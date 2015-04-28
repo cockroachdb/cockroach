@@ -948,11 +948,8 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 		reply.Header().SetGoError(err)
 		return err
 	}
-	if header.Timestamp.Equal(proto.ZeroTimestamp) {
-		// Update the incoming timestamp if unset.
-		header.Timestamp = s.ctx.Clock.Now()
-	} else {
-		// Otherwise, update our clock with the incoming request. This
+	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
+		// Update our clock with the incoming request timestamp. This
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted. The update is
 		// bounded by the max clock drift.

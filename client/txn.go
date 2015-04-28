@@ -51,12 +51,13 @@ func (ts *txnSender) Send(call Call) {
 //
 // A Txn instance is not thread safe.
 type Txn struct {
-	kv          KV
-	wrapped     KVSender
-	txn         proto.Transaction
-	txnSender   txnSender
-	prepared    []Call
-	needsEndTxn bool // True if EndTransaction needs to be sent
+	kv           KV
+	wrapped      KVSender
+	txn          proto.Transaction
+	txnSender    txnSender
+	prepared     []Call
+	haveTxnWrite bool // True if there were transactional writes
+	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
 
 var defaultTxnOpts = TransactionOptions{}
@@ -88,10 +89,10 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 	retryOpts := t.kv.TxnRetryOptions
 	retryOpts.Tag = t.txn.Name
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		t.needsEndTxn = false // always reset before [re]starting txn
+		t.haveTxnWrite, t.haveEndTxn = false, false // always reset before [re]starting txn
 		err := retryable(t)
 		if err == nil {
-			if t.needsEndTxn {
+			if !t.haveEndTxn && t.haveTxnWrite {
 				// If there were no errors running retryable, commit the txn. This
 				// may block waiting for outstanding writes to complete in case
 				// retryable didn't -- we need the most recent of all response
@@ -114,7 +115,7 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 		}
 		return util.RetryBreak, err
 	})
-	if err != nil && t.needsEndTxn {
+	if err != nil && t.haveTxnWrite {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
 		t.Run(Call{Args: etArgs, Reply: etReply})
@@ -136,7 +137,7 @@ func (t *Txn) Run(calls ...Call) error {
 		t.Prepare(calls...)
 		return t.Flush()
 	}
-	t.updateNeedsEndTxn(calls)
+	t.updateState(calls)
 	return t.kv.Run(calls...)
 }
 
@@ -158,7 +159,7 @@ func (t *Txn) Run(calls ...Call) error {
 // send the EndTransaction in the same batch as the final set of
 // prepared calls.
 func (t *Txn) Prepare(calls ...Call) {
-	t.updateNeedsEndTxn(calls)
+	t.updateState(calls)
 	for _, c := range calls {
 		c.resetClientCmdID(t.kv.clock)
 	}
@@ -180,22 +181,22 @@ func (t *Txn) Flush() error {
 	return t.kv.Run(calls...)
 }
 
-func (t *Txn) updateNeedsEndTxn(calls []Call) {
+func (t *Txn) updateState(calls []Call) {
 	for _, c := range calls {
 		if b, ok := c.Args.(*proto.BatchRequest); ok {
 			for _, br := range b.Requests {
-				t.updateNeedsEndTxnRequest(br.GetValue().(proto.Request))
+				t.updateStateForRequest(br.GetValue().(proto.Request))
 			}
 			continue
 		}
-		t.updateNeedsEndTxnRequest(c.Args)
+		t.updateStateForRequest(c.Args)
 	}
 }
 
-func (t *Txn) updateNeedsEndTxnRequest(r proto.Request) {
-	if !t.needsEndTxn {
-		t.needsEndTxn = proto.IsTransactionWrite(r)
+func (t *Txn) updateStateForRequest(r proto.Request) {
+	if !t.haveTxnWrite {
+		t.haveTxnWrite = proto.IsTransactionWrite(r)
 	} else if _, ok := r.(*proto.EndTransactionRequest); ok {
-		t.needsEndTxn = false
+		t.haveEndTxn = true
 	}
 }

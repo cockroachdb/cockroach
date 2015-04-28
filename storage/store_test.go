@@ -1027,8 +1027,8 @@ func TestStoreReadInconsistent(t *testing.T) {
 	gArgs.ReadConsistency = proto.INCONSISTENT
 	if err := store.ExecuteCmd(gArgs, gReply); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
-	} else if !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
-		t.Errorf("expected value %q, got %q", []byte("value1"), gReply.Value.Bytes)
+	} else if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
+		t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 	}
 	gArgs.Key = keyB
 	if err := store.ExecuteCmd(gArgs, gReply); err != nil {

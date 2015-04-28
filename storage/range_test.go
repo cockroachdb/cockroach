@@ -255,9 +255,15 @@ func TestRangeContains(t *testing.T) {
 }
 
 func setLeaderLease(t *testing.T, r *Range, l *proto.Lease) {
-	req := &proto.InternalLeaderLeaseRequest{Lease: *l}
+	args := &proto.InternalLeaderLeaseRequest{Lease: *l}
 	reply := &proto.InternalLeaderLeaseResponse{}
-	if err := r.AddCmd(req, reply, true); err != nil {
+	errChan, pendingCmd := r.proposeRaftCommand(args, reply)
+	var err error
+	if err = <-errChan; err == nil {
+		// Next if the command was commited, wait for the range to apply it.
+		err = <-pendingCmd.done
+	}
+	if err != nil {
 		t.Errorf("failed to set lease: %s", err)
 	}
 }
@@ -273,6 +279,11 @@ func TestRangeReadConsistency(t *testing.T) {
 
 	gArgs, gReply := getArgs(proto.Key("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
+
+	// Try consistent read and verify success.
+	if err := tc.rng.AddCmd(gArgs, gReply, true); err != nil {
+		t.Errorf("expected success on consistent read: %s", err)
+	}
 
 	// Try a consensus read and verify error.
 	gArgs.ReadConsistency = proto.CONSENSUS
