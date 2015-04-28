@@ -248,13 +248,14 @@ func (r *Range) start() {
 
 // Destroy cleans up all data associated with this range.
 func (r *Range) Destroy() error {
-	var deletes []interface{}
 	iter := newRangeDataIterator(r, r.rm.Engine())
 	defer iter.Close()
+	batch := r.rm.Engine().NewBatch()
+	defer batch.Close()
 	for ; iter.Valid(); iter.Next() {
-		deletes = append(deletes, engine.BatchDelete{RawKeyValue: proto.RawKeyValue{Key: iter.Key()}})
+		_ = batch.Clear(iter.Key())
 	}
-	return r.rm.Engine().WriteBatch(deletes)
+	return batch.Commit()
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -750,6 +751,8 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
+	defer batch.Close()
+
 	// Create an proto.MVCCStats instance.
 	ms := proto.MVCCStats{}
 
