@@ -21,6 +21,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -29,6 +30,7 @@ type Call struct {
 	Args  proto.Request  // The argument to the command
 	Reply proto.Response // The reply from the command
 	Err   error          // Error during call creation
+	Post  func() error   // Function to be called after successful completion
 }
 
 // resetClientCmdID sets the client command ID if the call is for a
@@ -56,6 +58,23 @@ func Get(key proto.Key) Call {
 		},
 		Reply: &proto.GetResponse{},
 	}
+}
+
+// GetProto returns a Call object initialized to get the value at key
+// and then to decode it as a protobuf message.
+func GetProto(key proto.Key, msg gogoproto.Message) Call {
+	c := Get(key)
+	c.Post = func() error {
+		reply := c.Reply.(*proto.GetResponse)
+		if reply.Value == nil {
+			return util.Errorf("%s: no value present", key)
+		}
+		if reply.Value.Integer != nil {
+			return util.Errorf("%s: unexpected integer value: %+v", key, reply.Value)
+		}
+		return gogoproto.Unmarshal(reply.Value.Bytes, msg)
+	}
+	return c
 }
 
 // Increment returns a Call object initialized to increment the
