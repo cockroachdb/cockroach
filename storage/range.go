@@ -649,7 +649,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		// First wait for raft to commit or abort the command.
 		var err error
 		if err = <-errChan; err == nil {
-			// Next if the command was commited, wait for the range to apply it.
+			// Next if the command was committed, wait for the range to apply it.
 			err = <-pendingCmd.done
 		}
 		// As for reads, update timestamp cache with the timestamp
@@ -695,9 +695,6 @@ func (r *Range) proposeRaftCommand(args proto.Request, reply proto.Response) (<-
 	r.Lock()
 	r.pendingCmds[idKey] = pendingCmd
 	r.Unlock()
-	// TODO(bdarnell): In certain raft failover scenarios, proposed
-	// commands may be abandoned. We need to re-propose the command
-	// if too much time passes with no response on the done channel.
 	errChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
 
 	return errChan, pendingCmd

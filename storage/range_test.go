@@ -1686,6 +1686,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		// Now, attempt to push the transaction with clock set to "currentTime".
 		tc.manualClock.Set(test.currentTime)
 		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args.Timestamp = tc.clock.Now()
 		err := tc.rng.AddCmd(args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
