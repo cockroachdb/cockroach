@@ -803,7 +803,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 				// After successful commit, update cached stats values.
 				r.stats.Update(ms)
 				// If the commit succeeded, potentially add range to split queue.
-				r.maybeSplit()
+				r.maybeAddToSplitQueue()
 				// Maybe update gossip configs on a put.
 				switch args.(type) {
 				case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
@@ -935,10 +935,10 @@ func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixC
 	return NewPrefixConfigMap(configs)
 }
 
-// maybeSplit checks whether the current size of the range exceeds the
-// max size specified in the zone config. If yes, the range is added
-// to the split queue.
-func (r *Range) maybeSplit() {
+// maybeAddToSplitQueue checks whether the current size of the range
+// exceeds the max size specified in the zone config. If yes, the
+// range is added to the split queue.
+func (r *Range) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.rm.SplitQueue().MaybeAdd(r, r.rm.Clock().Now())
@@ -1025,6 +1025,9 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	// remainder of the transaction.
 	// See the comment on proto.Transaction.CertainNodes.
 	if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
+		// Note that we can use this node's clock (which may be different from
+		// other replicas') because this error attaches the existing timestamp
+		// to the node itself when retrying.
 		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
 	}
 
@@ -1425,22 +1428,26 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	// pusherWins bool is true in the event the pusher prevails.
 	var pusherWins bool
 
-	// If there's no incoming transaction, the pusher is
-	// non-transactional. We make a random priority, biased by
-	// specified args.Header().UserPriority in this case.
+	// If there's no incoming transaction, the pusher is non-transactional.
+	// We make a random priority, biased by specified
+	// args.Header().UserPriority in this case.
 	var priority int32
 	if args.Txn != nil {
 		priority = args.Txn.Priority
 	} else {
-		priority = proto.MakePriority(args.GetUserPriority())
+		// Make sure we have a deterministic random number when generating
+		// a priority for this txn-less request, so all replicas see same priority.
+		rNG := rand.New(rand.NewSource(int64(reply.PusheeTxn.Priority)))
+		priority = proto.MakePriority(rNG, args.GetUserPriority())
 	}
 
 	// Check for txn timeout.
 	if reply.PusheeTxn.LastHeartbeat == nil {
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
-	// Compute heartbeat expiration.
-	expiry := r.rm.Clock().Now()
+	// Compute heartbeat expiration (use args.Timestamp instead of node
+	// clock wall time so that all replicas see the same result).
+	expiry := args.Timestamp
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
 		log.V(1).Infof("pushing expired txn %s", reply.PusheeTxn)
