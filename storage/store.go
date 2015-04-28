@@ -799,17 +799,17 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 // on the same store.
 func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error {
 	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
-		return util.Errorf("the new end key is not greater than the current one: %+v < %+v",
+		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingRng.Desc().EndKey)
 	}
 
 	subsumedRng, err := s.GetRange(subsumedRaftID)
 	if err != nil {
-		return util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
+		return util.Errorf("could not find the subsumed range: %d", subsumedRaftID)
 	}
 
 	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
-		return util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
+		return util.Errorf("ranges are not on the same replicas sets: %+v != %+v",
 			subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas())
 	}
 
