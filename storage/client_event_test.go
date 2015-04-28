@@ -32,7 +32,11 @@ import (
 )
 
 type storeEventReader struct {
-	perStoreFeeds map[proto.StoreID][]string
+	// If true, Update events will be recorded in full detail. If false, only a
+	// count of update events will be recorded.
+	recordUpdateDetail  bool
+	perStoreFeeds       map[proto.StoreID][]string
+	perStoreUpdateCount map[proto.StoreID]int
 }
 
 // recordEvent records the events received for all stores. Each event is
@@ -51,9 +55,18 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		eventStr = fmt.Sprintf("AddRange rid=%d, live=%d",
 			event.Desc.RaftID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
-		sid = event.StoreID
-		eventStr = fmt.Sprintf("UpdateRange rid=%d, live=%d",
-			event.Desc.RaftID, event.Diff.LiveBytes)
+		if event.Method == proto.InternalResolveIntent {
+			// InternalResolveIntent is a best effort call that seems to make
+			// this test flaky. Ignore them.
+			break
+		}
+		if ser.recordUpdateDetail {
+			sid = event.StoreID
+			eventStr = fmt.Sprintf("UpdateRange rid=%d, method=%s, livediff=%d",
+				event.Desc.RaftID, event.Method.String(), event.Diff.LiveBytes)
+		} else {
+			ser.perStoreUpdateCount[event.StoreID]++
+		}
 	case *storage.RemoveRangeEvent:
 		sid = event.StoreID
 		eventStr = fmt.Sprintf("RemoveRange rid=%d, live=%d",
@@ -82,21 +95,36 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 
 func (ser *storeEventReader) readEvents(sub *util.Subscription) {
 	ser.perStoreFeeds = make(map[proto.StoreID][]string)
+	ser.perStoreUpdateCount = make(map[proto.StoreID]int)
 	for e := range sub.Events() {
 		ser.recordEvent(e)
 	}
 }
 
-// printValues is used to assist the debugging of tests which use
-// storeEventReader.
-func (ser *storeEventReader) printValues(t testing.TB) {
+// eventFeedString describes the event information that was recorded by
+// storeEventReader. The formatting is appropriate to paste into this test if as
+// a new expected value.
+func (ser *storeEventReader) eventFeedString() string {
+	var response string
 	for id, feed := range ser.perStoreFeeds {
-		fmt.Printf("proto.StoreID(%d): []string{\n", int64(id))
+		response += fmt.Sprintf("proto.StoreID(%d): []string{\n", int64(id))
 		for _, evt := range feed {
-			fmt.Printf("\t\t\"%s\",\n", evt)
+			response += fmt.Sprintf("\t\t\"%s\",\n", evt)
 		}
-		fmt.Printf("},\n")
+		response += fmt.Sprintf("},\n")
 	}
+	return response
+}
+
+// updateCountString describes the update counts that were recorded by
+// storeEventReader.  The formatting is appropriate to paste into this test if
+// as a new expected value.
+func (ser *storeEventReader) updateCountString() string {
+	var response string
+	for id, c := range ser.perStoreUpdateCount {
+		response += fmt.Sprintf("proto.StoreID(%d): %d,\n", int64(id), c)
+	}
+	return response
 }
 
 // TestMultiStoreEventFeed verifies that events on multiple stores are properly
@@ -106,13 +134,15 @@ func TestMultiStoreEventFeed(t *testing.T) {
 
 	// Create a multiTestContext which publishes all store events to the given
 	// feed.
-	ser := &storeEventReader{}
 	feed := &util.Feed{}
 	mtc := &multiTestContext{
 		feed: feed,
 	}
 
 	// Start reading events from the feed before starting the stores.
+	ser := &storeEventReader{
+		recordUpdateDetail: false,
+	}
 	readStopper := util.NewStopper()
 	sub := feed.Subscribe()
 	readStopper.RunWorker(func() {
@@ -208,7 +238,6 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	// Close feed and wait for reader to receive all events.
 	feed.Close()
 	readStopper.Stop()
-	<-readStopper.IsStopped()
 
 	// Compare events to expected values.
 	expected := map[proto.StoreID][]string{
@@ -239,7 +268,17 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		},
 	}
 	if a, e := ser.perStoreFeeds, expected; !reflect.DeepEqual(a, e) {
-		t.Errorf("event feed did not meet expected value: printing actual values to compare with above expectation:\n")
-		ser.printValues(t)
+		t.Errorf("event feed did not match expected value. Actual values have been printed to compare with above expectation.\n")
+		t.Logf("Event feed information:\n%s", ser.eventFeedString())
+	}
+
+	expectedUpdateCount := map[proto.StoreID]int{
+		proto.StoreID(1): 34,
+		proto.StoreID(2): 31,
+		proto.StoreID(3): 29,
+	}
+	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {
+		t.Errorf("update counts did not match expected value. Actual values have been printed to compare with above expectation.\n")
+		t.Logf("Update count information:\n%s", ser.updateCountString())
 	}
 }

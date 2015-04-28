@@ -38,6 +38,7 @@ type UpdateRangeEvent struct {
 	StoreID proto.StoreID
 	Desc    *proto.RangeDescriptor
 	Stats   proto.MVCCStats
+	Method  proto.Method
 	Diff    proto.MVCCStats
 }
 
@@ -118,11 +119,11 @@ func (sef StoreEventFeed) addRange(rng *Range) {
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
-func (sef StoreEventFeed) updateRange(rng *Range, diff *proto.MVCCStats) {
+func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, diff *proto.MVCCStats) {
 	if sef.f == nil {
 		return
 	}
-	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, diff))
+	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, method, diff))
 }
 
 // removeRange publishes a RemoveRangeEvent to this feed which describes the
@@ -184,11 +185,12 @@ func makeAddRangeEvent(id proto.StoreID, rng *Range) *AddRangeEvent {
 	}
 }
 
-func makeUpdateRangeEvent(id proto.StoreID, rng *Range, diff *proto.MVCCStats) *UpdateRangeEvent {
+func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, diff *proto.MVCCStats) *UpdateRangeEvent {
 	return &UpdateRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
 		Stats:   rng.stats.GetMVCC(),
+		Method:  method,
 		Diff:    *diff,
 	}
 }

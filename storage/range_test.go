@@ -108,6 +108,7 @@ type testContext struct {
 	clock         *hlc.Clock
 	stopper       *util.Stopper
 	bootstrapMode bootstrapMode
+	feed          *util.Feed
 	// when true, do not automatically create the Raft group for the first
 	// range and wait for elections.
 	dormantRaft bool
@@ -115,7 +116,7 @@ type testContext struct {
 
 // testContext.Start initializes the test context with a single range covering the
 // entire keyspace.
-func (tc *testContext) Start(t *testing.T) {
+func (tc *testContext) Start(t testing.TB) {
 	if tc.stopper == nil {
 		tc.stopper = util.NewStopper()
 	}
@@ -136,12 +137,16 @@ func (tc *testContext) Start(t *testing.T) {
 		tc.transport = multiraft.NewLocalRPCTransport()
 	}
 	tc.stopper.AddCloser(tc.transport)
+	if tc.feed != nil {
+		tc.stopper.AddCloser(tc.feed)
+	}
 
 	if tc.store == nil {
 		ctx := TestStoreContext
 		ctx.Clock = tc.clock
 		ctx.Gossip = tc.gossip
 		ctx.Transport = tc.transport
+		ctx.EventFeed = tc.feed
 		tc.store = NewStore(ctx, tc.engine)
 		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, tc.stopper); err != nil {
 			t.Fatal(err)
@@ -186,7 +191,7 @@ func (tc *testContext) Stop() {
 }
 
 // initConfigs creates default configuration entries.
-func initConfigs(e engine.Engine, t *testing.T) {
+func initConfigs(e engine.Engine, t testing.TB) {
 	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
@@ -2179,4 +2184,71 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 		t.Fatalf("must not be able to add second replica to same node (err=%s)",
 			err)
 	}
+}
+
+// benchmarkEvents is designed to determine the impact of sending events on the
+// performance of write commands. This benchmark can be run with or without
+// events, and with or without a consumer reading the events.
+func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
+	defer leaktest.AfterTest(b)
+	tc := testContext{}
+
+	if sendEvents {
+		tc.feed = &util.Feed{}
+	}
+	eventC := 0
+	consumeStopper := util.NewStopper()
+	if consumeEvents {
+		sub := tc.feed.Subscribe()
+		consumeStopper.RunWorker(func() {
+			for _ = range sub.Events() {
+				eventC++
+			}
+		})
+	}
+
+	tc.Start(b)
+	defer tc.Stop()
+
+	args, reply := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := tc.rng.AddCmd(args, reply, true)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+
+	if consumeEvents {
+		// Close feed and wait for consumer to finish.
+		tc.feed.Close()
+		consumeStopper.Stop()
+		<-consumeStopper.IsStopped()
+
+		// The test expects exactly b.N update events to be sent on the feed.
+		// The '+5' is a constant number of non-update events sent when the
+		// store is first started.
+		if a, e := eventC, b.N+5; a != e {
+			b.Errorf("Unexpected number of events received %d, expected %d", a, e)
+		}
+	}
+}
+
+// BenchmarkWriteCmdNoEvents benchmarks write commands on a store that does not
+// publish events.
+func BenchmarkWriteCmdNoEvents(b *testing.B) {
+	benchmarkEvents(b, false, false)
+}
+
+// BenchmarkWriteCmdNoEvents benchmarks write commands on a store that publishes
+// events. There are no subscribers to the events, but they are still produced.
+func BenchmarkWriteCmdWithEvents(b *testing.B) {
+	benchmarkEvents(b, true, false)
+}
+
+// BenchmarkWriteConsumeEvents benchmarks write commands on a store that publishes
+// events. There is a single subscriber reading the events.
+func BenchmarkWriteCmdWithEventsAndConsumer(b *testing.B) {
+	benchmarkEvents(b, true, true)
 }
