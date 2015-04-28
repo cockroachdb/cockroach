@@ -485,7 +485,7 @@ func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) erro
 // commands which overlap its key range. This method will block if
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
-// invocation of cmdQ.Remove().
+// invocation of endCmd().
 func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
@@ -504,8 +504,12 @@ func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{}
 }
 
 // endCmd removes a pending command from the command queue.
-func (r *Range) endCmd(cmdKey interface{}) {
+func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOnly bool) {
 	r.Lock()
+	if err == nil && usesTimestampCache(args) {
+		header := args.Header()
+		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5(), readOnly)
+	}
 	r.cmdQ.Remove(cmdKey)
 	r.Unlock()
 }
@@ -560,7 +564,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 
 	// This replica must have leader lease to process a consistent read.
 	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
-		r.endCmd(cmdKey)
+		r.endCmd(cmdKey, args, err, true /* readOnly */)
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -569,12 +573,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 	err := r.executeCmd(r.rm.Engine(), nil, args, reply)
 
 	// Only update the timestamp cache if the command succeeded.
-	r.Lock()
-	if err == nil && usesTimestampCache(args) {
-		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5(), true /* readOnly */)
-	}
-	r.cmdQ.Remove(cmdKey)
-	r.Unlock()
+	r.endCmd(cmdKey, args, err, true /* readOnly */)
 
 	return err
 }
@@ -593,7 +592,6 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
-	txnMD5 := header.Txn.MD5()
 
 	// Add the write to the command queue to gate subsequent overlapping
 	// Commands until this command completes. Note that this must be
@@ -604,7 +602,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 
 	// This replica must have leader lease to process a write.
 	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
-		r.endCmd(cmdKey)
+		r.endCmd(cmdKey, args, err, false /* !readOnly */)
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -619,7 +617,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	// inform the final commit timestamp.
 	if usesTimestampCache(args) {
 		r.Lock()
-		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5)
+		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, header.Txn.MD5())
 		r.Unlock()
 
 		// Always push the timestamp forward if there's been a read which
@@ -657,12 +655,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		// As for reads, update timestamp cache with the timestamp
 		// of this write on success. This ensures a strictly higher
 		// timestamp for successive writes to the same key or key range.
-		r.Lock()
-		if err == nil && usesTimestampCache(args) {
-			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
-		}
-		r.cmdQ.Remove(cmdKey)
-		r.Unlock()
+		r.endCmd(cmdKey, args, err, false /* !readOnly */)
 
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.

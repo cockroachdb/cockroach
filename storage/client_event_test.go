@@ -129,8 +129,8 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	// Add some data in a transaction
 	err := mtc.db.RunTransaction(nil, func(txn *client.Txn) error {
 		return txn.Run(
-			client.PutCall(proto.Key("a"), []byte("asdf")),
-			client.PutCall(proto.Key("c"), []byte("jkl;")),
+			client.Put(proto.Key("a"), []byte("asdf")),
+			client.Put(proto.Key("c"), []byte("jkl;")),
 		)
 	})
 	if err != nil {
@@ -187,7 +187,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	// Add an additional put through the system and wait for all
 	// replicas to receive it.
 	err = mtc.db.Run(
-		client.IncrementCall(proto.Key("aa"), 5),
+		client.Increment(proto.Key("aa"), 5),
 	)
 	if err != nil {
 		t.Fatalf("error putting data to db: %s", err.Error())
