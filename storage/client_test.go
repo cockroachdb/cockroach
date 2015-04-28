@@ -103,6 +103,7 @@ type multiTestContext struct {
 	gossip      *gossip.Gossip
 	transport   multiraft.Transport
 	db          *client.KV
+	feed        *util.Feed
 	engines     []engine.Engine
 	senders     []*kv.LocalSender
 	stores      []*storage.Store
@@ -180,6 +181,7 @@ func (m *multiTestContext) makeContext() storage.StoreContext {
 	ctx.DB = m.db
 	ctx.Gossip = m.gossip
 	ctx.Transport = m.transport
+	ctx.EventFeed = m.feed
 	return ctx
 }
 

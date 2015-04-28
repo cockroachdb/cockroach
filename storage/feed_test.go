@@ -33,7 +33,7 @@ type storeEventConsumer struct {
 	received []interface{}
 }
 
-func newConsumer(feed StoreEventFeed) *storeEventConsumer {
+func newConsumer(feed *util.Feed) *storeEventConsumer {
 	return &storeEventConsumer{
 		sub: feed.Subscribe(),
 	}
@@ -47,9 +47,9 @@ func (sec *storeEventConsumer) process() {
 
 // startConsumerSet starts a StoreEventFeed and a number of associated
 // consumers.
-func startConsumerSet(count int) (*util.Stopper, StoreEventFeed, []*storeEventConsumer) {
+func startConsumerSet(count int) (*util.Stopper, *util.Feed, []*storeEventConsumer) {
 	stopper := util.NewStopper()
-	feed := NewStoreEventFeed()
+	feed := &util.Feed{}
 	consumers := make([]*storeEventConsumer, count)
 	for i := range consumers {
 		consumers[i] = newConsumer(feed)
@@ -123,9 +123,10 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"NewRange",
 			func(feed StoreEventFeed) {
-				feed.newRange(rng1)
+				feed.addRange(rng1)
 			},
-			&NewRangeEvent{
+			&AddRangeEvent{
+				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
 					RaftID:   1,
 					StartKey: proto.Key("a"),
@@ -144,6 +145,7 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.updateRange(rng1, diffStats)
 			},
 			&UpdateRangeEvent{
+				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
 					RaftID:   1,
 					StartKey: proto.Key("a"),
@@ -166,6 +168,7 @@ func TestStoreEventFeed(t *testing.T) {
 				feed.removeRange(rng2)
 			},
 			&RemoveRangeEvent{
+				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
 					RaftID:   2,
 					StartKey: proto.Key("b"),
@@ -181,9 +184,10 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"SplitRange",
 			func(feed StoreEventFeed) {
-				feed.splitRange(rng1, rng2, diffStats)
+				feed.splitRange(rng1, rng2)
 			},
 			&SplitRangeEvent{
+				StoreID: proto.StoreID(1),
 				Original: UpdateRangeEvent{
 					Desc: &proto.RangeDescriptor{
 						RaftID:   1,
@@ -196,11 +200,12 @@ func TestStoreEventFeed(t *testing.T) {
 						ValBytes:  360,
 					},
 					Diff: proto.MVCCStats{
-						IntentBytes: 30,
-						IntentAge:   20,
+						LiveBytes: -200,
+						KeyBytes:  -30,
+						ValBytes:  -170,
 					},
 				},
-				New: NewRangeEvent{
+				New: AddRangeEvent{
 					Desc: &proto.RangeDescriptor{
 						RaftID:   2,
 						StartKey: proto.Key("b"),
@@ -217,9 +222,10 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"MergeRange",
 			func(feed StoreEventFeed) {
-				feed.mergeRange(rng1, rng2, diffStats)
+				feed.mergeRange(rng1, rng2)
 			},
 			&MergeRangeEvent{
+				StoreID: proto.StoreID(1),
 				Merged: UpdateRangeEvent{
 					Desc: &proto.RangeDescriptor{
 						RaftID:   1,
@@ -232,8 +238,9 @@ func TestStoreEventFeed(t *testing.T) {
 						ValBytes:  360,
 					},
 					Diff: proto.MVCCStats{
-						IntentBytes: 30,
-						IntentAge:   20,
+						LiveBytes: 200,
+						KeyBytes:  30,
+						ValBytes:  170,
 					},
 				},
 				Removed: RemoveRangeEvent{
@@ -251,18 +258,31 @@ func TestStoreEventFeed(t *testing.T) {
 			},
 		},
 		{
+			"StartStore",
+			func(feed StoreEventFeed) {
+				feed.startStore()
+			},
+			&StartStoreEvent{
+				StoreID: proto.StoreID(1),
+			},
+		},
+		{
 			"BeginScanRanges",
 			func(feed StoreEventFeed) {
 				feed.beginScanRanges()
 			},
-			&BeginScanRangesEvent{},
+			&BeginScanRangesEvent{
+				StoreID: proto.StoreID(1),
+			},
 		},
 		{
 			"EndScanRanges",
 			func(feed StoreEventFeed) {
 				feed.endScanRanges()
 			},
-			&EndScanRangesEvent{},
+			&EndScanRangesEvent{
+				StoreID: proto.StoreID(1),
+			},
 		},
 	}
 
@@ -289,10 +309,11 @@ func TestStoreEventFeed(t *testing.T) {
 
 	// Run test cases directly through a feed.
 	stopper, feed, consumers := startConsumerSet(3)
+	storefeed := NewStoreEventFeed(proto.StoreID(1), feed)
 	for _, tc := range testCases {
-		tc.publishTo(feed)
+		tc.publishTo(storefeed)
 	}
-	feed.closeFeed()
+	feed.Close()
 	waitForStopper(t, stopper)
 	for i, c := range consumers {
 		verifyEventSlice(fmt.Sprintf("feed direct consumer %d", i), c.received)
