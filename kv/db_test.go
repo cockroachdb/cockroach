@@ -310,12 +310,12 @@ func TestKVDBTransaction(t *testing.T) {
 		Isolation: proto.SNAPSHOT,
 	}
 	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
-		if err := txn.Run(client.PutCall(key, value)); err != nil {
+		if err := txn.Run(client.Put(key, value)); err != nil {
 			t.Fatal(err)
 		}
 
 		// Attempt to read outside of txn.
-		call := client.GetCall(key)
+		call := client.Get(key)
 		gr := call.Reply.(*proto.GetResponse)
 		if err := kvClient.Run(call); err != nil {
 			t.Fatal(err)
@@ -325,7 +325,7 @@ func TestKVDBTransaction(t *testing.T) {
 		}
 
 		// Read within the transaction.
-		call = client.GetCall(key)
+		call = client.Get(key)
 		gr = call.Reply.(*proto.GetResponse)
 		if err := txn.Run(call); err != nil {
 			t.Fatal(err)
@@ -340,7 +340,7 @@ func TestKVDBTransaction(t *testing.T) {
 	}
 
 	// Verify the value is now visible after commit.
-	call := client.GetCall(key)
+	call := client.Get(key)
 	gr := call.Reply.(*proto.GetResponse)
 	if err = kvClient.Run(call); err != nil {
 		t.Errorf("expected success reading value; got %s", err)

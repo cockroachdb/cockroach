@@ -72,7 +72,7 @@ func runGet(cmd *commander.Command, args []string) {
 		return
 	}
 	key := proto.Key(args[0])
-	call := client.GetCall(key)
+	call := client.Get(key)
 	resp := call.Reply.(*proto.GetResponse)
 	if err := kv.Run(call); err != nil {
 		fmt.Fprintf(osStderr, "get failed: %s\n", err)
@@ -133,7 +133,7 @@ func runPut(cmd *commander.Command, args []string) {
 		for i := 0; i < len(args); i += 2 {
 			key := proto.Key(args[i])
 			value := []byte(args[i+1])
-			txn.Prepare(client.PutCall(key, value))
+			txn.Prepare(client.Put(key, value))
 		}
 		return nil
 	})
@@ -185,7 +185,7 @@ func runInc(cmd *commander.Command, args []string) {
 	}
 
 	key := proto.Key(args[0])
-	call := client.IncrementCall(key, int64(amount))
+	call := client.Increment(key, int64(amount))
 	resp := call.Reply.(*proto.IncrementResponse)
 	if err := kv.Run(call); err != nil {
 		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
@@ -231,7 +231,7 @@ func runDel(cmd *commander.Command, args []string) {
 	err = kv.RunTransaction(opts, func(txn *client.Txn) error {
 		for i := 0; i < len(args); i++ {
 			key := proto.Key(args[i])
-			txn.Prepare(client.DeleteCall(key))
+			txn.Prepare(client.Delete(key))
 		}
 		return nil
 	})
@@ -289,7 +289,7 @@ func runScan(cmd *commander.Command, args []string) {
 		return
 	}
 	// TODO(pmattis): Add a flag for the number of results to scan.
-	call := client.ScanCall(startKey, endKey, 1000)
+	call := client.Scan(startKey, endKey, 1000)
 	resp := call.Reply.(*proto.ScanResponse)
 	if err := kv.Run(call); err != nil {
 		fmt.Fprintf(osStderr, "scan failed: %s\n", err)

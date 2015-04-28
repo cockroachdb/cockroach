@@ -331,13 +331,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	var call client.Call
 	for i, k := range writes {
-		call = client.PutCall(k, k)
+		call = client.Put(k, k)
 		call.Args.Header().User = storage.UserRoot
 		tds.Send(call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
 		}
-		scan := client.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
+		scan := client.Scan(writes[0], writes[len(writes)-1].Next(), 0)
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
@@ -377,7 +377,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			len(writes), n)
 	}
 
-	scan := client.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
+	scan := client.Scan(writes[0], writes[len(writes)-1].Next(), 0)
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	scan.Args.Header().User = storage.UserRoot
 	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
@@ -427,7 +427,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 		var call client.Call
 		for _, k := range tc.keys {
-			call = client.PutCall(k, k)
+			call = client.Put(k, k)
 			call.Args.Header().User = storage.UserRoot
 			tds.Send(call)
 			if err := call.Reply.Header().GoError(); err != nil {
@@ -439,7 +439,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		for start := 0; start < len(tc.keys); start++ {
 			// Try every possible maxResults, from 1 to beyond the size of key array.
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-				scan := client.ScanCall(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
+				scan := client.Scan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
 				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
 				scan.Args.Header().User = storage.UserRoot

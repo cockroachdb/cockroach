@@ -97,7 +97,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 
 	// First check if any call contains an error. This allows the
 	// generation of a Call to create an error that is reported
-	// here. See PutProtoCall for an example.
+	// here. See PutProto for an example.
 	for _, call := range calls {
 		if call.Err != nil {
 			return call.Err

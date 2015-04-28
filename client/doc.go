@@ -31,12 +31,12 @@ an error. The example below shows a get and a put.
 
   kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", httpClient))
 
-  getCall := client.GetCall(proto.Key("a"))
+  getCall := client.Get(proto.Key("a"))
   getResp := getCall.Reply.(*proto.GetResponse)
   if err := kv.Run(getCall); err != nil {
     log.Fatal(err)
   }
-  if err := kv.Run(client.PutCall(proto.Key("b"), getResp.Value.Bytes)) err != nil {
+  if err := kv.Run(client.Put(proto.Key("b"), getResp.Value.Bytes)) err != nil {
     log.Fatal(err)
   }
 
@@ -51,16 +51,16 @@ parallel:
 
   kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", httpClient))
 
-  acScanCall := client.ScanCall(proto.Key("a"), proto.Key("c\x00"), 1000)
-  xzScanCall := client.ScanCall(proto.Key("x"), proto.Key("z\x00"), 1000)
+  acScan := client.Scan(proto.Key("a"), proto.Key("c\x00"), 1000)
+  xzScan := client.Scan(proto.Key("x"), proto.Key("z\x00"), 1000)
 
   // Run sends both scans in parallel and returns first error or nil.
-  if err := kv.Run(acScanCall, xzScanCall); err != nil {
+  if err := kv.Run(acScan, xzScan); err != nil {
     log.Fatal(err)
   }
 
-  acResp := acScanCall.Reply.(*proto.ScanResponse)
-  xzResp := xzScanCall.Reply.(*proto.ScanResponse)
+  acResp := acScan.Reply.(*proto.ScanResponse)
+  xzResp := xzScan.Reply.(*proto.ScanResponse)
 
   // Append maximum value from "a"-"c" to all values from "x"-"z".
   max := []byte(nil)
@@ -71,7 +71,7 @@ parallel:
   }
   var calls []*client.Call
   for keyVal := range xzResp.Rows {
-    putCall := client.PutCall(keyVal.Key, bytes.Join([][]byte{keyVal.Value.Bytes, max}, []byte(nil)))
+    putCall := client.Put(keyVal.Key, bytes.Join([][]byte{keyVal.Value.Bytes, max}, []byte(nil)))
     calls = append(calls, putCall)
   }
 
@@ -94,7 +94,7 @@ of using transactions with parallel writes:
   err := kv.RunTransaction(opts, func(txn *client.Txn) error {
     for i := 0; i < 100; i++ {
       key := proto.Key(fmt.Sprintf("testkey-%02d", i))
-      txn.Prepare(client.PutCall(key, []byte("test value")))
+      txn.Prepare(client.Put(key, []byte("test value")))
     }
 
     // Note that the Txn client is flushed automatically on transaction

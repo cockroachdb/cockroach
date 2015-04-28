@@ -135,7 +135,7 @@ func TestKVCommitReadOnlyTransaction(t *testing.T) {
 		calls = append(calls, call.Method())
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
-		txn.Run(GetCall(proto.Key("a")))
+		txn.Run(Get(proto.Key("a")))
 		return nil
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -157,7 +157,7 @@ func TestKVCommitMutatingTransaction(t *testing.T) {
 		}
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
-		txn.Run(PutCall(proto.Key("a"), nil))
+		txn.Run(Put(proto.Key("a"), nil))
 		return nil
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -200,7 +200,7 @@ func TestKVAbortReadOnlyTransaction(t *testing.T) {
 		}
 	}))
 	err := client.RunTransaction(nil, func(txn *Txn) error {
-		txn.Run(GetCall(proto.Key("a")))
+		txn.Run(Get(proto.Key("a")))
 		return errors.New("foo")
 	})
 	if err == nil {
@@ -219,7 +219,7 @@ func TestKVAbortMutatingTransaction(t *testing.T) {
 		}
 	}))
 	err := client.RunTransaction(nil, func(txn *Txn) error {
-		txn.Run(PutCall(proto.Key("a"), nil))
+		txn.Run(Put(proto.Key("a"), nil))
 		return errors.New("foo")
 	})
 	if err == nil {
