@@ -1277,6 +1277,37 @@ func TestRangeIdempotence(t *testing.T) {
 	}
 }
 
+// TestRangeResponseCacheError verifies that an error is returned to the
+// client in the event that a response cache entry is found but is not
+// decodable.
+func TestRangeResponseCacheError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	args, reply := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
+	args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
+	err := tc.rng.AddCmd(args, reply, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Overwrite repsonse cache entry with garbage for the last op.
+	key := engine.ResponseCacheKey(tc.rng.Desc().RaftID, &args.CmdID)
+	err = engine.MVCCPut(tc.engine, nil, key, proto.ZeroTimestamp, proto.Value{Bytes: []byte("\xff")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now try increment again and verify error.
+	reply.Reset()
+	err = tc.rng.AddCmd(args, reply, true)
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
 // TestEndTransactionBeforeHeartbeat verifies that a transaction
 // can be committed/aborted before being heartbeat.
 func TestEndTransactionBeforeHeartbeat(t *testing.T) {

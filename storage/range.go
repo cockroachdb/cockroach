@@ -732,16 +732,13 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
-			if ok { // this is a replay! extract error for return
-				log.V(1).Infof("found response cache entry for %+v", args.Header().CmdID)
-				return reply.Header().GoError()
-			}
-			// In this case there was an error reading from the response
-			// cache. Instead of failing the request just because we can't
-			// decode the reply in the response cache, we proceed as though
-			// idempotence has expired.
-			log.Errorf("unable to read result for %+v from the response cache: %s", args, err)
+		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok && err == nil {
+			log.V(1).Infof("found response cache entry for %+v", args.Header().CmdID)
+			return reply.Header().GoError()
+		} else if ok && err != nil {
+			newErr := util.Errorf("unable to read result for %+v from the response cache: %s", args, err)
+			reply.Header().SetGoError(newErr)
+			return newErr
 		}
 	}
 
