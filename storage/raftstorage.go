@@ -67,11 +67,26 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	return hs, cs, nil
 }
 
+// setLastIndex persists a new last index and updates its cached
+// value in the range. If a non-nil engine is passed, it is used for the
+// write; otherwise the range's default engine is used. Commit() will
+// be called on the engine to keep the update as atomic as possible.
 func (r *Range) setLastIndex(eng engine.Engine, lastIndex uint64) error {
-	return engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(r.Desc().RaftID),
+	if eng == nil {
+		eng = r.rm.Engine()
+	}
+	err := engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, proto.Value{
 			Bytes: encoding.EncodeUint64(nil, lastIndex),
 		}, nil)
+	if err != nil {
+		return err
+	}
+	if err = eng.Commit(); err != nil {
+		return err
+	}
+	atomic.StoreUint64(&r.lastIndex, lastIndex)
+	return nil
 }
 
 // loadLastIndex atomically loads the last index from storage into the range.
@@ -261,8 +276,8 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	}
 	var desc proto.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
-	// know they cannot be committed yet - operations that modify range
-	// descriptors resolve their own intents when they commit).
+	// know they cannot be committed yet; operations that modify range
+	// descriptors resolve their own intents when they commit.
 	ok, err := engine.MVCCGetProto(snap, engine.RangeDescriptorKey(r.Desc().StartKey),
 		r.rm.Clock().Now(), false, nil, &desc)
 	if err != nil {
@@ -330,22 +345,17 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 		}
 	}
 
+	// Commit the batch and update the last index.
 	if err := r.setLastIndex(batch, lastIndex); err != nil {
 		return err
 	}
 
-	if err := batch.Commit(); err != nil {
-		return err
-	}
 	atomic.StoreUint64(&r.lastIndex, lastIndex)
 	return nil
 }
 
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
-	r.testlock.Lock()
-	defer r.testlock.Unlock()
-	r.loadLastIndex()
 	snapData := proto.RaftSnapshotData{}
 	err := gogoproto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
@@ -409,18 +419,26 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
-	if err := batch.Commit(); err != nil {
+	// The next line in effect sets the last index to the last applied index
+	// and commits the batch.
+	// This is not a correctness issue, but means that we may have just
+	// transferred some entries we're about to re-request from the leader and
+	// overwrite.
+	// However, raft.MultiNode currently expects this behaviour, and the
+	// performance implications are not likely to be drastic. If our feelings
+	// about this ever change, we can add a LastIndex field to
+	// raftpb.SnapshotMetadata.
+	if err := r.setLastIndex(batch, snap.Metadata.Index); err != nil {
 		return err
 	}
 
 	// Save the descriptor and applied index to our member variables.
 	r.SetDesc(&desc)
-	r.loadAppliedIndex()
-	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+	if err := r.loadAppliedIndex(); err != nil {
+		return err
+	}
 	r.stats = stats
-
-	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
-	return r.loadLastIndex()
+	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 	return nil
 }
 
