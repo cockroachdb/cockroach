@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+# $1 is either "rebase" or "amend"; only "rebase" can introduce new changes.
+if [[ $1 != rebase ]]; then
+   exit 0
+fi
+
+LOG=$(git log -U0 --oneline -p HEAD@{1}..HEAD GLOCKFILE)
+[ -z "$LOG" ] && echo "glock: no changes to apply" && exit 0
+echo "glock: applying updates..."
+glock apply <<< "$LOG"
