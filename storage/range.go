@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -206,16 +205,13 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	}
 	r.SetDesc(desc)
 
-	err := r.loadLastIndex()
-	if err != nil {
+	if err := r.loadLastIndex(); err != nil {
 		return nil, err
 	}
 
-	appliedIndex, err := loadAppliedIndex(r.rm.Engine(), desc.RaftID)
-	if err != nil {
+	if err := r.loadAppliedIndex(); err != nil {
 		return nil, err
 	}
-	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
 	lease, err := loadLeaderLease(r.rm.Engine(), desc.RaftID)
 	if err != nil {
@@ -779,51 +775,40 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	// Create an proto.MVCCStats instance.
 	ms := proto.MVCCStats{}
 
+	// Execute the command; the error will also be set in the reply header.
 	err := r.executeCmd(batch, &ms, args, reply)
-	if err == nil {
-		// If we are applying a raft command, update the applied index.
-		if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-			log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
-		}
-		atomic.StoreUint64(&r.appliedIndex, index)
-		err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
-			proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
-		if err != nil {
-			reply.Header().SetGoError(err)
-		}
 
-		if proto.IsWrite(args) {
-			// On success, flush the MVCC stats to the batch and commit.
-			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
-			if err := batch.Commit(); err != nil {
-				log.Fatalf("failed to commit batch from Raft command execution: %s", err)
-			} else {
-				// After successful commit, update cached stats values.
-				r.stats.Update(ms)
-				// Publish update to event feed.
-				r.rm.EventFeed().updateRange(r, args.Method(), &ms)
-				// If the commit succeeded, potentially add range to split queue.
-				r.maybeAddToSplitQueue()
-				// Maybe update gossip configs on a put.
-				switch args.(type) {
-				case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-					if header.Key.Less(engine.KeySystemMax) {
-						r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-							return bytes.HasPrefix(header.Key, configPrefix)
-						})
-					}
+	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
+		log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
+	}
+
+	if err == nil && proto.IsWrite(args) {
+		// On success, flush the MVCC stats to the batch and commit.
+		r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
+		// Advance the applied index atomically with committing the batch.
+		if err := r.setAppliedIndex(index, batch); err != nil {
+			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
+		} else {
+			// After successful commit, update cached stats values.
+			r.stats.Update(ms)
+			// Publish update to event feed.
+			r.rm.EventFeed().updateRange(r, args.Method(), &ms)
+			// If the commit succeeded, potentially add range to split queue.
+			r.maybeAddToSplitQueue()
+			// Maybe update gossip configs on a put.
+			switch args.(type) {
+			case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
+				if header.Key.Less(engine.KeySystemMax) {
+					r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+						return bytes.HasPrefix(header.Key, configPrefix)
+					})
 				}
 			}
 		}
 	} else {
-		atomic.StoreUint64(&r.appliedIndex, index)
-		// On failure, abandon the batch we've built up, but still update the
-		// applied index so we won't retry this command on restart.
-		if err := engine.MVCCPut(r.rm.Engine(), nil, engine.RaftAppliedIndexKey(r.Desc().RaftID),
-			proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil); err != nil {
-			// The reply header already contains an error which is going to be more useful
-			// to the caller than this one, so just log it.
-			log.Errorf("failed to advance applied index: %s", err)
+		// Advance the last applied index nonetheless, without the batch.
+		if err = r.setAppliedIndex(index, nil /* eng */); reply.Header().GoError() == nil {
+			reply.Header().SetGoError(err)
 		}
 	}
 
@@ -1526,8 +1511,8 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *proto.MVCCStats, ar
 		reply.SetGoError(err)
 		return
 	}
-	start := engine.RaftLogKey(r.Desc().RaftID, args.Index).Next()
-	end := engine.RaftLogKey(r.Desc().RaftID, 0)
+	start := engine.RaftLogKey(r.Desc().RaftID, 0)
+	end := engine.RaftLogKey(r.Desc().RaftID, args.Index)
 	err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
 		func(kv proto.RawKeyValue) (bool, error) {
 			err := batch.Clear(kv.Key)
