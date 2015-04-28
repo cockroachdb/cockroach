@@ -636,3 +636,61 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestTxnRestartedSerializableTimestampRegression verifies that there is
+// no timestamp regression error in the event that a pushed txn record disagrees
+// with the original timestamp of a restarted transaction.
+func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
+	s := createTestDB(t)
+	defer s.Stop()
+
+	keyA := proto.Key("a")
+	keyB := proto.Key("b")
+	ch := make(chan struct{})
+	txnAOpts := &client.TransactionOptions{
+		Name:         "txnA",
+		UserPriority: -1,
+	}
+	go func() {
+		err := s.KV.RunTransaction(txnAOpts, func(txn *client.Txn) error {
+			// Put transactional value.
+			if err := txn.Run(client.PutCall(keyA, []byte("value1"))); err != nil {
+				return err
+			}
+			// Notify txnB to push txnA on get(a).
+			ch <- struct{}{}
+			// Wait for txnB notify us to commit.
+			<-ch
+			// Do a write to keyB, which will forward txn timestamp.
+			if err := txn.Run(client.PutCall(keyB, []byte("value2"))); err != nil {
+				return err
+			}
+			// Now commit...
+			return nil
+		})
+		if err != nil {
+			close(ch)
+			t.Fatal(err)
+		}
+		ch <- struct{}{}
+	}()
+
+	// Wait until txnA finishes put(a).
+	<-ch
+	// Attempt to get keyA, which will push txnA.
+	if err := s.KV.Run(client.GetCall(keyA)); err != nil {
+		t.Fatal(err)
+	}
+	// Do a read at keyB to cause txnA to forward timestamp.
+	if err := s.KV.Run(client.GetCall(keyB)); err != nil {
+		t.Fatal(err)
+	}
+	// Notify txnA to commit.
+	ch <- struct{}{}
+	// Wait for txnA to restart.
+	<-ch
+	// Notify txnA to commit.
+	ch <- struct{}{}
+	// Wait for txnA to finish.
+	<-ch
+}
