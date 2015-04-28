@@ -18,7 +18,9 @@
 package storage
 
 import (
+	"log"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,7 +49,11 @@ func TestIDAllocator(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 10; j++ {
-				allocd <- int(idAlloc.Allocate())
+				id, err := idAlloc.Allocate()
+				if err != nil {
+					t.Fatal(err)
+				}
+				allocd <- int(id)
 			}
 		}()
 	}
@@ -94,7 +100,10 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
-	value := idAlloc.Allocate()
+	value, err := idAlloc.Allocate()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if value != 2 {
 		t.Errorf("expected id allocation to have value 2; got %d", value)
 	}
@@ -127,13 +136,16 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	allocd := make(chan int, 10)
 
 	// Firstly create a valid IDAllocator to get some ID.
-	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.ctx.DB,
-		2, 10, stopper)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.ctx.DB, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
 
-	if id := idAlloc.Allocate(); id != 2 {
+	id, err := idAlloc.Allocate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != 2 {
 		t.Errorf("expected ID is 2, but got: %d", id)
 	}
 
@@ -143,7 +155,11 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.
 	for i := 0; i < 8; i++ {
-		if id := int(idAlloc.Allocate()); id != i+3 {
+		id, err := idAlloc.Allocate()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if int(id) != i+3 {
 			t.Errorf("expected ID is %d, but got: %d", i+3, id)
 		}
 	}
@@ -152,7 +168,11 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	// is recovered.
 	for i := 0; i < 10; i++ {
 		go func() {
-			allocd <- int(idAlloc.Allocate())
+			id, err := idAlloc.Allocate()
+			if err != nil {
+				t.Fatal(err)
+			}
+			allocd <- int(id)
 		}()
 	}
 	// Make sure no allocation returns.
@@ -177,8 +197,45 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 	// Check if the following allocations return expected ID.
 	for i := 0; i < 10; i++ {
-		if id := int(idAlloc.Allocate()); id != i+21 {
+		id, err := idAlloc.Allocate()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if int(id) != i+21 {
 			t.Errorf("expected ID is %d, but got: %d", i+21, id)
 		}
 	}
+}
+
+func TestAllocateWithStopper(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(10)
+	ch := make(chan struct{})
+
+	stopper.RunWorker(func() {
+		<-ch // wait for signal to start.
+		for i := 0; i < 10; i++ {
+			go func() {
+				_, err := idAlloc.Allocate()
+				// We expect all allocations to fail.
+				if err != nil {
+					wg.Done()
+				} else {
+					t.Fatal("unexpected success")
+				}
+			}()
+		}
+	})
+
+	// Stop the stopper pre-emptively, then signal the waiting worker to try allocations.
+	go stopper.Stop()
+	close(ch)
+	wg.Wait()
 }
