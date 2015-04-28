@@ -1521,18 +1521,18 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// be afer the prior lease's expiration.
 	oldLease := r.getLease()
 	if !args.Lease.Start.Less(args.Lease.Expiration) {
-		reply.SetGoError(util.Errorf("lease %s - %s invalid", args.Lease.Start, args.Lease.Expiration))
+		reply.SetGoError(util.Errorf("lease %d - %d invalid", args.Lease.Start, args.Lease.Expiration))
 		return
 	} else if oldLease.RaftNodeID == args.Lease.RaftNodeID {
 		if !oldLease.Start.Less(args.Lease.Start) {
-			reply.SetGoError(util.Errorf("lease renewal %s - %s invalid; prior lease %s - %s",
+			reply.SetGoError(util.Errorf("lease renewal %d - %d invalid; prior lease %d - %d",
 				args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
 			return
 		}
 		// Note that the lease expiration can be shortened by the holder.
 		// This could be used to effect a faster lease handoff.
 	} else if args.Lease.Start.Less(oldLease.Expiration) {
-		reply.SetGoError(util.Errorf("lease %s - %s invalid; prior lease %s - %s",
+		reply.SetGoError(util.Errorf("lease %d - %d invalid; prior lease %d - %d",
 			args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
 		return
 	}
