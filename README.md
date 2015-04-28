@@ -81,7 +81,7 @@ DIR=$(mktemp -d /tmp/dbXXX)
 ./cockroach create-ca-cert
 ./cockroach create-node-cert 127.0.0.1 localhost $(hostname)
 # Initialize data directories.
-./cockroach init $DIR
+./cockroach init -stores ssd=$DIR
 # Start the server.
 ./cockroach start -stores ssd="$DIR" -gossip self:// &
 ```
@@ -169,7 +169,7 @@ Once you've built your image, you may want to run the tests:
 Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node:
 
 ```bash
-docker run -v /data -v /certs cockroachdb/cockroach init /data
+docker run -v /data -v /certs cockroachdb/cockroach init -stores ssd=/data
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
   create-ca-cert -certs /certs
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \

@@ -81,7 +81,7 @@ func TestInitEngine(t *testing.T) {
 	for _, spec := range testCases {
 		ctx := NewContext()
 		ctx.Stores, ctx.GossipBootstrap = spec.key, "self://"
-		err := ctx.Init()
+		err := ctx.Init("start")
 		engines := ctx.Engines
 		if err == nil {
 			if spec.wantError {
@@ -123,7 +123,7 @@ func TestInitEngines(t *testing.T) {
 		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
-	err := ctx.Init()
+	err := ctx.Init("start")
 	engines := ctx.Engines
 	if err != nil {
 		t.Fatal(err)

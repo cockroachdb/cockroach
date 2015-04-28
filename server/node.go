@@ -107,18 +107,13 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 	return proto.StoreID(iReply.NewValue - inc + 1), nil
 }
 
-// BootstrapCluster bootstraps a store using the provided engine and
-// cluster ID. The bootstrapped store contains a single range spanning
+// BootstrapCluster bootstraps a multiple stores using the provided engines and
+// cluster ID. The first bootstrapped store contains a single range spanning
 // all keys. Initial range lookup metadata is populated for the range.
 //
-// Returns a KV client for unittest purposes. Caller should close
-// the returned client.
-func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper) (*client.KV, error) {
-	sIdent := proto.StoreIdent{
-		ClusterID: clusterID,
-		NodeID:    1,
-		StoreID:   1,
-	}
+// Returns a KV client for unittest purposes. Caller should close the returned
+// client.
+func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.KV, error) {
 	ctx := storage.StoreContext{}
 	ctx.Context = context.Background()
 	ctx.ScanInterval = 10 * time.Minute
@@ -128,40 +123,51 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
 	ctx.DB = localDB
 	ctx.Transport = multiraft.NewLocalRPCTransport()
-	// The bootstrapping store will not connect to other nodes so its StoreConfig
-	// doesn't really matter.
-	s := storage.NewStore(ctx, eng)
+	for i, eng := range engines {
+		sIdent := proto.StoreIdent{
+			ClusterID: clusterID,
+			NodeID:    1,
+			StoreID:   proto.StoreID(i + 1),
+		}
 
-	// Verify the store isn't already part of a cluster.
-	if len(s.Ident.ClusterID) > 0 {
-		return nil, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
-	}
+		// The bootstrapping store will not connect to other nodes so its StoreConfig
+		// doesn't really matter.
+		s := storage.NewStore(ctx, eng)
 
-	// Bootstrap store to persist the store ident.
-	if err := s.Bootstrap(sIdent, stopper); err != nil {
-		return nil, err
-	}
-	// Create first range, writing directly to engine. Note this does
-	// not create the range, just its data.
-	if err := s.BootstrapRange(); err != nil {
-		return nil, err
-	}
-	if err := s.Start(stopper); err != nil {
-		return nil, err
-	}
-	lSender.AddStore(s)
+		// Verify the store isn't already part of a cluster.
+		if len(s.Ident.ClusterID) > 0 {
+			return nil, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
+		}
 
-	// Initialize node and store ids after the fact to account
-	// for use of node ID = 1 and store ID = 1.
-	if nodeID, err := allocateNodeID(localDB); nodeID != sIdent.NodeID || err != nil {
-		return nil, util.Errorf("expected to intialize node id allocator to %d, got %d: %s",
-			sIdent.NodeID, nodeID, err)
-	}
-	if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, localDB); storeID != sIdent.StoreID || err != nil {
-		return nil, util.Errorf("expected to intialize store id allocator to %d, got %d: %s",
-			sIdent.StoreID, storeID, err)
-	}
+		// Bootstrap store to persist the store ident.
+		if err := s.Bootstrap(sIdent, stopper); err != nil {
+			return nil, err
+		}
+		// Create first range, writing directly to engine. Note this does
+		// not create the range, just its data.  Only do this if this is the
+		// first store.
+		if i == 0 {
+			if err := s.BootstrapRange(); err != nil {
+				return nil, err
+			}
+		}
+		if err := s.Start(stopper); err != nil {
+			return nil, err
+		}
+		lSender.AddStore(s)
 
+		// Initialize node and store ids.  Only initialize the node once.
+		if i == 0 {
+			if nodeID, err := allocateNodeID(localDB); nodeID != sIdent.NodeID || err != nil {
+				return nil, util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
+					sIdent.NodeID, nodeID, err)
+			}
+		}
+		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, localDB); storeID != sIdent.StoreID || err != nil {
+			return nil, util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
+				sIdent.StoreID, storeID, err)
+		}
+	}
 	return localDB, nil
 }
 
