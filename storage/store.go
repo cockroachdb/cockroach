@@ -763,8 +763,12 @@ func (s *Store) Stopper() *util.Stopper { return s.stopper }
 // keys and the supplied proto.Replicas slice. It allocates new Raft
 // and range IDs to fill out the supplied replicas.
 func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
+	id, err := s.raftIDAlloc.Allocate()
+	if err != nil {
+		return nil, err
+	}
 	desc := &proto.RangeDescriptor{
-		RaftID:   s.raftIDAlloc.Allocate(),
+		RaftID:   id,
 		StartKey: start,
 		EndKey:   end,
 		Replicas: append([]proto.Replica(nil), replicas...),

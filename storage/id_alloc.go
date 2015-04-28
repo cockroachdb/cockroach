@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -48,6 +49,7 @@ type IDAllocator struct {
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
 	ids       chan int64 // Channel of available IDs
+	closed    int32      // Atomically updated closed "bool"
 	stopper   *util.Stopper
 }
 
@@ -76,17 +78,22 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 }
 
 // Allocate allocates a new ID from the global KV DB.
-func (ia *IDAllocator) Allocate() int64 {
+func (ia *IDAllocator) Allocate() (int64, error) {
 	for {
 		id := <-ia.ids
 		if id == allocationTrigger {
-			ia.stopper.RunWorker(func() {
-				// allocateBlock may call itself to retry, so call stopper.SetStopped
-				// here to ensure Add and SetStopped are matched.
+			if !ia.stopper.StartTask() {
+				if atomic.CompareAndSwapInt32(&ia.closed, 0, 1) {
+					close(ia.ids)
+				}
+				return 0, util.Errorf("could not allocate ID; system is draining")
+			}
+			go func() {
 				ia.allocateBlock(ia.blockSize)
-			})
+				ia.stopper.FinishTask()
+			}()
 		} else {
-			return id
+			return id, nil
 		}
 	}
 }
@@ -98,25 +105,18 @@ func (ia *IDAllocator) Allocate() int64 {
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	var ir *proto.IncrementResponse
 	retryOpts := IDAllocationRetryOpts
-	retryOpts.Stopper = ia.stopper
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		if !ia.stopper.StartTask() {
-			return util.RetryBreak, util.Errorf("id allocator exiting as stopper is draining")
-		}
 		idKey := ia.idKey.Load().(proto.Key)
 		call := client.IncrementCall(idKey, incr)
 		ir = call.Reply.(*proto.IncrementResponse)
 		if err := ia.db.Run(call); err != nil {
 			log.Warningf("unable to allocate %d ids from %s: %s", incr, ia.idKey, err)
-			ia.stopper.FinishTask()
 			return util.RetryContinue, err
 		}
-		ia.stopper.FinishTask()
 		return util.RetryBreak, nil
 	})
 	if err != nil {
-		// The only way we exit with an error is if the stopper is triggered.
-		return
+		panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
 	}
 
 	if ir.NewValue <= ia.minID {
