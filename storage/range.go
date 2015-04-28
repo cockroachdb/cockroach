@@ -154,6 +154,7 @@ type RangeManager interface {
 	Gossip() *gossip.Gossip
 	SplitQueue() *splitQueue
 	Stopper() *util.Stopper
+	EventFeed() StoreEventFeed
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -802,6 +803,8 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 			} else {
 				// After successful commit, update cached stats values.
 				r.stats.Update(ms)
+				// Publish update to event feed.
+				r.rm.EventFeed().updateRange(r, args.Method(), &ms)
 				// If the commit succeeded, potentially add range to split queue.
 				r.maybeSplit()
 				// Maybe update gossip configs on a put.

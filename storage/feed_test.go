@@ -142,7 +142,7 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"UpdateRange",
 			func(feed StoreEventFeed) {
-				feed.updateRange(rng1, diffStats)
+				feed.updateRange(rng1, proto.Put, diffStats)
 			},
 			&UpdateRangeEvent{
 				StoreID: proto.StoreID(1),
@@ -156,6 +156,7 @@ func TestStoreEventFeed(t *testing.T) {
 					KeyBytes:  40,
 					ValBytes:  360,
 				},
+				Method: proto.Put,
 				Diff: proto.MVCCStats{
 					IntentBytes: 30,
 					IntentAge:   20,
