@@ -90,6 +90,7 @@ func newTemplate() (*x509.Certificate, error) {
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			Organization: []string{"Cockroach"},
+			CommonName:   "CockroachTest",
 		},
 		NotBefore: notBefore,
 		NotAfter:  notBefore.Add(validFor),
