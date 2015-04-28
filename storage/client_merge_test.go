@@ -20,6 +20,7 @@ package storage_test
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -195,9 +196,9 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	}
 }
 
-// disabledTestStoreRangeMergeNonConsecutive attempts to merge two ranges
+// TestStoreRangeMergeNonConsecutive attempts to merge two ranges
 // that are not on same store.
-func disabledTestStoreRangeMergeNonConsecutive(t *testing.T) {
+func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -226,12 +227,24 @@ func disabledTestStoreRangeMergeNonConsecutive(t *testing.T) {
 		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeC.Desc().StartKey)
 	}
 
-	// Remove range B from store and attempt to merge.
-	store.RemoveRange(rangeB)
+	// Remove range B from store and attempt to merge. This is a bit of a hack and leaves some
+	// internals in an inconsistent state, so we must re-add the range later.
+	// This is sufficient for now to generate the "ranges not collocated" error; if this changes
+	// in the future we could make this test more realistic by using a multiTestContext
+	// and ChangeReplicas to arrange two ranges onto different stores/nodes.
+	if err := store.RemoveRange(rangeB); err != nil {
+		t.Fatal(err)
+	}
 
 	argsMerge, replyMerge := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
 	rangeA.AdminMerge(argsMerge, replyMerge)
-	if replyMerge.Error == nil {
-		t.Fatal("Should not be able to merge two ranges that are not consecutive on store")
+	if replyMerge.Error == nil ||
+		!strings.Contains(replyMerge.Error.String(), "ranges not collocated") {
+		t.Fatalf("did not got expected error; got %s", replyMerge.Error)
+	}
+
+	// Re-add the range. This is necessary for a clean shutdown.
+	if err := store.AddRange(rangeB); err != nil {
+		t.Fatal(err)
 	}
 }
