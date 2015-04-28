@@ -314,8 +314,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 		},
 	}
 	// Send lease request directly to raft in order to skip unnecessary
-	// checks entanglements with normal request machinery, (e.g. the
-	// command queue).
+	// checks from normal request machinery, (e.g. the command queue).
 	errChan, pendingCmd := r.proposeRaftCommand(args, &proto.InternalLeaderLeaseResponse{})
 	var err error
 	if err = <-errChan; err == nil {
