@@ -748,6 +748,18 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	if index <= 0 {
 		log.Fatalf("raft command index is <= 0")
 	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			// We didn't commit the batch, but advance the last applied index nonetheless.
+			if err := setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
+				log.Fatalf("could not advance applied index: %s", err)
+			}
+			atomic.StoreUint64(&r.appliedIndex, index)
+		}
+	}()
+
 	header := args.Header()
 
 	// Check the response cache to ensure idempotency.
@@ -800,6 +812,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 		if err := batch.Commit(); err != nil {
 			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
 		}
+		committed = true
 		// After successful commit, update cached stats and appliedIndex value.
 		atomic.StoreUint64(&r.appliedIndex, index)
 		r.stats.Update(ms)
@@ -816,12 +829,6 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 				})
 			}
 		}
-	} else {
-		// Advance the last applied index nonetheless, without the batch.
-		if err = setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
-			log.Fatalf("could not advance applied index: %s", err)
-		}
-		atomic.StoreUint64(&r.appliedIndex, index)
 	}
 
 	// Add this command's result to the response cache if this is a
