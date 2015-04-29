@@ -800,7 +800,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 		if err := batch.Commit(); err != nil {
 			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
 		}
-		// After successful commit, update cached stats and lastIndex value.
+		// After successful commit, update cached stats and appliedIndex value.
 		atomic.StoreUint64(&r.appliedIndex, index)
 		r.stats.Update(ms)
 		// Publish update to event feed.
