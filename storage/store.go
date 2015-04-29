@@ -900,7 +900,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
 		return bytes.Compare(rng.Desc().StartKey, s.rangesByKey[i].Desc().EndKey) < 0
 	})
-	if n >= len(s.rangesByKey) {
+	if n >= len(s.rangesByKey) || rng.Desc().RaftID != s.rangesByKey[n].Desc().RaftID {
 		return util.Errorf("couldn't find range in rangesByKey slice")
 	}
 	s.rangesByKey = append(s.rangesByKey[:n], s.rangesByKey[n+1:]...)
