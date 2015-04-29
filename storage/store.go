@@ -231,6 +231,7 @@ type Store struct {
 	splitQueue     *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
 	replicateQueue *replicateQueue // Replication queue
+	rangeGCQueue   *rangeGCQueue   // Range GC queue
 	scanner        *rangeScanner   // Range scanner
 	feed           StoreEventFeed  // Event Feed
 	multiraft      *multiraft.MultiRaft
@@ -330,7 +331,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s.splitQueue = newSplitQueue(s.ctx.DB, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue)
+	s.rangeGCQueue = newRangeGCQueue(s.ctx.DB)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
 
 	return s
 }
@@ -644,6 +646,17 @@ func (s *Store) ForceReplicationScan(t util.Tester) {
 
 	for _, r := range s.ranges {
 		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
+	}
+}
+
+// ForceRangeGCScan iterates over all ranges and enqueues any that
+// may need to be GC'd. Exposed only for testing.
+func (s *Store) ForceRangeGCScan(t util.Tester) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range s.ranges {
+		s.rangeGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
 }
 

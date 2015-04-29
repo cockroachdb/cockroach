@@ -195,28 +195,27 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 // TODO(spencer): current load should factor into range processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 	stopper.RunWorker(func() {
-		// nextTime is set arbitrarily far into the future so that we don't
-		// unecessarily check for a range to dequeue if the timer function
-		// returns a short duration but the priority queue is empty.
-		emptyQueue := true
-		nextTime := time.Now().Add(24 * time.Hour)
+		// nextTime is initially nil; we don't start any timers until the queue
+		// becomes non-empty.
+		var nextTime <-chan time.Time
 
 		for {
 			select {
 			// Incoming ranges set the next time to process in the event that
 			// there were previously no ranges in the queue.
 			case <-bq.incoming:
-				if emptyQueue {
-					emptyQueue = false
-					nextTime = time.Now().Add(bq.impl.timer())
+				if nextTime == nil {
+					// When the first range is added, wake up immediately. This is
+					// mainly to facilitate testing without unnecessary sleeps.
+					nextTime = time.After(0 * time.Millisecond)
 				}
 			// Process ranges as the timer expires.
-			case <-time.After(nextTime.Sub(time.Now())):
-				nextTime = time.Now().Add(bq.impl.timer())
+			case <-nextTime:
 				bq.processOne(clock, stopper)
 				if bq.Length() == 0 {
-					emptyQueue = true
-					nextTime = time.Now().Add(24 * time.Hour)
+					nextTime = nil
+				} else {
+					nextTime = time.After(bq.impl.timer())
 				}
 
 			// Exit on stopper.

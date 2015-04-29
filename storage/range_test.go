@@ -349,7 +349,7 @@ func TestRangeHasLeaderLease(t *testing.T) {
 	if held, _ := tc.rng.HasLeaderLease(tc.clock.Now()); !held {
 		t.Errorf("expected lease on range start")
 	}
-	tc.manualClock.Set(int64(defaultLeaderLeaseDuration + 1))
+	tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(10, 0),
@@ -374,7 +374,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	tc.manualClock.Increment(int64(defaultLeaderLeaseDuration + 1))
+	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
@@ -464,7 +464,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 
 	// Expire our own lease which we automagically acquired due to being
 	// first range and config holder.
-	tc.manualClock.Increment(int64(defaultLeaderLeaseDuration + 1))
+	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := tc.clock.Now()
 
 	// Give lease to someone else.
@@ -500,7 +500,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
 
-	tc.manualClock.Increment(int64(defaultLeaderLeaseDuration + 1))
+	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := proto.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
 	rTS, _ := tc.rng.tsCache.GetMax(proto.Key("a"), nil /* end */, nil /* txn */)
@@ -902,7 +902,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// matic lease for us at the beginning, we'll basically create a lease from
 		// then on.
 		expStart := tc.rng.getLease().Expiration
-		tc.manualClock.Set(int64(defaultLeaderLeaseDuration + 1000))
+		tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1000))
 
 		test.args.Header().Timestamp = tc.clock.Now()
 
@@ -915,7 +915,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		lease := tc.rng.getLease()
 		// The lease may start earlier than our request timestamp, but the
 		// expiration will still be measured relative to it.
-		expExpiration := test.args.Header().Timestamp.Add(int64(defaultLeaderLeaseDuration), 0)
+		expExpiration := test.args.Header().Timestamp.Add(int64(DefaultLeaderLeaseDuration), 0)
 		if !lease.Start.Equal(expStart) || !lease.Expiration.Equal(expExpiration) {
 			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s", i,
 				lease.Start, lease.Expiration, expStart, expExpiration)
