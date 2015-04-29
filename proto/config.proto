@@ -120,3 +120,20 @@ message RangeTreeNode {
   optional bytes left_key = 4 [(gogoproto.customtype) = "Key"];
   optional bytes right_key = 5 [(gogoproto.customtype) = "Key"];
 }
+
+// Addr holds any network address. It is structurally similar to net.Addr 
+// however String is replaced with Address so the proto will compile.
+message Addr {
+  optional string network = 1 [(gogoproto.nullable) = false];
+  optional string address = 2 [(gogoproto.nullable) = false];
+}
+
+// NodeDescriptor holds details on node physical/network topology.
+message NodeDescriptor {
+  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  optional Addr address = 2 [(gogoproto.nullable) = false];
+  optional Attributes attrs = 3 [(gogoproto.nullable) = false];
+}
+
+
+

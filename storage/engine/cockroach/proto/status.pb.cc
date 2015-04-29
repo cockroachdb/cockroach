@@ -58,13 +58,14 @@ void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(StoreStatus));
   NodeStatus_descriptor_ = file->message_type(1);
-  static const int NodeStatus_offsets_[6] = {
+  static const int NodeStatus_offsets_[7] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, store_ids_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, range_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, started_at_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, updated_at_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, stats_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, desc_),
   };
   NodeStatus_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -111,23 +112,26 @@ void protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   ::cockroach::proto::protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  ::cockroach::proto::protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n\034cockroach/proto/status.proto\022\017cockroac"
-    "h.proto\032\032cockroach/proto/data.proto\032\024gog"
-    "oproto/gogo.proto\"\346\001\n\013StoreStatus\022,\n\010sto"
-    "re_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\022"
-    ")\n\007node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006Node"
-    "ID\022\031\n\013range_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted"
-    "_at\030\004 \001(\003B\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037"
-    "\000\022/\n\005stats\030\006 \001(\0132\032.cockroach.proto.MVCCS"
-    "tatsB\004\310\336\037\000\"\334\001\n\nNodeStatus\022)\n\007node_id\030\001 \001"
-    "(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022#\n\tstore_id"
-    "s\030\002 \003(\005B\020\310\336\037\000\342\336\037\010StoreIDs\022\031\n\013range_count"
-    "\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003B\004\310\336\037\000\022\030"
-    "\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stats\030\006 \001(\0132"
-    "\032.cockroach.proto.MVCCStatsB\004\310\336\037\000B\023Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001", 574);
+    "h.proto\032\032cockroach/proto/data.proto\032\034coc"
+    "kroach/proto/config.proto\032\024gogoproto/gog"
+    "o.proto\"\346\001\n\013StoreStatus\022,\n\010store_id\030\001 \001("
+    "\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\022)\n\007node_id"
+    "\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022\031\n\013rang"
+    "e_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003B"
+    "\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stats"
+    "\030\006 \001(\0132\032.cockroach.proto.MVCCStatsB\004\310\336\037\000"
+    "\"\221\002\n\nNodeStatus\022)\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336"
+    "\037\006NodeID\332\336\037\006NodeID\022#\n\tstore_ids\030\002 \003(\005B\020\310"
+    "\336\037\000\342\336\037\010StoreIDs\022\031\n\013range_count\030\003 \001(\005B\004\310\336"
+    "\037\000\022\030\n\nstarted_at\030\004 \001(\003B\004\310\336\037\000\022\030\n\nupdated_"
+    "at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stats\030\006 \001(\0132\032.cockroac"
+    "h.proto.MVCCStatsB\004\310\336\037\000\0223\n\004desc\030\007 \001(\0132\037."
+    "cockroach.proto.NodeDescriptorB\004\310\336\037\000B\023Z\005"
+    "proto\340\342\036\001\310\342\036\001\320\342\036\001", 657);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/status.proto", &protobuf_RegisterTypes);
   StoreStatus::default_instance_ = new StoreStatus();
@@ -588,6 +592,7 @@ const int NodeStatus::kRangeCountFieldNumber;
 const int NodeStatus::kStartedAtFieldNumber;
 const int NodeStatus::kUpdatedAtFieldNumber;
 const int NodeStatus::kStatsFieldNumber;
+const int NodeStatus::kDescFieldNumber;
 #endif  // !_MSC_VER
 
 NodeStatus::NodeStatus()
@@ -598,6 +603,7 @@ NodeStatus::NodeStatus()
 
 void NodeStatus::InitAsDefaultInstance() {
   stats_ = const_cast< ::cockroach::proto::MVCCStats*>(&::cockroach::proto::MVCCStats::default_instance());
+  desc_ = const_cast< ::cockroach::proto::NodeDescriptor*>(&::cockroach::proto::NodeDescriptor::default_instance());
 }
 
 NodeStatus::NodeStatus(const NodeStatus& from)
@@ -614,6 +620,7 @@ void NodeStatus::SharedCtor() {
   started_at_ = GOOGLE_LONGLONG(0);
   updated_at_ = GOOGLE_LONGLONG(0);
   stats_ = NULL;
+  desc_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -625,6 +632,7 @@ NodeStatus::~NodeStatus() {
 void NodeStatus::SharedDtor() {
   if (this != default_instance_) {
     delete stats_;
+    delete desc_;
   }
 }
 
@@ -660,10 +668,13 @@ void NodeStatus::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 61) {
+  if (_has_bits_[0 / 32] & 125) {
     ZR_(node_id_, updated_at_);
     if (has_stats()) {
       if (stats_ != NULL) stats_->::cockroach::proto::MVCCStats::Clear();
+    }
+    if (has_desc()) {
+      if (desc_ != NULL) desc_->::cockroach::proto::NodeDescriptor::Clear();
     }
   }
 
@@ -772,6 +783,19 @@ bool NodeStatus::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(58)) goto parse_desc;
+        break;
+      }
+
+      // optional .cockroach.proto.NodeDescriptor desc = 7;
+      case 7: {
+        if (tag == 58) {
+         parse_desc:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_desc()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -833,6 +857,12 @@ void NodeStatus::SerializeWithCachedSizes(
       6, this->stats(), output);
   }
 
+  // optional .cockroach.proto.NodeDescriptor desc = 7;
+  if (has_desc()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      7, this->desc(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -874,6 +904,13 @@ void NodeStatus::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         6, this->stats(), target);
+  }
+
+  // optional .cockroach.proto.NodeDescriptor desc = 7;
+  if (has_desc()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        7, this->desc(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -921,6 +958,13 @@ int NodeStatus::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->stats());
+    }
+
+    // optional .cockroach.proto.NodeDescriptor desc = 7;
+    if (has_desc()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->desc());
     }
 
   }
@@ -976,6 +1020,9 @@ void NodeStatus::MergeFrom(const NodeStatus& from) {
     if (from.has_stats()) {
       mutable_stats()->::cockroach::proto::MVCCStats::MergeFrom(from.stats());
     }
+    if (from.has_desc()) {
+      mutable_desc()->::cockroach::proto::NodeDescriptor::MergeFrom(from.desc());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -1005,6 +1052,7 @@ void NodeStatus::Swap(NodeStatus* other) {
     std::swap(started_at_, other->started_at_);
     std::swap(updated_at_, other->updated_at_);
     std::swap(stats_, other->stats_);
+    std::swap(desc_, other->desc_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

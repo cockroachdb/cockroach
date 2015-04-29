@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -480,7 +479,7 @@ func TestStoreRangeReplicate(t *testing.T) {
 
 	// Initialize the gossip network.
 	for _, s := range mtc.stores {
-		s.GossipCapacity(&gossip.NodeDescriptor{NodeID: s.Ident.NodeID})
+		s.GossipCapacity(&proto.NodeDescriptor{NodeID: s.Ident.NodeID})
 	}
 	mtc.stores[0].WaitForNodes(3)
 

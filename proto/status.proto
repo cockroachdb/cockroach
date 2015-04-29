@@ -20,6 +20,7 @@ package cockroach.proto;
 option go_package = "proto";
 
 import "cockroach/proto/data.proto";
+import "cockroach/proto/config.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -46,4 +47,5 @@ message NodeStatus {
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];
   optional MVCCStats stats = 6 [(gogoproto.nullable) = false];
+  optional NodeDescriptor desc = 7 [(gogoproto.nullable) = false];
 }

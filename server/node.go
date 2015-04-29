@@ -55,10 +55,10 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	ClusterID  string                // UUID for Cockroach cluster
-	Descriptor gossip.NodeDescriptor // Node ID, network/physical topology
-	ctx        storage.StoreContext  // Context to use and pass to stores
-	lSender    *kv.LocalSender       // Local KV sender for access to node-local stores
+	ClusterID  string               // UUID for Cockroach cluster
+	Descriptor proto.NodeDescriptor // Node ID, network/physical topology
+	ctx        storage.StoreContext // Context to use and pass to stores
+	lSender    *kv.LocalSender      // Local KV sender for access to node-local stores
 	startedAt  int64
 	// ScanCount is the number of times through the store scanning loop locked
 	// by the completedScan mutex.
@@ -183,7 +183,10 @@ func NewNode(ctx storage.StoreContext) *Node {
 // initDescriptor initializes the node descriptor with the server
 // address and the node attributes.
 func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
-	n.Descriptor.Address = addr
+	n.Descriptor.Address = proto.Addr{
+		Network: addr.Network(),
+		Address: addr.String(),
+	}
 	n.Descriptor.Attrs = attrs
 }
 

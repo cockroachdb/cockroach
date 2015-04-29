@@ -98,15 +98,8 @@ var (
 	TestBootstrap = []Resolver{}
 )
 
-// NodeDescriptor holds details on node physical/network topology.
-type NodeDescriptor struct {
-	NodeID  proto.NodeID
-	Address net.Addr
-	Attrs   proto.Attributes // node specific attributes (e.g. datacenter, machine info)
-}
-
 func init() {
-	gob.Register(&NodeDescriptor{})
+	gob.Register(&proto.NodeDescriptor{})
 }
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
@@ -165,7 +158,7 @@ func (g *Gossip) GetNodeID() proto.NodeID {
 
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
-func (g *Gossip) SetNodeDescriptor(desc *NodeDescriptor) error {
+func (g *Gossip) SetNodeDescriptor(desc *proto.NodeDescriptor) error {
 	nodeIDKey := MakeNodeIDKey(desc.NodeID)
 	log.Infof("gossiping node descriptor %+v", desc)
 	if err := g.AddInfo(nodeIDKey, desc, ttlNodeIDGossip); err != nil {
@@ -201,8 +194,8 @@ func (g *Gossip) GetNodeIDAddress(nodeID proto.NodeID) (net.Addr, error) {
 func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
-		if nd, ok := i.Val.(*NodeDescriptor); ok {
-			return nd.Address, nil
+		if nd, ok := i.Val.(*proto.NodeDescriptor); ok {
+			return util.MakeRawAddr(nd.Address.Network, nd.Address.Address), nil
 		}
 		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
 	}

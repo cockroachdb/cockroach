@@ -244,6 +244,58 @@ func (m *RangeTreeNode) GetBlack() bool {
 	return false
 }
 
+// Addr holds any network address. It is structurally similar to net.Addr
+// however String is replaced with Address so the proto will compile.
+type Addr struct {
+	Network          string `protobuf:"bytes,1,opt,name=network" json:"network"`
+	Address          string `protobuf:"bytes,2,opt,name=address" json:"address"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *Addr) Reset()         { *m = Addr{} }
+func (m *Addr) String() string { return proto1.CompactTextString(m) }
+func (*Addr) ProtoMessage()    {}
+
+func (m *Addr) GetNetwork() string {
+	if m != nil {
+		return m.Network
+	}
+	return ""
+}
+
+func (m *Addr) GetAddress() string {
+	if m != nil {
+		return m.Address
+	}
+	return ""
+}
+
+// NodeDescriptor holds details on node physical/network topology.
+type NodeDescriptor struct {
+	NodeID           NodeID     `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	Address          Addr       `protobuf:"bytes,2,opt,name=address" json:"address"`
+	Attrs            Attributes `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
+	XXX_unrecognized []byte     `json:"-"`
+}
+
+func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
+func (m *NodeDescriptor) String() string { return proto1.CompactTextString(m) }
+func (*NodeDescriptor) ProtoMessage()    {}
+
+func (m *NodeDescriptor) GetAddress() Addr {
+	if m != nil {
+		return m.Address
+	}
+	return Addr{}
+}
+
+func (m *NodeDescriptor) GetAttrs() Attributes {
+	if m != nil {
+		return m.Attrs
+	}
+	return Attributes{}
+}
+
 func init() {
 }
 func (m *Attributes) Unmarshal(data []byte) error {
@@ -1086,6 +1138,197 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *Addr) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Network", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Network = string(data[index:postIndex])
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Address = string(data[index:postIndex])
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
+func (m *NodeDescriptor) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.NodeID |= (NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Address.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Attrs.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
 func (m *Attributes) Size() (n int) {
 	var l int
 	_ = l
@@ -1224,6 +1467,33 @@ func (m *RangeTreeNode) Size() (n int) {
 		l = m.RightKey.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Addr) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Network)
+	n += 1 + l + sovConfig(uint64(l))
+	l = len(m.Address)
+	n += 1 + l + sovConfig(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *NodeDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.NodeID))
+	l = m.Address.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	l = m.Attrs.Size()
+	n += 1 + l + sovConfig(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1603,6 +1873,75 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n9
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Addr) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Addr) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintConfig(data, i, uint64(len(m.Network)))
+	i += copy(data[i:], m.Network)
+	data[i] = 0x12
+	i++
+	i = encodeVarintConfig(data, i, uint64(len(m.Address)))
+	i += copy(data[i:], m.Address)
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *NodeDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.NodeID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Address.Size()))
+	n10, err := m.Address.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n10
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
+	n11, err := m.Attrs.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

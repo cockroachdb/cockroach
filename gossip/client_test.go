@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
@@ -47,7 +48,12 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 		t.Fatal(err)
 	}
 	local = New(lRPCContext, gossipInterval, TestBootstrap)
-	local.SetNodeDescriptor(&NodeDescriptor{NodeID: 1, Address: laddr})
+	local.SetNodeDescriptor(&proto.NodeDescriptor{
+		NodeID: 1,
+		Address: proto.Addr{
+			Network: laddr.Network(),
+			Address: laddr.String(),
+		}})
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
 	rRPCContext := rpc.NewContext(rclock, tlsConfig, nil)
@@ -56,7 +62,13 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, gossipInterval, TestBootstrap)
-	local.SetNodeDescriptor(&NodeDescriptor{NodeID: 2, Address: raddr})
+	local.SetNodeDescriptor(&proto.NodeDescriptor{
+		NodeID: 2,
+		Address: proto.Addr{
+			Network: raddr.Network(),
+			Address: raddr.String(),
+		},
+	})
 	stopper = util.NewStopper()
 	stopper.AddCloser(lserver)
 	stopper.AddCloser(rserver)

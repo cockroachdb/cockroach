@@ -13,30 +13,6 @@ import math "math"
 var _ = proto1.Marshal
 var _ = math.Inf
 
-type Addr struct {
-	Network          string `protobuf:"bytes,1,opt,name=network" json:"network"`
-	Address          string `protobuf:"bytes,2,opt,name=address" json:"address"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *Addr) Reset()         { *m = Addr{} }
-func (m *Addr) String() string { return proto1.CompactTextString(m) }
-func (*Addr) ProtoMessage()    {}
-
-func (m *Addr) GetNetwork() string {
-	if m != nil {
-		return m.Network
-	}
-	return ""
-}
-
-func (m *Addr) GetAddress() string {
-	if m != nil {
-		return m.Address
-	}
-	return ""
-}
-
 // GossipRequest is the request struct passed with the Gossip RPC.
 type GossipRequest struct {
 	// Requesting node's ID.

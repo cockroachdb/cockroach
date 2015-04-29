@@ -48,6 +48,12 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* RangeTreeNode_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RangeTreeNode_reflection_ = NULL;
+const ::google::protobuf::Descriptor* Addr_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  Addr_reflection_ = NULL;
+const ::google::protobuf::Descriptor* NodeDescriptor_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  NodeDescriptor_reflection_ = NULL;
 
 }  // namespace
 
@@ -206,6 +212,39 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(RangeTreeNode));
+  Addr_descriptor_ = file->message_type(9);
+  static const int Addr_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, network_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, address_),
+  };
+  Addr_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      Addr_descriptor_,
+      Addr::default_instance_,
+      Addr_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(Addr));
+  NodeDescriptor_descriptor_ = file->message_type(10);
+  static const int NodeDescriptor_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, node_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, address_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, attrs_),
+  };
+  NodeDescriptor_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      NodeDescriptor_descriptor_,
+      NodeDescriptor::default_instance_,
+      NodeDescriptor_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(NodeDescriptor));
 }
 
 namespace {
@@ -236,6 +275,10 @@ void protobuf_RegisterTypes(const ::std::string&) {
     RangeTree_descriptor_, &RangeTree::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     RangeTreeNode_descriptor_, &RangeTreeNode::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    Addr_descriptor_, &Addr::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    NodeDescriptor_descriptor_, &NodeDescriptor::default_instance());
 }
 
 }  // namespace
@@ -259,6 +302,10 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto() {
   delete RangeTree_reflection_;
   delete RangeTreeNode::default_instance_;
   delete RangeTreeNode_reflection_;
+  delete Addr::default_instance_;
+  delete Addr_reflection_;
+  delete NodeDescriptor::default_instance_;
+  delete NodeDescriptor_reflection_;
 }
 
 void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
@@ -298,7 +345,13 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "\030\n\003key\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\023\n\005black\030\002 \001(\010"
     "B\004\310\336\037\000\022\037\n\nparent_key\030\003 \001(\014B\013\310\336\037\000\332\336\037\003Key\022"
     "\031\n\010left_key\030\004 \001(\014B\007\332\336\037\003Key\022\032\n\tright_key\030"
-    "\005 \001(\014B\007\332\336\037\003KeyB\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 1195);
+    "\005 \001(\014B\007\332\336\037\003Key\"4\n\004Addr\022\025\n\007network\030\001 \001(\tB"
+    "\004\310\336\037\000\022\025\n\007address\030\002 \001(\tB\004\310\336\037\000\"\233\001\n\016NodeDes"
+    "criptor\022)\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID"
+    "\332\336\037\006NodeID\022,\n\007address\030\002 \001(\0132\025.cockroach."
+    "proto.AddrB\004\310\336\037\000\0220\n\005attrs\030\003 \001(\0132\033.cockro"
+    "ach.proto.AttributesB\004\310\336\037\000B\023Z\005proto\340\342\036\001\310"
+    "\342\036\001\320\342\036\001", 1407);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -310,6 +363,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
   ZoneConfig::default_instance_ = new ZoneConfig();
   RangeTree::default_instance_ = new RangeTree();
   RangeTreeNode::default_instance_ = new RangeTreeNode();
+  Addr::default_instance_ = new Addr();
+  NodeDescriptor::default_instance_ = new NodeDescriptor();
   Attributes::default_instance_->InitAsDefaultInstance();
   Replica::default_instance_->InitAsDefaultInstance();
   RangeDescriptor::default_instance_->InitAsDefaultInstance();
@@ -319,6 +374,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
   ZoneConfig::default_instance_->InitAsDefaultInstance();
   RangeTree::default_instance_->InitAsDefaultInstance();
   RangeTreeNode::default_instance_->InitAsDefaultInstance();
+  Addr::default_instance_->InitAsDefaultInstance();
+  NodeDescriptor::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto);
 }
 
@@ -2982,6 +3039,622 @@ void RangeTreeNode::Swap(RangeTreeNode* other) {
   ::google::protobuf::Metadata metadata;
   metadata.descriptor = RangeTreeNode_descriptor_;
   metadata.reflection = RangeTreeNode_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int Addr::kNetworkFieldNumber;
+const int Addr::kAddressFieldNumber;
+#endif  // !_MSC_VER
+
+Addr::Addr()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.Addr)
+}
+
+void Addr::InitAsDefaultInstance() {
+}
+
+Addr::Addr(const Addr& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.Addr)
+}
+
+void Addr::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  network_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  address_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+Addr::~Addr() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.Addr)
+  SharedDtor();
+}
+
+void Addr::SharedDtor() {
+  if (network_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete network_;
+  }
+  if (address_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete address_;
+  }
+  if (this != default_instance_) {
+  }
+}
+
+void Addr::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* Addr::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return Addr_descriptor_;
+}
+
+const Addr& Addr::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  return *default_instance_;
+}
+
+Addr* Addr::default_instance_ = NULL;
+
+Addr* Addr::New() const {
+  return new Addr;
+}
+
+void Addr::Clear() {
+  if (_has_bits_[0 / 32] & 3) {
+    if (has_network()) {
+      if (network_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        network_->clear();
+      }
+    }
+    if (has_address()) {
+      if (address_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        address_->clear();
+      }
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool Addr::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.Addr)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional string network = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_network()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->network().data(), this->network().length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "network");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_address;
+        break;
+      }
+
+      // optional string address = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_address:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_address()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->address().data(), this->address().length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "address");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.Addr)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.Addr)
+  return false;
+#undef DO_
+}
+
+void Addr::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.Addr)
+  // optional string network = 1;
+  if (has_network()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->network().data(), this->network().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "network");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->network(), output);
+  }
+
+  // optional string address = 2;
+  if (has_address()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->address().data(), this->address().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "address");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      2, this->address(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.Addr)
+}
+
+::google::protobuf::uint8* Addr::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.Addr)
+  // optional string network = 1;
+  if (has_network()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->network().data(), this->network().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "network");
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+        1, this->network(), target);
+  }
+
+  // optional string address = 2;
+  if (has_address()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->address().data(), this->address().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "address");
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+        2, this->address(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.Addr)
+  return target;
+}
+
+int Addr::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional string network = 1;
+    if (has_network()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->network());
+    }
+
+    // optional string address = 2;
+    if (has_address()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->address());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void Addr::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const Addr* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const Addr*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void Addr::MergeFrom(const Addr& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_network()) {
+      set_network(from.network());
+    }
+    if (from.has_address()) {
+      set_address(from.address());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void Addr::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void Addr::CopyFrom(const Addr& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool Addr::IsInitialized() const {
+
+  return true;
+}
+
+void Addr::Swap(Addr* other) {
+  if (other != this) {
+    std::swap(network_, other->network_);
+    std::swap(address_, other->address_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata Addr::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = Addr_descriptor_;
+  metadata.reflection = Addr_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int NodeDescriptor::kNodeIdFieldNumber;
+const int NodeDescriptor::kAddressFieldNumber;
+const int NodeDescriptor::kAttrsFieldNumber;
+#endif  // !_MSC_VER
+
+NodeDescriptor::NodeDescriptor()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.NodeDescriptor)
+}
+
+void NodeDescriptor::InitAsDefaultInstance() {
+  address_ = const_cast< ::cockroach::proto::Addr*>(&::cockroach::proto::Addr::default_instance());
+  attrs_ = const_cast< ::cockroach::proto::Attributes*>(&::cockroach::proto::Attributes::default_instance());
+}
+
+NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.NodeDescriptor)
+}
+
+void NodeDescriptor::SharedCtor() {
+  _cached_size_ = 0;
+  node_id_ = 0;
+  address_ = NULL;
+  attrs_ = NULL;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+NodeDescriptor::~NodeDescriptor() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.NodeDescriptor)
+  SharedDtor();
+}
+
+void NodeDescriptor::SharedDtor() {
+  if (this != default_instance_) {
+    delete address_;
+    delete attrs_;
+  }
+}
+
+void NodeDescriptor::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* NodeDescriptor::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return NodeDescriptor_descriptor_;
+}
+
+const NodeDescriptor& NodeDescriptor::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  return *default_instance_;
+}
+
+NodeDescriptor* NodeDescriptor::default_instance_ = NULL;
+
+NodeDescriptor* NodeDescriptor::New() const {
+  return new NodeDescriptor;
+}
+
+void NodeDescriptor::Clear() {
+  if (_has_bits_[0 / 32] & 7) {
+    node_id_ = 0;
+    if (has_address()) {
+      if (address_ != NULL) address_->::cockroach::proto::Addr::Clear();
+    }
+    if (has_attrs()) {
+      if (attrs_ != NULL) attrs_->::cockroach::proto::Attributes::Clear();
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool NodeDescriptor::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.NodeDescriptor)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int32 node_id = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &node_id_)));
+          set_has_node_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_address;
+        break;
+      }
+
+      // optional .cockroach.proto.Addr address = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_address:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_address()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_attrs;
+        break;
+      }
+
+      // optional .cockroach.proto.Attributes attrs = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_attrs:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_attrs()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.NodeDescriptor)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.NodeDescriptor)
+  return false;
+#undef DO_
+}
+
+void NodeDescriptor::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.NodeDescriptor)
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
+  }
+
+  // optional .cockroach.proto.Addr address = 2;
+  if (has_address()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, this->address(), output);
+  }
+
+  // optional .cockroach.proto.Attributes attrs = 3;
+  if (has_attrs()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, this->attrs(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.NodeDescriptor)
+}
+
+::google::protobuf::uint8* NodeDescriptor::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.NodeDescriptor)
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->node_id(), target);
+  }
+
+  // optional .cockroach.proto.Addr address = 2;
+  if (has_address()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, this->address(), target);
+  }
+
+  // optional .cockroach.proto.Attributes attrs = 3;
+  if (has_attrs()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, this->attrs(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.NodeDescriptor)
+  return target;
+}
+
+int NodeDescriptor::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional int32 node_id = 1;
+    if (has_node_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->node_id());
+    }
+
+    // optional .cockroach.proto.Addr address = 2;
+    if (has_address()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->address());
+    }
+
+    // optional .cockroach.proto.Attributes attrs = 3;
+    if (has_attrs()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->attrs());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void NodeDescriptor::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const NodeDescriptor* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const NodeDescriptor*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_node_id()) {
+      set_node_id(from.node_id());
+    }
+    if (from.has_address()) {
+      mutable_address()->::cockroach::proto::Addr::MergeFrom(from.address());
+    }
+    if (from.has_attrs()) {
+      mutable_attrs()->::cockroach::proto::Attributes::MergeFrom(from.attrs());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void NodeDescriptor::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void NodeDescriptor::CopyFrom(const NodeDescriptor& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool NodeDescriptor::IsInitialized() const {
+
+  return true;
+}
+
+void NodeDescriptor::Swap(NodeDescriptor* other) {
+  if (other != this) {
+    std::swap(node_id_, other->node_id_);
+    std::swap(address_, other->address_);
+    std::swap(attrs_, other->attrs_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata NodeDescriptor::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = NodeDescriptor_descriptor_;
+  metadata.reflection = NodeDescriptor_reflection_;
   return metadata;
 }
 

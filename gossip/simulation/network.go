@@ -85,9 +85,12 @@ func NewNetwork(nodeCount int, networkType string,
 		}
 
 		node := gossip.New(rpcContext, gossipInterval, bootstrap)
-		node.SetNodeDescriptor(&gossip.NodeDescriptor{
-			NodeID:  proto.NodeID(i + 1),
-			Address: addrs[i],
+		node.SetNodeDescriptor(&proto.NodeDescriptor{
+			NodeID: proto.NodeID(i + 1),
+			Address: proto.Addr{
+				Network: addrs[i].Network(),
+				Address: addrs[i].String(),
+			},
 		})
 		node.Start(servers[i], stopper)
 		stopper.AddCloser(servers[i])
