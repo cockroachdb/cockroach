@@ -57,6 +57,22 @@ docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
 # root@82cb657cdc42:/cockroach#
 ```
 
+If the docker command fails but Docker is installed, you probably need to initialize it. Here's a common error message:
+```bash
+FATA[0000] Post http:///var/run/docker.sock/v1.17/images/create?fromImage=cockroachdb%2Fcockroach%3Alatest: dial unix /var/run/docker.sock: no such file or directory
+```
+On OSX:
+```bash
+# Setup Boot2Docker. This should only need to be done once.
+boot2docker init
+# Start Boot2Docker. This will need to be run once per reboot.
+boot2docker start
+# Setup environment variables. This will need to be run once per shell.
+$(boot2docker shellinit)
+```
+Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
+
+
 Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up the node:
 
 ```bash
