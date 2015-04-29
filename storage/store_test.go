@@ -539,20 +539,21 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	// Split the range and then remove the second half to clear up some space.
-	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
-	// This shouldn't be necessary, but without it, the range sometimes
-	// gets removed before the election is finished, and then Raft panics.
-	// See #702.
-	rng.WaitForLeaderLease(t)
-	if err := store.RemoveRange(rng); err != nil {
-		t.Fatal(err)
-	}
-	// Range is from KeyMin to "a", so reading "a" should fail because
-	// it's just outside the range boundary.
-	args, reply := getArgs([]byte("a"), 1, store.StoreID())
+
+	rng2 := splitTestRange(store, engine.KeyMin, proto.Key("b"), t)
+
+	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
+	// fail because it's just after the range boundary.
+	args, reply := getArgs([]byte("b"), 1, store.StoreID())
 	err := store.ExecuteCmd(args, reply)
 	if err == nil {
+		t.Error("expected key to be out of range")
+	}
+
+	// Range 2 is from "b" to KeyMax, so reading "a" from range 2 should
+	// fail because it's before the start of the range.
+	args, reply = getArgs([]byte("a"), rng2.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(args, reply); err == nil {
 		t.Error("expected key to be out of range")
 	}
 }
