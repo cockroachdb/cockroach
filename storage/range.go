@@ -211,7 +211,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	}
 	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
-	appliedIndex, err := r.loadAppliedIndex()
+	appliedIndex, err := r.loadAppliedIndex(r.rm.Engine())
 	if err != nil {
 		return nil, err
 	}
@@ -819,11 +819,9 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	} else {
 		// Advance the last applied index nonetheless, without the batch.
 		if err = setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
-			log.Errorf("could not advance applied index: %s", err)
-		} else {
-			atomic.StoreUint64(&r.appliedIndex, index)
+			log.Fatalf("could not advance applied index: %s", err)
 		}
-
+		atomic.StoreUint64(&r.appliedIndex, index)
 	}
 
 	// Add this command's result to the response cache if this is a

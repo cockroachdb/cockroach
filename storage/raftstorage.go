@@ -166,16 +166,10 @@ func (r *Range) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
-// loadAppliedIndex retrieves the applied index from storage.
-func (r *Range) loadAppliedIndex() (uint64, error) {
-	return loadAppliedIndex(r.rm.Engine(), r.Desc().RaftID)
-}
-
-// loadAppliedIndex retrieves the applied index for the given
-// raftID from the supplied engine.
-func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
+// loadAppliedIndex retrieves the applied index from the supplied engine.
+func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 	appliedIndex := uint64(0)
-	v, err := engine.MVCCGet(eng, engine.RaftAppliedIndexKey(raftID),
+	v, err := engine.MVCCGet(eng, engine.RaftAppliedIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
@@ -236,7 +230,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, err := loadAppliedIndex(snap, r.Desc().RaftID)
+	appliedIndex, err := r.loadAppliedIndex(snap)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
