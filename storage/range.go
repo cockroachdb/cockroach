@@ -625,6 +625,24 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		// occurred after our txn timestamp.
 		if !rTS.Less(header.Timestamp) {
 			header.Timestamp = rTS.Next()
+
+			// Check if a SSI transaction's timestamp is pushed by rts,
+			// just return TransactionRetryError and transaction can
+			// retry as early as possible.
+			if proto.IsTransactionWrite(args) && header.Txn != nil && header.Txn.Isolation == proto.SERIALIZABLE && !header.Txn.OrigTimestamp.Equal(header.Timestamp) {
+				r.Lock()
+				r.cmdQ.Remove(cmdKey)
+				r.Unlock()
+				if reply.Header().Txn == nil {
+					reply.Header().Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
+				}
+				if reply.Header().Txn.Timestamp.Less(header.Timestamp) {
+					reply.Header().Txn.Timestamp = header.Timestamp
+				}
+
+				reply.Header().SetGoError(proto.NewTransactionRetryError(reply.Header().Txn))
+				return reply.Header().GoError()
+			}
 		}
 		// If there's a newer write timestamp...
 		if !wTS.Less(header.Timestamp) {
