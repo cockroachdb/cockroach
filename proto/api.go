@@ -361,6 +361,9 @@ func (*InternalLeaderLeaseRequest) Method() Method { return InternalLeaderLease 
 // Method implements the Request interface.
 func (*InternalTruncateLogRequest) Method() Method { return InternalTruncateLog }
 
+// Method implements the Request interface.
+func (*InternalBatchRequest) Method() Method { return InternalBatch }
+
 // CreateReply implements the Request interface.
 func (*ContainsRequest) CreateReply() Response { return &ContainsResponse{} }
 
@@ -421,6 +424,9 @@ func (*InternalTruncateLogRequest) CreateReply() Response { return &InternalTrun
 // CreateReply implements the Request interface.
 func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLeaderLeaseResponse{} }
 
+// CreateReply implements the Request interface.
+func (*InternalBatchRequest) CreateReply() Response { return &InternalBatchResponse{} }
+
 func (*ContainsRequest) flags() int              { return isRead }
 func (*GetRequest) flags() int                   { return isRead }
 func (*PutRequest) flags() int                   { return isWrite | isTxnWrite }
@@ -441,3 +447,4 @@ func (*InternalResolveIntentRequest) flags() int { return isWrite }
 func (*InternalMergeRequest) flags() int         { return isWrite }
 func (*InternalTruncateLogRequest) flags() int   { return isWrite }
 func (*InternalLeaderLeaseRequest) flags() int   { return isWrite }
+func (*InternalBatchRequest) flags() int         { return isWrite }

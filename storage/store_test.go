@@ -73,7 +73,7 @@ type testSender struct {
 // coordinator sender from here.
 func (db *testSender) Send(call client.Call) {
 	switch call.Args.(type) {
-	case *proto.EndTransactionRequest, *proto.BatchRequest:
+	case *proto.EndTransactionRequest, *proto.BatchRequest, *proto.InternalBatchRequest:
 		call.Reply.Header().SetGoError(util.Errorf("%s method not supported", call.Method()))
 		return
 	}

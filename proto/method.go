@@ -104,6 +104,9 @@ const (
 	InternalTruncateLog
 	// InternalLeaderLease requests a leader lease for a replica.
 	InternalLeaderLease
+	// InternalBatch implements batch processing of commands. This is a
+	// superset of the Batch method.
+	InternalBatch
 )
 
 // AllMethods is a map from string to method enum.
@@ -128,4 +131,5 @@ var AllMethods = map[string]Method{
 	InternalMerge.String():         InternalMerge,
 	InternalTruncateLog.String():   InternalTruncateLog,
 	InternalLeaderLease.String():   InternalLeaderLease,
+	InternalBatch.String():         InternalBatch,
 }
