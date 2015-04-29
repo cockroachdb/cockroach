@@ -9,6 +9,7 @@
 # Folders
 _obj
 _test
+certs
 
 # Architecture specific extensions/prefixes
 *.[568vq]
