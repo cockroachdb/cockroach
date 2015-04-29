@@ -514,6 +514,11 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 	}
 }
 
+// splitTestRange splits a range. This does *not* fully emulate a real split
+// and should not be used in new tests. Tests that need splits should live in
+// client_split_test.go and use AdminSplit instead of this function.
+// See #702
+// TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range {
 	rng := store.LookupRange(key, key)
 	if rng == nil {
