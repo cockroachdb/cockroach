@@ -185,7 +185,8 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 						q.MaybeAdd(rng, clock.Now())
 					}
 					stats.RangeCount++
-					stats.MVCC.Accumulate(rng.stats.GetMVCC())
+					ms := rng.stats.GetMVCC()
+					stats.MVCC.Accumulate(&ms)
 				} else {
 					// Otherwise, we're done with the iteration. Reset iteration and start time.
 					rs.iter.Reset()

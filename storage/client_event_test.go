@@ -63,7 +63,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		if ser.recordUpdateDetail {
 			sid = event.StoreID
 			eventStr = fmt.Sprintf("UpdateRange rid=%d, method=%s, livediff=%d",
-				event.Desc.RaftID, event.Method.String(), event.Diff.LiveBytes)
+				event.Desc.RaftID, event.Method.String(), event.Delta.LiveBytes)
 		} else {
 			ser.perStoreUpdateCount[event.StoreID]++
 		}

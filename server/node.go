@@ -439,7 +439,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					}
 					accessedStoreIDs = append(accessedStoreIDs, int32(store.Ident.StoreID))
 					rangeCount += int(storeStatus.RangeCount)
-					stats.Accumulate(storeStatus.Stats)
+					stats.Accumulate(&storeStatus.Stats)
 					return nil
 				})
 

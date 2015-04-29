@@ -157,7 +157,7 @@ func TestStoreEventFeed(t *testing.T) {
 					ValBytes:  360,
 				},
 				Method: proto.Put,
-				Diff: proto.MVCCStats{
+				Delta: proto.MVCCStats{
 					IntentBytes: 30,
 					IntentAge:   20,
 				},
@@ -200,7 +200,7 @@ func TestStoreEventFeed(t *testing.T) {
 						KeyBytes:  40,
 						ValBytes:  360,
 					},
-					Diff: proto.MVCCStats{
+					Delta: proto.MVCCStats{
 						LiveBytes: -200,
 						KeyBytes:  -30,
 						ValBytes:  -170,
@@ -238,7 +238,7 @@ func TestStoreEventFeed(t *testing.T) {
 						KeyBytes:  40,
 						ValBytes:  360,
 					},
-					Diff: proto.MVCCStats{
+					Delta: proto.MVCCStats{
 						LiveBytes: 200,
 						KeyBytes:  30,
 						ValBytes:  170,
