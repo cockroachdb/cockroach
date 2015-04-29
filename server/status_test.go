@@ -40,7 +40,7 @@ import (
 // Cockroach KV client address is set to the address of the test server.
 func startStatusServer() (*httptest.Server, *util.Stopper) {
 	stopper := util.NewStopper()
-	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20), stopper)
+	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
 	if err != nil {
 		log.Fatal(err)
 	}

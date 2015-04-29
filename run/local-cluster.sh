@@ -122,7 +122,7 @@ for i in $(seq 1 $NODES); do
 
   # If this is the first node, initialize the cluster first.
   if [[ $i == 1 ]]; then
-      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init -certs=${CERTS_DIR} $VOL 2> /dev/null
+      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init -certs=${CERTS_DIR} -stores=ssd=$VOL 2> /dev/null
       NODE_ARGS="${NODE_ARGS} --volumes-from=cockroach-init"
   fi
 

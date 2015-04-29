@@ -28,7 +28,6 @@ import (
 	commander "code.google.com/p/go-commander"
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
@@ -41,21 +40,16 @@ var Context = server.NewContext()
 
 // An initCmd command initializes a new Cockroach cluster.
 var initCmd = &commander.Command{
-	UsageLine: "init <storage-location>",
+	UsageLine: "init -stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
 	Short:     "init new Cockroach cluster and start server",
 	Long: `
-Initialize a new Cockroach cluster using the first argument as the
-storage location used to bootstrap the first replica of the first
-range. If the storage location is already part of a pre-existing
-cluster, the bootstrap will fail.
-
-This command must be run before starting any nodes in the cluster.
-The storage location specified here must be used as a device in the
--stores flag when starting this node in order to start the cluster.
+Initialize a new Cockroach cluster using the -stores command line flag to 
+specify one or more storage locations. The first of these storage locations is 
+used to bootstrap the first replica of the first range. If any of the storage 
+locations are already part of a pre-existing cluster, the bootstrap will fail.
 
 For example:
-
-  cockroach init /mnt/ssd1
+	cockroach init -stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
 `,
 	Run:  runInit,
 	Flag: *flag.CommandLine,
@@ -64,17 +58,17 @@ For example:
 // runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
 func runInit(cmd *commander.Command, args []string) {
-	// Require a single argument for storage location.
-	if len(args) != 1 {
-		cmd.Usage()
+	// First initialize the Context as it is used in other places.
+	err := Context.Init("init")
+	if err != nil {
+		log.Errorf("failed to initialize context: %s", err)
 		return
 	}
 
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
-	e := engine.NewRocksDB(proto.Attributes{}, args[0], 1<<20)
 	stopper := util.NewStopper()
-	if _, err := server.BootstrapCluster(clusterID, e, stopper); err != nil {
+	if _, err := server.BootstrapCluster(clusterID, Context.Engines, stopper); err != nil {
 		log.Errorf("unable to bootstrap cluster: %s", err)
 		return
 	}
@@ -129,7 +123,7 @@ func runStart(cmd *commander.Command, args []string) {
 	log.Infof("build Deps: %s", info.Deps)
 
 	// First initialize the Context as it is used in other places.
-	err := Context.Init()
+	err := Context.Init("start")
 	if err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
@@ -194,7 +188,7 @@ node, cycling through each store specified by the -stores flag.
 
 // runExterminate destroys the data held in the specified stores.
 func runExterminate(cmd *commander.Command, args []string) {
-	err := Context.Init()
+	err := Context.Init("exterminate")
 	if err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
