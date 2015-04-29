@@ -1043,7 +1043,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, args proto.Request, rep
 			Txn:          args.Header().Txn,
 		},
 		PusheeTxn: wiErr.Txn,
-		Abort:     proto.IsWrite(args), // abort if cmd is read/write
+		Abort:     proto.IsWrite(args), // abort if cmd is write
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
 	s.ctx.DB.Run(client.Call{Args: pushArgs, Reply: pushReply})
