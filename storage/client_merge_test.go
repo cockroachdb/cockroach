@@ -232,6 +232,12 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	// This is sufficient for now to generate the "ranges not collocated" error; if this changes
 	// in the future we could make this test more realistic by using a multiTestContext
 	// and ChangeReplicas to arrange two ranges onto different stores/nodes.
+	//
+	// Wait for the leader lease to ensure things are quiescent before removing the range.
+	// See #702 and TestStoreExecuteCmdOutOfRange.
+	// TODO(bdarnell): refactor this test to rebalance the range onto a separate node
+	// when this is supported.
+	rangeB.WaitForLeaderLease(t)
 	if err := store.RemoveRange(rangeB); err != nil {
 		t.Fatal(err)
 	}
