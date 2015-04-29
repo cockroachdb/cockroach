@@ -56,7 +56,7 @@ func (bank *Bank) moveMoney(kvClient *client.KV, from, to []byte, amount int64) 
 		if err := txn.Run(call); err != nil {
 			return err
 		}
-
+		// Read from value.
 		var fromValue int64
 		if gr.Value != nil && gr.Value.Bytes != nil {
 			readValue, err := strconv.ParseInt(string(gr.Value.Bytes), 10, 64)
@@ -71,6 +71,7 @@ func (bank *Bank) moveMoney(kvClient *client.KV, from, to []byte, amount int64) 
 			return nil
 		}
 
+		// Read to value.
 		call = client.Get(proto.Key(to))
 		gr = call.Reply.(*proto.GetResponse)
 		if err := txn.Run(call); err != nil {
