@@ -83,7 +83,7 @@ func TestStatusJson(t *testing.T) {
 		{statusKeyPrefix, "{}"},
 		{statusNodesKeyPrefix, "\"nodes\": null"},
 	}
-	// Test the /_status/local/stacks endpoint only in a go release branch.
+	// Test the /_status/local/ endpoint only in a go release branch.
 	if !strings.HasPrefix(runtime.Version(), "devel") {
 		testCases = append(testCases, TestCase{statusLocalKeyPrefix, `{
   "buildInfo": {
