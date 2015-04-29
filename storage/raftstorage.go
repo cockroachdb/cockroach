@@ -67,37 +67,22 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	return hs, cs, nil
 }
 
-// setLastIndex persists a new last index and updates its cached
-// value in the range. If a non-nil engine is passed, it is used for the
-// write; otherwise the range's default engine is used. Commit() will
-// be called on the engine to keep the update as atomic as possible.
-func (r *Range) setLastIndex(eng engine.Engine, lastIndex uint64) error {
-	if eng == nil {
-		eng = r.rm.Engine()
-	}
-	err := engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(r.Desc().RaftID),
+// setLastIndex persists a new last index.
+func setLastIndex(eng engine.Engine, raftID int64, lastIndex uint64) error {
+	return engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(raftID),
 		proto.ZeroTimestamp, proto.Value{
 			Bytes: encoding.EncodeUint64(nil, lastIndex),
 		}, nil)
-	if err != nil {
-		return err
-	}
-	if err = eng.Commit(); err != nil {
-		return err
-	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
-	return nil
 }
 
-// loadLastIndex atomically loads the last index from storage into the range.
-func (r *Range) loadLastIndex() error {
+// loadLastIndex retrieves the last index from storage.
+func (r *Range) loadLastIndex() (uint64, error) {
 	lastIndex := uint64(0)
-	raftID := r.Desc().RaftID
-	eng := r.rm.Engine()
-	v, err := engine.MVCCGet(eng, engine.RaftLastIndexKey(raftID),
+	v, err := engine.MVCCGet(r.rm.Engine(),
+		engine.RaftLastIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if v != nil {
 		_, lastIndex = encoding.DecodeUint64(v.Bytes)
@@ -107,12 +92,11 @@ func (r *Range) loadLastIndex() error {
 		// handles both cases.
 		lastEnt, err := r.raftTruncatedState()
 		if err != nil {
-			return err
+			return 0, err
 		}
 		lastIndex = lastEnt.Index
 	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
-	return nil
+	return lastIndex, nil
 }
 
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
@@ -214,6 +198,10 @@ func (r *Range) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
+func (r *Range) loadAppliedIndex() (uint64, error) {
+	return loadAppliedIndex(r.rm.Engine(), r.Desc().RaftID)
+}
+
 func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
 	appliedIndex := uint64(0)
 	v, err := engine.MVCCGet(eng, engine.RaftAppliedIndexKey(raftID),
@@ -227,37 +215,13 @@ func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
 	return appliedIndex, nil
 }
 
-// loadAppliedIndex atomically updates the applied index from stable storage.
-func (r *Range) loadAppliedIndex() error {
-	appliedIndex, err := loadAppliedIndex(r.rm.Engine(), r.Desc().RaftID)
-	if err != nil {
-		return err
-	}
-	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
-	return nil
-}
-
-// setAppliedIndex persists a new applied index and updates its cached
-// value in the range. If a non-nil engine is passed, it is used for the
-// write; otherwise the range's default engine is used. Commit() will
-// be called on the engine to keep the update as atomic as possible.
-func (r *Range) setAppliedIndex(appliedIndex uint64, eng engine.Engine) error {
-	if eng == nil {
-		eng = r.rm.Engine()
-	}
-	err := engine.MVCCPut(eng, nil, /* stats */
-		engine.RaftAppliedIndexKey(r.Desc().RaftID),
+// setAppliedIndex persists a new applied index.
+func setAppliedIndex(eng engine.Engine, raftID int64, appliedIndex uint64) error {
+	return engine.MVCCPut(eng, nil, /* stats */
+		engine.RaftAppliedIndexKey(raftID),
 		proto.ZeroTimestamp,
 		proto.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
 		nil /* txn */)
-	if err != nil {
-		return err
-	}
-	if err = eng.Commit(); err != nil {
-		return err
-	}
-	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
-	return nil
 }
 
 // Snapshot implements the raft.Storage interface.
@@ -266,7 +230,6 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	snap := r.rm.NewSnapshot()
 	defer snap.Close()
 	var snapData proto.RaftSnapshotData
-	r.loadLastIndex()
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
@@ -346,7 +309,10 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 	}
 
 	// Commit the batch and update the last index.
-	if err := r.setLastIndex(batch, lastIndex); err != nil {
+	if err := setLastIndex(batch, r.Desc().RaftID, lastIndex); err != nil {
+		return err
+	}
+	if err := batch.Commit(); err != nil {
 		return err
 	}
 
@@ -419,8 +385,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
-	// The next line in effect sets the last index to the last applied index
-	// and commits the batch.
+	// The next line sets the persisted last index to the last applied index.
 	// This is not a correctness issue, but means that we may have just
 	// transferred some entries we're about to re-request from the leader and
 	// overwrite.
@@ -428,15 +393,21 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	// performance implications are not likely to be drastic. If our feelings
 	// about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	if err := r.setLastIndex(batch, snap.Metadata.Index); err != nil {
+	if err := setLastIndex(batch, r.Desc().RaftID, snap.Metadata.Index); err != nil {
 		return err
 	}
 
-	// Save the descriptor and applied index to our member variables.
-	r.SetDesc(&desc)
-	if err := r.loadAppliedIndex(); err != nil {
+	if err := batch.Commit(); err != nil {
 		return err
 	}
+
+	// As outlined above, last and applied index are the same after applying
+	// the snapshot.
+	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
+	atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
+
+	// Save the descriptor, stats and lease.
+	r.SetDesc(&desc)
 	r.stats = stats
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 	return nil

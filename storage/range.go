@@ -205,13 +205,17 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	}
 	r.SetDesc(desc)
 
-	if err := r.loadLastIndex(); err != nil {
+	lastIndex, err := r.loadLastIndex()
+	if err != nil {
 		return nil, err
 	}
+	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
-	if err := r.loadAppliedIndex(); err != nil {
+	appliedIndex, err := r.loadAppliedIndex()
+	if err != nil {
 		return nil, err
 	}
+	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
 	lease, err := loadLeaderLease(r.rm.Engine(), desc.RaftID)
 	if err != nil {
@@ -782,34 +786,44 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 		log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
 	}
 
+	// Advance the applied index atomically within the batch.
+	if e := setAppliedIndex(batch, r.Desc().RaftID, index); e != nil {
+		if reply.Header().GoError() == nil {
+			reply.Header().SetGoError(e)
+		}
+		err = e
+	}
+
 	if err == nil && proto.IsWrite(args) {
 		// On success, flush the MVCC stats to the batch and commit.
 		r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
-		// Advance the applied index atomically with committing the batch.
-		if err := r.setAppliedIndex(index, batch); err != nil {
+		if err := batch.Commit(); err != nil {
 			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
-		} else {
-			// After successful commit, update cached stats values.
-			r.stats.Update(ms)
-			// Publish update to event feed.
-			r.rm.EventFeed().updateRange(r, args.Method(), &ms)
-			// If the commit succeeded, potentially add range to split queue.
-			r.maybeAddToSplitQueue()
-			// Maybe update gossip configs on a put.
-			switch args.(type) {
-			case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-				if header.Key.Less(engine.KeySystemMax) {
-					r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-						return bytes.HasPrefix(header.Key, configPrefix)
-					})
-				}
+		}
+		// After successful commit, update cached stats and lastIndex value.
+		atomic.StoreUint64(&r.appliedIndex, index)
+		r.stats.Update(ms)
+		// Publish update to event feed.
+		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
+		// If the commit succeeded, potentially add range to split queue.
+		r.maybeAddToSplitQueue()
+		// Maybe update gossip configs on a put.
+		switch args.(type) {
+		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
+			if header.Key.Less(engine.KeySystemMax) {
+				r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+					return bytes.HasPrefix(header.Key, configPrefix)
+				})
 			}
 		}
 	} else {
 		// Advance the last applied index nonetheless, without the batch.
-		if err = r.setAppliedIndex(index, nil /* eng */); reply.Header().GoError() == nil {
-			reply.Header().SetGoError(err)
+		if err = setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
+			log.Errorf("could not advance applied index: %s", err)
+		} else {
+			atomic.StoreUint64(&r.appliedIndex, index)
 		}
+
 	}
 
 	// Add this command's result to the response cache if this is a
