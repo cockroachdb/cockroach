@@ -67,38 +67,6 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	return hs, cs, nil
 }
 
-// setLastIndex persists a new last index.
-func setLastIndex(eng engine.Engine, raftID int64, lastIndex uint64) error {
-	return engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(raftID),
-		proto.ZeroTimestamp, proto.Value{
-			Bytes: encoding.EncodeUint64(nil, lastIndex),
-		}, nil)
-}
-
-// loadLastIndex retrieves the last index from storage.
-func (r *Range) loadLastIndex() (uint64, error) {
-	lastIndex := uint64(0)
-	v, err := engine.MVCCGet(r.rm.Engine(),
-		engine.RaftLastIndexKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, true, nil)
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		_, lastIndex = encoding.DecodeUint64(v.Bytes)
-	} else {
-		// The log is empty, which means we are either starting from scratch
-		// or the entire log has been truncated away. raftTruncatedState
-		// handles both cases.
-		lastEnt, err := r.raftTruncatedState()
-		if err != nil {
-			return 0, err
-		}
-		lastIndex = lastEnt.Index
-	}
-	return lastIndex, nil
-}
-
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
@@ -198,10 +166,13 @@ func (r *Range) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
+// loadAppliedIndex retrieves the applied index from storage.
 func (r *Range) loadAppliedIndex() (uint64, error) {
 	return loadAppliedIndex(r.rm.Engine(), r.Desc().RaftID)
 }
 
+// loadAppliedIndex retrieves the applied index for the given
+// raftID from the supplied engine.
 func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
 	appliedIndex := uint64(0)
 	v, err := engine.MVCCGet(eng, engine.RaftAppliedIndexKey(raftID),
@@ -222,6 +193,38 @@ func setAppliedIndex(eng engine.Engine, raftID int64, appliedIndex uint64) error
 		proto.ZeroTimestamp,
 		proto.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
 		nil /* txn */)
+}
+
+// loadLastIndex retrieves the last index from storage.
+func (r *Range) loadLastIndex() (uint64, error) {
+	lastIndex := uint64(0)
+	v, err := engine.MVCCGet(r.rm.Engine(),
+		engine.RaftLastIndexKey(r.Desc().RaftID),
+		proto.ZeroTimestamp, true, nil)
+	if err != nil {
+		return 0, err
+	}
+	if v != nil {
+		_, lastIndex = encoding.DecodeUint64(v.Bytes)
+	} else {
+		// The log is empty, which means we are either starting from scratch
+		// or the entire log has been truncated away. raftTruncatedState
+		// handles both cases.
+		lastEnt, err := r.raftTruncatedState()
+		if err != nil {
+			return 0, err
+		}
+		lastIndex = lastEnt.Index
+	}
+	return lastIndex, nil
+}
+
+// setLastIndex persists a new last index.
+func setLastIndex(eng engine.Engine, raftID int64, lastIndex uint64) error {
+	return engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(raftID),
+		proto.ZeroTimestamp, proto.Value{
+			Bytes: encoding.EncodeUint64(nil, lastIndex),
+		}, nil)
 }
 
 // Snapshot implements the raft.Storage interface.
