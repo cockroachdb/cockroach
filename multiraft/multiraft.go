@@ -484,7 +484,10 @@ func (s *state) start(stopper *util.Stopper) {
 				s.propose(prop)
 
 			case readyGroups = <-raftReady:
-				s.handleRaftReady(readyGroups)
+				// readyGroups are saved in a local variable until they can be sent to
+				// the write task (and then the real work happens after the write is
+				// complete). All we do for now is log them.
+				s.logRaftReady(readyGroups)
 
 			case writeReady <- struct{}{}:
 				s.handleWriteReady(readyGroups)
@@ -685,8 +688,7 @@ func (s *state) propose(p *proposal) {
 	p.fn()
 }
 
-func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
-	// Soft state is updated immediately; everything else waits for handleWriteReady.
+func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
 	for groupID, ready := range readyGroups {
 		if log.V(5) {
 			log.Infof("node %v: group %v raft ready", s.nodeID, groupID)
@@ -707,36 +709,6 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			}
 			for i, m := range ready.Messages {
 				log.Infof("Outgoing Message[%d]: %.200s", i, raft.DescribeMessage(m, s.EntryFormatter))
-			}
-		}
-
-		g, ok := s.groups[groupID]
-		if !ok {
-			// This is a stale message for a removed group
-			log.V(4).Infof("node %v: dropping stale ready message for group %v", s.nodeID, groupID)
-			continue
-		}
-		term := g.committedTerm
-		if ready.SoftState != nil {
-			// Always save the leader whenever we get a SoftState.
-			g.leader = NodeID(ready.SoftState.Lead)
-		}
-		if len(ready.CommittedEntries) > 0 {
-			term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
-		}
-		if term != g.committedTerm && g.leader != 0 {
-			// Whenever the committed term has advanced and we know our leader,
-			// emit an event.
-			g.committedTerm = term
-			s.sendEvent(&EventLeaderElection{
-				GroupID: groupID,
-				NodeID:  NodeID(g.leader),
-				Term:    g.committedTerm,
-			})
-
-			// Re-submit all pending proposals
-			for _, prop := range g.pending {
-				s.proposalChan <- prop
 			}
 		}
 	}
@@ -861,6 +833,35 @@ func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
 	}
 }
 
+// maybeSendLeaderEvent processes a raft.Ready to send events in response to leadership
+// changes (this includes both sending an event to the app and retrying any pending
+// proposals).
+func (s *state) maybeSendLeaderEvent(groupID uint64, g *group, ready *raft.Ready) {
+	term := g.committedTerm
+	if ready.SoftState != nil {
+		// Always save the leader whenever we get a SoftState.
+		g.leader = NodeID(ready.SoftState.Lead)
+	}
+	if len(ready.CommittedEntries) > 0 {
+		term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
+	}
+	if term != g.committedTerm && g.leader != 0 {
+		// Whenever the committed term has advanced and we know our leader,
+		// emit an event.
+		g.committedTerm = term
+		s.sendEvent(&EventLeaderElection{
+			GroupID: groupID,
+			NodeID:  NodeID(g.leader),
+			Term:    g.committedTerm,
+		})
+
+		// Re-submit all pending proposals
+		for _, prop := range g.pending {
+			s.proposalChan <- prop
+		}
+	}
+}
+
 // handleWriteResponse updates the state machine and sends messages for a raft Ready batch.
 func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uint64]raft.Ready) {
 	log.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
@@ -872,6 +873,8 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			log.V(4).Infof("dropping stale write to group %v", groupID)
 			continue
 		}
+
+		// Process committed entries.
 		for _, entry := range ready.CommittedEntries {
 			commandID := s.processCommittedEntry(groupID, g, entry)
 			if p, ok := g.pending[commandID]; ok {
@@ -891,6 +894,10 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			}
 		}
 
+		// Process SoftState and leader changes.
+		s.maybeSendLeaderEvent(groupID, g, &ready)
+
+		// Send all messages.
 		noMoreHeartbeats := make(map[uint64]struct{})
 		for _, msg := range ready.Messages {
 			switch msg.Type {
