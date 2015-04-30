@@ -32,14 +32,14 @@ type AddRangeEvent struct {
 
 // UpdateRangeEvent occurs whenever a Range is modified. This structure includes
 // the same information as AddRangeEvent, but also includes a second set of
-// MVCCStats containing the difference from the Range's previous stats. If the
-// update did not modify any statistics, this diff may be nil.
+// MVCCStats containing the delta from the Range's previous stats. If the
+// update did not modify any statistics, this delta may be nil.
 type UpdateRangeEvent struct {
 	StoreID proto.StoreID
 	Desc    *proto.RangeDescriptor
 	Stats   proto.MVCCStats
 	Method  proto.Method
-	Diff    proto.MVCCStats
+	Delta   proto.MVCCStats
 }
 
 // RemoveRangeEvent occurs whenever a Range is removed from a store. This
@@ -78,7 +78,7 @@ type StartStoreEvent struct {
 // BeginScanRangesEvent occurs when the store is about to scan over all ranges.
 // During such a scan, each existing range will be published to the feed as a
 // AddRangeEvent. This is used because downstream consumers may be tracking
-// statistics via the Diffs in UpdateRangeEvent; this event informs subscribers
+// statistics via the Deltas in UpdateRangeEvent; this event informs subscribers
 // to clear currently cached values.
 type BeginScanRangesEvent struct {
 	StoreID proto.StoreID
@@ -119,11 +119,11 @@ func (sef StoreEventFeed) addRange(rng *Range) {
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
-func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, diff *proto.MVCCStats) {
+func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, delta *proto.MVCCStats) {
 	if sef.f == nil {
 		return
 	}
-	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, method, diff))
+	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, method, delta))
 }
 
 // removeRange publishes a RemoveRangeEvent to this feed which describes the
@@ -177,6 +177,45 @@ func (sef StoreEventFeed) endScanRanges() {
 	sef.f.Publish(&EndScanRangesEvent{sef.id})
 }
 
+// StoreEventListener is an interface that can be implemented by objects which
+// listen for events published by stores.
+type StoreEventListener interface {
+	OnAddRange(event *AddRangeEvent)
+	OnUpdateRange(event *UpdateRangeEvent)
+	OnRemoveRange(event *RemoveRangeEvent)
+	OnSplitRange(event *SplitRangeEvent)
+	OnMergeRange(event *MergeRangeEvent)
+	OnStartStore(event *StartStoreEvent)
+	OnBeginScanRanges(event *BeginScanRangesEvent)
+	OnEndScanRanges(event *EndScanRangesEvent)
+}
+
+// ProcessStoreEvents reads store events from the supplied channel and passes
+// them to the correct methods of the supplied StoreEventListener. This method
+// will run until the Subscription's events channel is closed.
+func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
+	for event := range sub.Events() {
+		switch event := event.(type) {
+		case *StartStoreEvent:
+			l.OnStartStore(event)
+		case *AddRangeEvent:
+			l.OnAddRange(event)
+		case *UpdateRangeEvent:
+			l.OnUpdateRange(event)
+		case *RemoveRangeEvent:
+			l.OnRemoveRange(event)
+		case *SplitRangeEvent:
+			l.OnSplitRange(event)
+		case *MergeRangeEvent:
+			l.OnMergeRange(event)
+		case *BeginScanRangesEvent:
+			l.OnBeginScanRanges(event)
+		case *EndScanRangesEvent:
+			l.OnEndScanRanges(event)
+		}
+	}
+}
+
 func makeAddRangeEvent(id proto.StoreID, rng *Range) *AddRangeEvent {
 	return &AddRangeEvent{
 		StoreID: id,
@@ -185,13 +224,13 @@ func makeAddRangeEvent(id proto.StoreID, rng *Range) *AddRangeEvent {
 	}
 }
 
-func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, diff *proto.MVCCStats) *UpdateRangeEvent {
+func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, delta *proto.MVCCStats) *UpdateRangeEvent {
 	return &UpdateRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
 		Stats:   rng.stats.GetMVCC(),
 		Method:  method,
-		Diff:    *diff,
+		Delta:   *delta,
 	}
 }
 
@@ -215,9 +254,9 @@ func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Range) *SplitRangeEv
 			Stats: rngNew.stats.GetMVCC(),
 		},
 	}
-	// Size difference of original range is the additive inverse of stats for
+	// Size delta of original range is the additive inverse of stats for
 	// the new range.
-	sre.Original.Diff = sre.Original.Diff.Difference(&sre.New.Stats)
+	sre.Original.Delta.Subtract(&sre.New.Stats)
 	return sre
 }
 
@@ -233,6 +272,6 @@ func makeMergeRangeEvent(id proto.StoreID, rngMerged, rngRemoved *Range) *MergeR
 			Stats: rngRemoved.stats.GetMVCC(),
 		},
 	}
-	mre.Merged.Diff = mre.Removed.Stats
+	mre.Merged.Delta = mre.Removed.Stats
 	return mre
 }

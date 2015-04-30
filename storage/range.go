@@ -813,11 +813,11 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
 		}
 		committed = true
+		// Publish update to event feed.
+		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
 		// After successful commit, update cached stats and appliedIndex value.
 		atomic.StoreUint64(&r.appliedIndex, index)
 		r.stats.Update(ms)
-		// Publish update to event feed.
-		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 		// Maybe update gossip configs on a put.
