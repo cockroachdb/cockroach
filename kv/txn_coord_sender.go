@@ -195,9 +195,24 @@ func (tc *TxnCoordSender) Send(call client.Call) {
 	tc.maybeBeginTxn(header)
 
 	// Process batch specially; otherwise, send via wrapped sender.
-	if breq, ok := call.Args.(*proto.BatchRequest); ok {
-		tc.sendBatch(breq, call.Reply.(*proto.BatchResponse))
-	} else {
+	switch args := call.Args.(type) {
+	case *proto.InternalBatchRequest:
+		tc.sendBatch(args, call.Reply.(*proto.InternalBatchResponse))
+	case *proto.BatchRequest:
+		// Convert the batch request to internal-batch request.
+		internalArgs := &proto.InternalBatchRequest{RequestHeader: args.RequestHeader}
+		internalReply := &proto.InternalBatchResponse{}
+		for i := range args.Requests {
+			internalArgs.Add(args.Requests[i].GetValue().(proto.Request))
+		}
+		tc.sendBatch(internalArgs, internalReply)
+		reply := call.Reply.(*proto.BatchResponse)
+		reply.ResponseHeader = internalReply.ResponseHeader
+		// Convert form internal-batch response to batch response.
+		for i := range internalReply.Responses {
+			reply.Add(internalReply.Responses[i].GetValue().(proto.Response))
+		}
+	default:
 		tc.sendOne(call)
 	}
 }
@@ -343,7 +358,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
-func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
+func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batchReply *proto.InternalBatchResponse) {
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies
 	// as needed.

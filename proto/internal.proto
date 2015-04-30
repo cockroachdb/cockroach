@@ -181,7 +181,62 @@ message InternalLeaderLeaseResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InternalRequestUnion contains exactly one of the optional requests.
+// Non-internal values added to RequestUnion must be added here.
+message InternalRequestUnion {
+  option (gogoproto.onlyone) = true;
+  oneof value {
+    ContainsRequest contains = 1;
+    GetRequest get = 2;
+    PutRequest put = 3;
+    ConditionalPutRequest conditional_put = 4;
+    IncrementRequest increment = 5;
+    DeleteRequest delete = 6;
+    DeleteRangeRequest delete_range = 7;
+    ScanRequest scan = 8;
+    EndTransactionRequest end_transaction = 9;
 
+    InternalPushTxnRequest internal_push_txn = 30;
+    InternalResolveIntentRequest internal_resolve_intent = 31;
+}
+}
+
+// An InternalResponseUnion contains exactly one of the optional responses.
+// Non-internal values added to ResponseUnion must be added here.
+message InternalResponseUnion {
+  option (gogoproto.onlyone) = true;
+  oneof value {
+    ContainsResponse contains = 1;
+    GetResponse get = 2;
+    PutResponse put = 3;
+    ConditionalPutResponse conditional_put = 4;
+    IncrementResponse increment = 5;
+    DeleteResponse delete = 6;
+    DeleteRangeResponse delete_range = 7;
+    ScanResponse scan = 8;
+    EndTransactionResponse end_transaction = 9;
+
+    InternalPushTxnResponse internal_push_txn = 30;
+    InternalResolveIntentResponse internal_resolve_intent = 31;
+  }
+}
+
+// An InternalBatchRequest contains a superset of commands from
+// BatchRequest and internal batchable commands.
+//
+// See comments for BatchRequest.
+message InternalBatchRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated InternalRequestUnion requests = 2 [(gogoproto.nullable) = false];
+}
+
+// An InternalBatchResponse contains command responses.
+//
+// See comments for BatchResponse.
+message InternalBatchResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated InternalResponseUnion responses = 2 [(gogoproto.nullable) = false];
+}
 
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
@@ -232,6 +287,7 @@ message InternalRaftCommandUnion {
     InternalTruncateLogRequest internal_truncate_log = 36;
     InternalGCRequest internal_gc = 37 [(gogoproto.customname) = "InternalGC"];
     InternalLeaderLeaseRequest internal_lease = 38;
+    InternalBatchRequest internal_batch = 39;
   }
 }
 

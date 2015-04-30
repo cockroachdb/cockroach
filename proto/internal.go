@@ -20,6 +20,7 @@ package proto
 
 import (
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -49,4 +50,28 @@ func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, err
 		return nil, util.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)
 	}
 	return &ts, nil
+}
+
+// Add adds a request to the internal batch request.
+func (br *InternalBatchRequest) Add(args Request) {
+	union := InternalRequestUnion{}
+	if !union.SetValue(args) {
+		// TODO(tschottdorf) evaluate whether this should return an error.
+		log.Fatalf("unable to add %T to internal batch request", args)
+	}
+	if br.Key == nil {
+		br.Key = args.Header().Key
+		br.EndKey = args.Header().EndKey
+	}
+	br.Requests = append(br.Requests, union)
+}
+
+// Add adds a response to the internal batch response.
+func (br *InternalBatchResponse) Add(reply Response) {
+	union := InternalResponseUnion{}
+	if !union.SetValue(reply) {
+		// TODO(tschottdorf) evaluate whether this should return an error.
+		log.Fatalf("unable to add %T to internal batch response", reply)
+	}
+	br.Responses = append(br.Responses, union)
 }
