@@ -446,7 +446,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				// Store the combined stats in the db.
 				now := n.ctx.Clock.Now().WallTime
 				status := &proto.NodeStatus{
-					NodeID:     n.Descriptor.NodeID,
+					Desc:       n.Descriptor,
 					StoreIDs:   accessedStoreIDs,
 					UpdatedAt:  now,
 					StartedAt:  n.startedAt,
