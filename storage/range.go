@@ -1666,11 +1666,9 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 		})
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
 
-		if log.V(1) {
-			nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))
-			log.Infof("new leader lease for store %d on node %d: %s - %s",
-				storeID, nodeID, args.Lease.Start, args.Lease.Expiration)
-		}
+		nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))
+		log.Infof("range %d: new leader lease for store %d on node %d: %s - %s",
+			r.Desc().RaftID, storeID, nodeID, args.Lease.Start, args.Lease.Expiration)
 	}
 }
 
