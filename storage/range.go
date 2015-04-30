@@ -166,6 +166,19 @@ type RangeManager interface {
 	SplitRange(origRng, newRng *Range) error
 }
 
+// a leaseRejectedError is returned if a lease request is denied due to
+// illegal overlap with the previous lease.
+type leaseRejectedError struct {
+	EffectiveStart   proto.Timestamp
+	PrevLease, Lease proto.Lease
+}
+
+func (l *leaseRejectedError) Error() string {
+	nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(l.Lease.RaftNodeID))
+	return fmt.Sprintf("node %d, store %d: previous lease %s overlaps %s (effective %s)",
+		nodeID, storeID, l.PrevLease, l.Lease, l.EffectiveStart)
+}
+
 // A Range is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -365,17 +378,16 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Range) redirectOnOrAcquireLeaderLease(args proto.Request) error {
+func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 	// If lease is currently held by another, redirect to holder.
-	timestamp := args.Header().Timestamp
 	if held, expired := r.HasLeaderLease(timestamp); !held && !expired {
 		return r.newNotLeaderError()
 	} else if !held || expired {
 		// Otherwise, if not held by this replica or expired, request renewal.
 		if err := r.requestLeaderLease(timestamp); err != nil {
-			return util.Errorf("failed to acquire lease: %s", err)
+			return err
 		}
 	}
 	return nil
@@ -415,10 +427,7 @@ func (r *Range) WaitForLeaderLease(t *testing.T) {
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Range) isInitialized() bool {
-	if desc := r.Desc(); desc != nil && len(desc.EndKey) > 0 {
-		return true
-	}
-	return false
+	return len(r.Desc().EndKey) > 0
 }
 
 // Desc atomically returns the range's descriptor.
@@ -547,7 +556,7 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // Admin commands must run on the leader replica.
 func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -590,7 +599,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 	cmdKey := r.beginCmd(header, true)
 
 	// This replica must have leader lease to process a consistent read.
-	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, true /* readOnly */)
 		reply.Header().SetGoError(err)
 		return err
@@ -628,7 +637,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	cmdKey := r.beginCmd(header, false)
 
 	// This replica must have leader lease to process a write.
-	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
 		reply.Header().SetGoError(err)
 		return err
@@ -872,31 +881,29 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 }
 
 // maybeGossipFirstRangeWithLease is periodically called and gossips the
-// sentinel and first range metadata if the range has the lease and is the
-// first range. Since one replica in the first range should always gossip this
-// information, a lease is acquired if there is no active lease.
+// sentinel and first range metadata if the range has the lease. Since one
+// replica should always gossip this information, a lease is acquired if there
+// is no active lease.
 func (r *Range) maybeGossipFirstRangeWithLease() {
 	// If no Gossip available (some tests) or not first range: nothing to do.
-	if r.rm.Gossip() == nil || !r.isInitialized() || !r.IsFirstRange() {
+	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}
 	timestamp := r.rm.Clock().Now()
-	held, shouldGetLease := r.HasLeaderLease(timestamp)
 
-	// Someone has an active lease; they'll do the work, not us.
-	if !held && !shouldGetLease {
+	// Check for or obtain the lease, if none active.
+	if err := r.redirectOnOrAcquireLeaderLease(timestamp); err != nil {
+		switch e := err.(type) {
+		// NotLeaderError means there is an active lease, leaseRejectedError
+		// means we tried to get one but someone beat us to it. They're nothing
+		// to worry about.
+		case *proto.NotLeaderError, *leaseRejectedError:
+		default:
+			// Any other error is worth being logged visibly.
+			log.Warningf("could not acquire lease for first range gossip: %s", e)
+		}
 		return
 	}
-
-	if shouldGetLease {
-		// We don't have an active lease, but we think we should be
-		// gossiping. Let's get the lease and then do just that.
-		if err := r.requestLeaderLease(timestamp); err != nil {
-			log.Infof("could not acquire leader lease for first range gossip: %s", err)
-			return
-		}
-	}
-
 	r.gossipFirstRange()
 }
 
@@ -908,7 +915,6 @@ func (r *Range) gossipFirstRange() {
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
 		log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
 	}
-
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
 		log.Errorf("failed to gossip first range metadata: %s", err)
 	}
@@ -1590,43 +1596,52 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	r.Lock()
 	defer r.Unlock()
 
-	oldLease := r.getLease()
+	prevLease := r.getLease()
+	isExtension := prevLease.RaftNodeID == args.Lease.RaftNodeID
+	effectiveStart := args.Lease.Start
+	// we return this error in "normal" lease-overlap related failures.
+	rErr := &leaseRejectedError{
+		PrevLease:      *prevLease,
+		Lease:          args.Lease,
+		EffectiveStart: effectiveStart,
+	}
+
 	// Verify details of new lease request. The start of this lease must
 	// obviously precede its expiration.
 	if !args.Lease.Start.Less(args.Lease.Expiration) {
-		reply.SetGoError(util.Errorf("lease %s - %s invalid",
-			args.Lease.Start, args.Lease.Expiration))
+		reply.SetGoError(rErr)
 		return
 	}
 
 	// Wind the start timestamp back as far to the previous lease's expiration
 	// as we can. That'll make sure that when multiple leases are requested out
 	// of order at the same replica (after all, they use the request timestamp,
-	// which isn't straight out of our local clock), they all succeed
-	// nevertheless, unless they have a "real" issue with a previous lease.
-	// Example: Assuming no previous lease, one request for [5, 15) followed by
-	// one for [0, 15) would fail without this optimization. With it, the first
-	// request effectively gets the lease for [0, 15), which the second one can
-	// commit again (even extending your own lease is possible; see below).
-	effectiveStart := oldLease.Expiration
-	// If no old lease exists or this is our lease, we don't need to add this
-	// extra tick. Unfortunately relevant in practice, especially in tests which
-	// tend to have manual clocks and run operations at the zero timestamp.
-	if oldLease.RaftNodeID != 0 && oldLease.RaftNodeID != args.Lease.RaftNodeID {
-		effectiveStart = effectiveStart.Add(0, 1)
+	// which isn't straight out of our local clock), they all succeed unless
+	// they have a "real" issue with a previous lease. Example: Assuming no
+	// previous lease, one request for [5, 15) followed by one for [0, 15)
+	// would fail without this optimization. With it, the first request
+	// effectively gets the lease for [0, 15), which the second one can commit
+	// again (even extending your own lease is possible; see below).
+	//
+	// If no old lease exists or this is our lease, we don't need to add an
+	// extra tick. This allows multiple requests from the same replica to
+	// merge without ticking away from the minimal common start timestamp.
+	if prevLease.RaftNodeID == 0 || isExtension {
+		effectiveStart.Backward(prevLease.Expiration)
+	} else {
+		effectiveStart.Backward(prevLease.Expiration.Next())
 	}
+	rErr.EffectiveStart = effectiveStart
 
-	if oldLease.RaftNodeID == args.Lease.RaftNodeID {
-		if effectiveStart.Less(oldLease.Start) {
-			reply.SetGoError(util.Errorf("lease renewal %s - [%s] - %s invalid; prior lease %s - %s",
-				effectiveStart, args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
+	if isExtension {
+		if effectiveStart.Less(prevLease.Start) {
+			reply.SetGoError(rErr)
 			return
 		}
 		// Note that the lease expiration can be shortened by the holder.
 		// This could be used to effect a faster lease handoff.
-	} else if effectiveStart.Less(oldLease.Expiration) {
-		reply.SetGoError(util.Errorf("lease %s - [%s] - %s invalid; prior lease %s - %s",
-			effectiveStart, args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
+	} else if effectiveStart.Less(prevLease.Expiration) {
+		reply.SetGoError(rErr)
 		return
 	}
 
@@ -1644,12 +1659,12 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// add the maximum clock offset to account for any difference in
 	// clocks between the expiration (set by a remote node) and this
 	// node.
-	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && oldLease.RaftNodeID != r.getLease().RaftNodeID {
+	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		// Gossip configs in the event this range contains config info.
 		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 			return r.ContainsKey(configPrefix)
 		})
-		r.tsCache.SetLowWater(oldLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
+		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
 
 		if log.V(1) {
 			nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))

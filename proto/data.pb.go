@@ -614,9 +614,8 @@ type Lease struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *Lease) Reset()         { *m = Lease{} }
-func (m *Lease) String() string { return proto1.CompactTextString(m) }
-func (*Lease) ProtoMessage()    {}
+func (m *Lease) Reset()      { *m = Lease{} }
+func (*Lease) ProtoMessage() {}
 
 func (m *Lease) GetStart() Timestamp {
 	if m != nil {

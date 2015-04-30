@@ -682,3 +682,9 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 	ms.GCBytesAge -= oms.GCBytesAge
 	ms.LastUpdateNanos -= oms.LastUpdateNanos
 }
+
+var _ fmt.Stringer = &Lease{}
+
+func (l Lease) String() string {
+	return fmt.Sprintf("%s-%s@%d", l.Start, l.Expiration, l.RaftNodeID)
+}
