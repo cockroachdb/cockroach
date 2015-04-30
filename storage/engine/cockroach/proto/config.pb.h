@@ -44,6 +44,8 @@ class PermConfig;
 class ZoneConfig;
 class RangeTree;
 class RangeTreeNode;
+class Addr;
+class NodeDescriptor;
 
 // ===================================================================
 
@@ -956,6 +958,208 @@ class RangeTreeNode : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static RangeTreeNode* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class Addr : public ::google::protobuf::Message {
+ public:
+  Addr();
+  virtual ~Addr();
+
+  Addr(const Addr& from);
+
+  inline Addr& operator=(const Addr& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const Addr& default_instance();
+
+  void Swap(Addr* other);
+
+  // implements Message ----------------------------------------------
+
+  Addr* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const Addr& from);
+  void MergeFrom(const Addr& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string network = 1;
+  inline bool has_network() const;
+  inline void clear_network();
+  static const int kNetworkFieldNumber = 1;
+  inline const ::std::string& network() const;
+  inline void set_network(const ::std::string& value);
+  inline void set_network(const char* value);
+  inline void set_network(const char* value, size_t size);
+  inline ::std::string* mutable_network();
+  inline ::std::string* release_network();
+  inline void set_allocated_network(::std::string* network);
+
+  // optional string address = 2;
+  inline bool has_address() const;
+  inline void clear_address();
+  static const int kAddressFieldNumber = 2;
+  inline const ::std::string& address() const;
+  inline void set_address(const ::std::string& value);
+  inline void set_address(const char* value);
+  inline void set_address(const char* value, size_t size);
+  inline ::std::string* mutable_address();
+  inline ::std::string* release_address();
+  inline void set_allocated_address(::std::string* address);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.Addr)
+ private:
+  inline void set_has_network();
+  inline void clear_has_network();
+  inline void set_has_address();
+  inline void clear_has_address();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* network_;
+  ::std::string* address_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static Addr* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class NodeDescriptor : public ::google::protobuf::Message {
+ public:
+  NodeDescriptor();
+  virtual ~NodeDescriptor();
+
+  NodeDescriptor(const NodeDescriptor& from);
+
+  inline NodeDescriptor& operator=(const NodeDescriptor& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const NodeDescriptor& default_instance();
+
+  void Swap(NodeDescriptor* other);
+
+  // implements Message ----------------------------------------------
+
+  NodeDescriptor* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const NodeDescriptor& from);
+  void MergeFrom(const NodeDescriptor& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int32 node_id = 1;
+  inline bool has_node_id() const;
+  inline void clear_node_id();
+  static const int kNodeIdFieldNumber = 1;
+  inline ::google::protobuf::int32 node_id() const;
+  inline void set_node_id(::google::protobuf::int32 value);
+
+  // optional .cockroach.proto.Addr address = 2;
+  inline bool has_address() const;
+  inline void clear_address();
+  static const int kAddressFieldNumber = 2;
+  inline const ::cockroach::proto::Addr& address() const;
+  inline ::cockroach::proto::Addr* mutable_address();
+  inline ::cockroach::proto::Addr* release_address();
+  inline void set_allocated_address(::cockroach::proto::Addr* address);
+
+  // optional .cockroach.proto.Attributes attrs = 3;
+  inline bool has_attrs() const;
+  inline void clear_attrs();
+  static const int kAttrsFieldNumber = 3;
+  inline const ::cockroach::proto::Attributes& attrs() const;
+  inline ::cockroach::proto::Attributes* mutable_attrs();
+  inline ::cockroach::proto::Attributes* release_attrs();
+  inline void set_allocated_attrs(::cockroach::proto::Attributes* attrs);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.NodeDescriptor)
+ private:
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
+  inline void set_has_address();
+  inline void clear_has_address();
+  inline void set_has_attrs();
+  inline void clear_has_attrs();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::Addr* address_;
+  ::cockroach::proto::Attributes* attrs_;
+  ::google::protobuf::int32 node_id_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static NodeDescriptor* default_instance_;
 };
 // ===================================================================
 
@@ -2074,6 +2278,272 @@ inline void RangeTreeNode::set_allocated_right_key(::std::string* right_key) {
     right_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RangeTreeNode.right_key)
+}
+
+// -------------------------------------------------------------------
+
+// Addr
+
+// optional string network = 1;
+inline bool Addr::has_network() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Addr::set_has_network() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Addr::clear_has_network() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Addr::clear_network() {
+  if (network_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    network_->clear();
+  }
+  clear_has_network();
+}
+inline const ::std::string& Addr::network() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Addr.network)
+  return *network_;
+}
+inline void Addr::set_network(const ::std::string& value) {
+  set_has_network();
+  if (network_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    network_ = new ::std::string;
+  }
+  network_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.Addr.network)
+}
+inline void Addr::set_network(const char* value) {
+  set_has_network();
+  if (network_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    network_ = new ::std::string;
+  }
+  network_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.Addr.network)
+}
+inline void Addr::set_network(const char* value, size_t size) {
+  set_has_network();
+  if (network_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    network_ = new ::std::string;
+  }
+  network_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Addr.network)
+}
+inline ::std::string* Addr::mutable_network() {
+  set_has_network();
+  if (network_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    network_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Addr.network)
+  return network_;
+}
+inline ::std::string* Addr::release_network() {
+  clear_has_network();
+  if (network_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = network_;
+    network_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void Addr::set_allocated_network(::std::string* network) {
+  if (network_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete network_;
+  }
+  if (network) {
+    set_has_network();
+    network_ = network;
+  } else {
+    clear_has_network();
+    network_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Addr.network)
+}
+
+// optional string address = 2;
+inline bool Addr::has_address() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Addr::set_has_address() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Addr::clear_has_address() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Addr::clear_address() {
+  if (address_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    address_->clear();
+  }
+  clear_has_address();
+}
+inline const ::std::string& Addr::address() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Addr.address)
+  return *address_;
+}
+inline void Addr::set_address(const ::std::string& value) {
+  set_has_address();
+  if (address_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    address_ = new ::std::string;
+  }
+  address_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.Addr.address)
+}
+inline void Addr::set_address(const char* value) {
+  set_has_address();
+  if (address_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    address_ = new ::std::string;
+  }
+  address_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.Addr.address)
+}
+inline void Addr::set_address(const char* value, size_t size) {
+  set_has_address();
+  if (address_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    address_ = new ::std::string;
+  }
+  address_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Addr.address)
+}
+inline ::std::string* Addr::mutable_address() {
+  set_has_address();
+  if (address_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    address_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Addr.address)
+  return address_;
+}
+inline ::std::string* Addr::release_address() {
+  clear_has_address();
+  if (address_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = address_;
+    address_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void Addr::set_allocated_address(::std::string* address) {
+  if (address_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete address_;
+  }
+  if (address) {
+    set_has_address();
+    address_ = address;
+  } else {
+    clear_has_address();
+    address_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Addr.address)
+}
+
+// -------------------------------------------------------------------
+
+// NodeDescriptor
+
+// optional int32 node_id = 1;
+inline bool NodeDescriptor::has_node_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void NodeDescriptor::set_has_node_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void NodeDescriptor::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void NodeDescriptor::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 NodeDescriptor::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeDescriptor.node_id)
+  return node_id_;
+}
+inline void NodeDescriptor::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.NodeDescriptor.node_id)
+}
+
+// optional .cockroach.proto.Addr address = 2;
+inline bool NodeDescriptor::has_address() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void NodeDescriptor::set_has_address() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void NodeDescriptor::clear_has_address() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void NodeDescriptor::clear_address() {
+  if (address_ != NULL) address_->::cockroach::proto::Addr::Clear();
+  clear_has_address();
+}
+inline const ::cockroach::proto::Addr& NodeDescriptor::address() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeDescriptor.address)
+  return address_ != NULL ? *address_ : *default_instance_->address_;
+}
+inline ::cockroach::proto::Addr* NodeDescriptor::mutable_address() {
+  set_has_address();
+  if (address_ == NULL) address_ = new ::cockroach::proto::Addr;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.NodeDescriptor.address)
+  return address_;
+}
+inline ::cockroach::proto::Addr* NodeDescriptor::release_address() {
+  clear_has_address();
+  ::cockroach::proto::Addr* temp = address_;
+  address_ = NULL;
+  return temp;
+}
+inline void NodeDescriptor::set_allocated_address(::cockroach::proto::Addr* address) {
+  delete address_;
+  address_ = address;
+  if (address) {
+    set_has_address();
+  } else {
+    clear_has_address();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeDescriptor.address)
+}
+
+// optional .cockroach.proto.Attributes attrs = 3;
+inline bool NodeDescriptor::has_attrs() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void NodeDescriptor::set_has_attrs() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void NodeDescriptor::clear_has_attrs() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void NodeDescriptor::clear_attrs() {
+  if (attrs_ != NULL) attrs_->::cockroach::proto::Attributes::Clear();
+  clear_has_attrs();
+}
+inline const ::cockroach::proto::Attributes& NodeDescriptor::attrs() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeDescriptor.attrs)
+  return attrs_ != NULL ? *attrs_ : *default_instance_->attrs_;
+}
+inline ::cockroach::proto::Attributes* NodeDescriptor::mutable_attrs() {
+  set_has_attrs();
+  if (attrs_ == NULL) attrs_ = new ::cockroach::proto::Attributes;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.NodeDescriptor.attrs)
+  return attrs_;
+}
+inline ::cockroach::proto::Attributes* NodeDescriptor::release_attrs() {
+  clear_has_attrs();
+  ::cockroach::proto::Attributes* temp = attrs_;
+  attrs_ = NULL;
+  return temp;
+}
+inline void NodeDescriptor::set_allocated_attrs(::cockroach::proto::Attributes* attrs) {
+  delete attrs_;
+  attrs_ = attrs;
+  if (attrs) {
+    set_has_attrs();
+  } else {
+    clear_has_attrs();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeDescriptor.attrs)
 }
 
 

@@ -185,7 +185,7 @@ func (e *NotBootstrappedError) Error() string {
 type StoreDescriptor struct {
 	StoreID  proto.StoreID
 	Attrs    proto.Attributes // store specific attributes (e.g. ssd, hdd, mem)
-	Node     gossip.NodeDescriptor
+	Node     proto.NodeDescriptor
 	Capacity engine.StoreCapacity
 }
 
@@ -522,7 +522,7 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 }
 
 // GossipCapacity broadcasts the node's capacity on the gossip network.
-func (s *Store) GossipCapacity(n *gossip.NodeDescriptor) {
+func (s *Store) GossipCapacity(n *proto.NodeDescriptor) {
 	storeDesc, err := s.Descriptor(n)
 	if err != nil {
 		log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
@@ -924,7 +924,7 @@ func (s *Store) Capacity() (engine.StoreCapacity, error) {
 
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
-func (s *Store) Descriptor(nodeDesc *gossip.NodeDescriptor) (*StoreDescriptor, error) {
+func (s *Store) Descriptor(nodeDesc *proto.NodeDescriptor) (*StoreDescriptor, error) {
 	capacity, err := s.Capacity()
 	if err != nil {
 		return nil, err

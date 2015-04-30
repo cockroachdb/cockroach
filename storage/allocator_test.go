@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -66,7 +65,7 @@ var singleStore = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 1,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 1,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -83,7 +82,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 1,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 1,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -95,7 +94,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 2,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 2,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -107,7 +106,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 3,
 			Attrs:   proto.Attributes{Attrs: []string{"hdd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 2,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -119,7 +118,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 4,
 			Attrs:   proto.Attributes{Attrs: []string{"hdd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 3,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -131,7 +130,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 5,
 			Attrs:   proto.Attributes{Attrs: []string{"mem"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 4,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -148,7 +147,7 @@ var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 1,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 1,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
@@ -160,7 +159,7 @@ var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 		{
 			StoreID: 2,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
-			Node: gossip.NodeDescriptor{
+			Node: proto.NodeDescriptor{
 				NodeID: 2,
 				Attrs:  proto.Attributes{Attrs: []string{"b"}},
 			},

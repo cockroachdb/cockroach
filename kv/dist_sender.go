@@ -94,7 +94,7 @@ type DistSender struct {
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
 	// which tries to obtain the value from the Gossip network if the
 	// descriptor is unknown.
-	nodeDescriptor *gossip.NodeDescriptor
+	nodeDescriptor *proto.NodeDescriptor
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -132,7 +132,7 @@ type DistSenderContext struct {
 	// nodeDescriptor, if provided, is used to describe which node the DistSender
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
-	nodeDescriptor *gossip.NodeDescriptor
+	nodeDescriptor *proto.NodeDescriptor
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
 	rpcSend           rpcSendFn
@@ -359,14 +359,14 @@ func (ds *DistSender) optimizeReplicaOrder(replicas proto.ReplicaSlice) rpc.Orde
 // We must jump through hoops here to get the node descriptor because it's not available
 // until after the node has joined the gossip network and been allowed to initialize
 // its stores.
-func (ds *DistSender) getNodeDescriptor() *gossip.NodeDescriptor {
+func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 	if ds.nodeDescriptor != nil {
 		return ds.nodeDescriptor
 	}
 	ownNodeID := ds.gossip.GetNodeID()
 	if nodeDesc, err := ds.gossip.GetInfo(
 		gossip.MakeNodeIDKey(ownNodeID)); err == nil && ownNodeID > 0 {
-		ds.nodeDescriptor = nodeDesc.(*gossip.NodeDescriptor)
+		ds.nodeDescriptor = nodeDesc.(*proto.NodeDescriptor)
 	} else {
 		log.Infof("unable to determine this node's attributes for replica " +
 			"selection; node is most likely bootstrapping")
@@ -412,7 +412,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	for i := range replicas {
 		addr, err := ds.gossip.GetNodeIDAddress(replicas[i].NodeID)
 		if err != nil {
-			log.V(1).Infof("node %d address is not gossiped", replicas[i].NodeID)
+			log.V(1).Infof("node %d address is not gossiped: %v", replicas[i].NodeID, err)
 			continue
 		}
 		addrs = append(addrs, addr)
