@@ -63,7 +63,6 @@ func (bank *Bank) moveMoney(from, to []byte, amount int64) bool {
 		if err := txn.Run(fromGet, toGet); err != nil {
 			return err
 		}
-
 		// Read from value.
 		var fromValue int64
 		if fromResp.Value != nil && fromResp.Value.Bytes != nil {
