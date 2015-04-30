@@ -107,6 +107,29 @@ func Put(key proto.Key, valueBytes []byte) Call {
 	}
 }
 
+// ConditionalPut returns a Call object initialized to put value as a
+// byte slice at key if the existing value at key equals
+// expValueBytes.
+func ConditionalPut(key proto.Key, valueBytes, expValueBytes []byte) Call {
+	value := proto.Value{Bytes: valueBytes}
+	value.InitChecksum(key)
+	var expValue *proto.Value
+	if expValueBytes != nil {
+		expValue = &proto.Value{Bytes: expValueBytes}
+		expValue.InitChecksum(key)
+	}
+	return Call{
+		Args: &proto.ConditionalPutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: key,
+			},
+			Value:    value,
+			ExpValue: expValue,
+		},
+		Reply: &proto.ConditionalPutResponse{},
+	}
+}
+
 // PutProto returns a Call object initialized to put the proto
 // message as a byte slice at key.
 func PutProto(key proto.Key, msg gogoproto.Message) Call {
