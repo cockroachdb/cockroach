@@ -484,7 +484,10 @@ func (s *state) start(stopper *util.Stopper) {
 				s.propose(prop)
 
 			case readyGroups = <-raftReady:
-				s.handleRaftReady(readyGroups)
+				// readyGroups are saved in a local variable until they can be sent to
+				// the write task (and then the real work happens after the write is
+				// complete). All we do for now is log them.
+				s.logRaftReady(readyGroups)
 
 			case writeReady <- struct{}{}:
 				s.handleWriteReady(readyGroups)
@@ -685,8 +688,7 @@ func (s *state) propose(p *proposal) {
 	p.fn()
 }
 
-func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
-	// Soft state is updated immediately; everything else waits for handleWriteReady.
+func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
 	for groupID, ready := range readyGroups {
 		if log.V(5) {
 			log.Infof("node %v: group %v raft ready", s.nodeID, groupID)
@@ -709,39 +711,11 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 				log.Infof("Outgoing Message[%d]: %.200s", i, raft.DescribeMessage(m, s.EntryFormatter))
 			}
 		}
-
-		g, ok := s.groups[groupID]
-		if !ok {
-			// This is a stale message for a removed group
-			log.V(4).Infof("node %v: dropping stale ready message for group %v", s.nodeID, groupID)
-			continue
-		}
-		term := g.committedTerm
-		if ready.SoftState != nil {
-			// Always save the leader whenever we get a SoftState.
-			g.leader = NodeID(ready.SoftState.Lead)
-		}
-		if len(ready.CommittedEntries) > 0 {
-			term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
-		}
-		if term != g.committedTerm && g.leader != 0 {
-			// Whenever the committed term has advanced and we know our leader,
-			// emit an event.
-			g.committedTerm = term
-			s.sendEvent(&EventLeaderElection{
-				GroupID: groupID,
-				NodeID:  NodeID(g.leader),
-				Term:    g.committedTerm,
-			})
-
-			// Re-submit all pending proposals
-			for _, prop := range g.pending {
-				s.proposalChan <- prop
-			}
-		}
 	}
 }
 
+// handleWriteReady converts a set of raft.Ready structs into a writeRequest
+// to be persisted, and sends it to the writeTask.
 func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	log.V(6).Infof("node %v write ready, preparing request", s.nodeID)
 	writeRequest := newWriteRequest()
@@ -761,6 +735,134 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	s.writeTask.in <- writeRequest
 }
 
+// processCommittedEntry tells the application that a command was committed.
+// Returns the commandID, or an empty string if the given entry was not a command.
+func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Entry) string {
+	var commandID string
+	switch entry.Type {
+	case raftpb.EntryNormal:
+		// etcd raft occasionally adds a nil entry (e.g. upon election); ignore these.
+		if entry.Data != nil {
+			var command []byte
+			commandID, command = decodeCommand(entry.Data)
+			s.sendEvent(&EventCommandCommitted{
+				GroupID:   groupID,
+				CommandID: commandID,
+				Command:   command,
+				Index:     entry.Index,
+			})
+		}
+
+	case raftpb.EntryConfChange:
+		cc := raftpb.ConfChange{}
+		err := cc.Unmarshal(entry.Data)
+		if err != nil {
+			log.Fatalf("invalid ConfChange data: %s", err)
+		}
+		var payload []byte
+		if len(cc.Context) > 0 {
+			commandID, payload = decodeCommand(cc.Context)
+		}
+		s.sendEvent(&EventMembershipChangeCommitted{
+			GroupID:    groupID,
+			CommandID:  commandID,
+			Index:      entry.Index,
+			NodeID:     NodeID(cc.NodeID),
+			ChangeType: cc.Type,
+			Payload:    payload,
+			Callback: func(err error) {
+				s.callbackChan <- func() {
+					if err == nil {
+						log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
+						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
+						switch cc.Type {
+						case raftpb.ConfChangeAddNode:
+							err = s.addNode(NodeID(cc.NodeID), groupID)
+						case raftpb.ConfChangeRemoveNode:
+							// TODO(bdarnell): support removing nodes; fix double-application of initial entries
+						case raftpb.ConfChangeUpdateNode:
+							// Updates don't concern multiraft, they are simply passed through.
+						}
+						if err != nil {
+							log.Errorf("error applying configuration change %v: %s", cc, err)
+						}
+						s.multiNode.ApplyConfChange(groupID, cc)
+					} else {
+						log.Warningf("aborting configuration change: %s", err)
+						s.multiNode.ApplyConfChange(groupID,
+							raftpb.ConfChange{})
+					}
+
+					// Re-submit all pending proposals, in case any of them were config changes
+					// that were dropped due to the one-at-a-time rule. This is a little
+					// redundant since most pending proposals won't benefit from this but
+					// config changes should be rare enough (and the size of the pending queue
+					// small enough) that it doesn't really matter.
+					for _, prop := range g.pending {
+						s.proposalChan <- prop
+					}
+				}
+			},
+		})
+	}
+	return commandID
+}
+
+// sendMessage sends a raft message on the given group.
+func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
+	log.V(6).Infof("node %v sending message %.200s to %v", s.nodeID,
+		raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
+	nodeID := NodeID(msg.To)
+	if _, ok := s.nodes[nodeID]; !ok {
+		log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
+		if err := s.addNode(nodeID, groupID); err != nil {
+			log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
+		}
+	}
+	err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
+	snapStatus := raft.SnapshotFinish
+	if err != nil {
+		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)
+		s.multiNode.ReportUnreachable(msg.To, groupID)
+		snapStatus = raft.SnapshotFailure
+	}
+	if msg.Type == raftpb.MsgSnap {
+		// TODO(bdarnell): add an ack for snapshots and don't report status until
+		// ack, error, or timeout.
+		s.multiNode.ReportSnapshot(msg.To, groupID, snapStatus)
+	}
+}
+
+// maybeSendLeaderEvent processes a raft.Ready to send events in response to leadership
+// changes (this includes both sending an event to the app and retrying any pending
+// proposals).
+func (s *state) maybeSendLeaderEvent(groupID uint64, g *group, ready *raft.Ready) {
+	term := g.committedTerm
+	if ready.SoftState != nil {
+		// Always save the leader whenever we get a SoftState.
+		g.leader = NodeID(ready.SoftState.Lead)
+	}
+	if len(ready.CommittedEntries) > 0 {
+		term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
+	}
+	if term != g.committedTerm && g.leader != 0 {
+		// Whenever the committed term has advanced and we know our leader,
+		// emit an event.
+		g.committedTerm = term
+		s.sendEvent(&EventLeaderElection{
+			GroupID: groupID,
+			NodeID:  NodeID(g.leader),
+			Term:    g.committedTerm,
+		})
+
+		// Re-submit all pending proposals
+		for _, prop := range g.pending {
+			s.proposalChan <- prop
+		}
+	}
+}
+
+// handleWriteResponse updates the state machine and sends messages for a raft Ready batch.
 func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uint64]raft.Ready) {
 	log.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
 	// Everything has been written to disk; now we can apply updates to the state machine
@@ -771,79 +873,10 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			log.V(4).Infof("dropping stale write to group %v", groupID)
 			continue
 		}
+
+		// Process committed entries.
 		for _, entry := range ready.CommittedEntries {
-			var commandID string
-			switch entry.Type {
-			case raftpb.EntryNormal:
-				// etcd raft occasionally adds a nil entry (e.g. upon election); ignore these.
-				if entry.Data != nil {
-					var command []byte
-					commandID, command = decodeCommand(entry.Data)
-					s.sendEvent(&EventCommandCommitted{
-						GroupID:   groupID,
-						CommandID: commandID,
-						Command:   command,
-						Index:     entry.Index,
-					})
-				}
-
-			case raftpb.EntryConfChange:
-				cc := raftpb.ConfChange{}
-				err := cc.Unmarshal(entry.Data)
-				if err != nil {
-					log.Fatalf("invalid ConfChange data: %s", err)
-				}
-				var payload []byte
-				if len(cc.Context) > 0 {
-					commandID, payload = decodeCommand(cc.Context)
-				}
-				s.sendEvent(&EventMembershipChangeCommitted{
-					GroupID:    groupID,
-					CommandID:  commandID,
-					Index:      entry.Index,
-					NodeID:     NodeID(cc.NodeID),
-					ChangeType: cc.Type,
-					Payload:    payload,
-					Callback: func(err error) {
-						s.callbackChan <- func() {
-							if err == nil {
-								log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
-								// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
-								switch cc.Type {
-								case raftpb.ConfChangeAddNode:
-									err = s.addNode(NodeID(cc.NodeID), groupID)
-								case raftpb.ConfChangeRemoveNode:
-									// TODO(bdarnell): support removing nodes; fix double-application of initial entries
-								case raftpb.ConfChangeUpdateNode:
-									// Updates don't concern multiraft, they are simply passed through.
-								}
-								if err != nil {
-									log.Errorf("error applying configuration change %v: %s", cc, err)
-								}
-								s.multiNode.ApplyConfChange(groupID, cc)
-							} else {
-								log.Warningf("aborting configuration change: %s", err)
-								s.multiNode.ApplyConfChange(groupID,
-									raftpb.ConfChange{})
-							}
-
-							// Re-submit all pending proposals, in case any of them were config changes
-							// that were dropped due to the one-at-a-time rule. This is a little
-							// redundant since most pending proposals won't benefit from this but
-							// config changes should be rare enough (and the size of the pending queue
-							// small enough) that it doesn't really matter.
-							//
-							// TODO(tschottdorf) move this reproposal mechanism
-							// up to the storage layer, where it's aware of the
-							// response cache. Currently commands can get
-							// executed multiple times when leadership changes.
-							for _, prop := range g.pending {
-								s.proposalChan <- prop
-							}
-						}
-					},
-				})
-			}
+			commandID := s.processCommittedEntry(groupID, g, entry)
 			if p, ok := g.pending[commandID]; ok {
 				// TODO(bdarnell): the command is now committed, but not applied until the
 				// application consumes EventCommandCommitted. Is returning via the channel
@@ -861,6 +894,10 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			}
 		}
 
+		// Process SoftState and leader changes.
+		s.maybeSendLeaderEvent(groupID, g, &ready)
+
+		// Send all messages.
 		noMoreHeartbeats := make(map[uint64]struct{})
 		for _, msg := range ready.Messages {
 			switch msg.Type {
@@ -877,27 +914,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				noMoreHeartbeats[msg.To] = struct{}{}
 			}
 
-			log.V(6).Infof("node %v sending message %.200s to %v", s.nodeID,
-				raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
-			nodeID := NodeID(msg.To)
-			if _, ok := s.nodes[nodeID]; !ok {
-				log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
-				if err := s.addNode(nodeID, groupID); err != nil {
-					log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
-				}
-			}
-			err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
-			snapStatus := raft.SnapshotFinish
-			if err != nil {
-				log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)
-				s.multiNode.ReportUnreachable(msg.To, groupID)
-				snapStatus = raft.SnapshotFailure
-			}
-			if msg.Type == raftpb.MsgSnap {
-				// TODO(bdarnell): add an ack for snapshots and don't report status until
-				// ack, error, or timeout.
-				s.multiNode.ReportSnapshot(msg.To, groupID, snapStatus)
-			}
+			s.sendMessage(groupID, msg)
 		}
 	}
 }

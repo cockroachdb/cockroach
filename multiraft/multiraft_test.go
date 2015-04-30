@@ -193,15 +193,14 @@ func TestLeaderElectionEvent(t *testing.T) {
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
 
-	// Send a Ready with a new leader but no new commits.
+	// Process a Ready with a new leader but no new commits.
 	// This happens while an election is in progress.
-	cluster.nodes[1].handleRaftReady(map[uint64]raft.Ready{
-		groupID: {
+	cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
+		&raft.Ready{
 			SoftState: &raft.SoftState{
 				Lead: 3,
 			},
-		},
-	})
+		})
 
 	// No events are sent.
 	select {
@@ -216,12 +215,11 @@ func TestLeaderElectionEvent(t *testing.T) {
 		Index: 42,
 		Term:  42,
 	}
-	cluster.nodes[1].handleRaftReady(map[uint64]raft.Ready{
-		groupID: {
+	cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
+		&raft.Ready{
 			Entries:          []raftpb.Entry{entry},
 			CommittedEntries: []raftpb.Entry{entry},
-		},
-	})
+		})
 
 	// Now we get an event.
 	select {
