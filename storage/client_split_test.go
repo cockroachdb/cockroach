@@ -125,7 +125,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			err := store.ExecuteCmd(args, reply)
 			if err != nil {
 				if matched, regexpErr := regexp.MatchString(".*outside of bounds of range", err.Error()); !matched || regexpErr != nil {
-					t.Errorf("error %s didn't match: %s", err, regexpErr)
+					t.Errorf("error %s didn't match regex %v", err, regexpErr)
 				} else {
 					atomic.AddInt32(&failureCount, 1)
 				}

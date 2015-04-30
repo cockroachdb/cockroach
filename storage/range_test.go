@@ -878,12 +878,18 @@ func TestAcquireLeaderLease(t *testing.T) {
 		{gArgs, gReply},
 		{pArgs, pReply},
 	}
+	// This is a single-replica test; since we're automatically pushing back
+	// the start of a lease as far as possible, and since there is no prior
+	// lease at the beginning, we'll basically create a lease from time zero
+	// in this test and extend it.
+	expStart := proto.ZeroTimestamp
 	for i, test := range testCases {
 		tc := testContext{}
 		tc.Start(t)
 		tc.manualClock.Set(time.Second.Nanoseconds())
 
 		test.args.Header().Timestamp = tc.clock.Now()
+
 		if err := tc.rng.AddCmd(test.args, test.reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -891,10 +897,11 @@ func TestAcquireLeaderLease(t *testing.T) {
 		if lease == nil {
 			t.Fatalf("%d: expected lease acquisition", i)
 		}
-		expStart := test.args.Header().Timestamp
-		expExpiration := expStart.Add(int64(defaultLeaderLeaseDuration), 0)
+		// The lease may start earlier than our request timestamp, but the
+		// expiration will still be measured relative to it.
+		expExpiration := test.args.Header().Timestamp.Add(int64(defaultLeaderLeaseDuration), 0)
 		if !lease.Start.Equal(expStart) || !lease.Expiration.Equal(expExpiration) {
-			t.Errorf("%d: unexpected lease timing %d, %d; expected %s, %s",
+			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s",
 				i, lease.Start, lease.Expiration, expStart, expExpiration)
 		}
 		tc.Stop()

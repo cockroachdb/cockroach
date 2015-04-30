@@ -235,13 +235,35 @@ func (r *Range) String() string {
 	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
-// start begins by gossiping the cluster ID (only happens if the range
-// is the first in the key space). This is necessary to get the cluster
-// started from scratch.
+// start begins by gossiping the configs. It also gossips the sentinel if we're
+// the first range (the store will do this regularly, but this is a good time
+// to get started quickly).
 func (r *Range) start() {
-	if r.IsFirstRange() {
-		r.startGossip(r.rm.Stopper())
+	// Being the first range comes with extra responsibility for the gossip
+	// sentinel and first range metadata.
+	// TODO(tschottdorf) really want something more streamlined, such as:
+	//
+	// if r.rm.Stopper().StartTask() {
+	// 	go func() {
+	// 		r.maybeGossipFirstRangeWithLease()
+	// 		r.rm.Stopper().FinishTask()
+	// 	}()
+	// }
+	//
+	// but
+	// a) in some tests that goroutine gets stuck acquiring the lease, probably
+	//    due to Raft losing the command
+	// b) other times, the lease fails because the MultiRaft group doesn't exist
+	//    yet
+	// b) it complicates testing because there's little way of knowing who
+	//    will get the lease first, and many tests are too low level to do
+	//    the appropriate retries.
+	//
+	// Instead we do this for now:
+	if desc := r.Desc(); desc != nil && len(desc.Replicas) == 1 && r.IsFirstRange() {
+		r.gossipFirstRange()
 	}
+
 	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 		return r.ContainsKey(configPrefix)
 	})
@@ -293,7 +315,8 @@ func (r *Range) newNotLeaderError() error {
 }
 
 // requestLeaderLease sends a request to obtain or extend a leader lease for
-// this replica.
+// this replica. Unless an error is returned, the obtained lease will be valid
+// for a time interval containing the requested timestamp.
 func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
@@ -320,7 +343,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	errChan, pendingCmd := r.proposeRaftCommand(args, &proto.InternalLeaderLeaseResponse{})
 	var err error
 	if err = <-errChan; err == nil {
-		// Next if the command was commited, wait for the range to apply it.
+		// Next if the command was committed, wait for the range to apply it.
 		err = <-pendingCmd.done
 	}
 	return err
@@ -352,7 +375,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(args proto.Request) error {
 	} else if !held || expired {
 		// Otherwise, if not held by this replica or expired, request renewal.
 		if err := r.requestLeaderLease(timestamp); err != nil {
-			return util.Errorf("failed to acquire lease on read or write pressure: %s", err)
+			return util.Errorf("failed to acquire lease: %s", err)
 		}
 	}
 	return nil
@@ -845,46 +868,46 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	return reply.Header().GoError()
 }
 
-// startGossip periodically gossips the cluster ID if it's the first
-// range. This function should only be called if this range replica is
-// the raft leader.
-func (r *Range) startGossip(stopper *util.Stopper) {
-	stopper.RunWorker(func() {
-		r.maybeGossipClusterID()
-		r.maybeGossipFirstRange()
+// maybeGossipFirstRangeWithLease is periodically called and gossips the
+// sentinel and first range metadata if the range has the lease and is the
+// first range. Since one replica in the first range should always gossip this
+// information, a lease is acquired if there is no active lease.
+func (r *Range) maybeGossipFirstRangeWithLease() {
+	// If no Gossip available (some tests) or not first range: nothing to do.
+	if r.rm.Gossip() == nil || !r.IsFirstRange() {
+		return
+	}
+	timestamp := r.rm.Clock().Now()
+	held, shouldGetLease := r.HasLeaderLease(timestamp)
 
-		ticker := time.NewTicker(ttlClusterIDGossip / 2)
-		for {
-			select {
-			case <-ticker.C:
-				if held, expired := r.HasLeaderLease(r.rm.Clock().Now()); held && !expired {
-					r.maybeGossipClusterID()
-					r.maybeGossipFirstRange()
-				}
-			case <-stopper.ShouldStop():
-				return
-			}
-		}
-	})
-}
+	// Someone has an active lease; they'll do the work, not us.
+	if !held && !shouldGetLease {
+		return
+	}
 
-// maybeGossipClusterID gossips the cluster ID if this range is
-// the start of the key space.
-func (r *Range) maybeGossipClusterID() {
-	if r.rm.Gossip() != nil {
-		if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
-			log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
+	if shouldGetLease {
+		// We don't have an active lease, but we think we should be
+		// gossiping. Let's get the lease and then do just that.
+		if err := r.requestLeaderLease(timestamp); err != nil {
+			log.Infof("could not acquire leader lease for gossiping: %s", err)
+			return
 		}
 	}
+
+	r.gossipFirstRange()
 }
 
-// maybeGossipFirstRange gossips the range locations if this range is
-// the start of the key space.
-func (r *Range) maybeGossipFirstRange() {
-	if r.rm.Gossip() != nil {
-		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
-			log.Errorf("failed to gossip first range metadata: %s", err)
-		}
+// gossipFirstRange adds the sentinel and first range metadata to gossip.
+func (r *Range) gossipFirstRange() {
+	if r.rm.Gossip() == nil {
+		return
+	}
+	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
+		log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
+	}
+
+	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
+		log.Errorf("failed to gossip first range metadata: %s", err)
 	}
 }
 
@@ -892,25 +915,26 @@ func (r *Range) maybeGossipFirstRange() {
 // within the range, and their contents are marked dirty.
 // Configuration maps include accounting, permissions, and zones.
 func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
-	if r.rm.Gossip() != nil {
-		held, expired := r.HasLeaderLease(r.rm.Clock().Now())
-		if r.getLease().RaftNodeID == 0 || (held && !expired) {
-			for _, cd := range configDescriptors {
-				if match(cd.keyPrefix) {
-					// Check for a bad range split. This should never happen as ranges
-					// cannot be split mid-config.
-					if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-						log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
-					}
-					configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
-					if err != nil {
-						log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
+	if r.rm.Gossip() == nil {
+		return
+	}
+	held, expired := r.HasLeaderLease(r.rm.Clock().Now())
+	if r.getLease().RaftNodeID == 0 || (held && !expired) {
+		for _, cd := range configDescriptors {
+			if match(cd.keyPrefix) {
+				// Check for a bad range split. This should never happen as ranges
+				// cannot be split mid-config.
+				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
+					log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
+				}
+				configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+				if err != nil {
+					log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
+					continue
+				} else {
+					if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
+						log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
 						continue
-					} else {
-						if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
-							log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
-							continue
-						}
 					}
 				}
 			}
@@ -1550,37 +1574,60 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *proto.MVCCStats, ar
 	reply.SetGoError(err)
 }
 
-// InternalLeaderLease sets the leader lease for this range. After a
-// lease has been set, calls to HasLeaderLease() will return true if
-// this replica is the lease holder and the lease has not yet
-// expired. If this range replica is already the lease holder, the
-// expiration will be extended as indicated. Otherwise, all duties
-// required of the range leader are commenced, including gossiping
-// cluster and config info where appropriate and clearing the command
-// queue and timestamp cache.
+// InternalLeaderLease sets the leader lease for this range. The command fails
+// only if the desired start timestamp collides with a previous lease.
+// Otherwise, the start timestamp is wound back to right after the expiration
+// of the previous lease (or zero). After a lease has been set, calls to
+// HasLeaderLease() will return true if this replica is the lease holder and
+// the lease has not yet expired. If this range replica is already the lease
+// holder, the expiration will be extended or shortened as indicated. For a new
+// lease, all duties required of the range leader are commenced, including
+// clearing the command queue and timestamp cache.
 func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
 	r.Lock()
 	defer r.Unlock()
 
-	// Verify details of new lease request. The start of this lease must
-	// be afer the prior lease's expiration.
 	oldLease := r.getLease()
+	// Verify details of new lease request. The start of this lease must
+	// obviously precede its expiration.
 	if !args.Lease.Start.Less(args.Lease.Expiration) {
-		reply.SetGoError(util.Errorf("lease %d - %d invalid", args.Lease.Start, args.Lease.Expiration))
+		reply.SetGoError(util.Errorf("lease %s - %s invalid",
+			args.Lease.Start, args.Lease.Expiration))
 		return
-	} else if oldLease.RaftNodeID == args.Lease.RaftNodeID {
-		if !oldLease.Start.Less(args.Lease.Start) {
-			reply.SetGoError(util.Errorf("lease renewal %d - %d invalid; prior lease %d - %d",
-				args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
+	}
+
+	// Wind the start timestamp back as far to the previous lease's expiration
+	// as we can. That'll make sure that when multiple leases are requested out
+	// of order at the same replica (after all, they use the request timestamp,
+	// which isn't straight out of our local clock), they all succeed
+	// nevertheless, unless they have a "real" issue with a previous lease.
+	// Example: Assuming no previous lease, one request for [5, 15) followed by
+	// one for [0, 15) would fail without this optimization. With it, the first
+	// request effectively gets the lease for [0, 15), which the second one can
+	// commit again (even extending your own lease is possible; see below).
+	effectiveStart := oldLease.Expiration
+	// If no old lease exists or this is our lease, we don't need to add this
+	// extra tick. Unfortunately relevant in practice, especially in tests which
+	// tend to have manual clocks and run operations at the zero timestamp.
+	if oldLease.RaftNodeID != 0 && oldLease.RaftNodeID != args.Lease.RaftNodeID {
+		effectiveStart = effectiveStart.Add(0, 1)
+	}
+
+	if oldLease.RaftNodeID == args.Lease.RaftNodeID {
+		if effectiveStart.Less(oldLease.Start) {
+			reply.SetGoError(util.Errorf("lease renewal %s - [%s] - %s invalid; prior lease %s - %s",
+				effectiveStart, args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
 			return
 		}
 		// Note that the lease expiration can be shortened by the holder.
 		// This could be used to effect a faster lease handoff.
-	} else if args.Lease.Start.Less(oldLease.Expiration) {
-		reply.SetGoError(util.Errorf("lease %d - %d invalid; prior lease %d - %d",
-			args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
+	} else if effectiveStart.Less(oldLease.Expiration) {
+		reply.SetGoError(util.Errorf("lease %s - [%s] - %s invalid; prior lease %s - %s",
+			effectiveStart, args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
 		return
 	}
+
+	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
 	if err := engine.MVCCPutProto(batch, nil, engine.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
@@ -1600,6 +1647,12 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 			return r.ContainsKey(configPrefix)
 		})
 		r.tsCache.SetLowWater(oldLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
+
+		if log.V(1) {
+			nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))
+			log.Infof("new leader lease for store %d on node %d: %s - %s",
+				storeID, nodeID, args.Lease.Start, args.Lease.Expiration)
+		}
 	}
 }
 
