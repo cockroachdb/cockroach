@@ -47,6 +47,7 @@ class TransactionPushError;
 class TransactionRetryError;
 class TransactionStatusError;
 class WriteIntentError;
+class WriteIntentError_Intent;
 class WriteTooOldError;
 class OpRequiresTxnError;
 class ConditionFailedError;
@@ -802,6 +803,102 @@ class TransactionStatusError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class WriteIntentError_Intent : public ::google::protobuf::Message {
+ public:
+  WriteIntentError_Intent();
+  virtual ~WriteIntentError_Intent();
+
+  WriteIntentError_Intent(const WriteIntentError_Intent& from);
+
+  inline WriteIntentError_Intent& operator=(const WriteIntentError_Intent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const WriteIntentError_Intent& default_instance();
+
+  void Swap(WriteIntentError_Intent* other);
+
+  // implements Message ----------------------------------------------
+
+  WriteIntentError_Intent* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const WriteIntentError_Intent& from);
+  void MergeFrom(const WriteIntentError_Intent& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes key = 1;
+  inline bool has_key() const;
+  inline void clear_key();
+  static const int kKeyFieldNumber = 1;
+  inline const ::std::string& key() const;
+  inline void set_key(const ::std::string& value);
+  inline void set_key(const char* value);
+  inline void set_key(const void* value, size_t size);
+  inline ::std::string* mutable_key();
+  inline ::std::string* release_key();
+  inline void set_allocated_key(::std::string* key);
+
+  // optional .cockroach.proto.Transaction txn = 2;
+  inline bool has_txn() const;
+  inline void clear_txn();
+  static const int kTxnFieldNumber = 2;
+  inline const ::cockroach::proto::Transaction& txn() const;
+  inline ::cockroach::proto::Transaction* mutable_txn();
+  inline ::cockroach::proto::Transaction* release_txn();
+  inline void set_allocated_txn(::cockroach::proto::Transaction* txn);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.WriteIntentError.Intent)
+ private:
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_txn();
+  inline void clear_has_txn();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* key_;
+  ::cockroach::proto::Transaction* txn_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static WriteIntentError_Intent* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class WriteIntentError : public ::google::protobuf::Message {
  public:
   WriteIntentError();
@@ -853,42 +950,31 @@ class WriteIntentError : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
+  typedef WriteIntentError_Intent Intent;
+
   // accessors -------------------------------------------------------
 
-  // optional bytes key = 1;
-  inline bool has_key() const;
-  inline void clear_key();
-  static const int kKeyFieldNumber = 1;
-  inline const ::std::string& key() const;
-  inline void set_key(const ::std::string& value);
-  inline void set_key(const char* value);
-  inline void set_key(const void* value, size_t size);
-  inline ::std::string* mutable_key();
-  inline ::std::string* release_key();
-  inline void set_allocated_key(::std::string* key);
+  // repeated .cockroach.proto.WriteIntentError.Intent intents = 1;
+  inline int intents_size() const;
+  inline void clear_intents();
+  static const int kIntentsFieldNumber = 1;
+  inline const ::cockroach::proto::WriteIntentError_Intent& intents(int index) const;
+  inline ::cockroach::proto::WriteIntentError_Intent* mutable_intents(int index);
+  inline ::cockroach::proto::WriteIntentError_Intent* add_intents();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::WriteIntentError_Intent >&
+      intents() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::WriteIntentError_Intent >*
+      mutable_intents();
 
-  // optional .cockroach.proto.Transaction txn = 2;
-  inline bool has_txn() const;
-  inline void clear_txn();
-  static const int kTxnFieldNumber = 2;
-  inline const ::cockroach::proto::Transaction& txn() const;
-  inline ::cockroach::proto::Transaction* mutable_txn();
-  inline ::cockroach::proto::Transaction* release_txn();
-  inline void set_allocated_txn(::cockroach::proto::Transaction* txn);
-
-  // optional bool resolved = 3;
+  // optional bool resolved = 2;
   inline bool has_resolved() const;
   inline void clear_resolved();
-  static const int kResolvedFieldNumber = 3;
+  static const int kResolvedFieldNumber = 2;
   inline bool resolved() const;
   inline void set_resolved(bool value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.WriteIntentError)
  private:
-  inline void set_has_key();
-  inline void clear_has_key();
-  inline void set_has_txn();
-  inline void clear_has_txn();
   inline void set_has_resolved();
   inline void clear_has_resolved();
 
@@ -896,8 +982,7 @@ class WriteIntentError : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::std::string* key_;
-  ::cockroach::proto::Transaction* txn_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::WriteIntentError_Intent > intents_;
   bool resolved_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
@@ -2190,61 +2275,61 @@ inline void TransactionStatusError::set_allocated_msg(::std::string* msg) {
 
 // -------------------------------------------------------------------
 
-// WriteIntentError
+// WriteIntentError_Intent
 
 // optional bytes key = 1;
-inline bool WriteIntentError::has_key() const {
+inline bool WriteIntentError_Intent::has_key() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void WriteIntentError::set_has_key() {
+inline void WriteIntentError_Intent::set_has_key() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void WriteIntentError::clear_has_key() {
+inline void WriteIntentError_Intent::clear_has_key() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void WriteIntentError::clear_key() {
+inline void WriteIntentError_Intent::clear_key() {
   if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_->clear();
   }
   clear_has_key();
 }
-inline const ::std::string& WriteIntentError::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.key)
+inline const ::std::string& WriteIntentError_Intent::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.Intent.key)
   return *key_;
 }
-inline void WriteIntentError::set_key(const ::std::string& value) {
+inline void WriteIntentError_Intent::set_key(const ::std::string& value) {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
   key_->assign(value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.WriteIntentError.key)
+  // @@protoc_insertion_point(field_set:cockroach.proto.WriteIntentError.Intent.key)
 }
-inline void WriteIntentError::set_key(const char* value) {
+inline void WriteIntentError_Intent::set_key(const char* value) {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
   key_->assign(value);
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.WriteIntentError.key)
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.WriteIntentError.Intent.key)
 }
-inline void WriteIntentError::set_key(const void* value, size_t size) {
+inline void WriteIntentError_Intent::set_key(const void* value, size_t size) {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
   key_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.WriteIntentError.key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.WriteIntentError.Intent.key)
 }
-inline ::std::string* WriteIntentError::mutable_key() {
+inline ::std::string* WriteIntentError_Intent::mutable_key() {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.key)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.Intent.key)
   return key_;
 }
-inline ::std::string* WriteIntentError::release_key() {
+inline ::std::string* WriteIntentError_Intent::release_key() {
   clear_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     return NULL;
@@ -2254,7 +2339,7 @@ inline ::std::string* WriteIntentError::release_key() {
     return temp;
   }
 }
-inline void WriteIntentError::set_allocated_key(::std::string* key) {
+inline void WriteIntentError_Intent::set_allocated_key(::std::string* key) {
   if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete key_;
   }
@@ -2265,40 +2350,40 @@ inline void WriteIntentError::set_allocated_key(::std::string* key) {
     clear_has_key();
     key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteIntentError.key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteIntentError.Intent.key)
 }
 
 // optional .cockroach.proto.Transaction txn = 2;
-inline bool WriteIntentError::has_txn() const {
+inline bool WriteIntentError_Intent::has_txn() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void WriteIntentError::set_has_txn() {
+inline void WriteIntentError_Intent::set_has_txn() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void WriteIntentError::clear_has_txn() {
+inline void WriteIntentError_Intent::clear_has_txn() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void WriteIntentError::clear_txn() {
+inline void WriteIntentError_Intent::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
   clear_has_txn();
 }
-inline const ::cockroach::proto::Transaction& WriteIntentError::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.txn)
+inline const ::cockroach::proto::Transaction& WriteIntentError_Intent::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.Intent.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
-inline ::cockroach::proto::Transaction* WriteIntentError::mutable_txn() {
+inline ::cockroach::proto::Transaction* WriteIntentError_Intent::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) txn_ = new ::cockroach::proto::Transaction;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.txn)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.Intent.txn)
   return txn_;
 }
-inline ::cockroach::proto::Transaction* WriteIntentError::release_txn() {
+inline ::cockroach::proto::Transaction* WriteIntentError_Intent::release_txn() {
   clear_has_txn();
   ::cockroach::proto::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
-inline void WriteIntentError::set_allocated_txn(::cockroach::proto::Transaction* txn) {
+inline void WriteIntentError_Intent::set_allocated_txn(::cockroach::proto::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -2306,18 +2391,52 @@ inline void WriteIntentError::set_allocated_txn(::cockroach::proto::Transaction*
   } else {
     clear_has_txn();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteIntentError.txn)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteIntentError.Intent.txn)
 }
 
-// optional bool resolved = 3;
+// -------------------------------------------------------------------
+
+// WriteIntentError
+
+// repeated .cockroach.proto.WriteIntentError.Intent intents = 1;
+inline int WriteIntentError::intents_size() const {
+  return intents_.size();
+}
+inline void WriteIntentError::clear_intents() {
+  intents_.Clear();
+}
+inline const ::cockroach::proto::WriteIntentError_Intent& WriteIntentError::intents(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.WriteIntentError.intents)
+  return intents_.Get(index);
+}
+inline ::cockroach::proto::WriteIntentError_Intent* WriteIntentError::mutable_intents(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.WriteIntentError.intents)
+  return intents_.Mutable(index);
+}
+inline ::cockroach::proto::WriteIntentError_Intent* WriteIntentError::add_intents() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.WriteIntentError.intents)
+  return intents_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::WriteIntentError_Intent >&
+WriteIntentError::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.WriteIntentError.intents)
+  return intents_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::WriteIntentError_Intent >*
+WriteIntentError::mutable_intents() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.WriteIntentError.intents)
+  return &intents_;
+}
+
+// optional bool resolved = 2;
 inline bool WriteIntentError::has_resolved() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void WriteIntentError::set_has_resolved() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void WriteIntentError::clear_has_resolved() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void WriteIntentError::clear_resolved() {
   resolved_ = false;

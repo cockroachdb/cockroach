@@ -2194,6 +2194,82 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	}
 }
 
+// TestRangeDanglingMetaIntent creates a dangling intent on a
+// meta2 record and verifies that InternalRangeLookup requests
+// behave appropriately. Normally, the old value and a write intent
+// error should be returned. If IgnoreIntents is specified, then
+// a random choice of old or new is returned with no error.
+func TestRangeDanglingMetaIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := proto.Key("a")
+
+	// Get original meta2 descriptor.
+	rlArgs := &proto.InternalRangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     engine.RangeMetaKey(key),
+			RaftID:  tc.rng.Desc().RaftID,
+			Replica: proto.Replica{StoreID: tc.store.StoreID()},
+		},
+		MaxRanges: 1,
+	}
+	rlReply := &proto.InternalRangeLookupResponse{}
+	if err := tc.rng.AddCmd(rlArgs, rlReply, true); err != nil {
+		t.Fatal(err)
+	}
+
+	origDesc := rlReply.Ranges[0]
+	newDesc := origDesc
+	newDesc.EndKey = key
+
+	// Write the new descriptor as an intent.
+	data, err := gogoproto.Marshal(&newDesc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pArgs, pReply := putArgs(engine.RangeMetaKey(key), data, 1, tc.store.StoreID())
+	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	pArgs.Timestamp = pArgs.Txn.Timestamp
+	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now lookup the range; should get old value + write intent error.
+	rlArgs.Key = engine.RangeMetaKey(proto.Key("A"))
+	rlArgs.Timestamp = proto.ZeroTimestamp
+	err = tc.rng.AddCmd(rlArgs, rlReply, true)
+	if wiErr, ok := err.(*proto.WriteIntentError); !ok || len(wiErr.Intents) != 1 {
+		t.Errorf("expected write intent error with 1 key; got %s", err)
+	}
+	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
+		t.Errorf("expected original descriptor %s; got %s", origDesc, rlReply.Ranges[0])
+	}
+
+	// Try 100 lookups with IgnoreIntents. Expect roughly 50/50.
+	rlArgs.IgnoreIntents = true
+	var origCount, newCount int
+	for i := 0; i < 100; i++ {
+		rlArgs.Timestamp = proto.ZeroTimestamp
+		rlReply.Reset()
+		if err = tc.rng.AddCmd(rlArgs, rlReply, true); err != nil {
+			t.Fatal(err)
+		}
+		if reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
+			origCount++
+		} else if reflect.DeepEqual(rlReply.Ranges[0], newDesc) {
+			newCount++
+		} else {
+			t.Errorf("expected orig/new descriptor %s/%s; got %s", origDesc, newDesc, rlReply.Ranges[0])
+		}
+	}
+	if origCount > newCount+20 || origCount < newCount-20 {
+		t.Errorf("expected close to 50/50 counts; got %d/%d", origCount, newCount)
+	}
+}
+
 // benchmarkEvents is designed to determine the impact of sending events on the
 // performance of write commands. This benchmark can be run with or without
 // events, and with or without a consumer reading the events.

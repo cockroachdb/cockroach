@@ -41,13 +41,13 @@ var (
 	testKey2     = proto.Key("/db2")
 	testKey3     = proto.Key("/db3")
 	testKey4     = proto.Key("/db4")
-	txn1         = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1}
-	txn1Commit   = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1, Status: proto.COMMITTED}
-	txn1Abort    = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1, Status: proto.ABORTED}
-	txn1e2       = &proto.Transaction{ID: []byte("Txn1"), Epoch: 2}
-	txn1e2Commit = &proto.Transaction{ID: []byte("Txn1"), Epoch: 2, Status: proto.COMMITTED}
-	txn2         = &proto.Transaction{ID: []byte("Txn2")}
-	txn2Commit   = &proto.Transaction{ID: []byte("Txn2"), Status: proto.COMMITTED}
+	txn1         = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 1}
+	txn1Commit   = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: proto.COMMITTED}
+	txn1Abort    = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: proto.ABORTED}
+	txn1e2       = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 2}
+	txn1e2Commit = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn1"), Epoch: 2, Status: proto.COMMITTED}
+	txn2         = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn2")}
+	txn2Commit   = &proto.Transaction{Key: proto.Key("a"), ID: []byte("Txn2"), Status: proto.COMMITTED}
 	value1       = proto.Value{Bytes: []byte("testValue1")}
 	value2       = proto.Value{Bytes: []byte("testValue2")}
 	value3       = proto.Value{Bytes: []byte("testValue3")}
@@ -540,6 +540,98 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 	}
 }
 
+func TestMVCCScanWriteIntentError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ts := []proto.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
+	kvs := []proto.KeyValue{
+		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
+		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
+		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
+		proto.KeyValue{Key: testKey2, Value: proto.Value{Bytes: []byte("testValue2"), Timestamp: &ts[3]}},
+		proto.KeyValue{Key: testKey3, Value: proto.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
+		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
+	}
+	for i, kv := range kvs {
+		var txn *proto.Transaction
+		if i == 2 {
+			txn = txn1
+		} else if i == 5 {
+			txn = txn2
+		}
+		err := MVCCPut(engine, nil, kv.Key, *kv.Value.Timestamp, kv.Value, txn)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scanCases := []struct {
+		consistent bool
+		txn        *proto.Transaction
+		expIntents []proto.WriteIntentError_Intent
+		expValues  []proto.KeyValue
+	}{
+		{
+			consistent: true,
+			txn:        nil,
+			expIntents: []proto.WriteIntentError_Intent{
+				{Key: testKey1, Txn: *txn1},
+				{Key: testKey4, Txn: *txn2},
+			},
+			expValues: []proto.KeyValue{kvs[3], kvs[4]},
+		},
+		{
+			consistent: true,
+			txn:        txn1,
+			expIntents: []proto.WriteIntentError_Intent{
+				{Key: testKey4, Txn: *txn2},
+			},
+			expValues: []proto.KeyValue{kvs[2], kvs[3], kvs[4]},
+		},
+		{
+			consistent: true,
+			txn:        txn2,
+			expIntents: []proto.WriteIntentError_Intent{
+				{Key: testKey1, Txn: *txn1},
+			},
+			expValues: []proto.KeyValue{kvs[3], kvs[4], kvs[5]},
+		},
+		{
+			consistent: false,
+			txn:        nil,
+			expIntents: []proto.WriteIntentError_Intent{
+				{Key: testKey1, Txn: *txn1},
+				{Key: testKey4, Txn: *txn2},
+			},
+			expValues: []proto.KeyValue{kvs[0], kvs[3], kvs[4], kvs[1]},
+		},
+	}
+
+	for i, scan := range scanCases {
+		cStr := "inconsistent"
+		if scan.consistent {
+			cStr = "consistent"
+		}
+		kvs, err := MVCCScan(engine, testKey1, testKey4.Next(), 0, makeTS(1, 0), scan.consistent, scan.txn)
+		if err == nil {
+			t.Errorf("%s(%d): expected error scanning keys with intents", cStr, i)
+			continue
+		}
+		wiErr, ok := err.(*proto.WriteIntentError)
+		if !ok {
+			t.Errorf("%s(%d): expected write intent error; got %s", cStr, i, err)
+		} else if !reflect.DeepEqual(wiErr.Intents, scan.expIntents) {
+			t.Errorf("%s(%d): expected intents %+v; got %+v", cStr, i, scan.expIntents, wiErr.Intents)
+		} else if scan.consistent && len(kvs) != 0 {
+			t.Errorf("%s(%d): on consistent read, expect no results; got %v", cStr, i, kvs)
+		} else if !scan.consistent && !reflect.DeepEqual(kvs, scan.expValues) {
+			t.Errorf("%s(%d): expected values %+v; got %+v", cStr, i, scan.expValues, kvs)
+		}
+	}
+}
+
 // TestMVCCGetInconsistent verifies the behavior of get with
 // consistent set to false.
 func TestMVCCGetInconsistent(t *testing.T) {
@@ -565,8 +657,14 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	// Inconsistent get will fetch value1 for any timestamp.
 	for _, ts := range []proto.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
 		val, err := MVCCGet(engine, testKey1, ts, false, nil)
-		if err != nil {
-			t.Fatal(err)
+		if ts.Less(makeTS(2, 0)) {
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if wiErr, ok := err.(*proto.WriteIntentError); !ok || !wiErr.Intents[0].Key.Equal(testKey1) {
+				t.Fatal(err)
+			}
 		}
 		if !bytes.Equal(val.Bytes, value1.Bytes) {
 			t.Errorf("@%s expected %q; got %q", ts, value1.Bytes, val.Bytes)
@@ -579,7 +677,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	val, err := MVCCGet(engine, testKey2, makeTS(2, 0), false, nil)
-	if err != nil {
+	if wiErr, ok := err.(*proto.WriteIntentError); !ok || !wiErr.Intents[0].Key.Equal(testKey2) {
 		t.Fatal(err)
 	}
 	if val != nil {
@@ -768,8 +866,12 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	expIntents := []proto.WriteIntentError_Intent{
+		{Key: testKey1, Txn: *txn1},
+		{Key: testKey3, Txn: *txn2},
+	}
 	kvs, err := MVCCScan(engine, testKey1, testKey4.Next(), 0, makeTS(7, 0), false, nil)
-	if err != nil {
+	if wiErr, ok := err.(*proto.WriteIntentError); !ok || !reflect.DeepEqual(wiErr.Intents, expIntents) {
 		t.Fatal(err)
 	}
 
@@ -783,8 +885,9 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	}
 
 	// Now try a scan at a historical timestamp.
+	expIntents = expIntents[:1]
 	kvs, err = MVCCScan(engine, testKey1, testKey4.Next(), 0, makeTS(3, 0), false, nil)
-	if err != nil {
+	if wiErr, ok := err.(*proto.WriteIntentError); !ok || !reflect.DeepEqual(wiErr.Intents, expIntents) {
 		t.Fatal(err)
 	}
 	expKVs = []proto.KeyValue{
@@ -1830,9 +1933,9 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
 				if wiErr, ok := err.(*proto.WriteIntentError); ok {
-					wiErr.Txn.Status = proto.ABORTED
+					wiErr.Intents[0].Txn.Status = proto.ABORTED
 					log.V(1).Infof("*** ABORT index %d", idx)
-					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), &wiErr.Txn); err != nil {
+					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), &wiErr.Intents[0].Txn); err != nil {
 						t.Fatal(err)
 					}
 					// Now, re-delete.

@@ -91,17 +91,21 @@ message TransactionStatusError {
   optional string msg = 2 [(gogoproto.nullable) = false];
 }
 
-// A WriteIntentError indicates that a write intent belonging to
-// another transaction was encountered leading to a read/write or
-// write/write conflict. The Key at which the intent was encountered
-// is set, as is the Txn record for the intent's transaction.
-// Resolved is set if the intent was successfully resolved, meaning
-// the client may retry the operation immediately. If Resolved is
-// false, the client should back off and retry.
+// A WriteIntentError indicates that one or more write intent
+// belonging to another transaction were encountered leading to a
+// read/write or write/write conflict. The keys at which the intent
+// was encountered are set, as are the txn records for the intents'
+// transactions. Resolved is set if the intent was successfully
+// resolved, meaning the client may retry the operation
+// immediately. If Resolved is false, the client should back off and
+// retry.
 message WriteIntentError {
-  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
-  optional Transaction txn = 2 [(gogoproto.nullable) = false];
-  optional bool resolved = 3 [(gogoproto.nullable) = false];
+  message Intent {
+    optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+    optional Transaction txn = 2 [(gogoproto.nullable) = false];
+  }
+  repeated Intent intents = 1 [(gogoproto.nullable) = false];
+  optional bool resolved = 2 [(gogoproto.nullable) = false];
 }
 
 // A WriteTooOldError indicates that a write encountered a versioned

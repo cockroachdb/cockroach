@@ -480,11 +480,12 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 	}
 	// If we're doing inconsistent reads and there's an intent, we
 	// ignore the intent by insisting that the timestamp we're reading
-	// at is an historical timestamp < the intent timestamp.
-	if !consistent && meta.Txn != nil {
-		if !timestamp.Less(meta.Timestamp) {
-			timestamp = meta.Timestamp.Prev()
-		}
+	// at is a historical timestamp < the intent timestamp. However, we
+	// return a write intent error so that the intents can be resolved.
+	var wiErr error
+	if !consistent && meta.Txn != nil && !timestamp.Less(meta.Timestamp) {
+		timestamp = meta.Timestamp.Prev()
+		wiErr = &proto.WriteIntentError{Intents: []proto.WriteIntentError_Intent{{Key: key, Txn: *meta.Txn}}}
 	}
 
 	var valueKey proto.EncodedKey
@@ -497,7 +498,7 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
 			// Trying to read the last value, but it's another transaction's
 			// intent; the reader will have to act on this.
-			return nil, &proto.WriteIntentError{Key: key, Txn: *meta.Txn}
+			return nil, &proto.WriteIntentError{Intents: []proto.WriteIntentError_Intent{{Key: key, Txn: *meta.Txn}}}
 		}
 		latestKey := mvccEncodeTimestamp(metaKey, meta.Timestamp)
 
@@ -559,8 +560,10 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 		valueKey, err = getValue(engine, nextKey, MVCCEncodeKey(key.Next()), value)
 	}
 
-	if err != nil || valueKey == nil {
+	if err != nil {
 		return nil, err
+	} else if valueKey == nil {
+		return nil, wiErr
 	}
 
 	_, ts, isValue := MVCCDecodeKey(valueKey)
@@ -583,7 +586,7 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 		panic(fmt.Sprintf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value))
 	}
 
-	return value.Value, nil
+	return value.Value, wiErr
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -698,7 +701,7 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 		// This should not happen since range should check the existing
 		// write intent before executing any Put action at MVCC level.
 		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
-			return &proto.WriteIntentError{Key: key, Txn: *meta.Txn}
+			return &proto.WriteIntentError{Intents: []proto.WriteIntentError_Intent{{Key: key, Txn: *meta.Txn}}}
 		}
 
 		// We can update the current metadata only if both the timestamp
@@ -896,6 +899,11 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 		}
 		return false, nil
 	}); err != nil {
+		// For inconsistent reads, return the results + the error, if the
+		// error is a write intent.
+		if _, ok := err.(*proto.WriteIntentError); !consistent && ok {
+			return res, err
+		}
 		return nil, err
 	}
 	return res, nil
@@ -939,14 +947,23 @@ func MVCCIterate(engine Engine, key, endKey proto.Key, timestamp proto.Timestamp
 		return key, iter.ValueProto(msg)
 	}
 
+	// A cumulative write intent error to gather all write intents.
+	var wiErr error
+
 	for {
 		iter.Seek(encKey)
 		if !iter.Valid() {
-			return iter.Error()
+			if err := iter.Error(); err != nil {
+				return err
+			}
+			return wiErr
 		}
 		metaKey := iter.Key()
 		if bytes.Compare(metaKey, encEndKey) >= 0 {
-			return iter.Error()
+			if err := iter.Error(); err != nil {
+				return err
+			}
+			return wiErr
 		}
 		key, _, isValue := MVCCDecodeKey(metaKey)
 		if isValue {
@@ -957,12 +974,25 @@ func MVCCIterate(engine Engine, key, endKey proto.Key, timestamp proto.Timestamp
 		}
 		value, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 		if err != nil {
-			return err
+			switch t := err.(type) {
+			case *proto.WriteIntentError:
+				// In the case of WriteIntentErrors, accumulate affected keys but continue scan.
+				if wiErr == nil {
+					wiErr = t
+				} else {
+					wiErr.(*proto.WriteIntentError).Intents = append(wiErr.(*proto.WriteIntentError).Intents, t.Intents...)
+				}
+			default:
+				return err
+			}
 		}
 		if value != nil {
 			done, err := f(proto.KeyValue{Key: key, Value: *value})
 			if done || err != nil {
-				return err
+				if err != nil {
+					return err
+				}
+				return wiErr
 			}
 		}
 		encKey = mvccEncodeKey(keyBuf, key.Next())
@@ -1353,6 +1383,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			}
 			ms.KeyBytes += int64(len(kv.Key))
 			ms.ValBytes += int64(len(kv.Value))
+			log.Infof("val %s: %d", kv.Key, len(kv.Value))
 			ms.KeyCount++
 			if meta.IsInline() {
 				ms.ValCount++
@@ -1384,6 +1415,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			}
 			ms.KeyBytes += mvccVersionTimestampSize
 			ms.ValBytes += int64(len(kv.Value))
+			log.Infof("val %s @%s: %d", kv.Key, ts, len(kv.Value))
 			ms.ValCount++
 		}
 		return false, nil

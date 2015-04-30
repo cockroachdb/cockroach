@@ -515,13 +515,20 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) error {
+	header := args.Header()
+	if !r.ContainsKeyRange(header.Key, header.EndKey) {
+		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+		reply.Header().SetGoError(err)
+		return err
+	}
+
 	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
 		return r.addAdminCmd(args, reply)
 	} else if proto.IsReadOnly(args) {
 		return r.addReadOnlyCmd(args, reply)
 	}
-	return r.addReadWriteCmd(args, reply, wait)
+	return r.addWriteCmd(args, reply, wait)
 }
 
 // beginCmd waits for any overlapping, already-executing commands via
@@ -622,7 +629,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 	return err
 }
 
-// addReadWriteCmd first consults the response cache to determine whether
+// addWriteCmd first consults the response cache to determine whether
 // this command has already been sent to the range. If a response is
 // found, it's returned immediately and not submitted to raft. Next,
 // the timestamp cache is checked to determine if any newer accesses to
@@ -632,7 +639,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the response cache.
 // If wait is true, will block until the command is complete.
-func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
@@ -875,7 +882,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	}
 
 	// Add this command's result to the response cache if this is a
-	// read/write method. This must be done as part of the execution of
+	// write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
 	if proto.IsWrite(args) {

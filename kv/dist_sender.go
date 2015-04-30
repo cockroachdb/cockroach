@@ -252,6 +252,11 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 		})
 }
 
+// lookupOptions capture additional options to pass to InternalRangeLookup.
+type lookupOptions struct {
+	ignoreIntents bool
+}
+
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range. Note that we allow
 // inconsistent reads when doing range lookups for efficiency. Getting stale
@@ -260,14 +265,16 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 // that internalRangeLookup bypasses the DistSender's Send() method, so there
 // is no error inspection and retry logic here; this is not an issue since the
 // lookup performs a single inconsistent read only.
-func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
+	info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
 			User:            storage.UserRoot,
 			ReadConsistency: proto.INCONSISTENT,
 		},
-		MaxRanges: ds.rangeLookupMaxRanges,
+		MaxRanges:     ds.rangeLookupMaxRanges,
+		IgnoreIntents: options.ignoreIntents,
 	}
 	reply := &proto.InternalRangeLookupResponse{}
 	if err := ds.sendRPC(info, args, reply); err != nil {
@@ -298,7 +305,7 @@ func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) 
 // RangeDescriptors are returned with the intent of pre-caching
 // subsequent ranges which are likely to be requested soon by the
 // current workload.
-func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, error) {
+func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.
@@ -326,13 +333,13 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor
 	} else {
 		// Look up desc from the cache, which will recursively call into
 		// ds.getRangeDescriptor if it is not cached.
-		desc, err = ds.rangeCache.LookupRangeDescriptor(metadataKey)
+		desc, err = ds.rangeCache.LookupRangeDescriptor(metadataKey, options)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return ds.internalRangeLookup(metadataKey, desc)
+	return ds.internalRangeLookup(metadataKey, options, desc)
 }
 
 func (ds *DistSender) optimizeReplicaOrder(replicas proto.ReplicaSlice) rpc.OrderingPolicy {
@@ -496,11 +503,17 @@ func (ds *DistSender) Send(call client.Call) {
 		args.Header().Timestamp = ds.clock.Now()
 	}
 
+	// If this is an InternalPushTxn, set ignoreIntents option as necessary.
+	options := lookupOptions{}
+	if pushArgs, ok := args.(*proto.InternalPushTxnRequest); ok {
+		options.ignoreIntents = pushArgs.RangeLookup
+	}
+
 	for {
 		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 			reply.Header().Reset()
 			descNext = nil
-			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key)
+			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key, options)
 			if err == nil {
 				// If the request accesses keys beyond the end of this range,
 				// get the descriptor of the adjacent range to address next.
@@ -519,7 +532,7 @@ func (ds *DistSender) Send(call client.Call) {
 					// This next lookup is likely for free since we've read the
 					// previous descriptor and range lookups use cache
 					// prefetching.
-					descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey)
+					descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey, options)
 					// Truncate the request to our current range.
 					args.Header().EndKey = desc.EndKey
 				}

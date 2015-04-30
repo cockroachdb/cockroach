@@ -160,12 +160,21 @@ class InternalRangeLookupRequest : public ::google::protobuf::Message {
   inline ::google::protobuf::int32 max_ranges() const;
   inline void set_max_ranges(::google::protobuf::int32 value);
 
+  // optional bool ignore_intents = 3;
+  inline bool has_ignore_intents() const;
+  inline void clear_ignore_intents();
+  static const int kIgnoreIntentsFieldNumber = 3;
+  inline bool ignore_intents() const;
+  inline void set_ignore_intents(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRangeLookupRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_max_ranges();
   inline void clear_has_max_ranges();
+  inline void set_has_ignore_intents();
+  inline void clear_has_ignore_intents();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -173,6 +182,7 @@ class InternalRangeLookupRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::google::protobuf::int32 max_ranges_;
+  bool ignore_intents_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
@@ -801,6 +811,13 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   inline bool abort() const;
   inline void set_abort(bool value);
 
+  // optional bool range_lookup = 4;
+  inline bool has_range_lookup() const;
+  inline void clear_range_lookup();
+  static const int kRangeLookupFieldNumber = 4;
+  inline bool range_lookup() const;
+  inline void set_range_lookup(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalPushTxnRequest)
  private:
   inline void set_has_header();
@@ -809,6 +826,8 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   inline void clear_has_pushee_txn();
   inline void set_has_abort();
   inline void clear_has_abort();
+  inline void set_has_range_lookup();
+  inline void clear_has_range_lookup();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -817,6 +836,7 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::Transaction* pushee_txn_;
   bool abort_;
+  bool range_lookup_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
@@ -3632,6 +3652,30 @@ inline void InternalRangeLookupRequest::set_max_ranges(::google::protobuf::int32
   // @@protoc_insertion_point(field_set:cockroach.proto.InternalRangeLookupRequest.max_ranges)
 }
 
+// optional bool ignore_intents = 3;
+inline bool InternalRangeLookupRequest::has_ignore_intents() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void InternalRangeLookupRequest::set_has_ignore_intents() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void InternalRangeLookupRequest::clear_has_ignore_intents() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void InternalRangeLookupRequest::clear_ignore_intents() {
+  ignore_intents_ = false;
+  clear_has_ignore_intents();
+}
+inline bool InternalRangeLookupRequest::ignore_intents() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRangeLookupRequest.ignore_intents)
+  return ignore_intents_;
+}
+inline void InternalRangeLookupRequest::set_ignore_intents(bool value) {
+  set_has_ignore_intents();
+  ignore_intents_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalRangeLookupRequest.ignore_intents)
+}
+
 // -------------------------------------------------------------------
 
 // InternalRangeLookupResponse
@@ -4187,6 +4231,30 @@ inline void InternalPushTxnRequest::set_abort(bool value) {
   set_has_abort();
   abort_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.Abort)
+}
+
+// optional bool range_lookup = 4;
+inline bool InternalPushTxnRequest::has_range_lookup() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void InternalPushTxnRequest::set_has_range_lookup() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void InternalPushTxnRequest::clear_has_range_lookup() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void InternalPushTxnRequest::clear_range_lookup() {
+  range_lookup_ = false;
+  clear_has_range_lookup();
+}
+inline bool InternalPushTxnRequest::range_lookup() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalPushTxnRequest.range_lookup)
+  return range_lookup_;
+}
+inline void InternalPushTxnRequest::set_range_lookup(bool value) {
+  set_has_range_lookup();
+  range_lookup_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.range_lookup)
 }
 
 // -------------------------------------------------------------------

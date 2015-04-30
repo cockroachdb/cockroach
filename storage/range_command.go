@@ -328,6 +328,10 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 // intended to serve as a sort of caching pre-fetch, so that the requesting
 // nodes can aggressively cache RangeDescriptors which are likely to be desired
 // by their current workload.
+//
+// Note that read consistency specified in the args header is ignored. Reads
+// are always inconsistent, but every attempt is made to resolve encountered
+// intents.
 func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) {
 	if err := engine.ValidateRangeMetaKey(args.Key); err != nil {
 		reply.SetGoError(err)
@@ -339,6 +343,8 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 		reply.SetGoError(util.Errorf(
 			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount))
 		return
+	} else if args.IgnoreIntents {
+		rangeCount = 1 // simplify lookup because we may have to retry to read new
 	}
 
 	// We want to search for the metadata key just greater than args.Key. Scan
@@ -346,16 +352,39 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// MaxRanges.
 	metaPrefix := proto.Key(args.Key[:len(engine.KeyMeta1Prefix)])
 	nextKey := proto.Key(args.Key).Next()
-	// Always false, at least when called from the DistSender.
-	consistent := args.ReadConsistency != proto.INCONSISTENT
-	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, consistent, args.Txn)
+	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, false, args.Txn)
 	if err != nil {
-		reply.SetGoError(err)
-		return
+		if wiErr, ok := err.(*proto.WriteIntentError); ok && args.IgnoreIntents {
+			// NOTE (subtle): in general, we want to try to clean up dangling
+			// intents on meta records. However, if we're in the process of
+			// cleaning up a dangling intent on a meta record by pushing the
+			// transaction, we don't want to create an infinite loop:
+			//
+			// intent! -> push-txn -> range-lookup -> intent! -> etc...
+			//
+			// Instead we want:
+			//
+			// intent! -> push-txn -> range-lookup -> ignore intent, return old/new ranges
+			//
+			// On the range-lookup from a push transaction, we want to be
+			// insensitive to intents and avoid resolving them. However, because
+			// the range may or may not have changed depending on the success of
+			// the split/merge/update, we return the range info without intent
+			// errors. However, because we don't know whether the range update
+			// succeeded or failed, we are forced to return old or new randomly.
+			if rand.Intn(2) == 0 {
+				key, txn := wiErr.Intents[0].Key, &wiErr.Intents[0].Txn
+				val, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
+				reply.SetGoError(err)
+				kvs = []proto.KeyValue{proto.KeyValue{Key: key, Value: *val}}
+			}
+		} else {
+			reply.SetGoError(err)
+		}
 	}
 
 	// The initial key must have the same metadata level prefix as we queried.
-	if len(kvs) == 0 {
+	if err == nil && len(kvs) == 0 {
 		// At this point the range has been verified to contain the requested
 		// key, but no matching results were returned from the scan. This could
 		// indicate a very bad system error, but for now we will just treat it

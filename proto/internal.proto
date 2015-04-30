@@ -37,6 +37,12 @@ option (gogoproto.unmarshaler_all) = true;
 message InternalRangeLookupRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
+  // Ignore intents indicates whether or not intents encountered
+  // while looking up the range info should be resolved. This should
+  // be false in general, except for the case where the lookup is
+  // already in service of pushing intents on meta records. Attempting
+  // to resolve intents in this case would lead to infinite recursion.
+  optional bool ignore_intents = 3 [(gogoproto.nullable) = false];
 }
 
 // An InternalRangeLookupResponse is the return value from the
@@ -108,6 +114,10 @@ message InternalPushTxnRequest {
   // Readers set this to false and instead attempt to move PusheeTxn's
   // commit timestamp forward.
   optional bool Abort = 3 [(gogoproto.nullable) = false];
+  // Range lookup indicates whether we're pushing a txn because of an
+  // intent encountered while servicing an internal range lookup
+  // request. See notes in InternalLookupRangeRequest.
+  optional bool range_lookup = 4 [(gogoproto.nullable) = false];
 }
 
 // An InternalPushTxnResponse is the return value from the

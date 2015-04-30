@@ -65,14 +65,15 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 	return response
 }
 
-func (db *testDescriptorDB) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, error) {
+func (db *testDescriptorDB) getRangeDescriptor(key proto.Key,
+	options lookupOptions) ([]proto.RangeDescriptor, error) {
 	db.hitCount++
 	metadataKey := engine.RangeMetaKey(key)
 
 	// Recursively call into cache as the real DB would, terminating recursion
 	// when a meta1key is encountered.
 	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
-		db.cache.LookupRangeDescriptor(metadataKey)
+		db.cache.LookupRangeDescriptor(metadataKey, options)
 	}
 	return db.getDescriptor(key), nil
 }
@@ -125,7 +126,7 @@ func (db *testDescriptorDB) assertHitCount(t *testing.T, expected int) {
 }
 
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) {
-	r, err := rc.LookupRangeDescriptor(proto.Key(key))
+	r, err := rc.LookupRangeDescriptor(proto.Key(key), lookupOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}

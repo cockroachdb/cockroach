@@ -66,14 +66,58 @@ type testSender struct {
 	store *Store
 }
 
+type requestUnion interface {
+	GetValue() interface{}
+}
+
+type responseAdder interface {
+	Add(reply proto.Response)
+}
+
 // Send forwards the call to the single store. This is a poor man's
 // version of kv/coordinator, but it serves the purposes of supporting
 // tests in this package. Batches and transactions are not
 // supported. Since kv/ depends on storage/, we can't get access to a
 // coordinator sender from here.
 func (db *testSender) Send(call client.Call) {
+	reqs := []requestUnion{}
+	switch t := call.Args.(type) {
+	case *proto.BatchRequest:
+		for i := range t.Requests {
+			reqs = append(reqs, &t.Requests[i])
+		}
+		if err := db.sendBatch(reqs, call.Reply.(*proto.BatchResponse)); err != nil {
+			call.Reply.Header().SetGoError(err)
+		}
+	case *proto.InternalBatchRequest:
+		for i := range t.Requests {
+			reqs = append(reqs, &t.Requests[i])
+		}
+		if err := db.sendBatch(reqs, call.Reply.(*proto.InternalBatchResponse)); err != nil {
+			call.Reply.Header().SetGoError(err)
+		}
+	default:
+		db.sendOne(call)
+	}
+}
+
+func (db *testSender) sendBatch(reqs []requestUnion, adder responseAdder) error {
+	var batchErr error
+	for _, req := range reqs {
+		args := req.GetValue().(proto.Request)
+		call := client.Call{Args: args, Reply: args.CreateReply()}
+		db.sendOne(call)
+		adder.Add(call.Reply)
+		if err := call.Reply.Header().GoError(); batchErr == nil && err != nil {
+			batchErr = err
+		}
+	}
+	return batchErr
+}
+
+func (db *testSender) sendOne(call client.Call) {
 	switch call.Args.(type) {
-	case *proto.EndTransactionRequest, *proto.BatchRequest, *proto.InternalBatchRequest:
+	case *proto.EndTransactionRequest:
 		call.Reply.Header().SetGoError(util.Errorf("%s method not supported", call.Method()))
 		return
 	}
@@ -1003,62 +1047,181 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
-// TestStoreReadInconsistent verifies that gets and scans with
-// read consistency set to INCONSISTENT ignore extant intents.
+// TestStoreReadInconsistent verifies that gets and scans with read
+// consistency set to INCONSISTENT either push or simply ignore extant
+// intents (if they cannot be pushed), depending on the intent priority.
 func TestStoreReadInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	keyA := proto.Key("a")
-	keyB := proto.Key("b")
+	for _, canPush := range []bool{true, false} {
+		keyA := proto.Key(fmt.Sprintf("%t-a", canPush))
+		keyB := proto.Key(fmt.Sprintf("%t-b", canPush))
 
-	// First, write keyA.
-	args, reply := putArgs(keyA, []byte("value1"), 1, store.StoreID())
-	if err := store.ExecuteCmd(args, reply); err != nil {
-		t.Fatal(err)
-	}
-
-	// Next, write intents for keyA and keyB.
-	args.Value.Bytes = []byte("value2")
-	txnA := newTransaction("test", keyA, 1, proto.SERIALIZABLE, store.ctx.Clock)
-	txnB := newTransaction("test", keyB, 1, proto.SERIALIZABLE, store.ctx.Clock)
-	for _, txn := range []*proto.Transaction{txnA, txnB} {
-		args.Key = txn.Key
-		args.Timestamp = txn.Timestamp
-		args.Txn = txn
+		// First, write keyA.
+		args, reply := putArgs(keyA, []byte("value1"), 1, store.StoreID())
 		if err := store.ExecuteCmd(args, reply); err != nil {
 			t.Fatal(err)
 		}
-	}
 
-	// Now, get from both keys and verify.
-	gArgs, gReply := getArgs(keyA, 1, store.StoreID())
-	gArgs.ReadConsistency = proto.INCONSISTENT
-	if err := store.ExecuteCmd(gArgs, gReply); err != nil {
-		t.Errorf("expected read to succeed: %s", err)
-	} else if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
-		t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
-	}
-	gArgs.Key = keyB
-	if err := store.ExecuteCmd(gArgs, gReply); err != nil {
-		t.Errorf("expected read to succeed: %s", err)
-	} else if gReply.Value != nil {
-		t.Errorf("expected value to be nil, got %+v", gReply.Value)
-	}
+		// Next, write intents for keyA and keyB. Note that the
+		// transactions have unpushable priorities if canPush is true and
+		// very pushable ones otherwise.
+		priority := int32(-proto.MaxPriority)
+		if canPush {
+			priority = -1
+		}
+		args.Value.Bytes = []byte("value2")
+		txnA := newTransaction("testA", keyA, priority, proto.SERIALIZABLE, store.ctx.Clock)
+		txnB := newTransaction("testB", keyB, priority, proto.SERIALIZABLE, store.ctx.Clock)
+		for _, txn := range []*proto.Transaction{txnA, txnB} {
+			args.Key = txn.Key
+			args.Timestamp = txn.Timestamp
+			args.Txn = txn
+			if err := store.ExecuteCmd(args, reply); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// End txn B, but without resolving the intent.
+		etArgs, etReply := endTxnArgs(txnB, true, 1, store.StoreID())
+		etArgs.Timestamp = txnB.Timestamp
+		if err := store.ExecuteCmd(etArgs, etReply); err != nil {
+			t.Fatal(err)
+		}
 
-	// Scan keys and verify results.
-	sArgs, sReply := scanArgs(keyA, proto.KeyMax, 1, store.StoreID())
-	sArgs.ReadConsistency = proto.INCONSISTENT
-	if err := store.ExecuteCmd(sArgs, sReply); err != nil {
-		t.Errorf("expected scan to succeed: %s", err)
+		// Now, get from both keys and verify. Wether we can push or not,
+		// we will be able to read with INCONSISTENT.
+		gArgs, gReply := getArgs(keyA, 1, store.StoreID())
+		gArgs.Timestamp = store.ctx.Clock.Now()
+		gArgs.ReadConsistency = proto.INCONSISTENT
+		if err := store.ExecuteCmd(gArgs, gReply); err != nil {
+			t.Errorf("expected read to succeed: %s", err)
+		} else if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
+			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
+		}
+		gArgs.Key = keyB
+		if err := store.ExecuteCmd(gArgs, gReply); err != nil {
+			t.Errorf("expected read to succeed: %s", err)
+		}
+		// The new value of B will be read as we can push txn B.
+		if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
+			t.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
+		}
+
+		// Scan keys and verify results.
+		sArgs, sReply := scanArgs(keyA, keyB.Next(), 1, store.StoreID())
+		sArgs.ReadConsistency = proto.INCONSISTENT
+		if err := store.ExecuteCmd(sArgs, sReply); err != nil {
+			t.Errorf("expected scan to succeed: %s", err)
+		}
+		if l := len(sReply.Rows); l != 2 {
+			t.Errorf("expected 2 results; got %d", l)
+		} else if key := sReply.Rows[0].Key; !key.Equal(keyA) {
+			t.Errorf("expected key %q; got %q", keyA, key)
+		} else if key := sReply.Rows[1].Key; !key.Equal(keyB) {
+			t.Errorf("expected key %q; got %q", keyB, key)
+		} else if val := sReply.Rows[0].Value.Bytes; !bytes.Equal(val, []byte("value1")) {
+			t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.Bytes)
+		} else if val := sReply.Rows[1].Value.Bytes; !bytes.Equal(val, []byte("value2")) {
+			t.Errorf("expected value %q, got %q", []byte("value2"), sReply.Rows[1].Value.Bytes)
+		}
 	}
-	if l := len(sReply.Rows); l != 1 {
-		t.Errorf("expected 1 result; got %d", l)
-	} else if key := sReply.Rows[0].Key; !key.Equal(keyA) {
-		t.Errorf("expected key %q; got %q", keyA, key)
-	} else if val := sReply.Rows[0].Value.Bytes; !bytes.Equal(val, []byte("value1")) {
-		t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.Bytes)
+}
+
+// TestStoreScanIntents verifies that a scan across 10 intents resolves
+// them in one fell swoop using both consistent and inconsistent reads.
+func TestStoreScanIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+	defer func() { TestingCommandFilter = nil }()
+
+	testCases := []struct {
+		consistent bool
+		canPush    bool // can the txn be pushed?
+		expFinish  bool // do we expect the scan to finish?
+		expCount   int  // how many times do we expect to scan?
+	}{
+		// Consistent which can push will make two loops.
+		{true, true, true, 2},
+		// Consistent but can't push will backoff and retry and not finish.
+		{true, false, false, -1},
+		// Inconsistent and can push will make two loops, resolving on first.
+		{false, true, true, 2},
+		// Inconsistent and can't push will just read inconsistent (will read nils).
+		{false, false, true, 1},
+	}
+	for i, test := range testCases {
+		// The command filter just counts the number of scan requests which are
+		// submitted to the range.
+		count := 0
+		TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+			if _, ok := args.(*proto.ScanRequest); ok {
+				count++
+			}
+			return false
+		}
+
+		// Lay down 10 intents to scan over.
+		var txn *proto.Transaction
+		keys := []proto.Key{}
+		for j := 0; j < 10; j++ {
+			key := proto.Key(fmt.Sprintf("key%d-%02d", i, j))
+			keys = append(keys, key)
+			if txn == nil {
+				priority := int32(-1)
+				if !test.canPush {
+					priority = -proto.MaxPriority
+				}
+				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, proto.SERIALIZABLE, store.ctx.Clock)
+			}
+			args, reply := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
+			args.Txn = txn
+			if err := store.ExecuteCmd(args, reply); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Scan the range and verify count. Do this in a goroutine in case
+		// it isn't expected to finish.
+		sArgs, sReply := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+		if !test.consistent {
+			sArgs.ReadConsistency = proto.INCONSISTENT
+		}
+		done := make(chan struct{})
+		go func(sArgs proto.Request, sReply proto.Response) {
+			if err := store.ExecuteCmd(sArgs, sReply); err != nil {
+				t.Fatal(err)
+			}
+			close(done)
+		}(sArgs, sReply)
+
+		wait := 1 * time.Second
+		if !test.expFinish {
+			wait = 10 * time.Millisecond
+		}
+		select {
+		case <-done:
+			if len(sReply.Rows) != 0 {
+				t.Errorf("expected empty scan result; got %+v", sReply.Rows)
+			}
+			if count != test.expCount {
+				t.Errorf("%d: expected scan count %d; got %d", i, test.expCount, count)
+			}
+		case <-time.After(wait):
+			if test.expFinish {
+				t.Errorf("%d: scan failed to finish after %s", i, wait)
+			} else {
+				// Commit the unpushable txn so the read can finish.
+				etArgs, etReply := endTxnArgs(txn, true, 1, store.StoreID())
+				etArgs.Timestamp = txn.Timestamp
+				if err := store.ExecuteCmd(etArgs, etReply); err != nil {
+					t.Fatal(err)
+				}
+				<-done
+			}
+		}
 	}
 }
 
