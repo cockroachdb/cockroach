@@ -369,6 +369,7 @@ func (m *InternalLeaderLeaseResponse) String() string { return proto1.CompactTex
 func (*InternalLeaderLeaseResponse) ProtoMessage()    {}
 
 // An InternalRequestUnion contains exactly one of the optional requests.
+// Non-internal values added to RequestUnion must be added here.
 type InternalRequestUnion struct {
 	Contains              *ContainsRequest              `protobuf:"bytes,1,opt,name=contains" json:"contains,omitempty"`
 	Get                   *GetRequest                   `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
@@ -379,8 +380,8 @@ type InternalRequestUnion struct {
 	DeleteRange           *DeleteRangeRequest           `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
 	Scan                  *ScanRequest                  `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
 	EndTransaction        *EndTransactionRequest        `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	InternalPushTxn       *InternalPushTxnRequest       `protobuf:"bytes,10,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
-	InternalResolveIntent *InternalResolveIntentRequest `protobuf:"bytes,11,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
+	InternalPushTxn       *InternalPushTxnRequest       `protobuf:"bytes,30,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
+	InternalResolveIntent *InternalResolveIntentRequest `protobuf:"bytes,31,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
 	XXX_unrecognized      []byte                        `json:"-"`
 }
 
@@ -466,6 +467,7 @@ func (m *InternalRequestUnion) GetInternalResolveIntent() *InternalResolveIntent
 }
 
 // An InternalResponseUnion contains exactly one of the optional responses.
+// Non-internal values added to ResponseUnion must be added here.
 type InternalResponseUnion struct {
 	Contains              *ContainsResponse              `protobuf:"bytes,1,opt,name=contains" json:"contains,omitempty"`
 	Get                   *GetResponse                   `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
@@ -476,8 +478,8 @@ type InternalResponseUnion struct {
 	DeleteRange           *DeleteRangeResponse           `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
 	Scan                  *ScanResponse                  `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
 	EndTransaction        *EndTransactionResponse        `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	InternalPushTxn       *InternalPushTxnResponse       `protobuf:"bytes,10,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
-	InternalResolveIntent *InternalResolveIntentResponse `protobuf:"bytes,11,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
+	InternalPushTxn       *InternalPushTxnResponse       `protobuf:"bytes,30,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
+	InternalResolveIntent *InternalResolveIntentResponse `protobuf:"bytes,31,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
 	XXX_unrecognized      []byte                         `json:"-"`
 }
 
@@ -2830,7 +2832,7 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
-		case 10:
+		case 30:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field InternalPushTxn", wireType)
 			}
@@ -2857,7 +2859,7 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
-		case 11:
+		case 31:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field InternalResolveIntent", wireType)
 			}
@@ -3169,7 +3171,7 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
-		case 10:
+		case 30:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field InternalPushTxn", wireType)
 			}
@@ -3196,7 +3198,7 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
-		case 11:
+		case 31:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field InternalResolveIntent", wireType)
 			}
@@ -5663,11 +5665,11 @@ func (m *InternalRequestUnion) Size() (n int) {
 	}
 	if m.InternalPushTxn != nil {
 		l = m.InternalPushTxn.Size()
-		n += 1 + l + sovInternal(uint64(l))
+		n += 2 + l + sovInternal(uint64(l))
 	}
 	if m.InternalResolveIntent != nil {
 		l = m.InternalResolveIntent.Size()
-		n += 1 + l + sovInternal(uint64(l))
+		n += 2 + l + sovInternal(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5716,11 +5718,11 @@ func (m *InternalResponseUnion) Size() (n int) {
 	}
 	if m.InternalPushTxn != nil {
 		l = m.InternalPushTxn.Size()
-		n += 1 + l + sovInternal(uint64(l))
+		n += 2 + l + sovInternal(uint64(l))
 	}
 	if m.InternalResolveIntent != nil {
 		l = m.InternalResolveIntent.Size()
-		n += 1 + l + sovInternal(uint64(l))
+		n += 2 + l + sovInternal(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -6734,7 +6736,9 @@ func (m *InternalRequestUnion) MarshalTo(data []byte) (n int, err error) {
 		i += n32
 	}
 	if m.InternalPushTxn != nil {
-		data[i] = 0x52
+		data[i] = 0xf2
+		i++
+		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalPushTxn.Size()))
 		n33, err := m.InternalPushTxn.MarshalTo(data[i:])
@@ -6744,7 +6748,9 @@ func (m *InternalRequestUnion) MarshalTo(data []byte) (n int, err error) {
 		i += n33
 	}
 	if m.InternalResolveIntent != nil {
-		data[i] = 0x5a
+		data[i] = 0xfa
+		i++
+		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalResolveIntent.Size()))
 		n34, err := m.InternalResolveIntent.MarshalTo(data[i:])
@@ -6865,7 +6871,9 @@ func (m *InternalResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		i += n43
 	}
 	if m.InternalPushTxn != nil {
-		data[i] = 0x52
+		data[i] = 0xf2
+		i++
+		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalPushTxn.Size()))
 		n44, err := m.InternalPushTxn.MarshalTo(data[i:])
@@ -6875,7 +6883,9 @@ func (m *InternalResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		i += n44
 	}
 	if m.InternalResolveIntent != nil {
-		data[i] = 0x5a
+		data[i] = 0xfa
+		i++
+		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalResolveIntent.Size()))
 		n45, err := m.InternalResolveIntent.MarshalTo(data[i:])

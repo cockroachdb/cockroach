@@ -965,9 +965,9 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "uestH\000\022,\n\004scan\030\010 \001(\0132\034.cockroach.proto.S"
     "canRequestH\000\022A\n\017end_transaction\030\t \001(\0132&."
     "cockroach.proto.EndTransactionRequestH\000\022"
-    "D\n\021internal_push_txn\030\n \001(\0132\'.cockroach.p"
+    "D\n\021internal_push_txn\030\036 \001(\0132\'.cockroach.p"
     "roto.InternalPushTxnRequestH\000\022P\n\027interna"
-    "l_resolve_intent\030\013 \001(\0132-.cockroach.proto"
+    "l_resolve_intent\030\037 \001(\0132-.cockroach.proto"
     ".InternalResolveIntentRequestH\000:\004\310\240\037\001B\007\n"
     "\005value\"\262\005\n\025InternalResponseUnion\0225\n\010cont"
     "ains\030\001 \001(\0132!.cockroach.proto.ContainsRes"
@@ -982,9 +982,9 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "RangeResponseH\000\022-\n\004scan\030\010 \001(\0132\035.cockroac"
     "h.proto.ScanResponseH\000\022B\n\017end_transactio"
     "n\030\t \001(\0132\'.cockroach.proto.EndTransaction"
-    "ResponseH\000\022E\n\021internal_push_txn\030\n \001(\0132(."
+    "ResponseH\000\022E\n\021internal_push_txn\030\036 \001(\0132(."
     "cockroach.proto.InternalPushTxnResponseH"
-    "\000\022Q\n\027internal_resolve_intent\030\013 \001(\0132..coc"
+    "\000\022Q\n\027internal_resolve_intent\030\037 \001(\0132..coc"
     "kroach.proto.InternalResolveIntentRespon"
     "seH\000:\004\310\240\037\001B\007\n\005value\"\217\001\n\024InternalBatchReq"
     "uest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.R"
@@ -5646,7 +5646,7 @@ bool InternalRequestUnion::MergePartialFromCodedStream(
   ::google::protobuf::uint32 tag;
   // @@protoc_insertion_point(parse_start:cockroach.proto.InternalRequestUnion)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(16383);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -5762,26 +5762,26 @@ bool InternalRequestUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(82)) goto parse_internal_push_txn;
+        if (input->ExpectTag(242)) goto parse_internal_push_txn;
         break;
       }
 
-      // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 10;
-      case 10: {
-        if (tag == 82) {
+      // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 30;
+      case 30: {
+        if (tag == 242) {
          parse_internal_push_txn:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_internal_push_txn()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(90)) goto parse_internal_resolve_intent;
+        if (input->ExpectTag(250)) goto parse_internal_resolve_intent;
         break;
       }
 
-      // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 11;
-      case 11: {
-        if (tag == 90) {
+      // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 31;
+      case 31: {
+        if (tag == 250) {
          parse_internal_resolve_intent:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_internal_resolve_intent()));
@@ -5871,16 +5871,16 @@ void InternalRequestUnion::SerializeWithCachedSizes(
       9, this->end_transaction(), output);
   }
 
-  // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 10;
+  // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 30;
   if (has_internal_push_txn()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, this->internal_push_txn(), output);
+      30, this->internal_push_txn(), output);
   }
 
-  // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 11;
+  // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 31;
   if (has_internal_resolve_intent()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, this->internal_resolve_intent(), output);
+      31, this->internal_resolve_intent(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -5956,18 +5956,18 @@ void InternalRequestUnion::SerializeWithCachedSizes(
         9, this->end_transaction(), target);
   }
 
-  // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 10;
+  // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 30;
   if (has_internal_push_txn()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        10, this->internal_push_txn(), target);
+        30, this->internal_push_txn(), target);
   }
 
-  // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 11;
+  // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 31;
   if (has_internal_resolve_intent()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        11, this->internal_resolve_intent(), target);
+        31, this->internal_resolve_intent(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6045,16 +6045,16 @@ int InternalRequestUnion::ByteSize() const {
           this->end_transaction());
       break;
     }
-    // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 10;
+    // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 30;
     case kInternalPushTxn: {
-      total_size += 1 +
+      total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->internal_push_txn());
       break;
     }
-    // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 11;
+    // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 31;
     case kInternalResolveIntent: {
-      total_size += 1 +
+      total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->internal_resolve_intent());
       break;
@@ -6325,7 +6325,7 @@ bool InternalResponseUnion::MergePartialFromCodedStream(
   ::google::protobuf::uint32 tag;
   // @@protoc_insertion_point(parse_start:cockroach.proto.InternalResponseUnion)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(16383);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -6441,26 +6441,26 @@ bool InternalResponseUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(82)) goto parse_internal_push_txn;
+        if (input->ExpectTag(242)) goto parse_internal_push_txn;
         break;
       }
 
-      // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 10;
-      case 10: {
-        if (tag == 82) {
+      // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 30;
+      case 30: {
+        if (tag == 242) {
          parse_internal_push_txn:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_internal_push_txn()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(90)) goto parse_internal_resolve_intent;
+        if (input->ExpectTag(250)) goto parse_internal_resolve_intent;
         break;
       }
 
-      // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 11;
-      case 11: {
-        if (tag == 90) {
+      // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 31;
+      case 31: {
+        if (tag == 250) {
          parse_internal_resolve_intent:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_internal_resolve_intent()));
@@ -6550,16 +6550,16 @@ void InternalResponseUnion::SerializeWithCachedSizes(
       9, this->end_transaction(), output);
   }
 
-  // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 10;
+  // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 30;
   if (has_internal_push_txn()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, this->internal_push_txn(), output);
+      30, this->internal_push_txn(), output);
   }
 
-  // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 11;
+  // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 31;
   if (has_internal_resolve_intent()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, this->internal_resolve_intent(), output);
+      31, this->internal_resolve_intent(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -6635,18 +6635,18 @@ void InternalResponseUnion::SerializeWithCachedSizes(
         9, this->end_transaction(), target);
   }
 
-  // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 10;
+  // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 30;
   if (has_internal_push_txn()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        10, this->internal_push_txn(), target);
+        30, this->internal_push_txn(), target);
   }
 
-  // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 11;
+  // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 31;
   if (has_internal_resolve_intent()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        11, this->internal_resolve_intent(), target);
+        31, this->internal_resolve_intent(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6724,16 +6724,16 @@ int InternalResponseUnion::ByteSize() const {
           this->end_transaction());
       break;
     }
-    // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 10;
+    // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 30;
     case kInternalPushTxn: {
-      total_size += 1 +
+      total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->internal_push_txn());
       break;
     }
-    // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 11;
+    // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 31;
     case kInternalResolveIntent: {
-      total_size += 1 +
+      total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->internal_resolve_intent());
       break;

@@ -639,6 +639,7 @@ func (m *EndTransactionResponse) GetCommitWait() int64 {
 }
 
 // A RequestUnion contains exactly one of the optional requests.
+// Values added here must be added to InternalRequestUnion as well.
 type RequestUnion struct {
 	Contains         *ContainsRequest       `protobuf:"bytes,1,opt,name=contains" json:"contains,omitempty"`
 	Get              *GetRequest            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
@@ -720,6 +721,7 @@ func (m *RequestUnion) GetEndTransaction() *EndTransactionRequest {
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
+// Values added here must be added to InternalResponseUnion as well.
 type ResponseUnion struct {
 	Contains         *ContainsResponse       `protobuf:"bytes,1,opt,name=contains" json:"contains,omitempty"`
 	Get              *GetResponse            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`

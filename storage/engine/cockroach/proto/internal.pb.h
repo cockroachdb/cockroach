@@ -1634,8 +1634,8 @@ class InternalRequestUnion : public ::google::protobuf::Message {
     kDeleteRange = 7,
     kScan = 8,
     kEndTransaction = 9,
-    kInternalPushTxn = 10,
-    kInternalResolveIntent = 11,
+    kInternalPushTxn = 30,
+    kInternalResolveIntent = 31,
     VALUE_NOT_SET = 0,
   };
 
@@ -1750,19 +1750,19 @@ class InternalRequestUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::EndTransactionRequest* release_end_transaction();
   inline void set_allocated_end_transaction(::cockroach::proto::EndTransactionRequest* end_transaction);
 
-  // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 10;
+  // optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 30;
   inline bool has_internal_push_txn() const;
   inline void clear_internal_push_txn();
-  static const int kInternalPushTxnFieldNumber = 10;
+  static const int kInternalPushTxnFieldNumber = 30;
   inline const ::cockroach::proto::InternalPushTxnRequest& internal_push_txn() const;
   inline ::cockroach::proto::InternalPushTxnRequest* mutable_internal_push_txn();
   inline ::cockroach::proto::InternalPushTxnRequest* release_internal_push_txn();
   inline void set_allocated_internal_push_txn(::cockroach::proto::InternalPushTxnRequest* internal_push_txn);
 
-  // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 11;
+  // optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 31;
   inline bool has_internal_resolve_intent() const;
   inline void clear_internal_resolve_intent();
-  static const int kInternalResolveIntentFieldNumber = 11;
+  static const int kInternalResolveIntentFieldNumber = 31;
   inline const ::cockroach::proto::InternalResolveIntentRequest& internal_resolve_intent() const;
   inline ::cockroach::proto::InternalResolveIntentRequest* mutable_internal_resolve_intent();
   inline ::cockroach::proto::InternalResolveIntentRequest* release_internal_resolve_intent();
@@ -1848,8 +1848,8 @@ class InternalResponseUnion : public ::google::protobuf::Message {
     kDeleteRange = 7,
     kScan = 8,
     kEndTransaction = 9,
-    kInternalPushTxn = 10,
-    kInternalResolveIntent = 11,
+    kInternalPushTxn = 30,
+    kInternalResolveIntent = 31,
     VALUE_NOT_SET = 0,
   };
 
@@ -1964,19 +1964,19 @@ class InternalResponseUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::EndTransactionResponse* release_end_transaction();
   inline void set_allocated_end_transaction(::cockroach::proto::EndTransactionResponse* end_transaction);
 
-  // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 10;
+  // optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 30;
   inline bool has_internal_push_txn() const;
   inline void clear_internal_push_txn();
-  static const int kInternalPushTxnFieldNumber = 10;
+  static const int kInternalPushTxnFieldNumber = 30;
   inline const ::cockroach::proto::InternalPushTxnResponse& internal_push_txn() const;
   inline ::cockroach::proto::InternalPushTxnResponse* mutable_internal_push_txn();
   inline ::cockroach::proto::InternalPushTxnResponse* release_internal_push_txn();
   inline void set_allocated_internal_push_txn(::cockroach::proto::InternalPushTxnResponse* internal_push_txn);
 
-  // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 11;
+  // optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 31;
   inline bool has_internal_resolve_intent() const;
   inline void clear_internal_resolve_intent();
-  static const int kInternalResolveIntentFieldNumber = 11;
+  static const int kInternalResolveIntentFieldNumber = 31;
   inline const ::cockroach::proto::InternalResolveIntentResponse& internal_resolve_intent() const;
   inline ::cockroach::proto::InternalResolveIntentResponse* mutable_internal_resolve_intent();
   inline ::cockroach::proto::InternalResolveIntentResponse* release_internal_resolve_intent();
@@ -5132,7 +5132,7 @@ inline void InternalRequestUnion::set_allocated_end_transaction(::cockroach::pro
   }
 }
 
-// optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 10;
+// optional .cockroach.proto.InternalPushTxnRequest internal_push_txn = 30;
 inline bool InternalRequestUnion::has_internal_push_txn() const {
   return value_case() == kInternalPushTxn;
 }
@@ -5175,7 +5175,7 @@ inline void InternalRequestUnion::set_allocated_internal_push_txn(::cockroach::p
   }
 }
 
-// optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 11;
+// optional .cockroach.proto.InternalResolveIntentRequest internal_resolve_intent = 31;
 inline bool InternalRequestUnion::has_internal_resolve_intent() const {
   return value_case() == kInternalResolveIntent;
 }
@@ -5618,7 +5618,7 @@ inline void InternalResponseUnion::set_allocated_end_transaction(::cockroach::pr
   }
 }
 
-// optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 10;
+// optional .cockroach.proto.InternalPushTxnResponse internal_push_txn = 30;
 inline bool InternalResponseUnion::has_internal_push_txn() const {
   return value_case() == kInternalPushTxn;
 }
@@ -5661,7 +5661,7 @@ inline void InternalResponseUnion::set_allocated_internal_push_txn(::cockroach::
   }
 }
 
-// optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 11;
+// optional .cockroach.proto.InternalResolveIntentResponse internal_resolve_intent = 31;
 inline bool InternalResponseUnion::has_internal_resolve_intent() const {
   return value_case() == kInternalResolveIntent;
 }
