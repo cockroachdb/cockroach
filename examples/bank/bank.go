@@ -150,6 +150,26 @@ func (bank *Bank) initBankAccounts(cash int64) {
 	}
 }
 
+func (bank *Bank) periodicallyCheckBalances(initCash int64) {
+	for {
+		// Sleep for a bit to allow money transfers to happen in the background.
+		time.Sleep(time.Second)
+		fmt.Printf("%d transactions were executed\n\n", bank.numTransactions)
+		// Check that all the money is accounted for.
+		balances := bank.readAllAccounts()
+		var totalAmount int64
+		for i := 0; i < bank.numAccounts; i++ {
+			// fmt.Printf("Account %d contains %d$\n", i, balances[i])
+			totalAmount += balances[i]
+		}
+		if totalAmount != int64(bank.numAccounts)*initCash {
+			err := fmt.Sprintf("\nTotal cash in the bank = %d\n", totalAmount)
+			log.Fatal(err)
+		}
+		fmt.Printf("\nThe bank is in good order\n\n")
+	}
+}
+
 func main() {
 	fmt.Printf("A simple program that keeps moving money between bank accounts\n\n")
 	// Run a test cockroach instance to represent the bank.
@@ -175,21 +195,6 @@ func main() {
 	for i := 0; i < numTransferRoutines; i++ {
 		go bank.continuousMoneyTransfer()
 	}
-	// Sleep for a bit to allow money transfers to happen in the background and then exit.
-	time.Sleep(10 * time.Second)
 
-	fmt.Printf("%d transactions were executed\n\n", bank.numTransactions)
-
-	// Check that all the money is accounted for.
-	balances := bank.readAllAccounts()
-	var totalAmount int64
-	for i := 0; i < bank.numAccounts; i++ {
-		fmt.Printf("Account %d contains %d$\n", i, balances[i])
-		totalAmount += balances[i]
-	}
-	if totalAmount != int64(bank.numAccounts)*initCash {
-		err := fmt.Sprintf("\nTotal cash in the bank = %d\n", totalAmount)
-		log.Fatal(err)
-	}
-	fmt.Printf("\nThe bank is in good order\n\n")
+	bank.periodicallyCheckBalances(initCash)
 }
