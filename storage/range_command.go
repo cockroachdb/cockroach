@@ -981,3 +981,129 @@ func updateRangeDescriptorCall(descKey proto.Key, oldDesc, newDesc *proto.RangeD
 		Reply: &proto.ConditionalPutResponse{},
 	}
 }
+
+// mergeTrigger is called on a successful commit of an AdminMerge
+// transaction. It recomputes stats for the receiving range.
+func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
+	if !bytes.Equal(r.Desc().StartKey, merge.UpdatedDesc.StartKey) {
+		return util.Errorf("range and updated range start keys do not match: %s != %s",
+			r.Desc().StartKey, merge.UpdatedDesc.StartKey)
+	}
+
+	if !r.Desc().EndKey.Less(merge.UpdatedDesc.EndKey) {
+		return util.Errorf("range end key is not less than the post merge end key: %s < %s",
+			r.Desc().EndKey, merge.UpdatedDesc.StartKey)
+	}
+
+	if merge.SubsumedRaftID <= 0 {
+		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRaftID)
+	}
+
+	// Copy the subsumed range's response cache to the subsuming one.
+	if err := r.respCache.CopyFrom(batch, merge.SubsumedRaftID); err != nil {
+		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	}
+
+	// Compute stats for updated range.
+	now := r.rm.Clock().Timestamp()
+	ms, err := engine.MVCCComputeStats(r.rm.Engine(), merge.UpdatedDesc.StartKey,
+		merge.UpdatedDesc.EndKey, now.WallTime)
+	if err != nil {
+		return util.Errorf("unable to compute stats for the range after merge: %s", err)
+	}
+	r.stats.SetMVCCStats(batch, ms)
+
+	// Clear the timestamp cache. In the case that this replica and the
+	// subsumed replica each held their respective leader leases, we
+	// could merge the timestamp caches for efficiency. But it's unlikely
+	// and not worth the extra logic and potential for error.
+	r.tsCache.Clear(r.rm.Clock())
+
+	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
+}
+
+func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
+	copy := *r.Desc()
+	copy.Replicas = change.UpdatedReplicas
+	r.SetDesc(&copy)
+	return nil
+}
+
+// ChangeReplicas adds or removes a replica of a range. The change is performed
+// in a distributed transaction and takes effect when that transaction is committed.
+// When removing a replica, only the NodeID and StoreID fields of the Replica are used.
+func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
+	// Only allow a single change per range at a time.
+	r.metaLock.Lock()
+	defer r.metaLock.Unlock()
+
+	// Validate the request and prepare the new descriptor.
+	desc := r.Desc()
+	updatedDesc := *desc
+	updatedDesc.Replicas = append([]proto.Replica{}, desc.Replicas...)
+	found := -1       // tracks NodeID && StoreID
+	nodeUsed := false // tracks NodeID only
+	for i, existingRep := range desc.Replicas {
+		nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
+		if existingRep.NodeID == replica.NodeID &&
+			existingRep.StoreID == replica.StoreID {
+			found = i
+			break
+		}
+	}
+	if changeType == proto.ADD_REPLICA {
+		// If the replica exists on the remote node, no matter in which store,
+		// abort the replica add.
+		if nodeUsed {
+			return util.Errorf("adding replica %v which is already present in range %d",
+				replica, desc.RaftID)
+		}
+		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+	} else if changeType == proto.REMOVE_REPLICA {
+		// If that exact node-store combination does not have the replica,
+		// abort the removal.
+		if found == -1 {
+			return util.Errorf("removing replica %v which is not present in range %d",
+				replica, desc.RaftID)
+		}
+		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
+		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
+	}
+
+	txnOpts := &client.TransactionOptions{
+		Name: fmt.Sprintf("change replicas of %d", desc.RaftID),
+	}
+	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
+		// Important: the range descriptor must be the first thing touched in the transaction
+		// so the transaction record is co-located with the range being modified.
+		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
+
+		txn.Prepare(updateRangeDescriptorCall(descKey, desc, &updatedDesc))
+
+		// TODO(bdarnell): call UpdateRangeAddressing
+
+		// End the transaction manually instead of letting RunTransaction
+		// loop do it, in order to provide a commit trigger.
+		txn.Prepare(client.Call{
+			Args: &proto.EndTransactionRequest{
+				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
+				Commit:        true,
+				InternalCommitTrigger: &proto.InternalCommitTrigger{
+					ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
+						NodeID:          replica.NodeID,
+						StoreID:         replica.StoreID,
+						ChangeType:      changeType,
+						UpdatedReplicas: updatedDesc.Replicas,
+					},
+					Intents: []proto.Key{descKey},
+				},
+			},
+			Reply: &proto.EndTransactionResponse{},
+		})
+		return txn.Flush()
+	})
+	if err != nil {
+		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
+	}
+	return nil
+}
