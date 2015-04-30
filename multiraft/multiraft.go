@@ -674,7 +674,11 @@ func (s *state) removeGroup(op *removeGroupOp) {
 func (s *state) propose(p *proposal) {
 	g, ok := s.groups[p.groupID]
 	if !ok {
-		p.ch <- util.Errorf("group %d not found", p.groupID)
+		if p.ch != nil {
+			// p.ch could be nil if this command was re-proposed due to leadership change
+			// but finished before we processed it from the proposal queue.
+			p.ch <- util.Errorf("group %d not found", p.groupID)
+		}
 		return
 	}
 	g.pending[p.commandID] = p
