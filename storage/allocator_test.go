@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -49,8 +48,8 @@ var multiDCConfig = proto.ZoneConfig{
 
 // filterStores returns just the store descriptors in the supplied
 // stores slice which contain all the specified attributes.
-func filterStores(a proto.Attributes, stores []*StoreDescriptor) ([]*StoreDescriptor, error) {
-	var filtered []*StoreDescriptor
+func filterStores(a proto.Attributes, stores []*proto.StoreDescriptor) ([]*proto.StoreDescriptor, error) {
+	var filtered []*proto.StoreDescriptor
 	for _, s := range stores {
 		sAttrs := s.CombinedAttrs()
 		if a.IsSubset(*sAttrs) {
@@ -60,8 +59,8 @@ func filterStores(a proto.Attributes, stores []*StoreDescriptor) ([]*StoreDescri
 	return filtered, nil
 }
 
-var singleStore = func(a proto.Attributes) ([]*StoreDescriptor, error) {
-	return filterStores(a, []*StoreDescriptor{
+var singleStore = func(a proto.Attributes) ([]*proto.StoreDescriptor, error) {
+	return filterStores(a, []*proto.StoreDescriptor{
 		{
 			StoreID: 1,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
@@ -69,7 +68,7 @@ var singleStore = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 1,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -77,8 +76,8 @@ var singleStore = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
-	return filterStores(a, []*StoreDescriptor{
+var sameDCStores = func(a proto.Attributes) ([]*proto.StoreDescriptor, error) {
+	return filterStores(a, []*proto.StoreDescriptor{
 		{
 			StoreID: 1,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
@@ -86,7 +85,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 1,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -98,7 +97,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 2,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -110,7 +109,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 2,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -122,7 +121,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 3,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -134,7 +133,7 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 4,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -142,8 +141,8 @@ var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
-	return filterStores(a, []*StoreDescriptor{
+var multiDCStores = func(a proto.Attributes) ([]*proto.StoreDescriptor, error) {
+	return filterStores(a, []*proto.StoreDescriptor{
 		{
 			StoreID: 1,
 			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
@@ -151,7 +150,7 @@ var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 1,
 				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -163,7 +162,7 @@ var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 				NodeID: 2,
 				Attrs:  proto.Attributes{Attrs: []string{"b"}},
 			},
-			Capacity: engine.StoreCapacity{
+			Capacity: proto.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -171,8 +170,8 @@ var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var noStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
-	return filterStores(a, []*StoreDescriptor{})
+var noStores = func(a proto.Attributes) ([]*proto.StoreDescriptor, error) {
+	return filterStores(a, []*proto.StoreDescriptor{})
 }
 
 func TestSimpleRetrieval(t *testing.T) {

@@ -56,16 +56,16 @@ func TestStoreFinder(t *testing.T) {
 		t.Errorf("expected no stores, instead %+v", stores)
 	}
 
-	matchingStore := StoreDescriptor{
+	matchingStore := proto.StoreDescriptor{
 		Attrs: proto.Attributes{Attrs: required},
 	}
-	supersetStore := StoreDescriptor{
+	supersetStore := proto.StoreDescriptor{
 		Attrs: proto.Attributes{Attrs: append(required, "db")},
 	}
-	unmatchingStore := StoreDescriptor{
+	unmatchingStore := proto.StoreDescriptor{
 		Attrs: proto.Attributes{Attrs: []string{"ssd", "otherdc"}},
 	}
-	emptyStore := StoreDescriptor{Attrs: proto.Attributes{}}
+	emptyStore := proto.StoreDescriptor{Attrs: proto.Attributes{}}
 
 	// Explicitly add keys rather than registering a gossip callback to avoid
 	// waiting for the goroutine callback to finish.

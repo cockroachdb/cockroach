@@ -479,7 +479,7 @@ func TestStoreRangeReplicate(t *testing.T) {
 
 	// Initialize the gossip network.
 	for _, s := range mtc.stores {
-		s.GossipCapacity(&proto.NodeDescriptor{NodeID: s.Ident.NodeID})
+		s.GossipCapacity()
 	}
 	mtc.stores[0].WaitForNodes(3)
 

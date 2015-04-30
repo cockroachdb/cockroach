@@ -249,11 +249,10 @@ func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawK
 	return it.Error()
 }
 
-// Capacity queries the underlying file system for disk capacity
-// information.
-func (r *RocksDB) Capacity() (StoreCapacity, error) {
+// Capacity queries the underlying file system for disk capacity information.
+func (r *RocksDB) Capacity() (proto.StoreCapacity, error) {
 	var fs syscall.Statfs_t
-	var capacity StoreCapacity
+	var capacity proto.StoreCapacity
 	dir := r.dir
 	if dir == "" {
 		dir = "/tmp"
@@ -467,7 +466,7 @@ func (r *rocksDBSnapshot) Merge(key proto.EncodedKey, value []byte) error {
 }
 
 // Capacity returns capacity details for the engine's available storage.
-func (r *rocksDBSnapshot) Capacity() (StoreCapacity, error) {
+func (r *rocksDBSnapshot) Capacity() (proto.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
@@ -620,7 +619,7 @@ func (r *rocksDBBatch) Clear(key proto.EncodedKey) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Capacity() (StoreCapacity, error) {
+func (r *rocksDBBatch) Capacity() (proto.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 

@@ -78,7 +78,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	ctx.DB.User = storage.UserRoot
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(*ctx, eng)
+	store := storage.NewStore(*ctx, eng, &proto.NodeDescriptor{NodeID: 1})
 	if bootstrap {
 		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
@@ -206,7 +206,7 @@ func (m *multiTestContext) addStore(t *testing.T) {
 
 	stopper := util.NewStopper()
 	ctx := m.makeContext()
-	store := storage.NewStore(ctx, eng)
+	store := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: proto.NodeID(idx + 1)})
 	if needBootstrap {
 		err := store.Bootstrap(proto.StoreIdent{
 			NodeID:  proto.NodeID(idx + 1),
@@ -251,7 +251,7 @@ func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = util.NewStopper()
 
 	ctx := m.makeContext()
-	m.stores[i] = storage.NewStore(ctx, m.engines[i])
+	m.stores[i] = storage.NewStore(ctx, m.engines[i], &proto.NodeDescriptor{NodeID: proto.NodeID(i + 1)})
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}

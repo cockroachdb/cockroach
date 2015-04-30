@@ -95,12 +95,14 @@ class StoreStatus : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int32 store_id = 1;
-  inline bool has_store_id() const;
-  inline void clear_store_id();
-  static const int kStoreIdFieldNumber = 1;
-  inline ::google::protobuf::int32 store_id() const;
-  inline void set_store_id(::google::protobuf::int32 value);
+  // optional .cockroach.proto.StoreDescriptor desc = 1;
+  inline bool has_desc() const;
+  inline void clear_desc();
+  static const int kDescFieldNumber = 1;
+  inline const ::cockroach::proto::StoreDescriptor& desc() const;
+  inline ::cockroach::proto::StoreDescriptor* mutable_desc();
+  inline ::cockroach::proto::StoreDescriptor* release_desc();
+  inline void set_allocated_desc(::cockroach::proto::StoreDescriptor* desc);
 
   // optional int32 node_id = 2;
   inline bool has_node_id() const;
@@ -141,8 +143,8 @@ class StoreStatus : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.StoreStatus)
  private:
-  inline void set_has_store_id();
-  inline void clear_has_store_id();
+  inline void set_has_desc();
+  inline void clear_has_desc();
   inline void set_has_node_id();
   inline void clear_has_node_id();
   inline void set_has_range_count();
@@ -158,12 +160,12 @@ class StoreStatus : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::int32 store_id_;
+  ::cockroach::proto::StoreDescriptor* desc_;
   ::google::protobuf::int32 node_id_;
+  ::google::protobuf::int32 range_count_;
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int64 updated_at_;
   ::cockroach::proto::MVCCStats* stats_;
-  ::google::protobuf::int32 range_count_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fstatus_2eproto();
@@ -314,28 +316,45 @@ class NodeStatus : public ::google::protobuf::Message {
 
 // StoreStatus
 
-// optional int32 store_id = 1;
-inline bool StoreStatus::has_store_id() const {
+// optional .cockroach.proto.StoreDescriptor desc = 1;
+inline bool StoreStatus::has_desc() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void StoreStatus::set_has_store_id() {
+inline void StoreStatus::set_has_desc() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void StoreStatus::clear_has_store_id() {
+inline void StoreStatus::clear_has_desc() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void StoreStatus::clear_store_id() {
-  store_id_ = 0;
-  clear_has_store_id();
+inline void StoreStatus::clear_desc() {
+  if (desc_ != NULL) desc_->::cockroach::proto::StoreDescriptor::Clear();
+  clear_has_desc();
 }
-inline ::google::protobuf::int32 StoreStatus::store_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.StoreStatus.store_id)
-  return store_id_;
+inline const ::cockroach::proto::StoreDescriptor& StoreStatus::desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreStatus.desc)
+  return desc_ != NULL ? *desc_ : *default_instance_->desc_;
 }
-inline void StoreStatus::set_store_id(::google::protobuf::int32 value) {
-  set_has_store_id();
-  store_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.StoreStatus.store_id)
+inline ::cockroach::proto::StoreDescriptor* StoreStatus::mutable_desc() {
+  set_has_desc();
+  if (desc_ == NULL) desc_ = new ::cockroach::proto::StoreDescriptor;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.StoreStatus.desc)
+  return desc_;
+}
+inline ::cockroach::proto::StoreDescriptor* StoreStatus::release_desc() {
+  clear_has_desc();
+  ::cockroach::proto::StoreDescriptor* temp = desc_;
+  desc_ = NULL;
+  return temp;
+}
+inline void StoreStatus::set_allocated_desc(::cockroach::proto::StoreDescriptor* desc) {
+  delete desc_;
+  desc_ = desc;
+  if (desc) {
+    set_has_desc();
+  } else {
+    clear_has_desc();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.StoreStatus.desc)
 }
 
 // optional int32 node_id = 2;

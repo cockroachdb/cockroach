@@ -128,6 +128,12 @@ message Addr {
   optional string address = 2 [(gogoproto.nullable) = false];
 }
 
+// StoreCapacity contains capacity information for a storage device.
+message StoreCapacity {
+  optional int64 Capacity = 1 [(gogoproto.nullable) = false];
+  optional int64 Available = 2 [(gogoproto.nullable) = false];
+}
+
 // NodeDescriptor holds details on node physical/network topology.
 message NodeDescriptor {
   optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
@@ -135,5 +141,11 @@ message NodeDescriptor {
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
 }
 
-
-
+// StoreDescriptor holds store information including store attributes, node 
+// descriptor and store capacity.
+message StoreDescriptor {
+  optional int32 store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+  optional Attributes attrs = 2 [(gogoproto.nullable) = false];
+  optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
+  optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
+}

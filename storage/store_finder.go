@@ -27,7 +27,7 @@ import (
 
 // FindStoreFunc finds the disks in a datacenter that have the requested
 // attributes.
-type FindStoreFunc func(proto.Attributes) ([]*StoreDescriptor, error)
+type FindStoreFunc func(proto.Attributes) ([]*proto.StoreDescriptor, error)
 
 type stringSet map[string]struct{}
 
@@ -81,10 +81,10 @@ func (sf *StoreFinder) WaitForNodes(n int) {
 // TODO(embark, spencer): consider using a reverse index map from Attr->stores,
 // for efficiency.  Ensure that entries in this map still have an opportunity
 // to be garbage collected.
-func (sf *StoreFinder) findStores(required proto.Attributes) ([]*StoreDescriptor, error) {
+func (sf *StoreFinder) findStores(required proto.Attributes) ([]*proto.StoreDescriptor, error) {
 	sf.finderMu.Lock()
 	defer sf.finderMu.Unlock()
-	var stores []*StoreDescriptor
+	var stores []*proto.StoreDescriptor
 	for key := range sf.capacityKeys {
 		storeDesc, err := storeDescFromGossip(key, sf.gossip)
 		if err != nil {
@@ -101,13 +101,13 @@ func (sf *StoreFinder) findStores(required proto.Attributes) ([]*StoreDescriptor
 // storeDescFromGossip retrieves a StoreDescriptor from the specified capacity
 // gossip key. Returns an error if the gossip doesn't exist or is not
 // a StoreDescriptor.
-func storeDescFromGossip(key string, g *gossip.Gossip) (*StoreDescriptor, error) {
+func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, error) {
 	info, err := g.GetInfo(key)
 
 	if err != nil {
 		return nil, err
 	}
-	storeDesc, ok := info.(StoreDescriptor)
+	storeDesc, ok := info.(proto.StoreDescriptor)
 	if !ok {
 		return nil, fmt.Errorf("gossiped info is not a StoreDescriptor: %+v", info)
 	}

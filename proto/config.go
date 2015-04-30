@@ -209,3 +209,25 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	copy(rs[1:i+1], rs[0:i])
 	rs[0] = front
 }
+
+// PercentAvail computes the percentage of disk space that is available.
+func (sc StoreCapacity) PercentAvail() float64 {
+	if sc.Capacity == 0 {
+		return 0
+	}
+	return float64(sc.Available) / float64(sc.Capacity)
+}
+
+// Less compares two StoreDescriptors based on percentage of disk available.
+func (s StoreDescriptor) Less(b util.Ordered) bool {
+	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
+}
+
+// CombinedAttrs returns the full list of attributes for the store, including
+// both the node and store attributes.
+func (s StoreDescriptor) CombinedAttrs() *Attributes {
+	var a []string
+	a = append(a, s.Node.Attrs.Attrs...)
+	a = append(a, s.Attrs.Attrs...)
+	return &Attributes{Attrs: a}
+}

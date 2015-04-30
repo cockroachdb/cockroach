@@ -50,7 +50,7 @@ func newAllocator(f FindStoreFunc) *allocator {
 // available stores matching attributes for missing replicas and picks
 // using randomly weighted selection based on available capacities.
 func (a *allocator) allocate(required proto.Attributes, existingReplicas []proto.Replica) (
-	*StoreDescriptor, error) {
+	*proto.StoreDescriptor, error) {
 	// Get a set of current nodes -- we never want to allocate on an existing node.
 	usedNodes := make(map[proto.NodeID]struct{})
 	for _, replica := range existingReplicas {
@@ -63,7 +63,7 @@ func (a *allocator) allocate(required proto.Attributes, existingReplicas []proto
 	}
 
 	// Randomly pick a node weighted by capacity.
-	var candidates []*StoreDescriptor
+	var candidates []*proto.StoreDescriptor
 	var capacityTotal float64
 	for _, s := range stores {
 		if _, ok := usedNodes[s.Node.NodeID]; !ok {

@@ -102,7 +102,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	stopper.AddCloser(ctx.Transport)
-	store := NewStore(ctx, eng)
+	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	stopper := util.NewStopper()
 	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
-	store := NewStore(ctx, eng)
+	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
 
 	// Can't start as haven't bootstrapped.
 	if err := store.Start(stopper); err == nil {
@@ -150,7 +150,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
-	store = NewStore(ctx, eng)
+	store = NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
 	if err := store.Start(stopper); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
@@ -177,7 +177,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	stopper := util.NewStopper()
 	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
-	store := NewStore(ctx, eng)
+	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
 	if err := store.Start(stopper); err == nil {

@@ -180,29 +180,6 @@ func (e *NotBootstrappedError) Error() string {
 	return "store has not been bootstrapped"
 }
 
-// StoreDescriptor holds store information including store attributes,
-// node descriptor and store capacity.
-type StoreDescriptor struct {
-	StoreID  proto.StoreID
-	Attrs    proto.Attributes // store specific attributes (e.g. ssd, hdd, mem)
-	Node     proto.NodeDescriptor
-	Capacity engine.StoreCapacity
-}
-
-// CombinedAttrs returns the full list of attributes for the store,
-// including both the node and store attributes.
-func (s *StoreDescriptor) CombinedAttrs() *proto.Attributes {
-	var a []string
-	a = append(a, s.Node.Attrs.Attrs...)
-	a = append(a, s.Attrs.Attrs...)
-	return &proto.Attributes{Attrs: a}
-}
-
-// Less compares two StoreDescriptors based on percentage of disk available.
-func (s StoreDescriptor) Less(b util.Ordered) bool {
-	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
-}
-
 // storeRangeIterator is an implementation of rangeIterator which
 // cycles through a store's rangesByKey slice.
 type storeRangeIterator struct {
@@ -261,6 +238,7 @@ type Store struct {
 	started        int32
 	stopper        *util.Stopper
 	startedAt      int64
+	nodeDesc       *proto.NodeDescriptor
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
@@ -329,7 +307,7 @@ func (sc *StoreContext) setDefaults() {
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(ctx StoreContext, eng engine.Engine) *Store {
+func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescriptor) *Store {
 	// TODO(tschottdorf) find better place to set these defaults.
 	ctx.setDefaults()
 
@@ -344,6 +322,7 @@ func NewStore(ctx StoreContext, eng engine.Engine) *Store {
 		engine:      eng,
 		allocator:   newAllocator(sf.findStores),
 		ranges:      map[int64]*Range{},
+		nodeDesc:    nodeDesc,
 	}
 
 	// Add range scanner and configure with queues.
@@ -387,6 +366,12 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		} else if !ok {
 			return &NotBootstrappedError{}
 		}
+	}
+
+	// If the nodeID is 0, it has not be assigned yet.
+	// TODO(bram): Figure out how to remove this special case.
+	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
+		return util.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
 
 	// Start store event feed.
@@ -548,8 +533,8 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 }
 
 // GossipCapacity broadcasts the node's capacity on the gossip network.
-func (s *Store) GossipCapacity(n *proto.NodeDescriptor) {
-	storeDesc, err := s.Descriptor(n)
+func (s *Store) GossipCapacity() {
+	storeDesc, err := s.Descriptor()
 	if err != nil {
 		log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
 		return
@@ -944,22 +929,22 @@ func (s *Store) Attrs() proto.Attributes {
 }
 
 // Capacity returns the capacity of the underlying storage engine.
-func (s *Store) Capacity() (engine.StoreCapacity, error) {
+func (s *Store) Capacity() (proto.StoreCapacity, error) {
 	return s.engine.Capacity()
 }
 
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
-func (s *Store) Descriptor(nodeDesc *proto.NodeDescriptor) (*StoreDescriptor, error) {
+func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 	capacity, err := s.Capacity()
 	if err != nil {
 		return nil, err
 	}
 	// Initialize the store descriptor.
-	return &StoreDescriptor{
+	return &proto.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
 		Attrs:    s.Attrs(),
-		Node:     *nodeDesc,
+		Node:     *s.nodeDesc,
 		Capacity: capacity,
 	}, nil
 }
@@ -1289,8 +1274,14 @@ func (s *Store) WaitForRangeScanCompletion() int64 {
 func (s *Store) updateStoreStatus() {
 	now := s.ctx.Clock.Now().WallTime
 	scannerStats := s.scanner.Stats()
+
+	desc, err := s.Descriptor()
+	if err != nil {
+		log.Error(err)
+		return
+	}
 	status := &proto.StoreStatus{
-		StoreID:    s.Ident.StoreID,
+		Desc:       *desc,
 		NodeID:     s.Ident.NodeID,
 		UpdatedAt:  now,
 		StartedAt:  s.startedAt,

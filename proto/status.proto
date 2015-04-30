@@ -30,7 +30,7 @@ option (gogoproto.unmarshaler_all) = true;
 // StoreStatus contains the stats needed to calculate the current status of a
 // store.
 message StoreStatus {  
-  optional int32 store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+  optional StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
   optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int64 started_at = 4 [(gogoproto.nullable) = false];

@@ -270,6 +270,31 @@ func (m *Addr) GetAddress() string {
 	return ""
 }
 
+// StoreCapacity contains capacity information for a storage device.
+type StoreCapacity struct {
+	Capacity         int64  `protobuf:"varint,1,opt" json:"Capacity"`
+	Available        int64  `protobuf:"varint,2,opt" json:"Available"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *StoreCapacity) Reset()         { *m = StoreCapacity{} }
+func (m *StoreCapacity) String() string { return proto1.CompactTextString(m) }
+func (*StoreCapacity) ProtoMessage()    {}
+
+func (m *StoreCapacity) GetCapacity() int64 {
+	if m != nil {
+		return m.Capacity
+	}
+	return 0
+}
+
+func (m *StoreCapacity) GetAvailable() int64 {
+	if m != nil {
+		return m.Available
+	}
+	return 0
+}
+
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
 	NodeID           NodeID     `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
@@ -294,6 +319,41 @@ func (m *NodeDescriptor) GetAttrs() Attributes {
 		return m.Attrs
 	}
 	return Attributes{}
+}
+
+// StoreDescriptor holds store information including store attributes, node
+// descriptor and store capacity.
+type StoreDescriptor struct {
+	StoreID          StoreID        `protobuf:"varint,1,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	Attrs            Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
+	Node             NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
+	Capacity         StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
+	XXX_unrecognized []byte         `json:"-"`
+}
+
+func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
+func (m *StoreDescriptor) String() string { return proto1.CompactTextString(m) }
+func (*StoreDescriptor) ProtoMessage()    {}
+
+func (m *StoreDescriptor) GetAttrs() Attributes {
+	if m != nil {
+		return m.Attrs
+	}
+	return Attributes{}
+}
+
+func (m *StoreDescriptor) GetNode() NodeDescriptor {
+	if m != nil {
+		return m.Node
+	}
+	return NodeDescriptor{}
+}
+
+func (m *StoreDescriptor) GetCapacity() StoreCapacity {
+	if m != nil {
+		return m.Capacity
+	}
+	return StoreCapacity{}
 }
 
 func init() {
@@ -1224,6 +1284,78 @@ func (m *Addr) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *StoreCapacity) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Capacity", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Capacity |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Available", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Available |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
 func (m *NodeDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -1303,6 +1435,135 @@ func (m *NodeDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.Attrs.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
+func (m *StoreDescriptor) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreID", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.StoreID |= (StoreID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Attrs.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Node", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Node.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Capacity", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Capacity.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1486,6 +1747,17 @@ func (m *Addr) Size() (n int) {
 	return n
 }
 
+func (m *StoreCapacity) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.Capacity))
+	n += 1 + sovConfig(uint64(m.Available))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *NodeDescriptor) Size() (n int) {
 	var l int
 	_ = l
@@ -1493,6 +1765,22 @@ func (m *NodeDescriptor) Size() (n int) {
 	l = m.Address.Size()
 	n += 1 + l + sovConfig(uint64(l))
 	l = m.Attrs.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *StoreDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.StoreID))
+	l = m.Attrs.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	l = m.Node.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	l = m.Capacity.Size()
 	n += 1 + l + sovConfig(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -1908,6 +2196,33 @@ func (m *Addr) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
+func (m *StoreCapacity) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *StoreCapacity) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Capacity))
+	data[i] = 0x10
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Available))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *NodeDescriptor) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -1942,6 +2257,54 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n11
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *StoreDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.StoreID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
+	n12, err := m.Attrs.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n12
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Node.Size()))
+	n13, err := m.Node.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	data[i] = 0x22
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Capacity.Size()))
+	n14, err := m.Capacity.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

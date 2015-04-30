@@ -45,7 +45,7 @@ import (
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
 func init() {
-	gob.Register(StoreDescriptor{})
+	gob.Register(proto.StoreDescriptor{})
 	gob.Register(PrefixConfigMap{})
 	gob.Register(&proto.AcctConfig{})
 	gob.Register(&proto.PermConfig{})
