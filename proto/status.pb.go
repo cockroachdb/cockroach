@@ -64,19 +64,25 @@ func (m *StoreStatus) GetStats() MVCCStats {
 // NodeStatus contains the stats needed to calculate the current status of a
 // node.
 type NodeStatus struct {
-	NodeID           NodeID         `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	Desc             NodeDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
 	StoreIDs         []int32        `protobuf:"varint,2,rep,name=store_ids" json:"store_ids"`
 	RangeCount       int32          `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
 	StartedAt        int64          `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
 	UpdatedAt        int64          `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
 	Stats            MVCCStats      `protobuf:"bytes,6,opt,name=stats" json:"stats"`
-	Desc             NodeDescriptor `protobuf:"bytes,7,opt,name=desc" json:"desc"`
 	XXX_unrecognized []byte         `json:"-"`
 }
 
 func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
 func (m *NodeStatus) String() string { return proto1.CompactTextString(m) }
 func (*NodeStatus) ProtoMessage()    {}
+
+func (m *NodeStatus) GetDesc() NodeDescriptor {
+	if m != nil {
+		return m.Desc
+	}
+	return NodeDescriptor{}
+}
 
 func (m *NodeStatus) GetStoreIDs() []int32 {
 	if m != nil {
@@ -111,13 +117,6 @@ func (m *NodeStatus) GetStats() MVCCStats {
 		return m.Stats
 	}
 	return MVCCStats{}
-}
-
-func (m *NodeStatus) GetDesc() NodeDescriptor {
-	if m != nil {
-		return m.Desc
-	}
-	return NodeDescriptor{}
 }
 
 func init() {
@@ -283,20 +282,29 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 		wireType := int(wire & 0x7)
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Desc", wireType)
 			}
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				m.NodeID |= (NodeID(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Desc.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
 		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StoreIDs", wireType)
@@ -383,30 +391,6 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
-		case 7:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Desc", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Desc.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -449,7 +433,8 @@ func (m *StoreStatus) Size() (n int) {
 func (m *NodeStatus) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovStatus(uint64(m.NodeID))
+	l = m.Desc.Size()
+	n += 1 + l + sovStatus(uint64(l))
 	if len(m.StoreIDs) > 0 {
 		for _, e := range m.StoreIDs {
 			n += 1 + sovStatus(uint64(e))
@@ -459,8 +444,6 @@ func (m *NodeStatus) Size() (n int) {
 	n += 1 + sovStatus(uint64(m.StartedAt))
 	n += 1 + sovStatus(uint64(m.UpdatedAt))
 	l = m.Stats.Size()
-	n += 1 + l + sovStatus(uint64(l))
-	l = m.Desc.Size()
 	n += 1 + l + sovStatus(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -540,9 +523,14 @@ func (m *NodeStatus) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	data[i] = 0xa
 	i++
-	i = encodeVarintStatus(data, i, uint64(m.NodeID))
+	i = encodeVarintStatus(data, i, uint64(m.Desc.Size()))
+	n2, err := m.Desc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
 	if len(m.StoreIDs) > 0 {
 		for _, num := range m.StoreIDs {
 			data[i] = 0x10
@@ -562,15 +550,7 @@ func (m *NodeStatus) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x32
 	i++
 	i = encodeVarintStatus(data, i, uint64(m.Stats.Size()))
-	n2, err := m.Stats.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	data[i] = 0x3a
-	i++
-	i = encodeVarintStatus(data, i, uint64(m.Desc.Size()))
-	n3, err := m.Desc.MarshalTo(data[i:])
+	n3, err := m.Stats.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}

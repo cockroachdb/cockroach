@@ -264,9 +264,10 @@ func TestCorruptedClusterID(t *testing.T) {
 }
 
 // compareNodeStatus ensures that the actual node status for the passed in
-// node is updated correctly. It checks that the NodeID, StoreIDs, RangeCount
-// and StartedAt are exactly correct and that the bytes and counts for Live, Key
-// and Val are at least the expected value.  And that UpdatedAt has increased.
+// node is updated correctly. It checks that the Node Descriptor, StoreIDs,
+// RangeCount and StartedAt are exactly correct and that the bytes and counts
+// for Live, Key and Val are at least the expected value.  And that UpdatedAt
+// has increased.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.NodeStatus, testNumber int) *proto.NodeStatus {
 	nodeStatusKey := engine.NodeStatusKey(int32(node.Descriptor.NodeID))
@@ -287,12 +288,16 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 	if err := gogoproto.Unmarshal(response.Value.GetBytes(), nodeStatus); err != nil {
 		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, response)
 	}
-	if expectedNodeStatus.NodeID != nodeStatus.NodeID {
-		t.Errorf("%v: NodeID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
-	}
+
+	// There values must be equal.
 	if expectedNodeStatus.RangeCount != nodeStatus.RangeCount {
 		t.Errorf("%v: RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
 	}
+	if !reflect.DeepEqual(expectedNodeStatus.Desc, nodeStatus.Desc) {
+		t.Errorf("%v: Description does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+
+	// There values must >= to the older value.
 	// If StartedAt is 0, we skip this test as we don't have the base value yet.
 	if expectedNodeStatus.StartedAt > 0 && expectedNodeStatus.StartedAt != nodeStatus.StartedAt {
 		t.Errorf("%v: StartedAt does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
@@ -356,11 +361,11 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus := &proto.NodeStatus{
-		NodeID:     1,
 		RangeCount: 1,
 		StoreIDs:   []int32{1, 2, 3},
 		StartedAt:  0,
 		UpdatedAt:  0,
+		Desc:       ts.node.Descriptor,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -387,11 +392,11 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus = &proto.NodeStatus{
-		NodeID:     1,
 		RangeCount: 1,
 		StoreIDs:   []int32{1, 2, 3},
 		StartedAt:  oldStats.StartedAt,
 		UpdatedAt:  oldStats.UpdatedAt,
+		Desc:       ts.node.Descriptor,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -427,11 +432,11 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus = &proto.NodeStatus{
-		NodeID:     1,
 		RangeCount: 2,
 		StoreIDs:   []int32{1, 2, 3},
 		StartedAt:  oldStats.StartedAt,
 		UpdatedAt:  oldStats.UpdatedAt,
+		Desc:       ts.node.Descriptor,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -456,11 +461,11 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus = &proto.NodeStatus{
-		NodeID:     1,
 		RangeCount: 2,
 		StoreIDs:   []int32{1, 2, 3},
 		StartedAt:  oldStats.StartedAt,
 		UpdatedAt:  oldStats.UpdatedAt,
+		Desc:       ts.node.Descriptor,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,

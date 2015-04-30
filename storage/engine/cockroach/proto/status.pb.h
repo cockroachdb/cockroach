@@ -226,12 +226,14 @@ class NodeStatus : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int32 node_id = 1;
-  inline bool has_node_id() const;
-  inline void clear_node_id();
-  static const int kNodeIdFieldNumber = 1;
-  inline ::google::protobuf::int32 node_id() const;
-  inline void set_node_id(::google::protobuf::int32 value);
+  // optional .cockroach.proto.NodeDescriptor desc = 1;
+  inline bool has_desc() const;
+  inline void clear_desc();
+  static const int kDescFieldNumber = 1;
+  inline const ::cockroach::proto::NodeDescriptor& desc() const;
+  inline ::cockroach::proto::NodeDescriptor* mutable_desc();
+  inline ::cockroach::proto::NodeDescriptor* release_desc();
+  inline void set_allocated_desc(::cockroach::proto::NodeDescriptor* desc);
 
   // repeated int32 store_ids = 2;
   inline int store_ids_size() const;
@@ -275,19 +277,10 @@ class NodeStatus : public ::google::protobuf::Message {
   inline ::cockroach::proto::MVCCStats* release_stats();
   inline void set_allocated_stats(::cockroach::proto::MVCCStats* stats);
 
-  // optional .cockroach.proto.NodeDescriptor desc = 7;
-  inline bool has_desc() const;
-  inline void clear_desc();
-  static const int kDescFieldNumber = 7;
-  inline const ::cockroach::proto::NodeDescriptor& desc() const;
-  inline ::cockroach::proto::NodeDescriptor* mutable_desc();
-  inline ::cockroach::proto::NodeDescriptor* release_desc();
-  inline void set_allocated_desc(::cockroach::proto::NodeDescriptor* desc);
-
   // @@protoc_insertion_point(class_scope:cockroach.proto.NodeStatus)
  private:
-  inline void set_has_node_id();
-  inline void clear_has_node_id();
+  inline void set_has_desc();
+  inline void clear_has_desc();
   inline void set_has_range_count();
   inline void clear_has_range_count();
   inline void set_has_started_at();
@@ -296,20 +289,17 @@ class NodeStatus : public ::google::protobuf::Message {
   inline void clear_has_updated_at();
   inline void set_has_stats();
   inline void clear_has_stats();
-  inline void set_has_desc();
-  inline void clear_has_desc();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  ::cockroach::proto::NodeDescriptor* desc_;
   ::google::protobuf::RepeatedField< ::google::protobuf::int32 > store_ids_;
-  ::google::protobuf::int32 node_id_;
-  ::google::protobuf::int32 range_count_;
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int64 updated_at_;
   ::cockroach::proto::MVCCStats* stats_;
-  ::cockroach::proto::NodeDescriptor* desc_;
+  ::google::protobuf::int32 range_count_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fstatus_2eproto();
@@ -489,28 +479,45 @@ inline void StoreStatus::set_allocated_stats(::cockroach::proto::MVCCStats* stat
 
 // NodeStatus
 
-// optional int32 node_id = 1;
-inline bool NodeStatus::has_node_id() const {
+// optional .cockroach.proto.NodeDescriptor desc = 1;
+inline bool NodeStatus::has_desc() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void NodeStatus::set_has_node_id() {
+inline void NodeStatus::set_has_desc() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void NodeStatus::clear_has_node_id() {
+inline void NodeStatus::clear_has_desc() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void NodeStatus::clear_node_id() {
-  node_id_ = 0;
-  clear_has_node_id();
+inline void NodeStatus::clear_desc() {
+  if (desc_ != NULL) desc_->::cockroach::proto::NodeDescriptor::Clear();
+  clear_has_desc();
 }
-inline ::google::protobuf::int32 NodeStatus::node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.NodeStatus.node_id)
-  return node_id_;
+inline const ::cockroach::proto::NodeDescriptor& NodeStatus::desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeStatus.desc)
+  return desc_ != NULL ? *desc_ : *default_instance_->desc_;
 }
-inline void NodeStatus::set_node_id(::google::protobuf::int32 value) {
-  set_has_node_id();
-  node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.NodeStatus.node_id)
+inline ::cockroach::proto::NodeDescriptor* NodeStatus::mutable_desc() {
+  set_has_desc();
+  if (desc_ == NULL) desc_ = new ::cockroach::proto::NodeDescriptor;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.NodeStatus.desc)
+  return desc_;
+}
+inline ::cockroach::proto::NodeDescriptor* NodeStatus::release_desc() {
+  clear_has_desc();
+  ::cockroach::proto::NodeDescriptor* temp = desc_;
+  desc_ = NULL;
+  return temp;
+}
+inline void NodeStatus::set_allocated_desc(::cockroach::proto::NodeDescriptor* desc) {
+  delete desc_;
+  desc_ = desc;
+  if (desc) {
+    set_has_desc();
+  } else {
+    clear_has_desc();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeStatus.desc)
 }
 
 // repeated int32 store_ids = 2;
@@ -654,47 +661,6 @@ inline void NodeStatus::set_allocated_stats(::cockroach::proto::MVCCStats* stats
     clear_has_stats();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeStatus.stats)
-}
-
-// optional .cockroach.proto.NodeDescriptor desc = 7;
-inline bool NodeStatus::has_desc() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void NodeStatus::set_has_desc() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void NodeStatus::clear_has_desc() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void NodeStatus::clear_desc() {
-  if (desc_ != NULL) desc_->::cockroach::proto::NodeDescriptor::Clear();
-  clear_has_desc();
-}
-inline const ::cockroach::proto::NodeDescriptor& NodeStatus::desc() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.NodeStatus.desc)
-  return desc_ != NULL ? *desc_ : *default_instance_->desc_;
-}
-inline ::cockroach::proto::NodeDescriptor* NodeStatus::mutable_desc() {
-  set_has_desc();
-  if (desc_ == NULL) desc_ = new ::cockroach::proto::NodeDescriptor;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.NodeStatus.desc)
-  return desc_;
-}
-inline ::cockroach::proto::NodeDescriptor* NodeStatus::release_desc() {
-  clear_has_desc();
-  ::cockroach::proto::NodeDescriptor* temp = desc_;
-  desc_ = NULL;
-  return temp;
-}
-inline void NodeStatus::set_allocated_desc(::cockroach::proto::NodeDescriptor* desc) {
-  delete desc_;
-  desc_ = desc;
-  if (desc) {
-    set_has_desc();
-  } else {
-    clear_has_desc();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeStatus.desc)
 }
 
 
