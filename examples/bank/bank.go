@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// makes an id string from an id int.
+// Makes an id string from an id int.
 func makeAccountID(id int) []byte {
 	return []byte(fmt.Sprintf("%09d", id))
 }
@@ -109,7 +109,7 @@ func (bank *Bank) readAllAccounts() []int64 {
 		if err := txn.Run(calls...); err != nil {
 			log.Fatal(err)
 		}
-		// Copy responses into balances
+		// Copy responses into balances.
 		for i := 0; i < bank.numAccounts; i++ {
 			gr := calls[i].Reply.(*proto.GetResponse)
 			if gr.Value != nil && gr.Value.Bytes != nil {
@@ -139,7 +139,7 @@ func (bank *Bank) continuousMoneyTransfer() {
 	}
 }
 
-// Initialize all the bank accounts with cash
+// Initialize all the bank accounts with cash.
 func (bank *Bank) initBankAccounts(cash int64) {
 	calls := make([]client.Call, bank.numAccounts)
 	for i := 0; i < bank.numAccounts; i++ {
@@ -152,11 +152,11 @@ func (bank *Bank) initBankAccounts(cash int64) {
 
 func main() {
 	fmt.Printf("A simple program that keeps moving money between bank accounts\n\n")
-	// Run a test cockroach instance to represent the bank
+	// Run a test cockroach instance to represent the bank.
 	security.SetReadFileFn(securitytest.Asset)
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
-	// Initialize the bank
+	// Initialize the bank.
 	var bank Bank
 	bank.numAccounts = 1000
 	// Key Value Client initialization.
@@ -166,21 +166,21 @@ func main() {
 	}
 	bank.kvClient = client.NewKV(nil, sender)
 	bank.kvClient.User = storage.UserRoot
-	// Initialize all the bank accounts
+	// Initialize all the bank accounts.
 	const initCash = 1000
 	bank.initBankAccounts(initCash)
 
-	// Start all the money transfer routines
+	// Start all the money transfer routines.
 	const numTransferRoutines = 10
 	for i := 0; i < numTransferRoutines; i++ {
 		go bank.continuousMoneyTransfer()
 	}
-	// Sleep for a bit to allow money transfers to happen in the background and then exit
+	// Sleep for a bit to allow money transfers to happen in the background and then exit.
 	time.Sleep(10 * time.Second)
 
 	fmt.Printf("%d transactions were executed\n\n", bank.numTransactions)
 
-	// Check that all the money is accounted for
+	// Check that all the money is accounted for.
 	balances := bank.readAllAccounts()
 	var totalAmount int64
 	for i := 0; i < bank.numAccounts; i++ {
