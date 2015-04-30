@@ -281,6 +281,7 @@ message EndTransactionResponse {
 }
 
 // A RequestUnion contains exactly one of the optional requests.
+// Values added here must be added to InternalRequestUnion as well.
 message RequestUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
@@ -297,6 +298,7 @@ message RequestUnion {
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
+// Values added here must be added to InternalResponseUnion as well.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
   oneof value {

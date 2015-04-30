@@ -182,6 +182,7 @@ message InternalLeaderLeaseResponse{
 }
 
 // An InternalRequestUnion contains exactly one of the optional requests.
+// Non-internal values added to RequestUnion must be added here.
 message InternalRequestUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
@@ -195,12 +196,13 @@ message InternalRequestUnion {
     ScanRequest scan = 8;
     EndTransactionRequest end_transaction = 9;
 
-    InternalPushTxnRequest internal_push_txn = 10;
-    InternalResolveIntentRequest internal_resolve_intent = 11;
+    InternalPushTxnRequest internal_push_txn = 30;
+    InternalResolveIntentRequest internal_resolve_intent = 31;
 }
 }
 
 // An InternalResponseUnion contains exactly one of the optional responses.
+// Non-internal values added to ResponseUnion must be added here.
 message InternalResponseUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
@@ -214,8 +216,8 @@ message InternalResponseUnion {
     ScanResponse scan = 8;
     EndTransactionResponse end_transaction = 9;
 
-    InternalPushTxnResponse internal_push_txn = 10;
-    InternalResolveIntentResponse internal_resolve_intent = 11;
+    InternalPushTxnResponse internal_push_txn = 30;
+    InternalResolveIntentResponse internal_resolve_intent = 31;
   }
 }
 
