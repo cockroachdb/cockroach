@@ -48,7 +48,7 @@ func (c *Call) Method() proto.Method {
 	return c.Args.Method()
 }
 
-// Method returns bytes received on a Get reply.
+// ReplyBytes returns the bytes received by a Get Call.
 func (c *Call) ReplyBytes() []byte {
 	if gr := c.Reply.(*proto.GetResponse); gr.Value != nil {
 		return gr.Value.Bytes
