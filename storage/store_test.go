@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/rand"
 	"sort"
 	"testing"
 	"time"
@@ -136,7 +137,7 @@ func (db *testSender) sendOne(call client.Call) {
 // engine. Returns the store, the store clock's manual unix nanos time
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
-func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
+func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *util.Stopper) {
 	stopper := util.NewStopper()
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
 	ctx := TestStoreContext
@@ -1322,4 +1323,50 @@ func TestRaftNodeID(t *testing.T) {
 				c.nodeID, c.storeID, x)
 		}()
 	}
+}
+
+// lookupAndAddRandomRanges adds numRanges ranges with randomly
+// generated start/end keys. Before adding a range, looks up if there is
+// any range that has the same key.
+func lookupAndAddRandomRanges(numRanges int, b *testing.B) {
+	store, _, stopper := createTestStore(b)
+	defer stopper.Stop()
+
+	// Remove range 1.
+	rng1, err := store.GetRange(1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if err := store.RemoveRange(rng1); err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < numRanges; i++ {
+		// Start from 2 since Raft ID 1 has already been assigned.
+		raftID := int64(i)
+		for {
+			start := rand.Int63()
+			startKey := proto.Key(fmt.Sprintf("a%d", start))
+			endKey := proto.Key(fmt.Sprintf("a%d", start+1))
+			if store.LookupRange(startKey, endKey) == nil {
+				rng := createRange(store, raftID, startKey, endKey)
+				if err := store.AddRange(rng); err != nil {
+					b.Fatal(err)
+				}
+				break
+			}
+			// Try again with a different key.
+		}
+	}
+}
+
+func benchmarkLookupAndAddRange(numRanges int, b *testing.B) {
+	defer leaktest.AfterTest(b)
+	for i := 0; i < b.N; i++ {
+		lookupAndAddRandomRanges(numRanges, b)
+	}
+}
+
+func BenchmarkLookupAndAddRange1K(b *testing.B) {
+	benchmarkLookupAndAddRange(1024, b)
 }
