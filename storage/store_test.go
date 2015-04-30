@@ -1325,10 +1325,11 @@ func TestRaftNodeID(t *testing.T) {
 	}
 }
 
-// lookupAndAddRandomRanges adds numRanges ranges with randomly
-// generated start/end keys. Before adding a range, looks up if there is
-// any range that has the same key.
-func lookupAndAddRandomRanges(numRanges int, b *testing.B) {
+// BenchmarkLookupAndAddRange adds b.N ranges with randomly generated
+// start/end keys. Before adding a range, looks up if there is any
+// range that has the same key.
+func BenchmarkLookupAndAddRanges(b *testing.B) {
+	defer leaktest.AfterTest(b)
 	store, _, stopper := createTestStore(b)
 	defer stopper.Stop()
 
@@ -1341,8 +1342,8 @@ func lookupAndAddRandomRanges(numRanges int, b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for i := 0; i < numRanges; i++ {
-		// Start from 2 since Raft ID 1 has already been assigned.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		raftID := int64(i)
 		for {
 			start := rand.Int63()
@@ -1358,15 +1359,5 @@ func lookupAndAddRandomRanges(numRanges int, b *testing.B) {
 			// Try again with a different key.
 		}
 	}
-}
-
-func benchmarkLookupAndAddRange(numRanges int, b *testing.B) {
-	defer leaktest.AfterTest(b)
-	for i := 0; i < b.N; i++ {
-		lookupAndAddRandomRanges(numRanges, b)
-	}
-}
-
-func BenchmarkLookupAndAddRange1K(b *testing.B) {
-	benchmarkLookupAndAddRange(1024, b)
+	b.StopTimer()
 }
