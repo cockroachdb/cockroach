@@ -130,14 +130,14 @@ void protobuf_AddDesc_cockroach_2fproto_2fheartbeat_2eproto() {
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n\037cockroach/proto/heartbeat.proto\022\017cockr"
-    "oach.proto\032\024gogoproto/gogo.proto\"T\n\014Remo"
+    "oach.proto\032\024gogoproto/gogo.proto\"Z\n\014Remo"
     "teOffset\022\024\n\006offset\030\001 \001(\003B\004\310\336\037\000\022\023\n\005error\030"
-    "\002 \001(\003B\004\310\336\037\000\022\031\n\013measured_at\030\003 \001(\003B\004\310\336\037\000\"j"
-    "\n\013PingRequest\022\022\n\004ping\030\001 \001(\tB\004\310\336\037\000\0223\n\006off"
-    "set\030\002 \001(\0132\035.cockroach.proto.RemoteOffset"
-    "B\004\310\336\037\000\022\022\n\004addr\030\003 \001(\tB\004\310\336\037\000\"=\n\014PingRespon"
-    "se\022\022\n\004pong\030\001 \001(\tB\004\310\336\037\000\022\031\n\013server_time\030\002 "
-    "\001(\003B\004\310\336\037\000B\007Z\005proto", 338);
+    "\002 \001(\003B\004\310\336\037\000\022\031\n\013measured_at\030\003 \001(\003B\004\310\336\037\000:\004"
+    "\230\240\037\000\"j\n\013PingRequest\022\022\n\004ping\030\001 \001(\tB\004\310\336\037\000\022"
+    "3\n\006offset\030\002 \001(\0132\035.cockroach.proto.Remote"
+    "OffsetB\004\310\336\037\000\022\022\n\004addr\030\003 \001(\tB\004\310\336\037\000\"=\n\014Ping"
+    "Response\022\022\n\004pong\030\001 \001(\tB\004\310\336\037\000\022\031\n\013server_t"
+    "ime\030\002 \001(\003B\004\310\336\037\000B\007Z\005proto", 344);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/heartbeat.proto", &protobuf_RegisterTypes);
   RemoteOffset::default_instance_ = new RemoteOffset();

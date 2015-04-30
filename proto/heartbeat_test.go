@@ -13,30 +13,20 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Kathy Spradlin (kathyspradlin@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package proto
 
-import (
-	"fmt"
-	"math"
-	"time"
-)
+import "testing"
 
-// InfiniteOffset is the offset value used if we fail to detect a heartbeat.
-var InfiniteOffset = RemoteOffset{
-	Offset: math.MaxInt64,
-	Error:  0,
-}
-
-// Equal is a equality comparison between remote offsets.
-func (r RemoteOffset) Equal(o RemoteOffset) bool {
-	return r.Offset == o.Offset && r.Error == o.Error && r.MeasuredAt == o.MeasuredAt
-}
-
-// String formats the RemoteOffset for human readability.
-func (r RemoteOffset) String() string {
-	t := time.Unix(r.MeasuredAt/1E9, 0).UTC()
-	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Error)/1E9, t)
+func TestRemoteOffsetString(t *testing.T) {
+	ro := RemoteOffset{
+		Offset:     -501584461,
+		Error:      351698,
+		MeasuredAt: 1430348776127420269,
+	}
+	expStr := "off=-0.501584461s, err=0.000351698s, at=2015-04-29 23:06:16 +0000 UTC"
+	if str := ro.String(); str != expStr {
+		t.Errorf("expected %s; got %s", expStr, str)
+	}
 }

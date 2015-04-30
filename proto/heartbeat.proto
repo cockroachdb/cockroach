@@ -30,6 +30,8 @@ import "gogoproto/gogo.proto";
 // Offset and error are measured using the remote clock reading technique
 // described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 message RemoteOffset {
+  option (gogoproto.goproto_stringer) = false;
+
   // The estimated offset from the remote server, in nanoseconds.
   optional int64 offset = 1 [(gogoproto.nullable) = false];
   // The maximum error of the measured offset, in nanoseconds.

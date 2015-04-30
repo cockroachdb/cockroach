@@ -30,9 +30,8 @@ type RemoteOffset struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *RemoteOffset) Reset()         { *m = RemoteOffset{} }
-func (m *RemoteOffset) String() string { return proto1.CompactTextString(m) }
-func (*RemoteOffset) ProtoMessage()    {}
+func (m *RemoteOffset) Reset()      { *m = RemoteOffset{} }
+func (*RemoteOffset) ProtoMessage() {}
 
 func (m *RemoteOffset) GetOffset() int64 {
 	if m != nil {
