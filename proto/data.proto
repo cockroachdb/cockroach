@@ -251,6 +251,7 @@ message Transaction {
 // Lease contains information about leader leases including the
 // expiration and lease holder.
 message Lease {
+  option (gogoproto.goproto_stringer) = false;
   // The start is a timestamp at which the lease begins. This value
   // must be greater than the last lease expiration or this call will
   // fail.

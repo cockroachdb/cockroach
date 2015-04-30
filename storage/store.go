@@ -491,10 +491,36 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		s.ctx.Gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
 	}
 
+	// Start a single goroutine in charge of periodically gossipping the
+	// sentinel and first range metadata if we have a first range.
+	s.startGossip()
+
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 
 	return nil
+}
+
+// startGossip runs an infinite loop in a goroutine which regularly checks
+// whether the store has a first range replica and asks that range to gossip
+// cluster ID and first range metadata accordingly.
+func (s *Store) startGossip() {
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(ttlClusterIDGossip / 2)
+		for {
+			select {
+			case <-ticker.C:
+				rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
+				if rng != nil {
+					log.V(1).Infof("store %d has first range, maybe gossiping",
+						s.StoreID())
+					rng.maybeGossipFirstRangeWithLease()
+				}
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // configGossipUpdate is a callback for gossip updates to
