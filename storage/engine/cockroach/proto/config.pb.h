@@ -45,7 +45,9 @@ class ZoneConfig;
 class RangeTree;
 class RangeTreeNode;
 class Addr;
+class StoreCapacity;
 class NodeDescriptor;
+class StoreDescriptor;
 
 // ===================================================================
 
@@ -1060,6 +1062,95 @@ class Addr : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class StoreCapacity : public ::google::protobuf::Message {
+ public:
+  StoreCapacity();
+  virtual ~StoreCapacity();
+
+  StoreCapacity(const StoreCapacity& from);
+
+  inline StoreCapacity& operator=(const StoreCapacity& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const StoreCapacity& default_instance();
+
+  void Swap(StoreCapacity* other);
+
+  // implements Message ----------------------------------------------
+
+  StoreCapacity* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const StoreCapacity& from);
+  void MergeFrom(const StoreCapacity& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int64 Capacity = 1;
+  inline bool has_capacity() const;
+  inline void clear_capacity();
+  static const int kCapacityFieldNumber = 1;
+  inline ::google::protobuf::int64 capacity() const;
+  inline void set_capacity(::google::protobuf::int64 value);
+
+  // optional int64 Available = 2;
+  inline bool has_available() const;
+  inline void clear_available();
+  static const int kAvailableFieldNumber = 2;
+  inline ::google::protobuf::int64 available() const;
+  inline void set_available(::google::protobuf::int64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.StoreCapacity)
+ private:
+  inline void set_has_capacity();
+  inline void clear_has_capacity();
+  inline void set_has_available();
+  inline void clear_has_available();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int64 capacity_;
+  ::google::protobuf::int64 available_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static StoreCapacity* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class NodeDescriptor : public ::google::protobuf::Message {
  public:
   NodeDescriptor();
@@ -1160,6 +1251,121 @@ class NodeDescriptor : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static NodeDescriptor* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class StoreDescriptor : public ::google::protobuf::Message {
+ public:
+  StoreDescriptor();
+  virtual ~StoreDescriptor();
+
+  StoreDescriptor(const StoreDescriptor& from);
+
+  inline StoreDescriptor& operator=(const StoreDescriptor& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const StoreDescriptor& default_instance();
+
+  void Swap(StoreDescriptor* other);
+
+  // implements Message ----------------------------------------------
+
+  StoreDescriptor* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const StoreDescriptor& from);
+  void MergeFrom(const StoreDescriptor& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int32 store_id = 1;
+  inline bool has_store_id() const;
+  inline void clear_store_id();
+  static const int kStoreIdFieldNumber = 1;
+  inline ::google::protobuf::int32 store_id() const;
+  inline void set_store_id(::google::protobuf::int32 value);
+
+  // optional .cockroach.proto.Attributes attrs = 2;
+  inline bool has_attrs() const;
+  inline void clear_attrs();
+  static const int kAttrsFieldNumber = 2;
+  inline const ::cockroach::proto::Attributes& attrs() const;
+  inline ::cockroach::proto::Attributes* mutable_attrs();
+  inline ::cockroach::proto::Attributes* release_attrs();
+  inline void set_allocated_attrs(::cockroach::proto::Attributes* attrs);
+
+  // optional .cockroach.proto.NodeDescriptor node = 3;
+  inline bool has_node() const;
+  inline void clear_node();
+  static const int kNodeFieldNumber = 3;
+  inline const ::cockroach::proto::NodeDescriptor& node() const;
+  inline ::cockroach::proto::NodeDescriptor* mutable_node();
+  inline ::cockroach::proto::NodeDescriptor* release_node();
+  inline void set_allocated_node(::cockroach::proto::NodeDescriptor* node);
+
+  // optional .cockroach.proto.StoreCapacity capacity = 4;
+  inline bool has_capacity() const;
+  inline void clear_capacity();
+  static const int kCapacityFieldNumber = 4;
+  inline const ::cockroach::proto::StoreCapacity& capacity() const;
+  inline ::cockroach::proto::StoreCapacity* mutable_capacity();
+  inline ::cockroach::proto::StoreCapacity* release_capacity();
+  inline void set_allocated_capacity(::cockroach::proto::StoreCapacity* capacity);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.StoreDescriptor)
+ private:
+  inline void set_has_store_id();
+  inline void clear_has_store_id();
+  inline void set_has_attrs();
+  inline void clear_has_attrs();
+  inline void set_has_node();
+  inline void clear_has_node();
+  inline void set_has_capacity();
+  inline void clear_has_capacity();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::Attributes* attrs_;
+  ::cockroach::proto::NodeDescriptor* node_;
+  ::cockroach::proto::StoreCapacity* capacity_;
+  ::google::protobuf::int32 store_id_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static StoreDescriptor* default_instance_;
 };
 // ===================================================================
 
@@ -2438,6 +2644,58 @@ inline void Addr::set_allocated_address(::std::string* address) {
 
 // -------------------------------------------------------------------
 
+// StoreCapacity
+
+// optional int64 Capacity = 1;
+inline bool StoreCapacity::has_capacity() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void StoreCapacity::set_has_capacity() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void StoreCapacity::clear_has_capacity() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void StoreCapacity::clear_capacity() {
+  capacity_ = GOOGLE_LONGLONG(0);
+  clear_has_capacity();
+}
+inline ::google::protobuf::int64 StoreCapacity::capacity() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreCapacity.Capacity)
+  return capacity_;
+}
+inline void StoreCapacity::set_capacity(::google::protobuf::int64 value) {
+  set_has_capacity();
+  capacity_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreCapacity.Capacity)
+}
+
+// optional int64 Available = 2;
+inline bool StoreCapacity::has_available() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void StoreCapacity::set_has_available() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void StoreCapacity::clear_has_available() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void StoreCapacity::clear_available() {
+  available_ = GOOGLE_LONGLONG(0);
+  clear_has_available();
+}
+inline ::google::protobuf::int64 StoreCapacity::available() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreCapacity.Available)
+  return available_;
+}
+inline void StoreCapacity::set_available(::google::protobuf::int64 value) {
+  set_has_available();
+  available_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreCapacity.Available)
+}
+
+// -------------------------------------------------------------------
+
 // NodeDescriptor
 
 // optional int32 node_id = 1;
@@ -2544,6 +2802,157 @@ inline void NodeDescriptor::set_allocated_attrs(::cockroach::proto::Attributes* 
     clear_has_attrs();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeDescriptor.attrs)
+}
+
+// -------------------------------------------------------------------
+
+// StoreDescriptor
+
+// optional int32 store_id = 1;
+inline bool StoreDescriptor::has_store_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void StoreDescriptor::set_has_store_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void StoreDescriptor::clear_has_store_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void StoreDescriptor::clear_store_id() {
+  store_id_ = 0;
+  clear_has_store_id();
+}
+inline ::google::protobuf::int32 StoreDescriptor::store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreDescriptor.store_id)
+  return store_id_;
+}
+inline void StoreDescriptor::set_store_id(::google::protobuf::int32 value) {
+  set_has_store_id();
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreDescriptor.store_id)
+}
+
+// optional .cockroach.proto.Attributes attrs = 2;
+inline bool StoreDescriptor::has_attrs() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void StoreDescriptor::set_has_attrs() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void StoreDescriptor::clear_has_attrs() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void StoreDescriptor::clear_attrs() {
+  if (attrs_ != NULL) attrs_->::cockroach::proto::Attributes::Clear();
+  clear_has_attrs();
+}
+inline const ::cockroach::proto::Attributes& StoreDescriptor::attrs() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreDescriptor.attrs)
+  return attrs_ != NULL ? *attrs_ : *default_instance_->attrs_;
+}
+inline ::cockroach::proto::Attributes* StoreDescriptor::mutable_attrs() {
+  set_has_attrs();
+  if (attrs_ == NULL) attrs_ = new ::cockroach::proto::Attributes;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.StoreDescriptor.attrs)
+  return attrs_;
+}
+inline ::cockroach::proto::Attributes* StoreDescriptor::release_attrs() {
+  clear_has_attrs();
+  ::cockroach::proto::Attributes* temp = attrs_;
+  attrs_ = NULL;
+  return temp;
+}
+inline void StoreDescriptor::set_allocated_attrs(::cockroach::proto::Attributes* attrs) {
+  delete attrs_;
+  attrs_ = attrs;
+  if (attrs) {
+    set_has_attrs();
+  } else {
+    clear_has_attrs();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.StoreDescriptor.attrs)
+}
+
+// optional .cockroach.proto.NodeDescriptor node = 3;
+inline bool StoreDescriptor::has_node() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void StoreDescriptor::set_has_node() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void StoreDescriptor::clear_has_node() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void StoreDescriptor::clear_node() {
+  if (node_ != NULL) node_->::cockroach::proto::NodeDescriptor::Clear();
+  clear_has_node();
+}
+inline const ::cockroach::proto::NodeDescriptor& StoreDescriptor::node() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreDescriptor.node)
+  return node_ != NULL ? *node_ : *default_instance_->node_;
+}
+inline ::cockroach::proto::NodeDescriptor* StoreDescriptor::mutable_node() {
+  set_has_node();
+  if (node_ == NULL) node_ = new ::cockroach::proto::NodeDescriptor;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.StoreDescriptor.node)
+  return node_;
+}
+inline ::cockroach::proto::NodeDescriptor* StoreDescriptor::release_node() {
+  clear_has_node();
+  ::cockroach::proto::NodeDescriptor* temp = node_;
+  node_ = NULL;
+  return temp;
+}
+inline void StoreDescriptor::set_allocated_node(::cockroach::proto::NodeDescriptor* node) {
+  delete node_;
+  node_ = node;
+  if (node) {
+    set_has_node();
+  } else {
+    clear_has_node();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.StoreDescriptor.node)
+}
+
+// optional .cockroach.proto.StoreCapacity capacity = 4;
+inline bool StoreDescriptor::has_capacity() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void StoreDescriptor::set_has_capacity() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void StoreDescriptor::clear_has_capacity() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void StoreDescriptor::clear_capacity() {
+  if (capacity_ != NULL) capacity_->::cockroach::proto::StoreCapacity::Clear();
+  clear_has_capacity();
+}
+inline const ::cockroach::proto::StoreCapacity& StoreDescriptor::capacity() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreDescriptor.capacity)
+  return capacity_ != NULL ? *capacity_ : *default_instance_->capacity_;
+}
+inline ::cockroach::proto::StoreCapacity* StoreDescriptor::mutable_capacity() {
+  set_has_capacity();
+  if (capacity_ == NULL) capacity_ = new ::cockroach::proto::StoreCapacity;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.StoreDescriptor.capacity)
+  return capacity_;
+}
+inline ::cockroach::proto::StoreCapacity* StoreDescriptor::release_capacity() {
+  clear_has_capacity();
+  ::cockroach::proto::StoreCapacity* temp = capacity_;
+  capacity_ = NULL;
+  return temp;
+}
+inline void StoreDescriptor::set_allocated_capacity(::cockroach::proto::StoreCapacity* capacity) {
+  delete capacity_;
+  capacity_ = capacity;
+  if (capacity) {
+    set_has_capacity();
+  } else {
+    clear_has_capacity();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.StoreDescriptor.capacity)
 }
 
 

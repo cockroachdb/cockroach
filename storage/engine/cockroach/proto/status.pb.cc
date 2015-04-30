@@ -39,7 +39,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto() {
   GOOGLE_CHECK(file != NULL);
   StoreStatus_descriptor_ = file->message_type(0);
   static const int StoreStatus_offsets_[6] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, store_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, desc_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, range_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, started_at_),
@@ -117,19 +117,19 @@ void protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto() {
     "\n\034cockroach/proto/status.proto\022\017cockroac"
     "h.proto\032\032cockroach/proto/data.proto\032\034coc"
     "kroach/proto/config.proto\032\024gogoproto/gog"
-    "o.proto\"\346\001\n\013StoreStatus\022,\n\010store_id\030\001 \001("
-    "\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\022)\n\007node_id"
-    "\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022\031\n\013rang"
-    "e_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003B"
-    "\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stats"
-    "\030\006 \001(\0132\032.cockroach.proto.MVCCStatsB\004\310\336\037\000"
-    "\"\346\001\n\nNodeStatus\0223\n\004desc\030\001 \001(\0132\037.cockroac"
-    "h.proto.NodeDescriptorB\004\310\336\037\000\022#\n\tstore_id"
-    "s\030\002 \003(\005B\020\310\336\037\000\342\336\037\010StoreIDs\022\031\n\013range_count"
-    "\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003B\004\310\336\037\000\022\030"
-    "\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stats\030\006 \001(\0132"
-    "\032.cockroach.proto.MVCCStatsB\004\310\336\037\000B\023Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001", 614);
+    "o.proto\"\356\001\n\013StoreStatus\0224\n\004desc\030\001 \001(\0132 ."
+    "cockroach.proto.StoreDescriptorB\004\310\336\037\000\022)\n"
+    "\007node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID"
+    "\022\031\n\013range_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_a"
+    "t\030\004 \001(\003B\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022"
+    "/\n\005stats\030\006 \001(\0132\032.cockroach.proto.MVCCSta"
+    "tsB\004\310\336\037\000\"\346\001\n\nNodeStatus\0223\n\004desc\030\001 \001(\0132\037."
+    "cockroach.proto.NodeDescriptorB\004\310\336\037\000\022#\n\t"
+    "store_ids\030\002 \003(\005B\020\310\336\037\000\342\336\037\010StoreIDs\022\031\n\013ran"
+    "ge_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003"
+    "B\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stat"
+    "s\030\006 \001(\0132\032.cockroach.proto.MVCCStatsB\004\310\336\037"
+    "\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 622);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/status.proto", &protobuf_RegisterTypes);
   StoreStatus::default_instance_ = new StoreStatus();
@@ -149,7 +149,7 @@ struct StaticDescriptorInitializer_cockroach_2fproto_2fstatus_2eproto {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int StoreStatus::kStoreIdFieldNumber;
+const int StoreStatus::kDescFieldNumber;
 const int StoreStatus::kNodeIdFieldNumber;
 const int StoreStatus::kRangeCountFieldNumber;
 const int StoreStatus::kStartedAtFieldNumber;
@@ -164,6 +164,7 @@ StoreStatus::StoreStatus()
 }
 
 void StoreStatus::InitAsDefaultInstance() {
+  desc_ = const_cast< ::cockroach::proto::StoreDescriptor*>(&::cockroach::proto::StoreDescriptor::default_instance());
   stats_ = const_cast< ::cockroach::proto::MVCCStats*>(&::cockroach::proto::MVCCStats::default_instance());
 }
 
@@ -176,7 +177,7 @@ StoreStatus::StoreStatus(const StoreStatus& from)
 
 void StoreStatus::SharedCtor() {
   _cached_size_ = 0;
-  store_id_ = 0;
+  desc_ = NULL;
   node_id_ = 0;
   range_count_ = 0;
   started_at_ = GOOGLE_LONGLONG(0);
@@ -192,6 +193,7 @@ StoreStatus::~StoreStatus() {
 
 void StoreStatus::SharedDtor() {
   if (this != default_instance_) {
+    delete desc_;
     delete stats_;
   }
 }
@@ -229,8 +231,10 @@ void StoreStatus::Clear() {
   } while (0)
 
   if (_has_bits_[0 / 32] & 63) {
-    ZR_(store_id_, updated_at_);
-    range_count_ = 0;
+    ZR_(node_id_, updated_at_);
+    if (has_desc()) {
+      if (desc_ != NULL) desc_->::cockroach::proto::StoreDescriptor::Clear();
+    }
     if (has_stats()) {
       if (stats_ != NULL) stats_->::cockroach::proto::MVCCStats::Clear();
     }
@@ -253,13 +257,11 @@ bool StoreStatus::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int32 store_id = 1;
+      // optional .cockroach.proto.StoreDescriptor desc = 1;
       case 1: {
-        if (tag == 8) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &store_id_)));
-          set_has_store_id();
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_desc()));
         } else {
           goto handle_unusual;
         }
@@ -365,9 +367,10 @@ failure:
 void StoreStatus::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.StoreStatus)
-  // optional int32 store_id = 1;
-  if (has_store_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->store_id(), output);
+  // optional .cockroach.proto.StoreDescriptor desc = 1;
+  if (has_desc()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, this->desc(), output);
   }
 
   // optional int32 node_id = 2;
@@ -406,9 +409,11 @@ void StoreStatus::SerializeWithCachedSizes(
 ::google::protobuf::uint8* StoreStatus::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.StoreStatus)
-  // optional int32 store_id = 1;
-  if (has_store_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->store_id(), target);
+  // optional .cockroach.proto.StoreDescriptor desc = 1;
+  if (has_desc()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, this->desc(), target);
   }
 
   // optional int32 node_id = 2;
@@ -450,11 +455,11 @@ int StoreStatus::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional int32 store_id = 1;
-    if (has_store_id()) {
+    // optional .cockroach.proto.StoreDescriptor desc = 1;
+    if (has_desc()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->store_id());
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->desc());
     }
 
     // optional int32 node_id = 2;
@@ -519,8 +524,8 @@ void StoreStatus::MergeFrom(const ::google::protobuf::Message& from) {
 void StoreStatus::MergeFrom(const StoreStatus& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_store_id()) {
-      set_store_id(from.store_id());
+    if (from.has_desc()) {
+      mutable_desc()->::cockroach::proto::StoreDescriptor::MergeFrom(from.desc());
     }
     if (from.has_node_id()) {
       set_node_id(from.node_id());
@@ -560,7 +565,7 @@ bool StoreStatus::IsInitialized() const {
 
 void StoreStatus::Swap(StoreStatus* other) {
   if (other != this) {
-    std::swap(store_id_, other->store_id_);
+    std::swap(desc_, other->desc_);
     std::swap(node_id_, other->node_id_);
     std::swap(range_count_, other->range_count_);
     std::swap(started_at_, other->started_at_);

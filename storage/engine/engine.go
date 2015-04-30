@@ -28,17 +28,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// StoreCapacity contains capacity information for a storage device.
-type StoreCapacity struct {
-	Capacity  int64
-	Available int64
-}
-
-// PercentAvail computes the percentage of disk space that is available.
-func (sc StoreCapacity) PercentAvail() float64 {
-	return float64(sc.Available) / float64(sc.Capacity)
-}
-
 // Iterator is an interface for iterating over key/value pairs in an
 // engine. Iterator implementation are thread safe unless otherwise
 // noted.
@@ -110,7 +99,7 @@ type Engine interface {
 	// The logic for merges is written in db.cc in order to be compatible with RocksDB.
 	Merge(key proto.EncodedKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
-	Capacity() (StoreCapacity, error)
+	Capacity() (proto.StoreCapacity, error)
 	// SetGCTimeouts sets a function which yields timeout values for GC
 	// compaction of transaction and response cache entries. The return
 	// values are in unix nanoseconds for the minimum transaction row

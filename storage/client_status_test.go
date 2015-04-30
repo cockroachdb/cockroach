@@ -18,6 +18,7 @@
 package storage_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -30,10 +31,11 @@ import (
 )
 
 // compareStoreStatus ensures that the actual store status for the passed in
-// store is updated correctly. It checks that the StoreID, NodeID and
-// RangeCount are exactly correct and that the bytes and counts for Live, Key
-// and Val are at least the expected value.  The latest actual stats are
-// returned.
+// store is updated correctly. It checks that the Desc.StoreID, Desc.Attrs,
+// Desc.Node, Desc.Capacity.Capacity, NodeID and RangeCount are exactly correct
+// and that the bytes and counts for Live, both Key and Val as well as
+// Desc.Capacity.Available are at least the expected value.
+// The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
 	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
 	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
@@ -47,8 +49,19 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	if err := gogoproto.Unmarshal(gReply.Value.GetBytes(), storeStatus); err != nil {
 		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, gReply)
 	}
-	if expectedStoreStatus.StoreID != storeStatus.StoreID {
-		t.Errorf("%v: actual store ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+
+	// Values much match exactly.
+	if expectedStoreStatus.Desc.StoreID != storeStatus.Desc.StoreID {
+		t.Errorf("%v: actual Desc.StoreID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if !reflect.DeepEqual(expectedStoreStatus.Desc.Attrs, storeStatus.Desc.Attrs) {
+		t.Errorf("%v: actual Desc.Attrs does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if !reflect.DeepEqual(expectedStoreStatus.Desc.Node, storeStatus.Desc.Node) {
+		t.Errorf("%v: actual Desc.Attrs does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Desc.Capacity.Capacity != expectedStoreStatus.Desc.Capacity.Capacity {
+		t.Errorf("%v: actual Desc.Capacity.Capacity does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
 	if expectedStoreStatus.NodeID != storeStatus.NodeID {
 		t.Errorf("%v: actual node ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
@@ -56,6 +69,8 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	if expectedStoreStatus.RangeCount != storeStatus.RangeCount {
 		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
+
+	// Values should be >= to expected values.
 	if storeStatus.Stats.LiveBytes < expectedStoreStatus.Stats.LiveBytes {
 		t.Errorf("%v: actual Live Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
@@ -74,6 +89,9 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	if storeStatus.Stats.ValCount < expectedStoreStatus.Stats.ValCount {
 		t.Errorf("%v: actual Val Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
+	if storeStatus.Desc.Capacity.Available < expectedStoreStatus.Desc.Capacity.Available {
+		t.Errorf("%v: actual Desc.Capacity.Available is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
 	return storeStatus
 }
 
@@ -88,8 +106,13 @@ func TestStoreStatus(t *testing.T) {
 	splitKey := proto.Key("b")
 	content := proto.Key("test content")
 
+	storeDesc, err := store.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	expectedStoreStatus := &proto.StoreStatus{
-		StoreID:    store.Ident.StoreID,
+		Desc:       *storeDesc,
 		NodeID:     1,
 		RangeCount: 1,
 		Stats: proto.MVCCStats{
@@ -118,7 +141,7 @@ func TestStoreStatus(t *testing.T) {
 	}
 
 	expectedStoreStatus = &proto.StoreStatus{
-		StoreID:    store.Ident.StoreID,
+		Desc:       oldstats.Desc,
 		NodeID:     1,
 		RangeCount: 1,
 		Stats: proto.MVCCStats{
@@ -141,7 +164,7 @@ func TestStoreStatus(t *testing.T) {
 	}
 
 	expectedStoreStatus = &proto.StoreStatus{
-		StoreID:    store.Ident.StoreID,
+		Desc:       oldstats.Desc,
 		NodeID:     1,
 		RangeCount: 2,
 		Stats: proto.MVCCStats{
@@ -170,7 +193,7 @@ func TestStoreStatus(t *testing.T) {
 	}
 
 	expectedStoreStatus = &proto.StoreStatus{
-		StoreID:    store.Ident.StoreID,
+		Desc:       oldstats.Desc,
 		NodeID:     1,
 		RangeCount: 2,
 		Stats: proto.MVCCStats{

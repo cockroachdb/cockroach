@@ -130,9 +130,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 			StoreID:   proto.StoreID(i + 1),
 		}
 
-		// The bootstrapping store will not connect to other nodes so its StoreConfig
-		// doesn't really matter.
-		s := storage.NewStore(ctx, eng)
+		// The bootstrapping store will not connect to other nodes so its
+		// StoreConfig doesn't really matter.
+		s := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
 
 		// Verify the store isn't already part of a cluster.
 		if len(s.Ident.ClusterID) > 0 {
@@ -154,6 +154,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 		if err := s.Start(stopper); err != nil {
 			return nil, err
 		}
+
 		lSender.AddStore(s)
 
 		// Initialize node and store ids.  Only initialize the node once.
@@ -262,7 +263,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error 
 		return util.Error("no engines")
 	}
 	for _, e := range engines {
-		s := storage.NewStore(n.ctx, e)
+		s := storage.NewStore(n.ctx, e, &n.Descriptor)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(stopper); err != nil {
@@ -408,7 +409,7 @@ func (n *Node) startGossip(stopper *util.Stopper) {
 // gossip network.
 func (n *Node) gossipCapacities() {
 	n.lSender.VisitStores(func(s *storage.Store) error {
-		s.GossipCapacity(&n.Descriptor)
+		s.GossipCapacity()
 		return nil
 	})
 }

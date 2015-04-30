@@ -121,7 +121,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
 		ctx.Transport = multiraft.NewLocalRPCTransport()
 		defer ctx.Transport.Close()
-		s[i] = storage.NewStore(ctx, e[i])
+		s[i] = storage.NewStore(ctx, e[i], &proto.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 
 		desc := &proto.RangeDescriptor{
