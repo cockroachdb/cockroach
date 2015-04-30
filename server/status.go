@@ -18,14 +18,18 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -148,15 +152,41 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request)
 // handleNodeStatus handles GET requests for node status.
 func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
 	// TODO(shawn) parse node-id in path
-	nodes := &status.NodeList{}
-	b, contentType, err := util.MarshalResponse(r, nodes, []util.EncodingType{util.JSONEncoding})
+
+	startKey := engine.KeyStatusNodePrefix
+	endKey := startKey.PrefixEnd()
+
+	call := client.Scan(startKey, endKey, 0)
+	resp := call.Reply.(*proto.ScanResponse)
+	if err := s.db.Run(call); err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if resp.Error != nil {
+		log.Error(resp.Error)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	nodeStatuses := []proto.NodeStatus{}
+	for _, row := range resp.Rows {
+		nodeStatus := &proto.NodeStatus{}
+		if err := gogoproto.Unmarshal(row.Value.GetBytes(), nodeStatus); err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		nodeStatuses = append(nodeStatuses, *nodeStatus)
+	}
+	val, err := json.Marshal(nodeStatuses)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
-	w.Write(b)
+	w.Write(val)
+
 }
 
 // handleStoresStatus handles GET requests for store status.
