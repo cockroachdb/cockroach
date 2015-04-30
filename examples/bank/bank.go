@@ -47,6 +47,23 @@ type Bank struct {
 	numTransactions int32
 }
 
+// Helper function to read bytes received on a Get Call response.
+// We could add this to the API
+func readBytes(call client.Call) []byte {
+	if gr := call.Reply.(*proto.GetResponse); gr.Value != nil {
+		return gr.Value.Bytes
+	}
+	return nil
+}
+
+// Helper function to read an int64 received on a Get Call response
+func readInt64(call client.Call) (int64, error) {
+	if resp := readBytes(call); resp != nil {
+		return strconv.ParseInt(string(resp), 10, 64)
+	}
+	return 0, nil
+}
+
 // moveMoney() moves an amount between two accounts if the amount
 // is available in the from account. Returns true on success.
 func (bank *Bank) moveMoney(from, to []byte, amount int64) bool {
@@ -57,33 +74,23 @@ func (bank *Bank) moveMoney(from, to []byte, amount int64) bool {
 	txnOpts := &client.TransactionOptions{Name: fmt.Sprintf("Transferring %s-%s-%d", from, to, amount)}
 	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		fromGet := client.Get(proto.Key(from))
-		fromResp := fromGet.Reply.(*proto.GetResponse)
 		toGet := client.Get(proto.Key(to))
-		toResp := toGet.Reply.(*proto.GetResponse)
 		if err := txn.Run(fromGet, toGet); err != nil {
 			return err
 		}
 		// Read from value.
-		var fromValue int64
-		if fromResp.Value != nil && fromResp.Value.Bytes != nil {
-			readValue, err := strconv.ParseInt(string(fromResp.Value.Bytes), 10, 64)
-			if err != nil {
-				return err
-			}
-			fromValue = readValue
+		fromValue, err := readInt64(fromGet)
+		if err != nil {
+			return err
 		}
 		// Ensure there is enough cash.
 		if fromValue < amount {
 			return nil
 		}
 		// Read to value.
-		var toValue int64
-		if toResp.Value != nil && toResp.Value.Bytes != nil {
-			readValue, err := strconv.ParseInt(string(toResp.Value.Bytes), 10, 64)
-			if err != nil {
-				return err
-			}
-			toValue = readValue
+		toValue, errRead := readInt64(toGet)
+		if errRead != nil {
+			return errRead
 		}
 		// Update both accounts.
 		txn.Prepare(client.Put(proto.Key(from), []byte(fmt.Sprintf("%d", fromValue-amount))))
@@ -111,13 +118,10 @@ func (bank *Bank) readAllAccounts() []int64 {
 		}
 		// Copy responses into balances.
 		for i := 0; i < bank.numAccounts; i++ {
-			gr := calls[i].Reply.(*proto.GetResponse)
-			if gr.Value != nil && gr.Value.Bytes != nil {
-				balance, err := strconv.ParseInt(string(gr.Value.Bytes), 10, 64)
-				if err != nil {
-					log.Fatal(err)
-				}
-				balances[i] = balance
+			if value, err := readInt64(calls[i]); err != nil {
+				log.Fatal(err)
+			} else {
+				balances[i] = value
 			}
 		}
 		return nil
