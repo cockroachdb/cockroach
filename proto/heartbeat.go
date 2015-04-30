@@ -38,5 +38,5 @@ func (r RemoteOffset) Equal(o RemoteOffset) bool {
 // String formats the RemoteOffset for human readability.
 func (r RemoteOffset) String() string {
 	t := time.Unix(r.MeasuredAt/1E9, 0).UTC()
-	return fmt.Sprintf("off=%.9f, err=%.9f, at=%s", float64(r.Offset)/1E9, float64(r.Error)/1E9, t)
+	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Error)/1E9, t)
 }
