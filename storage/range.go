@@ -415,7 +415,10 @@ func (r *Range) WaitForLeaderLease(t *testing.T) {
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Range) isInitialized() bool {
-	return len(r.Desc().EndKey) > 0
+	if desc := r.Desc(); desc != nil && len(desc.EndKey) > 0 {
+		return true
+	}
+	return false
 }
 
 // Desc atomically returns the range's descriptor.
@@ -874,7 +877,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 // information, a lease is acquired if there is no active lease.
 func (r *Range) maybeGossipFirstRangeWithLease() {
 	// If no Gossip available (some tests) or not first range: nothing to do.
-	if r.rm.Gossip() == nil || !r.IsFirstRange() {
+	if r.rm.Gossip() == nil || !r.isInitialized() || !r.IsFirstRange() {
 		return
 	}
 	timestamp := r.rm.Clock().Now()
@@ -889,7 +892,7 @@ func (r *Range) maybeGossipFirstRangeWithLease() {
 		// We don't have an active lease, but we think we should be
 		// gossiping. Let's get the lease and then do just that.
 		if err := r.requestLeaderLease(timestamp); err != nil {
-			log.Infof("could not acquire leader lease for gossiping: %s", err)
+			log.Infof("could not acquire leader lease for first range gossip: %s", err)
 			return
 		}
 	}
