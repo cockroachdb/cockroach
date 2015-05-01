@@ -185,7 +185,7 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 	}
 }
 
-// process processes the entries in the queue until the provided
+// processLoop processes the entries in the queue until the provided
 // stopper signals exit.
 //
 // TODO(spencer): current load should factor into range processing timer.

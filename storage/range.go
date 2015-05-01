@@ -466,8 +466,6 @@ func (r *Range) GetMVCCStats() proto.MVCCStats {
 }
 
 // ContainsKey returns whether this range contains the specified key.
-// Read-lock the mutex to protect access to Desc, which might be changed
-// concurrently via range split.
 func (r *Range) ContainsKey(key proto.Key) bool {
 	return r.Desc().ContainsKey(engine.KeyAddress(key))
 }
