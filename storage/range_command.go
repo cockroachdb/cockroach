@@ -828,29 +828,69 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	}
 }
 
-// ReplicaSetsEqual is used in AdminMerge to ensure that the ranges are
-// all collocate on the same set of replicas.
-func ReplicaSetsEqual(a, b []proto.Replica) bool {
-	if len(a) != len(b) {
-		return false
+// splitTrigger is called on a successful commit of an AdminSplit
+// transaction. It copies the response cache for the new range and
+// recomputes stats for both the existing, updated range and the new
+// range.
+func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
+	if !bytes.Equal(r.Desc().StartKey, split.UpdatedDesc.StartKey) ||
+		!bytes.Equal(r.Desc().EndKey, split.NewDesc.EndKey) {
+		return util.Errorf("range does not match splits: %s-%s + %s-%s != %s-%s", split.UpdatedDesc.StartKey,
+			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc().StartKey, r.Desc().EndKey)
 	}
 
-	set := make(map[proto.StoreID]int)
-	for _, replica := range a {
-		set[replica.StoreID]++
+	// Copy the GC metadata.
+	gcMeta, err := r.GetGCMetadata()
+	if err != nil {
+		return util.Errorf("unable to fetch GC metadata: %s", err)
+	}
+	if err := engine.MVCCPutProto(batch, nil, engine.RangeGCMetadataKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+		return util.Errorf("unable to copy GC metadata: %s", err)
 	}
 
-	for _, replica := range b {
-		set[replica.StoreID]--
+	// Copy the last verification timestamp.
+	verifyTS, err := r.GetLastVerificationTimestamp()
+	if err != nil {
+		return util.Errorf("unable to fetch last verification timestamp: %s", err)
+	}
+	if err := engine.MVCCPutProto(batch, nil, engine.RangeLastVerificationTimestampKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
+		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
-	for _, value := range set {
-		if value != 0 {
-			return false
-		}
+	// Compute stats for updated range.
+	now := r.rm.Clock().Timestamp()
+	ms, err := engine.MVCCComputeStats(r.rm.Engine(), split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey, now.WallTime)
+	if err != nil {
+		return util.Errorf("unable to compute stats for updated range after split: %s", err)
+	}
+	r.stats.SetMVCCStats(batch, ms)
+
+	// Initialize the new range's response cache by copying the original's.
+	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
+		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
-	return true
+	// Add the new split range to the store. This step atomically
+	// updates the EndKey of the updated range and also adds the
+	// new range to the store's range map.
+	newRng, err := NewRange(&split.NewDesc, r.rm)
+	if err != nil {
+		return err
+	}
+
+	// Compute stats for new range.
+	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey, now.WallTime)
+	if err != nil {
+		return util.Errorf("unable to compute stats for new range after split: %s", err)
+	}
+	newRng.stats.SetMVCCStats(batch, ms)
+
+	// Copy the timestamp cache into the new range.
+	r.Lock()
+	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
+	r.Unlock()
+
+	return r.rm.SplitRange(r, newRng)
 }
 
 // AdminMerge extends the range to subsume the range that comes next in
@@ -890,7 +930,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 	// Ensure that both ranges are collocate by intersecting the store ids from
 	// their replicas.
-	if !ReplicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
+	if !replicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
 		reply.SetGoError(util.Error("The two ranges replicas are not collocate"))
 		return
 	}
@@ -942,43 +982,6 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	}); err != nil {
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
 			subsumedDesc.RaftID, desc.RaftID, err))
-	}
-}
-
-// updateRangeDescriptorCall returns a client.Call to execute a ConditionalPut
-// on the range descriptor.
-// The conditional put verifies that changes to the range descriptor are made
-// in a well-defined order, preventing a scenario where a wayward replica which
-// is no longer part of the original Raft group comes back online to form a splinter
-// group with a node which was also a former replica, and hijacks the range
-// descriptor. This is a last line of defense; other mechanisms should prevent
-// rogue replicas from getting this far (see #768).
-func updateRangeDescriptorCall(descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) client.Call {
-	var oldValue *proto.Value
-	if oldDesc != nil {
-		oldData, err := gogoproto.Marshal(oldDesc)
-		if err != nil {
-			return client.Call{Err: err}
-		}
-		oldValue = &proto.Value{Bytes: oldData}
-	}
-
-	newData, err := gogoproto.Marshal(newDesc)
-	if err != nil {
-		return client.Call{Err: err}
-	}
-	newValue := proto.Value{Bytes: newData}
-	newValue.InitChecksum(descKey)
-
-	return client.Call{
-		Args: &proto.ConditionalPutRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: descKey,
-			},
-			Value:    newValue,
-			ExpValue: oldValue,
-		},
-		Reply: &proto.ConditionalPutResponse{},
 	}
 }
 
@@ -1106,4 +1109,66 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
 	}
 	return nil
+}
+
+// replicaSetsEqual is used in AdminMerge to ensure that the ranges are
+// all collocate on the same set of replicas.
+func replicaSetsEqual(a, b []proto.Replica) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	set := make(map[proto.StoreID]int)
+	for _, replica := range a {
+		set[replica.StoreID]++
+	}
+
+	for _, replica := range b {
+		set[replica.StoreID]--
+	}
+
+	for _, value := range set {
+		if value != 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// updateRangeDescriptorCall returns a client.Call to execute a ConditionalPut
+// on the range descriptor.
+// The conditional put verifies that changes to the range descriptor are made
+// in a well-defined order, preventing a scenario where a wayward replica which
+// is no longer part of the original Raft group comes back online to form a splinter
+// group with a node which was also a former replica, and hijacks the range
+// descriptor. This is a last line of defense; other mechanisms should prevent
+// rogue replicas from getting this far (see #768).
+func updateRangeDescriptorCall(descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) client.Call {
+	var oldValue *proto.Value
+	if oldDesc != nil {
+		oldData, err := gogoproto.Marshal(oldDesc)
+		if err != nil {
+			return client.Call{Err: err}
+		}
+		oldValue = &proto.Value{Bytes: oldData}
+	}
+
+	newData, err := gogoproto.Marshal(newDesc)
+	if err != nil {
+		return client.Call{Err: err}
+	}
+	newValue := proto.Value{Bytes: newData}
+	newValue.InitChecksum(descKey)
+
+	return client.Call{
+		Args: &proto.ConditionalPutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: descKey,
+			},
+			Value:    newValue,
+			ExpValue: oldValue,
+		},
+		Reply: &proto.ConditionalPutResponse{},
+	}
 }

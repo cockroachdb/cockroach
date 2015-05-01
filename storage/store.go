@@ -839,7 +839,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 		return util.Errorf("could not find the subsumed range: %d", subsumedRaftID)
 	}
 
-	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
+	if !replicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
 		return util.Errorf("ranges are not on the same replicas sets: %+v != %+v",
 			subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas())
 	}
