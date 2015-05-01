@@ -741,16 +741,17 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// clocks between the expiration (set by a remote node) and this
 	// node.
 	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && prevLease.RaftNodeID != r.getLease().RaftNodeID {
-		// Gossip configs in the event this range contains config info.
-		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-			return r.ContainsKey(configPrefix)
-		})
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
 
 		nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))
 		log.Infof("range %d: new leader lease for store %d on node %d: %s - %s",
 			r.Desc().RaftID, storeID, nodeID, args.Lease.Start, args.Lease.Expiration)
 	}
+
+	// Gossip configs in the event this range contains config info.
+	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+		return r.ContainsKey(configPrefix)
+	})
 }
 
 // AdminSplit divides the range into into two ranges, using either
