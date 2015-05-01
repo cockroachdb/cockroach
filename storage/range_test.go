@@ -2142,7 +2142,7 @@ func TestReplicaSetsEqual(t *testing.T) {
 		{true, createReplicaSets([]proto.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]proto.StoreID{1, 1, 2, 2, 3, 3})},
 	}
 	for _, test := range testData {
-		if ReplicaSetsEqual(test.a, test.b) != test.expected {
+		if replicaSetsEqual(test.a, test.b) != test.expected {
 			t.Fatalf("unexpected replica intersection: %+v", test)
 		}
 	}
