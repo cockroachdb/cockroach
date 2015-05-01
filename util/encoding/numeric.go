@@ -387,23 +387,16 @@ func makeFloatFromMandE(negative bool, e int, m []byte) float64 {
 	return f
 }
 
-// onesComplement inverts each byte in buf from index start to end.
-func onesComplement(buf []byte, start, end int) {
-	for i := start; i < end; i++ {
-		buf[i] = ^buf[i]
-	}
-}
-
 func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	n := putUvarint(buf[1:], uint64(-e))
 	copy(buf[n+1:], m)
 	l := 1 + n + len(m)
 	if negative {
 		buf[0] = 0x14
-		onesComplement(buf, 1+n, l) // ones complement of mantissa
+		onesComplement(buf[1+n : l]) // ones complement of mantissa
 	} else {
 		buf[0] = 0x16
-		onesComplement(buf, 1, 1+n) // ones complement of exponent
+		onesComplement(buf[1 : 1+n]) // ones complement of exponent
 	}
 	buf[l] = orderedEncodingTerminator
 	return buf[:l+1]
@@ -414,7 +407,7 @@ func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	l := 1 + len(m)
 	if negative {
 		buf[0] = 0x13 - byte(e)
-		onesComplement(buf, 1, l)
+		onesComplement(buf[1:l])
 	} else {
 		buf[0] = 0x17 + byte(e)
 	}
@@ -428,7 +421,7 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	l := 1 + n + len(m)
 	if negative {
 		buf[0] = 0x08
-		onesComplement(buf, 1, l)
+		onesComplement(buf[1:l])
 	} else {
 		buf[0] = 0x22
 	}
@@ -451,7 +444,7 @@ func decodeSmallNumber(negative bool, buf []byte) (int, []byte) {
 	copy(m, buf[1+n:len(buf)-1])
 
 	if negative {
-		onesComplement(m, 0, len(m))
+		onesComplement(m)
 	}
 	return int(-e), m
 }
@@ -464,7 +457,7 @@ func decodeMediumNumber(negative bool, buf []byte) (int, []byte) {
 	var e int
 	if negative {
 		e = 0x13 - int(buf[0])
-		onesComplement(m, 0, len(m))
+		onesComplement(m)
 	} else {
 		e = int(buf[0]) - 0x17
 	}
@@ -475,7 +468,7 @@ func decodeLargeNumber(negative bool, buf []byte) (int, []byte) {
 	m := make([]byte, len(buf))
 	copy(m, buf)
 	if negative {
-		onesComplement(m, 1, len(m))
+		onesComplement(m[1:])
 	}
 	e, l := getUvarint(m[1:])
 

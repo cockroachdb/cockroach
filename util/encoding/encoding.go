@@ -24,7 +24,9 @@ import (
 	"hash"
 	"hash/crc32"
 	"math"
+	"reflect"
 	"sync"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -356,11 +358,24 @@ const (
 	// \x00       -> \x00\xff
 	// \xff       -> \xff\x00
 	// <infinity> -> \xff\xff
-	escape1     = 0x00
-	escape2     = 0xff
-	escapedTerm = 0x01
-	escapedNul  = 0xff
-	escapedFF   = 0x00
+	escape1     byte = 0x00
+	escape2     byte = 0xff
+	escapedTerm byte = 0x01
+	escapedNul  byte = 0xff
+	escapedFF   byte = 0x00
+)
+
+type escapes struct {
+	escape1     byte
+	escape2     byte
+	escapedTerm byte
+	escapedNul  byte
+	escapedFF   byte
+}
+
+var (
+	ascendingEscapes  = escapes{escape1, escape2, escapedTerm, escapedNul, escapedFF}
+	descendingEscapes = escapes{^escape1, ^escape2, ^escapedTerm, ^escapedNul, ^escapedFF}
 )
 
 var (
@@ -398,25 +413,31 @@ func EncodeBytes(b []byte, data []byte) []byte {
 	return append(b, escape1, escapedTerm)
 }
 
-// DecodeBytes decodes a []byte value from the input buffer which was
-// encoded using EncodeBytes. The remainder of the input buffer and
-// the decoded []byte are returned.
-func DecodeBytes(b []byte) ([]byte, []byte) {
-	var r []byte
+// EncodeBytesDecreasing encodes the []byte value using an
+// escape-based encoding and then inverts (ones complement) the result
+// so that it sorts in reverse order, from larger to smaller
+// lexicographically.
+func EncodeBytesDecreasing(b []byte, data []byte) []byte {
+	n := len(b)
+	b = EncodeBytes(b, data)
+	onesComplement(b[n:])
+	return b
+}
 
-	if len(b) > 0 && b[0] == escape2 {
+func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte) {
+	if len(b) > 0 && b[0] == e.escape2 {
 		if len(b) == 1 {
 			panic("malformed escape")
 		}
-		if b[1] != escapedFF {
+		if b[1] != e.escapedFF {
 			panic("unknown escape")
 		}
-		r = append(r, 0xff)
+		r = append(r, e.escapedNul)
 		b = b[2:]
 	}
 
 	for {
-		i := bytes.IndexByte(b, escape1)
+		i := bytes.IndexByte(b, e.escape1)
 		if i == -1 {
 			panic("did not find terminator")
 		}
@@ -425,7 +446,7 @@ func DecodeBytes(b []byte) ([]byte, []byte) {
 		}
 
 		v := b[i+1]
-		if v == escapedTerm {
+		if v == e.escapedTerm {
 			if r == nil {
 				r = b[:i]
 			} else {
@@ -434,13 +455,241 @@ func DecodeBytes(b []byte) ([]byte, []byte) {
 			return b[i+2:], r
 		}
 
-		if v == escapedNul {
+		if v == e.escapedNul {
 			r = append(r, b[:i]...)
-			r = append(r, 0)
+			r = append(r, e.escapedFF)
 		} else {
 			panic("unknown escape")
 		}
 
 		b = b[i+2:]
 	}
+}
+
+// DecodeBytes decodes a []byte value from the input buffer which was
+// encoded using EncodeBytes. The decoded bytes are appended to r. The
+// remainder of the input buffer and the decoded []byte are returned.
+func DecodeBytes(b []byte, r []byte) ([]byte, []byte) {
+	return decodeBytes(b, r, ascendingEscapes)
+}
+
+// DecodeBytesDecreasing decodes a []byte value from the input buffer
+// which was encoded using EncodeBytesDecreasing. The decoded bytes
+// are appended to r. The remainder of the input buffer and the
+// decoded []byte are returned.
+func DecodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte) {
+	if r == nil {
+		r = []byte{}
+	}
+	b, r = decodeBytes(b, r, descendingEscapes)
+	onesComplement(r)
+	return b, r
+}
+
+func parseVerb(format string, i int) (verb byte, ascending bool, width int, newI int) {
+	if format[i] != '%' {
+		panic("invalid format string: " + format)
+	}
+	i++
+
+	// Process ascending flag (either "+" or "-").
+	ascending = true
+	if i < len(format) {
+		if format[i] == '+' {
+			i++
+		} else if format[i] == '-' {
+			ascending = false
+			i++
+		}
+	}
+
+	// Process width specifier (either blank, "32" or "64").
+	width = 0
+	if i+1 < len(format) {
+		if format[i] == '3' && format[i+1] == '2' {
+			width = 32
+			i += 2
+		} else if format[i] == '6' && format[i+1] == '4' {
+			width = 64
+			i += 2
+		} else if format[i] >= '0' && format[i] <= '9' {
+			panic("invalid width specifier; use 32 or 64")
+		}
+	}
+
+	if i == len(format) {
+		panic("no verb: " + format)
+	}
+
+	return format[i], ascending, width, i + 1
+}
+
+func init() {
+	// Verify that our unsafe conversion from a string to a []byte in
+	// EncodeKey is kosher. We need the string data/len fields to be at
+	// the same offsets as the slice data/len fields.
+	strHdr := reflect.StringHeader{}
+	slHdr := reflect.SliceHeader{}
+	if unsafe.Offsetof(strHdr.Data) != unsafe.Offsetof(slHdr.Data) ||
+		unsafe.Offsetof(strHdr.Len) != unsafe.Offsetof(slHdr.Len) ||
+		unsafe.Sizeof(strHdr.Data) != unsafe.Sizeof(slHdr.Data) ||
+		unsafe.Sizeof(strHdr.Len) != unsafe.Sizeof(slHdr.Len) {
+		panic(fmt.Sprintf("unsafe string -> []byte conversion not ok: %+v %+v\n", strHdr, slHdr))
+	}
+}
+
+// EncodeKey encodes values to a byte slice according to a format
+// string. Returns the byte slice containing the encoded values.
+//
+// The format string is printf-style with caveats: the primary being
+// that the "fixed" portion of the format must occur as a prefix to
+// the format. The verbs specify precisely what argument type is
+// expected and no attempt is made to perform type conversion. For
+// example, '%d' specifies an argument type of 'int64'. A panic will
+// occur if any other type is encountered.
+//
+// The verbs:
+//	%d	varint (int64) increasing
+//	%-d	varint (int64) decreasing
+//	%u	uvarint (uint64) increasing
+//	%-u	uvarint (uint64) increasing
+//	%32u	uint32 increasing
+//	%-32u	uint32 increasing
+//	%64u	uint64 increasing
+//	%-64u	uint64 increasing
+//	%s	bytes ([]byte,string) increasing
+//	%-s	bytes ([]byte,string) decreasing
+func EncodeKey(b []byte, format string, args ...interface{}) []byte {
+	i, end := 0, len(format)
+	for i < end && format[i] != '%' {
+		i++
+	}
+	b = append(b, format[:i]...)
+
+	for i < end {
+		var verb byte
+		var ascending bool
+		var width int
+		verb, ascending, width, i = parseVerb(format, i)
+
+		switch verb {
+		case 'd':
+			if ascending {
+				b = EncodeVarint(b, args[0].(int64))
+			} else {
+				b = EncodeVarintDecreasing(b, args[0].(int64))
+			}
+		case 'u':
+			if ascending {
+				if width == 0 {
+					b = EncodeUvarint(b, args[0].(uint64))
+				} else if width == 32 {
+					b = EncodeUint32(b, args[0].(uint32))
+				} else {
+					b = EncodeUint64(b, args[0].(uint64))
+				}
+			} else {
+				if width == 0 {
+					b = EncodeUvarintDecreasing(b, args[0].(uint64))
+				} else if width == 32 {
+					b = EncodeUint32Decreasing(b, args[0].(uint32))
+				} else {
+					b = EncodeUint64Decreasing(b, args[0].(uint64))
+				}
+			}
+		case 's':
+			var arg []byte
+			if s, ok := args[0].(string); ok {
+				// Treat the string as a []byte to avoid an allocation when
+				// converting to a string. This is kosher only because the
+				// string header and slice header match on the first two
+				// fields and we know EncodeBytes{,Decreasing} does not keep
+				// a reference to the value it encodes.
+				arg = *(*[]byte)(unsafe.Pointer(&s))
+			} else {
+				arg = args[0].([]byte)
+			}
+			if ascending {
+				b = EncodeBytes(b, arg)
+			} else {
+				b = EncodeBytesDecreasing(b, arg)
+			}
+		default:
+			panic("unknown format verb")
+		}
+		args = args[1:]
+	}
+	return b
+}
+
+// DecodeKey decodes values from a byte slice according to the format
+// string. Returns the remainder of the byte slice if it was not
+// completely consumed by the format string. See EncodeKey for details
+// of the format specifiers.
+//
+// The variadic arguments must be pointers to the types specified by
+// the format string. For example, '%d" requires a '*int64' argument.
+func DecodeKey(b []byte, format string, args ...interface{}) []byte {
+	i, end := 0, len(format)
+	for i < end && format[i] != '%' {
+		if len(b) == 0 || b[i] != format[i] {
+			panic("format mismatch")
+		}
+		i++
+	}
+	if i > 0 {
+		b = b[i:]
+	}
+
+	for i < end {
+		var verb byte
+		var ascending bool
+		var width int
+		verb, ascending, width, i = parseVerb(format, i)
+
+		switch verb {
+		case 'd':
+			var r int64
+			if ascending {
+				b, r = DecodeVarint(b)
+			} else {
+				b, r = DecodeVarintDecreasing(b)
+			}
+			*(args[0].(*int64)) = r
+		case 'u':
+			if ascending {
+				if width == 0 {
+					b, *(args[0].(*uint64)) = DecodeUvarint(b)
+				} else if width == 32 {
+					b, *(args[0].(*uint32)) = DecodeUint32(b)
+				} else {
+					b, *(args[0].(*uint64)) = DecodeUint64(b)
+				}
+			} else {
+				if width == 0 {
+					b, *(args[0].(*uint64)) = DecodeUvarintDecreasing(b)
+				} else if width == 32 {
+					b, *(args[0].(*uint32)) = DecodeUint32Decreasing(b)
+				} else {
+					b, *(args[0].(*uint64)) = DecodeUint64Decreasing(b)
+				}
+			}
+		case 's':
+			var r []byte
+			if ascending {
+				b, r = DecodeBytes(b, nil)
+			} else {
+				b, r = DecodeBytesDecreasing(b, nil)
+			}
+			if s, ok := args[0].(*string); ok {
+				*s = string(r)
+			} else {
+				*(args[0].(*[]byte)) = r
+			}
+		default:
+			panic("unknown format verb")
+		}
+		args = args[1:]
+	}
+	return b
 }

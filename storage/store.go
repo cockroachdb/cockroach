@@ -95,7 +95,7 @@ func verifyKeyLength(key proto.Key) error {
 	maxLength := engine.KeyMaxLength
 	if bytes.HasPrefix(key, engine.KeyLocalRangeKeyPrefix) {
 		key = key[len(engine.KeyLocalRangeKeyPrefix):]
-		_, key = encoding.DecodeBytes(key)
+		_, key = encoding.DecodeBytes(key, nil)
 	}
 	if bytes.HasPrefix(key, engine.KeyMetaPrefix) {
 		key = key[len(engine.KeyMeta1Prefix):]

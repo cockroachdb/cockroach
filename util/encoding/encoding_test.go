@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"math"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -405,7 +406,7 @@ func TestEncodeDecodeBytes(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec := DecodeBytes(enc)
+		remainder, dec := DecodeBytes(enc, nil)
 		if !bytes.Equal(c.value, dec) {
 			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
 		}
@@ -414,7 +415,54 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		}
 
 		enc = append(enc, []byte("remainder")...)
-		remainder, dec = DecodeBytes(enc)
+		remainder, dec = DecodeBytes(enc, nil)
+		if string(remainder) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
+		}
+	}
+}
+
+func TestEncodeDecodeBytesDecreasing(t *testing.T) {
+	testCases := []struct {
+		value   []byte
+		encoded []byte
+	}{
+		{[]byte{0xff, 0xff, 'b'}, []byte{0x00, 0xff, 0x00, ^byte('b'), 0xff, 0xfe}},
+		{[]byte{0xff, 'b'}, []byte{0x00, 0xff, ^byte('b'), 0xff, 0xfe}},
+		{[]byte{0xff, 0, 'a'}, []byte{0x00, 0xff, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte("hello"), []byte{^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
+		{[]byte{'b', 0xff}, []byte{^byte('b'), 0x00, 0xff, 0xfe}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{'b', 0, 0}, []byte{^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
+		{[]byte{'b', 0}, []byte{^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
+		{[]byte{'b'}, []byte{^byte('b'), 0xff, 0xfe}},
+		{[]byte{'a'}, []byte{^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 0xff, 'a'}, []byte{0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 'a'}, []byte{0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 1, 'a'}, []byte{0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
+	}
+	for i, c := range testCases {
+		enc := EncodeBytesDecreasing(nil, c.value)
+		if !bytes.Equal(enc, c.encoded) {
+			t.Errorf("unexpected encoding mismatch for %v. expected [% x], got [% x]",
+				c.value, c.encoded, enc)
+		}
+		if i > 0 {
+			if bytes.Compare(testCases[i-1].encoded, enc) >= 0 {
+				t.Errorf("%v: expected [% x] to be less than [% x]",
+					c.value, testCases[i-1].encoded, enc)
+			}
+		}
+		remainder, dec := DecodeBytesDecreasing(enc, nil)
+		if !bytes.Equal(c.value, dec) {
+			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
+		}
+		if len(remainder) != 0 {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
+		}
+
+		enc = append(enc, []byte("remainder")...)
+		remainder, dec = DecodeBytesDecreasing(enc, nil)
 		if string(remainder) != "remainder" {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
@@ -437,9 +485,186 @@ func TestDecodeInvalidBytes(t *testing.T) {
 					t.Error("expected panic")
 				}
 			}()
-			DecodeBytes(c.value)
+			DecodeBytes(c.value, nil)
 		}()
 	}
+}
+
+func TestDecodeInvalidBytesDecreasing(t *testing.T) {
+	testCases := []struct {
+		value []byte
+	}{
+		{[]byte{^byte('a')}},             // no terminator
+		{[]byte{^byte('a'), 0xff}},       // malformed escape
+		{[]byte{^byte('a'), 0xff, 0xff}}, // invalid escape
+		{[]byte{^byte('a'), 0xff, 0xfd}}, // invalid escape
+	}
+	for _, c := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				}
+			}()
+			DecodeBytesDecreasing(c.value, nil)
+		}()
+	}
+}
+
+func TestEncodeDecodeKey(t *testing.T) {
+	testCases := []struct {
+		format   string
+		args     []interface{}
+		results  []interface{}
+		expected []byte
+	}{
+		{"%d",
+			[]interface{}{int64(1)},
+			[]interface{}{new(int64)},
+			EncodeVarint(nil, 1)},
+		{"%-d",
+			[]interface{}{int64(2)},
+			[]interface{}{new(int64)},
+			EncodeVarintDecreasing(nil, 2)},
+		{"%u",
+			[]interface{}{uint64(3)},
+			[]interface{}{new(uint64)},
+			EncodeUvarint(nil, 3)},
+		{"%-u",
+			[]interface{}{uint64(4)},
+			[]interface{}{new(uint64)},
+			EncodeUvarintDecreasing(nil, 4)},
+		{"%32u",
+			[]interface{}{uint32(5)},
+			[]interface{}{new(uint32)},
+			EncodeUint32(nil, 5)},
+		{"%-32u",
+			[]interface{}{uint32(6)},
+			[]interface{}{new(uint32)},
+			EncodeUint32Decreasing(nil, 6)},
+		{"%64u",
+			[]interface{}{uint64(7)},
+			[]interface{}{new(uint64)},
+			EncodeUint64(nil, 7)},
+		{"%-64u",
+			[]interface{}{uint64(8)},
+			[]interface{}{new(uint64)},
+			EncodeUint64Decreasing(nil, 8)},
+		{"%s",
+			[]interface{}{[]byte("9")},
+			[]interface{}{new([]byte)},
+			EncodeBytes(nil, []byte("9"))},
+		{"%s",
+			[]interface{}{"10"},
+			[]interface{}{new(string)},
+			EncodeBytes(nil, []byte("10"))},
+		{"%-s",
+			[]interface{}{[]byte("11")},
+			[]interface{}{new([]byte)},
+			EncodeBytesDecreasing(nil, []byte("11"))},
+		{"%-s",
+			[]interface{}{"12"},
+			[]interface{}{new(string)},
+			EncodeBytesDecreasing(nil, []byte("12"))},
+		{"hello%d",
+			[]interface{}{int64(13)},
+			[]interface{}{new(int64)},
+			EncodeVarint([]byte("hello"), 13)},
+		{"%d%-d",
+			[]interface{}{int64(14), int64(15)},
+			[]interface{}{new(int64), new(int64)},
+			EncodeVarintDecreasing(EncodeVarint(nil, 14), 15)},
+		{"%s%-s%s",
+			[]interface{}{"a", "b", "c"},
+			[]interface{}{new(string), new(string), new(string)},
+			EncodeBytes(EncodeBytesDecreasing(EncodeBytes(nil, []byte("a")), []byte("b")), []byte("c"))},
+	}
+	for i, c := range testCases {
+		enc := EncodeKey(nil, c.format, c.args...)
+		if !bytes.Equal(c.expected, enc) {
+			t.Errorf("expected [% x]; got [% x]", c.expected, enc)
+		}
+
+		dec := DecodeKey(enc, c.format, c.results...)
+		if len(dec) != 0 {
+			t.Errorf("expected complete decoding, %d remaining", len(dec))
+		}
+
+		var dresults []interface{}
+		for _, r := range c.results {
+			dresults = append(dresults, reflect.ValueOf(r).Elem().Interface())
+		}
+		if !reflect.DeepEqual(c.args, dresults) {
+			t.Errorf("%d: expected %v; got %v", i, c.args, dresults)
+		}
+	}
+}
+
+func TestEncodeDecodeKeyInvalidFormat(t *testing.T) {
+	testCases := []struct {
+		format   string
+		expected string
+		args     []interface{}
+	}{
+		{"%", "no verb: ", nil},
+		{"%v", "unknown format verb", nil},
+		{"%33d", "invalid width specifier; use 32 or 64", nil},
+		{"%da", "invalid format string:", []interface{}{int64(1)}},
+	}
+	for _, c := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				} else if ok, err := regexp.MatchString(c.expected, r.(string)); err != nil {
+					t.Error(err)
+				} else if !ok {
+					t.Errorf("expected match \"%s\", but got %s", c.expected, r)
+				}
+			}()
+			EncodeKey(nil, c.format, c.args...)
+		}()
+	}
+}
+
+func TestEncodeDecodeKeyInvalidArgs(t *testing.T) {
+	testCases := []struct {
+		format string
+		arg    interface{}
+		result interface{}
+	}{
+		{"%d", int32(1), new(int32)},
+		{"%u", int32(1), new(int32)},
+		{"%s", int32(1), new(int32)},
+	}
+
+	for _, c := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("expected panic")
+				}
+			}()
+			EncodeKey(nil, c.format, c.arg)
+		}()
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				}
+			}()
+			DecodeKey(nil, c.format, c.result)
+		}()
+	}
+}
+
+func TestDecodeKeyFormatMismatch(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic")
+		}
+	}()
+	DecodeKey([]byte("world"), "hello")
 }
 
 func BenchmarkEncodeUint32(b *testing.B) {
@@ -578,6 +803,22 @@ func BenchmarkEncodeBytes(b *testing.B) {
 	}
 }
 
+func BenchmarkEncodeBytesDecreasing(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = util.RandBytes(rng, 100)
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeBytesDecreasing(buf, vals[i%len(vals)])
+	}
+}
+
 func BenchmarkDecodeBytes(b *testing.B) {
 	rng, _ := util.NewPseudoRand()
 
@@ -586,8 +827,186 @@ func BenchmarkDecodeBytes(b *testing.B) {
 		vals[i] = EncodeBytes(nil, util.RandBytes(rng, 100))
 	}
 
+	buf := make([]byte, 0, 1000)
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = DecodeBytes(vals[i%len(vals)])
+		_, _ = DecodeBytes(vals[i%len(vals)], buf)
+	}
+}
+
+func BenchmarkDecodeBytesDecreasing(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBytesDecreasing(nil, util.RandBytes(rng, 100))
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeBytesDecreasing(vals[i%len(vals)], buf)
+	}
+}
+
+func BenchmarkEncodeKeyUint32(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([]interface{}, 10000)
+	for i := range vals {
+		vals[i] = uint32(rng.Int31())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeKey(buf, "%32u", vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeKeyUint32(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUint32(nil, uint32(rng.Int31()))
+	}
+
+	result := uint32(0)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DecodeKey(vals[i%len(vals)], "%32u", &result)
+	}
+}
+
+func BenchmarkEncodeKeyUint64(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([]interface{}, 10000)
+	for i := range vals {
+		vals[i] = uint64(rng.Int63())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeKey(buf, "%64u", vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeKeyUint64(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUint64(nil, uint64(rng.Int63()))
+	}
+
+	result := uint64(0)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DecodeKey(vals[i%len(vals)], "%64u", &result)
+	}
+}
+
+func BenchmarkEncodeKeyVarint(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([]interface{}, 10000)
+	for i := range vals {
+		vals[i] = rng.Int63()
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeKey(buf, "%d", vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeKeyVarint(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeVarint(nil, rng.Int63())
+	}
+
+	result := int64(0)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DecodeKey(vals[i%len(vals)], "%d", &result)
+	}
+}
+
+func BenchmarkEncodeKeyUvarint(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([]interface{}, 10000)
+	for i := range vals {
+		vals[i] = uint64(rng.Int63())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeKey(buf, "%u", vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeKeyUvarint(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUvarint(nil, uint64(rng.Int63()))
+	}
+
+	result := uint64(0)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DecodeKey(vals[i%len(vals)], "%u", &result)
+	}
+}
+
+func BenchmarkEncodeKeyBytes(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([]interface{}, 10000)
+	for i := range vals {
+		vals[i] = util.RandBytes(rng, 100)
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeKey(buf, "%s", vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeKeyBytes(b *testing.B) {
+	rng, _ := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBytes(nil, util.RandBytes(rng, 100))
+	}
+
+	result := []byte(nil)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DecodeKey(vals[i%len(vals)], "%s", &result)
 	}
 }
