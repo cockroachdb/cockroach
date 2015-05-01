@@ -254,10 +254,10 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-type mockRangeDescriptorDB func(proto.Key) ([]proto.RangeDescriptor, error)
+type mockRangeDescriptorDB func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 
-func (mdb mockRangeDescriptorDB) getRangeDescriptor(k proto.Key) ([]proto.RangeDescriptor, error) {
-	return mdb(k)
+func (mdb mockRangeDescriptorDB) getRangeDescriptor(k proto.Key, lo lookupOptions) ([]proto.RangeDescriptor, error) {
+	return mdb(k, lo)
 }
 
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
@@ -281,7 +281,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key) ([]proto.RangeDescriptor, error) {
+		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
 			return []proto.RangeDescriptor{testRangeDescriptor}, nil
 		}),
 	}
@@ -302,6 +302,38 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	ds.updateLeaderCache(1, leader)
 	if ds.leaderCache.Lookup(1) != nil {
 		t.Errorf("update with same replica did not evict the cache")
+	}
+}
+
+// TestRangeLookupOnPushTxnIgnoresIntents verifies that if a push txn
+// request has range lookup set, the range lookup requests will have
+// ignore intents set.
+func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
+	g := makeTestGossip(t)
+
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		return nil, nil
+	}
+
+	for _, rangeLookup := range []bool{true, false} {
+		ctx := &DistSenderContext{
+			rpcSend: testFn,
+			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+				if opts.ignoreIntents != rangeLookup {
+					t.Fatalf("expected ignore intents to be %t", rangeLookup)
+				}
+				return []proto.RangeDescriptor{testRangeDescriptor}, nil
+			}),
+		}
+		ds := NewDistSender(ctx, g)
+		call := client.Call{
+			Args: &proto.InternalPushTxnRequest{
+				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
+				RangeLookup:   rangeLookup,
+			},
+			Reply: &proto.InternalPushTxnResponse{},
+		}
+		ds.Send(call)
 	}
 }
 

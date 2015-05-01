@@ -263,7 +263,7 @@ func (t Timestamp) Equal(s Timestamp) bool {
 }
 
 func (t Timestamp) String() string {
-	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
+	return fmt.Sprintf("%.09f,%d", float64(t.WallTime)/1E9, t.Logical)
 }
 
 // Add returns a timestamp with the WallTime and Logical components increased.

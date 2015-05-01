@@ -382,7 +382,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 			Txn: txn2,
 		},
 		PusheeTxn: *txn,
-		Abort:     true,
+		PushType:  proto.ABORT_TXN,
 	}
 	if err := s.KV.Run(client.Call{
 		Args:  pushArgs,

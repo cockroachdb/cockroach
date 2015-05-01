@@ -50,7 +50,7 @@ type rangeDescriptorDB interface {
 	// RangeDescriptors are returned with the intent of pre-caching
 	// subsequent ranges which are likely to be requested soon by the
 	// current workload.
-	getRangeDescriptor(proto.Key) ([]proto.RangeDescriptor, error)
+	getRangeDescriptor(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -106,14 +106,15 @@ func (rmc *rangeDescriptorCache) String() string {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.RangeDescriptor, error) {
+func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
+	options lookupOptions) (*proto.RangeDescriptor, error) {
 	_, r := rmc.getCachedRangeDescriptor(key)
 	log.V(1).Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
 	if r != nil {
 		return r, nil
 	}
 
-	rs, err := rmc.db.getRangeDescriptor(key)
+	rs, err := rmc.db.getRangeDescriptor(key, options)
 	if err != nil {
 		return nil, err
 	}

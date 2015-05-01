@@ -772,7 +772,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID proto
 
 // pushTxnArgs returns request/response pair for InternalPushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, storeID proto.StoreID) (
+func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID int64, storeID proto.StoreID) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -783,7 +783,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, st
 			Txn:       pusher,
 		},
 		PusheeTxn: *pushee,
-		Abort:     abort,
+		PushType:  pushType,
 	}
 	reply := &proto.InternalPushTxnResponse{}
 	return args, reply
@@ -1552,7 +1552,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, tc.clock)
 
-	args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+	args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 	args.Key = pusher.Key
 	verifyErrorMatches(tc.rng.AddCmd(args, reply, true), ".*should match pushee.*", t)
 }
@@ -1580,7 +1580,7 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		}
 
 		// Now try to push what's already committed or aborted.
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 		if err := tc.rng.AddCmd(args, reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -1639,7 +1639,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		// Now, attempt to push the transaction using updated values for epoch & timestamp.
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 		if err := tc.rng.AddCmd(args, reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -1669,20 +1669,33 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 	testCases := []struct {
 		heartbeat   *proto.Timestamp // nil indicates no heartbeat
 		currentTime int64            // nanoseconds
+		pushType    proto.PushTxnType
 		expSuccess  bool
 	}{
-		{nil, 0, false},
-		{nil, ns, false},
-		{nil, ns*2 - 1, false},
-		{nil, ns * 2, false},
-		{&ts, ns*2 + 1, false},
-		{&ts, ns*2 + 2, true},
+		{nil, 0, proto.PUSH_TIMESTAMP, false},
+		{nil, 0, proto.ABORT_TXN, false},
+		{nil, 0, proto.CLEANUP_TXN, false},
+		{nil, ns, proto.PUSH_TIMESTAMP, false},
+		{nil, ns, proto.ABORT_TXN, false},
+		{nil, ns, proto.CLEANUP_TXN, false},
+		{nil, ns*2 - 1, proto.PUSH_TIMESTAMP, false},
+		{nil, ns*2 - 1, proto.ABORT_TXN, false},
+		{nil, ns*2 - 1, proto.CLEANUP_TXN, false},
+		{nil, ns * 2, proto.PUSH_TIMESTAMP, false},
+		{nil, ns * 2, proto.ABORT_TXN, false},
+		{nil, ns * 2, proto.CLEANUP_TXN, false},
+		{&ts, ns*2 + 1, proto.PUSH_TIMESTAMP, false},
+		{&ts, ns*2 + 1, proto.ABORT_TXN, false},
+		{&ts, ns*2 + 1, proto.CLEANUP_TXN, false},
+		{&ts, ns*2 + 2, proto.PUSH_TIMESTAMP, true},
+		{&ts, ns*2 + 2, proto.ABORT_TXN, true},
+		{&ts, ns*2 + 2, proto.CLEANUP_TXN, true},
 	}
 
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, proto.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("pusher", key, 1, proto.SERIALIZABLE, tc.clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -1697,8 +1710,9 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with clock set to "currentTime".
 		tc.manualClock.Set(test.currentTime)
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		args.Timestamp = tc.clock.Now()
+		args.Timestamp.Logical = 0
 		err := tc.rng.AddCmd(args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1706,56 +1720,6 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		if err != nil {
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
-			}
-		}
-	}
-}
-
-// TestInternalPushTxnOldEpoch verifies that a txn intent from an
-// older epoch may be pushed.
-func TestInternalPushTxnOldEpoch(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	testCases := []struct {
-		curEpoch, intentEpoch int32
-		expSuccess            bool
-	}{
-		// Same epoch; can't push based on epoch.
-		{0, 0, false},
-		// The intent is newer; definitely can't push.
-		{0, 1, false},
-		// The intent is old; can push.
-		{1, 0, true},
-	}
-
-	for i, test := range testCases {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee.Priority = 2
-		pusher.Priority = 1 // Pusher won't win based on priority.
-
-		// First, establish "start" of existing pushee's txn via heartbeat.
-		pushee.Epoch = test.curEpoch
-		hbArgs, hbReply := heartbeatArgs(pushee, 1, tc.store.StoreID())
-		hbArgs.Timestamp = pushee.Timestamp
-		if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
-			t.Fatal(err)
-		}
-
-		// Now, attempt to push the transaction with intent epoch set appropriately.
-		pushee.Epoch = test.intentEpoch
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
-		err := tc.rng.AddCmd(args, reply, true)
-		if test.expSuccess != (err == nil) {
-			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
-		}
-		if err != nil {
-			if _, ok := err.(*proto.TransactionPushError); !ok {
-				t.Errorf("expected txn push error; got %s", err)
 			}
 		}
 	}
@@ -1776,26 +1740,29 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 	testCases := []struct {
 		pusherPriority, pusheePriority int32
 		pusherTS, pusheeTS             proto.Timestamp
-		abort                          bool
+		pushType                       proto.PushTxnType
 		expSuccess                     bool
 	}{
 		// Pusher has higher priority succeeds.
-		{2, 1, ts1, ts1, true, true},
+		{2, 1, ts1, ts1, proto.ABORT_TXN, true},
 		// Pusher has lower priority fails.
-		{1, 2, ts1, ts1, true, false},
-		{1, 2, ts1, ts1, false, false},
+		{1, 2, ts1, ts1, proto.ABORT_TXN, false},
+		{1, 2, ts1, ts1, proto.PUSH_TIMESTAMP, false},
 		// Pusher has lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, true, false},
+		{1, 2, ts1, ts2, proto.ABORT_TXN, false},
 		// Pusher has lower priority, but older txn timestamp allows success if !abort.
-		{1, 2, ts1, ts2, false, true},
+		{1, 2, ts1, ts2, proto.PUSH_TIMESTAMP, true},
 		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, true, true},
+		{1, 1, ts1, ts2, proto.ABORT_TXN, true},
 		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, true, false},
-		{1, 1, ts1, ts1, false, false},
+		{1, 1, ts1, ts1, proto.ABORT_TXN, false},
+		{1, 1, ts1, ts1, proto.PUSH_TIMESTAMP, false},
 		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, true, false},
-		{1, 1, ts2, ts1, false, false},
+		{1, 1, ts2, ts1, proto.ABORT_TXN, false},
+		{1, 1, ts2, ts1, proto.PUSH_TIMESTAMP, false},
+		// When confirming, priority never wins.
+		{2, 1, ts1, ts1, proto.CLEANUP_TXN, false},
+		{1, 2, ts1, ts1, proto.CLEANUP_TXN, false},
 	}
 
 	for i, test := range testCases {
@@ -1808,7 +1775,7 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 		pushee.Timestamp = test.pusheeTS
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
-		args, reply := pushTxnArgs(pusher, pushee, test.abort, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		err := tc.rng.AddCmd(args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1839,7 +1806,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	pushee.Timestamp = proto.Timestamp{WallTime: 5, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1, tc.store.StoreID())
+	args, reply := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 	if err := tc.rng.AddCmd(args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -1871,7 +1838,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	pushee.Timestamp = proto.Timestamp{WallTime: 50, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1, tc.store.StoreID())
+	args, reply := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 	if err := tc.rng.AddCmd(args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -2191,6 +2158,82 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 		"already present") {
 		t.Fatalf("must not be able to add second replica to same node (err=%s)",
 			err)
+	}
+}
+
+// TestRangeDanglingMetaIntent creates a dangling intent on a
+// meta2 record and verifies that InternalRangeLookup requests
+// behave appropriately. Normally, the old value and a write intent
+// error should be returned. If IgnoreIntents is specified, then
+// a random choice of old or new is returned with no error.
+func TestRangeDanglingMetaIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := proto.Key("a")
+
+	// Get original meta2 descriptor.
+	rlArgs := &proto.InternalRangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     engine.RangeMetaKey(key),
+			RaftID:  tc.rng.Desc().RaftID,
+			Replica: proto.Replica{StoreID: tc.store.StoreID()},
+		},
+		MaxRanges: 1,
+	}
+	rlReply := &proto.InternalRangeLookupResponse{}
+	if err := tc.rng.AddCmd(rlArgs, rlReply, true); err != nil {
+		t.Fatal(err)
+	}
+
+	origDesc := rlReply.Ranges[0]
+	newDesc := origDesc
+	newDesc.EndKey = key
+
+	// Write the new descriptor as an intent.
+	data, err := gogoproto.Marshal(&newDesc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pArgs, pReply := putArgs(engine.RangeMetaKey(key), data, 1, tc.store.StoreID())
+	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+	pArgs.Timestamp = pArgs.Txn.Timestamp
+	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now lookup the range; should get old value + write intent error.
+	rlArgs.Key = engine.RangeMetaKey(proto.Key("A"))
+	rlArgs.Timestamp = proto.ZeroTimestamp
+	err = tc.rng.AddCmd(rlArgs, rlReply, true)
+	if wiErr, ok := err.(*proto.WriteIntentError); !ok || len(wiErr.Intents) != 1 {
+		t.Errorf("expected write intent error with 1 key; got %s", err)
+	}
+	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
+		t.Errorf("expected original descriptor %s; got %s", origDesc, rlReply.Ranges[0])
+	}
+
+	// Try 100 lookups with IgnoreIntents. Expect roughly 50/50.
+	rlArgs.IgnoreIntents = true
+	var origCount, newCount int
+	for i := 0; i < 100; i++ {
+		rlArgs.Timestamp = proto.ZeroTimestamp
+		rlReply.Reset()
+		if err = tc.rng.AddCmd(rlArgs, rlReply, true); err != nil {
+			t.Fatal(err)
+		}
+		if reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
+			origCount++
+		} else if reflect.DeepEqual(rlReply.Ranges[0], newDesc) {
+			newCount++
+		} else {
+			t.Errorf("expected orig/new descriptor %s/%s; got %s", origDesc, newDesc, rlReply.Ranges[0])
+		}
+	}
+	if origCount > newCount+20 || origCount < newCount-20 {
+		t.Errorf("expected close to 50/50 counts; got %d/%d", origCount, newCount)
 	}
 }
 

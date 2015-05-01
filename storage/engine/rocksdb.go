@@ -109,7 +109,11 @@ func (r *RocksDB) Close() {
 	if atomic.AddInt32(&r.refcount, -1) > 0 {
 		return
 	}
-	log.Infof("closing rocksdb instance at %q", r.dir)
+	if len(r.dir) == 0 {
+		log.Infof("closing in-memory rocksdb instance")
+	} else {
+		log.Infof("closing rocksdb instance at %q", r.dir)
+	}
 	if r.rdb != nil {
 		C.DBClose(r.rdb)
 		r.rdb = nil

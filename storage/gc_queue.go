@@ -257,7 +257,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 			Txn:          nil,
 		},
 		PusheeTxn: *meta.Txn,
-		Abort:     true,
+		PushType:  proto.ABORT_TXN,
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
 	if err := rng.rm.DB().Run(client.Call{Args: pushArgs, Reply: pushReply}); err != nil {

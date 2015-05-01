@@ -73,9 +73,10 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 			event.Desc.RaftID, event.Stats.LiveBytes)
 	case *storage.SplitRangeEvent:
 		sid = event.StoreID
-		eventStr = fmt.Sprintf("SplitRange origId=%d, newId=%d, origLive=%d, newLive=%d",
+		eventStr = fmt.Sprintf("SplitRange origId=%d, newId=%d, origLive=%d, newLive=%d, origVal=%d, newVal=%d",
 			event.Original.Desc.RaftID, event.New.Desc.RaftID,
-			event.Original.Stats.LiveBytes, event.New.Stats.LiveBytes)
+			event.Original.Stats.LiveBytes, event.New.Stats.LiveBytes,
+			event.Original.Stats.ValBytes, event.New.Stats.ValBytes)
 	case *storage.MergeRangeEvent:
 		sid = event.StoreID
 		eventStr = fmt.Sprintf("MergeRange rid=%d, subId=%d, live=%d, subLive=%d",
@@ -246,24 +247,24 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"BeginScanRanges",
 			"AddRange rid=1, live=348",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origLive=938, newLive=42",
-			"SplitRange origId=2, newId=3, origLive=42, newLive=0",
+			"SplitRange origId=1, newId=2, origLive=938, newLive=42, origVal=799, newVal=27",
+			"SplitRange origId=2, newId=3, origLive=42, newLive=0, origVal=27, newVal=0",
 			"MergeRange rid=2, subId=3, live=42, subLive=0",
 		},
 		proto.StoreID(2): []string{
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origLive=938, newLive=42",
-			"SplitRange origId=2, newId=3, origLive=42, newLive=0",
+			"SplitRange origId=1, newId=2, origLive=938, newLive=42, origVal=799, newVal=27",
+			"SplitRange origId=2, newId=3, origLive=42, newLive=0, origVal=27, newVal=0",
 			"MergeRange rid=2, subId=3, live=42, subLive=0",
 		},
 		proto.StoreID(3): []string{
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origLive=938, newLive=42",
-			"SplitRange origId=2, newId=3, origLive=42, newLive=0",
+			"SplitRange origId=1, newId=2, origLive=938, newLive=42, origVal=799, newVal=27",
+			"SplitRange origId=2, newId=3, origLive=42, newLive=0, origVal=27, newVal=0",
 			"MergeRange rid=2, subId=3, live=42, subLive=0",
 		},
 	}

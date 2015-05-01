@@ -993,7 +993,25 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it in Range.executeCmd.
-		err = s.maybeResolveWriteIntentError(rng, args, reply)
+		if wiErr, ok := err.(*proto.WriteIntentError); ok {
+			// If inconsistent, return results and resolve asynchronously.
+			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
+				go func() {
+					if err := s.resolveWriteIntentError(wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
+						log.Warningf("async resolve on inconsistent read: %s", err)
+					}
+					s.stopper.FinishTask()
+				}()
+				reply.Header().Error = nil
+				return util.RetryBreak, nil
+			}
+			pushType := proto.PUSH_TIMESTAMP
+			if proto.IsWrite(args) {
+				pushType = proto.ABORT_TXN
+			}
+			err = s.resolveWriteIntentError(wiErr, rng, args, pushType, false)
+			reply.Header().SetGoError(err)
+		}
 
 		switch t := err.(type) {
 		case *proto.WriteTooOldError:
@@ -1007,10 +1025,12 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			if t.Resolved {
 				return util.RetryReset, nil
 			}
+
 			// Otherwise, update timestamp on read/write and backoff / retry.
-			if proto.IsWrite(args) && header.Timestamp.Less(t.Txn.Timestamp) {
-				header.Timestamp = t.Txn.Timestamp
-				header.Timestamp.Logical++
+			for _, intent := range t.Intents {
+				if proto.IsWrite(args) && header.Timestamp.Less(intent.Txn.Timestamp) {
+					header.Timestamp = intent.Txn.Timestamp.Next()
+				}
 			}
 			return util.RetryContinue, nil
 		}
@@ -1027,71 +1047,73 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 	return reply.Header().GoError()
 }
 
-// maybeResolveWriteIntentError checks the reply's error. If the error
-// is a writeIntentError, it tries to push the conflicting
-// transaction: either move its timestamp forward on a read/write
-// conflict, or abort it on a write/write conflict. If the push
-// succeeds, we immediately issue a resolve intent command and set the
-// error's Resolved flag to true so the client retries the command
+// resolveWriteIntentError tries to push the conflicting transaction:
+// either move its timestamp forward on a read/write conflict, or
+// abort it on a write/write conflict. If the push succeeds, we
+// immediately issue a resolve intent command and set the error's
+// Resolved flag to true so the client retries the command
 // immediately. If the push fails, we set the error's Resolved flag to
 // false so that the client backs off before reissuing the command.
-func (s *Store) maybeResolveWriteIntentError(rng *Range, args proto.Request, reply proto.Response) error {
-	err := reply.Header().GoError()
-	wiErr, ok := err.(*proto.WriteIntentError)
-	if !ok {
-		return err
-	}
-
+func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
+	pushType proto.PushTxnType, wait bool) error {
 	log.V(1).Infof("resolving write intent on %s %q: %s", args.Method(), args.Header().Key, wiErr)
 
-	// Attempt to push the transaction which created the conflicting intent.
-	pushArgs := &proto.InternalPushTxnRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp:    args.Header().Timestamp,
-			Key:          wiErr.Txn.Key,
-			User:         args.Header().User,
-			UserPriority: args.Header().UserPriority,
-			Txn:          args.Header().Txn,
-		},
-		PusheeTxn: wiErr.Txn,
-		Abort:     proto.IsWrite(args), // abort if cmd is write
+	// Attempt to push the transaction(s) which created the conflicting intent(s).
+	bArgs := &proto.InternalBatchRequest{}
+	bReply := &proto.InternalBatchResponse{}
+	for _, intent := range wiErr.Intents {
+		pushArgs := &proto.InternalPushTxnRequest{
+			RequestHeader: proto.RequestHeader{
+				Timestamp:    args.Header().Timestamp,
+				Key:          intent.Txn.Key,
+				User:         args.Header().User,
+				UserPriority: args.Header().UserPriority,
+				Txn:          args.Header().Txn,
+			},
+			PusheeTxn:   intent.Txn,
+			PushType:    pushType,
+			RangeLookup: args.Method() == proto.InternalRangeLookup,
+		}
+		bArgs.Add(pushArgs)
 	}
-	pushReply := &proto.InternalPushTxnResponse{}
-	s.ctx.DB.Run(client.Call{Args: pushArgs, Reply: pushReply})
-	if pushErr := pushReply.GoError(); pushErr != nil {
-		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushErr)
+	// Run all pushes in parallel.
+	if pushErr := s.ctx.DB.Run(client.Call{Args: bArgs, Reply: bReply}); pushErr != nil {
+		log.V(1).Infof("pushes for %+v failed: %s", wiErr.Intents, pushErr)
 
 		// For write/write conflicts within a transaction, propagate the
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
 		if args.Header().Txn != nil && proto.IsWrite(args) {
-			reply.Header().SetGoError(pushErr)
 			return pushErr
 		}
 		// For read/write conflicts, return the write intent error which
 		// engages backoff/retry (with !Resolved). We don't need to
 		// restart the txn, only resend the read with a backoff.
-		return err
+		return wiErr
 	}
 	wiErr.Resolved = true // success!
 
-	// We pushed the transaction successfully, so resolve the intent.
-	resolveArgs := &proto.InternalResolveIntentRequest{
-		RequestHeader: proto.RequestHeader{
-			// Use the pushee's timestamp, which might be lower than the
-			// pusher's request timestamp. No need to push the intent higher
-			// than the pushee's txn!
-			Timestamp: pushReply.PusheeTxn.Timestamp,
-			Key:       wiErr.Key,
-			User:      UserRoot,
-			Txn:       pushReply.PusheeTxn,
-		},
-	}
-	resolveReply := &proto.InternalResolveIntentResponse{}
-	// Add resolve command with wait=false to add to Raft but not wait for completion.
-	if resolveErr := rng.AddCmd(resolveArgs, resolveReply, false); resolveErr != nil {
-		log.Warningf("resolve of key %q failed: %s", wiErr.Key, resolveErr)
+	// We pushed the transaction(s) successfully, so resolve the intent(s).
+	for i, intent := range wiErr.Intents {
+		pushReply := bReply.Responses[i].GetValue().(*proto.InternalPushTxnResponse)
+		resolveArgs := &proto.InternalResolveIntentRequest{
+			RequestHeader: proto.RequestHeader{
+				// Use the pushee's timestamp, which might be lower than the
+				// pusher's request timestamp. No need to push the intent higher
+				// than the pushee's txn!
+				Timestamp: pushReply.PusheeTxn.Timestamp,
+				Key:       intent.Key,
+				User:      UserRoot,
+				Txn:       pushReply.PusheeTxn,
+			},
+		}
+		resolveReply := &proto.InternalResolveIntentResponse{}
+		// Add resolve command with wait=false to add to Raft but not wait for completion.
+		waitForResolve := wait && i == len(wiErr.Intents)-1
+		if resolveErr := rng.AddCmd(resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
+			return resolveErr
+		}
 	}
 
 	return wiErr

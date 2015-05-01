@@ -340,26 +340,51 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount))
 		return
 	}
+	if args.IgnoreIntents {
+		rangeCount = 1 // simplify lookup because we may have to retry to read new
+	}
 
 	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
 	metaPrefix := proto.Key(args.Key[:len(engine.KeyMeta1Prefix)])
 	nextKey := proto.Key(args.Key).Next()
-	// Always false, at least when called from the DistSender.
-	consistent := args.ReadConsistency != proto.INCONSISTENT
-	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, consistent, args.Txn)
+	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, false, args.Txn)
 	if err != nil {
-		reply.SetGoError(err)
-		return
-	}
-
-	// The initial key must have the same metadata level prefix as we queried.
-	if len(kvs) == 0 {
-		// At this point the range has been verified to contain the requested
-		// key, but no matching results were returned from the scan. This could
-		// indicate a very bad system error, but for now we will just treat it
-		// as a retryable Key Mismatch error.
+		if wiErr, ok := err.(*proto.WriteIntentError); ok && args.IgnoreIntents {
+			// NOTE (subtle): in general, we want to try to clean up dangling
+			// intents on meta records. However, if we're in the process of
+			// cleaning up a dangling intent on a meta record by pushing the
+			// transaction, we don't want to create an infinite loop:
+			//
+			// intent! -> push-txn -> range-lookup -> intent! -> etc...
+			//
+			// Instead we want:
+			//
+			// intent! -> push-txn -> range-lookup -> ignore intent, return old/new ranges
+			//
+			// On the range-lookup from a push transaction, we therefore
+			// want to suppress WriteIntentErrors and return a value
+			// anyway. But which value? We don't know whether the range
+			// update succeeded or failed, but if we don't return the
+			// correct range descriptor we may not be able to find the
+			// transaction to push. Since we cannot know the correct answer,
+			// we choose randomly between the pre- and post- transaction
+			// values. If we guess wrong, the client will try again and get
+			// the other value (within a few tries).
+			if rand.Intn(2) == 0 {
+				key, txn := wiErr.Intents[0].Key, &wiErr.Intents[0].Txn
+				val, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
+				reply.SetGoError(err)
+				kvs = []proto.KeyValue{proto.KeyValue{Key: key, Value: *val}}
+			}
+		} else {
+			reply.SetGoError(err)
+		}
+	} else if len(kvs) == 0 {
+		// No matching results were returned from the scan. This could
+		// indicate a very bad system error, but for now we will just
+		// treat it as a retryable Key Mismatch error.
 		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc())
 		reply.SetGoError(err)
 		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
@@ -445,19 +470,20 @@ func (r *Range) InternalGC(batch engine.Engine, ms *proto.MVCCStats, args *proto
 // Txn Timeout: If pushee txn entry isn't present or its LastHeartbeat
 // timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat. If
 // current time - LastHeartbeat > 2 * DefaultHeartbeatInterval, then
-// the pushee txn should be either pushed forward or aborted,
-// depending on value of Request.Abort.
+// the pushee txn should be either pushed forward, aborted, or
+// confirmed not pending, depending on value of Request.PushType.
 //
 // Old Txn Epoch: If persisted pushee txn entry has a newer Epoch than
 // PushTxn.Epoch, return success, as older epoch may be removed.
 //
 // Lower Txn Priority: If pushee txn has a lower priority than pusher,
-// adjust pushee's persisted txn depending on value of args.Abort. If
-// args.Abort is true, set txn.Status to ABORTED, and priority to one
-// less than the pusher's priority and return success. If args.Abort
-// is false, set txn.Timestamp to pusher's Timestamp + 1 (note that
-// we use the pusher's Args.Timestamp, not Txn.Timestamp because the
-// args timestamp can advance during the txn).
+// adjust pushee's persisted txn depending on value of
+// args.PushType. If args.PushType is ABORT_TXN, set txn.Status to
+// ABORTED, and priority to one less than the pusher's priority and
+// return success. If args.PushType is PUSH_TIMESTAMP, set
+// txn.Timestamp to pusher's Timestamp + 1 (note that we use the
+// pusher's Args.Timestamp, not Txn.Timestamp because the args
+// timestamp can advance during the txn).
 //
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
@@ -509,9 +535,10 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 		// Trivial noop.
 		return
 	}
+
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if !args.Abort && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
+	if args.PushType == proto.PUSH_TIMESTAMP && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
 		return
 	}
@@ -543,17 +570,17 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
 		log.V(1).Infof("pushing expired txn %s", reply.PusheeTxn)
 		pusherWins = true
-	} else if args.PusheeTxn.Epoch < reply.PusheeTxn.Epoch {
-		// Check for an intent from a prior epoch.
-		log.V(1).Infof("pushing intent from previous epoch for txn %s", reply.PusheeTxn)
+	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && args.PushType == proto.PUSH_TIMESTAMP {
+		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
 		pusherWins = true
+	} else if args.PushType == proto.CLEANUP_TXN {
+		// If just attempting to cleanup old or already-committed txns, don't push.
+		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
 		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
-		// Finally, choose based on priority; if priorities are equal, order by lower txn timestamp.
+		// Pusher wins based on priority; if priorities are equal, order
+		// by lower txn timestamp.
 		log.V(1).Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
-		pusherWins = true
-	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && !args.Abort {
-		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
 		pusherWins = true
 	}
 
@@ -567,9 +594,9 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	reply.PusheeTxn.UpgradePriority(priority - 1)
 
 	// If aborting transaction, set new status and return success.
-	if args.Abort {
+	if args.PushType == proto.ABORT_TXN {
 		reply.PusheeTxn.Status = proto.ABORTED
-	} else {
+	} else if args.PushType == proto.PUSH_TIMESTAMP {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
 		reply.PusheeTxn.Timestamp = args.Timestamp
 		reply.PusheeTxn.Timestamp.Logical++

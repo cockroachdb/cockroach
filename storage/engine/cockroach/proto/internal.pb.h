@@ -71,6 +71,26 @@ class RaftTruncatedState;
 class RaftSnapshotData;
 class RaftSnapshotData_KeyValue;
 
+enum PushTxnType {
+  PUSH_TIMESTAMP = 0,
+  ABORT_TXN = 1,
+  CLEANUP_TXN = 2
+};
+bool PushTxnType_IsValid(int value);
+const PushTxnType PushTxnType_MIN = PUSH_TIMESTAMP;
+const PushTxnType PushTxnType_MAX = CLEANUP_TXN;
+const int PushTxnType_ARRAYSIZE = PushTxnType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* PushTxnType_descriptor();
+inline const ::std::string& PushTxnType_Name(PushTxnType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    PushTxnType_descriptor(), value);
+}
+inline bool PushTxnType_Parse(
+    const ::std::string& name, PushTxnType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<PushTxnType>(
+    PushTxnType_descriptor(), name, value);
+}
 enum InternalValueType {
   _CR_TS = 1
 };
@@ -160,12 +180,21 @@ class InternalRangeLookupRequest : public ::google::protobuf::Message {
   inline ::google::protobuf::int32 max_ranges() const;
   inline void set_max_ranges(::google::protobuf::int32 value);
 
+  // optional bool ignore_intents = 3;
+  inline bool has_ignore_intents() const;
+  inline void clear_ignore_intents();
+  static const int kIgnoreIntentsFieldNumber = 3;
+  inline bool ignore_intents() const;
+  inline void set_ignore_intents(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRangeLookupRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_max_ranges();
   inline void clear_has_max_ranges();
+  inline void set_has_ignore_intents();
+  inline void clear_has_ignore_intents();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -173,6 +202,7 @@ class InternalRangeLookupRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::google::protobuf::int32 max_ranges_;
+  bool ignore_intents_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
@@ -794,12 +824,19 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::Transaction* release_pushee_txn();
   inline void set_allocated_pushee_txn(::cockroach::proto::Transaction* pushee_txn);
 
-  // optional bool Abort = 3;
-  inline bool has_abort() const;
-  inline void clear_abort();
-  static const int kAbortFieldNumber = 3;
-  inline bool abort() const;
-  inline void set_abort(bool value);
+  // optional .cockroach.proto.PushTxnType push_type = 3;
+  inline bool has_push_type() const;
+  inline void clear_push_type();
+  static const int kPushTypeFieldNumber = 3;
+  inline ::cockroach::proto::PushTxnType push_type() const;
+  inline void set_push_type(::cockroach::proto::PushTxnType value);
+
+  // optional bool range_lookup = 4;
+  inline bool has_range_lookup() const;
+  inline void clear_range_lookup();
+  static const int kRangeLookupFieldNumber = 4;
+  inline bool range_lookup() const;
+  inline void set_range_lookup(bool value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalPushTxnRequest)
  private:
@@ -807,8 +844,10 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_pushee_txn();
   inline void clear_has_pushee_txn();
-  inline void set_has_abort();
-  inline void clear_has_abort();
+  inline void set_has_push_type();
+  inline void clear_has_push_type();
+  inline void set_has_range_lookup();
+  inline void clear_has_range_lookup();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -816,7 +855,8 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::Transaction* pushee_txn_;
-  bool abort_;
+  int push_type_;
+  bool range_lookup_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
@@ -3632,6 +3672,30 @@ inline void InternalRangeLookupRequest::set_max_ranges(::google::protobuf::int32
   // @@protoc_insertion_point(field_set:cockroach.proto.InternalRangeLookupRequest.max_ranges)
 }
 
+// optional bool ignore_intents = 3;
+inline bool InternalRangeLookupRequest::has_ignore_intents() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void InternalRangeLookupRequest::set_has_ignore_intents() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void InternalRangeLookupRequest::clear_has_ignore_intents() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void InternalRangeLookupRequest::clear_ignore_intents() {
+  ignore_intents_ = false;
+  clear_has_ignore_intents();
+}
+inline bool InternalRangeLookupRequest::ignore_intents() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRangeLookupRequest.ignore_intents)
+  return ignore_intents_;
+}
+inline void InternalRangeLookupRequest::set_ignore_intents(bool value) {
+  set_has_ignore_intents();
+  ignore_intents_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalRangeLookupRequest.ignore_intents)
+}
+
 // -------------------------------------------------------------------
 
 // InternalRangeLookupResponse
@@ -4165,28 +4229,53 @@ inline void InternalPushTxnRequest::set_allocated_pushee_txn(::cockroach::proto:
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalPushTxnRequest.pushee_txn)
 }
 
-// optional bool Abort = 3;
-inline bool InternalPushTxnRequest::has_abort() const {
+// optional .cockroach.proto.PushTxnType push_type = 3;
+inline bool InternalPushTxnRequest::has_push_type() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void InternalPushTxnRequest::set_has_abort() {
+inline void InternalPushTxnRequest::set_has_push_type() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void InternalPushTxnRequest::clear_has_abort() {
+inline void InternalPushTxnRequest::clear_has_push_type() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void InternalPushTxnRequest::clear_abort() {
-  abort_ = false;
-  clear_has_abort();
+inline void InternalPushTxnRequest::clear_push_type() {
+  push_type_ = 0;
+  clear_has_push_type();
 }
-inline bool InternalPushTxnRequest::abort() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalPushTxnRequest.Abort)
-  return abort_;
+inline ::cockroach::proto::PushTxnType InternalPushTxnRequest::push_type() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalPushTxnRequest.push_type)
+  return static_cast< ::cockroach::proto::PushTxnType >(push_type_);
 }
-inline void InternalPushTxnRequest::set_abort(bool value) {
-  set_has_abort();
-  abort_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.Abort)
+inline void InternalPushTxnRequest::set_push_type(::cockroach::proto::PushTxnType value) {
+  assert(::cockroach::proto::PushTxnType_IsValid(value));
+  set_has_push_type();
+  push_type_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.push_type)
+}
+
+// optional bool range_lookup = 4;
+inline bool InternalPushTxnRequest::has_range_lookup() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void InternalPushTxnRequest::set_has_range_lookup() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void InternalPushTxnRequest::clear_has_range_lookup() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void InternalPushTxnRequest::clear_range_lookup() {
+  range_lookup_ = false;
+  clear_has_range_lookup();
+}
+inline bool InternalPushTxnRequest::range_lookup() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalPushTxnRequest.range_lookup)
+  return range_lookup_;
+}
+inline void InternalPushTxnRequest::set_range_lookup(bool value) {
+  set_has_range_lookup();
+  range_lookup_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.range_lookup)
 }
 
 // -------------------------------------------------------------------
@@ -8020,6 +8109,11 @@ RaftSnapshotData::mutable_kv() {
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::cockroach::proto::PushTxnType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::PushTxnType>() {
+  return ::cockroach::proto::PushTxnType_descriptor();
+}
 template <> struct is_proto_enum< ::cockroach::proto::InternalValueType> : ::google::protobuf::internal::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::InternalValueType>() {

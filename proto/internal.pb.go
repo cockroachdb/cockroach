@@ -17,6 +17,47 @@ import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 var _ = proto1.Marshal
 var _ = math.Inf
 
+// TxnPushType determines what action to take when pushing a
+// transaction.
+type PushTxnType int32
+
+const (
+	// Push the timestamp forward if possible to accommodate a concurrent reader.
+	PUSH_TIMESTAMP PushTxnType = 0
+	// Abort the transaction if possible to accommodate a concurrent writer.
+	ABORT_TXN PushTxnType = 1
+	// Cleanup the transaction if already committed/aborted, or if too old.
+	CLEANUP_TXN PushTxnType = 2
+)
+
+var PushTxnType_name = map[int32]string{
+	0: "PUSH_TIMESTAMP",
+	1: "ABORT_TXN",
+	2: "CLEANUP_TXN",
+}
+var PushTxnType_value = map[string]int32{
+	"PUSH_TIMESTAMP": 0,
+	"ABORT_TXN":      1,
+	"CLEANUP_TXN":    2,
+}
+
+func (x PushTxnType) Enum() *PushTxnType {
+	p := new(PushTxnType)
+	*p = x
+	return p
+}
+func (x PushTxnType) String() string {
+	return proto1.EnumName(PushTxnType_name, int32(x))
+}
+func (x *PushTxnType) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(PushTxnType_value, data, "PushTxnType")
+	if err != nil {
+		return err
+	}
+	*x = PushTxnType(value)
+	return nil
+}
+
 // InternalValueType defines a set of string constants placed in the "tag" field
 // of Value messages which are created internally. These are defined as a
 // protocol buffer enumeration so that they can be used portably between our Go
@@ -61,8 +102,14 @@ func (x *InternalValueType) UnmarshalJSON(data []byte) error {
 // additional consecutive addressable ranges. Specify max_ranges > 1
 // to pre-fill the range descriptor cache.
 type InternalRangeLookupRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	MaxRanges        int32  `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	MaxRanges     int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
+	// Ignore intents indicates whether or not intents encountered
+	// while looking up the range info should be resolved. This should
+	// be false in general, except for the case where the lookup is
+	// already in service of pushing intents on meta records. Attempting
+	// to resolve intents in this case would lead to infinite recursion.
+	IgnoreIntents    bool   `protobuf:"varint,3,opt,name=ignore_intents" json:"ignore_intents"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -75,6 +122,13 @@ func (m *InternalRangeLookupRequest) GetMaxRanges() int32 {
 		return m.MaxRanges
 	}
 	return 0
+}
+
+func (m *InternalRangeLookupRequest) GetIgnoreIntents() bool {
+	if m != nil {
+		return m.IgnoreIntents
+	}
+	return false
 }
 
 // An InternalRangeLookupResponse is the return value from the
@@ -194,16 +248,22 @@ func (*InternalGCResponse) ProtoMessage()    {}
 // been committed or aborted already. Otherwise, the existing txn can
 // either be aborted (for write/write conflicts), or its commit
 // timestamp can be moved forward (for read/write conflicts). The
-// course of action is determined by the owning txn's status and also
-// by comparing priorities.
+// course of action is determined by the specified push type, and by
+// the owning txn's status and priority.
 type InternalPushTxnRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	PusheeTxn     Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
-	// Set to true to request that the PushTxn be aborted if possible.
-	// This is done in the event of a writer conflicting with PusheeTxn.
-	// Readers set this to false and instead attempt to move PusheeTxn's
-	// commit timestamp forward.
-	Abort            bool   `protobuf:"varint,3,opt" json:"Abort"`
+	// Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
+	// timestamp forward. Writers set this to ABORT_TXN to request that
+	// the PushTxn be aborted if possible. This is done in the event of
+	// a writer conflicting with PusheeTxn. Inconsistent readers set
+	// this to CLEANUP_TXN to determine whether dangling intents
+	// may be resolved.
+	PushType PushTxnType `protobuf:"varint,3,opt,name=push_type,enum=cockroach.proto.PushTxnType" json:"push_type"`
+	// Range lookup indicates whether we're pushing a txn because of an
+	// intent encountered while servicing an internal range lookup
+	// request. See notes in InternalLookupRangeRequest.
+	RangeLookup      bool   `protobuf:"varint,4,opt,name=range_lookup" json:"range_lookup"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -218,9 +278,16 @@ func (m *InternalPushTxnRequest) GetPusheeTxn() Transaction {
 	return Transaction{}
 }
 
-func (m *InternalPushTxnRequest) GetAbort() bool {
+func (m *InternalPushTxnRequest) GetPushType() PushTxnType {
 	if m != nil {
-		return m.Abort
+		return m.PushType
+	}
+	return PUSH_TIMESTAMP
+}
+
+func (m *InternalPushTxnRequest) GetRangeLookup() bool {
+	if m != nil {
+		return m.RangeLookup
 	}
 	return false
 }
@@ -1206,6 +1273,7 @@ func (m *RaftSnapshotData_KeyValue) GetValue() []byte {
 }
 
 func init() {
+	proto1.RegisterEnum("cockroach.proto.PushTxnType", PushTxnType_name, PushTxnType_value)
 	proto1.RegisterEnum("cockroach.proto.InternalValueType", InternalValueType_name, InternalValueType_value)
 }
 func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
@@ -1266,6 +1334,23 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IgnoreIntents", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IgnoreIntents = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {
@@ -1848,7 +1933,22 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 			index = postIndex
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Abort", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PushType", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.PushType |= (PushTxnType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeLookup", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -1862,7 +1962,7 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.Abort = bool(v != 0)
+			m.RangeLookup = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {
@@ -5414,6 +5514,7 @@ func (m *InternalRangeLookupRequest) Size() (n int) {
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	n += 1 + sovInternal(uint64(m.MaxRanges))
+	n += 2
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -5509,6 +5610,7 @@ func (m *InternalPushTxnRequest) Size() (n int) {
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.PusheeTxn.Size()
 	n += 1 + l + sovInternal(uint64(l))
+	n += 1 + sovInternal(uint64(m.PushType))
 	n += 2
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -6075,6 +6177,14 @@ func (m *InternalRangeLookupRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.MaxRanges))
+	data[i] = 0x18
+	i++
+	if m.IgnoreIntents {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -6328,7 +6438,10 @@ func (m *InternalPushTxnRequest) MarshalTo(data []byte) (n int, err error) {
 	i += n11
 	data[i] = 0x18
 	i++
-	if m.Abort {
+	i = encodeVarintInternal(data, i, uint64(m.PushType))
+	data[i] = 0x20
+	i++
+	if m.RangeLookup {
 		data[i] = 1
 	} else {
 		data[i] = 0
