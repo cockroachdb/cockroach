@@ -570,17 +570,13 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
 		log.V(1).Infof("pushing expired txn %s", reply.PusheeTxn)
 		pusherWins = true
-	} else if args.PusheeTxn.Epoch < reply.PusheeTxn.Epoch {
-		// Check for an intent from a prior epoch.
-		log.V(1).Infof("pushing intent from previous epoch for txn %s", reply.PusheeTxn)
-		pusherWins = true
 	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && args.PushType == proto.PUSH_TIMESTAMP {
 		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
 		pusherWins = true
 	} else if (reply.PusheeTxn.Priority < priority ||
 		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp))) &&
-		args.PushType != proto.CONFIRM_NOT_PENDING {
-		// If not just confirming that the transaction is not pending,
+		args.PushType != proto.CLEANUP_TXN {
+		// If not just attempting to cleanup old or already-committed txns,
 		// pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.
 		log.V(1).Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)

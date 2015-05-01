@@ -1088,7 +1088,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 		return nil
 	}
 
-	// This method shouldn't be called with this instance, but there's
+	// This method shouldn't be called in this instance, but there's
 	// nothing to do if the epochs match and the state is still PENDING.
 	if txn.Status == proto.PENDING && meta.Txn.Epoch == txn.Epoch {
 		return nil

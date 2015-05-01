@@ -995,10 +995,11 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 		// intent independently, so we can't do it in Range.executeCmd.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
 			// If inconsistent, return results and resolve asynchronously.
-			if header.ReadConsistency == proto.INCONSISTENT {
-				s.stopper.StartTask()
+			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
 				go func() {
-					s.resolveWriteIntentError(wiErr, rng, args, proto.CONFIRM_NOT_PENDING, true)
+					if err := s.resolveWriteIntentError(wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
+						log.Warningf("async resolve on inconsistent read: %s", err)
+					}
 					s.stopper.FinishTask()
 				}()
 				reply.Header().Error = nil

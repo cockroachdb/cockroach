@@ -74,11 +74,11 @@ class RaftSnapshotData_KeyValue;
 enum PushTxnType {
   PUSH_TIMESTAMP = 0,
   ABORT_TXN = 1,
-  CONFIRM_NOT_PENDING = 2
+  CLEANUP_TXN = 2
 };
 bool PushTxnType_IsValid(int value);
 const PushTxnType PushTxnType_MIN = PUSH_TIMESTAMP;
-const PushTxnType PushTxnType_MAX = CONFIRM_NOT_PENDING;
+const PushTxnType PushTxnType_MAX = CLEANUP_TXN;
 const int PushTxnType_ARRAYSIZE = PushTxnType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* PushTxnType_descriptor();

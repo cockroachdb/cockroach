@@ -26,19 +26,19 @@ const (
 	PUSH_TIMESTAMP PushTxnType = 0
 	// Abort the transaction if possible to accommodate a concurrent writer.
 	ABORT_TXN PushTxnType = 1
-	// Confirm that the transaction has either been committed or aborted.
-	CONFIRM_NOT_PENDING PushTxnType = 2
+	// Cleanup the transaction if already committed/aborted, or if too old.
+	CLEANUP_TXN PushTxnType = 2
 )
 
 var PushTxnType_name = map[int32]string{
 	0: "PUSH_TIMESTAMP",
 	1: "ABORT_TXN",
-	2: "CONFIRM_NOT_PENDING",
+	2: "CLEANUP_TXN",
 }
 var PushTxnType_value = map[string]int32{
-	"PUSH_TIMESTAMP":      0,
-	"ABORT_TXN":           1,
-	"CONFIRM_NOT_PENDING": 2,
+	"PUSH_TIMESTAMP": 0,
+	"ABORT_TXN":      1,
+	"CLEANUP_TXN":    2,
 }
 
 func (x PushTxnType) Enum() *PushTxnType {
@@ -257,7 +257,7 @@ type InternalPushTxnRequest struct {
 	// timestamp forward. Writers set this to ABORT_TXN to request that
 	// the PushTxn be aborted if possible. This is done in the event of
 	// a writer conflicting with PusheeTxn. Inconsistent readers set
-	// this to CONFIRM_NOT_PENDING to determine whether dangling intents
+	// this to CLEANUP_TXN to determine whether dangling intents
 	// may be resolved.
 	PushType PushTxnType `protobuf:"varint,3,opt,name=push_type,enum=cockroach.proto.PushTxnType" json:"push_type"`
 	// Range lookup indicates whether we're pushing a txn because of an

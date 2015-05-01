@@ -1674,22 +1674,22 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 	}{
 		{nil, 0, proto.PUSH_TIMESTAMP, false},
 		{nil, 0, proto.ABORT_TXN, false},
-		{nil, 0, proto.CONFIRM_NOT_PENDING, false},
+		{nil, 0, proto.CLEANUP_TXN, false},
 		{nil, ns, proto.PUSH_TIMESTAMP, false},
 		{nil, ns, proto.ABORT_TXN, false},
-		{nil, ns, proto.CONFIRM_NOT_PENDING, false},
+		{nil, ns, proto.CLEANUP_TXN, false},
 		{nil, ns*2 - 1, proto.PUSH_TIMESTAMP, false},
 		{nil, ns*2 - 1, proto.ABORT_TXN, false},
-		{nil, ns*2 - 1, proto.CONFIRM_NOT_PENDING, false},
+		{nil, ns*2 - 1, proto.CLEANUP_TXN, false},
 		{nil, ns * 2, proto.PUSH_TIMESTAMP, false},
 		{nil, ns * 2, proto.ABORT_TXN, false},
-		{nil, ns * 2, proto.CONFIRM_NOT_PENDING, false},
+		{nil, ns * 2, proto.CLEANUP_TXN, false},
 		{&ts, ns*2 + 1, proto.PUSH_TIMESTAMP, false},
 		{&ts, ns*2 + 1, proto.ABORT_TXN, false},
-		{&ts, ns*2 + 1, proto.CONFIRM_NOT_PENDING, false},
+		{&ts, ns*2 + 1, proto.CLEANUP_TXN, false},
 		{&ts, ns*2 + 2, proto.PUSH_TIMESTAMP, true},
 		{&ts, ns*2 + 2, proto.ABORT_TXN, true},
-		{&ts, ns*2 + 2, proto.CONFIRM_NOT_PENDING, true},
+		{&ts, ns*2 + 2, proto.CLEANUP_TXN, true},
 	}
 
 	for i, test := range testCases {
@@ -1720,63 +1720,6 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		if err != nil {
 			if _, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", err)
-			}
-		}
-	}
-}
-
-// TestInternalPushTxnOldEpoch verifies that a txn intent from an
-// older epoch may be pushed.
-func TestInternalPushTxnOldEpoch(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	testCases := []struct {
-		curEpoch, intentEpoch int32
-		pushType              proto.PushTxnType
-		expSuccess            bool
-	}{
-		// Same epoch; can't push based on epoch.
-		{0, 0, proto.PUSH_TIMESTAMP, false},
-		{0, 0, proto.ABORT_TXN, false},
-		{0, 0, proto.CONFIRM_NOT_PENDING, false},
-		// The intent is newer; definitely can't push.
-		{0, 1, proto.PUSH_TIMESTAMP, false},
-		{0, 1, proto.ABORT_TXN, false},
-		{0, 1, proto.CONFIRM_NOT_PENDING, false},
-		// The intent is old; can push.
-		{1, 0, proto.PUSH_TIMESTAMP, true},
-		{1, 0, proto.ABORT_TXN, true},
-		{1, 0, proto.CONFIRM_NOT_PENDING, true},
-	}
-
-	for i, test := range testCases {
-		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee.Priority = 2
-		pusher.Priority = 1 // Pusher won't win based on priority.
-
-		// First, establish "start" of existing pushee's txn via heartbeat.
-		pushee.Epoch = test.curEpoch
-		hbArgs, hbReply := heartbeatArgs(pushee, 1, tc.store.StoreID())
-		hbArgs.Timestamp = pushee.Timestamp
-		if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
-			t.Fatal(err)
-		}
-
-		// Now, attempt to push the transaction with intent epoch set appropriately.
-		pushee.Epoch = test.intentEpoch
-		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
-		err := tc.rng.AddCmd(args, reply, true)
-		if test.expSuccess != (err == nil) {
-			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
-		}
-		if err != nil {
-			if _, ok := err.(*proto.TransactionPushError); !ok {
-				t.Errorf("expected txn push error; got %s", err)
 			}
 		}
 	}
@@ -1818,8 +1761,8 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 		{1, 1, ts2, ts1, proto.ABORT_TXN, false},
 		{1, 1, ts2, ts1, proto.PUSH_TIMESTAMP, false},
 		// When confirming, priority never wins.
-		{2, 1, ts1, ts1, proto.CONFIRM_NOT_PENDING, false},
-		{1, 2, ts1, ts1, proto.CONFIRM_NOT_PENDING, false},
+		{2, 1, ts1, ts1, proto.CLEANUP_TXN, false},
+		{1, 2, ts1, ts1, proto.CLEANUP_TXN, false},
 	}
 
 	for i, test := range testCases {
