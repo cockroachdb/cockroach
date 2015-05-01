@@ -680,7 +680,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	prevLease := r.getLease()
 	isExtension := prevLease.RaftNodeID == args.Lease.RaftNodeID
 	effectiveStart := args.Lease.Start
-	// we return this error in "normal" lease-overlap related failures.
+	// We return this error in "normal" lease-overlap related failures.
 	rErr := &leaseRejectedError{
 		PrevLease:      *prevLease,
 		Lease:          args.Lease,
@@ -708,6 +708,8 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// extra tick. This allows multiple requests from the same replica to
 	// merge without ticking away from the minimal common start timestamp.
 	if prevLease.RaftNodeID == 0 || isExtension {
+		// TODO(tschottdorf) probably go all the way back to
+		// prevLease.Start() (so it's properly extending previous lease).
 		effectiveStart.Backward(prevLease.Expiration)
 	} else {
 		effectiveStart.Backward(prevLease.Expiration.Next())

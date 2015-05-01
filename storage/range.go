@@ -922,7 +922,6 @@ func (r *Range) maybeGossipFirstRange() error {
 // Note that maybeGossipConfigs does not check the leader lease; it is called
 // on only when the lease is actually held.
 func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
-	log.Warningf("gossiping %s", r.rm.Gossip())
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}

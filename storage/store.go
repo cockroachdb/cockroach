@@ -512,7 +512,6 @@ func (s *Store) startGossip() error {
 				// This store has no range with this configuration.
 				continue
 			}
-			log.Warningf("rng=%s", rng)
 			// Wake up the replica. If it acquires a fresh lease, it will
 			// gossip. If an unexpected error occurs (i.e. nobody else seems to
 			// have an active lease but we still failed to obtain it), return

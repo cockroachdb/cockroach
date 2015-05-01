@@ -471,7 +471,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 // TestStoreRangeReplicate verifies that the replication queue will notice
 // under-replicated ranges and replicate them.
-func disabledTestStoreRangeReplicate(t *testing.T) {
+func TestStoreRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	mtc := multiTestContext{}
 	mtc.Start(t, 3)
