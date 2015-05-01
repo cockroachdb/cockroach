@@ -33,8 +33,8 @@ import (
 // compareStoreStatus ensures that the actual store status for the passed in
 // store is updated correctly. It checks that the Desc.StoreID, Desc.Attrs,
 // Desc.Node, Desc.Capacity.Capacity, NodeID and RangeCount are exactly correct
-// and that the bytes and counts for Live, both Key and Val as well as
-// Desc.Capacity.Available are at least the expected value.
+// and that the bytes and counts for Live, Key and Val are at least the
+// expected value.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
 	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
@@ -88,9 +88,6 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	}
 	if storeStatus.Stats.ValCount < expectedStoreStatus.Stats.ValCount {
 		t.Errorf("%v: actual Val Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
-	}
-	if storeStatus.Desc.Capacity.Available < expectedStoreStatus.Desc.Capacity.Available {
-		t.Errorf("%v: actual Desc.Capacity.Available is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
 	return storeStatus
 }
