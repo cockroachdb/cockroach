@@ -18,6 +18,8 @@
 package status
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -28,6 +30,7 @@ import (
 // components.
 type StoreStatusMonitor struct {
 	rangeDataAccumulator
+	ID proto.StoreID
 }
 
 // NodeStatusMonitor monitors the status of a server node. Status information
@@ -37,6 +40,7 @@ type StoreStatusMonitor struct {
 // interesting subsets of data on the node. NodeStatusMonitor is responsible
 // for passing event feed data to these subset structures for accumulation.
 type NodeStatusMonitor struct {
+	sync.RWMutex
 	stores map[proto.StoreID]*StoreStatusMonitor
 }
 
@@ -47,15 +51,41 @@ func NewNodeStatusMonitor() *NodeStatusMonitor {
 	}
 }
 
-// getStore is a helper method which retrieves the StoreStatusMonitor for the
+// GetStoreMonitor is a helper method which retrieves the StoreStatusMonitor for the
 // given StoreID, creating it if it does not already exist.
-func (nsm *NodeStatusMonitor) getStore(id proto.StoreID) *StoreStatusMonitor {
+func (nsm *NodeStatusMonitor) GetStoreMonitor(id proto.StoreID) *StoreStatusMonitor {
+	nsm.RLock()
+	s, ok := nsm.stores[id]
+	nsm.RUnlock()
+	if ok {
+		return s
+	}
+
+	// Rare case where store did not already exist, we need to take an actual
+	// lock.
+	nsm.Lock()
+	defer nsm.Unlock()
 	if s, ok := nsm.stores[id]; ok {
 		return s
 	}
-	s := &StoreStatusMonitor{}
+	s = &StoreStatusMonitor{
+		ID: id,
+	}
 	nsm.stores[id] = s
 	return s
+}
+
+// VisitStoreMonitors calls the supplied visitor function with every
+// StoreStatusMonitor currently in this monitor's collection. A lock is taken on
+// each StoreStatusMonitor before it is passed to the visitor function.
+func (nsm *NodeStatusMonitor) VisitStoreMonitors(visitor func(*StoreStatusMonitor)) {
+	nsm.RLock()
+	defer nsm.RUnlock()
+	for _, ssm := range nsm.stores {
+		ssm.Lock()
+		visitor(ssm)
+		ssm.Unlock()
+	}
 }
 
 // StartMonitorFeed begins processing events published to the supplied
@@ -69,56 +99,56 @@ func (nsm *NodeStatusMonitor) StartMonitorFeed(sub *util.Subscription) {
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnAddRange(event *storage.AddRangeEvent) {
-	nsm.getStore(event.StoreID).addRange(event)
+	nsm.GetStoreMonitor(event.StoreID).addRange(event)
 }
 
 // OnUpdateRange receives UpdateRangeEvents retrieved from an storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnUpdateRange(event *storage.UpdateRangeEvent) {
-	nsm.getStore(event.StoreID).updateRange(event)
+	nsm.GetStoreMonitor(event.StoreID).updateRange(event)
 }
 
 // OnRemoveRange receives RemoveRangeEvents retrieved from an storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnRemoveRange(event *storage.RemoveRangeEvent) {
-	nsm.getStore(event.StoreID).removeRange(event)
+	nsm.GetStoreMonitor(event.StoreID).removeRange(event)
 }
 
 // OnSplitRange receives SplitRangeEvents retrieved from an storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnSplitRange(event *storage.SplitRangeEvent) {
-	nsm.getStore(event.StoreID).splitRange(event)
+	nsm.GetStoreMonitor(event.StoreID).splitRange(event)
 }
 
 // OnMergeRange receives MergeRangeEvents retrieved from an storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnMergeRange(event *storage.MergeRangeEvent) {
-	nsm.getStore(event.StoreID).mergeRange(event)
+	nsm.GetStoreMonitor(event.StoreID).mergeRange(event)
 }
 
 // OnStartStore receives StartStoreEvents retrieved from an storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnStartStore(event *storage.StartStoreEvent) {
-	nsm.getStore(event.StoreID)
+	nsm.GetStoreMonitor(event.StoreID)
 }
 
 // OnBeginScanRanges receives BeginScanRangesEvents retrieved from an storage
 // event subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnBeginScanRanges(event *storage.BeginScanRangesEvent) {
-	nsm.getStore(event.StoreID).beginScanRanges(event)
+	nsm.GetStoreMonitor(event.StoreID).beginScanRanges(event)
 }
 
 // OnEndScanRanges receives EndScanRangesEvents retrieved from an storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnEndScanRanges(event *storage.EndScanRangesEvent) {
-	nsm.getStore(event.StoreID).endScanRanges(event)
+	nsm.GetStoreMonitor(event.StoreID).endScanRanges(event)
 }
 
 // rangeDataAccumulator maintains a set of accumulated stats for a set of
@@ -127,6 +157,7 @@ func (nsm *NodeStatusMonitor) OnEndScanRanges(event *storage.EndScanRangesEvent)
 // responsible for selecting the specific ranges accumulated by a
 // rangeDataAccumulator instance.
 type rangeDataAccumulator struct {
+	sync.Mutex
 	stats      proto.MVCCStats
 	rangeCount int64
 	// 'scanning' is a special mode used to initialize a rangeDataAccumulator.
@@ -147,14 +178,18 @@ type rangeDataAccumulator struct {
 }
 
 func (rda *rangeDataAccumulator) addRange(event *storage.AddRangeEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	if rda.isScanning {
 		rda.seenScan[event.Desc.RaftID] = struct{}{}
 		rda.rangeCount++
-		rda.stats.Accumulate(&event.Stats)
+		rda.stats.Add(&event.Stats)
 	}
 }
 
 func (rda *rangeDataAccumulator) updateRange(event *storage.UpdateRangeEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	if rda.isScanning {
 		// Skip if we are in an active scan and have not yet accumulated the
 		// data for this range.
@@ -162,23 +197,31 @@ func (rda *rangeDataAccumulator) updateRange(event *storage.UpdateRangeEvent) {
 			return
 		}
 	}
-	rda.stats.Accumulate(&event.Delta)
+	rda.stats.Add(&event.Delta)
 }
 
 func (rda *rangeDataAccumulator) removeRange(event *storage.RemoveRangeEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	rda.stats.Subtract(&event.Stats)
 	rda.rangeCount--
 }
 
 func (rda *rangeDataAccumulator) splitRange(event *storage.SplitRangeEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	rda.rangeCount++
 }
 
 func (rda *rangeDataAccumulator) mergeRange(event *storage.MergeRangeEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	rda.rangeCount--
 }
 
 func (rda *rangeDataAccumulator) beginScanRanges(event *storage.BeginScanRangesEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	rda.isScanning = true
 	rda.stats = proto.MVCCStats{}
 	rda.rangeCount = 0
@@ -186,6 +229,8 @@ func (rda *rangeDataAccumulator) beginScanRanges(event *storage.BeginScanRangesE
 }
 
 func (rda *rangeDataAccumulator) endScanRanges(event *storage.EndScanRangesEvent) {
+	rda.Lock()
+	defer rda.Unlock()
 	rda.isScanning = false
 	rda.seenScan = nil
 }

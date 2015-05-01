@@ -653,8 +653,8 @@ func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
 	return result
 }
 
-// Accumulate adds values from oms to ms.
-func (ms *MVCCStats) Accumulate(oms *MVCCStats) {
+// Add adds values from oms to ms.
+func (ms *MVCCStats) Add(oms *MVCCStats) {
 	ms.LiveBytes += oms.LiveBytes
 	ms.KeyBytes += oms.KeyBytes
 	ms.ValBytes += oms.ValBytes
