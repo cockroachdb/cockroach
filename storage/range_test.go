@@ -772,7 +772,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID proto
 
 // pushTxnArgs returns request/response pair for InternalPushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, storeID proto.StoreID) (
+func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID int64, storeID proto.StoreID) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -783,7 +783,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, st
 			Txn:       pusher,
 		},
 		PusheeTxn: *pushee,
-		Abort:     abort,
+		PushType:  pushType,
 	}
 	reply := &proto.InternalPushTxnResponse{}
 	return args, reply
@@ -1552,7 +1552,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, tc.clock)
 
-	args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+	args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 	args.Key = pusher.Key
 	verifyErrorMatches(tc.rng.AddCmd(args, reply, true), ".*should match pushee.*", t)
 }
@@ -1580,7 +1580,7 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		}
 
 		// Now try to push what's already committed or aborted.
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 		if err := tc.rng.AddCmd(args, reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -1639,7 +1639,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		// Now, attempt to push the transaction using updated values for epoch & timestamp.
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 		if err := tc.rng.AddCmd(args, reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -1669,20 +1669,33 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 	testCases := []struct {
 		heartbeat   *proto.Timestamp // nil indicates no heartbeat
 		currentTime int64            // nanoseconds
+		pushType    proto.PushTxnType
 		expSuccess  bool
 	}{
-		{nil, 0, false},
-		{nil, ns, false},
-		{nil, ns*2 - 1, false},
-		{nil, ns * 2, false},
-		{&ts, ns*2 + 1, false},
-		{&ts, ns*2 + 2, true},
+		{nil, 0, proto.PUSH_TIMESTAMP, false},
+		{nil, 0, proto.ABORT_TXN, false},
+		{nil, 0, proto.CONFIRM_NOT_PENDING, false},
+		{nil, ns, proto.PUSH_TIMESTAMP, false},
+		{nil, ns, proto.ABORT_TXN, false},
+		{nil, ns, proto.CONFIRM_NOT_PENDING, false},
+		{nil, ns*2 - 1, proto.PUSH_TIMESTAMP, false},
+		{nil, ns*2 - 1, proto.ABORT_TXN, false},
+		{nil, ns*2 - 1, proto.CONFIRM_NOT_PENDING, false},
+		{nil, ns * 2, proto.PUSH_TIMESTAMP, false},
+		{nil, ns * 2, proto.ABORT_TXN, false},
+		{nil, ns * 2, proto.CONFIRM_NOT_PENDING, false},
+		{&ts, ns*2 + 1, proto.PUSH_TIMESTAMP, false},
+		{&ts, ns*2 + 1, proto.ABORT_TXN, false},
+		{&ts, ns*2 + 1, proto.CONFIRM_NOT_PENDING, false},
+		{&ts, ns*2 + 2, proto.PUSH_TIMESTAMP, true},
+		{&ts, ns*2 + 2, proto.ABORT_TXN, true},
+		{&ts, ns*2 + 2, proto.CONFIRM_NOT_PENDING, true},
 	}
 
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, proto.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("pusher", key, 1, proto.SERIALIZABLE, tc.clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -1697,8 +1710,9 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with clock set to "currentTime".
 		tc.manualClock.Set(test.currentTime)
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		args.Timestamp = tc.clock.Now()
+		args.Timestamp.Logical = 0
 		err := tc.rng.AddCmd(args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1721,20 +1735,27 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 
 	testCases := []struct {
 		curEpoch, intentEpoch int32
+		pushType              proto.PushTxnType
 		expSuccess            bool
 	}{
 		// Same epoch; can't push based on epoch.
-		{0, 0, false},
+		{0, 0, proto.PUSH_TIMESTAMP, false},
+		{0, 0, proto.ABORT_TXN, false},
+		{0, 0, proto.CONFIRM_NOT_PENDING, false},
 		// The intent is newer; definitely can't push.
-		{0, 1, false},
+		{0, 1, proto.PUSH_TIMESTAMP, false},
+		{0, 1, proto.ABORT_TXN, false},
+		{0, 1, proto.CONFIRM_NOT_PENDING, false},
 		// The intent is old; can push.
-		{1, 0, true},
+		{1, 0, proto.PUSH_TIMESTAMP, true},
+		{1, 0, proto.ABORT_TXN, true},
+		{1, 0, proto.CONFIRM_NOT_PENDING, true},
 	}
 
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -1748,7 +1769,7 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		pushee.Epoch = test.intentEpoch
-		args, reply := pushTxnArgs(pusher, pushee, true, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		err := tc.rng.AddCmd(args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1776,26 +1797,29 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 	testCases := []struct {
 		pusherPriority, pusheePriority int32
 		pusherTS, pusheeTS             proto.Timestamp
-		abort                          bool
+		pushType                       proto.PushTxnType
 		expSuccess                     bool
 	}{
 		// Pusher has higher priority succeeds.
-		{2, 1, ts1, ts1, true, true},
+		{2, 1, ts1, ts1, proto.ABORT_TXN, true},
 		// Pusher has lower priority fails.
-		{1, 2, ts1, ts1, true, false},
-		{1, 2, ts1, ts1, false, false},
+		{1, 2, ts1, ts1, proto.ABORT_TXN, false},
+		{1, 2, ts1, ts1, proto.PUSH_TIMESTAMP, false},
 		// Pusher has lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, true, false},
+		{1, 2, ts1, ts2, proto.ABORT_TXN, false},
 		// Pusher has lower priority, but older txn timestamp allows success if !abort.
-		{1, 2, ts1, ts2, false, true},
+		{1, 2, ts1, ts2, proto.PUSH_TIMESTAMP, true},
 		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, true, true},
+		{1, 1, ts1, ts2, proto.ABORT_TXN, true},
 		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, true, false},
-		{1, 1, ts1, ts1, false, false},
+		{1, 1, ts1, ts1, proto.ABORT_TXN, false},
+		{1, 1, ts1, ts1, proto.PUSH_TIMESTAMP, false},
 		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, true, false},
-		{1, 1, ts2, ts1, false, false},
+		{1, 1, ts2, ts1, proto.ABORT_TXN, false},
+		{1, 1, ts2, ts1, proto.PUSH_TIMESTAMP, false},
+		// When confirming, priority never wins.
+		{2, 1, ts1, ts1, proto.CONFIRM_NOT_PENDING, false},
+		{1, 2, ts1, ts1, proto.CONFIRM_NOT_PENDING, false},
 	}
 
 	for i, test := range testCases {
@@ -1808,7 +1832,7 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 		pushee.Timestamp = test.pusheeTS
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
-		args, reply := pushTxnArgs(pusher, pushee, test.abort, 1, tc.store.StoreID())
+		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		err := tc.rng.AddCmd(args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1839,7 +1863,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	pushee.Timestamp = proto.Timestamp{WallTime: 5, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1, tc.store.StoreID())
+	args, reply := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 	if err := tc.rng.AddCmd(args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -1871,7 +1895,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	pushee.Timestamp = proto.Timestamp{WallTime: 50, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1, tc.store.StoreID())
+	args, reply := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
 	if err := tc.rng.AddCmd(args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}

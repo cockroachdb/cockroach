@@ -71,6 +71,26 @@ class RaftTruncatedState;
 class RaftSnapshotData;
 class RaftSnapshotData_KeyValue;
 
+enum PushTxnType {
+  PUSH_TIMESTAMP = 0,
+  ABORT_TXN = 1,
+  CONFIRM_NOT_PENDING = 2
+};
+bool PushTxnType_IsValid(int value);
+const PushTxnType PushTxnType_MIN = PUSH_TIMESTAMP;
+const PushTxnType PushTxnType_MAX = CONFIRM_NOT_PENDING;
+const int PushTxnType_ARRAYSIZE = PushTxnType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* PushTxnType_descriptor();
+inline const ::std::string& PushTxnType_Name(PushTxnType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    PushTxnType_descriptor(), value);
+}
+inline bool PushTxnType_Parse(
+    const ::std::string& name, PushTxnType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<PushTxnType>(
+    PushTxnType_descriptor(), name, value);
+}
 enum InternalValueType {
   _CR_TS = 1
 };
@@ -804,12 +824,12 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::Transaction* release_pushee_txn();
   inline void set_allocated_pushee_txn(::cockroach::proto::Transaction* pushee_txn);
 
-  // optional bool Abort = 3;
-  inline bool has_abort() const;
-  inline void clear_abort();
-  static const int kAbortFieldNumber = 3;
-  inline bool abort() const;
-  inline void set_abort(bool value);
+  // optional .cockroach.proto.PushTxnType push_type = 3;
+  inline bool has_push_type() const;
+  inline void clear_push_type();
+  static const int kPushTypeFieldNumber = 3;
+  inline ::cockroach::proto::PushTxnType push_type() const;
+  inline void set_push_type(::cockroach::proto::PushTxnType value);
 
   // optional bool range_lookup = 4;
   inline bool has_range_lookup() const;
@@ -824,8 +844,8 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_pushee_txn();
   inline void clear_has_pushee_txn();
-  inline void set_has_abort();
-  inline void clear_has_abort();
+  inline void set_has_push_type();
+  inline void clear_has_push_type();
   inline void set_has_range_lookup();
   inline void clear_has_range_lookup();
 
@@ -835,7 +855,7 @@ class InternalPushTxnRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::Transaction* pushee_txn_;
-  bool abort_;
+  int push_type_;
   bool range_lookup_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
@@ -4209,28 +4229,29 @@ inline void InternalPushTxnRequest::set_allocated_pushee_txn(::cockroach::proto:
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalPushTxnRequest.pushee_txn)
 }
 
-// optional bool Abort = 3;
-inline bool InternalPushTxnRequest::has_abort() const {
+// optional .cockroach.proto.PushTxnType push_type = 3;
+inline bool InternalPushTxnRequest::has_push_type() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void InternalPushTxnRequest::set_has_abort() {
+inline void InternalPushTxnRequest::set_has_push_type() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void InternalPushTxnRequest::clear_has_abort() {
+inline void InternalPushTxnRequest::clear_has_push_type() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void InternalPushTxnRequest::clear_abort() {
-  abort_ = false;
-  clear_has_abort();
+inline void InternalPushTxnRequest::clear_push_type() {
+  push_type_ = 0;
+  clear_has_push_type();
 }
-inline bool InternalPushTxnRequest::abort() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalPushTxnRequest.Abort)
-  return abort_;
+inline ::cockroach::proto::PushTxnType InternalPushTxnRequest::push_type() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalPushTxnRequest.push_type)
+  return static_cast< ::cockroach::proto::PushTxnType >(push_type_);
 }
-inline void InternalPushTxnRequest::set_abort(bool value) {
-  set_has_abort();
-  abort_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.Abort)
+inline void InternalPushTxnRequest::set_push_type(::cockroach::proto::PushTxnType value) {
+  assert(::cockroach::proto::PushTxnType_IsValid(value));
+  set_has_push_type();
+  push_type_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalPushTxnRequest.push_type)
 }
 
 // optional bool range_lookup = 4;
@@ -8088,6 +8109,11 @@ RaftSnapshotData::mutable_kv() {
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::cockroach::proto::PushTxnType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::PushTxnType>() {
+  return ::cockroach::proto::PushTxnType_descriptor();
+}
 template <> struct is_proto_enum< ::cockroach::proto::InternalValueType> : ::google::protobuf::internal::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::InternalValueType>() {

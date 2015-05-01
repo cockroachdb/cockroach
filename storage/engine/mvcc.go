@@ -462,6 +462,12 @@ type getValueFunc func(engine Engine, start, end proto.EncodedKey,
 // value, and reads the versioned value indicated by timestamp, taking
 // the transaction txn into account. getValue is a helper function to
 // get an earlier version of the value when doing historical reads.
+//
+// The consistent parameter specifies whether reads should ignore any
+// pending write intents and read the most recent _committed_ value
+// instead. In the event that an inconsistent read does encounter
+// intents, the intent is returned via a WriteIntentError, in addition
+// to the result.
 func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, timestamp proto.Timestamp,
 	consistent bool, txn *proto.Transaction, getValue getValueFunc, buf *getBuffer) (*proto.Value, error) {
 	if !consistent && txn != nil {
@@ -1383,7 +1389,6 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			}
 			ms.KeyBytes += int64(len(kv.Key))
 			ms.ValBytes += int64(len(kv.Value))
-			log.Infof("val %s: %d", kv.Key, len(kv.Value))
 			ms.KeyCount++
 			if meta.IsInline() {
 				ms.ValCount++
@@ -1415,7 +1420,6 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			}
 			ms.KeyBytes += mvccVersionTimestampSize
 			ms.ValBytes += int64(len(kv.Value))
-			log.Infof("val %s @%s: %d", kv.Key, ts, len(kv.Value))
 			ms.ValCount++
 		}
 		return false, nil

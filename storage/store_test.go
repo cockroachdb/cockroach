@@ -75,10 +75,10 @@ type responseAdder interface {
 }
 
 // Send forwards the call to the single store. This is a poor man's
-// version of kv/coordinator, but it serves the purposes of supporting
-// tests in this package. Batches and transactions are not
-// supported. Since kv/ depends on storage/, we can't get access to a
-// coordinator sender from here.
+// version of kv/txn_coord_sender, but it serves the purposes of
+// supporting tests in this package. Transactions are not supported.
+// Since kv/ depends on storage/, we can't get access to a
+// txn_coord_sender from here.
 func (db *testSender) Send(call client.Call) {
 	reqs := []requestUnion{}
 	switch t := call.Args.(type) {
@@ -1104,10 +1104,20 @@ func TestStoreReadInconsistent(t *testing.T) {
 		if err := store.ExecuteCmd(gArgs, gReply); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		}
-		// The new value of B will be read as we can push txn B.
-		if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
-			t.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
+		// The new value of B will not be read at first.
+		if gReply.Value != nil {
+			t.Errorf("expected value nil, got %+v", gReply.Value)
 		}
+		// However, it will be read eventually, as B's intent can be
+		// resolved asynchronously as txn B is committed.
+		util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+			if err := store.ExecuteCmd(gArgs, gReply); err != nil {
+				return util.Errorf("expected read to succeed: %s", err)
+			} else if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
+				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
+			}
+			return nil
+		})
 
 		// Scan keys and verify results.
 		sArgs, sReply := scanArgs(keyA, keyB.Next(), 1, store.StoreID())
@@ -1147,8 +1157,8 @@ func TestStoreScanIntents(t *testing.T) {
 		{true, true, true, 2},
 		// Consistent but can't push will backoff and retry and not finish.
 		{true, false, false, -1},
-		// Inconsistent and can push will make two loops, resolving on first.
-		{false, true, true, 2},
+		// Inconsistent and can push will make one loop, with async resolves.
+		{false, true, true, 1},
 		// Inconsistent and can't push will just read inconsistent (will read nils).
 		{false, false, true, 1},
 	}
@@ -1186,6 +1196,7 @@ func TestStoreScanIntents(t *testing.T) {
 		// Scan the range and verify count. Do this in a goroutine in case
 		// it isn't expected to finish.
 		sArgs, sReply := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+		sArgs.Timestamp = store.Clock().Now()
 		if !test.consistent {
 			sArgs.ReadConsistency = proto.INCONSISTENT
 		}
@@ -1223,6 +1234,49 @@ func TestStoreScanIntents(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestStoreScanInconsistentResolvesIntents lays down 10 intents,
+// commits the txn without resolving intents, then does repeated
+// inconsistent reads until the data shows up, showing that the
+// inconsistent reads are triggering intent resolution.
+func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Lay down 10 intents to scan over.
+	txn := newTransaction("test", proto.Key("foo"), 1, proto.SERIALIZABLE, store.ctx.Clock)
+	keys := []proto.Key{}
+	for j := 0; j < 10; j++ {
+		key := proto.Key(fmt.Sprintf("key%02d", j))
+		keys = append(keys, key)
+		args, reply := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
+		args.Txn = txn
+		if err := store.ExecuteCmd(args, reply); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Now, commit txn without resolving intents.
+	etArgs, etReply := endTxnArgs(txn, true, 1, store.StoreID())
+	etArgs.Timestamp = txn.Timestamp
+	if err := store.ExecuteCmd(etArgs, etReply); err != nil {
+		t.Fatal(err)
+	}
+
+	// Scan the range repeatedly until we've verified count.
+	sArgs, sReply := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+	sArgs.ReadConsistency = proto.INCONSISTENT
+	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+		if err := store.ExecuteCmd(sArgs, sReply); err != nil {
+			return err
+		}
+		if len(sReply.Rows) != 10 {
+			return util.Errorf("could not read rows as expected")
+		}
+		return nil
+	})
 }
 
 func TestRaftNodeID(t *testing.T) {

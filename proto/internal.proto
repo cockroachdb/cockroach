@@ -93,6 +93,18 @@ message InternalGCResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// TxnPushType determines what action to take when pushing a
+// transaction.
+enum PushTxnType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Push the timestamp forward if possible to accommodate a concurrent reader.
+  PUSH_TIMESTAMP = 0;
+  // Abort the transaction if possible to accommodate a concurrent writer.
+  ABORT_TXN = 1;
+  // Confirm that the transaction has either been committed or aborted.
+  CONFIRM_NOT_PENDING = 2;
+}
+
 // An InternalPushTxnRequest is arguments to the InternalPushTxn()
 // method. It's sent by readers or writers which have encountered an
 // "intent" laid down by another transaction. The goal is to resolve
@@ -104,16 +116,18 @@ message InternalGCResponse {
 // been committed or aborted already. Otherwise, the existing txn can
 // either be aborted (for write/write conflicts), or its commit
 // timestamp can be moved forward (for read/write conflicts). The
-// course of action is determined by the owning txn's status and also
-// by comparing priorities.
+// course of action is determined by the specified push type, and by
+// the owning txn's status and priority.
 message InternalPushTxnRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
-  // Set to true to request that the PushTxn be aborted if possible.
-  // This is done in the event of a writer conflicting with PusheeTxn.
-  // Readers set this to false and instead attempt to move PusheeTxn's
-  // commit timestamp forward.
-  optional bool Abort = 3 [(gogoproto.nullable) = false];
+  // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
+  // timestamp forward. Writers set this to ABORT_TXN to request that
+  // the PushTxn be aborted if possible. This is done in the event of
+  // a writer conflicting with PusheeTxn. Inconsistent readers set
+  // this to CONFIRM_NOT_PENDING to determine whether dangling intents
+  // may be resolved.
+  optional PushTxnType push_type = 3 [(gogoproto.nullable) = false];
   // Range lookup indicates whether we're pushing a txn because of an
   // intent encountered while servicing an internal range lookup
   // request. See notes in InternalLookupRangeRequest.

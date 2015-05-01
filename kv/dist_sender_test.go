@@ -315,24 +315,26 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 		return nil, nil
 	}
 
-	ctx := &DistSenderContext{
-		rpcSend: testFn,
-		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
-			if !opts.ignoreIntents {
-				t.Fatal("expected ignore intents to be true")
-			}
-			return []proto.RangeDescriptor{testRangeDescriptor}, nil
-		}),
+	for _, rangeLookup := range []bool{true, false} {
+		ctx := &DistSenderContext{
+			rpcSend: testFn,
+			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+				if opts.ignoreIntents != rangeLookup {
+					t.Fatalf("expected ignore intents to be %t", rangeLookup)
+				}
+				return []proto.RangeDescriptor{testRangeDescriptor}, nil
+			}),
+		}
+		ds := NewDistSender(ctx, g)
+		call := client.Call{
+			Args: &proto.InternalPushTxnRequest{
+				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
+				RangeLookup:   rangeLookup,
+			},
+			Reply: &proto.InternalPushTxnResponse{},
+		}
+		ds.Send(call)
 	}
-	ds := NewDistSender(ctx, g)
-	call := client.Call{
-		Args: &proto.InternalPushTxnRequest{
-			RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
-			RangeLookup:   true,
-		},
-		Reply: &proto.InternalPushTxnResponse{},
-	}
-	ds.Send(call)
 }
 
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip

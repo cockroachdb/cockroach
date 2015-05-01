@@ -994,7 +994,22 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it in Range.executeCmd.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
-			err = s.resolveWriteIntentError(wiErr, rng, args, reply)
+			// If inconsistent, return results and resolve asynchronously.
+			if header.ReadConsistency == proto.INCONSISTENT {
+				s.stopper.StartTask()
+				go func() {
+					s.resolveWriteIntentError(wiErr, rng, args, proto.CONFIRM_NOT_PENDING, true)
+					s.stopper.FinishTask()
+				}()
+				reply.Header().Error = nil
+				return util.RetryBreak, nil
+			}
+			var pushType proto.PushTxnType
+			if proto.IsWrite(args) {
+				pushType = proto.ABORT_TXN
+			}
+			err = s.resolveWriteIntentError(wiErr, rng, args, pushType, false)
+			reply.Header().SetGoError(err)
 		}
 
 		switch t := err.(type) {
@@ -1007,24 +1022,13 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
-				// If read was inconsistent & we resolved, change to consistent
-				// to allow outstanding resolves to finish before reading.
-				if header.ReadConsistency == proto.INCONSISTENT {
-					header.ReadConsistency = proto.CONSISTENT
-				}
 				return util.RetryReset, nil
-			} else if header.ReadConsistency == proto.INCONSISTENT {
-				// If read was inconsistent, don't retry, clear the error and
-				// return the inconsistent results.
-				reply.Header().Error = nil
-				return util.RetryBreak, nil
 			}
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
 			for _, intent := range t.Intents {
 				if proto.IsWrite(args) && header.Timestamp.Less(intent.Txn.Timestamp) {
-					header.Timestamp = intent.Txn.Timestamp
-					header.Timestamp.Logical++
+					header.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
 			return util.RetryContinue, nil
@@ -1049,8 +1053,8 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 // Resolved flag to true so the client retries the command
 // immediately. If the push fails, we set the error's Resolved flag to
 // false so that the client backs off before reissuing the command.
-func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError,
-	rng *Range, args proto.Request, reply proto.Response) error {
+func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
+	pushType proto.PushTxnType, wait bool) error {
 	log.V(1).Infof("resolving write intent on %s %q: %s", args.Method(), args.Header().Key, wiErr)
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
@@ -1066,7 +1070,7 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError,
 				Txn:          args.Header().Txn,
 			},
 			PusheeTxn:   intent.Txn,
-			Abort:       proto.IsWrite(args), // abort if cmd is write
+			PushType:    pushType,
 			RangeLookup: args.Method() == proto.InternalRangeLookup,
 		}
 		bArgs.Add(pushArgs)
@@ -1080,7 +1084,6 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError,
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
 		if args.Header().Txn != nil && proto.IsWrite(args) {
-			reply.Header().SetGoError(pushErr)
 			return pushErr
 		}
 		// For read/write conflicts, return the write intent error which
@@ -1106,7 +1109,8 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError,
 		}
 		resolveReply := &proto.InternalResolveIntentResponse{}
 		// Add resolve command with wait=false to add to Raft but not wait for completion.
-		if resolveErr := rng.AddCmd(resolveArgs, resolveReply, false); resolveErr != nil {
+		waitForResolve := wait && i == len(wiErr.Intents)-1
+		if resolveErr := rng.AddCmd(resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
 			return resolveErr
 		}
 	}
