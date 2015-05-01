@@ -503,7 +503,9 @@ func (ds *DistSender) Send(call client.Call) {
 		args.Header().Timestamp = ds.clock.Now()
 	}
 
-	// If this is an InternalPushTxn, set ignoreIntents option as necessary.
+	// If this is an InternalPushTxn, set ignoreIntents option as
+	// necessary. This prevents a potential infinite loop; see the
+	// comments in proto.InternalLookupRangeRequest.
 	options := lookupOptions{}
 	if pushArgs, ok := args.(*proto.InternalPushTxnRequest); ok {
 		options.ignoreIntents = pushArgs.RangeLookup
