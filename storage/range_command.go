@@ -573,11 +573,12 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && args.PushType == proto.PUSH_TIMESTAMP {
 		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
 		pusherWins = true
-	} else if (reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp))) &&
-		args.PushType != proto.CLEANUP_TXN {
-		// If not just attempting to cleanup old or already-committed txns,
-		// pusher wins based on priority; if priorities are equal, order
+	} else if args.PushType == proto.CLEANUP_TXN {
+		// If just attempting to cleanup old or already-committed txns, don't push.
+		pusherWins = false
+	} else if reply.PusheeTxn.Priority < priority ||
+		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
+		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.
 		log.V(1).Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
 		pusherWins = true

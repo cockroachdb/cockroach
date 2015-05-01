@@ -1005,7 +1005,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 				reply.Header().Error = nil
 				return util.RetryBreak, nil
 			}
-			var pushType proto.PushTxnType
+			pushType := proto.PUSH_TIMESTAMP
 			if proto.IsWrite(args) {
 				pushType = proto.ABORT_TXN
 			}

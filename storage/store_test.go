@@ -1144,8 +1144,8 @@ func TestStoreReadInconsistent(t *testing.T) {
 func TestStoreScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
-	defer stopper.Stop()
 	defer func() { TestingCommandFilter = nil }()
+	defer stopper.Stop()
 
 	testCases := []struct {
 		consistent bool
