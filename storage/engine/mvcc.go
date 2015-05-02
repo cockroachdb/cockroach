@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -1354,6 +1355,22 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 	return humanKey, nil
 }
 
+var statsDiagnosticsEnabled int32
+
+func areStatsDiagnosticsEnabled() bool {
+	return atomic.LoadInt32(&statsDiagnosticsEnabled) == 1
+}
+
+// EnableMVCCComputeStatsDiagnostics turns stats diagnostics on or off.
+func EnableMVCCComputeStatsDiagnostics(enabled bool) {
+	oldValue := int32(0)
+	newValue := int32(1)
+	if !enabled {
+		oldValue, newValue = newValue, oldValue
+	}
+	atomic.CompareAndSwapInt32(&statsDiagnosticsEnabled, oldValue, newValue)
+}
+
 // MVCCComputeStats scans the underlying engine from start to end keys
 // and computes stats counters based on the values. This method is
 // used after a range is split to recompute stats for each
@@ -1372,8 +1389,10 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 	ms := proto.MVCCStats{LastUpdateNanos: nowNanos}
 	first := false
 	meta := &proto.MVCCMetadata{}
+	diag := areStatsDiagnosticsEnabled()
+
 	err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
-		_, ts, isValue := MVCCDecodeKey(kv.Key)
+		key, ts, isValue := MVCCDecodeKey(kv.Key)
 		if !isValue {
 			totalBytes := int64(len(kv.Value)) + int64(len(kv.Key))
 			first = true
@@ -1392,6 +1411,9 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			ms.KeyCount++
 			if meta.IsInline() {
 				ms.ValCount++
+			}
+			if diag {
+				log.Infof("diag: %s meta  k=%d v=%d", key, len(kv.Key), len(kv.Value))
 			}
 		} else {
 			totalBytes := int64(len(kv.Value)) + mvccVersionTimestampSize
@@ -1421,6 +1443,9 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			ms.KeyBytes += mvccVersionTimestampSize
 			ms.ValBytes += int64(len(kv.Value))
 			ms.ValCount++
+			if diag {
+				log.Infof("diag: %s value k=%d v=%d @%s", key, mvccVersionTimestampSize, len(kv.Value), ts)
+			}
 		}
 		return false, nil
 	})
