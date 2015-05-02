@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
+	"code.google.com/p/go-uuid/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -350,7 +350,7 @@ func TestValueChecksumWithInteger(t *testing.T) {
 }
 
 func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := util.NewUUID4(), util.NewUUID4()
+	txn1, txn2 := uuid.NewRandom(), uuid.NewRandom()
 	txn1Copy := append([]byte(nil), txn1...)
 
 	testCases := []struct {

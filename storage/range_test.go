@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -1893,7 +1894,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Put a 2nd value transactionally.
 	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
-	pArgs.Txn = &proto.Transaction{ID: util.NewUUID4(), Timestamp: pArgs.Timestamp}
+	pArgs.Txn = &proto.Transaction{ID: uuid.NewRandom(), Timestamp: pArgs.Timestamp}
 	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}

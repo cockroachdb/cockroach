@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -475,7 +476,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs, pReply = putArgs(engine.TransactionKey(meta2KeyMax, []byte(util.NewUUID4())),
+	pArgs, pReply = putArgs(engine.TransactionKey(meta2KeyMax, []byte(uuid.New())),
 		[]byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(pArgs, pReply); err != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", err)

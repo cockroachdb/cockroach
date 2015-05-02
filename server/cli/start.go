@@ -26,6 +26,7 @@ import (
 	"time"
 
 	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -42,9 +43,9 @@ var initCmd = &commander.Command{
 	UsageLine: "init -stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
 	Short:     "init new Cockroach cluster and start server",
 	Long: `
-Initialize a new Cockroach cluster using the -stores command line flag to
-specify one or more storage locations. The first of these storage locations is
-used to bootstrap the first replica of the first range. If any of the storage
+Initialize a new Cockroach cluster using the -stores command line flag to 
+specify one or more storage locations. The first of these storage locations is 
+used to bootstrap the first replica of the first range. If any of the storage 
 locations are already part of a pre-existing cluster, the bootstrap will fail.
 
 For example:
@@ -65,7 +66,7 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
-	clusterID := util.NewUUID4().String()
+	clusterID := uuid.New()
 	stopper := util.NewStopper()
 	if _, err := server.BootstrapCluster(clusterID, Context.Engines, stopper); err != nil {
 		log.Errorf("unable to bootstrap cluster: %s", err)

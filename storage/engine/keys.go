@@ -137,7 +137,7 @@ func ResponseCacheKey(raftID int64, cmdID *proto.ClientCmdID) proto.Key {
 
 // MakeRangeKey creates a range-local key based on the range
 // start key, metadata key suffix, and optional detail (e.g. the
-// transaction ID for a txn record, etc.).
+// transaction UUID for a txn record, etc.).
 func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != KeyLocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
@@ -408,7 +408,7 @@ var (
 	// range). The key is appended to this prefix, encoded using
 	// EncodeBytes. The specific sort of per-range metadata is
 	// identified by one of the suffixes listed below, along with
-	// potentially additional encoded key info, such as the txn ID in
+	// potentially additional encoded key info, such as the txn UUID in
 	// the case of a transaction record.
 	//
 	// NOTE: KeyLocalRangeKeyPrefix must be kept in sync with the value
