@@ -421,7 +421,7 @@ func DecodeBytes(b []byte) ([]byte, []byte) {
 		if i == -1 {
 			panic("did not find terminator")
 		}
-		if i+1 > len(b) {
+		if i+1 >= len(b) {
 			panic("malformed escape")
 		}
 
