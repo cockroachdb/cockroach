@@ -1347,8 +1347,8 @@ func BenchmarkLookupAndAddRanges(b *testing.B) {
 		raftID := int64(i)
 		for {
 			start := rand.Int63()
-			startKey := proto.Key(fmt.Sprintf("a%d", start))
-			endKey := proto.Key(fmt.Sprintf("a%d", start+1))
+			startKey := proto.Key(fmt.Sprintf("a020%d", start))
+			endKey := proto.Key(fmt.Sprintf("a020%d", start+1))
 			if store.LookupRange(startKey, endKey) == nil {
 				rng := createRange(store, raftID, startKey, endKey)
 				if err := store.AddRange(rng); err != nil {
