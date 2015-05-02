@@ -19,7 +19,6 @@ package proto
 
 import (
 	"bytes"
-	"crypto/md5"
 	"fmt"
 	"math"
 	"math/rand"
@@ -247,8 +246,6 @@ var (
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
 	// ZeroTimestamp is an empty timestamp.
 	ZeroTimestamp = Timestamp{WallTime: 0, Logical: 0}
-	// NoTxnMD5 is a zero-filled md5 byte array, used to indicate a nil transaction.
-	NoTxnMD5 = [md5.Size]byte{}
 )
 
 // Less implements the util.Ordered interface, allowing
@@ -385,6 +382,11 @@ func (kv RawKeyValue) Compare(b llrb.Comparable) int {
 	return bytes.Compare(kv.Key, b.(KeyGetter).KeyGet())
 }
 
+const (
+	// TxnIDSize is the size in bytes of a transaction ID.
+	TxnIDSize = 16
+)
+
 // NewTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
 // affected by the transaction) and a random UUID to guarantee
@@ -403,7 +405,7 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 	return &Transaction{
 		Name:          name,
 		Key:           baseKey,
-		ID:            []byte(uuid.New()),
+		ID:            uuid.NewRandom(),
 		Priority:      priority,
 		Isolation:     isolation,
 		Timestamp:     now,
@@ -443,9 +445,15 @@ func MakePriority(r *rand.Rand, userPriority int32) int32 {
 	return math.MaxInt32 - rand.Int31n(math.MaxInt32/userPriority)
 }
 
-// MD5Equal returns whether the specified md5.Size byte arrays are equal.
-func MD5Equal(a, b [md5.Size]byte) bool {
-	for i := 0; i < md5.Size; i++ {
+// TxnIDEqual returns whether the transaction IDs are equal.
+func TxnIDEqual(a, b []byte) bool {
+	if a == nil && b == nil {
+	} else if a == nil && b != nil {
+		return false
+	} else if a != nil && b == nil {
+		return false
+	}
+	for i := 0; i < TxnIDSize; i++ {
 		if a[i] != b[i] {
 			return false
 		}
@@ -509,19 +517,10 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
-// MD5 returns the MD5 digest of the transaction ID. This method
-// returns an empty string if the transaction is nil.
-func (t *Transaction) MD5() [md5.Size]byte {
-	if t == nil {
-		return NoTxnMD5
-	}
-	return md5.Sum(t.ID)
-}
-
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s orig=%s max=%s}",
-		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		t.Name, uuid.UUID(t.ID), t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
 
 // IsInline returns true if the value is inlined in the metadata.

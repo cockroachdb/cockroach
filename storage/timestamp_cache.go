@@ -20,8 +20,6 @@ package storage
 import (
 	"time"
 
-	"crypto/md5"
-
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -38,11 +36,9 @@ const (
 
 // A TimestampCache maintains an interval tree FIFO cache of keys or
 // key ranges and the timestamps at which they were most recently read
-// or written. If a timestamp was read or written by a transaction, an
-// MD5 of the txn ID is stored with the timestamp to avoid advancing
-// timestamps on successive requests from the same transaction. We use
-// the MD5 of the txn ID to conserve memory as txn IDs are expected to
-// be fairly large ~100 bytes.
+// or written. If a timestamp was read or written by a transaction,
+// the txn ID is stored with the timestamp to avoid advancing
+// timestamps on successive requests from the same transaction.
 //
 // The cache also maintains a low-water mark which is the most
 // recently evicted entry's timestamp. This value always ratchets
@@ -53,12 +49,11 @@ type TimestampCache struct {
 	lowWater, latest proto.Timestamp
 }
 
-// A cacheEntry combines the timestamp with an optional MD5 of the
-// transaction ID.
+// A cacheEntry combines the timestamp with an optional txn ID.
 type cacheEntry struct {
 	timestamp proto.Timestamp
-	txnMD5    [md5.Size]byte // Empty for no transaction
-	readOnly  bool           // Command is read-only
+	txnID     []byte // Nil for no transaction
+	readOnly  bool   // Command is read-only
 }
 
 // NewTimestampCache returns a new timestamp cache with supplied
@@ -91,9 +86,9 @@ func (tc *TimestampCache) SetLowWater(lowWater proto.Timestamp) {
 
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
-// key only. txnMD5 is empty for no transaction. readOnly specifies
+// key only. txnID is nil for no transaction. readOnly specifies
 // whether the command adding this timestamp was read-only or not.
-func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
+func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, txnID []byte, readOnly bool) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
@@ -119,7 +114,7 @@ func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, t
 				tc.cache.Del(o.Key) // delete existing key; this cache entry supersedes.
 			}
 		}
-		ce := cacheEntry{timestamp: timestamp, txnMD5: txnMD5, readOnly: readOnly}
+		ce := cacheEntry{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
 		tc.cache.Add(key, ce)
 	}
 }
@@ -130,12 +125,12 @@ func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, t
 // range is overlapped by timestamps in the cache, the low water
 // timestamp is returned for both read and write timestamps.
 //
-// The txnMD5 is an MD5 of the transaction ID. It prevents restarts
-// with a pattern like: read("a"), write("a"). The read adds a
-// timestamp for "a". Then the write (for the same transaction) would
-// get that as the max timestamp and be forced to increment it. The MD5
-// allows timestamps from the same txn to be ignored.
-func (tc *TimestampCache) GetMax(start, end proto.Key, txnMD5 [md5.Size]byte) (proto.Timestamp, proto.Timestamp) {
+// The txn ID prevents restarts with a pattern like: read("a"),
+// write("a"). The read adds a timestamp for "a". Then the write (for
+// the same transaction) would get that as the max timestamp and be
+// forced to increment it. This allows timestamps from the same txn
+// to be ignored.
+func (tc *TimestampCache) GetMax(start, end proto.Key, txnID []byte) (proto.Timestamp, proto.Timestamp) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
@@ -143,7 +138,7 @@ func (tc *TimestampCache) GetMax(start, end proto.Key, txnMD5 [md5.Size]byte) (p
 	maxW := tc.lowWater
 	for _, o := range tc.cache.GetOverlaps(start, end) {
 		ce := o.Value.(cacheEntry)
-		if proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) || !proto.MD5Equal(txnMD5, ce.txnMD5) {
+		if ce.txnID == nil || txnID == nil || !proto.TxnIDEqual(txnID, ce.txnID) {
 			if ce.readOnly && maxR.Less(ce.timestamp) {
 				maxR = ce.timestamp
 			} else if !ce.readOnly && maxW.Less(ce.timestamp) {
