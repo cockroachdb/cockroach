@@ -132,6 +132,8 @@ func (ser *storeEventReader) updateCountString() string {
 // recieved by a single event reader.
 func TestMultiStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	engine.EnableMVCCComputeStatsDiagnostics(true)
+	defer engine.EnableMVCCComputeStatsDiagnostics(false)
 
 	// Create a multiTestContext which publishes all store events to the given
 	// feed.
