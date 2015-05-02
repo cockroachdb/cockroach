@@ -825,7 +825,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		desc2Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
 		txn.Prepare(updateRangeDescriptorCall(desc2Key, desc, &updatedDesc))
 		// Update range descriptor addressing record(s).
-		calls, err := SplitRangeAddressing(newDesc, &updatedDesc)
+		calls, err := splitRangeAddressing(newDesc, &updatedDesc)
 		if err != nil {
 			return err
 		}
@@ -987,7 +987,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
 		txn.Prepare(client.Delete(desc2Key))
 
-		calls, err := MergeRangeAddressing(desc, &updatedDesc)
+		calls, err := mergeRangeAddressing(desc, &updatedDesc)
 		if err != nil {
 			return err
 		}
@@ -1114,7 +1114,12 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 
 		txn.Prepare(updateRangeDescriptorCall(descKey, desc, &updatedDesc))
 
-		// TODO(bdarnell): call UpdateRangeAddressing
+		// Update range descriptor addressing record(s).
+		calls, err := updateRangeAddressing(&updatedDesc)
+		if err != nil {
+			return err
+		}
+		txn.Prepare(calls...)
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
