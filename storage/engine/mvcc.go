@@ -1414,6 +1414,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (pro
 			}
 			if diag {
 				log.Infof("diag: %s meta  k=%d v=%d", key, len(kv.Key), len(kv.Value))
+				log.Infof("meta: %+v, encoded=%q", meta, kv.Value)
 			}
 		} else {
 			totalBytes := int64(len(kv.Value)) + mvccVersionTimestampSize
