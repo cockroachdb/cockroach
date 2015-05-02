@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -517,7 +518,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 			RaftNodeID: uint64(test.nodeID),
 		})
 		// Verify expected low water mark.
-		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, proto.NoTxnMD5)
+		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got %d, %d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
@@ -934,17 +935,17 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(err)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, proto.NoTxnMD5)
+	rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s", rTS, wTS)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, wTS = tc.rng.tsCache.GetMax(proto.Key("b"), nil, proto.NoTxnMD5)
+	rTS, wTS = tc.rng.tsCache.GetMax(proto.Key("b"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s", rTS, wTS)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, wTS = tc.rng.tsCache.GetMax(proto.Key("c"), nil, proto.NoTxnMD5)
+	rTS, wTS = tc.rng.tsCache.GetMax(proto.Key("c"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s", rTS, wTS)
 	}
@@ -1893,11 +1894,11 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Put a 2nd value transactionally.
 	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
-	pArgs.Txn = &proto.Transaction{ID: []byte("txn1"), Timestamp: pArgs.Timestamp}
+	pArgs.Txn = &proto.Transaction{ID: uuid.NewRandom(), Timestamp: pArgs.Timestamp}
 	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 118, KeyBytes: 30, ValBytes: 88, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
+	expMS = proto.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Resolve the 2nd value.

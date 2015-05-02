@@ -559,7 +559,7 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 	r.Lock()
 	if err == nil && usesTimestampCache(args) {
 		header := args.Header()
-		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5(), readOnly)
+		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), readOnly)
 	}
 	r.cmdQ.Remove(cmdKey)
 	r.Unlock()
@@ -668,7 +668,7 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 	// inform the final commit timestamp.
 	if usesTimestampCache(args) {
 		r.Lock()
-		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, header.Txn.MD5())
+		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, header.Txn.GetID())
 		r.Unlock()
 
 		// Always push the timestamp forward if there's been a read which

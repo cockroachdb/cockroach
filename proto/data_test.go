@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"code.google.com/p/go-uuid/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -345,6 +346,49 @@ func TestValueChecksumWithInteger(t *testing.T) {
 		if err := v.Verify(k); err == nil {
 			t.Error("expected checksum verification failure on different value")
 		}
+	}
+}
+
+func TestTxnIDEqual(t *testing.T) {
+	txn1, txn2 := uuid.NewRandom(), uuid.NewRandom()
+	txn1Copy := append([]byte(nil), txn1...)
+
+	testCases := []struct {
+		a, b     []byte
+		expEqual bool
+	}{
+		{txn1, txn1, true},
+		{txn1, txn2, false},
+		{txn1, txn1Copy, true},
+	}
+	for i, test := range testCases {
+		if eq := TxnIDEqual(test.a, test.b); eq != test.expEqual {
+			t.Errorf("%d: expected %q == %q: %t; got %t", i, test.a, test.b, test.expEqual, eq)
+		}
+	}
+}
+
+func TestTransactionString(t *testing.T) {
+	id := []byte("ת\x0f^\xe4-Fؽ\xf7\x16\xe4\xf9\xbe^\xbe")
+	ts1 := makeTS(10, 11)
+	txn := Transaction{
+		Name:          "name",
+		Key:           Key("foo"),
+		ID:            id,
+		Priority:      10,
+		Isolation:     SERIALIZABLE,
+		Status:        COMMITTED,
+		Epoch:         2,
+		LastHeartbeat: &ts1,
+		Timestamp:     makeTS(20, 21),
+		OrigTimestamp: makeTS(30, 31),
+		MaxTimestamp:  makeTS(40, 41),
+	}
+	expStr := `"name" {id=d7aa0f5e-e42d-46d8-bdf7-16e4f9be5ebe pri=10, iso=SERIALIZABLE, stat=COMMITTED, ` +
+		`epo=2, ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41}`
+
+	if str := txn.String(); str != expStr {
+		t.Errorf("expected txn %s; got %s", expStr, str)
 	}
 }
 
