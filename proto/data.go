@@ -25,7 +25,6 @@ import (
 	"sort"
 	"strconv"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/util"
@@ -382,16 +381,11 @@ func (kv RawKeyValue) Compare(b llrb.Comparable) int {
 	return bytes.Compare(kv.Key, b.(KeyGetter).KeyGet())
 }
 
-const (
-	// TxnIDSize is the size in bytes of a transaction ID.
-	TxnIDSize = 16
-)
-
 // NewTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
-// affected by the transaction) and a random UUID to guarantee
-// uniqueness. The specified user-level priority is combined with
-// a randomly chosen value to yield a final priority, used to settle
+// affected by the transaction) and a random ID to guarantee
+// uniqueness. The specified user-level priority is combined with a
+// randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Range.InternalPushTxn).
 func NewTransaction(name string, baseKey Key, userPriority int32,
@@ -405,7 +399,7 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 	return &Transaction{
 		Name:          name,
 		Key:           baseKey,
-		ID:            uuid.NewRandom(),
+		ID:            util.NewUUID4(),
 		Priority:      priority,
 		Isolation:     isolation,
 		Timestamp:     now,
@@ -447,18 +441,7 @@ func MakePriority(r *rand.Rand, userPriority int32) int32 {
 
 // TxnIDEqual returns whether the transaction IDs are equal.
 func TxnIDEqual(a, b []byte) bool {
-	if a == nil && b == nil {
-	} else if a == nil && b != nil {
-		return false
-	} else if a != nil && b == nil {
-		return false
-	}
-	for i := 0; i < TxnIDSize; i++ {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return bytes.Equal(a, b)
 }
 
 // Restart reconfigures a transaction for restart. The epoch is
@@ -520,7 +503,7 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s orig=%s max=%s}",
-		t.Name, uuid.UUID(t.ID), t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		t.Name, util.UUID(t.ID), t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
 
 // IsInline returns true if the value is inlined in the metadata.

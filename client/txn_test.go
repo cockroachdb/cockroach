@@ -20,14 +20,14 @@ package client
 import (
 	"testing"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var (
 	txnKey = proto.Key("test-txn")
-	txnID  = []byte(uuid.New())
+	txnID  = []byte(util.NewUUID4())
 )
 
 func makeTS(walltime int64, logical int32) proto.Timestamp {

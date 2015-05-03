@@ -9,7 +9,6 @@ cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
 bitbucket.org/tebeka/go2xunit 77968f802fb3
 code.google.com/p/go-commander df033a4b379cd723ef7408b881c1e092cd943831
-code.google.com/p/go-uuid 35bc42037350
 code.google.com/p/snappy-go 8850bd446ad6
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store cb1ae010c5c75b7ce4f5c5d0ef92defcafdfdce4

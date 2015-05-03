@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -95,11 +94,11 @@ func TestRocksDBCompaction(t *testing.T) {
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		{
-			Key:   TransactionKey(proto.Key("a"), proto.Key(uuid.New())),
+			Key:   TransactionKey(proto.Key("a"), proto.Key(util.NewUUID4())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		{
-			Key:   TransactionKey(proto.Key("b"), proto.Key(uuid.New())),
+			Key:   TransactionKey(proto.Key("b"), proto.Key(util.NewUUID4())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}

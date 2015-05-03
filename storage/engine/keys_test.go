@@ -21,8 +21,8 @@ import (
 	"bytes"
 	"testing"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -61,8 +61,8 @@ func TestKeyAddress(t *testing.T) {
 		{proto.Key("123"), proto.Key("123")},
 		{MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
-		{TransactionKey(proto.Key("baz"), proto.Key(uuid.New())), proto.Key("baz")},
-		{TransactionKey(KeyMax, proto.Key(uuid.New())), KeyMax},
+		{TransactionKey(proto.Key("baz"), proto.Key(util.NewUUID4())), proto.Key("baz")},
+		{TransactionKey(KeyMax, proto.Key(util.NewUUID4())), KeyMax},
 	}
 	for i, test := range testCases {
 		result := KeyAddress(test.key)

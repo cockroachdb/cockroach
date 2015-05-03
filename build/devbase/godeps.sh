@@ -20,7 +20,7 @@ if ! test -e ${GOPATH}/bin/glock ; then
     # itself, so no -u here)
     go get github.com/robfig/glock
 fi
-    
+
 ${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
 
 # NOTE: Use "make listdeps" to update this list. We can't just use "go
@@ -31,10 +31,10 @@ ${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
 # downloaded but whose dependencies have not).
 pkgs="
 code.google.com/p/go-commander
-code.google.com/p/go-uuid/uuid
 code.google.com/p/snappy-go/snappy
 github.com/biogo/store/interval
 github.com/biogo/store/llrb
+github.com/cockroachdb/c-lz4
 github.com/cockroachdb/c-protobuf
 github.com/cockroachdb/c-rocksdb
 github.com/cockroachdb/c-snappy
