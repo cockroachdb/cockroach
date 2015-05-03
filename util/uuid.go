@@ -49,7 +49,7 @@ func NewUUID4() UUID {
 }
 
 // String formats as hex xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,
-// or "" if t is invalid.
+// or "" if u is invalid.
 func (u UUID) String() string {
 	if u == nil || len(u) != UUIDSize {
 		return ""
