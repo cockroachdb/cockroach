@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package base
+package base_test
 
 import (
 	"github.com/cockroachdb/cockroach/security"

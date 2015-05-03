@@ -15,9 +15,12 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package security
+package security_test
 
-import "github.com/cockroachdb/cockroach/security/securitytest"
+import (
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+)
 
 func init() {
 	ResetTest()
@@ -26,5 +29,5 @@ func init() {
 // ResetTest sets up the test environment. In particular, it embeds the
 // test_certs folder and makes the tls package load from there.
 func ResetTest() {
-	SetReadFileFn(securitytest.Asset)
+	security.SetReadFileFn(securitytest.Asset)
 }

@@ -31,7 +31,7 @@ import (
 func TestGenerateCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
-	defer security.ResetTest()
+	defer ResetTest()
 
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
@@ -69,7 +69,7 @@ func TestGenerateCerts(t *testing.T) {
 func TestUseCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
-	defer security.ResetTest()
+	defer ResetTest()
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 

@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package structured
+package structured_test
 
 import (
 	"github.com/cockroachdb/cockroach/security"
