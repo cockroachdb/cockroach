@@ -329,12 +329,13 @@ func DecodeUvarint(b []byte) ([]byte, uint64) {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
 	length := int(b[0]) - 8
+	b = b[1:] // skip length byte
 	if length < 0 {
 		panic(fmt.Sprintf("unable to decode negative value into uint64: %d", length))
-	}
-	b = b[1:] // skip length byte
-	if len(b) < length {
-		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", b))
+	} else if length > 8 {
+		panic(fmt.Sprintf("invalid uvarint length of %d", length))
+	} else if len(b) < length {
+		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %v", b))
 	}
 	var v uint64
 	// It is faster to range over the elements in a slice than to index
