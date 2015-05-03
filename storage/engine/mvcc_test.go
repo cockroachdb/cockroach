@@ -2066,7 +2066,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		key, ts, _ := MVCCDecodeKey(kv.Key)
 		log.Infof("%d: %q, ts=%s", i, key, ts)
 		if !kv.Key.Equal(expEncKeys[i]) {
-			t.Errorf("%d: expected key %q; got %q", expEncKeys[i], kv.Key)
+			t.Errorf("%d: expected key %q; got %q", i, expEncKeys[i], kv.Key)
 		}
 	}
 

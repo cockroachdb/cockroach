@@ -206,7 +206,7 @@ func TestProtoEncodingError(t *testing.T) {
 	var value string
 	err = util.UnmarshalRequest(req, reqBody, value, []util.EncodingType{util.ProtoEncoding})
 	if err == nil {
-		t.Errorf("%d: unexpected success")
+		t.Errorf("unexpected success")
 	}
 
 	req.Header.Add(util.AcceptHeader, "application/x-protobuf")
