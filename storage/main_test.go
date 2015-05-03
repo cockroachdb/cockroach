@@ -15,7 +15,7 @@
 //
 // Author: Ben Darnell
 
-package storage
+package storage_test
 
 import (
 	"testing"

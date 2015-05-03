@@ -15,7 +15,7 @@
 //
 // Author: Ben Darnell
 
-package engine
+package engine_test
 
 import (
 	"testing"

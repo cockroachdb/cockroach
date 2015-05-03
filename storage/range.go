@@ -176,7 +176,7 @@ type leaseRejectedError struct {
 func (l *leaseRejectedError) Error() string {
 	nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(l.Lease.RaftNodeID))
 	return fmt.Sprintf("node %d, store %d: previous lease %s overlaps %s (effective %s)",
-		nodeID, storeID, l.PrevLease, l.Lease, l.EffectiveStart)
+		nodeID, storeID, &l.PrevLease, &l.Lease, l.EffectiveStart)
 }
 
 // A Range is a contiguous keyspace with writes managed via an

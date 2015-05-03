@@ -64,7 +64,7 @@ func TestClientNoCache(t *testing.T) {
 	c2 := NewClient(s.Addr(), nil, rpcContext)
 	<-c2.Ready
 	if c1 == c2 {
-		t.Errorf("expected different clients with cache disabled: %s != %s", c1, c2)
+		t.Errorf("expected different clients with cache disabled: %+v != %+v", c1, c2)
 	}
 	s.Close()
 }

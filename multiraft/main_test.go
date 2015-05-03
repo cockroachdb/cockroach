@@ -15,7 +15,7 @@
 //
 // Author: Ben Darnell
 
-package multiraft
+package multiraft_test
 
 import (
 	"testing"

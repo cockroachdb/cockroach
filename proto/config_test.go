@@ -82,7 +82,7 @@ func TestRangeDescriptorMissingReplica(t *testing.T) {
 	desc := RangeDescriptor{}
 	i, r := desc.FindReplica(0)
 	if i >= 0 || r != nil {
-		t.Fatalf("unexpected return (%s, %s) on missing replica", i, r)
+		t.Fatalf("unexpected return (%d, %s) on missing replica", i, r)
 	}
 }
 

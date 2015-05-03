@@ -901,8 +901,8 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// expiration will still be measured relative to it.
 		expExpiration := test.args.Header().Timestamp.Add(int64(defaultLeaderLeaseDuration), 0)
 		if !lease.Start.Equal(expStart) || !lease.Expiration.Equal(expExpiration) {
-			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s",
-				i, lease.Start, lease.Expiration, expStart, expExpiration)
+			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s", i,
+				lease.Start, lease.Expiration, expStart, expExpiration)
 		}
 		tc.Stop()
 	}
@@ -2212,7 +2212,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		t.Errorf("expected write intent error with 1 key; got %s", err)
 	}
 	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
-		t.Errorf("expected original descriptor %s; got %s", origDesc, rlReply.Ranges[0])
+		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
 	}
 
 	// Try 100 lookups with IgnoreIntents. Expect roughly 50/50.
@@ -2229,7 +2229,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		} else if reflect.DeepEqual(rlReply.Ranges[0], newDesc) {
 			newCount++
 		} else {
-			t.Errorf("expected orig/new descriptor %s/%s; got %s", origDesc, newDesc, rlReply.Ranges[0])
+			t.Errorf("expected orig/new descriptor %s/%s; got %s", &origDesc, &newDesc, &rlReply.Ranges[0])
 		}
 	}
 	if origCount > newCount+20 || origCount < newCount-20 {

@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package kv
+package kv_test
 
 import (
 	"github.com/cockroachdb/cockroach/security"
