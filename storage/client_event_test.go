@@ -73,15 +73,14 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 			event.Desc.RaftID, event.Stats.LiveBytes)
 	case *storage.SplitRangeEvent:
 		sid = event.StoreID
-		eventStr = fmt.Sprintf("SplitRange origId=%d, newId=%d, origLive=%d, newLive=%d, origVal=%d, newVal=%d",
+		eventStr = fmt.Sprintf("SplitRange origId=%d, newId=%d, origKey=%d, newKey=%d",
 			event.Original.Desc.RaftID, event.New.Desc.RaftID,
-			event.Original.Stats.LiveBytes, event.New.Stats.LiveBytes,
-			event.Original.Stats.ValBytes, event.New.Stats.ValBytes)
+			event.Original.Stats.KeyBytes, event.New.Stats.KeyBytes)
 	case *storage.MergeRangeEvent:
 		sid = event.StoreID
-		eventStr = fmt.Sprintf("MergeRange rid=%d, subId=%d, live=%d, subLive=%d",
+		eventStr = fmt.Sprintf("MergeRange rid=%d, subId=%d, key=%d, subKey=%d",
 			event.Merged.Desc.RaftID, event.Removed.Desc.RaftID,
-			event.Merged.Stats.LiveBytes, event.Removed.Stats.LiveBytes)
+			event.Merged.Stats.KeyBytes, event.Removed.Stats.KeyBytes)
 	case *storage.BeginScanRangesEvent:
 		sid = event.StoreID
 		eventStr = "BeginScanRanges"
@@ -132,8 +131,6 @@ func (ser *storeEventReader) updateCountString() string {
 // recieved by a single event reader.
 func TestMultiStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	engine.EnableMVCCComputeStatsDiagnostics(true)
-	defer engine.EnableMVCCComputeStatsDiagnostics(false)
 
 	// Create a multiTestContext which publishes all store events to the given
 	// feed.
@@ -249,25 +246,25 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"BeginScanRanges",
 			"AddRange rid=1, live=348",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origLive=858, newLive=42, origVal=719, newVal=27",
-			"SplitRange origId=2, newId=3, origLive=42, newLive=0, origVal=27, newVal=0",
-			"MergeRange rid=2, subId=3, live=42, subLive=0",
+			"SplitRange origId=1, newId=2, origKey=242, newKey=15",
+			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
+			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
 		proto.StoreID(2): []string{
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origLive=858, newLive=42, origVal=719, newVal=27",
-			"SplitRange origId=2, newId=3, origLive=42, newLive=0, origVal=27, newVal=0",
-			"MergeRange rid=2, subId=3, live=42, subLive=0",
+			"SplitRange origId=1, newId=2, origKey=242, newKey=15",
+			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
+			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
 		proto.StoreID(3): []string{
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origLive=858, newLive=42, origVal=719, newVal=27",
-			"SplitRange origId=2, newId=3, origLive=42, newLive=0, origVal=27, newVal=0",
-			"MergeRange rid=2, subId=3, live=42, subLive=0",
+			"SplitRange origId=1, newId=2, origKey=242, newKey=15",
+			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
+			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
 	}
 	if a, e := ser.perStoreFeeds, expected; !reflect.DeepEqual(a, e) {
