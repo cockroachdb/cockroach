@@ -344,6 +344,24 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 	testCustomEncodeUint64(testCases, EncodeUvarint, t)
 }
 
+// TestDecodeInvalidUvarint tests that invalid uvarint encodings panic.
+func TestDecodeInvalidUvarint(t *testing.T) {
+	testCases := [][]byte{
+		// length of 9 bytes should cause an error.
+		{0x11, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
+	}
+	for _, c := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				}
+			}()
+			DecodeUvarint(c)
+		}()
+	}
+}
+
 func TestEncodeDecodeUvarintDecreasing(t *testing.T) {
 	testBasicEncodeDecodeUint64(EncodeUvarintDecreasing, DecodeUvarintDecreasing, true, t)
 	testCases := []testCaseUint64{
