@@ -539,8 +539,8 @@ func (s *Store) startGossip() error {
 func (s *Store) maybeGossipFirstRange() error {
 	rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
 	if rng != nil {
-		log.V(1).Infof("store %d has first range, maybe gossiping",
-			s.StoreID())
+		log.Infof("gossiping first range on store %d, range %d",
+			s.StoreID(), rng.Desc().RaftID)
 		return rng.maybeGossipFirstRange()
 	}
 	return nil
@@ -558,10 +558,11 @@ func (s *Store) maybeGossipConfigs() error {
 	for _, cd := range configDescriptors {
 		rng := s.LookupRange(cd.keyPrefix, cd.keyPrefix.Next())
 		if rng == nil {
-			log.Warningf("no range")
 			// This store has no range with this configuration.
 			continue
 		}
+		log.Infof("gossiping configuration map on store %d, range %d: %s",
+			s.StoreID(), rng.Desc().RaftID, cd.gossipKey)
 		// Wake up the replica. If it acquires a fresh lease, it will
 		// gossip. If an unexpected error occurs (i.e. nobody else seems to
 		// have an active lease but we still failed to obtain it), return
@@ -1247,6 +1248,10 @@ func (s *Store) processRaft() {
 					err := gogoproto.Unmarshal(e.Command, &cmd)
 					if err != nil {
 						log.Fatal(err)
+					}
+					if log.V(6) {
+						log.Infof("store %d: new committed %s command at index %d",
+							cmd.Cmd.GetValue().(proto.Request).Method(), e.Index)
 					}
 
 				case *multiraft.EventMembershipChangeCommitted:

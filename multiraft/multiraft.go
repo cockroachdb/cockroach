@@ -654,10 +654,21 @@ func (s *state) createGroup(groupID uint64) error {
 
 func (s *state) removeGroup(op *removeGroupOp) {
 	// Group creation is lazy and idempotent; so is removal.
-	if _, ok := s.groups[op.groupID]; !ok {
+	log.V(3).Infof("removing group %d", op.groupID)
+	g, ok := s.groups[op.groupID]
+	if !ok {
 		op.ch <- nil
 		return
 	}
+
+	// Cancel commands which are still in transit.
+	for cmdID, prop := range g.pending {
+		if prop.ch != nil {
+			prop.ch <- util.Errorf("group deleted")
+		}
+		delete(g.pending, cmdID)
+	}
+
 	if err := s.multiNode.RemoveGroup(op.groupID); err != nil {
 		op.ch <- err
 		return
@@ -684,6 +695,7 @@ func (s *state) propose(p *proposal) {
 		}
 		return
 	}
+	log.V(3).Infof("group %d: new proposal %x", p.groupID, p.commandID)
 	g.pending[p.commandID] = p
 	p.fn()
 }
