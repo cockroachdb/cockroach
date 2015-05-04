@@ -221,10 +221,11 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 }
 
-// TestNodeStatusResponse verifies that node status returns the expected
-// results.
-// TODO(Bram): Add more nodes.
-func TestNodeStatusResponse(t *testing.T) {
+// startServerAndGetStatus will startup a server with a short scan interval,
+// wait for the scan to completed, fetch the request status based on the
+// keyPrefix. The test server and fetched status are returned. The caller is
+// responsible to stop the server.
+func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byte) {
 	ts := &TestServer{}
 	ts.Ctx = NewTestContext()
 	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
@@ -232,7 +233,6 @@ func TestNodeStatusResponse(t *testing.T) {
 	if err := ts.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer ts.Stop()
 
 	// Make sure the node is spun up and that a full scan of the ranges in the
 	// stores is complete.  The best way to do that is to wait twice.
@@ -243,7 +243,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+ts.ServingAddr()+statusNodesKeyPrefix, nil)
+	req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+ts.ServingAddr()+keyPrefix, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,15 @@ func TestNodeStatusResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return ts, body
+}
 
+// TestNodeStatusResponse verifies that node status returns the expected
+// results.
+// TODO(Bram): Add more nodes.
+func TestNodeStatusResponse(t *testing.T) {
+	ts, body := startServerAndGetStatus(t, statusNodeKeyPrefix)
+	defer ts.Stop()
 	nodeStatuses := []proto.NodeStatus{}
 	if err := json.Unmarshal(body, &nodeStatuses); err != nil {
 		t.Fatal(err)
@@ -275,5 +283,38 @@ func TestNodeStatusResponse(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ts.node.Descriptor, nodeStatuses[0].Desc) {
 		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatuses[0].Desc)
+	}
+}
+
+// TestStoreStatusResponse verifies that node status returns the expected
+// results.
+// TODO(Bram): Add more nodes.
+func TestStoreStatusResponse(t *testing.T) {
+	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
+	defer ts.Stop()
+	storeStatuses := []proto.StoreStatus{}
+	if err := json.Unmarshal(body, &storeStatuses); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(storeStatuses) != ts.node.lSender.GetStoreCount() {
+		t.Errorf("too many node statuses returned - expected:%d, actual:%d", ts.node.lSender.GetStoreCount(), len(storeStatuses))
+	}
+	for _, storeStatus := range storeStatuses {
+		storeID := storeStatus.Desc.StoreID
+		store, err := ts.node.lSender.GetStore(storeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		desc, err := store.Descriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The capacities fluctuate a lot, so drop them for the deep equal.
+		desc.Capacity = proto.StoreCapacity{}
+		storeStatus.Desc.Capacity = proto.StoreCapacity{}
+		if !reflect.DeepEqual(*desc, storeStatus.Desc) {
+			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, storeStatus.Desc)
+		}
 	}
 }

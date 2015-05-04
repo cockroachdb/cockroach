@@ -51,15 +51,19 @@ const (
 	// statusLocalStacksKey exposes stack traces of running goroutines.
 	statusLocalStacksKey = statusLocalKeyPrefix + "stacks"
 
-	// statusNodesKeyPrefix exposes status for each of the nodes the cluster.
-	// statusNodesKeyPrefix/nodes -> lists all nodes
-	// statusNodesKeyPrefix/nodes/ -> lists all nodes
-	// statusNodesKeyPrefix/nodes/{NodeID} -> shows only the status for that
+	// statusNodeKeyPrefix exposes status for each of the nodes the cluster.
+	// statusNodeKeyPrefix/nodes -> lists all nodes
+	// statusNodeKeyPrefix/nodes/ -> lists all nodes
+	// statusNodeKeyPrefix/nodes/{NodeID} -> shows only the status for that
 	//                                        specific node
-	statusNodesKeyPrefix = statusKeyPrefix + "nodes/"
+	statusNodeKeyPrefix = statusKeyPrefix + "nodes/"
 
-	// statusStoresKeyPrefix exposes status for each store.
-	statusStoresKeyPrefix = statusKeyPrefix + "stores/"
+	// statusStoreKeyPrefix exposes status for each store.
+	// statusStoreKeyPrefix/stores -> lists all nodes
+	// statusStoreKeyPrefix/stores/ -> lists all nodes
+	// statusStoreKeyPrefix/stores/{StoreID} -> shows only the status for that
+	//                                        specific store
+	statusStoreKeyPrefix = statusKeyPrefix + "stores/"
 
 	// statusTransactionsKeyPrefix exposes transaction statistics.
 	statusTransactionsKeyPrefix = statusKeyPrefix + "txns/"
@@ -82,17 +86,17 @@ func newStatusServer(db *client.KV, gossip *gossip.Gossip) *statusServer {
 // registerHandlers registers admin handlers with the supplied
 // serve mux.
 func (s *statusServer) registerHandlers(mux *http.ServeMux) {
-	mux.HandleFunc(statusKeyPrefix, s.handleStatus)
+	mux.HandleFunc(statusKeyPrefix, s.handleClusterStatus)
 	mux.HandleFunc(statusGossipKeyPrefix, s.handleGossipStatus)
 	mux.HandleFunc(statusLocalKeyPrefix, s.handleLocalStatus)
 	mux.HandleFunc(statusLocalStacksKey, s.handleLocalStacks)
-	mux.HandleFunc(statusNodesKeyPrefix, s.handleNodesStatus)
-	mux.HandleFunc(statusStoresKeyPrefix, s.handleStoresStatus)
+	mux.HandleFunc(statusNodeKeyPrefix, s.handleNodeStatus)
+	mux.HandleFunc(statusStoreKeyPrefix, s.handleStoreStatus)
 	mux.HandleFunc(statusTransactionsKeyPrefix, s.handleTransactionStatus)
 }
 
 // handleStatus handles GET requests for cluster status.
-func (s *statusServer) handleStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleClusterStatus(w http.ResponseWriter, r *http.Request) {
 	cluster := &status.Cluster{}
 	b, contentType, err := util.MarshalResponse(r, cluster, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
@@ -150,7 +154,7 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleNodesStatus handles GET requests for all node status.
+// handleNodesStatus handles GET requests for all node statuses.
 func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request) {
 	startKey := engine.KeyStatusNodePrefix
 	endKey := startKey.PrefixEnd()
@@ -188,16 +192,58 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request)
 	w.Write(b)
 }
 
-// handleNodeStatus handles GET requests for a single node status.
+// handleNodeStatus handles GET requests for a single node's status. If no id is
+// available, it calls handleNodesStatus to return all node's statuses.
 func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
-	// TODO(bram) parse node-id in path and return the single node status only.
+	// TODO(bram) parse node-id in path and return the single node's status
+	// only.
 	s.handleNodesStatus(w, r)
 }
 
-// handleStoresStatus handles GET requests for store status.
+// handleStoresStatus handles GET requests for all store statuses.
 func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"stores": []}`))
+	startKey := engine.KeyStatusStorePrefix
+	endKey := startKey.PrefixEnd()
+
+	call := client.Scan(startKey, endKey, 0)
+	resp := call.Reply.(*proto.ScanResponse)
+	if err := s.db.Run(call); err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if resp.Error != nil {
+		log.Error(resp.Error)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	storeStatuses := []proto.StoreStatus{}
+	for _, row := range resp.Rows {
+		storeStatus := &proto.StoreStatus{}
+		if err := gogoproto.Unmarshal(row.Value.GetBytes(), storeStatus); err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		storeStatuses = append(storeStatuses, *storeStatus)
+	}
+	b, contentType, err := util.MarshalResponse(r, storeStatuses, []util.EncodingType{util.JSONEncoding})
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(b)
+}
+
+// handleStoreStatus handles GET requests for a single node's status. If no id
+// is available, it calls handleStoresStatus to return all store's statuses.
+func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request) {
+	// TODO(bram) parse node-id in path and return the single store's status
+	// only.
+	s.handleStoresStatus(w, r)
 }
 
 // handleTransactionStatus handles GET requests for transaction status.
