@@ -18,8 +18,12 @@
 package ts
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // DB provides Cockroach's Time Series API.
@@ -34,29 +38,106 @@ func NewDB(kv *client.KV) *DB {
 	}
 }
 
-// storeData attempts to store the supplied time series data on the server.
-// Data will be sampled at the supplied resolution.
-func (db *DB) storeData(r Resolution, data proto.TimeSeriesData) error {
-	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
-	if err != nil {
-		return err
+// PollSource begins a Goroutine which periodically queries the supplied
+// DataSource for time series data, storing the returned data in the server.
+// Stored data will be sampled using the provided Resolution. The polling
+// process will continue until the provided util.Stopper is stopped.
+func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolution, stopper *util.Stopper) {
+	p := &poller{
+		db:        db,
+		source:    source,
+		frequency: frequency,
+		r:         r,
+		stopper:   stopper,
+	}
+	p.start()
+}
+
+// A DataSource can be queryied for a slice of time series data.
+type DataSource interface {
+	GetTimeSeriesData() []proto.TimeSeriesData
+}
+
+// poller maintains information for a polling process started by PollSource().
+type poller struct {
+	db        *DB
+	source    DataSource
+	frequency time.Duration
+	r         Resolution
+	stopper   *util.Stopper
+}
+
+// start begins the goroutine for this poller, which will periodically request
+// time series data from the DataSource and store it.
+func (p *poller) start() {
+	p.stopper.RunWorker(func() {
+		ticker := time.NewTicker(p.frequency)
+		for {
+			select {
+			case <-ticker.C:
+				p.poll()
+			case <-p.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// poll retrieves data from the underlying DataSource a single time, storing any
+// returned time series data on the server.
+func (p *poller) poll() {
+	if !p.stopper.StartTask() {
+		return
+	}
+	defer p.stopper.FinishTask()
+
+	data := p.source.GetTimeSeriesData()
+	if len(data) == 0 {
+		return
 	}
 
-	for _, idata := range internalData {
-		key := MakeDataKey(data.Name, data.Source, r, idata.StartTimestampNanos)
-		value, err := idata.ToValue()
+	if err := p.db.storeData(p.r, data); err != nil {
+		log.Warningf("error writing time series data: %s", err.Error())
+	}
+}
+
+// storeData writes the supplied time series data to the cockroach server.
+// Stored data will be sampled at the supplied resolution.
+func (db *DB) storeData(r Resolution, data []proto.TimeSeriesData) error {
+	var kvs []proto.KeyValue
+
+	// Process data collection: data is converted to internal format, and a key
+	// is generated for each internal message.
+	for _, d := range data {
+		idatas, err := d.ToInternal(r.KeyDuration(), r.SampleDuration())
 		if err != nil {
 			return err
 		}
+		for _, idata := range idatas {
+			value, err := idata.ToValue()
+			if err != nil {
+				return err
+			}
+			kvs = append(kvs, proto.KeyValue{
+				Key:   MakeDataKey(d.Name, d.Source, r, idata.StartTimestampNanos),
+				Value: *value,
+			})
+		}
+	}
 
-		// TODO(mrtracy): If there are multiple values to merge, they could be
-		// batched together instead of being called individually.
+	// Send the individual internal merge requests.
+	// TODO(mrtracy): In the likely event that there are multiple values to
+	// merge, they should be batched together instead of being called
+	// individually. However, InternalBatchRequest currently does not support
+	// InternalMergeRequest, probably because it cannot be part of a
+	// transaction. Look into batching this.
+	for _, kv := range kvs {
 		if err := db.kv.Run(client.Call{
 			Args: &proto.InternalMergeRequest{
 				RequestHeader: proto.RequestHeader{
-					Key: key,
+					Key: kv.Key,
 				},
-				Value: *value,
+				Value: kv.Value,
 			},
 			Reply: &proto.InternalMergeResponse{}}); err != nil {
 			return err
