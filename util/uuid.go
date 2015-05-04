@@ -40,7 +40,7 @@ type UUID []byte
 func NewUUID4() UUID {
 	uuid := make([]byte, UUIDSize)
 	if _, err := io.ReadFull(rand.Reader, uuid); err != nil {
-		panic(err.Error()) // rand should never fail
+		panic(err) // rand should never fail
 	}
 	// UUID (Version 4) compliance.
 	uuid[6] = (uuid[6] & 0x0f) | 0x40 // Version 4
