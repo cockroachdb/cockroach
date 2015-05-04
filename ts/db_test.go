@@ -20,10 +20,12 @@ package ts
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -139,14 +141,7 @@ func (tm *testModel) assertKeyCount(expected int) {
 	}
 }
 
-// storeTimeSeriesData instructs the model to store the given time series data
-// in both the model and the system under test.
-func (tm *testModel) storeTimeSeriesData(r Resolution, data proto.TimeSeriesData) {
-	// Store data in the system under test.
-	if err := tm.DB.storeData(r, data); err != nil {
-		tm.t.Fatalf("error storing time series data: %s", err.Error())
-	}
-
+func (tm *testModel) storeInModel(r Resolution, data proto.TimeSeriesData) {
 	// Process and store data in the model.
 	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
 	if err != nil {
@@ -182,6 +177,52 @@ func (tm *testModel) storeTimeSeriesData(r Resolution, data proto.TimeSeriesData
 	}
 }
 
+// storeTimeSeriesData instructs the model to store the given time series data
+// in both the model and the system under test.
+func (tm *testModel) storeTimeSeriesData(r Resolution, data []proto.TimeSeriesData) {
+	// Store data in the system under test.
+	if err := tm.DB.storeData(r, data); err != nil {
+		tm.t.Fatalf("error storing time series data: %s", err.Error())
+	}
+
+	// Store data in the model.
+	for _, d := range data {
+		tm.storeInModel(r, d)
+	}
+}
+
+// modelDataSource is used to create a mock DataSource. It returns a
+// deterministic set of data to GetTimeSeriesData, storing the returned data in
+// the model whenever GetTimeSeriesData is called. Data is returned until all
+// sets are exhausted, at which point the supplied util.Stopper is stopped.
+type modelDataSource struct {
+	model       *testModel
+	datasets    [][]proto.TimeSeriesData
+	r           Resolution
+	stopper     *util.Stopper
+	calledCount int
+}
+
+// GetTimeSeriesData implements the DataSource interface, returning a predefined
+// set of TimeSeriesData to subsequent calls. It stores each TimeSeriesData
+// object in the test model before returning it. If all TimeSeriesData objects
+// have been returned, this method will stop the provided Stopper.
+func (mds *modelDataSource) GetTimeSeriesData() []proto.TimeSeriesData {
+	if len(mds.datasets) == 0 {
+		// Stop on goroutine to prevent deadlock.
+		go mds.stopper.Stop()
+		return nil
+	}
+	mds.calledCount++
+	data := mds.datasets[0]
+	mds.datasets = mds.datasets[1:]
+
+	for _, d := range data {
+		mds.model.storeInModel(mds.r, d)
+	}
+	return data
+}
+
 // intDatapoint quickly generates an integer-valued datapoint.
 func intDatapoint(timestamp int64, val int64) *proto.TimeSeriesDatapoint {
 	return &proto.TimeSeriesDatapoint{
@@ -206,10 +247,12 @@ func TestStoreTimeSeries(t *testing.T) {
 	defer tm.Stop()
 
 	// Basic storage operation: one data point.
-	tm.storeTimeSeriesData(Resolution10s, proto.TimeSeriesData{
-		Name: "test.metric",
-		Datapoints: []*proto.TimeSeriesDatapoint{
-			intDatapoint(-446061360000000000, 100),
+	tm.storeTimeSeriesData(Resolution10s, []proto.TimeSeriesData{
+		{
+			Name: "test.metric",
+			Datapoints: []*proto.TimeSeriesDatapoint{
+				intDatapoint(-446061360000000000, 100),
+			},
 		},
 	})
 	tm.assertKeyCount(1)
@@ -217,22 +260,26 @@ func TestStoreTimeSeries(t *testing.T) {
 
 	// Store data with different sources, and with multiple data points that
 	// aggregate into the same key.
-	tm.storeTimeSeriesData(Resolution10s, proto.TimeSeriesData{
-		Name:   "test.metric.float",
-		Source: "cpu01",
-		Datapoints: []*proto.TimeSeriesDatapoint{
-			floatDatapoint(1428713843000000000, 100.0),
-			floatDatapoint(1428713843000000001, 50.2),
-			floatDatapoint(1428713843000000002, 90.9),
+	tm.storeTimeSeriesData(Resolution10s, []proto.TimeSeriesData{
+		{
+			Name:   "test.metric.float",
+			Source: "cpu01",
+			Datapoints: []*proto.TimeSeriesDatapoint{
+				floatDatapoint(1428713843000000000, 100.0),
+				floatDatapoint(1428713843000000001, 50.2),
+				floatDatapoint(1428713843000000002, 90.9),
+			},
 		},
 	})
-	tm.storeTimeSeriesData(Resolution10s, proto.TimeSeriesData{
-		Name:   "test.metric.float",
-		Source: "cpu02",
-		Datapoints: []*proto.TimeSeriesDatapoint{
-			floatDatapoint(1428713843000000000, 900.8),
-			floatDatapoint(1428713843000000001, 30.12),
-			floatDatapoint(1428713843000000002, 72.324),
+	tm.storeTimeSeriesData(Resolution10s, []proto.TimeSeriesData{
+		{
+			Name:   "test.metric.float",
+			Source: "cpu02",
+			Datapoints: []*proto.TimeSeriesDatapoint{
+				floatDatapoint(1428713843000000000, 900.8),
+				floatDatapoint(1428713843000000001, 30.12),
+				floatDatapoint(1428713843000000002, 72.324),
+			},
 		},
 	})
 	tm.assertKeyCount(3)
@@ -240,14 +287,67 @@ func TestStoreTimeSeries(t *testing.T) {
 
 	// A single storage operation that stores to multiple keys, including an
 	// existing key.
-	tm.storeTimeSeriesData(Resolution10s, proto.TimeSeriesData{
-		Name: "test.metric",
-		Datapoints: []*proto.TimeSeriesDatapoint{
-			intDatapoint(-446061360000000001, 200),
-			intDatapoint(450000000000000000, 1),
-			intDatapoint(460000000000000000, 777),
+	tm.storeTimeSeriesData(Resolution10s, []proto.TimeSeriesData{
+		{
+			Name: "test.metric",
+			Datapoints: []*proto.TimeSeriesDatapoint{
+				intDatapoint(-446061360000000001, 200),
+				intDatapoint(450000000000000000, 1),
+				intDatapoint(460000000000000000, 777),
+			},
 		},
 	})
 	tm.assertKeyCount(5)
+	tm.assertModelCorrect()
+}
+
+// TestPollSource verifies that polled data sources are called as expected.
+func TestPollSource(t *testing.T) {
+	tm := newTestModel(t)
+	tm.Start()
+	defer tm.Stop()
+
+	testSource := &modelDataSource{
+		model:   tm,
+		r:       Resolution10s,
+		stopper: util.NewStopper(),
+		datasets: [][]proto.TimeSeriesData{
+			{
+				{
+					Name:   "test.metric.float",
+					Source: "cpu01",
+					Datapoints: []*proto.TimeSeriesDatapoint{
+						floatDatapoint(1428713843000000000, 100.0),
+						floatDatapoint(1428713843000000001, 50.2),
+						floatDatapoint(1428713843000000002, 90.9),
+					},
+				},
+				{
+					Name:   "test.metric.float",
+					Source: "cpu02",
+					Datapoints: []*proto.TimeSeriesDatapoint{
+						floatDatapoint(1428713843000000000, 900.8),
+						floatDatapoint(1428713843000000001, 30.12),
+						floatDatapoint(1428713843000000002, 72.324),
+					},
+				},
+			},
+			{
+				{
+					Name: "test.metric",
+					Datapoints: []*proto.TimeSeriesDatapoint{
+						intDatapoint(-446061360000000000, 100),
+					},
+				},
+			},
+		},
+	}
+
+	tm.DB.PollSource(testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	<-testSource.stopper.IsStopped()
+	if a, e := testSource.calledCount, 2; a != e {
+		t.Errorf("testSource was called %d times, expected %d", a, e)
+	}
+	tm.assertKeyCount(3)
 	tm.assertModelCorrect()
 }
