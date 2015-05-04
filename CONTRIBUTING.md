@@ -26,8 +26,7 @@ Note that if you edit a `.proto` file you will need to manually regenerate the a
 `.pb.{go,cc,h}` files using `go generate`.
 
 To add or update a dependency:
-- `go get -u` to updates the dependancies or `go get {package}` to add a new dependancy
-- be sure to reference it somewhere in your code
+- `go get -u` to update the dependencies or `go get {package}` to add a dependency
 - `glock save github.com/cockroachdb/cockroach` to update the GLOCKFILE
 - `make listdeps` and take the output of that and replace the dependancy list in build/devbase/godeps.sh
 - create a PR with all the changes
