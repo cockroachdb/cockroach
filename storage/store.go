@@ -491,68 +491,15 @@ func (s *Store) Start(stopper *util.Stopper) error {
 }
 
 // startGossip runs an infinite loop in a goroutine which regularly checks
-// whether the store has a first range replica and asks that range to gossip
-// cluster ID and first range metadata accordingly.
+// whether the store has a first range or config replica and asks those ranges
+// to gossip accordingly.
 func (s *Store) startGossip() error {
-	// Take care of gossip for config descriptors. It does not
-	// expire, so this is a one-time action in a working cluster - if values change, ranges
-	// will update gossip autonomously.
-	// However, the lease holder, who is normally in charge of that
-	// might crash precisely when trying to gossip. To account for
-	// this rare scenario, we activate all ranges that hold config
-	// maps periodically.
-	configFn := func() error {
-		for _, cd := range configDescriptors {
-			// If we ever allow configs to span multiple ranges, we'll need to
-			// get them all. Below we assume that one exists containing this
-			// whole chunk.
-			rng := s.LookupRange(cd.keyPrefix, cd.keyPrefix.Next())
-			if rng == nil {
-				log.Warningf("no range")
-				// This store has no range with this configuration.
-				continue
-			}
-			// Wake up the replica. If it acquires a fresh lease, it will
-			// gossip. If an unexpected error occurs (i.e. nobody else seems to
-			// have an active lease but we still failed to obtain it), return
-			// that error. If we ignored it we would run the risk of running a
-			// cluster without configs gossiped.
-			if _, err := rng.getLeaseForGossip(); err != nil {
-				return err
-			}
-			// Since leader leases are persisted, and a bootstrapping range
-			// gets a leader lease, we can't actually trust that the above
-			// automatically gossips the configs. The initial start of a fresh
-			// cluster after bootstrap, if fast enough, will actually be happy
-			// with its previous lease and not automatically re-gossip. It has
-			// an empty gossip though. TestStatusGossipJson fails without this.
-			// If a leader crashes right after applying a leader lease and
-			// gossiping, reboots and still holds the lease, the same effect
-			// occurs.
-			rng.maybeGossipConfigs(func(_ proto.Key) bool {
-				return rng.ContainsKey(cd.keyPrefix)
-			})
-		}
-		return nil
-	}
-
-	// Now we deal with first range gossip, which happens periodically.
-	firstRangeFn := func() error {
-		rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
-		if rng != nil {
-			log.V(1).Infof("store %d has first range, maybe gossiping",
-				s.StoreID())
-			return rng.maybeGossipFirstRange()
-		}
-		return nil
-	}
-
 	// Go through one iteration synchronously before returning. This makes sure
 	// that everything is gossiped when the store finishes starting.
-	if err := configFn(); err != nil {
+	if err := s.maybeGossipConfigs(); err != nil {
 		return err
 	}
-	if err := firstRangeFn(); err != nil {
+	if err := s.maybeGossipFirstRange(); err != nil {
 		return err
 	}
 	// Periodic updates run in a goroutine.
@@ -561,7 +508,7 @@ func (s *Store) startGossip() error {
 		for {
 			select {
 			case <-ticker.C:
-				if err := firstRangeFn(); err != nil {
+				if err := s.maybeGossipFirstRange(); err != nil {
 					log.Warningf("error gossiping first range data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
@@ -575,7 +522,7 @@ func (s *Store) startGossip() error {
 		for {
 			select {
 			case <-ticker.C:
-				if err := configFn(); err != nil {
+				if err := s.maybeGossipConfigs(); err != nil {
 					log.Warningf("error gossiping configs: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
@@ -583,6 +530,53 @@ func (s *Store) startGossip() error {
 			}
 		}
 	})
+	return nil
+}
+
+// maybeGossipFirstRange checks whether the store has a replia of the first
+// range and if so, reminds it to gossip the first range descriptor and
+// sentinel gossip.
+func (s *Store) maybeGossipFirstRange() error {
+	rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
+	if rng != nil {
+		log.V(1).Infof("store %d has first range, maybe gossiping",
+			s.StoreID())
+		return rng.maybeGossipFirstRange()
+	}
+	return nil
+}
+
+// maybeGossipConfigs checks which of the store's ranges contain config
+// descriptors and lets these ranges gossip them. Config gossip entries do not
+// expire, so this is a rarely needed action in a working cluster - if values
+// change, ranges will update gossip autonomously. However, the lease holder,
+// who is normally in charge of that might crash after updates before gossiping
+// and a new leader lease is only acquired if needed. To account for this rare
+// scenario, we activate the very few ranges that hold config maps
+// periodically.
+func (s *Store) maybeGossipConfigs() error {
+	for _, cd := range configDescriptors {
+		rng := s.LookupRange(cd.keyPrefix, cd.keyPrefix.Next())
+		if rng == nil {
+			log.Warningf("no range")
+			// This store has no range with this configuration.
+			continue
+		}
+		// Wake up the replica. If it acquires a fresh lease, it will
+		// gossip. If an unexpected error occurs (i.e. nobody else seems to
+		// have an active lease but we still failed to obtain it), return
+		// that error. If we ignored it we would run the risk of running a
+		// cluster without configs gossiped.
+		if _, err := rng.getLeaseForGossip(); err != nil {
+			return err
+		}
+		// Always gossip the configs as there are leader lease acquisition
+		// scenarios in which the config is not gossiped (e.g. leader executes
+		// but crashes before gossiping; comes back up but group goes dormant).
+		rng.maybeGossipConfigs(func(_ proto.Key) bool {
+			return rng.ContainsKey(cd.keyPrefix)
+		})
+	}
 	return nil
 }
 

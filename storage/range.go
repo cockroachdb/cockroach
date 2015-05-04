@@ -870,6 +870,8 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	return reply.Header().GoError()
 }
 
+// getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
+// should gossip; the bool returned indicates whether it's us.
 func (r *Range) getLeaseForGossip() (bool, error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
@@ -882,8 +884,7 @@ func (r *Range) getLeaseForGossip() (bool, error) {
 	if err != nil {
 		switch e := err.(type) {
 		// NotLeaderError means there is an active lease, leaseRejectedError
-		// means we tried to get one but someone beat us to it. They're nothing
-		// to worry about.
+		// means we tried to get one but someone beat us to it.
 		case *proto.NotLeaderError, *leaseRejectedError:
 		default:
 			// Any other error is worth being logged visibly.
@@ -894,9 +895,9 @@ func (r *Range) getLeaseForGossip() (bool, error) {
 	return err == nil, nil
 }
 
-// gossipFirstRange adds the sentinel and first range metadata to gossip
-// if this is the first range and a leader lease can be obtained.
-// The Store calls this periodically on first range replicas.
+// maybeGossipFirstRange adds the sentinel and first range metadata to gossip
+// if this is the first range and a leader lease can be obtained. The Store
+// calls this periodically on first range replicas.
 func (r *Range) maybeGossipFirstRange() error {
 	if !r.IsFirstRange() {
 		return nil
@@ -921,6 +922,9 @@ func (r *Range) maybeGossipFirstRange() error {
 //
 // Note that maybeGossipConfigs does not check the leader lease; it is called
 // on only when the lease is actually held.
+// TODO(tschottdorf): The main reason this method does not try to get the lease
+// is that InternalLeaderLease calls it, which means that we would wind up
+// deadlocking in redirectOnOrObtainLeaderLease. Can possibly simplify.
 func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return

@@ -708,8 +708,9 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// extra tick. This allows multiple requests from the same replica to
 	// merge without ticking away from the minimal common start timestamp.
 	if prevLease.RaftNodeID == 0 || isExtension {
-		// TODO(tschottdorf) probably go all the way back to
-		// prevLease.Start() (so it's properly extending previous lease).
+		// TODO(tschottdorf) Think about whether it'd be better to go all the
+		// way back to prevLease.Start(), so that whenever the last lease is
+		// the own one, the original start is preserved.
 		effectiveStart.Backward(prevLease.Expiration)
 	} else {
 		effectiveStart.Backward(prevLease.Expiration.Next())

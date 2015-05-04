@@ -503,7 +503,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	tc.manualClock.Increment(int64(defaultLeaderLeaseDuration + 1))
 	now := proto.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
-	rTS, _ := tc.rng.tsCache.GetMax(proto.Key("a"), nil, proto.NoTxnMD5)
+	rTS, _ := tc.rng.tsCache.GetMax(proto.Key("a"), nil /* end */, nil /* txn */)
 	baseLowWater := rTS.WallTime
 
 	testCases := []struct {
@@ -910,7 +910,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 			t.Fatal(err)
 		}
 		if held, expired := tc.rng.HasLeaderLease(test.args.Header().Timestamp); !held || expired {
-			t.Fatalf("%d: expected lease acquisition")
+			t.Fatalf("%d: expected lease acquisition", i)
 		}
 		lease := tc.rng.getLease()
 		// The lease may start earlier than our request timestamp, but the
