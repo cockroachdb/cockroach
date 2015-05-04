@@ -25,8 +25,11 @@ downloaded and installed which can be somewhat time consuming. Be patient.
 Note that if you edit a `.proto` file you will need to manually regenerate the associated
 `.pb.{go,cc,h}` files using `go generate`.
 
-To add or update a dependency, use `go get -u` and then
-`glock save github.com/cockroachdb/cockroach` and commit the changes to the GLOCKFILE.
+To add or update a dependency:
+- `go get -u` to update the dependencies or `go get {package}` to add a dependency
+- `glock save github.com/cockroachdb/cockroach` to update the GLOCKFILE
+- `make listdeps` and take the output of that and replace the dependancy list in build/devbase/godeps.sh
+- create a PR with all the changes
 
 ### Style guide
 We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.
