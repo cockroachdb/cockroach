@@ -62,13 +62,24 @@ var (
 	// it may be aborted by conflicting txns.
 	DefaultHeartbeatInterval = 5 * time.Second
 
-	// ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
+	// clusterIDGossipTTL is time-to-live for cluster ID. The cluster ID
 	// serves as the sentinel gossip key which informs a node whether or
 	// not it's connected to the primary gossip network and not just a
 	// partition. As such it must expire on a reasonable basis and be
 	// continually re-gossiped. The replica which is the raft leader of
 	// the first range gossips it.
-	ttlClusterIDGossip = 30 * time.Second
+	clusterIDGossipTTL = 30 * time.Second
+	// clusterIDGossipInterval is the approximate interval at which the
+	// sentinel info is gossiped.
+	clusterIDGossipInterval = clusterIDGossipTTL / 2
+
+	// configGossipTTL is the time-to-live for configuration maps.
+	configGossipTTL = 0 * time.Second // does not expire
+	// configGossipInterval is the interval at which range leaders gossip
+	// their config maps. Even if config maps do not expire, we still
+	// need a periodic gossip to safeguard against failure of a leader
+	// to gossip after performing an update to the map.
+	configGossipInterval = time.Minute
 )
 
 // TestingCommandFilter may be set in tests to intercept the handling
@@ -246,40 +257,6 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 // String returns a string representation of the range.
 func (r *Range) String() string {
 	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
-}
-
-// start begins by gossiping the configs. It also gossips the sentinel if we're
-// the first range (the store will do this regularly, but this is a good time
-// to get started quickly).
-func (r *Range) start() {
-	// Being the first range comes with extra responsibility for the gossip
-	// sentinel and first range metadata.
-	// TODO(tschottdorf) really want something more streamlined, such as:
-	//
-	// if r.rm.Stopper().StartTask() {
-	// 	go func() {
-	// 		r.maybeGossipFirstRangeWithLease()
-	// 		r.rm.Stopper().FinishTask()
-	// 	}()
-	// }
-	//
-	// but
-	// a) in some tests that goroutine gets stuck acquiring the lease, probably
-	//    due to Raft losing the command
-	// b) other times, the lease fails because the MultiRaft group doesn't exist
-	//    yet
-	// b) it complicates testing because there's little way of knowing who
-	//    will get the lease first, and many tests are too low level to do
-	//    the appropriate retries.
-	//
-	// Instead we do this for now:
-	if desc := r.Desc(); desc != nil && len(desc.Replicas) == 1 && r.IsFirstRange() {
-		r.gossipFirstRange()
-	}
-
-	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-		return r.ContainsKey(configPrefix)
-	})
 }
 
 // Destroy cleans up all data associated with this range.
@@ -893,71 +870,83 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	return reply.Header().GoError()
 }
 
-// maybeGossipFirstRangeWithLease is periodically called and gossips the
-// sentinel and first range metadata if the range has the lease. Since one
-// replica should always gossip this information, a lease is acquired if there
-// is no active lease.
-func (r *Range) maybeGossipFirstRangeWithLease() {
-	// If no Gossip available (some tests) or not first range: nothing to do.
+// getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
+// should gossip; the bool returned indicates whether it's us.
+func (r *Range) getLeaseForGossip() (bool, error) {
+	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
-		return
+		return false, util.Errorf("no gossip or range not initialized")
 	}
 	timestamp := r.rm.Clock().Now()
 
 	// Check for or obtain the lease, if none active.
-	if err := r.redirectOnOrAcquireLeaderLease(timestamp); err != nil {
+	err := r.redirectOnOrAcquireLeaderLease(timestamp)
+	if err != nil {
 		switch e := err.(type) {
 		// NotLeaderError means there is an active lease, leaseRejectedError
-		// means we tried to get one but someone beat us to it. They're nothing
-		// to worry about.
+		// means we tried to get one but someone beat us to it.
 		case *proto.NotLeaderError, *leaseRejectedError:
 		default:
 			// Any other error is worth being logged visibly.
 			log.Warningf("could not acquire lease for first range gossip: %s", e)
+			return false, err
 		}
-		return
 	}
-	r.gossipFirstRange()
+	return err == nil, nil
 }
 
-// gossipFirstRange adds the sentinel and first range metadata to gossip.
-func (r *Range) gossipFirstRange() {
-	if r.rm.Gossip() == nil {
-		return
+// maybeGossipFirstRange adds the sentinel and first range metadata to gossip
+// if this is the first range and a leader lease can be obtained. The Store
+// calls this periodically on first range replicas.
+func (r *Range) maybeGossipFirstRange() error {
+	if !r.IsFirstRange() {
+		return nil
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
+	if ok, err := r.getLeaseForGossip(); !ok || err != nil {
+		return err
+	}
+	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
+	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
 		log.Errorf("failed to gossip first range metadata: %s", err)
 	}
+	return nil
 }
 
-// maybeGossipConfigs gossips configuration maps if their data falls
-// within the range, and their contents are marked dirty.
-// Configuration maps include accounting, permissions, and zones.
+// maybeGossipConfigs gossips those configuration maps for which the supplied
+// function returns true and whose contents are marked dirty. Configuration
+// maps include accounting, permissions, and zones. The store is in charge of
+// the initial update, and the range itself re-triggers updates following
+// writes that may have altered any of the maps.
+//
+// Note that maybeGossipConfigs does not check the leader lease; it is called
+// on only when the lease is actually held.
+// TODO(tschottdorf): The main reason this method does not try to get the lease
+// is that InternalLeaderLease calls it, which means that we would wind up
+// deadlocking in redirectOnOrObtainLeaderLease. Can possibly simplify.
 func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
-	if r.rm.Gossip() == nil {
+	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}
-	held, expired := r.HasLeaderLease(r.rm.Clock().Now())
-	if r.getLease().RaftNodeID == 0 || (held && !expired) {
-		for _, cd := range configDescriptors {
-			if match(cd.keyPrefix) {
-				// Check for a bad range split. This should never happen as ranges
-				// cannot be split mid-config.
-				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-					log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
-				}
-				configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
-				if err != nil {
-					log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
+	for _, cd := range configDescriptors {
+		if match(cd.keyPrefix) {
+			// Check for a bad range split. This should never happen as ranges
+			// cannot be split mid-config.
+			if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
+				// If we ever implement configs that span multiple ranges,
+				// we must update store.startGossip accordingly. For the
+				// time being, it will only fire the first range.
+				log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
+			}
+			configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+			if err != nil {
+				log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
+				continue
+			} else {
+				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
+					log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
 					continue
-				} else {
-					if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
-						log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
-						continue
-					}
 				}
 			}
 		}

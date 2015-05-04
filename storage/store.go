@@ -461,24 +461,28 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	// Start the scanner.
 	s.scanner.Start(s.ctx.Clock, s.stopper)
 
-	// Register callbacks for any changes to accounting and zone
-	// configurations; we split ranges along prefix boundaries to
-	// avoid having a range that has two different accounting/zone
-	// configs. (We don't need a callback for permissions since
-	// permissions don't have such a requirement.)
-	//
-	// Gossip is only ever nil for unittests.
+	// Gossip is only ever nil while bootstrapping a cluster and
+	// in unittests.
 	if s.ctx.Gossip != nil {
+		// Register callbacks for any changes to accounting and zone
+		// configurations; we split ranges along prefix boundaries to
+		// avoid having a range that has two different accounting/zone
+		// configs. (We don't need a callback for permissions since
+		// permissions don't have such a requirement.)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
 		// Callback triggers on capacity gossip from all stores.
 		capacityRegex := gossip.MakePrefixPattern(gossip.KeyMaxAvailCapacityPrefix)
 		s.ctx.Gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
-	}
 
-	// Start a single goroutine in charge of periodically gossipping the
-	// sentinel and first range metadata if we have a first range.
-	s.startGossip()
+		// Start a single goroutine in charge of periodically gossipping the
+		// sentinel and first range metadata if we have a first range.
+		// This may wake up ranges and requires everything to be set up and
+		// running.
+		if err := s.startGossip(); err != nil {
+			return err
+		}
+	}
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
@@ -487,25 +491,93 @@ func (s *Store) Start(stopper *util.Stopper) error {
 }
 
 // startGossip runs an infinite loop in a goroutine which regularly checks
-// whether the store has a first range replica and asks that range to gossip
-// cluster ID and first range metadata accordingly.
-func (s *Store) startGossip() {
+// whether the store has a first range or config replica and asks those ranges
+// to gossip accordingly.
+func (s *Store) startGossip() error {
+	// Go through one iteration synchronously before returning. This makes sure
+	// that everything is gossiped when the store finishes starting.
+	if err := s.maybeGossipConfigs(); err != nil {
+		return err
+	}
+	if err := s.maybeGossipFirstRange(); err != nil {
+		return err
+	}
+	// Periodic updates run in a goroutine.
 	s.stopper.RunWorker(func() {
-		ticker := time.NewTicker(ttlClusterIDGossip / 2)
+		ticker := time.NewTicker(clusterIDGossipInterval)
 		for {
 			select {
 			case <-ticker.C:
-				rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
-				if rng != nil {
-					log.V(1).Infof("store %d has first range, maybe gossiping",
-						s.StoreID())
-					rng.maybeGossipFirstRangeWithLease()
+				if err := s.maybeGossipFirstRange(); err != nil {
+					log.Warningf("error gossiping first range data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
 			}
 		}
 	})
+
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(configGossipInterval)
+		for {
+			select {
+			case <-ticker.C:
+				if err := s.maybeGossipConfigs(); err != nil {
+					log.Warningf("error gossiping configs: %s", err)
+				}
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+	return nil
+}
+
+// maybeGossipFirstRange checks whether the store has a replia of the first
+// range and if so, reminds it to gossip the first range descriptor and
+// sentinel gossip.
+func (s *Store) maybeGossipFirstRange() error {
+	rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
+	if rng != nil {
+		log.V(1).Infof("store %d has first range, maybe gossiping",
+			s.StoreID())
+		return rng.maybeGossipFirstRange()
+	}
+	return nil
+}
+
+// maybeGossipConfigs checks which of the store's ranges contain config
+// descriptors and lets these ranges gossip them. Config gossip entries do not
+// expire, so this is a rarely needed action in a working cluster - if values
+// change, ranges will update gossip autonomously. However, the lease holder,
+// who is normally in charge of that might crash after updates before gossiping
+// and a new leader lease is only acquired if needed. To account for this rare
+// scenario, we activate the very few ranges that hold config maps
+// periodically.
+func (s *Store) maybeGossipConfigs() error {
+	for _, cd := range configDescriptors {
+		rng := s.LookupRange(cd.keyPrefix, cd.keyPrefix.Next())
+		if rng == nil {
+			log.Warningf("no range")
+			// This store has no range with this configuration.
+			continue
+		}
+		// Wake up the replica. If it acquires a fresh lease, it will
+		// gossip. If an unexpected error occurs (i.e. nobody else seems to
+		// have an active lease but we still failed to obtain it), return
+		// that error. If we ignored it we would run the risk of running a
+		// cluster without configs gossiped.
+		if _, err := rng.getLeaseForGossip(); err != nil {
+			return err
+		}
+		// Always gossip the configs as there are leader lease acquisition
+		// scenarios in which the config is not gossiped (e.g. leader executes
+		// but crashes before gossiping; comes back up but group goes dormant).
+		rng.maybeGossipConfigs(func(_ proto.Key) bool {
+			return rng.ContainsKey(cd.keyPrefix)
+		})
+	}
+	return nil
 }
 
 // configGossipUpdate is a callback for gossip updates to
@@ -873,14 +945,12 @@ func (s *Store) AddRange(rng *Range) error {
 	return nil
 }
 
-// addRangeInternal starts the range and adds it to the ranges map and
-// the rangesByKey slice. If resort is true, the rangesByKey slice is
-// sorted; this is optional to allow many ranges to be added and the
-// sort only invoked once. This method presupposes the store's lock
-// is held. Returns a rangeAlreadyExists error if a range with the
-// same Raft ID has already been added to this store.
+// addRangeInternal adds the range to the ranges map and the rangesByKey slice.
+// If resort is true, the rangesByKey slice is sorted; this is optional to
+// allow many ranges to be added and the sort only invoked once. This method
+// presupposes the store's lock is held. Returns a rangeAlreadyExists error if
+// a range with the same Raft ID has already been added to this store.
 func (s *Store) addRangeInternal(rng *Range, resort bool) error {
-	rng.start()
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
 	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {

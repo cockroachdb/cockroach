@@ -680,7 +680,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	prevLease := r.getLease()
 	isExtension := prevLease.RaftNodeID == args.Lease.RaftNodeID
 	effectiveStart := args.Lease.Start
-	// we return this error in "normal" lease-overlap related failures.
+	// We return this error in "normal" lease-overlap related failures.
 	rErr := &leaseRejectedError{
 		PrevLease:      *prevLease,
 		Lease:          args.Lease,
@@ -708,6 +708,9 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// extra tick. This allows multiple requests from the same replica to
 	// merge without ticking away from the minimal common start timestamp.
 	if prevLease.RaftNodeID == 0 || isExtension {
+		// TODO(tschottdorf) Think about whether it'd be better to go all the
+		// way back to prevLease.Start(), so that whenever the last lease is
+		// the own one, the original start is preserved.
 		effectiveStart.Backward(prevLease.Expiration)
 	} else {
 		effectiveStart.Backward(prevLease.Expiration.Next())
@@ -741,16 +744,17 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// clocks between the expiration (set by a remote node) and this
 	// node.
 	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && prevLease.RaftNodeID != r.getLease().RaftNodeID {
-		// Gossip configs in the event this range contains config info.
-		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-			return r.ContainsKey(configPrefix)
-		})
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
 
 		nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))
 		log.Infof("range %d: new leader lease for store %d on node %d: %s - %s",
 			r.Desc().RaftID, storeID, nodeID, args.Lease.Start, args.Lease.Expiration)
 	}
+
+	// Gossip configs in the event this range contains config info.
+	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+		return r.ContainsKey(configPrefix)
+	})
 }
 
 // AdminSplit divides the range into into two ranges, using either
