@@ -22,10 +22,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -81,7 +83,6 @@ func TestStatusJson(t *testing.T) {
 
 	testCases := []TestCase{
 		{statusKeyPrefix, "{}"},
-		{statusNodesKeyPrefix, "\"nodes\": null"},
 	}
 	// Test the /_status/local/ endpoint only in a go release branch.
 	if !strings.HasPrefix(runtime.Version(), "devel") {
@@ -217,5 +218,61 @@ func TestStatusGossipJson(t *testing.T) {
 		if data.Infos.Node1 == nil {
 			t.Errorf("no node 1 info returned: %v", body)
 		}
+	}
+}
+
+// TestNodeStatusResponse verifies that node status returns the expected
+// results.
+// TODO(Bram): Add more nodes.
+func TestNodeStatusResponse(t *testing.T) {
+	ts := &TestServer{}
+	ts.Ctx = NewTestContext()
+	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
+	ts.StoresPerNode = 3
+	if err := ts.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Stop()
+
+	// Make sure the node is spun up.
+	ts.node.waitForScanCompletion()
+	ts.node.waitForScanCompletion()
+
+	httpClient, err := testContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+ts.ServingAddr()+statusNodesKeyPrefix, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("unexpected status code: %v", resp.StatusCode)
+	}
+	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
+	if returnedContentType != "application/json" {
+		t.Errorf("unexpected content type: %v", returnedContentType)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nodeStatuses := []proto.NodeStatus{}
+	if err := json.Unmarshal(body, &nodeStatuses); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(nodeStatuses) != 1 {
+		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
+	}
+	if !reflect.DeepEqual(ts.node.Descriptor, nodeStatuses[0].Desc) {
+		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatuses[0].Desc)
 	}
 }
