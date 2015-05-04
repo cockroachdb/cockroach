@@ -198,10 +198,8 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 
 // TestStoreRangeMergeNonConsecutive attempts to merge two ranges
 // that are not on same store.
-// TODO(tschottdorf): debug the test failures on CircleCI, see #893.
 func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): debug and re-enable, see #893")
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
