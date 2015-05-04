@@ -22,7 +22,7 @@ GO ?= go
 # Allow setting of go build flags from the command line.
 GOFLAGS :=
 # Set to 1 to use static linking for all builds (including tests).
-STATIC := $(STATIC)
+STATIC :=
 # The cockroach image to be used for starting Docker containers
 # during acceptance tests. Usually cockroachdb/cockroach{,-dev}
 # depending on the context.
