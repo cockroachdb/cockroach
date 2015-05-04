@@ -35,6 +35,7 @@ type LocalSender struct {
 
 // NewLocalSender returns a local-only sender which directly accesses
 // a collection of stores.
+// The context is passed down to the store when sending commands.
 func NewLocalSender() *LocalSender {
 	return &LocalSender{
 		storeMap: map[proto.StoreID]*storage.Store{},

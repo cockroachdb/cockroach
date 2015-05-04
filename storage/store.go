@@ -35,9 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/log/logfield"
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -72,7 +72,6 @@ var (
 		RaftHeartbeatIntervalTicks: 1,
 		RaftElectionTimeoutTicks:   2,
 		ScanInterval:               10 * time.Minute,
-		Context:                    context.Background(),
 	}
 )
 
@@ -256,7 +255,6 @@ type StoreContext struct {
 	DB        *client.KV
 	Gossip    *gossip.Gossip
 	Transport multiraft.Transport
-	Context   context.Context
 
 	// RangeRetryOptions are the retry options for ranges.
 	// TODO(tschottdorf) improve comment once I figure out what this is.
@@ -286,7 +284,7 @@ type StoreContext struct {
 // We don't check for Gossip and DB since some of our tests pass
 // that as nil.
 func (sc *StoreContext) Valid() bool {
-	return sc.Clock != nil && sc.Context != nil && sc.Transport != nil &&
+	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0
 }
@@ -339,6 +337,18 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 // String formats a store for debug output.
 func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
+}
+
+// context returns a base context to pass along with commands being executed.
+// TODO(tschottdorf): currently we initialize the context here, but for client
+// requests we would ideally want one from higher up:
+// node -> local sender -> store
+// so that we can log relevant information such as the client address.
+// that however means passing a context through the local sender.
+func (s *Store) context() log.RoachContext {
+	return log.Background().Add(
+		logfield.NodeID, s.Ident.NodeID,
+		logfield.StoreID, s.Ident.StoreID)
 }
 
 // IsStarted returns true if the Store has been started.
@@ -1024,6 +1034,9 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
 func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
+	// should be passed in to ExecuteCmd from higher up eventually;
+	// see comment in context().
+	ctx := s.context().Add(logfield.Method, args.Method())
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
@@ -1055,8 +1068,9 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			reply.Header().SetGoError(err)
 			return util.RetryBreak, err
 		}
+		ctx = ctx.Add(logfield.RaftID, header.RaftID)
 
-		if err = rng.AddCmd(args, reply, true); err == nil {
+		if err = rng.AddCmd(ctx, args, reply, true); err == nil {
 			return util.RetryBreak, nil
 		}
 
@@ -1069,7 +1083,8 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
 				go func() {
 					if err := s.resolveWriteIntentError(wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
-						log.Warningf("async resolve on inconsistent read: %s", err)
+						log.CtxWarningf(ctx.Add(logfield.Error, err),
+							"failed to resolve on inconsistent read asynchronously")
 					}
 					s.stopper.FinishTask()
 				}()
@@ -1186,7 +1201,7 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Rang
 		resolveReply := &proto.InternalResolveIntentResponse{}
 		// Add resolve command with wait=false to add to Raft but not wait for completion.
 		waitForResolve := wait && i == len(wiErr.Intents)-1
-		if resolveErr := rng.AddCmd(resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
+		if resolveErr := rng.AddCmd(log.Background(), resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
 			return resolveErr
 		}
 	}

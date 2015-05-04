@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	gogoproto "github.com/gogo/protobuf/proto"
-	"golang.org/x/net/context"
 )
 
 // createTestNode creates an rpc server using the specified address,
@@ -53,7 +52,6 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		t.Fatal(err)
 	}
 	ctx := storage.StoreContext{}
-	ctx.Context = context.Background()
 
 	stopper := util.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
@@ -219,12 +217,12 @@ func TestNodeJoin(t *testing.T) {
 	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	if err := util.IsTrueWithin(func() bool {
-		if val, err := node1.ctx.Gossip.GetInfo(node2Key); err != nil {
+		if val, err := node1.sCtx.Gossip.GetInfo(node2Key); err != nil {
 			return false
 		} else if addr2 := val.(*proto.NodeDescriptor).Address.Address; addr2 != server2.Addr().String() {
 			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
-		if val, err := node2.ctx.Gossip.GetInfo(node1Key); err != nil {
+		if val, err := node2.sCtx.Gossip.GetInfo(node1Key); err != nil {
 			return false
 		} else if addr1 := val.(*proto.NodeDescriptor).Address.Address; addr1 != server1.Addr().String() {
 			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())

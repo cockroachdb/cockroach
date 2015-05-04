@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/log/logfield"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -489,7 +490,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
-func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) AddCmd(ctx log.RoachContext, args proto.Request, reply proto.Response, wait bool) error {
 	header := args.Header()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
@@ -499,11 +500,11 @@ func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) erro
 
 	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
-		return r.addAdminCmd(args, reply)
+		return r.addAdminCmd(ctx, args, reply)
 	} else if proto.IsReadOnly(args) {
-		return r.addReadOnlyCmd(args, reply)
+		return r.addReadOnlyCmd(ctx, args, reply)
 	}
-	return r.addWriteCmd(args, reply, wait)
+	return r.addWriteCmd(ctx, args, reply, wait)
 }
 
 // beginCmd waits for any overlapping, already-executing commands via
@@ -544,7 +545,7 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
+func (r *Range) addAdminCmd(ctx log.RoachContext, args proto.Request, reply proto.Response) error {
 	// Admin commands always require the leader lease.
 	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
 		reply.Header().SetGoError(err)
@@ -565,7 +566,7 @@ func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(ctx log.RoachContext, args proto.Request, reply proto.Response) error {
 	header := args.Header()
 
 	// If read-consistency is set to INCONSISTENT, run directly.
@@ -614,7 +615,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the response cache.
 // If wait is true, will block until the command is complete.
-func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) addWriteCmd(ctx log.RoachContext, args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
@@ -686,8 +687,8 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
-				args.Method(), args, err)
+			log.CtxWarningf(ctx.Add(logfield.Error, err),
+				"non-synchronous execution with %+v failed", args)
 		}
 		return err
 	}

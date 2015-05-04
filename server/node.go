@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -58,7 +57,7 @@ const (
 type Node struct {
 	ClusterID  string               // UUID for Cockroach cluster
 	Descriptor proto.NodeDescriptor // Node ID, network/physical topology
-	ctx        storage.StoreContext // Context to use and pass to stores
+	sCtx       storage.StoreContext // Context to use and pass to stores
 	lSender    *kv.LocalSender      // Local KV sender for access to node-local stores
 	status     *status.NodeStatusMonitor
 	startedAt  int64
@@ -116,15 +115,14 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 // Returns a KV client for unittest purposes. Caller should close the returned
 // client.
 func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.KV, error) {
-	ctx := storage.StoreContext{}
-	ctx.Context = context.Background()
-	ctx.ScanInterval = 10 * time.Minute
-	ctx.Clock = hlc.NewClock(hlc.UnixNano)
+	sCtx := storage.StoreContext{}
+	sCtx.ScanInterval = 10 * time.Minute
+	sCtx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
-	ctx.DB = localDB
-	ctx.Transport = multiraft.NewLocalRPCTransport()
+	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, sCtx.Clock, false, stopper))
+	sCtx.DB = localDB
+	sCtx.Transport = multiraft.NewLocalRPCTransport()
 	for i, eng := range engines {
 		sIdent := proto.StoreIdent{
 			ClusterID: clusterID,
@@ -134,7 +132,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
+		s := storage.NewStore(sCtx, eng, &proto.NodeDescriptor{NodeID: 1})
 
 		// Verify the store isn't already part of a cluster.
 		if len(s.Ident.ClusterID) > 0 {
@@ -175,9 +173,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(ctx storage.StoreContext) *Node {
+func NewNode(sCtx storage.StoreContext) *Node {
 	return &Node{
-		ctx:           ctx,
+		sCtx:          sCtx,
 		status:        status.NewNodeStatusMonitor(),
 		lSender:       kv.NewLocalSender(),
 		completedScan: sync.NewCond(&sync.Mutex{}),
@@ -214,7 +212,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.ctx.DB)
+		id, err = allocateNodeID(n.sCtx.DB)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -226,7 +224,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
-	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+	if err = n.sCtx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 }
@@ -249,7 +247,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 		return err
 	}
 
-	n.startedAt = n.ctx.Clock.Now().WallTime
+	n.startedAt = n.sCtx.Clock.Now().WallTime
 	n.startStoresScanner(stopper)
 	n.startGossip(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
@@ -269,7 +267,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error 
 		return util.Error("no engines")
 	}
 	for _, e := range engines {
-		s := storage.NewStore(n.ctx, e, &n.Descriptor)
+		s := storage.NewStore(n.sCtx, e, &n.Descriptor)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(stopper); err != nil {
@@ -344,7 +342,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.sCtx.DB)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -375,9 +373,9 @@ func (n *Node) connectGossip() {
 	log.Infof("connecting to gossip network to verify cluster ID...")
 	// No timeout or stop condition is needed here. Log statements should be
 	// sufficient for diagnosing this type of condition.
-	<-n.ctx.Gossip.Connected
+	<-n.sCtx.Gossip.Connected
 
-	val, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
+	val, err := n.sCtx.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil || val == nil {
 		log.Fatalf("unable to ascertain cluster ID from gossip network: %s", err)
 	}
@@ -421,12 +419,12 @@ func (n *Node) gossipCapacities() {
 }
 
 // startStoresScanner will walk through all the stores in the node every
-// ctx.ScanInterval and store the status in the db.
+// sCtx.ScanInterval and store the status in the db.
 func (n *Node) startStoresScanner(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		for {
 			select {
-			case <-time.After(n.ctx.ScanInterval):
+			case <-time.After(n.sCtx.ScanInterval):
 				if !stopper.StartTask() {
 					continue
 				}
@@ -451,7 +449,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				})
 
 				// Store the combined stats in the db.
-				now := n.ctx.Clock.Now().WallTime
+				now := n.sCtx.Clock.Now().WallTime
 				status := &proto.NodeStatus{
 					Desc:       n.Descriptor,
 					StoreIDs:   accessedStoreIDs,
@@ -461,7 +459,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					Stats:      *stats,
 				}
 				key := engine.NodeStatusKey(int32(n.Descriptor.NodeID))
-				if err := n.ctx.DB.Run(client.PutProto(key, status)); err != nil {
+				if err := n.sCtx.DB.Run(client.PutProto(key, status)); err != nil {
 					log.Error(err)
 				}
 				// Increment iteration count.
