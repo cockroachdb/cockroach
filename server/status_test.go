@@ -234,7 +234,8 @@ func TestNodeStatusResponse(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	// Make sure the node is spun up.
+	// Make sure the node is spun up and that a full scan of the ranges in the
+	// stores is complete.  The best way to do that is to wait twice.
 	ts.node.waitForScanCompletion()
 	ts.node.waitForScanCompletion()
 

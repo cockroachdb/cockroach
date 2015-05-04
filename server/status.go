@@ -18,7 +18,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"runtime"
 
@@ -53,8 +52,10 @@ const (
 	statusLocalStacksKey = statusLocalKeyPrefix + "stacks"
 
 	// statusNodesKeyPrefix exposes status for each of the nodes the cluster.
-	// GETing statusNodesKeyPrefix will list all nodes.
-	// Individual node status can be queried at statusNodesKeyPrefix/NodeID.
+	// statusNodesKeyPrefix/nodes -> lists all nodes
+	// statusNodesKeyPrefix/nodes/ -> lists all nodes
+	// statusNodesKeyPrefix/nodes/{NodeID} -> shows only the status for that
+	//                                        specific node
 	statusNodesKeyPrefix = statusKeyPrefix + "nodes/"
 
 	// statusStoresKeyPrefix exposes status for each store.
@@ -85,7 +86,7 @@ func (s *statusServer) registerHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(statusGossipKeyPrefix, s.handleGossipStatus)
 	mux.HandleFunc(statusLocalKeyPrefix, s.handleLocalStatus)
 	mux.HandleFunc(statusLocalStacksKey, s.handleLocalStacks)
-	mux.HandleFunc(statusNodesKeyPrefix, s.handleNodeStatus)
+	mux.HandleFunc(statusNodesKeyPrefix, s.handleNodesStatus)
 	mux.HandleFunc(statusStoresKeyPrefix, s.handleStoresStatus)
 	mux.HandleFunc(statusTransactionsKeyPrefix, s.handleTransactionStatus)
 }
@@ -149,10 +150,8 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleNodeStatus handles GET requests for node status.
-func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
-	// TODO(shawn) parse node-id in path
-
+// handleNodesStatus handles GET requests for all node status.
+func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request) {
 	startKey := engine.KeyStatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -168,7 +167,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+
 	nodeStatuses := []proto.NodeStatus{}
 	for _, row := range resp.Rows {
 		nodeStatus := &proto.NodeStatus{}
@@ -179,14 +178,20 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) 
 		}
 		nodeStatuses = append(nodeStatuses, *nodeStatus)
 	}
-	val, err := json.Marshal(nodeStatuses)
+	b, contentType, err := util.MarshalResponse(r, nodeStatuses, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Write(val)
+	w.Header().Set("Content-Type", contentType)
+	w.Write(b)
+}
 
+// handleNodeStatus handles GET requests for a single node status.
+func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
+	// TODO(bram) parse node-id in path and return the single node status only.
+	s.handleNodesStatus(w, r)
 }
 
 // handleStoresStatus handles GET requests for store status.
