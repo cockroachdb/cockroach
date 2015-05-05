@@ -246,7 +246,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"BeginScanRanges",
 			"AddRange rid=1, live=348",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origKey=242, newKey=15",
+			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
@@ -254,7 +254,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origKey=242, newKey=15",
+			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
@@ -262,7 +262,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
-			"SplitRange origId=1, newId=2, origKey=242, newKey=15",
+			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
@@ -273,8 +273,8 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	}
 
 	expectedUpdateCount := map[proto.StoreID]int{
-		proto.StoreID(1): 34,
-		proto.StoreID(2): 31,
+		proto.StoreID(1): 38,
+		proto.StoreID(2): 33,
 		proto.StoreID(3): 29,
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {
