@@ -104,7 +104,9 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
 			return util.Errorf("infostore could not be decoded: %s", err)
 		}
-		log.V(1).Infof("received delta infostore from client %s: %s", addr, delta)
+		if log.V(1) {
+			log.Infof("received delta infostore from client %s: %s", addr, delta)
+		}
 		s.is.combine(delta)
 	}
 	// If requested max sequence is not -1, wait for gossip interval to expire.

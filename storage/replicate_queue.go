@@ -81,7 +81,9 @@ func (rq *replicateQueue) needsReplication(zone proto.ZoneConfig, rng *Range) (b
 	need := len(zone.ReplicaAttrs)
 	have := len(rng.Desc().Replicas)
 	if need > have {
-		log.V(1).Infof("%s needs %d nodes; has %d", rng, need, have)
+		if log.V(1) {
+			log.Infof("%s needs %d nodes; has %d", rng, need, have)
+		}
 		return true, float64(need - have)
 	}
 

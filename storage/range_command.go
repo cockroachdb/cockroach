@@ -92,7 +92,9 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 		return util.Errorf("unrecognized command %s", args.Method())
 	}
 
-	log.V(1).Infof("executed %s command %+v: %+v", args.Method(), args, reply)
+	if log.V(1) {
+		log.Infof("executed %s command %+v: %+v", args.Method(), args, reply)
+	}
 
 	// Update the node clock with the serviced request. This maintains a
 	// high water mark for all ops serviced, so that received ops
@@ -276,7 +278,9 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 	if ct := args.InternalCommitTrigger; ct != nil {
 		// Resolve any explicit intents.
 		for _, key := range ct.Intents {
-			log.V(1).Infof("resolving intent at %s on end transaction [%s]", key, reply.Txn.Status)
+			if log.V(1) {
+				log.Infof("resolving intent at %s on end transaction [%s]", key, reply.Txn.Status)
+			}
 			if err := engine.MVCCResolveWriteIntent(batch, ms, key, reply.Txn.Timestamp, reply.Txn); err != nil {
 				reply.SetGoError(err)
 				return
@@ -568,10 +572,14 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	expiry := args.Timestamp
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
-		log.V(1).Infof("pushing expired txn %s", reply.PusheeTxn)
+		if log.V(1) {
+			log.Infof("pushing expired txn %s", reply.PusheeTxn)
+		}
 		pusherWins = true
 	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && args.PushType == proto.PUSH_TIMESTAMP {
-		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
+		if log.V(1) {
+			log.Infof("pushing timestamp for snapshot isolation txn")
+		}
 		pusherWins = true
 	} else if args.PushType == proto.CLEANUP_TXN {
 		// If just attempting to cleanup old or already-committed txns, don't push.
@@ -580,12 +588,16 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.
-		log.V(1).Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
+		if log.V(1) {
+			log.Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
+		}
 		pusherWins = true
 	}
 
 	if !pusherWins {
-		log.V(1).Infof("failed to push intent %s vs %s using priority=%d", reply.PusheeTxn, args.Txn, priority)
+		if log.V(1) {
+			log.Infof("failed to push intent %s vs %s using priority=%d", reply.PusheeTxn, args.Txn, priority)
+		}
 		reply.SetGoError(proto.NewTransactionPushError(args.Txn, reply.PusheeTxn))
 		return
 	}

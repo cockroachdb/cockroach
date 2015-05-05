@@ -161,7 +161,9 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 		return
 	}
 
-	log.V(1).Infof("adding range %s to %s queue", rng, bq.name)
+	if log.V(1) {
+		log.Infof("adding range %s to %s queue", rng, bq.name)
+	}
 	item = &rangeItem{value: rng, priority: priority}
 	heap.Push(&bq.priorityQ, item)
 	bq.ranges[rng.Desc().RaftID] = item
@@ -180,7 +182,9 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 	bq.Lock()
 	defer bq.Unlock()
 	if item, ok := bq.ranges[rng.Desc().RaftID]; ok {
-		log.V(1).Infof("removing range %s from %s queue", item.value, bq.name)
+		if log.V(1) {
+			log.Infof("removing range %s from %s queue", item.value, bq.name)
+		}
 		bq.remove(item.index)
 	}
 }
@@ -239,7 +243,9 @@ func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *util.Stopper) {
 	bq.Unlock()
 	if rng != nil {
 		now := clock.Now()
-		log.V(1).Infof("processing range %s from %s queue...", rng, bq.name)
+		if log.V(1) {
+			log.Infof("processing range %s from %s queue...", rng, bq.name)
+		}
 		// If the queue requires the leader lease to process the
 		// range, check whether this replica has leader lease and
 		// renew or acquire if necessary.
@@ -247,14 +253,18 @@ func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *util.Stopper) {
 			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
 			if err := rng.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
-				log.V(1).Infof("this replica of %s could not acquire leader lease; skipping...", rng)
+				if log.V(1) {
+					log.Infof("this replica of %s could not acquire leader lease; skipping...", rng)
+				}
 				return
 			}
 		}
 		if err := bq.impl.process(now, rng); err != nil {
 			log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
 		}
-		log.V(1).Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+		if log.V(1) {
+			log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+		}
 	}
 }
 

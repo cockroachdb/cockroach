@@ -311,7 +311,9 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 			gc = zone.GC
 			return true, nil
 		}
-		log.V(1).Infof("skipping zone config %+v, because no GC policy is set", zone)
+		if log.V(1) {
+			log.Infof("skipping zone config %+v, because no GC policy is set", zone)
+		}
 		return false, nil
 	}); err != nil {
 		return proto.GCPolicy{}, err

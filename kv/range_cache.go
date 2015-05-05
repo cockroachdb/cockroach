@@ -109,7 +109,9 @@ func (rmc *rangeDescriptorCache) String() string {
 func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	options lookupOptions) (*proto.RangeDescriptor, error) {
 	_, r := rmc.getCachedRangeDescriptor(key)
-	log.V(1).Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
+	if log.V(1) {
+		log.Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
+	}
 	if r != nil {
 		return r, nil
 	}
@@ -145,7 +147,9 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 			rmc.rangeCacheMu.Lock()
 			rmc.rangeCache.Del(k)
 			rmc.rangeCacheMu.Unlock()
-			log.V(1).Infof("evict cached descriptor: key=%s desc=%+v\n%s", key, rd, rmc)
+			if log.V(1) {
+				log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", key, rd, rmc)
+			}
 		}
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which

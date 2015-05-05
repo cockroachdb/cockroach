@@ -162,7 +162,9 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				continue
 			}
 			reply := getReply()
-			log.V(1).Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
+			if log.V(1) {
+				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
+			}
 			go sendOneFn(clients[index], opts.Timeout, method, args, reply, helperChan)
 		}
 		// Wait for completions.
@@ -190,7 +192,9 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				}
 			default:
 				successes++
-				log.V(1).Infof("%s: successful reply: %+v", method, t)
+				if log.V(1) {
+					log.Infof("%s: successful reply: %+v", method, t)
+				}
 				replies = append(replies, t)
 				if successes == opts.N {
 					return replies, nil

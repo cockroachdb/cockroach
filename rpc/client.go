@@ -244,7 +244,9 @@ func (c *Client) heartbeat() error {
 	select {
 	case <-call.Done:
 		receiveTime := c.clock.PhysicalNow()
-		log.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
+		if log.V(1) {
+			log.Infof("client %s heartbeat: %v", c.Addr(), call.Error)
+		}
 		c.mu.Lock()
 		c.healthy = true
 		c.offset.MeasuredAt = receiveTime

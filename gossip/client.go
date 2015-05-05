@@ -158,7 +158,9 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 			if err := gob.NewDecoder(bytes.NewBuffer(reply.Delta)).Decode(delta); err != nil {
 				return util.Errorf("infostore could not be decoded: %s", err)
 			}
-			log.V(1).Infof("received gossip reply delta from %s: %s", c.addr, delta)
+			if log.V(1) {
+				log.Infof("received gossip reply delta from %s: %s", c.addr, delta)
+			}
 			g.mu.Lock()
 			c.peerID = delta.NodeID
 			g.outgoing.addNode(c.peerID)

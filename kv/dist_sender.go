@@ -419,7 +419,9 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	for i := range replicas {
 		addr, err := ds.gossip.GetNodeIDAddress(replicas[i].NodeID)
 		if err != nil {
-			log.V(1).Infof("node %d address is not gossiped: %v", replicas[i].NodeID, err)
+			if log.V(1) {
+				log.Infof("node %d address is not gossiped: %v", replicas[i].NodeID, err)
+			}
 			continue
 		}
 		addrs = append(addrs, addr)
@@ -631,13 +633,17 @@ func (ds *DistSender) updateLeaderCache(rid proto.RaftID, leader proto.Replica) 
 	oldLeader := ds.leaderCache.Lookup(rid)
 	ds.leaderCache.Update(rid, proto.Replica{})
 	if oldLeader != nil {
-		log.V(1).Infof("raft %d: evicted cached leader %d", rid, oldLeader.StoreID)
+		if log.V(1) {
+			log.Infof("raft %d: evicted cached leader %d", rid, oldLeader.StoreID)
+		}
 	}
 	if leader.StoreID == 0 {
 		return
 	}
 	if oldLeader == nil || leader.StoreID != oldLeader.StoreID {
-		log.V(1).Infof("raft %d: new cached leader %d", rid, leader.StoreID)
+		if log.V(1) {
+			log.Infof("raft %d: new cached leader %d", rid, leader.StoreID)
+		}
 		ds.leaderCache.Update(rid, leader)
 	}
 }
