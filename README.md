@@ -78,8 +78,8 @@ Now we're in an environment that has everything set up, and we start by first in
 ```bash
 DIR=$(mktemp -d /tmp/dbXXX)
 # Initialize CA and server certificates. Default directory is --certs=certs
-./cockroach create-ca-cert
-./cockroach create-node-cert 127.0.0.1 localhost $(hostname)
+./cockroach cert create-ca
+./cockroach cert create-node 127.0.0.1 localhost $(hostname)
 # Initialize data directories.
 ./cockroach init --stores ssd=$DIR
 # Start the server.
@@ -171,9 +171,9 @@ Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node
 ```bash
 docker run -v /data -v /certs cockroachdb/cockroach init --stores ssd=/data
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  create-ca-cert --certs /certs
+  cert create-ca --certs /certs
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  create-node-cert --certs /certs 127.0.0.1 localhost roachnode
+  cert create-node --certs /certs 127.0.0.1 localhost roachnode
 docker run -p 8080:8080 -h roachnode --volumes-from=$(docker ps -q -n 1) \
   cockroachdb/cockroach start --certs /certs --stores ssd=/data --gossip self://
 ```

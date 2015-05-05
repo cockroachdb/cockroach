@@ -28,7 +28,7 @@ import (
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
 var createCACertCmd = &cobra.Command{
-	Use:   "create-ca-cert [options]",
+	Use:   "create-ca [options]",
 	Short: "create CA cert and key",
 	Long: `
 Generates a new key pair, a new CA certificate and writes them to
@@ -51,8 +51,8 @@ func runCreateCACert(cmd *cobra.Command, args []string) {
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
 var createNodeCertCmd = &cobra.Command{
-	Use:   "create-node-cert [options] <host 1> <host 2> ... <host N>",
-	Short: "create node cert and key\n",
+	Use:   "create-node [options] <host 1> <host 2> ... <host N>",
+	Short: "create node cert and key",
 	Long: `
 Generates a new key pair, a new node certificate and writes them to
 individual files in the directory specified by --certs (required).
@@ -76,4 +76,16 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) {
 var certCmds = []*cobra.Command{
 	createCACertCmd,
 	createNodeCertCmd,
+}
+
+var certCmd = &cobra.Command{
+	Use:   "cert",
+	Short: "create ca and node certs",
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Usage()
+	},
+}
+
+func init() {
+	certCmd.AddCommand(certCmds...)
 }
