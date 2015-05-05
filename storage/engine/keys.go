@@ -153,7 +153,7 @@ func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(KeyLocalRangeKeyPrefix):]
-	b, startKey = encoding.DecodeBytes(b)
+	b, startKey = encoding.DecodeBytes(b, nil)
 	if len(b) < KeyLocalSuffixLength {
 		panic(fmt.Sprintf("key %q does not have suffix of length %d", key, KeyLocalSuffixLength))
 	}
@@ -214,7 +214,7 @@ func KeyAddress(k proto.Key) proto.Key {
 	}
 	if bytes.HasPrefix(k, KeyLocalRangeKeyPrefix) {
 		k = k[len(KeyLocalRangeKeyPrefix):]
-		_, k = encoding.DecodeBytes(k)
+		_, k = encoding.DecodeBytes(k, nil)
 		return k
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q", k, KeyLocalRangeKeyPrefix)

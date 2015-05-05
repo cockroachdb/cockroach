@@ -94,7 +94,7 @@ func DecodeDataKey(key proto.Key) (string, string, Resolution, int64) {
 	remainder = remainder[len(keyDataPrefix):]
 
 	// Decode series name.
-	remainder, name = encoding.DecodeBytes(remainder)
+	remainder, name = encoding.DecodeBytes(remainder, nil)
 	// Decode resolution.
 	remainder, resolutionInt = encoding.DecodeVarint(remainder)
 	resolution := Resolution(resolutionInt)
