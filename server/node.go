@@ -240,7 +240,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	}
 
 	// Start status monitor.
-	n.status.StartMonitorFeed(n.ctx.EventFeed)
+	n.status.StartMonitorFeed(n.sCtx.EventFeed)
 
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(engines, stopper); err != nil {
