@@ -20,10 +20,12 @@ package log
 import (
 	"fmt"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestContextLog(t *testing.T) {
-	ctx := Background().With(
+	ctx := Add(context.Background(),
 		Method, "Put",
 		NodeID, 5,
 		Err, fmt.Errorf("everything broke"))
@@ -31,9 +33,9 @@ func TestContextLog(t *testing.T) {
 	if s := contextKV(ctx).String(); s != expS {
 		t.Errorf("formatted output %s != %s", s, expS)
 	}
-	ctx.Warning("just testing")
+	Warningc(ctx, "just testing")
 
-	ctx = Background().With("not_a_field", 5)
+	ctx = Add(context.Background(), "not_a_field", 5)
 	if s := contextKV(ctx).String(); s != "" {
 		t.Errorf("wanted empty string, not %s", s)
 	}

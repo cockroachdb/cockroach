@@ -33,42 +33,10 @@ const (
 	levelFatal
 )
 
-// Context wraps a context.Context into an object suitable for logging.
-type Context interface {
-	context.Context
-	With(kvs ...interface{}) Context
-
-	Info(string)
-	Warning(string)
-	Error(string)
-	Fatal(string)
-
-	// Should be avoided with structured logging, but in theory we
-	// can have them:
-	// Infof(string, ...interface{})
-	// Warningf(string, ...interface{})
-	// Errorf(string, ...interface{})
-	// Fatalf(string, ...interface{})
-}
-
-type logContext struct {
-	context.Context
-}
-
-var _ Context = &logContext{}
-
-// Background ...
-func Background() Context {
-	return Wrap(context.Background())
-}
-
-// Wrap ...
-func Wrap(ctx context.Context) Context {
-	return &logContext{ctx}
-}
-
-func (lc *logContext) With(kvs ...interface{}) Context {
-	ctx := lc.Context
+// Add takes a context and an additional even number of arguments,
+// interpreted as key-value pairs. These are added on top of the
+// supplied context and the resulting context returned.
+func Add(ctx context.Context, kvs ...interface{}) context.Context {
 	l := len(kvs)
 	if l%2 != 0 {
 		panic("Add called with odd number of arguments")
@@ -76,27 +44,17 @@ func (lc *logContext) With(kvs ...interface{}) Context {
 	for i := 1; i < l; i += 2 {
 		ctx = context.WithValue(ctx, kvs[i-1], kvs[i])
 	}
-	return &logContext{ctx}
+	return ctx
 }
 
-// Infof ...
-func (lc *logContext) Info(msg string) {
-	glogHandler(levelInfo, contextKV(lc), msg)
+// Infoc ...
+func Infoc(ctx context.Context, msg string) {
+	glogHandler(levelInfo, contextKV(ctx), msg)
 }
 
-// Warningf ...
-func (lc *logContext) Warning(msg string) {
-	glogHandler(levelWarning, contextKV(lc), msg)
-}
-
-// Errorf ...
-func (lc *logContext) Error(msg string) {
-	glogHandler(levelError, contextKV(lc), msg)
-}
-
-// Fatalf ...
-func (lc *logContext) Fatal(msg string) {
-	glogHandler(levelFatal, contextKV(lc), msg)
+// Warningc ...
+func Warningc(ctx context.Context, msg string) {
+	glogHandler(levelWarning, contextKV(ctx), msg)
 }
 
 type kvSlice []interface{}
@@ -126,10 +84,11 @@ func glogHandler(level level, kvs kvSlice, pattern string) {
 		Info(kvs.String() + ": " + pattern)
 	case levelWarning:
 		Warning(kvs.String() + ": " + pattern)
-	case levelError:
-		Error(kvs.String() + ": " + pattern)
-	case levelFatal:
-		Fatal(kvs.String() + ": " + pattern)
+	//case levelError:
+	//	Error(kvs.String() + ": " + pattern)
+	//case levelFatal:
+	//	Fatal(kvs.String() + ": " + pattern)
 	default:
+		panic(fmt.Sprintf("unknown log level %v", level))
 	}
 }
