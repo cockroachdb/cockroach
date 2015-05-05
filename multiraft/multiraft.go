@@ -18,6 +18,7 @@
 package multiraft
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -29,6 +30,10 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 )
+
+// An ErrGroupDeleted is returned for commands which are pending while their
+// group is deleted.
+var ErrGroupDeleted = errors.New("group deleted")
 
 // NodeID is a type alias for a raft node ID. Note that a raft node corresponds
 // to a cockroach node+store combination.
@@ -84,17 +89,6 @@ func (c *Config) validate() error {
 		return util.Error("TickInterval must be non-zero")
 	}
 	return nil
-}
-
-// A GroupDeletedError is returned to a client for commands which are
-// pending while a group is deleted.
-type GroupDeletedError string
-
-var _ error = GroupDeletedError("")
-
-// Error implements the error interface.
-func (err GroupDeletedError) Error() string {
-	return string(err)
 }
 
 // MultiRaft represents a local node in a raft cluster. The owner is responsible for consuming
@@ -715,7 +709,7 @@ func (s *state) removeGroup(op *removeGroupOp) {
 	// Cancel commands which are still in transit.
 	for cmdID, prop := range g.pending {
 		if prop.ch != nil {
-			prop.ch <- GroupDeletedError("group deleted")
+			prop.ch <- ErrGroupDeleted
 		}
 		delete(g.pending, cmdID)
 	}

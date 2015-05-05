@@ -677,7 +677,7 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 		if err = <-errChan; err == nil {
 			// Next if the command was committed, wait for the range to apply it.
 			err = <-pendingCmd.done
-		} else if _, ok := err.(multiraft.GroupDeletedError); ok {
+		} else if err == multiraft.ErrGroupDeleted {
 			// This error needs to be converted appropriately so that
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(r.Desc().RaftID)
