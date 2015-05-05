@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -216,7 +217,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 
 	// Send GC request through range.
 	gcArgs.GCMeta = *gcMeta
-	if err := rng.AddCmd(log.Background(), gcArgs, &proto.InternalGCResponse{}, true); err != nil {
+	if err := rng.AddCmd(context.Background(), gcArgs, &proto.InternalGCResponse{}, true); err != nil {
 		return err
 	}
 
@@ -275,7 +276,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 			Txn:       pushReply.PusheeTxn,
 		},
 	}
-	if err := rng.AddCmd(log.Background(), resolveArgs, &proto.InternalResolveIntentResponse{}, true); err != nil {
+	if err := rng.AddCmd(rng.context(), resolveArgs, &proto.InternalResolveIntentResponse{}, true); err != nil {
 		log.Warningf("resolve of key %q failed: %s", key, err)
 		updateOldestIntent(meta.Timestamp.WallTime)
 	}

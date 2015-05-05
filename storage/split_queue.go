@@ -107,7 +107,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 		return err
 	}
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
-		rng.AddCmd(log.Background(), &proto.AdminSplitRequest{
+		rng.AddCmd(rng.context(), &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{Key: rng.Desc().StartKey},
 		}, &proto.AdminSplitResponse{}, true)
 	}

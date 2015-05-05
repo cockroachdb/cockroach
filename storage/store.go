@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -338,14 +339,14 @@ func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
-// context returns a base context to pass along with commands being executed.
+// Context returns a base context to pass along with commands being executed.
 // TODO(tschottdorf): currently we initialize the context here, but for client
 // requests we would ideally want one from higher up:
 // node -> local sender -> store
 // so that we can log relevant information such as the client address.
 // that however means passing a context through the local sender.
-func (s *Store) context() log.Context {
-	return log.Background().With(
+func (s *Store) Context() context.Context {
+	return log.Add(context.Background(),
 		log.NodeID, s.Ident.NodeID,
 		log.StoreID, s.Ident.StoreID)
 }
@@ -577,7 +578,7 @@ func (s *Store) maybeGossipConfigs() error {
 		// have an active lease but we still failed to obtain it), return
 		// that error. If we ignored it we would run the risk of running a
 		// cluster without configs gossiped.
-		if _, err := rng.getLeaseForGossip(); err != nil {
+		if _, err := rng.getLeaseForGossip(s.Context()); err != nil {
 			return err
 		}
 		// Always gossip the configs as there are leader lease acquisition
@@ -1035,7 +1036,7 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 	// should be passed in to ExecuteCmd from higher up eventually;
 	// see comment in context().
-	ctx := s.context().With(log.Method, args.Method())
+	ctx := log.Add(s.Context(), log.Method, args.Method())
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
@@ -1067,7 +1068,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			reply.Header().SetGoError(err)
 			return util.RetryBreak, err
 		}
-		ctx = ctx.With(log.RaftID, header.RaftID)
+		ctx = log.Add(ctx, log.RaftID, header.RaftID)
 
 		if err = rng.AddCmd(ctx, args, reply, true); err == nil {
 			return util.RetryBreak, nil
@@ -1081,9 +1082,9 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			// If inconsistent, return results and resolve asynchronously.
 			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
 				go func() {
-					if err := s.resolveWriteIntentError(wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
-						ctx.With(log.Err, err).
-							Warning("failed to resolve on inconsistent read asynchronously")
+					if err := s.resolveWriteIntentError(ctx, wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
+						log.Warningc(log.Add(ctx, log.Err, err),
+							"failed to resolve on inconsistent read asynchronously")
 					}
 					s.stopper.FinishTask()
 				}()
@@ -1094,7 +1095,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			if proto.IsWrite(args) {
 				pushType = proto.ABORT_TXN
 			}
-			err = s.resolveWriteIntentError(wiErr, rng, args, pushType, false)
+			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType, false)
 			reply.Header().SetGoError(err)
 		}
 
@@ -1139,10 +1140,11 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 // Resolved flag to true so the client retries the command
 // immediately. If the push fails, we set the error's Resolved flag to
 // false so that the client backs off before reissuing the command.
-func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
 	pushType proto.PushTxnType, wait bool) error {
+	ctx = log.Add(ctx, log.Err, wiErr, log.Key, args.Header().Key)
 	if log.V(1) {
-		log.Infof("resolving write intent on %s %q: %s", args.Method(), args.Header().Key, wiErr)
+		log.Infoc(ctx, "resolving write intent")
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
@@ -1166,7 +1168,8 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Rang
 	// Run all pushes in parallel.
 	if pushErr := s.ctx.DB.Run(client.Call{Args: bArgs, Reply: bReply}); pushErr != nil {
 		if log.V(1) {
-			log.Infof("pushes for %+v failed: %s", wiErr.Intents, pushErr)
+			log.Infoc(log.Add(ctx, log.Err, pushErr, log.Detail, wiErr.Intents),
+				"pushes failed")
 		}
 
 		// For write/write conflicts within a transaction, propagate the
@@ -1200,7 +1203,7 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Rang
 		resolveReply := &proto.InternalResolveIntentResponse{}
 		// Add resolve command with wait=false to add to Raft but not wait for completion.
 		waitForResolve := wait && i == len(wiErr.Intents)-1
-		if resolveErr := rng.AddCmd(log.Background(), resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
+		if resolveErr := rng.AddCmd(context.TODO(), resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
 			return resolveErr
 		}
 	}

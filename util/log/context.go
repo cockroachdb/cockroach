@@ -57,6 +57,11 @@ func Warningc(ctx context.Context, msg string) {
 	glogHandler(levelWarning, contextKV(ctx), msg)
 }
 
+// Errorc  ...
+func Errorc(ctx context.Context, msg string) {
+	glogHandler(levelError, contextKV(ctx), msg)
+}
+
 type kvSlice []interface{}
 
 func contextKV(ctx context.Context) kvSlice {
