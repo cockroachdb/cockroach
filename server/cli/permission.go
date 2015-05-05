@@ -18,28 +18,26 @@
 package cli
 
 import (
-	"flag"
-
-	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
+
+	"github.com/spf13/cobra"
 )
 
 // A getPermsCmd command displays the perm config for the specified
 // prefix.
-var getPermsCmd = &commander.Command{
-	UsageLine: "get-perms [options] <key-prefix>",
-	Short:     "fetches and displays the permission config",
+var getPermsCmd = &cobra.Command{
+	Use:   "get-perms [options] <key-prefix>",
+	Short: "fetches and displays the permission config",
 	Long: `
 Fetches and displays the permission configuration for <key-prefix>. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runGetPerms,
-	Flag: *flag.CommandLine,
+	Run: runGetPerms,
 }
 
 // runGetPerms invokes the REST API with GET action and key prefix as path.
-func runGetPerms(cmd *commander.Command, args []string) {
+func runGetPerms(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -48,24 +46,23 @@ func runGetPerms(cmd *commander.Command, args []string) {
 }
 
 // A lsPermsCmd command displays a list of perm configs by prefix.
-var lsPermsCmd = &commander.Command{
-	UsageLine: "ls-perms [options] [key-regexp]",
-	Short:     "list all permisison configs by key prefix",
+var lsPermsCmd = &cobra.Command{
+	Use:   "ls-perms [options] [key-regexp]",
+	Short: "list all permisison configs by key prefix",
 	Long: `
 List permission configs. If a regular expression is given, the results of
 the listing are filtered by key prefixes matching the regexp. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runLsPerms,
-	Flag: *flag.CommandLine,
+	Run: runLsPerms,
 }
 
 // runLsPerms invokes the REST API with GET action and no path, which
 // fetches a list of all perm configuration prefixes. The optional
 // regexp is applied to the complete list and matching prefixes
 // displayed.
-func runLsPerms(cmd *commander.Command, args []string) {
+func runLsPerms(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
 		cmd.Usage()
 		return
@@ -79,9 +76,9 @@ func runLsPerms(cmd *commander.Command, args []string) {
 }
 
 // A rmPermsCmd command removes a perm config by prefix.
-var rmPermsCmd = &commander.Command{
-	UsageLine: "rm-perms [options] <key-prefix>",
-	Short:     "remove a permission config by key prefix",
+var rmPermsCmd = &cobra.Command{
+	Use:   "rm-perms [options] <key-prefix>",
+	Short: "remove a permission config by key prefix",
 	Long: `
 Remove an existing permission config by key prefix. No action is taken if no
 permission configuration exists for the specified key prefix. Note that this
@@ -89,13 +86,12 @@ command can affect only a single perm config with an exactly matching
 prefix. The key prefix should be escaped via URL query escaping if it
 contains non-ascii bytes or spaces.
 `,
-	Run:  runRmPerms,
-	Flag: *flag.CommandLine,
+	Run: runRmPerms,
 }
 
 // runRmPerms invokes the REST API with DELETE action and key prefix as
 // path.
-func runRmPerms(cmd *commander.Command, args []string) {
+func runRmPerms(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -105,9 +101,9 @@ func runRmPerms(cmd *commander.Command, args []string) {
 
 // A setPermsCmd command creates a new or updates an existing perm
 // config.
-var setPermsCmd = &commander.Command{
-	UsageLine: "set-perm [options] <key-prefix> <perm-config-file>",
-	Short:     "create or update permission config for key prefix\n",
+var setPermsCmd = &cobra.Command{
+	Use:   "set-perm [options] <key-prefix> <perm-config-file>",
+	Short: "create or update permission config for key prefix\n",
 	Long: `
 Create or update a perm config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
@@ -138,14 +134,13 @@ For example:
 Setting permission configs will guarantee that users will have permissions for
 this key prefix and all sub prefixes of the one that is set
 `,
-	Run:  runSetPerms,
-	Flag: *flag.CommandLine,
+	Run: runSetPerms,
 }
 
 // runSetPerm invokes the REST API with POST action and key prefix as
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
-func runSetPerms(cmd *commander.Command, args []string) {
+func runSetPerms(cmd *cobra.Command, args []string) {
 	if len(args) != 2 {
 		cmd.Usage()
 		return

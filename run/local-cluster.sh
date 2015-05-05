@@ -105,8 +105,8 @@ for i in $(seq 1 $NODES); do
 done
 
 # Generate certs.
-docker run -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} create-ca-cert -certs=${CERTS_DIR} 2> /dev/null
-docker run --rm --volumes-from=${CERTS_NAME} ${COCKROACH_IMAGE} create-node-cert -certs=${CERTS_DIR} ${NODE_ADDRESSES} 2> /dev/null
+docker run -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} create-ca-cert --certs=${CERTS_DIR} 2> /dev/null
+docker run --rm --volumes-from=${CERTS_NAME} ${COCKROACH_IMAGE} create-node-cert --certs=${CERTS_DIR} ${NODE_ADDRESSES} 2> /dev/null
 
 # Start all nodes.
 for i in $(seq 1 $NODES); do
@@ -114,7 +114,7 @@ for i in $(seq 1 $NODES); do
   VOL="/data$i"
 
   # Command args specify two data directories per instance to simulate two physical devices.
-  START_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=ssd=$VOL -addr=${HOSTS[$i]}:$PORT -certs=${CERTS_DIR}"
+  START_ARGS="--gossip=${HOSTS[1]}:$PORT --stores=ssd=$VOL --addr=${HOSTS[$i]}:$PORT --certs=${CERTS_DIR}"
   # Log (almost) everything.
   #START_ARGS="${START_ARGS} -v 7"
   # Node-specific arguments for node container.
@@ -122,7 +122,7 @@ for i in $(seq 1 $NODES); do
 
   # If this is the first node, initialize the cluster first.
   if [[ $i == 1 ]]; then
-      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init -certs=${CERTS_DIR} -stores=ssd=$VOL 2> /dev/null
+      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init --certs=${CERTS_DIR} --stores=ssd=$VOL 2> /dev/null
       NODE_ARGS="${NODE_ARGS} --volumes-from=cockroach-init"
   fi
 

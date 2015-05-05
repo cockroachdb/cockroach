@@ -18,31 +18,30 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
-	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+
 	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/spf13/cobra"
 )
 
 // A lsRangesCmd command lists the ranges in a cluster.
-var lsRangesCmd = &commander.Command{
-	UsageLine: "ls-ranges [options] [<start-key>]",
-	Short:     "lists the ranges",
+var lsRangesCmd = &cobra.Command{
+	Use:   "ls-ranges [options] [<start-key>]",
+	Short: "lists the ranges",
 	Long: `
 Lists the ranges in a cluster.
 
 Caveat: Currently only lists up to 1000 rangges.
 `,
-	Run:  runLsRanges,
-	Flag: *flag.CommandLine,
+	Run: runLsRanges,
 }
 
-func runLsRanges(cmd *commander.Command, args []string) {
+func runLsRanges(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
 		cmd.Usage()
 		return
@@ -82,19 +81,18 @@ func runLsRanges(cmd *commander.Command, args []string) {
 }
 
 // A splitRangeCmd command splits a range.
-var splitRangeCmd = &commander.Command{
-	UsageLine: "split-range [options] <key> [<split-key>]",
-	Short:     "splits a range",
+var splitRangeCmd = &cobra.Command{
+	Use:   "split-range [options] <key> [<split-key>]",
+	Short: "splits a range",
 	Long: `
 Splits the range containing <key>. If <split-key> is not specified a
 key to split the range approximately in half will be automatically
 chosen.
 `,
-	Run:  runSplitRange,
-	Flag: *flag.CommandLine,
+	Run: runSplitRange,
 }
 
-func runSplitRange(cmd *commander.Command, args []string) {
+func runSplitRange(cmd *cobra.Command, args []string) {
 	if len(args) == 0 || len(args) > 2 {
 		cmd.Usage()
 		return
@@ -126,17 +124,16 @@ func runSplitRange(cmd *commander.Command, args []string) {
 }
 
 // A mergeRangeCmd command merges a range.
-var mergeRangeCmd = &commander.Command{
-	UsageLine: "merge-range [options] <key>",
-	Short:     "merges a range\n",
+var mergeRangeCmd = &cobra.Command{
+	Use:   "merge-range [options] <key>",
+	Short: "merges a range\n",
 	Long: `
 Merges the range containing <key> with the immediate successor range.
 `,
-	Run:  runMergeRange,
-	Flag: *flag.CommandLine,
+	Run: runMergeRange,
 }
 
-func runMergeRange(cmd *commander.Command, args []string) {
+func runMergeRange(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return

@@ -26,12 +26,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 
-	commander "code.google.com/p/go-commander"
+	"github.com/spf13/cobra"
 )
 
-var listParamsCmd = &commander.Command{
-	UsageLine: "listparams",
-	Short:     "list all available parameters and their default values",
+var listParamsCmd = &cobra.Command{
+	Use:   "listparams",
+	Short: "list all available parameters and their default values",
 	Long: `
 List all available parameters and their default values.
 Note that parameter parsing stops after the first non-
@@ -39,18 +39,18 @@ option after the command name. Hence, the options need
 to precede any additional arguments,
 
   cockroach <command> [options] [arguments].`,
-	Run: func(cmd *commander.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		flag.CommandLine.PrintDefaults()
 	},
 }
 
-var versionCmd = &commander.Command{
-	UsageLine: "version",
-	Short:     "output version information",
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "output version information",
 	Long: `
 Output build version information.
 `,
-	Run: func(cmd *commander.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		info := util.GetBuildInfo()
 		w := &tabwriter.Writer{}
 		w.Init(os.Stdout, 2, 1, 2, ' ', 0)
@@ -63,57 +63,63 @@ Output build version information.
 	},
 }
 
-var allCmds = &commander.Commander{
-	Name: "cockroach",
-	Commands: []*commander.Command{
-		// Node commands.
-		initCmd,
-		startCmd,
-		exterminateCmd,
-		quitCmd,
+var allCmds = []*cobra.Command{
+	// Node commands.
+	initCmd,
+	startCmd,
+	exterminateCmd,
+	quitCmd,
 
-		// Certificate commands.
-		createCACertCmd,
-		createNodeCertCmd,
+	// Certificate commands.
+	createCACertCmd,
+	createNodeCertCmd,
 
-		// Key/value commands.
-		getCmd,
-		putCmd,
-		incCmd,
-		delCmd,
-		scanCmd,
+	// Key/value commands.
+	getCmd,
+	putCmd,
+	incCmd,
+	delCmd,
+	scanCmd,
 
-		// Range commands.
-		lsRangesCmd,
-		splitRangeCmd,
-		mergeRangeCmd,
+	// Range commands.
+	lsRangesCmd,
+	splitRangeCmd,
+	mergeRangeCmd,
 
-		// Accounting commands.
-		getAcctCmd,
-		lsAcctsCmd,
-		rmAcctCmd,
-		setAcctCmd,
+	// Accounting commands.
+	getAcctCmd,
+	lsAcctsCmd,
+	rmAcctCmd,
+	setAcctCmd,
 
-		// Permission commands.
-		getPermsCmd,
-		lsPermsCmd,
-		rmPermsCmd,
-		setPermsCmd,
+	// Permission commands.
+	getPermsCmd,
+	lsPermsCmd,
+	rmPermsCmd,
+	setPermsCmd,
 
-		// Zone commands.
-		getZoneCmd,
-		lsZonesCmd,
-		rmZoneCmd,
-		setZoneCmd,
+	// Zone commands.
+	getZoneCmd,
+	lsZonesCmd,
+	rmZoneCmd,
+	setZoneCmd,
 
-		// Miscellaneous commands.
-		// TODO(pmattis): stats
-		listParamsCmd,
-		versionCmd,
-	},
+	// Miscellaneous commands.
+	// TODO(pmattis): stats
+	listParamsCmd,
+	versionCmd,
+}
+
+var cockroachCmd = cobra.Command{
+	Use: "cockroach",
+}
+
+func init() {
+	cockroachCmd.AddCommand(allCmds...)
 }
 
 // Run ...
 func Run(args []string) error {
-	return allCmds.Run(args)
+	cockroachCmd.SetArgs(args)
+	return cockroachCmd.Execute()
 }

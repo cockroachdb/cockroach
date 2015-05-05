@@ -30,7 +30,6 @@ ${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
 # (and adding /... to repo paths will match packages that have been
 # downloaded but whose dependencies have not).
 pkgs="
-code.google.com/p/go-commander
 code.google.com/p/snappy-go/snappy
 github.com/biogo/store/interval
 github.com/biogo/store/llrb
@@ -45,6 +44,9 @@ github.com/coreos/etcd/raft/raftpb
 github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
 github.com/golang/glog
+github.com/inconshreveable/mousetrap
+github.com/spf13/cobra
+github.com/spf13/pflag
 golang.org/x/net/context
 gopkg.in/yaml.v1
 "

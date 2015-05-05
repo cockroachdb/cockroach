@@ -21,7 +21,6 @@ package cli
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -32,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 
-	commander "code.google.com/p/go-commander"
+	"github.com/spf13/cobra"
 )
 
 var osExit = os.Exit
@@ -50,17 +49,16 @@ func makeKVClient() (*client.KV, error) {
 }
 
 // A getCmd command gets the value for the specified key.
-var getCmd = &commander.Command{
-	UsageLine: "get [options] <key>",
-	Short:     "gets the value for a key",
+var getCmd = &cobra.Command{
+	Use:   "get [options] <key>",
+	Short: "gets the value for a key",
 	Long: `
 Fetches and display the value for <key>.
 `,
-	Run:  runGet,
-	Flag: *flag.CommandLine,
+	Run: runGet,
 }
 
-func runGet(cmd *commander.Command, args []string) {
+func runGet(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -92,19 +90,18 @@ func runGet(cmd *commander.Command, args []string) {
 }
 
 // A putCmd command sets the value for one or more keys.
-var putCmd = &commander.Command{
-	UsageLine: "put [options] <key> <value> [<key2> <value2>...]",
-	Short:     "sets the value for a key",
+var putCmd = &cobra.Command{
+	Use:   "put [options] <key> <value> [<key2> <value2>...]",
+	Short: "sets the value for a key",
 	Long: `
 Sets the value for one or more keys. Keys and values must be provided
 in pairs on the command line. All of the key/value pairs are set within
 a transaction.
 `,
-	Run:  runPut,
-	Flag: *flag.CommandLine,
+	Run: runPut,
 }
 
-func runPut(cmd *commander.Command, args []string) {
+func runPut(cmd *cobra.Command, args []string) {
 	if len(args) == 0 || len(args)%2 == 1 {
 		cmd.Usage()
 		return
@@ -145,18 +142,17 @@ func runPut(cmd *commander.Command, args []string) {
 }
 
 // A incCmd command increments the value for one or more keys.
-var incCmd = &commander.Command{
-	UsageLine: "inc [options] <key> [<amount>]",
-	Short:     "increments the value for a key",
+var incCmd = &cobra.Command{
+	Use:   "inc [options] <key> [<amount>]",
+	Short: "increments the value for a key",
 	Long: `
 Increments the value for a key. The increment amount defaults to 1 if
 not specified. Displays the incremented value upon success.
 `,
-	Run:  runInc,
-	Flag: *flag.CommandLine,
+	Run: runInc,
 }
 
-func runInc(cmd *commander.Command, args []string) {
+func runInc(cmd *cobra.Command, args []string) {
 	if len(args) > 2 {
 		cmd.Usage()
 		return
@@ -196,17 +192,16 @@ func runInc(cmd *commander.Command, args []string) {
 }
 
 // A delCmd command sets the value for one or more keys.
-var delCmd = &commander.Command{
-	UsageLine: "del [options] <key> [<key2>...]",
-	Short:     "deletes the value for a key",
+var delCmd = &cobra.Command{
+	Use:   "del [options] <key> [<key2>...]",
+	Short: "deletes the value for a key",
 	Long: `
 Deletes the value for one or more keys.
 `,
-	Run:  runDel,
-	Flag: *flag.CommandLine,
+	Run: runDel,
 }
 
-func runDel(cmd *commander.Command, args []string) {
+func runDel(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		cmd.Usage()
 		return
@@ -244,9 +239,9 @@ func runDel(cmd *commander.Command, args []string) {
 
 // A scanCmd command fetches the key/value pairs for a specified
 // range.
-var scanCmd = &commander.Command{
-	UsageLine: "scan [options] [<start-key> [<end-key>]]",
-	Short:     "scans a range of keys\n",
+var scanCmd = &cobra.Command{
+	Use:   "scan [options] [<start-key> [<end-key>]]",
+	Short: "scans a range of keys\n",
 	Long: `
 Fetches and display the key/value pairs for a range. If no <start-key>
 is specified then all (non-system) key/value pairs are retrieved. If no
@@ -255,11 +250,10 @@ are retrieved.
 
 Caveat: Currently only retrieves up to 1000 keys.
 `,
-	Run:  runScan,
-	Flag: *flag.CommandLine,
+	Run: runScan,
 }
 
-func runScan(cmd *commander.Command, args []string) {
+func runScan(cmd *cobra.Command, args []string) {
 	if len(args) > 2 {
 		cmd.Usage()
 		return

@@ -302,7 +302,7 @@ func (g *Gossip) Outgoing() []proto.NodeID {
 
 // Start launches the gossip instance, which commences joining the
 // gossip network using the supplied rpc server and the gossip
-// bootstrap addresses specified via command-line flag: -gossip.
+// bootstrap addresses specified via command-line flag: --gossip.
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
