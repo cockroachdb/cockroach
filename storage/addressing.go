@@ -36,40 +36,52 @@ func delMeta(calls []client.Call, key proto.Key, desc *proto.RangeDescriptor) []
 	return append(calls, client.Delete(key))
 }
 
-// SplitRangeAddressing creates (or overwrites if necessary) the meta1
+// splitRangeAddressing creates (or overwrites if necessary) the meta1
 // and meta2 range addressing records for the left and right ranges
 // caused by a split.
-func SplitRangeAddressing(left, right *proto.RangeDescriptor) ([]client.Call, error) {
+func splitRangeAddressing(left, right *proto.RangeDescriptor) ([]client.Call, error) {
 	var calls []client.Call
 	var err error
-	if calls, err = updateRangeAddressing(calls, left, putMeta); err != nil {
+	if calls, err = rangeAddressing(calls, left, putMeta); err != nil {
 		return nil, err
 	}
-	if calls, err = updateRangeAddressing(calls, right, putMeta); err != nil {
+	if calls, err = rangeAddressing(calls, right, putMeta); err != nil {
 		return nil, err
 	}
 	return calls, nil
 }
 
-// MergeRangeAddressing removes subsumed meta1 and meta2 range
+// mergeRangeAddressing removes subsumed meta1 and meta2 range
 // addressing records caused by merging and updates the records for
 // the new merged range. Left is the range descriptor for the "left"
 // range before merging and merged describes the left to right merge.
-func MergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, error) {
+func mergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, error) {
 	var calls []client.Call
 	var err error
-	if calls, err = updateRangeAddressing(calls, left, delMeta); err != nil {
+	if calls, err = rangeAddressing(calls, left, delMeta); err != nil {
 		return nil, err
 	}
-	if calls, err = updateRangeAddressing(calls, merged, putMeta); err != nil {
+	if calls, err = rangeAddressing(calls, merged, putMeta); err != nil {
 		return nil, err
 	}
 	return calls, nil
 }
 
-// updateRangeAddressing updates or deletes the range addressing
-// metadata for the range specified by desc. The action to take is
-// specified by the supplied metaAction function.
+// updateRangeAddressing overwrites the meta1 and meta2 range addressing
+// records for the descriptor. Returns a slice of calls necessary to
+// update the records on the KV database.
+func updateRangeAddressing(desc *proto.RangeDescriptor) ([]client.Call, error) {
+	var calls []client.Call
+	var err error
+	if calls, err = rangeAddressing(calls, desc, putMeta); err != nil {
+		return nil, err
+	}
+	return calls, nil
+}
+
+// rangeAddressing updates or deletes the range addressing metadata
+// for the range specified by desc. The action to take is specified by
+// the supplied metaAction function.
 //
 // The rules for meta1 and meta2 records are as follows:
 //
@@ -81,7 +93,7 @@ func MergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, e
 //     - meta2(desc.EndKey)
 //     3a. If desc.StartKey is KeyMin or meta2:
 //         - meta1(KeyMax)
-func updateRangeAddressing(calls []client.Call, desc *proto.RangeDescriptor,
+func rangeAddressing(calls []client.Call, desc *proto.RangeDescriptor,
 	action metaAction) ([]client.Call, error) {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta1Prefix) ||

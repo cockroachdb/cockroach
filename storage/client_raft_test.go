@@ -205,21 +205,39 @@ func TestReplicateRange(t *testing.T) {
 	}
 	// Verify no intent remains on range descriptor key.
 	key := engine.RangeDescriptorKey(rng.Desc().StartKey)
-	if _, err := engine.MVCCGet(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil); err != nil {
-		t.Fatal(err)
+	desc := proto.RangeDescriptor{}
+	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); !ok || err != nil {
+		t.Fatalf("fetching range descriptor yielded %t, %s", ok, err)
 	}
+	// Verify that in time, no intents remain on meta addressing
+	// keys, and that range descriptor on the meta records is correct.
+	util.SucceedsWithin(t, 1*time.Second, func() error {
+		meta2 := engine.RangeMetaKey(engine.KeyMax)
+		meta1 := engine.RangeMetaKey(meta2)
+		for _, key := range []proto.Key{meta2, meta1} {
+			metaDesc := proto.RangeDescriptor{}
+			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
+				return util.Errorf("failed to resolve %s", key)
+			}
+			if !reflect.DeepEqual(metaDesc, desc) {
+				return util.Errorf("descs not equal: %+v != %+v", metaDesc, desc)
+			}
+		}
+		return nil
+	})
 
 	// Verify that the same data is available on the replica.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, 1*time.Second, func() error {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
 		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
-			return false
+			return util.Errorf("failed to read data")
 		}
-		return getResp.Value.GetInteger() == 5
-	}, 1*time.Second); err != nil {
-		t.Fatal(err)
-	}
+		if getResp.Value.GetInteger() != 5 {
+			return util.Errorf("failed to read correct data: %d", getResp.Value.GetInteger())
+		}
+		return nil
+	})
 }
 
 // TestRestoreReplicas ensures that consensus group membership is properly
