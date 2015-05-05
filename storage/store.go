@@ -1083,7 +1083,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 				go func() {
 					if err := s.resolveWriteIntentError(wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
 						ctx.With(log.Err, err).
-							Warningf("failed to resolve on inconsistent read asynchronously")
+							Warning("failed to resolve on inconsistent read asynchronously")
 					}
 					s.stopper.FinishTask()
 				}()

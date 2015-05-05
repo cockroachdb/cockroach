@@ -686,8 +686,8 @@ func (r *Range) addWriteCmd(ctx log.Context, args proto.Request, reply proto.Res
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			ctx.With(log.Err, err).Warningf(
-				"non-synchronous execution with %+v failed", args)
+			ctx.With(log.Err, err).With(log.Detail, args).Warning(
+				"non-synchronous execution failed")
 		}
 		return err
 	}

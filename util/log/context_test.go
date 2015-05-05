@@ -27,14 +27,14 @@ func TestContextLog(t *testing.T) {
 		Method, "Put",
 		NodeID, 5,
 		Err, fmt.Errorf("everything broke"))
-	expS := "NodeID=5 Method=Put Err=everything broke: %s is good"
-	if s := ctxPattern(ctx, "%s is good"); s != expS {
+	expS := "NodeID=5 Method=Put Err=everything broke"
+	if s := contextKV(ctx).String(); s != expS {
 		t.Errorf("formatted output %s != %s", s, expS)
 	}
-	ctx.Warningf("just testing %d", 5)
+	ctx.Warning("just testing")
 
 	ctx = Background().With("not_a_field", 5)
-	if s := ctxPattern(ctx, "test"); s != "test" {
-		t.Errorf("wanted 'test', not %s", s)
+	if s := contextKV(ctx).String(); s != "" {
+		t.Errorf("wanted empty string, not %s", s)
 	}
 }

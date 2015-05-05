@@ -24,20 +24,38 @@ import (
 	"golang.org/x/net/context"
 )
 
+type level int
+
+const (
+	levelInfo level = iota
+	levelWarning
+	levelError
+	levelFatal
+)
+
 // Context wraps a context.Context into an object suitable for logging.
 type Context interface {
 	context.Context
 	With(kvs ...interface{}) Context
 
-	Infof(string, ...interface{})
-	Warningf(string, ...interface{})
-	Errorf(string, ...interface{})
-	Fatalf(string, ...interface{})
+	Info(string)
+	Warning(string)
+	Error(string)
+	Fatal(string)
+
+	// Should be avoided with structured logging, but in theory we
+	// can have them:
+	// Infof(string, ...interface{})
+	// Warningf(string, ...interface{})
+	// Errorf(string, ...interface{})
+	// Fatalf(string, ...interface{})
 }
 
 type logContext struct {
 	context.Context
 }
+
+var _ Context = &logContext{}
 
 // Background ...
 func Background() Context {
@@ -62,41 +80,56 @@ func (lc *logContext) With(kvs ...interface{}) Context {
 }
 
 // Infof ...
-func (lc *logContext) Infof(pat string, args ...interface{}) {
-	Infof(ctxPattern(lc, pat), args...)
+func (lc *logContext) Info(msg string) {
+	glogHandler(levelInfo, contextKV(lc), msg)
 }
 
 // Warningf ...
-func (lc *logContext) Warningf(pat string, args ...interface{}) {
-	Warningf(ctxPattern(lc, pat), args...)
+func (lc *logContext) Warning(msg string) {
+	glogHandler(levelWarning, contextKV(lc), msg)
 }
 
 // Errorf ...
-func (lc *logContext) Errorf(pat string, args ...interface{}) {
-	Errorf(ctxPattern(lc, pat), args...)
+func (lc *logContext) Error(msg string) {
+	glogHandler(levelError, contextKV(lc), msg)
 }
 
 // Fatalf ...
-func (lc *logContext) Fatalf(pat string, args ...interface{}) {
-	Fatalf(ctxPattern(lc, pat), args...)
+func (lc *logContext) Fatal(msg string) {
+	glogHandler(levelFatal, contextKV(lc), msg)
 }
 
-var _ Context = &logContext{}
+type kvSlice []interface{}
 
-func parseContext(ctx context.Context) []string {
-	var r []string
+func contextKV(ctx context.Context) kvSlice {
+	var r []interface{}
 	for i := Field(0); i < maxField; i++ {
 		if v := ctx.Value(i); v != nil {
-			r = append(r, i.String()+"="+fmt.Sprintf("%v", v))
+			r = append(r, i, v)
 		}
 	}
 	return r
 }
 
-func ctxPattern(ctx context.Context, pat string) string {
-	sl := parseContext(ctx)
-	if len(sl) == 0 {
-		return pat
+func (kvs kvSlice) String() string {
+	l := len(kvs)
+	r := []string{}
+	for i := 1; i < l; i += 2 {
+		r = append(r, kvs[i-1].(fmt.Stringer).String()+"="+fmt.Sprintf("%v", kvs[i]))
 	}
-	return strings.Join(sl, " ") + ": " + pat
+	return strings.Join(r, " ")
+}
+
+func glogHandler(level level, kvs kvSlice, pattern string) {
+	switch level {
+	case levelInfo:
+		Info(kvs.String() + ": " + pattern)
+	case levelWarning:
+		Warning(kvs.String() + ": " + pattern)
+	case levelError:
+		Error(kvs.String() + ": " + pattern)
+	case levelFatal:
+		Fatal(kvs.String() + ": " + pattern)
+	default:
+	}
 }
