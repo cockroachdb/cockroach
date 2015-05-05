@@ -26,7 +26,18 @@ import (
 )
 
 const (
-	storeTimeSeriesNameFmt = "cr.store.%d.%s"
+	// storeTimeSeriesNameFmt is the current format for cockroach's
+	// store-specific time series keys. Each key has a prefix of "cr.store",
+	// followed by the name of the specific stat, followed by the StoreID.
+	//
+	// For example, the livebytes stats for Store with ID 1 would be stored with
+	// key:
+	//		cr.store.livebytes.1
+	//
+	// This format has been chosen to put the StoreID as the suffix of keys, in
+	// anticipation of an initially simple query system where only key suffixes
+	// can be wildcarded.
+	storeTimeSeriesNameFmt = "cr.store.%s.%d"
 )
 
 // NodeStatusRecorder is used to periodically persist the status of a node as a
@@ -80,7 +91,7 @@ type storeStatusRecorder struct {
 // proto.TimeSeriesData object.
 func (ssr *storeStatusRecorder) recordInt(name string, data int64) proto.TimeSeriesData {
 	return proto.TimeSeriesData{
-		Name: fmt.Sprintf(storeTimeSeriesNameFmt, ssr.ID, name),
+		Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, ssr.ID),
 		Datapoints: []*proto.TimeSeriesDatapoint{
 			intDatapoint(ssr.timestampNanos, data),
 		},

@@ -43,7 +43,7 @@ func initFlags(ctx *server.Context) {
 		"in-memory store. Device attributes typically include whether the store is "+
 		"flash (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device "+
 		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
-		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.")
+		"For example, --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.")
 
 	pflag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify an ordered, colon-separated list of node "+
 		"attributes. Attributes are arbitrary strings specifying topography or "+
@@ -61,6 +61,10 @@ func initFlags(ctx *server.Context) {
 		"node-to-node links and if any node notices it has clock offset in excess "+
 		"of --max-offset, it will commit suicide. Setting this value too high may "+
 		"decrease transaction performance in the presence of contention.")
+
+	pflag.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, "specify "+
+		"--metrics-frequency to adjust the frequency at which the server records "+
+		"its own internal metrics.")
 
 	// Gossip flags.
 	pflag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, "specify a "+
@@ -84,7 +88,7 @@ func initFlags(ctx *server.Context) {
 		"caches, shared evenly if there are multiple storage devices.")
 
 	pflag.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, "specify "+
-		"--scan_interval to adjust the target for the duration of a single scan "+
+		"--scan-interval to adjust the target for the duration of a single scan "+
 		"through a store's ranges. The scan is slowed as necessary to approximately"+
 		"achieve this duration.")
 }

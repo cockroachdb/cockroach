@@ -88,11 +88,12 @@ func (nsm *NodeStatusMonitor) VisitStoreMonitors(visitor func(*StoreStatusMonito
 	}
 }
 
-// StartMonitorFeed begins processing events published to the supplied
-// Subscription. This method will continue running until the Subscription's
-// events feed is closed.
-func (nsm *NodeStatusMonitor) StartMonitorFeed(sub *util.Subscription) {
-	storage.ProcessStoreEvents(nsm, sub)
+// StartMonitorFeed starts a goroutine which processes events published to the
+// supplied Subscription. The goroutine will continue running until the
+// Subscription's Events feed is closed.
+func (nsm *NodeStatusMonitor) StartMonitorFeed(feed *util.Feed) {
+	sub := feed.Subscribe()
+	go storage.ProcessStoreEvents(nsm, sub)
 }
 
 // OnAddRange receives AddRangeEvents retrieved from an storage event
