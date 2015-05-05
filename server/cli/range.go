@@ -31,7 +31,7 @@ import (
 
 // A lsRangesCmd command lists the ranges in a cluster.
 var lsRangesCmd = &cobra.Command{
-	Use:   "ls-ranges [options] [<start-key>]",
+	Use:   "ls [options] [<start-key>]",
 	Short: "lists the ranges",
 	Long: `
 Lists the ranges in a cluster.
@@ -82,7 +82,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 
 // A splitRangeCmd command splits a range.
 var splitRangeCmd = &cobra.Command{
-	Use:   "split-range [options] <key> [<split-key>]",
+	Use:   "split [options] <key> [<split-key>]",
 	Short: "splits a range",
 	Long: `
 Splits the range containing <key>. If <split-key> is not specified a
@@ -125,8 +125,8 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 
 // A mergeRangeCmd command merges a range.
 var mergeRangeCmd = &cobra.Command{
-	Use:   "merge-range [options] <key>",
-	Short: "merges a range\n",
+	Use:   "merge [options] <key>",
+	Short: "merges a range",
 	Long: `
 Merges the range containing <key> with the immediate successor range.
 `,
@@ -155,4 +155,18 @@ func runMergeRange(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		os.Exit(1)
 	}
+}
+
+var rangeCmds = []*cobra.Command{
+	lsRangesCmd,
+	splitRangeCmd,
+	mergeRangeCmd,
+}
+
+var rangeCmd = &cobra.Command{
+	Use: "range",
+}
+
+func init() {
+	rangeCmd.AddCommand(rangeCmds...)
 }

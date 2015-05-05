@@ -305,3 +305,19 @@ func runScan(cmd *cobra.Command, args []string) {
 		}
 	}
 }
+
+var kvCmds = []*cobra.Command{
+	getCmd,
+	putCmd,
+	incCmd,
+	delCmd,
+	scanCmd,
+}
+
+var kvCmd = &cobra.Command{
+	Use: "kv",
+}
+
+func init() {
+	kvCmd.AddCommand(kvCmds...)
+}

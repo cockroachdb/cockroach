@@ -29,7 +29,7 @@ import (
 // A getAcctCmd command displays the acct config for the specified
 // prefix.
 var getAcctCmd = &cobra.Command{
-	Use:   "get-acct [options] <key-prefix>",
+	Use:   "get [options] <key-prefix>",
 	Short: "fetches and displays an accounting config",
 	Long: `
 Fetches and displays the accounting configuration for <key-prefix>. The key
@@ -50,7 +50,7 @@ func runGetAcct(cmd *cobra.Command, args []string) {
 
 // A lsAcctsCmd command displays a list of acct configs by prefix.
 var lsAcctsCmd = &cobra.Command{
-	Use:   "ls-accts [options] [key-regexp]",
+	Use:   "ls [options] [key-regexp]",
 	Short: "list all accounting configs by key prefix",
 	Long: `
 List accounting configs. If a regular expression is given, the results of
@@ -80,7 +80,7 @@ func runLsAccts(cmd *cobra.Command, args []string) {
 
 // A rmAcctCmd command removes an acct config by prefix.
 var rmAcctCmd = &cobra.Command{
-	Use:   "rm-acct [options] <key-prefix>",
+	Use:   "rm [options] <key-prefix>",
 	Short: "remove an accounting config by key prefix",
 	Long: `
 Remove an existing accounting config by key prefix. No action is taken if no
@@ -105,8 +105,8 @@ func runRmAcct(cmd *cobra.Command, args []string) {
 // A setAcctCmd command creates a new or updates an existing acct
 // config.
 var setAcctCmd = &cobra.Command{
-	Use:   "set-acct [options] <key-prefix> <acct-config-file>",
-	Short: "create or update an accounting config for key prefix\n",
+	Use:   "set [options] <key-prefix> <acct-config-file>",
+	Short: "create or update an accounting config for key prefix",
 	Long: `
 Create or update a accounting config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
@@ -137,3 +137,18 @@ func runSetAcct(cmd *cobra.Command, args []string) {
 }
 
 // TODO:(bram) Add inline json for setting
+
+var acctCmds = []*cobra.Command{
+	getAcctCmd,
+	lsAcctsCmd,
+	rmAcctCmd,
+	setAcctCmd,
+}
+
+var acctCmd = &cobra.Command{
+	Use: "accounting",
+}
+
+func init() {
+	acctCmd.AddCommand(acctCmds...)
+}

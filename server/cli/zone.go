@@ -103,7 +103,7 @@ func runRmZone(cmd *cobra.Command, args []string) {
 // config.
 var setZoneCmd = &cobra.Command{
 	Use:   "set-zone [options] <key-prefix> <zone-config-file>",
-	Short: "create or update zone config for key prefix\n",
+	Short: "create or update zone config for key prefix",
 	Long: `
 Create or update a zone config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
@@ -144,4 +144,19 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 	server.RunSetZone(Context, args[0], args[1])
+}
+
+var zoneCmds = []*cobra.Command{
+	getZoneCmd,
+	lsZonesCmd,
+	rmZoneCmd,
+	setZoneCmd,
+}
+
+var zoneCmd = &cobra.Command{
+	Use: "zone",
+}
+
+func init() {
+	zoneCmd.AddCommand(zoneCmds...)
 }

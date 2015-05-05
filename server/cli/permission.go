@@ -103,7 +103,7 @@ func runRmPerms(cmd *cobra.Command, args []string) {
 // config.
 var setPermsCmd = &cobra.Command{
 	Use:   "set-perm [options] <key-prefix> <perm-config-file>",
-	Short: "create or update permission config for key prefix\n",
+	Short: "create or update permission config for key prefix",
 	Long: `
 Create or update a perm config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
@@ -151,3 +151,18 @@ func runSetPerms(cmd *cobra.Command, args []string) {
 
 // TODO:(bram) Add inline json for setting
 // TODO:(bram) Add ability to add/remove a single user's read or write permission on a prefix
+
+var permCmds = []*cobra.Command{
+	getPermsCmd,
+	lsPermsCmd,
+	rmPermsCmd,
+	setPermsCmd,
+}
+
+var permCmd = &cobra.Command{
+	Use: "permission",
+}
+
+func init() {
+	permCmd.AddCommand(permCmds...)
+}
