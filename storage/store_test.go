@@ -23,7 +23,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -259,26 +258,6 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func TestRangeSliceSort(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	var rs RangeSlice
-	for i := 4; i >= 0; i-- {
-		r := &Range{}
-		if err := r.setDesc(&proto.RangeDescriptor{StartKey: proto.Key(fmt.Sprintf("foo%d", i))}); err != nil {
-			t.Fatal(err)
-		}
-		rs = append(rs, r)
-	}
-
-	sort.Sort(rs)
-	for i := 0; i < 5; i++ {
-		expectedKey := proto.Key(fmt.Sprintf("foo%d", i))
-		if !bytes.Equal(rs[i].Desc().StartKey, expectedKey) {
-			t.Errorf("Expected %s, got %s", expectedKey, rs[i].Desc().StartKey)
-		}
-	}
-}
-
 func createRange(s *Store, raftID int64, start, end proto.Key) *Range {
 	desc := &proto.RangeDescriptor{
 		RaftID:   raftID,
@@ -327,8 +306,8 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createRange(store, 1, proto.Key("a"), proto.Key("b"))
-	if err := store.AddRangeTest(rng2Dup); err != nil {
-		t.Fatal(err)
+	if err := store.AddRangeTest(rng2Dup); err == nil {
+		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
 	rng3 := createRange(store, 3, proto.Key("c"), proto.Key("d"))
@@ -361,7 +340,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 }
 
-func TestStoreRangeIterator(t *testing.T) {
+func TestStoreRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -383,40 +362,73 @@ func TestStoreRangeIterator(t *testing.T) {
 		}
 	}
 
-	// Verify two passes of the iteration.
-	iter := newStoreRangeIterator(store)
+	// Verify two passes of the visit.
+	ranges := newStoreRangeSet(store)
 	for pass := 0; pass < 2; pass++ {
-		for i := 1; iter.EstimatedCount() > 0; i++ {
-			if rng := iter.Next(); rng == nil || rng.Desc().RaftID != int64(i) {
+		if ec := ranges.EstimatedCount(); ec != 10 {
+			t.Errorf("expected 10 remaining; got %d", ec)
+		}
+		i := 1
+		ranges.Visit(func(rng *Range) bool {
+			if rng.Desc().RaftID != int64(i) {
 				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
+			if ec := ranges.EstimatedCount(); ec != 10-i {
+				t.Errorf("expected %d remaining; got %d", 10-i, ec)
+			}
+			i++
+			return true
+		})
+		if ec := ranges.EstimatedCount(); ec != 10 {
+			t.Errorf("expected 10 remaining; got %d", ec)
 		}
-		iter.Reset()
 	}
 
-	// Try iterating with an addition.
-	iter.Next()
-	if ec := iter.EstimatedCount(); ec != 9 {
+	// Try visiting with an addition and a removal.
+	visited := make(chan struct{})
+	updated := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		i := 1
+		ranges.Visit(func(rng *Range) bool {
+			if i == 1 {
+				if rng.Desc().RaftID != int64(i) {
+					t.Errorf("expected range with Raft ID %d; got %v", i, rng)
+				}
+				close(visited)
+				<-updated
+			} else {
+				// The second range will be removed and skipped.
+				if rng.Desc().RaftID != int64(i+1) {
+					t.Errorf("expected range with Raft ID %d; got %v", i+1, rng)
+				}
+			}
+			i++
+			return true
+		})
+		if i != 10 {
+			t.Errorf("expected visit of 9 ranges, but got %v", i-1)
+		}
+		close(done)
+	}()
+
+	<-visited
+	if ec := ranges.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
+
 	// Split the first range to insert a new range as second range.
+	// The range is never visited with this iteration.
 	rng := createRange(store, 11, proto.Key("a000"), proto.Key("a01"))
 	if err = store.SplitRange(store.LookupRange(proto.Key("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
-	// Estimated count will still be 9, as it's cached, but next() will refresh.
-	if ec := iter.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
-	if r := iter.Next(); r == nil || r != rng {
-		t.Errorf("expected r==rng; got %d", r.Desc().RaftID)
-	}
-	if ec := iter.EstimatedCount(); ec != 9 {
+	// Estimated count will still be 9, as it's cached.
+	if ec := ranges.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
 
-	// Now, remove the next range in the iteration but verify iteration
-	// continues as expected.
+	// Now, remove the next range in the iteration and verify we skip the removed range.
 	rng = store.LookupRange(proto.Key("a01"), nil)
 	if rng.Desc().RaftID != 2 {
 		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc().RaftID)
@@ -424,20 +436,12 @@ func TestStoreRangeIterator(t *testing.T) {
 	if err := store.RemoveRange(rng); err != nil {
 		t.Error(err)
 	}
-	if ec := iter.EstimatedCount(); ec != 9 {
+	if ec := ranges.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
-	// Verify we skip removed range (id=2).
-	if r := iter.Next(); r.Desc().RaftID != 3 {
-		t.Errorf("expected raftID=3; got %d", r.Desc().RaftID)
-	}
-	if ec := iter.EstimatedCount(); ec != 7 {
-		t.Errorf("expected 7 remaining; got %d", ec)
-	}
-}
 
-func TestStoreIteratorWithAddAndRemoval(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	close(updated)
+	<-done
 }
 
 // TestStoreExecuteCmd verifies straightforward command execution
