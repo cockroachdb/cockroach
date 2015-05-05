@@ -35,13 +35,12 @@ import (
 
 // Context defaults.
 const (
-	defaultAddr           = ":8080"
-	defaultMaxOffset      = 250 * time.Millisecond
-	defaultGossipInterval = 2 * time.Second
-	defaultCacheSize      = 1 << 30 // GB
-	// defaultScanInterval is the default value for the scan interval.
-	// command line flag.
-	defaultScanInterval = 10 * time.Minute
+	defaultAddr             = ":8080"
+	defaultMaxOffset        = 250 * time.Millisecond
+	defaultGossipInterval   = 2 * time.Second
+	defaultCacheSize        = 1 << 30 // GB
+	defaultScanInterval     = 10 * time.Minute
+	defaultMetricsFrequency = 10 * time.Second
 )
 
 // Context holds parameters needed to setup a server.
@@ -111,16 +110,21 @@ type Context struct {
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
 	ScanInterval time.Duration
+
+	// MetricsFrequency determines the frequency at which the server should
+	// record internal metrics.
+	MetricsFrequency time.Duration
 }
 
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	ctx := &Context{
-		Addr:           defaultAddr,
-		MaxOffset:      defaultMaxOffset,
-		GossipInterval: defaultGossipInterval,
-		CacheSize:      defaultCacheSize,
-		ScanInterval:   defaultScanInterval,
+		Addr:             defaultAddr,
+		MaxOffset:        defaultMaxOffset,
+		GossipInterval:   defaultGossipInterval,
+		CacheSize:        defaultCacheSize,
+		ScanInterval:     defaultScanInterval,
+		MetricsFrequency: defaultMetricsFrequency,
 	}
 	// Initializes base context defaults.
 	ctx.InitDefaults()

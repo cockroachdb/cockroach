@@ -113,7 +113,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	generateStoreData := func(storeId int, name string, time, val int64) proto.TimeSeriesData {
 		return proto.TimeSeriesData{
-			Name: fmt.Sprintf(storeTimeSeriesNameFmt, proto.StoreID(storeId), name),
+			Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, proto.StoreID(storeId)),
 			Datapoints: []*proto.TimeSeriesDatapoint{
 				intDatapoint(time, val),
 			},

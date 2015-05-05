@@ -34,8 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/resource"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -66,6 +68,7 @@ type Server struct {
 	status         *statusServer
 	structuredDB   structured.DB
 	structuredREST *structured.RESTServer
+	tsDB           *ts.DB
 	raftTransport  multiraft.Transport
 	stopper        *util.Stopper
 }
@@ -129,12 +132,15 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		Transport:    s.raftTransport,
 		Context:      context.Background(),
 		ScanInterval: s.ctx.ScanInterval,
+		EventFeed:    &util.Feed{},
 	}
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.kv, s.stopper)
 	s.status = newStatusServer(s.kv, s.gossip)
 	s.structuredDB = structured.NewDB(s.kv)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
+	s.tsDB = ts.NewDB(s.kv)
+	s.stopper.AddCloser(nCtx.EventFeed)
 
 	return s, nil
 }
@@ -160,6 +166,10 @@ func (s *Server) Start(selfBootstrap bool) error {
 	if err := s.node.start(s.rpc, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
 		return err
 	}
+
+	// Begin recording time series data collected by the status monitor.
+	recorder := status.NewNodeStatusRecorder(s.node.status, s.clock)
+	s.tsDB.PollSource(recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
 
 	log.Infof("starting %s server at %s", s.ctx.RequestScheme(), s.rpc.Addr())
 	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.

@@ -29,9 +29,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -317,4 +319,40 @@ func TestStoreStatusResponse(t *testing.T) {
 			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, storeStatus.Desc)
 		}
 	}
+}
+
+// TestMetricsRecording verifies that Node statistics are periodically recorded
+// as time series data.
+func TestMetricsRecording(t *testing.T) {
+	tsrv := &TestServer{}
+	tsrv.Ctx = NewTestContext()
+	tsrv.Ctx.MetricsFrequency = 5 * time.Millisecond
+	if err := tsrv.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer tsrv.Stop()
+
+	// Verify that metrics for the current timestamp are recorded. This should
+	// be true very quickly.
+	util.SucceedsWithin(t, time.Second, func() error {
+		now := tsrv.Clock().PhysicalNow()
+		key := ts.MakeDataKey("cr.store.livebytes.1", "", ts.Resolution10s, now)
+		call := client.Get(key)
+		if err := tsrv.kv.Run(call); err != nil {
+			return err
+		}
+		resp, ok := call.Reply.(*proto.GetResponse)
+		if !ok {
+			return util.Error("response was not a GetResponse")
+		}
+		if resp.Value == nil {
+			return util.Errorf("key %s had nil value", key)
+		}
+
+		// The value should be an internal time series.
+		if _, err := proto.InternalTimeSeriesDataFromValue(resp.Value); err != nil {
+			return err
+		}
+		return nil
+	})
 }

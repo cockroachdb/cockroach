@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -59,6 +60,7 @@ type Node struct {
 	Descriptor proto.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext // Context to use and pass to stores
 	lSender    *kv.LocalSender      // Local KV sender for access to node-local stores
+	status     *status.NodeStatusMonitor
 	startedAt  int64
 	// ScanCount is the number of times through the store scanning loop locked
 	// by the completedScan mutex.
@@ -176,6 +178,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
 		ctx:           ctx,
+		status:        status.NewNodeStatusMonitor(),
 		lSender:       kv.NewLocalSender(),
 		completedScan: sync.NewCond(&sync.Mutex{}),
 	}
@@ -237,6 +240,9 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	if err := rpcServer.RegisterName("Node", (*nodeServer)(n)); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
+
+	// Start status monitor.
+	n.status.StartMonitorFeed(n.ctx.EventFeed)
 
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(engines, stopper); err != nil {
