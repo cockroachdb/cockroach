@@ -273,6 +273,9 @@ func DecodeVarint(b []byte) ([]byte, int64) {
 	}
 
 	b, v := DecodeUvarint(b)
+	if v > math.MaxInt64 {
+		panic(fmt.Sprintf("varint %d overflows int64", v))
+	}
 	return b, int64(v)
 }
 
