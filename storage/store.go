@@ -1127,7 +1127,9 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 // false so that the client backs off before reissuing the command.
 func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
 	pushType proto.PushTxnType, wait bool) error {
-	log.V(1).Infof("resolving write intent on %s %q: %s", args.Method(), args.Header().Key, wiErr)
+	if log.V(1) {
+		log.Infof("resolving write intent on %s %q: %s", args.Method(), args.Header().Key, wiErr)
+	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	bArgs := &proto.InternalBatchRequest{}
@@ -1149,7 +1151,9 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Rang
 	}
 	// Run all pushes in parallel.
 	if pushErr := s.ctx.DB.Run(client.Call{Args: bArgs, Reply: bReply}); pushErr != nil {
-		log.V(1).Infof("pushes for %+v failed: %s", wiErr.Intents, pushErr)
+		if log.V(1) {
+			log.Infof("pushes for %+v failed: %s", wiErr.Intents, pushErr)
+		}
 
 		// For write/write conflicts within a transaction, propagate the
 		// push failure, not the original write intent error. The push

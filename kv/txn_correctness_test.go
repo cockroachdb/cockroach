@@ -97,7 +97,9 @@ func (c *cmd) execute(db runner, t *testing.T) (string, error) {
 	if c.prev != nil {
 		<-c.prev
 	}
-	log.V(1).Infof("executing %s", c)
+	if log.V(1) {
+		log.Infof("executing %s", c)
+	}
 	err := c.fn(c, db, t)
 	if c.ch != nil {
 		c.ch <- struct{}{}
@@ -504,7 +506,9 @@ func (hv *historyVerifier) run(isolations []proto.IsolationType, db *client.KV, 
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []proto.IsolationType, cmds []*cmd, db *client.KV, t *testing.T) error {
 	plannedStr := historyString(cmds)
-	log.V(1).Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+	if log.V(1) {
+		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+	}
 
 	hv.actual = []string{}
 	hv.wg.Add(len(priorities))
@@ -546,7 +550,9 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 
 	err := hv.verify.checkFn(verifyEnv)
 	if err == nil {
-		log.V(1).Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
+		if log.V(1) {
+			log.Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
+		}
 	}
 	if hv.expSuccess && err != nil {
 		verifyStr := strings.Join(verifyStrs, " ")
@@ -579,7 +585,9 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 				c.done()
 			}
 		}
-		log.V(1).Infof("%s, retry=%d", txnName, retry)
+		if log.V(1) {
+			log.Infof("%s, retry=%d", txnName, retry)
+		}
 		for i := range cmds {
 			cmds[i].env = env
 			if err := hv.runCmd(txn, txnIdx, retry, i, cmds, t); err != nil {

@@ -144,7 +144,9 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 // MaxOffset, then this method will trigger a fatal error, causing the node to
 // suicide.
 func (r *RemoteClockMonitor) MonitorRemoteOffsets() {
-	log.V(1).Infof("monitoring cluster offset")
+	if log.V(1) {
+		log.Infof("monitoring cluster offset")
+	}
 	for {
 		time.Sleep(monitorInterval)
 		offsetInterval, err := r.findOffsetInterval()
@@ -168,7 +170,9 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets() {
 					"indicates that the true offset is greater than %d",
 					r.offsets, offsetInterval, r.lClock.MaxOffset())
 			}
-			log.V(1).Infof("healthy cluster offset: %v", offsetInterval)
+			if log.V(1) {
+				log.Infof("healthy cluster offset: %v", offsetInterval)
+			}
 		}
 		r.mu.Lock()
 		r.lastMonitoredAt = r.lClock.PhysicalNow()
@@ -209,8 +213,10 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 	endpoints := r.buildEndpointList()
 	sort.Sort(endpoints)
 	numClocks := len(endpoints) / 2
-	log.V(1).Infof("finding offset interval for monitorInterval: %d, numOffsets %d",
-		monitorInterval, numClocks)
+	if log.V(1) {
+		log.Infof("finding offset interval for monitorInterval: %d, numOffsets %d",
+			monitorInterval, numClocks)
+	}
 	if numClocks == 0 {
 		return ClusterOffsetInterval{
 			Lowerbound: 0,

@@ -172,7 +172,9 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 
 		for {
 			waitInterval := rs.paceInterval(start, time.Now())
-			log.V(6).Infof("Wait time interval set to %s", waitInterval)
+			if log.V(6) {
+				log.Infof("Wait time interval set to %s", waitInterval)
+			}
 			select {
 			case <-time.After(waitInterval):
 				if !stopper.StartTask() {
@@ -202,7 +204,9 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 					rs.count++
 					rs.completedScan.Broadcast()
 					rs.completedScan.L.Unlock()
-					log.V(6).Infof("reset range scan iteration")
+					if log.V(6) {
+						log.Infof("reset range scan iteration")
+					}
 				}
 				stopper.FinishTask()
 
@@ -211,7 +215,9 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				for _, q := range rs.queues {
 					q.MaybeRemove(rng)
 				}
-				log.V(6).Infof("removed range %s", rng)
+				if log.V(6) {
+					log.Infof("removed range %s", rng)
+				}
 
 			case <-stopper.ShouldStop():
 				// Exit the loop.

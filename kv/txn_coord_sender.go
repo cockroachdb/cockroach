@@ -103,7 +103,9 @@ func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 // already been resolved and do not receive resolve intent commands.
 func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender, stopper *util.Stopper) {
 	if tm.keys.Len() > 0 {
-		log.V(1).Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
+		if log.V(1) {
+			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
+		}
 	}
 	for _, o := range tm.keys.GetOverlaps(engine.KeyMin, engine.KeyMax) {
 		call := client.Call{
@@ -138,7 +140,9 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		// effort. We simply fire and forget, each in its own goroutine.
 		if stopper.StartTask() {
 			go func() {
-				log.V(1).Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+				if log.V(1) {
+					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+				}
 				sender.Send(call)
 				if call.Reply.Header().Error != nil {
 					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
@@ -311,7 +315,9 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		tc.cleanupTxn(&t.Txn, nil)
 	case *proto.OpRequiresTxnError:
 		// Run a one-off transaction with that single command.
-		log.V(1).Infof("%s: auto-wrapping in txn and re-executing", call.Method())
+		if log.V(1) {
+			log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
+		}
 		txnOpts := &client.TransactionOptions{
 			Name: "auto-wrap",
 		}
@@ -344,7 +350,9 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 				time.Duration(tc.clock.PhysicalNow()-startNS)
 			if tc.linearizable && sleepNS > 0 {
 				defer func() {
-					log.V(1).Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
+					if log.V(1) {
+						log.Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
+					}
 					time.Sleep(sleepNS)
 				}()
 			}
@@ -507,7 +515,9 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 				// Before we send a heartbeat, determine whether this transaction
 				// should be considered abandoned. If so, exit heartbeat.
 				if tc.hasClientAbandonedCoord(txn.ID) {
-					log.V(1).Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
+					if log.V(1) {
+						log.Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
+					}
 					tc.stopper.FinishTask()
 					return
 				}

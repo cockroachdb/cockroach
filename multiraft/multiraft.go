@@ -219,19 +219,25 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 		// If we don't think that the sending node is leading that group, don't
 		// propagate.
 		if s.groups[groupID].leader != fromID || fromID == s.nodeID {
-			log.V(8).Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
-				s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+			if log.V(8) {
+				log.Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
+					s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+			}
 			continue
 		}
 		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
-			log.V(4).Infof("node %v: coalesced heartbeat step failed for message %s", s.nodeID, groupID,
-				raft.DescribeMessage(req.Message, s.EntryFormatter))
+			if log.V(4) {
+				log.Infof("node %v: coalesced heartbeat step failed for message %s", s.nodeID, groupID,
+					raft.DescribeMessage(req.Message, s.EntryFormatter))
+			}
 		}
 		cnt++
 	}
-	log.V(7).Infof("node %v: received coalesced heartbeat from node %v; "+
-		"fanned out to %d followers in %d overlapping groups",
-		s.nodeID, fromID, cnt, len(originNode.groupIDs))
+	if log.V(7) {
+		log.Infof("node %v: received coalesced heartbeat from node %v; "+
+			"fanned out to %d followers in %d overlapping groups",
+			s.nodeID, fromID, cnt, len(originNode.groupIDs))
+	}
 }
 
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
@@ -248,19 +254,25 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the local node is leader, don't propagate.
 		if s.groups[groupID].leader != s.nodeID || fromID == s.nodeID {
-			log.V(8).Infof("node %v: not fanning out heartbeat response to %v, msg is from %d and leader is %d",
-				s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+			if log.V(8) {
+				log.Infof("node %v: not fanning out heartbeat response to %v, msg is from %d and leader is %d",
+					s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+			}
 			continue
 		}
 		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
-			log.V(4).Infof("node %v: coalesced heartbeat response step failed for message %s", s.nodeID, groupID,
-				raft.DescribeMessage(req.Message, s.EntryFormatter))
+			if log.V(4) {
+				log.Infof("node %v: coalesced heartbeat response step failed for message %s", s.nodeID, groupID,
+					raft.DescribeMessage(req.Message, s.EntryFormatter))
+			}
 		}
 		cnt++
 	}
-	log.V(7).Infof("node %v: received coalesced heartbeat response from node %v; "+
-		"fanned out to %d leaders in %d overlapping groups",
-		s.nodeID, fromID, cnt, len(originNode.groupIDs))
+	if log.V(7) {
+		log.Infof("node %v: received coalesced heartbeat response from node %v; "+
+			"fanned out to %d leaders in %d overlapping groups",
+			s.nodeID, fromID, cnt, len(originNode.groupIDs))
+	}
 }
 
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
@@ -291,7 +303,9 @@ func (m *MultiRaft) RemoveGroup(groupID uint64) error {
 // An error or nil will be written to the returned channel when the command has
 // been committed or aborted.
 func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) <-chan error {
-	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
+	if log.V(6) {
+		log.Infof("node %v submitting command to group %v", m.nodeID, groupID)
+	}
 	ch := make(chan error, 1)
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
@@ -312,7 +326,9 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
 func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 	changeType raftpb.ConfChangeType, nodeID NodeID, payload []byte) <-chan error {
-	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
+	if log.V(6) {
+		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
+	}
 	ch := make(chan error, 1)
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
@@ -407,7 +423,9 @@ func newState(m *MultiRaft) *state {
 func (s *state) start(stopper *util.Stopper) {
 	s.stopper = stopper
 	stopper.RunWorker(func() {
-		log.V(1).Infof("node %v starting", s.nodeID)
+		if log.V(1) {
+			log.Infof("node %v starting", s.nodeID)
+		}
 		s.writeTask.start(s.stopper)
 		// These maps form a kind of state machine: We don't want to read from the
 		// ready channel until the groups we got from the last read have made their
@@ -439,16 +457,22 @@ func (s *state) start(stopper *util.Stopper) {
 				raftReady = s.multiNode.Ready()
 			}
 
-			log.V(8).Infof("node %v: selecting", s.nodeID)
+			if log.V(8) {
+				log.Infof("node %v: selecting", s.nodeID)
+			}
 			select {
 			case <-s.stopper.ShouldStop():
-				log.V(6).Infof("node %v: stopping", s.nodeID)
+				if log.V(6) {
+					log.Infof("node %v: stopping", s.nodeID)
+				}
 				s.stop()
 				return
 
 			case req := <-s.reqChan:
-				log.V(5).Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
-					raft.DescribeMessage(req.Message, s.EntryFormatter))
+				if log.V(5) {
+					log.Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
+						raft.DescribeMessage(req.Message, s.EntryFormatter))
+				}
 				switch req.Message.Type {
 				case raftpb.MsgHeartbeat:
 					s.fanoutHeartbeat(req)
@@ -468,16 +492,22 @@ func (s *state) start(stopper *util.Stopper) {
 					}
 
 					if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
-						log.V(4).Infof("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
-							raft.DescribeMessage(req.Message, s.EntryFormatter))
+						if log.V(4) {
+							log.Infof("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
+								raft.DescribeMessage(req.Message, s.EntryFormatter))
+						}
 					}
 				}
 			case op := <-s.createGroupChan:
-				log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+				if log.V(6) {
+					log.Infof("node %v: got op %#v", s.nodeID, op)
+				}
 				op.ch <- s.createGroup(op.groupID)
 
 			case op := <-s.removeGroupChan:
-				log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+				if log.V(6) {
+					log.Infof("node %v: got op %#v", s.nodeID, op)
+				}
 				s.removeGroup(op)
 
 			case prop := <-s.proposalChan:
@@ -500,7 +530,9 @@ func (s *state) start(stopper *util.Stopper) {
 				writingGroups = nil
 
 			case <-s.Ticker.Chan():
-				log.V(8).Infof("node %v: got tick", s.nodeID)
+				if log.V(8) {
+					log.Infof("node %v: got tick", s.nodeID)
+				}
 				s.multiNode.Tick()
 				ticks++
 				if ticks >= s.HeartbeatIntervalTicks {
@@ -526,7 +558,9 @@ func (s *state) coalescedHeartbeat() {
 		if nodeID == s.nodeID {
 			continue
 		}
-		log.V(6).Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
+		if log.V(6) {
+			log.Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
+		}
 		msg := raftpb.Message{
 			From: uint64(s.nodeID),
 			To:   uint64(nodeID),
@@ -544,7 +578,9 @@ func (s *state) coalescedHeartbeat() {
 }
 
 func (s *state) stop() {
-	log.V(6).Infof("node %v stopping", s.nodeID)
+	if log.V(6) {
+		log.Infof("node %v stopping", s.nodeID)
+	}
 	s.MultiRaft.Transport.Stop(s.nodeID)
 
 	// Drain the create/remove group channels because other threads may be blocking
@@ -592,7 +628,9 @@ func (s *state) createGroup(groupID uint64) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
 	}
-	log.V(6).Infof("node %v creating group %v", s.nodeID, groupID)
+	if log.V(6) {
+		log.Infof("node %v creating group %v", s.nodeID, groupID)
+	}
 
 	gs := s.Storage.GroupStorage(groupID)
 	_, cs, err := gs.InitialState()
@@ -654,7 +692,9 @@ func (s *state) createGroup(groupID uint64) error {
 
 func (s *state) removeGroup(op *removeGroupOp) {
 	// Group creation is lazy and idempotent; so is removal.
-	log.V(3).Infof("removing group %d", op.groupID)
+	if log.V(3) {
+		log.Infof("removing group %d", op.groupID)
+	}
 	g, ok := s.groups[op.groupID]
 	if !ok {
 		op.ch <- nil
@@ -695,7 +735,9 @@ func (s *state) propose(p *proposal) {
 		}
 		return
 	}
-	log.V(3).Infof("group %d: new proposal %x", p.groupID, p.commandID)
+	if log.V(3) {
+		log.Infof("group %d: new proposal %x", p.groupID, p.commandID)
+	}
 	g.pending[p.commandID] = p
 	p.fn()
 }
@@ -729,7 +771,9 @@ func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
 // handleWriteReady converts a set of raft.Ready structs into a writeRequest
 // to be persisted, and sends it to the writeTask.
 func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
-	log.V(6).Infof("node %v write ready, preparing request", s.nodeID)
+	if log.V(6) {
+		log.Infof("node %v write ready, preparing request", s.nodeID)
+	}
 	writeRequest := newWriteRequest()
 	for groupID, ready := range readyGroups {
 		gwr := &groupWriteRequest{}
@@ -785,7 +829,9 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 			Callback: func(err error) {
 				s.callbackChan <- func() {
 					if err == nil {
-						log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
+						if log.V(3) {
+							log.Infof("node %v applying configuration change %v", s.nodeID, cc)
+						}
 						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
@@ -822,11 +868,15 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 
 // sendMessage sends a raft message on the given group.
 func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
-	log.V(6).Infof("node %v sending message %.200s to %v", s.nodeID,
-		raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
+	if log.V(6) {
+		log.Infof("node %v sending message %.200s to %v", s.nodeID,
+			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
+	}
 	nodeID := NodeID(msg.To)
 	if _, ok := s.nodes[nodeID]; !ok {
-		log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
+		if log.V(4) {
+			log.Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
+		}
 		if err := s.addNode(nodeID, groupID); err != nil {
 			log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
 		}
@@ -876,13 +926,17 @@ func (s *state) maybeSendLeaderEvent(groupID uint64, g *group, ready *raft.Ready
 
 // handleWriteResponse updates the state machine and sends messages for a raft Ready batch.
 func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uint64]raft.Ready) {
-	log.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
+	if log.V(6) {
+		log.Infof("node %v got write response: %#v", s.nodeID, *response)
+	}
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
 		g, ok := s.groups[groupID]
 		if !ok {
-			log.V(4).Infof("dropping stale write to group %v", groupID)
+			if log.V(4) {
+				log.Infof("dropping stale write to group %v", groupID)
+			}
 			continue
 		}
 
@@ -914,13 +968,17 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		for _, msg := range ready.Messages {
 			switch msg.Type {
 			case raftpb.MsgHeartbeat:
-				log.V(7).Infof("node %v dropped individual heartbeat to node %v",
-					s.nodeID, msg.To)
+				if log.V(7) {
+					log.Infof("node %v dropped individual heartbeat to node %v",
+						s.nodeID, msg.To)
+				}
 				continue
 			case raftpb.MsgHeartbeatResp:
 				if _, ok := noMoreHeartbeats[msg.To]; ok {
-					log.V(7).Infof("node %v dropped redundant heartbeat response to node %v",
-						s.nodeID, msg.To)
+					if log.V(7) {
+						log.Infof("node %v dropped redundant heartbeat response to node %v",
+							s.nodeID, msg.To)
+					}
 					continue
 				}
 				noMoreHeartbeats[msg.To] = struct{}{}

@@ -99,4 +99,9 @@ var Fatalln = glog.Fatalln
 var FatalDepth = glog.FatalDepth
 
 // V wraps glog.V. See that documentation for details.
-var V = glog.V
+// glog has a custom type alias for bool and implements logging functions on
+// it; we don't want to have that here since the calls would go straight to
+// the glog package and not to whatever functions we define here.
+func V(level glog.Level) bool {
+	return bool(glog.V(level))
+}

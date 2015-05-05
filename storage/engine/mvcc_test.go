@@ -1929,17 +1929,23 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		isDelete := rng.Int31n(4) == 0
 		if i > 0 && isDelete {
 			idx := rng.Int31n(i)
-			log.V(1).Infof("*** DELETE index %d", idx)
+			if log.V(1) {
+				log.Infof("*** DELETE index %d", idx)
+			}
 			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
 				if wiErr, ok := err.(*proto.WriteIntentError); ok {
 					wiErr.Intents[0].Txn.Status = proto.ABORTED
-					log.V(1).Infof("*** ABORT index %d", idx)
+					if log.V(1) {
+						log.Infof("*** ABORT index %d", idx)
+					}
 					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), &wiErr.Intents[0].Txn); err != nil {
 						t.Fatal(err)
 					}
 					// Now, re-delete.
-					log.V(1).Infof("*** RE-DELETE index %d", idx)
+					if log.V(1) {
+						log.Infof("*** RE-DELETE index %d", idx)
+					}
 					if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 						t.Fatal(err)
 					}
@@ -1949,7 +1955,9 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			}
 		} else {
 			rngVal := proto.Value{Bytes: util.RandBytes(rng, int(rng.Int31n(128)))}
-			log.V(1).Infof("*** PUT index %d; TXN=%t", i, txn != nil)
+			if log.V(1) {
+				log.Infof("*** PUT index %d; TXN=%t", i, txn != nil)
+			}
 			if err := MVCCPut(engine, ms, key, makeTS(int64(i+1)*1E9, 0), rngVal, txn); err != nil {
 				t.Fatal(err)
 			}
@@ -1959,7 +1967,9 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			if rng.Int31n(10) == 0 { // abort txn with 10% prob
 				txn.Status = proto.ABORTED
 			}
-			log.V(1).Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
+			if log.V(1) {
+				log.Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
+			}
 			if err := MVCCResolveWriteIntent(engine, ms, key, makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				t.Fatal(err)
 			}
@@ -2033,7 +2043,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 	for i, kv := range kvsn {
 		key, ts, _ := MVCCDecodeKey(kv.Key)
-		log.V(1).Infof("%d: %q, ts=%s", i, key, ts)
+		if log.V(1) {
+			log.Infof("%d: %q, ts=%s", i, key, ts)
+		}
 	}
 
 	keys := []proto.InternalGCRequest_GCKey{

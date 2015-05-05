@@ -167,14 +167,19 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		sort.Sort(expMetas)
 
 		if test.split {
-			log.V(1).Infof("test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+			if log.V(1) {
+				log.Infof("test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+			}
 		} else {
-			log.V(1).Infof("test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+			if log.V(1) {
+				log.Infof("test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+			}
 		}
 		for _, meta := range metas {
-			log.V(1).Infof("%q", meta.key)
+			if log.V(1) {
+				log.Infof("%q", meta.key)
+			}
 		}
-		log.V(1).Infof("")
 
 		if !reflect.DeepEqual(expMetas, metas) {
 			t.Errorf("expected metas don't match")

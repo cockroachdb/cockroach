@@ -94,14 +94,18 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	}
 
 	if ctx.Certs != "" {
-		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+		if log.V(1) {
+			log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+		}
 		cfg, err := security.LoadClientTLSConfigFromDir(ctx.Certs)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)
 		}
 		ctx.clientTLSConfig = cfg
 	} else {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
+		if log.V(1) {
+			log.Infof("no certificates directory specified: using insecure TLS")
+		}
 		ctx.clientTLSConfig = security.LoadInsecureClientTLSConfig()
 	}
 
@@ -128,7 +132,9 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 		return nil, util.Errorf("--insecure=false, but --certs is empty. We need a certs directory")
 	}
 
-	log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+	if log.V(1) {
+		log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+	}
 	cfg, err := security.LoadTLSConfigFromDir(ctx.Certs)
 	if err != nil {
 		return nil, util.Errorf("error setting up server TLS config: %s", err)

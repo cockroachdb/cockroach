@@ -469,7 +469,9 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				n.scanCount++
 				n.completedScan.Broadcast()
 				n.completedScan.L.Unlock()
-				log.V(6).Infof("store scan iteration completed")
+				if log.V(6) {
+					log.Infof("store scan iteration completed")
+				}
 				stopper.FinishTask()
 			case <-stopper.ShouldStop():
 				// Exit the loop.

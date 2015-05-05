@@ -453,7 +453,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
-		log.V(1).Infof("read value %d", getResp.Value.GetInteger())
+		if log.V(1) {
+			log.Infof("read value %d", getResp.Value.GetInteger())
+		}
 		return getResp.Value.GetInteger() == 16
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)

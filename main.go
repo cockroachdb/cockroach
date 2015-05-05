@@ -53,7 +53,9 @@ func main() {
 	numCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPU)
 	rand.Seed(util.NewPseudoSeed())
-	log.V(1).Infof("running using %d processor cores", numCPU)
+	if log.V(1) {
+		log.Infof("running using %d processor cores", numCPU)
+	}
 
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")

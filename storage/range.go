@@ -790,7 +790,9 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
 		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok && err == nil {
-			log.V(1).Infof("found response cache entry for %+v", args.Header().CmdID)
+			if log.V(1) {
+				log.Infof("found response cache entry for %+v", args.Header().CmdID)
+			}
 			return reply.Header().GoError()
 		} else if ok && err != nil {
 			newErr := util.Errorf("unable to read result for %+v from the response cache: %s", args, err)

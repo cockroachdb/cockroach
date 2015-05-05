@@ -235,9 +235,13 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 	for i, kv := range kvs {
 		if key, ts, isValue := engine.MVCCDecodeKey(kv.Key); isValue {
-			log.V(1).Infof("%d: %q, ts=%s", i, key, ts)
+			if log.V(1) {
+				log.Infof("%d: %q, ts=%s", i, key, ts)
+			}
 		} else {
-			log.V(1).Infof("%d: %q meta", i, key)
+			if log.V(1) {
+				log.Infof("%d: %q meta", i, key)
+			}
 		}
 	}
 	if len(kvs) != len(expKVs) {
@@ -252,9 +256,13 @@ func TestGCQueueProcess(t *testing.T) {
 			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, ts)
 		}
 		if isValue {
-			log.V(1).Infof("%d: %q, ts=%s", i, key, ts)
+			if log.V(1) {
+				log.Infof("%d: %q, ts=%s", i, key, ts)
+			}
 		} else {
-			log.V(1).Infof("%d: %q meta", i, key)
+			if log.V(1) {
+				log.Infof("%d: %q meta", i, key)
+			}
 		}
 	}
 

@@ -148,13 +148,17 @@ func (w *writeTask) start(stopper *util.Stopper) {
 				return
 			case request = <-w.in:
 			}
-			log.V(6).Infof("writeTask got request %#v", *request)
+			if log.V(6) {
+				log.Infof("writeTask got request %#v", *request)
+			}
 			response := &writeResponse{make(map[uint64]*groupWriteResponse)}
 
 			for groupID, groupReq := range request.groups {
 				group := w.storage.GroupStorage(groupID)
 				if group == nil {
-					log.V(4).Infof("dropping write to group %v", groupID)
+					if log.V(4) {
+						log.Infof("dropping write to group %v", groupID)
+					}
 					continue
 				}
 				groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
