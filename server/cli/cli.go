@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 
-	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-commander"
 )
 
 var listParamsCmd = &commander.Command{

@@ -25,7 +25,7 @@ import (
 	"syscall"
 	"time"
 
-	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"

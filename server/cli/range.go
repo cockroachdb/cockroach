@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"os"
 
-	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"

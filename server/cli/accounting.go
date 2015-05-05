@@ -20,7 +20,7 @@ package cli
 import (
 	"flag"
 
-	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
 )
 
