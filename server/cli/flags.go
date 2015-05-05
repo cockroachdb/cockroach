@@ -28,6 +28,7 @@ import (
 // settable here.
 func initFlags(ctx *server.Context) {
 	// Server flags.
+
 	pflag.StringVar(&ctx.Addr, "addr", ctx.Addr, "when run as the server the host:port to bind for "+
 		"HTTP/RPC traffic; when run as the client the address for connection to the cockroach cluster.")
 
@@ -67,6 +68,7 @@ func initFlags(ctx *server.Context) {
 		"its own internal metrics.")
 
 	// Gossip flags.
+
 	pflag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, "specify a "+
 		"comma-separated list of gossip addresses or resolvers for gossip bootstrap. "+
 		"Each item in the list has an optional type: [type=]<address>. "+
