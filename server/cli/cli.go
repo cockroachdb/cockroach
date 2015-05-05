@@ -63,59 +63,25 @@ Output build version information.
 	},
 }
 
-var allCmds = []*cobra.Command{
-	// Node commands.
-	initCmd,
-	startCmd,
-	exterminateCmd,
-	quitCmd,
-
-	// Certificate commands.
-	createCACertCmd,
-	createNodeCertCmd,
-
-	// Key/value commands.
-	getCmd,
-	putCmd,
-	incCmd,
-	delCmd,
-	scanCmd,
-
-	// Range commands.
-	lsRangesCmd,
-	splitRangeCmd,
-	mergeRangeCmd,
-
-	// Accounting commands.
-	getAcctCmd,
-	lsAcctsCmd,
-	rmAcctCmd,
-	setAcctCmd,
-
-	// Permission commands.
-	getPermsCmd,
-	lsPermsCmd,
-	rmPermsCmd,
-	setPermsCmd,
-
-	// Zone commands.
-	getZoneCmd,
-	lsZonesCmd,
-	rmZoneCmd,
-	setZoneCmd,
-
-	// Miscellaneous commands.
-	// TODO(pmattis): stats
-	listParamsCmd,
-	versionCmd,
-}
-
-var cockroachCmd = cobra.Command{
+var cockroachCmd = &cobra.Command{
 	Use: "cockroach",
 }
 
 func init() {
-	cockroachCmd.AddCommand(allCmds...)
+	cockroachCmd.AddCommand(nodeCmds...)
+	cockroachCmd.AddCommand(certCmds...)
+	cockroachCmd.AddCommand(
+		kvCmd,
+		rangeCmd,
+		acctCmd,
+		permCmd,
+		zoneCmd,
+
+		// Miscellaneous commands.
+		// TODO(pmattis): stats
+		listParamsCmd,
+		versionCmd,
+	)
 }
 
 // Run ...

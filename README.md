@@ -93,27 +93,27 @@ Now let's talk to this node. The easiest way to do that is to use the `cockroach
 
 ```bash
 # Put the values a->1, b->2, c->3, d->4.
-./cockroach put a 1 b 2 c 3 d 4
-./cockroach scan
+./cockroach kv put a 1 b 2 c 3 d 4
+./cockroach kv scan
 # "a"     1
 # "b"     2
 # "c"     3
 # "d"     4
 # Scans do not include the end key.
-./cockroach scan b d
+./cockroach kv scan b d
 # "b"     2
 # "c"     3
-./cockroach del c
-./cockroach scan
+./cockroach kv del c
+./cockroach kv scan
 # "a"     1
 # "b"     2
 # "d"     4
 # Counters are also available:
-./cockroach inc mycnt 5
+./cockroach kv inc mycnt 5
 # 5
-./cockroach inc mycnt -3
+./cockroach kv inc mycnt -3
 #2
-./cockroach get mycnt
+./cockroach kv get mycnt
 #2
 ```
 

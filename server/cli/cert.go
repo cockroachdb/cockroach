@@ -72,3 +72,8 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) {
 		return
 	}
 }
+
+var certCmds = []*cobra.Command{
+	createCACertCmd,
+	createNodeCertCmd,
+}

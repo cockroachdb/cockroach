@@ -226,3 +226,10 @@ completed, the server exits.
 func runQuit(cmd *cobra.Command, args []string) {
 	server.SendQuit(Context)
 }
+
+var nodeCmds = []*cobra.Command{
+	initCmd,
+	startCmd,
+	exterminateCmd,
+	quitCmd,
+}

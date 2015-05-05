@@ -62,38 +62,38 @@ func (c cliTest) Run(line string) {
 func ExampleBasic() {
 	c := newCLITest()
 
-	c.Run("put a 1 b 2")
-	c.Run("scan")
-	c.Run("del a")
-	c.Run("get a")
-	c.Run("get b")
-	c.Run("inc c 1")
-	c.Run("inc c 10")
-	c.Run("inc c 100")
-	c.Run("scan")
-	c.Run("inc c b")
+	c.Run("kv put a 1 b 2")
+	c.Run("kv scan")
+	c.Run("kv del a")
+	c.Run("kv get a")
+	c.Run("kv get b")
+	c.Run("kv inc c 1")
+	c.Run("kv inc c 10")
+	c.Run("kv inc c 100")
+	c.Run("kv scan")
+	c.Run("kv inc c b")
 	c.Run("quit")
 
 	// Output:
-	// put a 1 b 2
-	// scan
+	// kv put a 1 b 2
+	// kv scan
 	// "a"	1
 	// "b"	2
-	// del a
-	// get a
+	// kv del a
+	// kv get a
 	// "a" not found
-	// get b
+	// kv get b
 	// 2
-	// inc c 1
+	// kv inc c 1
 	// 1
-	// inc c 10
+	// kv inc c 10
 	// 11
-	// inc c 100
+	// kv inc c 100
 	// 111
-	// scan
+	// kv scan
 	// "b"	2
 	// "c"	111
-	// inc c b
+	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
 	// node drained and shutdown: ok
@@ -102,39 +102,39 @@ func ExampleBasic() {
 func ExampleSplitMergeRanges() {
 	c := newCLITest()
 
-	c.Run("put a 1 b 2 c 3 d 4")
-	c.Run("scan")
-	c.Run("split-range c c")
-	c.Run("ls-ranges")
-	c.Run("scan")
-	c.Run("merge-range b")
-	c.Run("ls-ranges")
-	c.Run("scan")
+	c.Run("kv put a 1 b 2 c 3 d 4")
+	c.Run("kv scan")
+	c.Run("range split c c")
+	c.Run("range ls")
+	c.Run("kv scan")
+	c.Run("range merge b")
+	c.Run("range ls")
+	c.Run("kv scan")
 	c.Run("quit")
 
 	// Output:
-	// put a 1 b 2 c 3 d 4
-	// scan
+	// kv put a 1 b 2 c 3 d 4
+	// kv scan
 	// "a"	1
 	// "b"	2
 	// "c"	3
 	// "d"	4
-	// split-range c c
-	// ls-ranges
+	// range split c c
+	// range ls
 	// ""-"c" [1]
 	// 	0: node-id=1 store-id=1 attrs=[]
 	// "c"-"\xff\xff" [2]
 	// 	0: node-id=1 store-id=1 attrs=[]
-	// scan
+	// kv scan
 	// "a"	1
 	// "b"	2
 	// "c"	3
 	// "d"	4
-	// merge-range b
-	// ls-ranges
+	// range merge b
+	// range ls
 	// ""-"\xff\xff" [1]
 	// 	0: node-id=1 store-id=1 attrs=[]
-	// scan
+	// kv scan
 	// "a"	1
 	// "b"	2
 	// "c"	3
