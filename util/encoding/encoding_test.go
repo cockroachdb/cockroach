@@ -363,6 +363,24 @@ func TestDecodeInvalidUvarint(t *testing.T) {
 	}
 }
 
+// TestDecodeInvalidVarint tests that invalid uvarint encodings panic.
+func TestDecodeInvalidVarint(t *testing.T) {
+	testCases := [][]byte{
+		// overflows int64.
+		{0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+	}
+	for _, c := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				}
+			}()
+			DecodeVarint(c)
+		}()
+	}
+}
+
 func TestEncodeDecodeUvarintDecreasing(t *testing.T) {
 	testBasicEncodeDecodeUint64(EncodeUvarintDecreasing, DecodeUvarintDecreasing, true, t)
 	testCases := []testCaseUint64{
