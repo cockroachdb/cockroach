@@ -86,6 +86,17 @@ func (c *Config) validate() error {
 	return nil
 }
 
+// A GroupDeletedError is returned to a client for commands which are
+// pending while a group is deleted.
+type GroupDeletedError string
+
+var _ error = GroupDeletedError("")
+
+// Error implements the error interface.
+func (err GroupDeletedError) Error() string {
+	return string(err)
+}
+
 // MultiRaft represents a local node in a raft cluster. The owner is responsible for consuming
 // the Events channel in a timely manner.
 type MultiRaft struct {
@@ -704,7 +715,7 @@ func (s *state) removeGroup(op *removeGroupOp) {
 	// Cancel commands which are still in transit.
 	for cmdID, prop := range g.pending {
 		if prop.ch != nil {
-			prop.ch <- util.Errorf("group deleted")
+			prop.ch <- GroupDeletedError("group deleted")
 		}
 		delete(g.pending, cmdID)
 	}
