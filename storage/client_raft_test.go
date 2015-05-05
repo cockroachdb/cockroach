@@ -330,24 +330,24 @@ func TestRestoreReplicas(t *testing.T) {
 
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
 	mtc := multiTestContext{}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
-	rng, err := mtc.stores[0].GetRange(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		storage.TestingCommandFilter = nil
-	}()
 	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
 		if et, ok := args.(*proto.EndTransactionRequest); ok && et.Commit {
 			reply.Header().SetGoError(util.Errorf("boom"))
 			return true
 		}
 		return false
+	}
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,

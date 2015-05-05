@@ -71,7 +71,7 @@ func mergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, e
 // records for the descriptor. Returns a slice of calls necessary to
 // update the records on the KV database.
 func updateRangeAddressing(desc *proto.RangeDescriptor) ([]client.Call, error) {
-	return rangeAddressing(calls, desc, putMeta)
+	return rangeAddressing([]client.Call{}, desc, putMeta)
 }
 
 // rangeAddressing updates or deletes the range addressing metadata
