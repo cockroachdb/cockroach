@@ -894,7 +894,9 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
-	r.stats.SetMVCCStats(batch, ms)
+	if err := r.stats.SetMVCCStats(batch, ms); err != nil {
+		return util.Errorf("unable to write MVCC stats: %s", err)
+	}
 
 	// Initialize the new range's response cache by copying the original's.
 	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
@@ -914,7 +916,9 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
-	newRng.stats.SetMVCCStats(batch, ms)
+	if err = newRng.stats.SetMVCCStats(batch, ms); err != nil {
+		return util.Errorf("unable to write MVCC stats: %s", err)
+	}
 
 	// Copy the timestamp cache into the new range.
 	r.Lock()
@@ -1045,7 +1049,9 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for the range after merge: %s", err)
 	}
-	r.stats.SetMVCCStats(batch, ms)
+	if err = r.stats.SetMVCCStats(batch, ms); err != nil {
+		return util.Errorf("unable to write MVCC stats: %s", err)
+	}
 
 	// Clear the timestamp cache. In the case that this replica and the
 	// subsumed replica each held their respective leader leases, we

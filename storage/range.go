@@ -833,7 +833,9 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 
 	if err == nil && proto.IsWrite(args) {
 		// On success, flush the MVCC stats to the batch and commit.
-		r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
+		if err := r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime); err != nil {
+			log.Fatal(err) // should never fail writing to a batch
+		}
 		if err := batch.Commit(); err != nil {
 			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
 		}

@@ -72,21 +72,21 @@ func (rs *rangeStats) GetSize() int64 {
 // MVCC operations into the range's stats. The intent age is augmented
 // by multiplying the previous intent count by the elapsed nanos since
 // the last update to range stats.
-func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *proto.MVCCStats, nowNanos int64) {
+func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *proto.MVCCStats, nowNanos int64) error {
 	// Augment the current intent age.
 	diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
 	ms.LastUpdateNanos = nowNanos - rs.LastUpdateNanos
 	ms.IntentAge += rs.IntentCount * diffSeconds
 	ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
-	engine.MergeStats(ms, e, rs.raftID)
+	return engine.MergeStats(ms, e, rs.raftID)
 }
 
 // SetStats sets stats wholesale.
-func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms proto.MVCCStats) {
+func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms proto.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.MVCCStats = ms
-	engine.SetStats(&ms, e, rs.raftID)
+	return engine.SetStats(&ms, e, rs.raftID)
 }
 
 // Update updates the rangeStats' internal values for lastUpdateNanos and
