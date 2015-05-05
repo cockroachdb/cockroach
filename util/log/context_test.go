@@ -20,23 +20,20 @@ package log
 import (
 	"fmt"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/util/log/logfield"
-	"golang.org/x/net/context"
 )
 
 func TestContextLog(t *testing.T) {
-	ctx := Add(context.Background(),
-		logfield.Method, "Put",
-		logfield.NodeID, 5,
-		logfield.Error, fmt.Errorf("everything broke"))
-	expS := "NodeID=5 Method=Put Error=everything broke: %s is good"
+	ctx := Background().With(
+		Method, "Put",
+		NodeID, 5,
+		Err, fmt.Errorf("everything broke"))
+	expS := "NodeID=5 Method=Put Err=everything broke: %s is good"
 	if s := ctxPattern(ctx, "%s is good"); s != expS {
 		t.Errorf("formatted output %s != %s", s, expS)
 	}
-	CtxWarningf(ctx, "just testing %d", 5)
+	ctx.Warningf("just testing %d", 5)
 
-	ctx = Add(context.Background(), "not_a_field", 5)
+	ctx = Background().With("not_a_field", 5)
 	if s := ctxPattern(ctx, "test"); s != "test" {
 		t.Errorf("wanted 'test', not %s", s)
 	}

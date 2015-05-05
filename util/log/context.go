@@ -21,43 +21,71 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util/log/logfield"
 	"golang.org/x/net/context"
 )
 
-// RoachContext wraps a context.Context, providing additional sugar.
-type RoachContext interface {
+// Context wraps a context.Context into an object suitable for logging.
+type Context interface {
 	context.Context
-	Add(kvs ...interface{}) RoachContext
+	With(kvs ...interface{}) Context
+
+	Infof(string, ...interface{})
+	Warningf(string, ...interface{})
+	Errorf(string, ...interface{})
+	Fatalf(string, ...interface{})
 }
 
-type roachContext struct {
+type logContext struct {
 	context.Context
 }
 
 // Background ...
-func Background() RoachContext {
-	return &roachContext{context.Background()}
+func Background() Context {
+	return Wrap(context.Background())
 }
 
-func (rc *roachContext) Add(kvs ...interface{}) RoachContext {
-	return &roachContext{Add(rc.Context, kvs...)}
+// Wrap ...
+func Wrap(ctx context.Context) Context {
+	return &logContext{ctx}
 }
 
-var _ RoachContext = &roachContext{}
-
-// Add returns a context with the supplied kvs stored as key-value
-// pairs. The even entries constitute the keys.
-func Add(ctx context.Context, kvs ...interface{}) context.Context {
-	for i := 1; i < len(kvs); i += 2 {
+func (lc *logContext) With(kvs ...interface{}) Context {
+	ctx := lc.Context
+	l := len(kvs)
+	if l%2 != 0 {
+		panic("Add called with odd number of arguments")
+	}
+	for i := 1; i < l; i += 2 {
 		ctx = context.WithValue(ctx, kvs[i-1], kvs[i])
 	}
-	return ctx
+	return &logContext{ctx}
 }
+
+// Infof ...
+func (lc *logContext) Infof(pat string, args ...interface{}) {
+	Infof(ctxPattern(lc, pat), args...)
+}
+
+// Warningf ...
+func (lc *logContext) Warningf(pat string, args ...interface{}) {
+	Warningf(ctxPattern(lc, pat), args...)
+}
+
+// Errorf ...
+func (lc *logContext) Errorf(pat string, args ...interface{}) {
+	Errorf(ctxPattern(lc, pat), args...)
+}
+
+// Fatalf ...
+func (lc *logContext) Fatalf(pat string, args ...interface{}) {
+	Fatalf(ctxPattern(lc, pat), args...)
+}
+
+var _ Context = &logContext{}
 
 func parseContext(ctx context.Context) []string {
 	var r []string
-	for i := logfield.Field(0); i < logfield.MaxField; i++ {
+	for i := Field(0); i < maxField; i++ {
 		if v := ctx.Value(i); v != nil {
 			r = append(r, i.String()+"="+fmt.Sprintf("%v", v))
 		}
@@ -71,24 +99,4 @@ func ctxPattern(ctx context.Context, pat string) string {
 		return pat
 	}
 	return strings.Join(sl, " ") + ": " + pat
-}
-
-// CtxInfof ...
-func CtxInfof(ctx context.Context, pat string, args ...interface{}) {
-	Infof(ctxPattern(ctx, pat), args...)
-}
-
-// CtxWarningf ...
-func CtxWarningf(ctx context.Context, pat string, args ...interface{}) {
-	Warningf(ctxPattern(ctx, pat), args...)
-}
-
-// CtxErrorf ...
-func CtxErrorf(ctx context.Context, pat string, args ...interface{}) {
-	Errorf(ctxPattern(ctx, pat), args...)
-}
-
-// CtxFatalf ...
-func CtxFatalf(ctx context.Context, pat string, args ...interface{}) {
-	Fatalf(ctxPattern(ctx, pat), args...)
 }

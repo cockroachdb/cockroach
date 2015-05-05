@@ -15,10 +15,7 @@
 //
 // Author: Tobias Schottdorf
 
-// Package logfield contains integer constants used as field names in
-// structured log output. They all implement the Stringer interface
-// and they are logged in the order in which they appear.
-package logfield
+package log
 
 // A Field is an integer used to enumerate allowed field names in structured
 // log output.
@@ -27,11 +24,12 @@ type Field int
 //go:generate stringer -type Field
 const (
 	ClusterID Field = iota
-	NodeID
-	StoreID
-	RaftID // TODO
-	Method
-	Client // TODO
-	Error
-	MaxField
+	NodeID          // the ID of the node
+	StoreID         // the ID of the store
+	RaftID          // the ID of the range
+	Method          // the method being executed
+	Client          // TODO: client on whose behalf we're acting
+	Err             // a wrapped error message, if applicable
+	Detail          // information intended for human eyes only
+	maxField        // internal field bounding the range of allocated fields
 )

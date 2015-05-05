@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/log/logfield"
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -345,10 +344,10 @@ func (s *Store) String() string {
 // node -> local sender -> store
 // so that we can log relevant information such as the client address.
 // that however means passing a context through the local sender.
-func (s *Store) context() log.RoachContext {
-	return log.Background().Add(
-		logfield.NodeID, s.Ident.NodeID,
-		logfield.StoreID, s.Ident.StoreID)
+func (s *Store) context() log.Context {
+	return log.Background().With(
+		log.NodeID, s.Ident.NodeID,
+		log.StoreID, s.Ident.StoreID)
 }
 
 // IsStarted returns true if the Store has been started.
@@ -1036,7 +1035,7 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 	// should be passed in to ExecuteCmd from higher up eventually;
 	// see comment in context().
-	ctx := s.context().Add(logfield.Method, args.Method())
+	ctx := s.context().With(log.Method, args.Method())
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
@@ -1068,7 +1067,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			reply.Header().SetGoError(err)
 			return util.RetryBreak, err
 		}
-		ctx = ctx.Add(logfield.RaftID, header.RaftID)
+		ctx = ctx.With(log.RaftID, header.RaftID)
 
 		if err = rng.AddCmd(ctx, args, reply, true); err == nil {
 			return util.RetryBreak, nil
@@ -1083,8 +1082,8 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
 				go func() {
 					if err := s.resolveWriteIntentError(wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
-						log.CtxWarningf(ctx.Add(logfield.Error, err),
-							"failed to resolve on inconsistent read asynchronously")
+						ctx.With(log.Err, err).
+							Warningf("failed to resolve on inconsistent read asynchronously")
 					}
 					s.stopper.FinishTask()
 				}()

@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/log/logfield"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -490,7 +489,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
-func (r *Range) AddCmd(ctx log.RoachContext, args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) AddCmd(ctx log.Context, args proto.Request, reply proto.Response, wait bool) error {
 	header := args.Header()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
@@ -545,7 +544,7 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Range) addAdminCmd(ctx log.RoachContext, args proto.Request, reply proto.Response) error {
+func (r *Range) addAdminCmd(ctx log.Context, args proto.Request, reply proto.Response) error {
 	// Admin commands always require the leader lease.
 	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
 		reply.Header().SetGoError(err)
@@ -558,7 +557,7 @@ func (r *Range) addAdminCmd(ctx log.RoachContext, args proto.Request, reply prot
 	case *proto.AdminMergeRequest:
 		r.AdminMerge(args.(*proto.AdminMergeRequest), reply.(*proto.AdminMergeResponse))
 	default:
-		return util.Errorf("unrecognized admin command type: %s", args.Method())
+		return util.Error("unrecognized admin command")
 	}
 	return reply.Header().GoError()
 }
@@ -566,14 +565,14 @@ func (r *Range) addAdminCmd(ctx log.RoachContext, args proto.Request, reply prot
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(ctx log.RoachContext, args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(ctx log.Context, args proto.Request, reply proto.Response) error {
 	header := args.Header()
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
 		// But disallow any inconsistent reads within txns.
 		if header.Txn != nil {
-			reply.Header().SetGoError(util.Errorf("cannot allow inconsistent reads within a transaction"))
+			reply.Header().SetGoError(util.Error("cannot allow inconsistent reads within a transaction"))
 			return reply.Header().GoError()
 		}
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
@@ -581,7 +580,7 @@ func (r *Range) addReadOnlyCmd(ctx log.RoachContext, args proto.Request, reply p
 		}
 		return r.executeCmd(r.rm.Engine(), nil, args, reply)
 	} else if header.ReadConsistency == proto.CONSENSUS {
-		reply.Header().SetGoError(util.Errorf("consensus reads not implemented"))
+		reply.Header().SetGoError(util.Error("consensus reads not implemented"))
 		return reply.Header().GoError()
 	}
 
@@ -615,7 +614,7 @@ func (r *Range) addReadOnlyCmd(ctx log.RoachContext, args proto.Request, reply p
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the response cache.
 // If wait is true, will block until the command is complete.
-func (r *Range) addWriteCmd(ctx log.RoachContext, args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) addWriteCmd(ctx log.Context, args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
@@ -687,7 +686,7 @@ func (r *Range) addWriteCmd(ctx log.RoachContext, args proto.Request, reply prot
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			log.CtxWarningf(ctx.Add(logfield.Error, err),
+			ctx.With(log.Err, err).Warningf(
 				"non-synchronous execution with %+v failed", args)
 		}
 		return err
