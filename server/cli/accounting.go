@@ -18,10 +18,9 @@
 package cli
 
 import (
-	"flag"
-
-	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
+
+	"github.com/spf13/cobra"
 )
 
 // TODO:(bram) change this api to not require a file, just set (no file),
@@ -29,20 +28,19 @@ import (
 
 // A getAcctCmd command displays the acct config for the specified
 // prefix.
-var getAcctCmd = &commander.Command{
-	UsageLine: "get-acct [options] <key-prefix>",
-	Short:     "fetches and displays an accounting config",
+var getAcctCmd = &cobra.Command{
+	Use:   "get-acct [options] <key-prefix>",
+	Short: "fetches and displays an accounting config",
 	Long: `
 Fetches and displays the accounting configuration for <key-prefix>. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runGetAcct,
-	Flag: *flag.CommandLine,
+	Run: runGetAcct,
 }
 
 // runGetAcct invokes the REST API with GET action and key prefix as path.
-func runGetAcct(cmd *commander.Command, args []string) {
+func runGetAcct(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -51,24 +49,23 @@ func runGetAcct(cmd *commander.Command, args []string) {
 }
 
 // A lsAcctsCmd command displays a list of acct configs by prefix.
-var lsAcctsCmd = &commander.Command{
-	UsageLine: "ls-accts [options] [key-regexp]",
-	Short:     "list all accounting configs by key prefix",
+var lsAcctsCmd = &cobra.Command{
+	Use:   "ls-accts [options] [key-regexp]",
+	Short: "list all accounting configs by key prefix",
 	Long: `
 List accounting configs. If a regular expression is given, the results of
 the listing are filtered by key prefixes matching the regexp. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runLsAccts,
-	Flag: *flag.CommandLine,
+	Run: runLsAccts,
 }
 
 // runLsAccts invokes the REST API with GET action and no path, which
 // fetches a list of all acct configuration prefixes. The optional
 // regexp is applied to the complete list and matching prefixes
 // displayed.
-func runLsAccts(cmd *commander.Command, args []string) {
+func runLsAccts(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
 		cmd.Usage()
 		return
@@ -82,9 +79,9 @@ func runLsAccts(cmd *commander.Command, args []string) {
 }
 
 // A rmAcctCmd command removes an acct config by prefix.
-var rmAcctCmd = &commander.Command{
-	UsageLine: "rm-acct [options] <key-prefix>",
-	Short:     "remove an accounting config by key prefix",
+var rmAcctCmd = &cobra.Command{
+	Use:   "rm-acct [options] <key-prefix>",
+	Short: "remove an accounting config by key prefix",
 	Long: `
 Remove an existing accounting config by key prefix. No action is taken if no
 accounting configuration exists for the specified key prefix. Note that this
@@ -92,13 +89,12 @@ command can affect only a single accounting config with an exactly matching
 prefix. The key prefix should be escaped via URL query escaping if it
 contains non-ascii bytes or spaces.
 `,
-	Run:  runRmAcct,
-	Flag: *flag.CommandLine,
+	Run: runRmAcct,
 }
 
 // runRmAcct invokes the REST API with DELETE action and key prefix as
 // path.
-func runRmAcct(cmd *commander.Command, args []string) {
+func runRmAcct(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -108,9 +104,9 @@ func runRmAcct(cmd *commander.Command, args []string) {
 
 // A setAcctCmd command creates a new or updates an existing acct
 // config.
-var setAcctCmd = &commander.Command{
-	UsageLine: "set-acct [options] <key-prefix> <acct-config-file>",
-	Short:     "create or update an accounting config for key prefix\n",
+var setAcctCmd = &cobra.Command{
+	Use:   "set-acct [options] <key-prefix> <acct-config-file>",
+	Short: "create or update an accounting config for key prefix\n",
 	Long: `
 Create or update a accounting config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
@@ -126,14 +122,13 @@ For example:
 
   cluster_id: test
 `,
-	Run:  runSetAcct,
-	Flag: *flag.CommandLine,
+	Run: runSetAcct,
 }
 
 // runSetAcct invokes the REST API with POST action and key prefix as
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
-func runSetAcct(cmd *commander.Command, args []string) {
+func runSetAcct(cmd *cobra.Command, args []string) {
 	if len(args) != 2 {
 		cmd.Usage()
 		return

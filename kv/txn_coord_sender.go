@@ -329,7 +329,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		var resolved []proto.Key
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			txn = call.Reply.Header().Txn
-			// If the -linearizable flag is set, we want to make sure that
+			// If the --linearizable flag is set, we want to make sure that
 			// all the clocks in the system are past the commit timestamp
 			// of the transaction. This is guaranteed if either
 			// - the commit timestamp is MaxOffset behind startNS

@@ -138,7 +138,7 @@ func (ctx *Context) Init(command string) error {
 		storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
 		if storeSpecs == nil || len(storeSpecs) == 0 {
 			return fmt.Errorf("invalid or empty engines specification %q, "+
-				"did you specify -stores?", ctx.Stores)
+				"did you specify --stores?", ctx.Stores)
 		}
 
 		ctx.Engines = nil
@@ -167,7 +167,7 @@ func (ctx *Context) Init(command string) error {
 			return err
 		}
 		if len(resolvers) == 0 {
-			return errors.New("no gossip addresses found, did you specify -gossip?")
+			return errors.New("no gossip addresses found, did you specify --gossip?")
 		}
 		ctx.GossipBootstrapResolvers = resolvers
 	}
@@ -202,8 +202,8 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]gossip.Resolver, error) {
 		}
 		// Special case self:// to pick a nice address that resolves
 		// uniquely for use in Gossip. This avoids having to specify
-		// the port for single-node clusters twice (once in -addr,
-		// once in -gossip).
+		// the port for single-node clusters twice (once in --addr,
+		// once in --gossip).
 		if strings.HasPrefix(address, "self://") {
 			address = util.EnsureHost(ctx.Addr)
 		}

@@ -125,7 +125,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	}
 
 	if ctx.Certs == "" {
-		return nil, util.Errorf("-insecure=false, but -certs is empty. We need a certs directory")
+		return nil, util.Errorf("--insecure=false, but --certs is empty. We need a certs directory")
 	}
 
 	log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
@@ -149,7 +149,7 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 	}
 
 	if ctx.Insecure {
-		log.Warning("running in insecure mode, this is strongly discouraged. See -insecure and -certs.")
+		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
 	}
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {

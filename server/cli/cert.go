@@ -18,30 +18,28 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/security"
 
-	"code.google.com/p/go-commander"
+	"github.com/spf13/cobra"
 )
 
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
-var createCACertCmd = &commander.Command{
-	UsageLine: "create-ca-cert [options]",
-	Short:     "create CA cert and key",
+var createCACertCmd = &cobra.Command{
+	Use:   "create-ca-cert [options]",
+	Short: "create CA cert and key",
 	Long: `
 Generates a new key pair, a new CA certificate and writes them to
-individual files in the directory specified by -certs (required).
+individual files in the directory specified by --certs (required).
 `,
-	Run:  runCreateCACert,
-	Flag: *flag.CommandLine,
+	Run: runCreateCACert,
 }
 
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runCreateCACert(cmd *commander.Command, args []string) {
+func runCreateCACert(cmd *cobra.Command, args []string) {
 	err := security.RunCreateCACert(Context.Certs)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate CA certificate: %s\n", err)
@@ -52,22 +50,21 @@ func runCreateCACert(cmd *commander.Command, args []string) {
 
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
-var createNodeCertCmd = &commander.Command{
-	UsageLine: "create-node-cert [options] <host 1> <host 2> ... <host N>",
-	Short:     "create node cert and key\n",
+var createNodeCertCmd = &cobra.Command{
+	Use:   "create-node-cert [options] <host 1> <host 2> ... <host N>",
+	Short: "create node cert and key\n",
 	Long: `
 Generates a new key pair, a new node certificate and writes them to
-individual files in the directory specified by -certs (required).
+individual files in the directory specified by --certs (required).
 The certs directory should contain a CA cert and key.
 At least one host should be passed in (either IP address of dns name).
 `,
-	Run:  runCreateNodeCert,
-	Flag: *flag.CommandLine,
+	Run: runCreateNodeCert,
 }
 
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runCreateNodeCert(cmd *commander.Command, args []string) {
+func runCreateNodeCert(cmd *cobra.Command, args []string) {
 	err := security.RunCreateNodeCert(Context.Certs, args)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate node certificate: %s\n", err)

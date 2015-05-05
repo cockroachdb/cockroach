@@ -48,9 +48,9 @@ func (c cliTest) Run(line string) {
 
 	var args []string
 	args = append(args, a[0])
-	args = append(args, fmt.Sprintf("-addr=%s", c.ServingAddr()))
+	args = append(args, fmt.Sprintf("--addr=%s", c.ServingAddr()))
 	// Always load test certs.
-	args = append(args, fmt.Sprintf("-certs=%s", security.EmbeddedCertsDir))
+	args = append(args, fmt.Sprintf("--certs=%s", security.EmbeddedCertsDir))
 	args = append(args, a[1:]...)
 
 	fmt.Printf("%s\n", line)

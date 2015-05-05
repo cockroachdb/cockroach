@@ -176,7 +176,7 @@ func TestHealth(t *testing.T) {
 // TestPlainHTTPServer verifies that we can serve plain http and talk to it.
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
-	// Create a custom context. The default one has a default -certs value.
+	// Create a custom context. The default one has a default --certs value.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
 	ctx.Insecure = true

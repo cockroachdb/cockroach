@@ -19,28 +19,26 @@
 package cli
 
 import (
-	"flag"
-
-	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
+
+	"github.com/spf13/cobra"
 )
 
 // A getZoneCmd command displays the zone config for the specified
 // prefix.
-var getZoneCmd = &commander.Command{
-	UsageLine: "get-zone [options] <key-prefix>",
-	Short:     "fetches and displays the zone config",
+var getZoneCmd = &cobra.Command{
+	Use:   "get-zone [options] <key-prefix>",
+	Short: "fetches and displays the zone config",
 	Long: `
 Fetches and displays the zone configuration for <key-prefix>. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runGetZone,
-	Flag: *flag.CommandLine,
+	Run: runGetZone,
 }
 
 // runGetZone invokes the REST API with GET action and key prefix as path.
-func runGetZone(cmd *commander.Command, args []string) {
+func runGetZone(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -49,24 +47,23 @@ func runGetZone(cmd *commander.Command, args []string) {
 }
 
 // A lsZonesCmd command displays a list of zone configs by prefix.
-var lsZonesCmd = &commander.Command{
-	UsageLine: "ls-zones [options] [key-regexp]",
-	Short:     "list all zone configs by key prefix",
+var lsZonesCmd = &cobra.Command{
+	Use:   "ls-zones [options] [key-regexp]",
+	Short: "list all zone configs by key prefix",
 	Long: `
 List zone configs. If a regular expression is given, the results of
 the listing are filtered by key prefixes matching the regexp. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runLsZones,
-	Flag: *flag.CommandLine,
+	Run: runLsZones,
 }
 
 // runLsZones invokes the REST API with GET action and no path, which
 // fetches a list of all zone configuration prefixes. The optional
 // regexp is applied to the complete list and matching prefixes
 // displayed.
-func runLsZones(cmd *commander.Command, args []string) {
+func runLsZones(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
 		cmd.Usage()
 		return
@@ -79,9 +76,9 @@ func runLsZones(cmd *commander.Command, args []string) {
 }
 
 // A rmZoneCmd command removes a zone config by prefix.
-var rmZoneCmd = &commander.Command{
-	UsageLine: "rm-zone [options] <key-prefix>",
-	Short:     "remove a zone config by key prefix",
+var rmZoneCmd = &cobra.Command{
+	Use:   "rm-zone [options] <key-prefix>",
+	Short: "remove a zone config by key prefix",
 	Long: `
 Remove an existing zone config by key prefix. No action is taken if no
 zone configuration exists for the specified key prefix. Note that this
@@ -89,13 +86,12 @@ command can affect only a single zone config with an exactly matching
 prefix. The key prefix should be escaped via URL query escaping if it
 contains non-ascii bytes or spaces.
 `,
-	Run:  runRmZone,
-	Flag: *flag.CommandLine,
+	Run: runRmZone,
 }
 
 // runRmZone invokes the REST API with DELETE action and key prefix as
 // path.
-func runRmZone(cmd *commander.Command, args []string) {
+func runRmZone(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return
@@ -105,9 +101,9 @@ func runRmZone(cmd *commander.Command, args []string) {
 
 // A setZoneCmd command creates a new or updates an existing zone
 // config.
-var setZoneCmd = &commander.Command{
-	UsageLine: "set-zone [options] <key-prefix> <zone-config-file>",
-	Short:     "create or update zone config for key prefix\n",
+var setZoneCmd = &cobra.Command{
+	Use:   "set-zone [options] <key-prefix> <zone-config-file>",
+	Short: "create or update zone config for key prefix\n",
 	Long: `
 Create or update a zone config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
@@ -136,14 +132,13 @@ Setting zone configs will guarantee that key ranges will be split
 such that no key range straddles two zone config specifications.
 This feature can be taken advantage of to pre-split ranges.
 `,
-	Run:  runSetZone,
-	Flag: *flag.CommandLine,
+	Run: runSetZone,
 }
 
 // runSetZone invokes the REST API with POST action and key prefix as
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
-func runSetZone(cmd *commander.Command, args []string) {
+func runSetZone(cmd *cobra.Command, args []string) {
 	if len(args) != 2 {
 		cmd.Usage()
 		return

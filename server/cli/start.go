@@ -19,44 +19,43 @@
 package cli
 
 import (
-	"flag"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+
+	"github.com/spf13/cobra"
 )
 
 // Context is the CLI Context used for the server.
 var Context = server.NewContext()
 
 // An initCmd command initializes a new Cockroach cluster.
-var initCmd = &commander.Command{
-	UsageLine: "init -stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short:     "init new Cockroach cluster and start server",
+var initCmd = &cobra.Command{
+	Use:   "init --stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
+	Short: "init new Cockroach cluster and start server",
 	Long: `
-Initialize a new Cockroach cluster using the -stores command line flag to
+Initialize a new Cockroach cluster using the --stores command line flag to
 specify one or more storage locations. The first of these storage locations is
 used to bootstrap the first replica of the first range. If any of the storage
 locations are already part of a pre-existing cluster, the bootstrap will fail.
 
 For example:
-	cockroach init -stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
+	cockroach init --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
 `,
-	Run:  runInit,
-	Flag: *flag.CommandLine,
+	Run: runInit,
 }
 
 // runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
-func runInit(cmd *commander.Command, args []string) {
+func runInit(cmd *cobra.Command, args []string) {
 	// First initialize the Context as it is used in other places.
 	err := Context.Init("init")
 	if err != nil {
@@ -77,21 +76,21 @@ func runInit(cmd *commander.Command, args []string) {
 }
 
 // A startCmd command starts nodes by joining the gossip network.
-var startCmd = &commander.Command{
-	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
-		"-certs=<cert-dir> " +
-		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
+var startCmd = &cobra.Command{
+	Use: "start --gossip=host1:port1[,host2:port2...] " +
+		"--certs=<cert-dir> " +
+		"--stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
 	Short: "start node by joining the gossip network",
 	Long: `
 Start Cockroach node by joining the gossip network and exporting key
 ranges stored on physical device(s). The gossip network is joined by
-contacting one or more well-known hosts specified by the -gossip
+contacting one or more well-known hosts specified by the --gossip
 flag. Every node should be run with the same list of bootstrap hosts
 to guarantee a connected network. An alternate approach is to use a
-single host for -gossip and round-robin DNS.
+single host for --gossip and round-robin DNS.
 
 Each node exports data from one or more physical devices. These
-devices are specified via the -stores flag. This is a comma-separated
+devices are specified via the --stores flag. This is a comma-separated
 list of paths to storage directories or for in-memory stores, the
 number of bytes. Although the paths should be specified to correspond
 uniquely to physical devices, this requirement isn't strictly
@@ -99,22 +98,21 @@ enforced.
 
 For example:
 
-  cockroach start -gossip=host1:port1,host2:port2 -stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
+  cockroach start --gossip=host1:port1,host2:port2 --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
 
 A node exports an HTTP API with the following endpoints:
 
   Health check:           /healthz
   Key-value REST:         ` + kv.RESTPrefix + `
   Structured Schema REST: ` + structured.StructuredKeyPrefix,
-	Run:  runStart,
-	Flag: *flag.CommandLine,
+	Run: runStart,
 }
 
-// runStart starts the cockroach node using -stores as the list of
-// storage devices ("stores") on this machine and -gossip as the list
+// runStart starts the cockroach node using --stores as the list of
+// storage devices ("stores") on this machine and --gossip as the list
 // of "well-known" hosts used to join this node to the cockroach
 // cluster via the gossip network.
-func runStart(cmd *commander.Command, args []string) {
+func runStart(cmd *cobra.Command, args []string) {
 	info := util.GetBuildInfo()
 	log.Infof("build Vers: %s", info.Vers)
 	log.Infof("build Tag:  %s", info.Tag)
@@ -173,20 +171,19 @@ func runStart(cmd *commander.Command, args []string) {
 }
 
 // A exterminateCmd command shuts down the node server.
-var exterminateCmd = &commander.Command{
-	UsageLine: "exterminate",
-	Short:     "destroy all data held by the node",
+var exterminateCmd = &cobra.Command{
+	Use:   "exterminate",
+	Short: "destroy all data held by the node",
 	Long: `
 
 First shuts down the system and then destroys all data held by the
-node, cycling through each store specified by the -stores flag.
+node, cycling through each store specified by the --stores flag.
 `,
-	Run:  runExterminate,
-	Flag: *flag.CommandLine,
+	Run: runExterminate,
 }
 
 // runExterminate destroys the data held in the specified stores.
-func runExterminate(cmd *commander.Command, args []string) {
+func runExterminate(cmd *cobra.Command, args []string) {
 	err := Context.Init("exterminate")
 	if err != nil {
 		log.Errorf("failed to initialize context: %s", err)
@@ -214,19 +211,18 @@ func runExterminate(cmd *commander.Command, args []string) {
 }
 
 // A quitCmd command shuts down the node server.
-var quitCmd = &commander.Command{
-	UsageLine: "quit",
-	Short:     "drain and shutdown node\n",
+var quitCmd = &cobra.Command{
+	Use:   "quit",
+	Short: "drain and shutdown node\n",
 	Long: `
 Shutdown the server. The first stage is drain, where any new requests
 will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
-	Run:  runQuit,
-	Flag: *flag.CommandLine,
+	Run: runQuit,
 }
 
 // runQuit accesses the quit shutdown path.
-func runQuit(cmd *commander.Command, args []string) {
+func runQuit(cmd *cobra.Command, args []string) {
 	server.SendQuit(Context)
 }

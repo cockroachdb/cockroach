@@ -18,9 +18,9 @@
 package cli
 
 import (
-	"flag"
-
 	"github.com/cockroachdb/cockroach/server"
+
+	"github.com/spf13/pflag"
 )
 
 // initFlags sets the server.Context values to flag values.
@@ -28,16 +28,16 @@ import (
 // settable here.
 func initFlags(ctx *server.Context) {
 	// Server flags.
-	flag.StringVar(&ctx.Addr, "addr", ctx.Addr, "when run as the server the host:port to bind for "+
+	pflag.StringVar(&ctx.Addr, "addr", ctx.Addr, "when run as the server the host:port to bind for "+
 		"HTTP/RPC traffic; when run as the client the address for connection to the cockroach cluster.")
 
-	flag.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, "run over plain HTTP. WARNING: "+
+	pflag.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, "run over plain HTTP. WARNING: "+
 		"this is strongly discouraged.")
 
-	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs. "+
-		"This flag is required if -insecure=false.")
+	pflag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs. "+
+		"This flag is required if --insecure=false.")
 
-	flag.StringVar(&ctx.Stores, "stores", ctx.Stores, "specify a comma-separated list of stores, "+
+	pflag.StringVar(&ctx.Stores, "stores", ctx.Stores, "specify a comma-separated list of stores, "+
 		"specified by a colon-separated list of device attributes followed by '=' and "+
 		"either a filepath for a persistent store or an integer size in bytes for an "+
 		"in-memory store. Device attributes typically include whether the store is "+
@@ -45,7 +45,7 @@ func initFlags(ctx *server.Context) {
 		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
 		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.")
 
-	flag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify an ordered, colon-separated list of node "+
+	pflag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify an ordered, colon-separated list of node "+
 		"attributes. Attributes are arbitrary strings specifying topography or "+
 		"machine capabilities. Topography might include datacenter designation "+
 		"(e.g. \"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+
@@ -54,36 +54,36 @@ func initFlags(ctx *server.Context) {
 		"The relative geographic proximity of two nodes is inferred from the "+
 		"common prefix of the attributes list, so topographic attributes should be "+
 		"specified first and in the same order for all nodes. "+
-		"For example: -attrs=us-west-1b,gpu.")
+		"For example: --attrs=us-west-1b,gpu.")
 
-	flag.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, "specify "+
+	pflag.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, "specify "+
 		"the maximum clock offset for the cluster. Clock offset is measured on all "+
 		"node-to-node links and if any node notices it has clock offset in excess "+
-		"of -max-offset, it will commit suicide. Setting this value too high may "+
+		"of --max-offset, it will commit suicide. Setting this value too high may "+
 		"decrease transaction performance in the presence of contention.")
 
 	// Gossip flags.
-	flag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, "specify a "+
+	pflag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, "specify a "+
 		"comma-separated list of gossip addresses or resolvers for gossip bootstrap. "+
 		"Each item in the list has an optional type: [type=]<address>. "+
 		"Unspecified type means ip address or dns. Type can also be a load balancer (\"lb\"), "+
 		"a unix socket (\"unix\") or, for single-node systems, \"self\".")
 
-	flag.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
+	pflag.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
 		"approximate interval (time.Duration) for gossiping new information to peers.")
 
 	// KV flags.
 
-	flag.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, "enables linearizable behaviour "+
+	pflag.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, "enables linearizable behaviour "+
 		"of operations on this node by making sure that no commit timestamp is reported "+
 		"back to the client until all other node clocks have necessarily passed it.")
 
 	// Engine flags.
 
-	flag.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, "total size in bytes for "+
+	pflag.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, "total size in bytes for "+
 		"caches, shared evenly if there are multiple storage devices.")
 
-	flag.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, "specify "+
+	pflag.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, "specify "+
 		"--scan_interval to adjust the target for the duration of a single scan "+
 		"through a store's ranges. The scan is slowed as necessary to approximately"+
 		"achieve this duration.")
