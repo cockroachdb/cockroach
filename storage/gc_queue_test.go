@@ -102,8 +102,9 @@ func TestGCQueueShouldQueue(t *testing.T) {
 			IntentAge:   test.intentAge,
 			GCBytesAge:  test.gcBytesAge,
 		}
-		tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats)
-
+		if err := tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats); err != nil {
+			t.Fatal(err)
+		}
 		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)

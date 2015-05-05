@@ -39,33 +39,79 @@ const (
 )
 
 // MergeStats merges accumulated stats to stat counters for specified range.
-func MergeStats(ms *proto.MVCCStats, engine Engine, raftID int64) {
-	MVCCMergeRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes)
-	MVCCMergeRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes)
-	MVCCMergeRangeStat(engine, raftID, StatValBytes, ms.ValBytes)
-	MVCCMergeRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes)
-	MVCCMergeRangeStat(engine, raftID, StatLiveCount, ms.LiveCount)
-	MVCCMergeRangeStat(engine, raftID, StatKeyCount, ms.KeyCount)
-	MVCCMergeRangeStat(engine, raftID, StatValCount, ms.ValCount)
-	MVCCMergeRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
-	MVCCMergeRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
-	MVCCMergeRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge)
-	MVCCMergeRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos)
+func MergeStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
+	if err := MVCCMergeRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatValBytes, ms.ValBytes); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatLiveCount, ms.LiveCount); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatKeyCount, ms.KeyCount); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatValCount, ms.ValCount); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatIntentCount, ms.IntentCount); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatIntentAge, ms.IntentAge); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos); err != nil {
+		return err
+	}
+	return nil
 }
 
 // SetStats sets stat counters for specified range.
-func SetStats(ms *proto.MVCCStats, engine Engine, raftID int64) {
-	MVCCSetRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes)
-	MVCCSetRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes)
-	MVCCSetRangeStat(engine, raftID, StatValBytes, ms.ValBytes)
-	MVCCSetRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes)
-	MVCCSetRangeStat(engine, raftID, StatLiveCount, ms.LiveCount)
-	MVCCSetRangeStat(engine, raftID, StatKeyCount, ms.KeyCount)
-	MVCCSetRangeStat(engine, raftID, StatValCount, ms.ValCount)
-	MVCCSetRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
-	MVCCSetRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
-	MVCCSetRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge)
-	MVCCSetRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos)
+func SetStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
+	if err := MVCCSetRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatValBytes, ms.ValBytes); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatLiveCount, ms.LiveCount); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatKeyCount, ms.KeyCount); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatValCount, ms.ValCount); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatIntentCount, ms.IntentCount); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatIntentAge, ms.IntentAge); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos); err != nil {
+		return err
+	}
+	return nil
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for
