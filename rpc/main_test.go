@@ -18,9 +18,23 @@
 package rpc
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
+
+// NewTestContext returns a rpc.Context for testing.
+func NewTestContext(t *testing.T) *Context {
+	tlsConfig, err := security.LoadTLSConfigFromDir(security.EmbeddedCertsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clock := hlc.NewClock(hlc.UnixNano)
+	return NewContext(clock, tlsConfig, nil)
+}
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
