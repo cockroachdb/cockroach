@@ -63,6 +63,7 @@ func TestKeyAddress(t *testing.T) {
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
 		{TransactionKey(proto.Key("baz"), proto.Key(util.NewUUID4())), proto.Key("baz")},
 		{TransactionKey(KeyMax, proto.Key(util.NewUUID4())), KeyMax},
+		{nil, nil},
 	}
 	for i, test := range testCases {
 		result := KeyAddress(test.key)

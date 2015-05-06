@@ -380,7 +380,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
-		call := client.Scan(proto.Key("t"), proto.Key("t"), 0)
+		call := client.Scan(proto.Key("t"), proto.Key("t").Next(), 0)
 		if err = txn.Run(call); err != nil {
 			t.Fatal(err)
 		}
