@@ -18,7 +18,9 @@
 package multiraft
 
 import (
+	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -316,7 +318,6 @@ func TestMembershipChange(t *testing.T) {
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 1)
 	// An automatic election is triggered since this is a single-node Raft group.
-	//cluster.triggerElection(0, groupID)
 	cluster.waitForElection(0)
 
 	// Consume and apply the membership change events.
@@ -361,4 +362,71 @@ func TestMembershipChange(t *testing.T) {
 				}
 			}
 		}*/
+}
+
+func TestRapidMembershipChange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	proposers := 5
+
+	numCommit := int32(200)
+
+	cluster := newTestCluster(nil, 1, stopper, t)
+	groupID := uint64(1)
+
+	cluster.createGroup(groupID, 0, 1 /* replicas */)
+	cmdID := int32(0) // updated atomically from now on
+
+	cmdIDFormat := "%0" + fmt.Sprintf("%d", commandIDLen) + "d"
+
+	proposerFn := func(i int) {
+		var seq int32
+		for {
+			seq = atomic.AddInt32(&cmdID, 1)
+			if seq > numCommit {
+				break
+			}
+			cmdID := fmt.Sprintf(cmdIDFormat, seq)
+		retry:
+			for {
+				cluster.nodes[0].CreateGroup(groupID)
+				if log.V(1) {
+					log.Infof("%-3d: try    %s", i, cmdID)
+				}
+
+				select {
+				case err := <-cluster.nodes[0].SubmitCommand(groupID,
+					cmdID, []byte("command")):
+					if err == nil {
+						log.Infof("%-3d: ok   %s", i, cmdID)
+						break retry
+					}
+					log.Infof("%-3d: err  %s %s", i, cmdID, err)
+				case <-time.After(10 * time.Millisecond):
+					t.Fatalf("timed out waiting for command result %s", cmdID)
+				}
+			}
+			cluster.nodes[0].RemoveGroup(groupID)
+		}
+	}
+
+	for i := 0; i < proposers; i++ {
+		go proposerFn(i)
+	}
+
+	for e := range cluster.events[0].CommandCommitted {
+		if log.V(1) {
+			log.Infof("   : recv %s", e.CommandID)
+		}
+		if fmt.Sprintf(cmdIDFormat, numCommit) == e.CommandID {
+			break
+		}
+
+	}
+
+	// TODO(tschottdorf): get the stray RaftMessage calls under control.
+	// Maybe they should be ignored by leaktest?
+	time.Sleep(20 * time.Millisecond)
 }
