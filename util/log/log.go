@@ -102,6 +102,6 @@ var FatalDepth = glog.FatalDepth
 // glog has a custom type alias for bool and implements logging functions on
 // it; we don't want to have that here since the calls would go straight to
 // the glog package and not to whatever functions we define here.
-func V(level glog.Level) bool {
-	return bool(glog.V(level))
-}
+// TODO(tschottdorf): restored the original, see @bdarnell's comment on #925.
+// We still should not use the chained logger.
+var V = glog.V
