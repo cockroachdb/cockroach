@@ -19,6 +19,7 @@ package cli
 
 import (
 	"flag"
+	"go/build"
 	"strings"
 	"testing"
 )
@@ -34,4 +35,32 @@ func TestStdFlagToPflag(t *testing.T) {
 			t.Errorf("unable to find \"%s\"", n)
 		}
 	})
+}
+
+func TestNoLinkTesting(t *testing.T) {
+	imports := make(map[string]struct{})
+
+	var addImports func(string)
+	addImports = func(root string) {
+		pkg, err := build.Import(root, "", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, imp := range pkg.Imports {
+			// https: //github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
+			if imp == "C" {
+				continue // "C" is fake
+			}
+			if _, ok := imports[imp]; !ok {
+				imports[imp] = struct{}{}
+				addImports(imp)
+			}
+		}
+	}
+
+	addImports("github.com/cockroachdb/cockroach")
+	if _, ok := imports["testing"]; ok {
+		t.Error("\"testing\" is included in the main cockroach binary!")
+	}
 }

@@ -19,7 +19,6 @@ package kv
 
 import (
 	"fmt"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -110,7 +109,7 @@ type LocalTestCluster struct {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t testing.TB) {
+func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = util.NewStopper()
