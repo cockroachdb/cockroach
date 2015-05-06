@@ -18,8 +18,6 @@
 package server
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
@@ -31,7 +29,7 @@ import (
 )
 
 // StartTestServer starts a in-memory test server.
-func StartTestServer(t testing.TB) *TestServer {
+func StartTestServer(t util.Tester) *TestServer {
 	s := &TestServer{}
 	if err := s.Start(); err != nil {
 		if t != nil {

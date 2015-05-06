@@ -23,7 +23,6 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -639,7 +638,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 
 // ForceReplicationScan iterates over all ranges and enqueues any that
 // need to be replicated. Exposed only for testing.
-func (s *Store) ForceReplicationScan(t testing.TB) {
+func (s *Store) ForceReplicationScan(t util.Tester) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

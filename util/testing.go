@@ -22,11 +22,17 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// Tester is a proxy for e.g. testing.T which does not introduce a dependency
+// on "testing".
+type Tester interface {
+	Fatal(args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
 
 // tempUnixFile creates a temporary file for use with a unix domain socket.
 // TODO(bdarnell): use TempDir instead to make this atomic.
@@ -50,7 +56,7 @@ func tempLocalhostAddr() string {
 
 // CreateTempDir creates a temporary directory and returns its path.
 // You should usually call defer CleanupDir(dir) right after.
-func CreateTempDir(t *testing.T, prefix string) string {
+func CreateTempDir(t Tester, prefix string) string {
 	dir, err := ioutil.TempDir("", prefix)
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +67,7 @@ func CreateTempDir(t *testing.T, prefix string) string {
 // CreateNTempDirs creates N temporary directories and returns a slice
 // of paths.
 // You should usually call defer CleanupDirs(dirs) right after.
-func CreateNTempDirs(t *testing.T, prefix string, n int) []string {
+func CreateNTempDirs(t Tester, prefix string, n int) []string {
 	dirs := make([]string, n)
 	var err error
 	for i := 0; i < n; i++ {
@@ -130,7 +136,7 @@ func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 // function is invoked immediately at first and then successively with
 // an exponential backoff starting at 1ns and ending at the specified
 // duration.
-func SucceedsWithin(t testing.TB, duration time.Duration, fn func() error) {
+func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
 	total := time.Duration(0)
 	var lastErr error
 	for wait := time.Duration(1); total < duration; wait *= 2 {

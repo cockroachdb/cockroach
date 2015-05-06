@@ -126,12 +126,6 @@ func initFlags(ctx *server.Context) {
 	// top-level cockroach command.
 	pf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
-		// Skip the testing flags.
-		//
-		// TODO(pmattis): Remove when we no longer depend on the "testing" package.
-		if strings.HasPrefix(f.Name, "test.") {
-			return
-		}
 		pf.Var(pflagValue{f.Value}, normalizeStdFlagName(f.Name), f.Usage)
 	})
 

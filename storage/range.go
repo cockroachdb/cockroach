@@ -28,7 +28,6 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 	"unsafe"
 
@@ -401,7 +400,7 @@ func (r *Range) HasLeaderLease(timestamp proto.Timestamp) (bool, bool) {
 
 // WaitForLeaderLease is used from unittests to wait until this range
 // has the leader lease.
-func (r *Range) WaitForLeaderLease(t *testing.T) {
+func (r *Range) WaitForLeaderLease(t util.Tester) {
 	util.SucceedsWithin(t, 1*time.Second, func() error {
 		return r.requestLeaderLease(r.rm.Clock().Now())
 	})
