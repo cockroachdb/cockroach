@@ -60,7 +60,13 @@ func TestNoLinkTesting(t *testing.T) {
 	}
 
 	addImports("github.com/cockroachdb/cockroach")
-	if _, ok := imports["testing"]; ok {
-		t.Error("\"testing\" is included in the main cockroach binary!")
+
+	for _, forbidden := range []string{
+		"testing",
+		"github.com/cockroachdb/cockroach/security/securitytest",
+	} {
+		if _, ok := imports[forbidden]; ok {
+			t.Errorf("%s is included in the main cockroach binary!", forbidden)
+		}
 	}
 }
