@@ -422,7 +422,7 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	zoneConfig := &proto.ZoneConfig{}
 
 	// Write zone configs for db3 & db4.
-	var calls []client.Call
+	var calls []client.Callable
 	for _, k := range []string{"db4", "db3"} {
 		call := client.PutProto(
 			engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),

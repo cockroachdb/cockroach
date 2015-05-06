@@ -193,7 +193,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 
 		// Get the current value to verify whether the txn happened first.
 		call := client.Get(key)
-		getReply := call.Reply.(*proto.GetResponse)
+		getReply := call.Reply
 		if err := kvClient.Run(call); err != nil {
 			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
 		}
@@ -235,7 +235,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 				}
 				// Attempt to read outside of txn.
 				call := client.Get(key)
-				gr := call.Reply.(*proto.GetResponse)
+				gr := call.Reply
 				if err := kvClient.Run(call); err != nil {
 					return err
 				}
@@ -244,7 +244,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 				}
 				// Read within the transaction.
 				call = client.Get(key)
-				gr = call.Reply.(*proto.GetResponse)
+				gr = call.Reply
 				if err := txn.Run(call); err != nil {
 					return err
 				}
@@ -265,7 +265,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
 		call := client.Get(key)
-		gr := call.Reply.(*proto.GetResponse)
+		gr := call.Reply
 		err = kvClient.Run(call)
 		if commit {
 			if err != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
@@ -306,7 +306,7 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 	if err := kvClient.Run(call); err != nil {
 		t.Fatalf("unable to get proto: %v", err)
 	}
-	reply := call.Reply.(*proto.GetResponse)
+	reply := call.Reply
 	if reply.Timestamp.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
 	}
@@ -330,7 +330,7 @@ func TestKVClientGetAndPut(t *testing.T) {
 	if err := kvClient.Run(call); err != nil {
 		t.Fatalf("unable to get value: %v", err)
 	}
-	reply := call.Reply.(*proto.GetResponse)
+	reply := call.Reply
 	if reply.Timestamp.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
 	}
@@ -368,7 +368,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 	}
 
 	getCall := client.Get(proto.Key("a"))
-	getResp := getCall.Reply.(*proto.GetResponse)
+	getResp := getCall.Reply
 	if err := kvClient.Run(getCall); err != nil {
 		t.Error(err)
 	}
@@ -376,7 +376,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 	getCall = client.Get(proto.Key("b"))
-	getResp = getCall.Reply.(*proto.GetResponse)
+	getResp = getCall.Reply
 	if err := kvClient.Run(getCall); err != nil {
 		t.Error(err)
 	}
@@ -394,7 +394,7 @@ func TestKVClientBatch(t *testing.T) {
 	kvClient.User = storage.UserRoot
 
 	keys := []proto.Key{}
-	calls := []client.Call{}
+	calls := []client.Callable{}
 	for i := 0; i < 10; i++ {
 		key := proto.Key(fmt.Sprintf("key %02d", i))
 		keys = append(keys, key)
@@ -406,14 +406,14 @@ func TestKVClientBatch(t *testing.T) {
 	}
 
 	for i, call := range calls {
-		reply := call.Reply.(*proto.IncrementResponse)
+		reply := call.Call().Reply.(*proto.IncrementResponse)
 		if reply.NewValue != int64(i) {
 			t.Errorf("%d: expected %d; got %d", i, i, reply.NewValue)
 		}
 	}
 
 	// Now try 2 scans.
-	calls = []client.Call{
+	calls = []client.Callable{
 		client.Scan(proto.Key("key 00"), proto.Key("key 05"), 0),
 		client.Scan(proto.Key("key 05"), proto.Key("key 10"), 0),
 	}
@@ -421,8 +421,8 @@ func TestKVClientBatch(t *testing.T) {
 		t.Error(err)
 	}
 
-	scan1 := calls[0].Reply.(*proto.ScanResponse)
-	scan2 := calls[1].Reply.(*proto.ScanResponse)
+	scan1 := calls[0].Call().Reply.(*proto.ScanResponse)
+	scan2 := calls[1].Call().Reply.(*proto.ScanResponse)
 	if len(scan1.Rows) != 5 || len(scan2.Rows) != 5 {
 		t.Errorf("expected scan results to include 5 and 5 rows; got %d and %d",
 			len(scan1.Rows), len(scan2.Rows))
@@ -469,7 +469,7 @@ func ExampleKV_Run1() {
 
 	// Retrieve test value using same key.
 	getCall := client.Get(key)
-	getResp := getCall.Reply.(*proto.GetResponse)
+	getResp := getCall.Reply
 	if err := kvClient.Run(getCall); err != nil {
 		log.Fatal(err)
 	}
@@ -506,7 +506,7 @@ func ExampleKV_RunMultiple() {
 	batchSize := 12
 	keys := make([]string, batchSize)
 	values := make([][]byte, batchSize)
-	calls := []client.Call{}
+	calls := []client.Callable{}
 	for i := 0; i < batchSize; i++ {
 		keys[i] = fmt.Sprintf("key-%03d", i)
 		values[i] = []byte(fmt.Sprintf("value-%03d", i))
@@ -535,7 +535,7 @@ func ExampleKV_RunMultiple() {
 	// Check results which may be returned out-of-order from creation.
 	var matchCount int
 	for i := 0; i < numScans; i++ {
-		scanResponse := calls[i].Reply.(*proto.ScanResponse)
+		scanResponse := calls[i].Call().Reply.(*proto.ScanResponse)
 		for _, keyVal := range scanResponse.Rows {
 			currKey := keyVal.Key
 			currValue := keyVal.Value.Bytes
@@ -600,7 +600,7 @@ func ExampleKV_RunTransaction() {
 	err = kvClient.RunTransaction(&getOpts, func(txn *client.Txn) error {
 		for i := 0; i < numKVPairs; i++ {
 			call := client.Get(proto.Key(keys[i]))
-			getResponses[i] = call.Reply.(*proto.GetResponse)
+			getResponses[i] = call.Call().Reply.(*proto.GetResponse)
 			txn.Prepare(call)
 		}
 		return nil
@@ -651,7 +651,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 			if err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 				// Retrieve the other key.
 				call := client.Get(readKey)
-				gr := call.Reply.(*proto.GetResponse)
+				gr := call.Reply
 				if err := txn.Run(call); err != nil {
 					return err
 				}
@@ -684,7 +684,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 	for i := 0; i < 2; i++ {
 		readKey := []byte(fmt.Sprintf("value-%d", i))
 		call := client.Get(readKey)
-		gr := call.Reply.(*proto.GetResponse)
+		gr := call.Reply
 		if err := kvClient.Run(call); err != nil {
 			log.Fatal(err)
 		}
@@ -770,7 +770,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
-		var calls []client.Call
+		var calls []client.Callable
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
 				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))

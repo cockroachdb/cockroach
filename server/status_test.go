@@ -454,10 +454,7 @@ func TestMetricsRecording(t *testing.T) {
 		if err := tsrv.kv.Run(call); err != nil {
 			return err
 		}
-		resp, ok := call.Reply.(*proto.GetResponse)
-		if !ok {
-			return util.Error("response was not a GetResponse")
-		}
+		resp := call.Reply
 		if resp.Value == nil {
 			return util.Errorf("key %s had nil value", key)
 		}

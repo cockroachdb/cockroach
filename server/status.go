@@ -293,7 +293,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 
 	nodeStatus := &proto.NodeStatus{}
 	call := client.GetProto(key, nodeStatus)
-	resp := call.Reply.(*proto.GetResponse)
+	resp := call.Reply
 	if err := s.db.Run(call); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -366,7 +366,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 
 	storeStatus := &proto.StoreStatus{}
 	call := client.GetProto(key, storeStatus)
-	resp := call.Reply.(*proto.GetResponse)
+	resp := call.Reply
 	if err := s.db.Run(call); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)

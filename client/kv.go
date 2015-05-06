@@ -83,22 +83,23 @@ func (kv *KV) NewDB() *DB {
 
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (kv *KV) Run(calls ...Call) (err error) {
-	if len(calls) == 0 {
+func (kv *KV) Run(callables ...Callable) (err error) {
+	if len(callables) == 0 {
 		return nil
 	}
 
 	// First check if any call contains an error. This allows the
 	// generation of a Call to create an error that is reported
 	// here. See PutProto for an example.
-	for _, call := range calls {
+	for _, callable := range callables {
+		call := callable.Call()
 		if call.Err != nil {
 			return call.Err
 		}
 	}
 
-	if len(calls) == 1 {
-		c := calls[0]
+	if len(callables) == 1 {
+		c := callables[0].Call()
 		if c.Args.Header().User == "" {
 			c.Args.Header().User = kv.User
 		}
@@ -117,8 +118,8 @@ func (kv *KV) Run(calls ...Call) (err error) {
 	}
 
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
-	for _, call := range calls {
-		bArgs.Add(call.Args)
+	for _, callable := range callables {
+		bArgs.Add(callable.Call().Args)
 	}
 	err = kv.Run(Call{Args: bArgs, Reply: bReply})
 
@@ -137,7 +138,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 
 	// Transfer individual responses from batch response to prepared replies.
 	for i, reply := range bReply.Responses {
-		c := calls[i]
+		c := callables[i].Call()
 		gogoproto.Merge(c.Reply, reply.GetValue().(gogoproto.Message))
 		if c.Post != nil {
 			if e := c.Post(); e != nil && err != nil {

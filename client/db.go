@@ -481,7 +481,7 @@ type Batch struct {
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
 	Results    []Result
-	calls      []Call
+	calls      []Callable
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue
 	rowsIdx    int
@@ -518,7 +518,7 @@ func (b *Batch) fillResults() error {
 		result := &b.Results[i]
 
 		for k := 0; k < result.calls; k++ {
-			call := b.calls[offset+k]
+			call := b.calls[offset+k].Call()
 
 			if result.Err == nil {
 				result.Err = call.Reply.Header().GoError()
@@ -623,7 +623,7 @@ func (b *Batch) InternalAddCall(call Call) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Get(keys ...interface{}) *Batch {
-	var calls []Call
+	var calls []Callable
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
@@ -741,7 +741,7 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) *Batch {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Del(keys ...interface{}) *Batch {
-	var calls []Call
+	var calls []Callable
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {

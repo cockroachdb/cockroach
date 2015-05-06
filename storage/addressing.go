@@ -26,21 +26,21 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type metaAction func([]client.Call, proto.Key, *proto.RangeDescriptor) []client.Call
+type metaAction func([]client.Callable, proto.Key, *proto.RangeDescriptor) []client.Callable
 
-func putMeta(calls []client.Call, key proto.Key, desc *proto.RangeDescriptor) []client.Call {
+func putMeta(calls []client.Callable, key proto.Key, desc *proto.RangeDescriptor) []client.Callable {
 	return append(calls, client.PutProto(key, desc))
 }
 
-func delMeta(calls []client.Call, key proto.Key, desc *proto.RangeDescriptor) []client.Call {
+func delMeta(calls []client.Callable, key proto.Key, desc *proto.RangeDescriptor) []client.Callable {
 	return append(calls, client.Delete(key))
 }
 
 // splitRangeAddressing creates (or overwrites if necessary) the meta1
 // and meta2 range addressing records for the left and right ranges
 // caused by a split.
-func splitRangeAddressing(left, right *proto.RangeDescriptor) ([]client.Call, error) {
-	var calls []client.Call
+func splitRangeAddressing(left, right *proto.RangeDescriptor) ([]client.Callable, error) {
+	var calls []client.Callable
 	var err error
 	if calls, err = rangeAddressing(calls, left, putMeta); err != nil {
 		return nil, err
@@ -55,8 +55,8 @@ func splitRangeAddressing(left, right *proto.RangeDescriptor) ([]client.Call, er
 // addressing records caused by merging and updates the records for
 // the new merged range. Left is the range descriptor for the "left"
 // range before merging and merged describes the left to right merge.
-func mergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, error) {
-	var calls []client.Call
+func mergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Callable, error) {
+	var calls []client.Callable
 	var err error
 	if calls, err = rangeAddressing(calls, left, delMeta); err != nil {
 		return nil, err
@@ -70,8 +70,8 @@ func mergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, e
 // updateRangeAddressing overwrites the meta1 and meta2 range addressing
 // records for the descriptor. Returns a slice of calls necessary to
 // update the records on the KV database.
-func updateRangeAddressing(desc *proto.RangeDescriptor) ([]client.Call, error) {
-	return rangeAddressing([]client.Call{}, desc, putMeta)
+func updateRangeAddressing(desc *proto.RangeDescriptor) ([]client.Callable, error) {
+	return rangeAddressing([]client.Callable{}, desc, putMeta)
 }
 
 // rangeAddressing updates or deletes the range addressing metadata
@@ -88,8 +88,8 @@ func updateRangeAddressing(desc *proto.RangeDescriptor) ([]client.Call, error) {
 //     - meta2(desc.EndKey)
 //     3a. If desc.StartKey is KeyMin or meta2:
 //         - meta1(KeyMax)
-func rangeAddressing(calls []client.Call, desc *proto.RangeDescriptor,
-	action metaAction) ([]client.Call, error) {
+func rangeAddressing(calls []client.Callable, desc *proto.RangeDescriptor,
+	action metaAction) ([]client.Callable, error) {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta1Prefix) ||
 		bytes.HasPrefix(desc.StartKey, engine.KeyMeta1Prefix) {

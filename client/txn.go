@@ -56,7 +56,7 @@ type Txn struct {
 	wrapped      KVSender
 	txn          proto.Transaction
 	txnSender    txnSender
-	prepared     []Call
+	prepared     []Callable
 	haveTxnWrite bool // True if there were transactional writes
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
@@ -130,7 +130,7 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (t *Txn) Run(calls ...Call) error {
+func (t *Txn) Run(calls ...Callable) error {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -159,12 +159,12 @@ func (t *Txn) Run(calls ...Call) error {
 // with the KV interface, but potentially removes the optimization to
 // send the EndTransaction in the same batch as the final set of
 // prepared calls.
-func (t *Txn) Prepare(calls ...Call) {
-	t.updateState(calls)
-	for _, c := range calls {
-		c.resetClientCmdID(t.kv.clock)
+func (t *Txn) Prepare(callables ...Callable) {
+	t.updateState(callables)
+	for _, c := range callables {
+		c.Call().resetClientCmdID(t.kv.clock)
 	}
-	t.prepared = append(t.prepared, calls...)
+	t.prepared = append(t.prepared, callables...)
 }
 
 // Flush sends all previously prepared calls, buffered by invocations
@@ -182,8 +182,9 @@ func (t *Txn) Flush() error {
 	return t.kv.Run(calls...)
 }
 
-func (t *Txn) updateState(calls []Call) {
-	for _, c := range calls {
+func (t *Txn) updateState(callables []Callable) {
+	for _, callable := range callables {
+		c := callable.Call()
 		if b, ok := c.Args.(*proto.BatchRequest); ok {
 			for _, br := range b.Requests {
 				t.updateStateForRequest(br.GetValue().(proto.Request))
