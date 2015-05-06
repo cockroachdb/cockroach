@@ -484,6 +484,11 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
 }
 
+// AddCall .
+func (r *Range) AddCall(call client.Call, wait bool) error {
+	return r.addCmd(call.Args, call.Reply, wait)
+}
+
 // AddCmd adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -491,6 +496,10 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) error {
+	return r.addCmd(args, reply, wait)
+}
+
+func (r *Range) addCmd(args proto.Request, reply proto.Response, wait bool) error {
 	header := args.Header()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
