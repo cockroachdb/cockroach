@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -225,6 +226,14 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	}
 	if bytes.Equal(rangeA.Desc().StartKey, rangeC.Desc().StartKey) {
 		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeC.Desc().StartKey)
+	}
+
+	// Read all of the system keys touched by the split transactions to
+	// resolve intents.  If intents are left unresolved then the
+	// asynchronous resolution may happen after the call to RemoveRange
+	// below, reviving the range and breaking the test.
+	if err := store.DB().Run(client.Scan(engine.KeyLocalMax, engine.KeySystemMax, 1000)); err != nil {
+		t.Fatal(err)
 	}
 
 	// Remove range B from store and attempt to merge. This is a bit of a hack and leaves some
