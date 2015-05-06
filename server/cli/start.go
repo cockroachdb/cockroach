@@ -39,18 +39,16 @@ var Context = server.NewContext()
 
 // An initCmd command initializes a new Cockroach cluster.
 var initCmd = &cobra.Command{
-	Use:   "init --stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
+	Use:   "init --stores=...",
 	Short: "init new Cockroach cluster and start server",
 	Long: `
-Initialize a new Cockroach cluster using the --stores command line flag to
-specify one or more storage locations. The first of these storage locations is
-used to bootstrap the first replica of the first range. If any of the storage
-locations are already part of a pre-existing cluster, the bootstrap will fail.
-
-For example:
-	cockroach init --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
+Initialize a new Cockroach cluster using the --stores flag to specify one or
+more storage locations. The first of these storage locations is used to
+bootstrap the first replica of the first range. If any of the storage locations
+are already part of a pre-existing cluster, the bootstrap will fail.
 `,
-	Run: runInit,
+	Example: `  cockroach init --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2`,
+	Run:     runInit,
 }
 
 // runInit initializes the engine based on the first
@@ -77,35 +75,30 @@ func runInit(cmd *cobra.Command, args []string) {
 
 // A startCmd command starts nodes by joining the gossip network.
 var startCmd = &cobra.Command{
-	Use: "start --gossip=host1:port1[,host2:port2...] " +
-		"--certs=<cert-dir> " +
-		"--stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network",
+	Use:   "start",
+	Short: "start a node by joining the gossip network",
 	Long: `
-Start Cockroach node by joining the gossip network and exporting key
-ranges stored on physical device(s). The gossip network is joined by
-contacting one or more well-known hosts specified by the --gossip
-flag. Every node should be run with the same list of bootstrap hosts
-to guarantee a connected network. An alternate approach is to use a
-single host for --gossip and round-robin DNS.
+Start a Cockroach node by joining the gossip network and exporting key ranges
+stored on physical device(s). The gossip network is joined by contacting one or
+more well-known hosts specified by the --gossip flag. Every node should be run
+with the same list of bootstrap hosts to guarantee a connected network. An
+alternate approach is to use a single host for --gossip and round-robin DNS.
 
-Each node exports data from one or more physical devices. These
-devices are specified via the --stores flag. This is a comma-separated
-list of paths to storage directories or for in-memory stores, the
-number of bytes. Although the paths should be specified to correspond
-uniquely to physical devices, this requirement isn't strictly
-enforced.
-
-For example:
-
-  cockroach start --gossip=host1:port1,host2:port2 --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
+Each node exports data from one or more physical devices. These devices are
+specified via the --stores flag. This is a comma-separated list of paths to
+storage directories or for in-memory stores, the number of bytes. Although the
+paths should be specified to correspond uniquely to physical devices, this
+requirement isn't strictly enforced. See the --stores flag help description for
+additional details.
 
 A node exports an HTTP API with the following endpoints:
 
   Health check:           /healthz
   Key-value REST:         ` + kv.RESTPrefix + `
-  Structured Schema REST: ` + structured.StructuredKeyPrefix,
-	Run: runStart,
+  Structured Schema REST: ` + structured.StructuredKeyPrefix + `
+`,
+	Example: `  cockroach start --certs=<dir> --gossip=host1:port1[,...] --stores=ssd=/mnt/ssd1,...`,
+	Run:     runStart,
 }
 
 // runStart starts the cockroach node using --stores as the list of
@@ -175,7 +168,6 @@ var exterminateCmd = &cobra.Command{
 	Use:   "exterminate",
 	Short: "destroy all data held by the node",
 	Long: `
-
 First shuts down the system and then destroys all data held by the
 node, cycling through each store specified by the --stores flag.
 `,
