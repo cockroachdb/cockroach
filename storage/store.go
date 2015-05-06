@@ -1032,19 +1032,11 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 	}, nil
 }
 
-// ExecuteCall .
-func (s *Store) ExecuteCmd(call client.Call) error {
-	return s.executeCmd(call.Args, call.Reply)
-}
-
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ObsoleteExecuteCmd(args proto.Request, reply proto.Response) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *Store) executeCmd(args proto.Request, reply proto.Response) error {
+func (s *Store) ExecuteCmd(call client.Call) error {
+	args, reply := call.Args, call.Reply
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
