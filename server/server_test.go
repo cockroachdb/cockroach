@@ -26,8 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	"code.google.com/p/snappy-go/snappy"
-
+	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
