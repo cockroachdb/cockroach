@@ -42,7 +42,6 @@ import (
 // DistSender and instead rely on local sender only.
 type retryableLocalSender struct {
 	*LocalSender
-	t *testing.T
 }
 
 func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
