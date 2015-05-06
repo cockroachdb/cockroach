@@ -18,7 +18,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -28,21 +27,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-var listParamsCmd = &cobra.Command{
-	Use:   "listparams",
-	Short: "list all available parameters and their default values",
-	Long: `
-List all available parameters and their default values.
-Note that parameter parsing stops after the first non-
-option after the command name. Hence, the options need
-to precede any additional arguments,
-
-  cockroach <command> [options] [arguments].`,
-	Run: func(cmd *cobra.Command, args []string) {
-		flag.CommandLine.PrintDefaults()
-	},
-}
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
@@ -83,7 +67,6 @@ func init() {
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats
-		listParamsCmd,
 		versionCmd,
 	)
 

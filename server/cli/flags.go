@@ -18,15 +18,48 @@
 package cli
 
 import (
+	"flag"
+	"reflect"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/server"
 
 	"github.com/spf13/cobra"
 )
 
+// pflagValue wraps flag.Value and implements the extra methods of the
+// pflag.Value interface.
+type pflagValue struct {
+	flag.Value
+}
+
+func (v pflagValue) Type() string {
+	t := reflect.TypeOf(v.Value).Elem()
+	return t.Kind().String()
+}
+
+func (v pflagValue) IsBoolFlag() bool {
+	t := reflect.TypeOf(v.Value).Elem()
+	return t.Kind() == reflect.Bool
+}
+
 // initFlags sets the server.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
 func initFlags(ctx *server.Context) {
+	// Map any flags registered in the standard "flag" package into the
+	// top-level cockroach command.
+	pf := cockroachCmd.PersistentFlags()
+	flag.VisitAll(func(f *flag.Flag) {
+		// Skip the testing flags.
+		//
+		// TODO(pmattis): Remove when we no longer depend on the "testing" package.
+		if strings.HasPrefix(f.Name, "test.") {
+			return
+		}
+		pf.Var(pflagValue{f.Value}, f.Name, f.Usage)
+	})
+
 	for _, cmd := range nodeCmds {
 		f := cmd.Flags()
 
