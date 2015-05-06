@@ -19,8 +19,10 @@ package encoding
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -346,36 +348,71 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 
 // TestDecodeInvalidUvarint tests that invalid uvarint encodings panic.
 func TestDecodeInvalidUvarint(t *testing.T) {
-	testCases := [][]byte{
-		// length of 9 bytes should cause an error.
-		{0x11, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
+	tests := []struct{
+		name    string // name printed with errors.
+		buf     []byte // buf contains an invalid uvarint to decode.
+		pattern string // pattern is a regexp that matches the panic string.
+	}{
+		{
+			name:    "length of 9 bytes",
+			buf:     []byte{0x11, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
+			pattern: "invalid uvarint length of [0-9]+",
+		},
 	}
-	for _, c := range testCases {
+	for _, test := range tests {
 		func() {
 			defer func() {
-				if r := recover(); r == nil {
-					t.Error("expected panic")
+				r := recover()
+				if r == nil {
+					t.Errorf("%q, expected panic", test.name)
+					return
+				}
+				str := fmt.Sprint(r)
+				match, err := regexp.MatchString(test.pattern, str)
+				if err != nil {
+					t.Errorf("%q, couldn't match regexp: %v", test.name, err)
+					return
+				}
+				if !match {
+					t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, str)
 				}
 			}()
-			DecodeUvarint(c)
+			DecodeUvarint(test.buf)
 		}()
 	}
 }
 
-// TestDecodeInvalidVarint tests that invalid uvarint encodings panic.
+// TestDecodeInvalidVarint tests that invalid varint encodings panic.
 func TestDecodeInvalidVarint(t *testing.T) {
-	testCases := [][]byte{
-		// overflows int64.
-		{0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+	tests := []struct{
+		name    string // name printed with errors.
+		buf     []byte // buf contains an invalid varint to decode.
+		pattern string // pattern is a regexp that matches the panic string.
+	}{
+		{
+			name:    "overflows int64",
+			buf:     []byte{0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			pattern: "varint [0-9]+ overflows int64",
+		},
 	}
-	for _, c := range testCases {
+	for _, test := range tests {
 		func() {
 			defer func() {
-				if r := recover(); r == nil {
-					t.Error("expected panic")
+				r := recover()
+				if r == nil {
+					t.Error("%q, expected panic", test.name)
+				}
+				str := fmt.Sprint(r)
+				match, err := regexp.MatchString(test.pattern, str)
+				if err != nil {
+					t.Errorf("%q, couldn't match regexp: %v", test.name, err)
+					return
+				}
+				if !match {
+					t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, str)
 				}
 			}()
-			DecodeVarint(c)
+			DecodeVarint(test.buf)
 		}()
 	}
 }
