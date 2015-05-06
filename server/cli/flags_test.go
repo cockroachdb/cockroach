@@ -42,7 +42,7 @@ func TestNoLinkTesting(t *testing.T) {
 
 	var addImports func(string)
 	addImports = func(root string) {
-		pkg, err := build.Import(root, "", 0)
+		pkg, err := build.Import(root, build.Default.GOPATH, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
