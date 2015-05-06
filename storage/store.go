@@ -1033,14 +1033,14 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 }
 
 // ExecuteCall .
-func (s *Store) ExecuteCall(call client.Call) error {
+func (s *Store) ExecuteCmd(call client.Call) error {
 	return s.executeCmd(call.Args, call.Reply)
 }
 
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
+func (s *Store) ObsoleteExecuteCmd(args proto.Request, reply proto.Response) error {
 	return s.executeCmd(args, reply)
 }
 
@@ -1077,7 +1077,7 @@ func (s *Store) executeCmd(args proto.Request, reply proto.Response) error {
 			return util.RetryBreak, err
 		}
 
-		if err = rng.AddCmd(args, reply, true); err == nil {
+		if err = rng.AddCmd(client.Call{Args: args, Reply: reply}, true); err == nil {
 			return util.RetryBreak, nil
 		}
 
@@ -1207,7 +1207,7 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Rang
 		resolveReply := &proto.InternalResolveIntentResponse{}
 		// Add resolve command with wait=false to add to Raft but not wait for completion.
 		waitForResolve := wait && i == len(wiErr.Intents)-1
-		if resolveErr := rng.AddCmd(resolveArgs, resolveReply, waitForResolve); resolveErr != nil {
+		if resolveErr := rng.AddCmd(client.Call{Args: resolveArgs, Reply: resolveReply}, waitForResolve); resolveErr != nil {
 			return resolveErr
 		}
 	}

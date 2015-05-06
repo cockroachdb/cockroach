@@ -485,7 +485,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 }
 
 // AddCall .
-func (r *Range) AddCall(call client.Call, wait bool) error {
+func (r *Range) AddCmd(call client.Call, wait bool) error {
 	return r.addCmd(call.Args, call.Reply, wait)
 }
 
@@ -495,7 +495,7 @@ func (r *Range) AddCall(call client.Call, wait bool) error {
 // either along the read-only execution path or the read-write Raft
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
-func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) ObsoleteAddCmd(args proto.Request, reply proto.Response, wait bool) error {
 	return r.addCmd(args, reply, wait)
 }
 
