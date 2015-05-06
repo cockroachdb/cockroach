@@ -160,7 +160,11 @@ var permCmds = []*cobra.Command{
 }
 
 var permCmd = &cobra.Command{
-	Use: "permission",
+	Use:   "permission",
+	Short: "get, set, list and remove permissions",
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Usage()
+	},
 }
 
 func init() {

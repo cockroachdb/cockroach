@@ -53,7 +53,7 @@ var getCmd = &cobra.Command{
 	Use:   "get [options] <key>",
 	Short: "gets the value for a key",
 	Long: `
-Fetches and display the value for <key>.
+Fetches and displays the value for <key>.
 `,
 	Run: runGet,
 }
@@ -315,7 +315,11 @@ var kvCmds = []*cobra.Command{
 }
 
 var kvCmd = &cobra.Command{
-	Use: "kv",
+	Use:   "kv",
+	Short: "get, put, increment, delete and scan key/value pairs",
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Usage()
+	},
 }
 
 func init() {

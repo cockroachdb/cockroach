@@ -164,7 +164,11 @@ var rangeCmds = []*cobra.Command{
 }
 
 var rangeCmd = &cobra.Command{
-	Use: "range",
+	Use:   "range",
+	Short: "list, split and merge ranges",
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Usage()
+	},
 }
 
 func init() {
