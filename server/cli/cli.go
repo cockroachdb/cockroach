@@ -84,8 +84,7 @@ Aliases:
 {{end}}{{if .HasExample}}
 
 Examples:
-{{ .Example }}
-{{end}}{{ if .HasRunnableSubCommands}}
+{{ .Example }}{{end}}{{ if .HasRunnableSubCommands}}
 
 Available Commands: {{range .Commands}}{{if and (.Runnable) (not .Deprecated)}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}

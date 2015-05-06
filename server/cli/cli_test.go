@@ -147,8 +147,8 @@ func ExampleGlogFlags() {
 	c := newCLITest()
 
 	c.Run("kv --alsologtostderr=false scan")
-	c.Run("kv --log_backtrace_at=foo.go:1 scan")
-	c.Run("kv --log_dir='' scan")
+	c.Run("kv --log-backtrace-at=foo.go:1 scan")
+	c.Run("kv --log-dir='' scan")
 	c.Run("kv --logtostderr scan")
 	c.Run("kv --stderrthreshold=2 scan")
 	c.Run("kv --v=0 scan")
@@ -156,8 +156,8 @@ func ExampleGlogFlags() {
 
 	// Output:
 	// kv --alsologtostderr=false scan
-	// kv --log_backtrace_at=foo.go:1 scan
-	// kv --log_dir='' scan
+	// kv --log-backtrace-at=foo.go:1 scan
+	// kv --log-dir='' scan
 	// kv --logtostderr scan
 	// kv --stderrthreshold=2 scan
 	// kv --v=0 scan

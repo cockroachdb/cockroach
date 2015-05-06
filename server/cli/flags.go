@@ -43,6 +43,81 @@ func (v pflagValue) IsBoolFlag() bool {
 	return t.Kind() == reflect.Bool
 }
 
+var flagUsage = map[string]string{
+	"addr": `
+        The host:port to bind for HTTP/RPC traffic
+`,
+	"attrs": `
+        An ordered, colon-separated list of node attributes. Attributes are
+        arbitrary strings specifying topography or machine
+        capabilities. Topography might include datacenter designation
+        (e.g. "us-west-1a", "us-west-1b", "us-east-1c"). Machine capabilities
+        might include specialized hardware or number of cores (e.g. "gpu",
+        "x16c"). The relative geographic proximity of two nodes is inferred
+        from the common prefix of the attributes list, so topographic
+        attributes should be specified first and in the same order for all
+        nodes. For example:
+
+          --attrs=us-west-1b,gpu.
+`,
+	"cache-size": `
+        Total size in bytes for caches, shared evenly if there are multiple
+        storage devices.
+`,
+	"certs": `
+        Directory containing RSA key and x509 certs. This flag is required if
+        --insecure=false.
+`,
+	"gossip": `
+        A comma-separated list of gossip addresses or resolvers for gossip
+        bootstrap. Each item in the list has an optional type:
+        [type=]<address>. An unspecified type means ip address or dns. Type can
+        also be a load balancer ("lb"), a unix socket ("unix") or, for
+        single-node systems, "self".
+`,
+	"gossip-interval": `
+        Approximate interval (time.Duration) for gossiping new information to peers.
+`,
+	"linearizable": `
+        Enables linearizable behaviour of operations on this node by making
+        sure that no commit timestamp is reported back to the client until all
+        other node clocks have necessarily passed it.
+`,
+	"insecure": `
+        Run over plain HTTP. WARNING: this is strongly discouraged.
+`,
+	"max-offset": `
+        The maximum clock offset for the cluster. Clock offset is measured on
+        all node-to-node links and if any node notices it has clock offset in
+        excess of --max-offset, it will commit suicide. Setting this value too
+        high may decrease transaction performance in the presence of
+        contention.
+`,
+	"metrics-frequency": `
+        Adjust the frequency at which the server records its own internal metrics.
+`,
+	"scan-interval": `
+        Adjusts the target for the duration of a single scan through a store's
+        ranges. The scan is slowed as necessary to approximately achieve this
+        duration.
+`,
+	"stores": `
+        A comma-separated list of stores, specified by a colon-separated list
+        of device attributes followed by '=' and either a filepath for a
+        persistent store or an integer size in bytes for an in-memory
+        store. Device attributes typically include whether the store is flash
+        (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device
+        attributes might also include speeds and other specs (7200rpm,
+        200kiops, etc.). For example:
+
+          --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.
+`,
+}
+
+func normalizeStdFlagName(s string) string {
+	return strings.Replace(s, "_", "-", -1)
+}
+
 // initFlags sets the server.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
@@ -57,71 +132,52 @@ func initFlags(ctx *server.Context) {
 		if strings.HasPrefix(f.Name, "test.") {
 			return
 		}
-		pf.Var(pflagValue{f.Value}, f.Name, f.Usage)
+		pf.Var(pflagValue{f.Value}, normalizeStdFlagName(f.Name), f.Usage)
 	})
 
-	for _, cmd := range nodeCmds {
-		f := cmd.Flags()
+	if f := initCmd.Flags(); true {
+		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
+		initCmd.MarkFlagRequired("stores")
+	}
 
+	if f := startCmd.Flags(); true {
 		// Server flags.
+		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, flagUsage["attrs"])
+		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
+		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, flagUsage["max-offset"])
+		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency,
+			flagUsage["metrics-frequency"])
 
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, "the host:port to bind for HTTP/RPC traffic")
-
-		f.StringVar(&ctx.Stores, "stores", ctx.Stores, "specify a comma-separated list of stores, "+
-			"specified by a colon-separated list of device attributes followed by '=' and "+
-			"either a filepath for a persistent store or an integer size in bytes for an "+
-			"in-memory store. Device attributes typically include whether the store is "+
-			"flash (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device "+
-			"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
-			"For example, --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.")
-
-		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify an ordered, colon-separated list of node "+
-			"attributes. Attributes are arbitrary strings specifying topography or "+
-			"machine capabilities. Topography might include datacenter designation "+
-			"(e.g. \"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+
-			"might include specialized hardware or number of cores (e.g. \"gpu\", "+
-			"\"x16c\"). "+
-			"The relative geographic proximity of two nodes is inferred from the "+
-			"common prefix of the attributes list, so topographic attributes should be "+
-			"specified first and in the same order for all nodes. "+
-			"For example: --attrs=us-west-1b,gpu.")
-
-		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, "specify "+
-			"the maximum clock offset for the cluster. Clock offset is measured on all "+
-			"node-to-node links and if any node notices it has clock offset in excess "+
-			"of --max-offset, it will commit suicide. Setting this value too high may "+
-			"decrease transaction performance in the presence of contention.")
-
-		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, "specify "+
-			"--metrics-frequency to adjust the frequency at which the server records "+
-			"its own internal metrics.")
+		// Security flags.
+		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 
 		// Gossip flags.
-
-		f.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, "specify a "+
-			"comma-separated list of gossip addresses or resolvers for gossip bootstrap. "+
-			"Each item in the list has an optional type: [type=]<address>. "+
-			"Unspecified type means ip address or dns. Type can also be a load balancer (\"lb\"), "+
-			"a unix socket (\"unix\") or, for single-node systems, \"self\".")
-
+		f.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, flagUsage["gossip"])
 		f.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
-			"approximate interval (time.Duration) for gossiping new information to peers.")
+			flagUsage["gossip-interval"])
 
 		// KV flags.
-
-		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, "enables linearizable behaviour "+
-			"of operations on this node by making sure that no commit timestamp is reported "+
-			"back to the client until all other node clocks have necessarily passed it.")
+		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, flagUsage["linearizable"])
 
 		// Engine flags.
+		f.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, flagUsage["cache-size"])
+		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, flagUsage["scan-interval"])
 
-		f.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, "total size in bytes for "+
-			"caches, shared evenly if there are multiple storage devices.")
+		startCmd.MarkFlagRequired("gossip")
+		startCmd.MarkFlagRequired("stores")
+	}
 
-		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, "specify "+
-			"--scan-interval to adjust the target for the duration of a single scan "+
-			"through a store's ranges. The scan is slowed as necessary to approximately "+
-			"achieve this duration.")
+	if f := exterminateCmd.Flags(); true {
+		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
+		exterminateCmd.MarkFlagRequired("stores")
+	}
+
+	for _, cmd := range certCmds {
+		f := cmd.Flags()
+		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+		cmd.MarkFlagRequired("certs")
 	}
 
 	var clientCmds []*cobra.Command
@@ -130,23 +186,13 @@ func initFlags(ctx *server.Context) {
 	clientCmds = append(clientCmds, acctCmds...)
 	clientCmds = append(clientCmds, permCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
+	clientCmds = append(clientCmds, quitCmd)
 
 	for _, cmd := range clientCmds {
-		cmd.Flags().StringVar(&ctx.Addr, "addr", ctx.Addr, "the address for connection to the cockroach cluster.")
-	}
-
-	for _, cmds := range [][]*cobra.Command{nodeCmds, clientCmds} {
-		for _, cmd := range cmds {
-			cmd.Flags().BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, "run over plain HTTP. WARNING: "+
-				"this is strongly discouraged.")
-		}
-	}
-
-	for _, cmds := range [][]*cobra.Command{nodeCmds, clientCmds, certCmds} {
-		for _, cmd := range cmds {
-			cmd.Flags().StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs. "+
-				"This flag is required if --insecure=false.")
-		}
+		f := cmd.Flags()
+		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
+		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
 	}
 }
 
