@@ -17,7 +17,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package cache
 
 import (
 	"bytes"
@@ -26,6 +26,10 @@ import (
 
 	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
+
+	// Define -logtostderr which is required by 'make test'`
+	// TODO(bdarnell): remove this once we've gotten our log situation straightened out.
+	_ "github.com/cockroachdb/cockroach/util/log"
 )
 
 type testKey string
@@ -59,7 +63,7 @@ func evictThreeOrMore(size int, key, value interface{}) bool {
 
 func TestCacheGet(t *testing.T) {
 	for _, tt := range getTests {
-		mc := NewUnorderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+		mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 		mc.Add(tt.keyToAdd, 1234)
 		val, ok := mc.Get(tt.keyToGet)
 		if ok != tt.expectedOk {
@@ -71,7 +75,7 @@ func TestCacheGet(t *testing.T) {
 }
 
 func TestCacheClear(t *testing.T) {
-	mc := NewUnorderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	mc.Add(testKey("a"), 1)
 	mc.Add(testKey("b"), 2)
 	mc.Clear()
@@ -88,7 +92,7 @@ func TestCacheClear(t *testing.T) {
 }
 
 func TestCacheDel(t *testing.T) {
-	mc := NewUnorderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	mc.Add(testKey("myKey"), 1234)
 	if val, ok := mc.Get(testKey("myKey")); !ok {
 		t.Fatal("TestDel returned no match")
@@ -103,7 +107,7 @@ func TestCacheDel(t *testing.T) {
 }
 
 func TestCacheEviction(t *testing.T) {
-	mc := NewUnorderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: evictTwoOrMore})
+	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: evictTwoOrMore})
 	// Insert two keys into cache which only holds 1.
 	mc.Add(testKey("a"), 1234)
 	val, ok := mc.Get(testKey("a"))
@@ -122,7 +126,7 @@ func TestCacheEviction(t *testing.T) {
 }
 
 func TestCacheLRU(t *testing.T) {
-	mc := NewUnorderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: evictThreeOrMore})
+	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: evictThreeOrMore})
 	// Insert two keys into cache.
 	mc.Add(testKey("a"), 1)
 	mc.Add(testKey("b"), 2)
@@ -139,7 +143,7 @@ func TestCacheLRU(t *testing.T) {
 }
 
 func TestCacheFIFO(t *testing.T) {
-	mc := NewUnorderedCache(CacheConfig{Policy: CacheFIFO, ShouldEvict: evictThreeOrMore})
+	mc := NewUnorderedCache(Config{Policy: CacheFIFO, ShouldEvict: evictThreeOrMore})
 	// Insert two keys into cache.
 	mc.Add(testKey("a"), 1)
 	mc.Add(testKey("b"), 2)
@@ -156,7 +160,7 @@ func TestCacheFIFO(t *testing.T) {
 }
 
 func TestOrderedCache(t *testing.T) {
-	oc := NewOrderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	oc := NewOrderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	oc.Add(testKey("a"), 1)
 	oc.Add(testKey("b"), 2)
 
@@ -202,7 +206,7 @@ func TestOrderedCache(t *testing.T) {
 }
 
 func TestOrderedCacheClear(t *testing.T) {
-	oc := NewOrderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	oc := NewOrderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	oc.Add(testKey("a"), 1)
 	oc.Add(testKey("b"), 2)
 	oc.Clear()
@@ -226,7 +230,7 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 }
 
 func TestIntervalCache(t *testing.T) {
-	ic := NewIntervalCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	key1 := ic.NewKey(rangeKey("a"), rangeKey("b"))
 	key2 := ic.NewKey(rangeKey("a"), rangeKey("c"))
 	key3 := ic.NewKey(rangeKey("d"), rangeKey("d\x00"))
@@ -256,7 +260,7 @@ func TestIntervalCache(t *testing.T) {
 }
 
 func TestIntervalCacheOverlap(t *testing.T) {
-	ic := NewIntervalCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 1)
 	ic.Add(ic.NewKey(rangeKey("c"), rangeKey("e")), 2)
 	ic.Add(ic.NewKey(rangeKey("b"), rangeKey("g")), 3)
@@ -279,7 +283,7 @@ func TestIntervalCacheOverlap(t *testing.T) {
 }
 
 func TestIntervalCacheClear(t *testing.T) {
-	ic := NewIntervalCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
 	key1 := ic.NewKey(rangeKey("a"), rangeKey("c"))
 	key2 := ic.NewKey(rangeKey("c"), rangeKey("e"))
 	ic.Add(key1, 1)

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -58,7 +59,7 @@ type txnMetadata struct {
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
-	keys *util.IntervalCache
+	keys *cache.IntervalCache
 
 	// lastUpdateTS is the latest time when the client sent transaction
 	// operations to this coordinator.
@@ -296,7 +297,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		if txnMeta, ok = tc.txns[string(header.Txn.ID)]; !ok {
 			txnMeta = &txnMetadata{
 				txn:             *header.Txn,
-				keys:            util.NewIntervalCache(util.CacheConfig{Policy: util.CacheNone}),
+				keys:            cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
 				lastUpdateTS:    tc.clock.Now(),
 				timeoutDuration: tc.clientTimeout,
 			}
