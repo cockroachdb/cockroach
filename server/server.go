@@ -26,8 +26,7 @@ import (
 	"strings"
 	"sync"
 
-	"code.google.com/p/snappy-go/snappy"
-
+	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"

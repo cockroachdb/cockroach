@@ -8,13 +8,12 @@ cmd github.com/robfig/glock
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
 bitbucket.org/tebeka/go2xunit 77968f802fb3
-code.google.com/p/snappy-go 8850bd446ad6
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store cb1ae010c5c75b7ce4f5c5d0ef92defcafdfdce4
 github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3
-github.com/cockroachdb/c-snappy af73b00e85e6f0e3c1fcc51f73f1d036df1e99ff
+github.com/cockroachdb/c-snappy 0975dbfba5147722a2cad2229f34aad2ee85c2b4
 github.com/coreos/etcd e5f2f401450b56947e231336f9e8350059428036
 github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
 github.com/gogo/protobuf bc946d07d1016848dfd2507f90f0859c9471681e

@@ -30,7 +30,6 @@ ${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
 # (and adding /... to repo paths will match packages that have been
 # downloaded but whose dependencies have not).
 pkgs="
-code.google.com/p/snappy-go/snappy
 github.com/biogo/store/interval
 github.com/biogo/store/llrb
 github.com/cockroachdb/c-lz4
