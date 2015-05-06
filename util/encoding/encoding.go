@@ -524,20 +524,6 @@ func parseVerb(format string, i int) (verb byte, ascending bool, width int, newI
 	return format[i], ascending, width, i + 1
 }
 
-func init() {
-	// Verify that our unsafe conversion from a string to a []byte in
-	// EncodeKey is kosher. We need the string data/len fields to be at
-	// the same offsets as the slice data/len fields.
-	strHdr := reflect.StringHeader{}
-	slHdr := reflect.SliceHeader{}
-	if unsafe.Offsetof(strHdr.Data) != unsafe.Offsetof(slHdr.Data) ||
-		unsafe.Offsetof(strHdr.Len) != unsafe.Offsetof(slHdr.Len) ||
-		unsafe.Sizeof(strHdr.Data) != unsafe.Sizeof(slHdr.Data) ||
-		unsafe.Sizeof(strHdr.Len) != unsafe.Sizeof(slHdr.Len) {
-		panic(fmt.Sprintf("unsafe string -> []byte conversion not ok: %+v %+v\n", strHdr, slHdr))
-	}
-}
-
 // EncodeKey encodes values to a byte slice according to a format
 // string. Returns the byte slice containing the encoded values.
 //
@@ -600,12 +586,20 @@ func EncodeKey(b []byte, format string, args ...interface{}) []byte {
 		case 's':
 			var arg []byte
 			if s, ok := args[0].(string); ok {
-				// Treat the string as a []byte to avoid an allocation when
-				// converting to a string. This is kosher only because the
-				// string header and slice header match on the first two
-				// fields and we know EncodeBytes{,Decreasing} does not keep
-				// a reference to the value it encodes.
-				arg = *(*[]byte)(unsafe.Pointer(&s))
+				// We unsafely convert the string to a []byte to avoid the
+				// usual allocation when converting to a []byte. This is
+				// kosher because we know that EncodeBytes{,Decreasing} does
+				// not keep a reference to the value it encodes. The first
+				// step is getting access to the string internals.
+				hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
+				// Next we treat the string data as a maximally sized array
+				// which we slice.
+				//
+				// Go vet complains about possible misuse of unsafe.Pointer
+				// here (converting a uintptr to an unsafe.Pointer). This
+				// usage is safe because the pointer value remains in the
+				// string.
+				arg = (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
 			} else {
 				arg = args[0].([]byte)
 			}
