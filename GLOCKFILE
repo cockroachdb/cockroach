@@ -17,6 +17,7 @@ github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/coreos/etcd 0ad6d7e3babb7667b24ca15ef8d54cfc870eff51
+github.com/docker/docker f5850e8e30b9420d26bd12136d8bbb6669d1e2bb
 github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
 github.com/gogo/protobuf e888c342b46b97d9bf828e98ac755d227b57d6e8
 github.com/golang/lint dea130113ab8ebacb52dbce09c9a4c92951afdca
@@ -26,6 +27,7 @@ github.com/julienschmidt/httprouter 8c199fb6259ffc1af525cc3ad52ee60ba8359669
 github.com/kisielk/errcheck a48456c583c0111c8310fc59335f6496b8eb85f1
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
 github.com/robfig/glock e0f25993e42f3aff6494cf397815841a3491d890
+github.com/samalba/dockerclient 979115d9e4d847c0e936d539c0584e25c226162e
 github.com/spf13/cobra c11766b405b388c6bbafaa1c8b3ad2eaf471b7b6
 github.com/spf13/pflag 0ed81a961505a7dfaab5490049a7a324743e6f03
 golang.org/x/net e0403b4e005737430c05a57aac078479844f919c
