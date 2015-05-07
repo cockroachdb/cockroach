@@ -16,17 +16,18 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
-PWD=$(shell pwd)
+# Ensure we only have one entry in GOPATH
+GOPATH := $(shell pwd)/../../../../..
 
-PROTOC      := $(PWD)/../../../../../bin/protoc
+PROTOC      := $(GOPATH)/bin/protoc
 PROTOS      := $(sort $(wildcard *.proto))
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
-GOGO_PROTOS := $(PWD)/../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
+GOGO_PROTOS := $(GOPATH)/src/github.com/gogo/protobuf/gogoproto/gogo.proto
 SOURCES     := $(PROTOS:.proto=.pb.cc) github.com/gogo/protobuf/gogoproto/gogo.pb.cc
 HEADERS     := $(PROTOS:.proto=.pb.h) github.com/gogo/protobuf/gogoproto/gogo.pb.h
 
-PROTO_PATH := $(PWD)/../..:$(PWD)/../../../../github.com/gogo/protobuf:$(PWD)/../../../../github.com/gogo/protobuf/protobuf
-PROTOC_GEN_GOGO := $(PWD)/../../../../../bin/protoc-gen-gogo
+PROTO_PATH := ../..:$(GOPATH)/src/github.com/gogo/protobuf:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
+PROTOC_GEN_GOGO := $(GOPATH)/bin/protoc-gen-gogo
 
 # Protoc is very picky about paths. It doesn't like '..' in any of the input filenames,
 # and generally expects paths and package names to match (this is especially important
@@ -43,7 +44,7 @@ PROTOC_GEN_GOGO := $(PWD)/../../../../../bin/protoc-gen-gogo
 # The gogoprotobuf customtype and unmarshaller extensions do not play nicely with integer
 # types. Manually wack the generate code to make it compile.
 all:
-	(cd ../.. && $(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=cockroach/storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS:%=cockroach/proto/%))
+	(cd ../.. && $(PROTOC) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=cockroach/storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS:%=cockroach/proto/%))
 	(cd ../.. && $(PROTOC) --cpp_out=cockroach/storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS))
 	(cd ../storage/engine && ln -sf gogoproto/gogo.pb.cc .)
 	(cd ../storage/engine && ln -sf cockroach/proto/*.pb.cc .)

@@ -42,7 +42,7 @@
 //	Recv Response: recvFrame(conn, body)
 package wire;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;

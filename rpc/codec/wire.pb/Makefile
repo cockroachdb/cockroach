@@ -15,14 +15,15 @@
 #
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-PROTOC      := ../../../../../../../bin/protoc
-PROTOS      := $(wildcard *.proto)
+# Ensure we only have one entry in GOPATH
+GOPATH := $(shell pwd)/../../../../../../..
+
+PROTOC      := $(GOPATH)/bin/protoc
+PROTOS      := $(sort $(wildcard *.proto))
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
-GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
 
-PROTO_PATH := ../../../../../../:../../../../../../github.com/gogo/protobuf/protobuf:../../../../../../github.com/gogo/protobuf/gogoproto
+PROTO_PATH := ../..:$(GOPATH)/src/github.com/gogo/protobuf:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
+PROTOC_GEN_GOGO := $(GOPATH)/bin/protoc-gen-gogo
 
-all: $(PROTO_GO)
-
-$(PROTO_GO): $(PROTOS)
-	$(PROTOC) --gogo_out=. --proto_path=.:$(PROTO_PATH) $(PROTOS)
+all:
+	$(PROTOC) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. --proto_path=.:$(PROTO_PATH) $(PROTOS)

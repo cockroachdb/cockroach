@@ -4,7 +4,7 @@
 
 package message;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 message ArithRequest {
 	optional int32 a = 1 [(gogoproto.nullable) = false];
