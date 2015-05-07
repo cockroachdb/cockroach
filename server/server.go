@@ -185,7 +185,7 @@ func (s *Server) initHTTP() {
 	s.admin.registerHandlers(s.mux)
 
 	// Status endpoints:
-	s.status.registerHandlers(s.mux)
+	s.mux.Handle(statusKeyPrefix, s.status)
 
 	s.mux.Handle(kv.RESTPrefix, s.kvREST)
 	s.mux.Handle(kv.DBPrefix, s.kvDB)

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/julienschmidt/httprouter"
 )
 
 const (
@@ -57,6 +58,9 @@ const (
 	// statusNodeKeyPrefix/nodes/{NodeID} -> shows only the status for that
 	//                                        specific node
 	statusNodeKeyPrefix = statusKeyPrefix + "nodes/"
+	// statusNodeKeyPattern is the pattern to match
+	// statusNodeKeyPrefix/nodes/{NodeID}
+	statusNodeKeyPattern = statusNodeKeyPrefix + ":id"
 
 	// statusStoreKeyPrefix exposes status for each store.
 	// statusStoreKeyPrefix/stores -> lists all nodes
@@ -64,6 +68,9 @@ const (
 	// statusStoreKeyPrefix/stores/{StoreID} -> shows only the status for that
 	//                                        specific store
 	statusStoreKeyPrefix = statusKeyPrefix + "stores/"
+	// statusStoreKeyPattern is the pattern to match
+	// statusStoreKeyPrefix/nodes/{StoreID}
+	statusStoreKeyPattern = statusStoreKeyPrefix + ":id"
 
 	// statusTransactionsKeyPrefix exposes transaction statistics.
 	statusTransactionsKeyPrefix = statusKeyPrefix + "txns/"
@@ -73,30 +80,37 @@ const (
 type statusServer struct {
 	db     *client.KV
 	gossip *gossip.Gossip
+	router *httprouter.Router
 }
 
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(db *client.KV, gossip *gossip.Gossip) *statusServer {
-	return &statusServer{
+	server := &statusServer{
 		db:     db,
 		gossip: gossip,
+		router: httprouter.New(),
 	}
+
+	server.router.GET(statusKeyPrefix, server.handleClusterStatus)
+	server.router.GET(statusGossipKeyPrefix, server.handleGossipStatus)
+	server.router.GET(statusLocalKeyPrefix, server.handleLocalStatus)
+	server.router.GET(statusLocalStacksKey, server.handleLocalStacks)
+	server.router.GET(statusNodeKeyPrefix, server.handleNodesStatus)
+	server.router.GET(statusNodeKeyPattern, server.handleNodeStatus)
+	server.router.GET(statusStoreKeyPrefix, server.handleStoresStatus)
+	server.router.GET(statusStoreKeyPattern, server.handleStoreStatus)
+	server.router.GET(statusTransactionsKeyPrefix, server.handleTransactionStatus)
+
+	return server
 }
 
-// registerHandlers registers admin handlers with the supplied
-// serve mux.
-func (s *statusServer) registerHandlers(mux *http.ServeMux) {
-	mux.HandleFunc(statusKeyPrefix, s.handleClusterStatus)
-	mux.HandleFunc(statusGossipKeyPrefix, s.handleGossipStatus)
-	mux.HandleFunc(statusLocalKeyPrefix, s.handleLocalStatus)
-	mux.HandleFunc(statusLocalStacksKey, s.handleLocalStacks)
-	mux.HandleFunc(statusNodeKeyPrefix, s.handleNodeStatus)
-	mux.HandleFunc(statusStoreKeyPrefix, s.handleStoreStatus)
-	mux.HandleFunc(statusTransactionsKeyPrefix, s.handleTransactionStatus)
+// ServeHTTP implements the http.Handler interface.
+func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.router.ServeHTTP(w, r)
 }
 
 // handleStatus handles GET requests for cluster status.
-func (s *statusServer) handleClusterStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleClusterStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	cluster := &status.Cluster{}
 	b, contentType, err := util.MarshalResponse(r, cluster, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
@@ -109,7 +123,7 @@ func (s *statusServer) handleClusterStatus(w http.ResponseWriter, r *http.Reques
 }
 
 // handleGossipStatus handles GET requests for gossip network status.
-func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.Header().Set("Content-Type", "application/json")
 	b, err := s.gossip.GetInfosAsJSON()
 	if err != nil {
@@ -120,7 +134,7 @@ func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request
 }
 
 // handleLocalStatus handles GET requests for local-node status.
-func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	local := struct {
 		BuildInfo util.BuildInfo `json:"buildInfo"`
 	}{
@@ -137,7 +151,7 @@ func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request)
 }
 
 // handleLocalStacks handles GET requests for goroutines stack traces.
-func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	bufSize := runtime.NumGoroutine() * stackTraceApproxSize
 	for {
 		buf := make([]byte, bufSize)
@@ -155,7 +169,7 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request)
 }
 
 // handleNodesStatus handles GET requests for all node statuses.
-func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	startKey := engine.KeyStatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -194,14 +208,14 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request)
 
 // handleNodeStatus handles GET requests for a single node's status. If no id is
 // available, it calls handleNodesStatus to return all node's statuses.
-func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	// TODO(bram) parse node-id in path and return the single node's status
 	// only.
-	s.handleNodesStatus(w, r)
+	s.handleNodesStatus(w, r, nil)
 }
 
 // handleStoresStatus handles GET requests for all store statuses.
-func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	startKey := engine.KeyStatusStorePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -240,14 +254,14 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 
 // handleStoreStatus handles GET requests for a single node's status. If no id
 // is available, it calls handleStoresStatus to return all store's statuses.
-func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	// TODO(bram) parse node-id in path and return the single store's status
 	// only.
-	s.handleStoresStatus(w, r)
+	s.handleStoresStatus(w, r, nil)
 }
 
 // handleTransactionStatus handles GET requests for transaction status.
-func (s *statusServer) handleTransactionStatus(w http.ResponseWriter, r *http.Request) {
+func (s *statusServer) handleTransactionStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"transactions": []}`))
 }

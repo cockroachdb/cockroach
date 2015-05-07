@@ -49,9 +49,7 @@ func startStatusServer() (*httptest.Server, *util.Stopper) {
 		log.Fatal(err)
 	}
 	status := newStatusServer(db, nil)
-	mux := http.NewServeMux()
-	status.registerHandlers(mux)
-	httpServer := httptest.NewTLSServer(mux)
+	httpServer := httptest.NewTLSServer(status.router)
 	stopper.AddCloser(httpServer)
 	return httpServer, stopper
 }
