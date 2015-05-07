@@ -2617,7 +2617,9 @@ func (m *ScanResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Rows = append(m.Rows, KeyValue{})
-			m.Rows[len(m.Rows)-1].Unmarshal(data[index:postIndex])
+			if err := m.Rows[len(m.Rows)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -2830,8 +2832,11 @@ func (m *EndTransactionResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Resolved = append(m.Resolved, Key{})
-			m.Resolved[len(m.Resolved)-1].Unmarshal(data[index:postIndex])
+			var v Key
+			m.Resolved = append(m.Resolved, v)
+			if err := m.Resolved[len(m.Resolved)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3490,7 +3495,9 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Requests = append(m.Requests, RequestUnion{})
-			m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex])
+			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3579,7 +3586,9 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Responses = append(m.Responses, ResponseUnion{})
-			m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex])
+			if err := m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int

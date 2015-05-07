@@ -1745,7 +1745,9 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.UpdatedReplicas = append(m.UpdatedReplicas, Replica{})
-			m.UpdatedReplicas[len(m.UpdatedReplicas)-1].Unmarshal(data[index:postIndex])
+			if err := m.UpdatedReplicas[len(m.UpdatedReplicas)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -1890,8 +1892,11 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Intents = append(m.Intents, Key{})
-			m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex])
+			var v Key
+			m.Intents = append(m.Intents, v)
+			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -2807,7 +2812,9 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Datapoints = append(m.Datapoints, &TimeSeriesDatapoint{})
-			m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex])
+			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int

@@ -116,8 +116,7 @@ acceptance:
 
 .PHONY: check
 check:
-	# TODO(tamird): contribute a patch to gogoproto that makes it pass errcheck and then remove this ignore
-	errcheck -ignore 'bytes:Write.*,compress/gzip:Close,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' -ignorepkg github.com/cockroachdb/cockroach/proto $(PKG)
+	errcheck -ignore 'bytes:Write.*,compress/gzip:Close,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' $(PKG)
 
 .PHONY: clean
 clean:

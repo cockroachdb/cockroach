@@ -257,7 +257,9 @@ func TestUnmarshal(t *testing.T) {
 	}
 	for i, c := range testCases {
 		key := &Key{}
-		key.Unmarshal(c.input)
+		if err := key.Unmarshal(c.input); err != nil {
+			t.Fatal(err)
+		}
 		if (key == nil) != c.expectedNil {
 			t.Errorf("%d: Expect result to not to be %v.", i, c.expectedNil)
 		}
