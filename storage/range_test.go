@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -148,7 +147,11 @@ func (tc *testContext) Start(t testing.TB) {
 		ctx.Transport = tc.transport
 		ctx.EventFeed = tc.feed
 		tc.store = NewStore(ctx, tc.engine, &proto.NodeDescriptor{NodeID: 1})
-		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, tc.stopper); err != nil {
+		if err := tc.store.Bootstrap(proto.StoreIdent{
+			ClusterID: "test",
+			NodeID:    1,
+			StoreID:   1,
+		}, tc.stopper); err != nil {
 			t.Fatal(err)
 		}
 		// We created the store without a real KV client, so it can't perform splits.
@@ -540,43 +543,30 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
-// TODO(tschottdorf): This test is almost fixed, we only need to have the
-// test server bootstrap with a non-empty ClusterID.
-func disabledTestRangeGossipFirstRange(t *testing.T) {
+func TestRangeGossipFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	if err := util.IsTrueWithin(func() bool {
-		for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor} {
-			info, err := tc.gossip.GetInfo(key)
-			if err != nil {
-				log.Warningf("still waiting for first range gossip of key %s...", key)
-				return false
-			}
-			if key == gossip.KeyFirstRangeDescriptor &&
-				info.(proto.RangeDescriptor).RaftID == 0 {
-				t.Errorf("expected gossiped range location, got %+v", info.(proto.RangeDescriptor))
-			}
-			if key == gossip.KeyClusterID && info.(string) == "" {
-				t.Errorf("expected non-empty gossiped cluster ID, got %+v", info)
-			}
+	for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor} {
+		info, err := tc.gossip.GetInfo(key)
+		if err != nil {
+			t.Errorf("missing first range gossip of key %s", key)
 		}
-		return true
-	}, 500*time.Millisecond); err != nil {
-		t.Error(err)
+		if key == gossip.KeyFirstRangeDescriptor &&
+			info.(proto.RangeDescriptor).RaftID == 0 {
+			t.Errorf("expected gossiped range location, got %+v", info.(proto.RangeDescriptor))
+		}
+		if key == gossip.KeyClusterID && info.(string) == "" {
+			t.Errorf("expected non-empty gossiped cluster ID, got %+v", info)
+		}
 	}
 }
 
-// TestRangeGossipAllConfigs verifies that all config types are
-// gossiped.
-// TODO(tschottdorf): re-enable: That means removing bootstrapRangeOnly
-// and then changing what it expects.
-func disabledTestRangeGossipAllConfigs(t *testing.T) {
+// TestRangeGossipAllConfigs verifies that all config types are gossiped.
+func TestRangeGossipAllConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	tc := testContext{
-		bootstrapMode: bootstrapRangeOnly,
-	}
+	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 	testData := []struct {
@@ -588,14 +578,9 @@ func disabledTestRangeGossipAllConfigs(t *testing.T) {
 		{gossip.KeyConfigZone, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {
-		info, err := tc.gossip.GetInfo(test.gossipKey)
+		_, err := tc.gossip.GetInfo(test.gossipKey)
 		if err != nil {
 			t.Fatal(err)
-		}
-		configMap := info.(PrefixConfigMap)
-		expConfigs := []*PrefixConfig{test.configs[0]}
-		if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
-			t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 		}
 	}
 }
