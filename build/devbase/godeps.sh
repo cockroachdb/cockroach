@@ -44,6 +44,7 @@ github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
 github.com/golang/glog
 github.com/inconshreveable/mousetrap
+github.com/julienschmidt/httprouter
 github.com/spf13/cobra
 github.com/spf13/pflag
 golang.org/x/net/context

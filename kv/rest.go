@@ -22,33 +22,32 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/julienschmidt/httprouter"
 )
 
 const (
 	// RESTPrefix is the prefix for RESTful endpoints used to
 	// interact directly with the key-value datastore.
 	RESTPrefix = "/kv/rest/"
-	// EntryPrefix is the prefix for endpoints that interact with individual key-value pairs directly.
+	// EntryPrefix is the prefix for endpoints that interact with individual
+	// key-value pairs directly.
 	EntryPrefix = RESTPrefix + "entry/"
+	// EntryPattern is the pattern used to route requests for individual keys.
+	EntryPattern = EntryPrefix + ":key"
 	// RangePrefix is the prefix for endpoints that interact with a range of key-value pairs.
 	RangePrefix = RESTPrefix + "range"
 	// CounterPrefix is the prefix for the endpoint that increments a key by a given amount.
 	CounterPrefix = RESTPrefix + "counter/"
+	// CounterPattern is the pattern used to route requests for incrementing
+	// counters.
+	CounterPattern = CounterPrefix + ":key"
 )
-
-// Function signture for an HTTP handler that only takes a writer and a request
-type actionHandler func(*RESTServer, http.ResponseWriter, *http.Request)
-
-// Function signture for an HTTP handler that takes a writer and a request and a storage key
-type actionKeyHandler func(*RESTServer, http.ResponseWriter, *http.Request, proto.Key)
 
 // HTTP methods, defined in RFC 2616.
 const (
@@ -59,57 +58,60 @@ const (
 	methodHead   = "HEAD"
 )
 
-// The routingTable maps various path + HTTP method combos to specific
-// server methods.
-var routingTable = map[string]map[string]actionHandler{
-	// TODO(andybons): For Entry and Counter prefixes, return JSON-ified
-	// response with option for “raw” value by passing ?raw=true.
-	EntryPrefix: {
-		methodGet:    keyedAction(EntryPrefix, (*RESTServer).handleGetAction),
-		methodPut:    keyedAction(EntryPrefix, (*RESTServer).handlePutAction),
-		methodPost:   keyedAction(EntryPrefix, (*RESTServer).handlePutAction),
-		methodDelete: keyedAction(EntryPrefix, (*RESTServer).handleDeleteAction),
-		methodHead:   keyedAction(EntryPrefix, (*RESTServer).handleHeadAction),
-	},
-	RangePrefix: {
-		// TODO(andybons): HEAD action handler.
-		methodGet:    (*RESTServer).handleRangeAction,
-		methodDelete: (*RESTServer).handleRangeAction,
-	},
-	CounterPrefix: {
-		methodHead:   keyedAction(CounterPrefix, (*RESTServer).handleHeadAction),
-		methodGet:    keyedAction(CounterPrefix, (*RESTServer).handleCounterAction),
-		methodPost:   keyedAction(CounterPrefix, (*RESTServer).handleCounterAction),
-		methodDelete: keyedAction(CounterPrefix, (*RESTServer).handleDeleteAction),
-	},
-}
+// Parameters used for range requests.
+const (
+	rangeParamStart = "start"
+	rangeParamEnd   = "end"
+	rangeParamLimit = "limit"
+)
 
 // A RESTServer provides a RESTful HTTP API to interact with
 // an underlying key-value store.
 type RESTServer struct {
-	db *client.KV // Key-value database client
+	router *httprouter.Router
+	db     *client.KV // Key-value database client
 }
 
 // NewRESTServer allocates and returns a new server.
 func NewRESTServer(db *client.KV) *RESTServer {
-	return &RESTServer{db: db}
+	server := &RESTServer{
+		router: httprouter.New(),
+		db:     db,
+	}
+
+	// Empty Keys should return an error messages instead of a 404.
+	server.router.GET(EntryPrefix, server.handleEmptyKey)
+	server.router.PUT(EntryPrefix, server.handleEmptyKey)
+	server.router.POST(EntryPrefix, server.handleEmptyKey)
+	server.router.DELETE(EntryPrefix, server.handleEmptyKey)
+	server.router.HEAD(EntryPrefix, server.handleEmptyKey)
+
+	server.router.GET(EntryPattern, server.handleGetAction)
+	server.router.PUT(EntryPattern, server.handlePutAction)
+	server.router.POST(EntryPattern, server.handlePutAction)
+	server.router.DELETE(EntryPattern, server.handleDeleteAction)
+	server.router.HEAD(EntryPattern, server.handleHeadAction)
+
+	server.router.GET(RangePrefix, server.handleRangeAction)
+	server.router.DELETE(RangePrefix, server.handleRangeAction)
+
+	// Empty Keys should return an error messages instead of a 404.
+	server.router.HEAD(CounterPrefix, server.handleEmptyKey)
+	server.router.GET(CounterPrefix, server.handleEmptyKey)
+	server.router.POST(CounterPrefix, server.handleEmptyKey)
+	server.router.DELETE(CounterPrefix, server.handleEmptyKey)
+
+	server.router.HEAD(CounterPattern, server.handleHeadAction)
+	server.router.GET(CounterPattern, server.handleCounterAction)
+	server.router.POST(CounterPattern, server.handleCounterAction)
+	server.router.DELETE(CounterPattern, server.handleDeleteAction)
+
+	return server
 }
 
-// ServeHTTP satisfies the http.Handler interface and arbitrates requests
-// to the appropriate function based on the request’s HTTP method.
+// ServeHTTP implements the http.Handler interface.
 func (s *RESTServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for endPoint, epRoutes := range routingTable {
-		if strings.HasPrefix(r.URL.Path, endPoint) {
-			epHandler := epRoutes[r.Method]
-			if epHandler == nil {
-				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-				return
-			}
-			epHandler(s, w, r)
-			return
-		}
-	}
-	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	s.router.ServeHTTP(w, r)
 }
 
 // writeJSON marshals v to JSON and writes the result to w with
@@ -122,39 +124,14 @@ func writeJSON(w http.ResponseWriter, statusCode int, v interface{}) {
 	}
 }
 
-// keyedAction wraps the given actionKeyHandler func in a closure that
-// extracts the key from the request and passes it on to the handler.
-// The closure is then returned for later execution.
-func keyedAction(pathPrefix string, act actionKeyHandler) actionHandler {
-	return func(s *RESTServer, w http.ResponseWriter, r *http.Request) {
-		key, err := dbKey(r.URL.Path, pathPrefix)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		act(s, w, r, key)
-	}
+// handleEmptyKey returns a specific error instead of a generic 404 if no key
+// is entered.
+func (s *RESTServer) handleEmptyKey(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	http.Error(w, errors.New("empty key not allowed").Error(), http.StatusBadRequest)
 }
 
-func dbKey(path, apiPrefix string) (proto.Key, error) {
-	result, err := url.QueryUnescape(strings.TrimPrefix(path, apiPrefix))
-	if err == nil {
-		k := proto.Key(result)
-		if len(k) == 0 {
-			return nil, errors.New("empty key not allowed")
-		}
-		return k, nil
-	}
-	return nil, err
-}
-
-const (
-	rangeParamStart = "start"
-	rangeParamEnd   = "end"
-	rangeParamLimit = "limit"
-)
-
-func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request) {
+// handleRangeAction deals with all range requests.
+func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	// TODO(andybons): Allow the client to specify range parameters via
 	// request headers as well, allowing query parameters to override the
 	// range headers if necessary.
@@ -210,8 +187,10 @@ func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, results)
 }
 
-func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+// handleCounterAction deals with all counter increment requests.
+func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	// GET Requests are just an increment with 0 value.
+	key := proto.Key(ps.ByName("key"))
 	var inputVal int64
 
 	if r.Method == methodPost {
@@ -244,7 +223,9 @@ func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, ir)
 }
 
-func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+// handlePutAction deals with all key put requests.
+func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	key := proto.Key(ps.ByName("key"))
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -267,7 +248,9 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, key
 	writeJSON(w, http.StatusOK, pr)
 }
 
-func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+// handlePutAction deals with all key get requests.
+func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	key := proto.Key(ps.ByName("key"))
 	gr := &proto.GetResponse{}
 	if err := s.db.Run(client.Call{
 		Args: &proto.GetRequest{
@@ -287,7 +270,9 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, key
 	writeJSON(w, status, gr)
 }
 
-func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+// handlePutAction deals with all key head requests.
+func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	key := proto.Key(ps.ByName("key"))
 	cr := &proto.ContainsResponse{}
 	if err := s.db.Run(client.Call{
 		Args: &proto.ContainsRequest{
@@ -306,7 +291,9 @@ func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, ke
 	writeJSON(w, status, cr)
 }
 
-func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+// handlePutAction deals with all key delete requests.
+func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	key := proto.Key(ps.ByName("key"))
 	dr := &proto.DeleteResponse{}
 	if err := s.db.Run(client.Call{
 		Args: &proto.DeleteRequest{
