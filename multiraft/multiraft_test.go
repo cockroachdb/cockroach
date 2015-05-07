@@ -380,6 +380,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	cmdID := int32(0) // updated atomically from now on
 
 	cmdIDFormat := "%0" + fmt.Sprintf("%d", commandIDLen) + "d"
+	teardown := make(chan struct{})
 
 	proposerFn := func(i int) {
 		var seq int32
@@ -404,8 +405,8 @@ func TestRapidMembershipChange(t *testing.T) {
 						break retry
 					}
 					log.Infof("%-3d: err  %s %s", i, cmdID, err)
-				case <-time.After(10 * time.Millisecond):
-					t.Fatalf("timed out waiting for command result %s", cmdID)
+				case <-teardown:
+					return
 				}
 			}
 			cluster.nodes[0].RemoveGroup(groupID)
@@ -421,10 +422,12 @@ func TestRapidMembershipChange(t *testing.T) {
 			log.Infof("   : recv %s", e.CommandID)
 		}
 		if fmt.Sprintf(cmdIDFormat, numCommit) == e.CommandID {
+			log.Infof("received everything we asked for, ending test")
 			break
 		}
 
 	}
+	close(teardown)
 
 	// TODO(tschottdorf): get the stray RaftMessage calls under control.
 	// Maybe they should be ignored by leaktest?
