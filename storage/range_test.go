@@ -2029,20 +2029,31 @@ func TestInternalTruncateLog(t *testing.T) {
 	}
 }
 
-// TODO(tschottdorf) fails because it assumes Raft is dormant initially.
-func disabledTestRaftStorage(t *testing.T) {
+func TestRaftStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	var tc testContext
+	var eng engine.Engine
 	storagetest.RunTests(t,
 		func(t *testing.T) storagetest.WriteableStorage {
-			// Make sure the Raft group doesn't auto-start, or the elections
-			// will write HardState which confuses storagetest.
-			tc = testContext{}
-			tc.Start(t)
-			return tc.rng
+			eng = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+			// Fake store to house the engine.
+			store := &Store{
+				ctx: StoreContext{
+					Clock: hlc.NewClock(hlc.UnixNano),
+				},
+				engine: eng,
+			}
+			rng, err := NewRange(&proto.RangeDescriptor{
+				RaftID:   1,
+				StartKey: proto.KeyMin,
+				EndKey:   proto.KeyMax,
+			}, store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return rng
 		},
 		func(t *testing.T, r storagetest.WriteableStorage) {
-			tc.Stop()
+			eng.Close()
 		})
 }
 
