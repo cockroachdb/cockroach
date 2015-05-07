@@ -38,6 +38,10 @@ func TestStdFlagToPflag(t *testing.T) {
 }
 
 func TestNoLinkTesting(t *testing.T) {
+	if build.Default.GOPATH == "" {
+		t.Skip("GOPATH isn't set")
+	}
+
 	imports := make(map[string]struct{})
 
 	var addImports func(string)
