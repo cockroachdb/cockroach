@@ -121,6 +121,9 @@ func TestRangeDescriptorContains(t *testing.T) {
 			if desc.ContainsKey(test.start) != test.contains {
 				t.Errorf("expected key %q within range", test.start)
 			}
+			if desc.ContainsKeyRange(test.start, test.end) {
+				t.Errorf("expected false for single key range %q", test.start)
+			}
 		} else {
 			if desc.ContainsKeyRange(test.start, test.end) != test.contains {
 				t.Errorf("expected key range %q-%q within range", test.start, test.end)

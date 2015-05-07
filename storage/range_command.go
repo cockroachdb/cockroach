@@ -961,7 +961,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		// Noop.
 		return
 	}
-	subsumedRng := r.rm.LookupRange(desc.EndKey, desc.EndKey)
+	subsumedRng := r.rm.LookupRange(desc.EndKey, nil)
 	if subsumedRng == nil {
 		reply.SetGoError(util.Errorf("ranges not collocated; migration of ranges in anticipation of merge not yet implemented"))
 		return

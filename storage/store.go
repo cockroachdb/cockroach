@@ -536,7 +536,7 @@ func (s *Store) startGossip() error {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupRange(engine.KeyMin, engine.KeyMin.Next())
+	rng := s.LookupRange(engine.KeyMin, nil)
 	if rng != nil {
 		log.Infof("gossiping first range on store %d, range %d",
 			s.StoreID(), rng.Desc().RaftID)
@@ -555,7 +555,7 @@ func (s *Store) maybeGossipFirstRange() error {
 // periodically.
 func (s *Store) maybeGossipConfigs() error {
 	for _, cd := range configDescriptors {
-		rng := s.LookupRange(cd.keyPrefix, cd.keyPrefix.Next())
+		rng := s.LookupRange(cd.keyPrefix, nil)
 		if rng == nil {
 			// This store has no range with this configuration.
 			continue
@@ -714,7 +714,7 @@ func (s *Store) GetRange(raftID int64) (*Range, error) {
 // "rangesByKey" RangeSlice. Returns nil if no range is found for
 // specified key range. Note that the specified keys are transformed
 // using Key.Address() to ensure we lookup ranges correctly for local
-// keys.
+// keys. When end is nill, a range that contains start is looked up.
 func (s *Store) LookupRange(start, end proto.Key) *Range {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

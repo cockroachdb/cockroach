@@ -287,7 +287,7 @@ func (m *multiTestContext) replicateRange(raftID int64, sourceStoreIndex int, de
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(raftID) to ensure that the
 			// snaphost has been transferred and the descriptor initialized.
-			if m.stores[dest].LookupRange(rng.Desc().StartKey, rng.Desc().StartKey) == nil {
+			if m.stores[dest].LookupRange(rng.Desc().StartKey, nil) == nil {
 				return util.Errorf("range not found on store %d", dest)
 			}
 		}

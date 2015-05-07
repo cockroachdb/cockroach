@@ -112,12 +112,12 @@ func (r *RangeDescriptor) ContainsKey(key []byte) bool {
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
-// key range from start to end.
+// key range from start (inclusive) to end (exclusive).
 func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 	if len(end) == 0 {
 		return r.ContainsKey(start)
 	}
-	if bytes.Compare(end, start) < 0 {
+	if bytes.Compare(end, start) <= 0 {
 		return false
 	}
 	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0

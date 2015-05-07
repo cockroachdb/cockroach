@@ -209,6 +209,10 @@ func TransactionKey(key proto.Key, id []byte) proto.Key {
 // local keys incorporating the Raft ID are not (e.g. response cache
 // entries, and range stats).
 func KeyAddress(k proto.Key) proto.Key {
+	if k == nil {
+		return nil
+	}
+
 	if !bytes.HasPrefix(k, KeyLocalPrefix) {
 		return k
 	}
