@@ -20,6 +20,7 @@ package server
 import (
 	"net/http"
 	"runtime"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -208,10 +209,37 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 
 // handleNodeStatus handles GET requests for a single node's status. If no id is
 // available, it calls handleNodesStatus to return all node's statuses.
-func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	// TODO(bram) parse node-id in path and return the single node's status
-	// only.
-	s.handleNodesStatus(w, r, nil)
+func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id, err := strconv.ParseInt(ps.ByName("id"), 10, 64)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	key := engine.NodeStatusKey(int32(id))
+
+	nodeStatus := &proto.NodeStatus{}
+	call := client.GetProto(key, nodeStatus)
+	resp := call.Reply.(*proto.GetResponse)
+	if err := s.db.Run(call); err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if resp.Error != nil {
+		log.Error(resp.Error)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	b, contentType, err := util.MarshalResponse(r, nodeStatus, []util.EncodingType{util.JSONEncoding})
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(b)
 }
 
 // handleStoresStatus handles GET requests for all store statuses.
@@ -254,10 +282,37 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 
 // handleStoreStatus handles GET requests for a single node's status. If no id
 // is available, it calls handleStoresStatus to return all store's statuses.
-func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	// TODO(bram) parse node-id in path and return the single store's status
-	// only.
-	s.handleStoresStatus(w, r, nil)
+func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id, err := strconv.ParseInt(ps.ByName("id"), 10, 32)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	key := engine.StoreStatusKey(int32(id))
+
+	storeStatus := &proto.StoreStatus{}
+	call := client.GetProto(key, storeStatus)
+	resp := call.Reply.(*proto.GetResponse)
+	if err := s.db.Run(call); err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if resp.Error != nil {
+		log.Error(resp.Error)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	b, contentType, err := util.MarshalResponse(r, storeStatus, []util.EncodingType{util.JSONEncoding})
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(b)
 }
 
 // handleTransactionStatus handles GET requests for transaction status.
