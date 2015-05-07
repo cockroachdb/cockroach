@@ -96,9 +96,11 @@ var TestingCommandFilter func(proto.Request, proto.Response) bool
 // discarded prefix to the log, so we must begin the log at an arbitrary
 // index greater than 1.
 const (
-	raftInitialLogIndex        = 10
-	raftInitialLogTerm         = 5
-	defaultLeaderLeaseDuration = time.Second
+	raftInitialLogIndex = 10
+	raftInitialLogTerm  = 5
+
+	// DefaultLeaderLeaseDuration is the default duration of the leader lease.
+	DefaultLeaderLeaseDuration = time.Second
 )
 
 // configDescriptor describes administrative configuration maps
@@ -317,7 +319,7 @@ func (r *Range) newNotLeaderError() error {
 func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
-	duration := int64(defaultLeaderLeaseDuration)
+	duration := int64(DefaultLeaderLeaseDuration)
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
 	args := &proto.InternalLeaderLeaseRequest{
