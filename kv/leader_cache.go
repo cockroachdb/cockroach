@@ -21,14 +21,14 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 )
 
 // A leaderCache is a cache used to keep track of the leader
 // replica of Raft consensus groups.
 type leaderCache struct {
 	mu    sync.RWMutex
-	cache *util.UnorderedCache
+	cache *cache.UnorderedCache
 }
 
 // newLeaderCache creates a new leaderCache of the given size.
@@ -36,8 +36,8 @@ type leaderCache struct {
 // are cheap.
 func newLeaderCache(size int) *leaderCache {
 	return &leaderCache{
-		cache: util.NewUnorderedCache(util.CacheConfig{
-			Policy: util.CacheLRU,
+		cache: cache.NewUnorderedCache(cache.Config{
+			Policy: cache.CacheLRU,
 			ShouldEvict: func(s int, key, value interface{}) bool {
 				return s > size
 			},

@@ -17,7 +17,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package cache
 
 import (
 	"container/list"
@@ -39,9 +39,9 @@ const (
 	CacheNone                       // No evictions; don't maintain ordering list
 )
 
-// A CacheConfig specifies the eviction policy, eviction
+// A Config specifies the eviction policy, eviction
 // trigger callback, and eviction listener callback.
-type CacheConfig struct {
+type Config struct {
 	// Policy is one of the consts listed for EvictionPolicy.
 	Policy EvictionPolicy
 
@@ -120,15 +120,15 @@ type cacheStore interface {
 // baseCache contains the config, cacheStore interface, and the linked
 // list for eviction order.
 type baseCache struct {
-	CacheConfig
+	Config
 	store cacheStore
 	ll    *list.List
 }
 
-func newBaseCache(config CacheConfig) *baseCache {
+func newBaseCache(config Config) *baseCache {
 	return &baseCache{
-		CacheConfig: config,
-		ll:          list.New(),
+		Config: config,
+		ll:     list.New(),
 	}
 }
 
@@ -225,7 +225,7 @@ type UnorderedCache struct {
 }
 
 // NewUnorderedCache creates a new UnorderedCache backed by a hash map.
-func NewUnorderedCache(config CacheConfig) *UnorderedCache {
+func NewUnorderedCache(config Config) *UnorderedCache {
 	mc := &UnorderedCache{
 		baseCache: newBaseCache(config),
 		hmap:      make(map[interface{}]interface{}),
@@ -271,7 +271,7 @@ type OrderedCache struct {
 // NewOrderedCache creates a new Cache backed by a left-leaning red
 // black binary tree which supports binary searches via the Ceil() and
 // Floor() methods. See NewUnorderedCache() for details on parameters.
-func NewOrderedCache(config CacheConfig) *OrderedCache {
+func NewOrderedCache(config Config) *OrderedCache {
 	oc := &OrderedCache{
 		baseCache: newBaseCache(config),
 	}
@@ -381,7 +381,7 @@ func (ik *IntervalKey) Contains(lk *IntervalKey) bool {
 
 // NewIntervalCache creates a new Cache backed by an interval tree.
 // See NewCache() for details on parameters.
-func NewIntervalCache(config CacheConfig) *IntervalCache {
+func NewIntervalCache(config Config) *IntervalCache {
 	ic := &IntervalCache{
 		baseCache: newBaseCache(config),
 		tree:      &interval.Tree{},

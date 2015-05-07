@@ -21,7 +21,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 )
 
 // A CommandQueue maintains an interval tree of keys or key ranges for
@@ -48,7 +48,7 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	cache *util.IntervalCache
+	cache *cache.IntervalCache
 }
 
 type cmd struct {
@@ -59,7 +59,7 @@ type cmd struct {
 // NewCommandQueue returns a new command queue.
 func NewCommandQueue() *CommandQueue {
 	cq := &CommandQueue{
-		cache: util.NewIntervalCache(util.CacheConfig{Policy: util.CacheNone}),
+		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
 	}
 	cq.cache.OnEvicted = cq.onEvicted
 	return cq

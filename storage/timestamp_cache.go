@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -45,7 +45,7 @@ const (
 // with monotonic increases. The low water mark is initialized to
 // the current system time plus the maximum clock offset.
 type TimestampCache struct {
-	cache            *util.IntervalCache
+	cache            *cache.IntervalCache
 	lowWater, latest proto.Timestamp
 }
 
@@ -60,10 +60,10 @@ type cacheEntry struct {
 // hybrid clock.
 func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 	tc := &TimestampCache{
-		cache: util.NewIntervalCache(util.CacheConfig{Policy: util.CacheFIFO}),
+		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 	}
 	tc.Clear(clock)
-	tc.cache.CacheConfig.ShouldEvict = tc.shouldEvict
+	tc.cache.Config.ShouldEvict = tc.shouldEvict
 	return tc
 }
 

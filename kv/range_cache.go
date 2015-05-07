@@ -25,7 +25,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -63,7 +63,7 @@ type rangeDescriptorCache struct {
 	// rangeCache caches replica metadata for key ranges. The cache is
 	// filled while servicing read and write requests to the key value
 	// store.
-	rangeCache *util.OrderedCache
+	rangeCache *cache.OrderedCache
 	// rangeCacheMu protects rangeCache for concurrent access
 	rangeCacheMu sync.RWMutex
 }
@@ -74,8 +74,8 @@ type rangeDescriptorCache struct {
 func newRangeDescriptorCache(db rangeDescriptorDB, size int) *rangeDescriptorCache {
 	return &rangeDescriptorCache{
 		db: db,
-		rangeCache: util.NewOrderedCache(util.CacheConfig{
-			Policy: util.CacheLRU,
+		rangeCache: cache.NewOrderedCache(cache.Config{
+			Policy: cache.CacheLRU,
 			ShouldEvict: func(n int, k, v interface{}) bool {
 				return n > size
 			},
