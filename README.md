@@ -81,9 +81,9 @@ DIR=$(mktemp -d /tmp/dbXXX)
 ./cockroach cert create-ca
 ./cockroach cert create-node 127.0.0.1 localhost $(hostname)
 # Initialize data directories.
-./cockroach init --stores ssd=$DIR
+./cockroach init --stores=ssd=$DIR
 # Start the server.
-./cockroach start --stores ssd="$DIR" --gossip self:// &
+./cockroach start --stores=ssd="$DIR" --gossip=self:// &
 ```
 This initializes and starts a single-node cluster in the background.
 
@@ -169,13 +169,13 @@ Once you've built your image, you may want to run the tests:
 Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node:
 
 ```bash
-docker run -v /data -v /certs cockroachdb/cockroach init --stores ssd=/data
+docker run -v /data -v /certs cockroachdb/cockroach init --stores=ssd=/data
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  cert create-ca --certs /certs
+  cert create-ca --certs=/certs
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
-  cert create-node --certs /certs 127.0.0.1 localhost roachnode
+  cert create-node --certs=/certs 127.0.0.1 localhost roachnode
 docker run -p 8080:8080 -h roachnode --volumes-from=$(docker ps -q -n 1) \
-  cockroachdb/cockroach start --certs /certs --stores ssd=/data --gossip self://
+  cockroachdb/cockroach start --certs=/certs --stores=ssd=/data --gossip=self://
 ```
 
 Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.
