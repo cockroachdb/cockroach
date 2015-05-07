@@ -377,6 +377,11 @@ type group struct {
 	// is written to proposal.ch and it is removed from this
 	// map.
 	pending map[string]*proposal
+	// writing is true while an active writeTask exists for this group.
+	// We need to keep track of this since groups can be removed and
+	// re-added at any time, and we don't want a writeTask started by
+	// an earlier incarnation to be fed into a later one.
+	writing bool
 }
 
 type createGroupOp struct {
@@ -513,7 +518,7 @@ func (s *state) start(stopper *util.Stopper) {
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
-				s.removeGroup(op)
+				s.removeGroup(op, readyGroups)
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
@@ -550,6 +555,21 @@ func (s *state) start(stopper *util.Stopper) {
 			}
 		}
 	})
+}
+
+func (s *state) removePending(g *group, prop *proposal, err error) {
+	if prop == nil {
+		return
+	}
+	// Because of the way we re-queue proposals during leadership
+	// changes, we may finish the same proposal object twice.
+	if prop.ch != nil {
+		prop.ch <- err
+		prop.ch = nil
+	}
+	if g != nil {
+		delete(g.pending, prop.commandID)
+	}
 }
 
 func (s *state) coalescedHeartbeat() {
@@ -633,7 +653,7 @@ func (s *state) createGroup(groupID uint64) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
 	}
-	if log.V(6) {
+	if log.V(3) {
 		log.Infof("node %v creating group %v", s.nodeID, groupID)
 	}
 
@@ -695,23 +715,20 @@ func (s *state) createGroup(groupID uint64) error {
 	return nil
 }
 
-func (s *state) removeGroup(op *removeGroupOp) {
+func (s *state) removeGroup(op *removeGroupOp, readyGroups map[uint64]raft.Ready) {
 	// Group creation is lazy and idempotent; so is removal.
-	if log.V(3) {
-		log.Infof("removing group %d", op.groupID)
-	}
 	g, ok := s.groups[op.groupID]
 	if !ok {
 		op.ch <- nil
 		return
 	}
+	if log.V(3) {
+		log.Infof("node %v removing group %v", s.nodeID, op.groupID)
+	}
 
 	// Cancel commands which are still in transit.
-	for cmdID, prop := range g.pending {
-		if prop.ch != nil {
-			prop.ch <- ErrGroupDeleted
-		}
-		delete(g.pending, cmdID)
+	for _, prop := range g.pending {
+		s.removePending(g, prop, ErrGroupDeleted)
 	}
 
 	if err := s.multiNode.RemoveGroup(op.groupID); err != nil {
@@ -726,6 +743,11 @@ func (s *state) removeGroup(op *removeGroupOp) {
 	for _, nodeID := range cs.Nodes {
 		s.nodes[NodeID(nodeID)].unregisterGroup(op.groupID)
 	}
+	// Delete any entries for this group in readyGroups.
+	if readyGroups != nil {
+		delete(readyGroups, op.groupID)
+	}
+
 	delete(s.groups, op.groupID)
 	op.ch <- nil
 }
@@ -733,11 +755,7 @@ func (s *state) removeGroup(op *removeGroupOp) {
 func (s *state) propose(p *proposal) {
 	g, ok := s.groups[p.groupID]
 	if !ok {
-		if p.ch != nil {
-			// p.ch could be nil if this command was re-proposed due to leadership change
-			// but finished before we processed it from the proposal queue.
-			p.ch <- util.Errorf("group %d not found", p.groupID)
-		}
+		s.removePending(nil /* group */, p, ErrGroupDeleted)
 		return
 	}
 	if log.V(3) {
@@ -774,13 +792,22 @@ func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
 }
 
 // handleWriteReady converts a set of raft.Ready structs into a writeRequest
-// to be persisted, and sends it to the writeTask.
+// to be persisted, marks the group as writing and sends it to the writeTask.
 func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	if log.V(6) {
 		log.Infof("node %v write ready, preparing request", s.nodeID)
 	}
 	writeRequest := newWriteRequest()
 	for groupID, ready := range readyGroups {
+		g, ok := s.groups[groupID]
+		if !ok {
+			if log.V(6) {
+				log.Infof("dropping write request to group %d", groupID)
+			}
+			continue
+		}
+		g.writing = true
+
 		gwr := &groupWriteRequest{}
 		if !raft.IsEmptyHardState(ready.HardState) {
 			gwr.state = ready.HardState
@@ -943,26 +970,25 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				log.Infof("dropping stale write to group %v", groupID)
 			}
 			continue
+		} else if !g.writing {
+			if log.V(4) {
+				log.Infof("dropping stale write to reincarnation of group %v", groupID)
+			}
+			delete(readyGroups, groupID) // they must not make it to Advance.
+			continue
 		}
+		g.writing = false
 
 		// Process committed entries.
 		for _, entry := range ready.CommittedEntries {
 			commandID := s.processCommittedEntry(groupID, g, entry)
-			if p, ok := g.pending[commandID]; ok {
-				// TODO(bdarnell): the command is now committed, but not applied until the
-				// application consumes EventCommandCommitted. Is returning via the channel
-				// at this point useful or do we need to wait for the command to be
-				// applied too?
-				// This could be done with a Callback as in EventMembershipChangeCommitted
-				// or perhaps we should move away from a channel to a callback-based system.
-				if p.ch != nil {
-					// Because of the way we re-queue proposals during leadership
-					// changes, we may finish the same proposal object twice.
-					p.ch <- nil
-					p.ch = nil
-				}
-				delete(g.pending, commandID)
-			}
+			// TODO(bdarnell): the command is now committed, but not applied until the
+			// application consumes EventCommandCommitted. Is returning via the channel
+			// at this point useful or do we need to wait for the command to be
+			// applied too?
+			// This could be done with a Callback as in EventMembershipChangeCommitted
+			// or perhaps we should move away from a channel to a callback-based system.
+			s.removePending(g, g.pending[commandID], nil /* err */)
 		}
 
 		// Process SoftState and leader changes.
