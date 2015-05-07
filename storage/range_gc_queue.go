@@ -111,7 +111,9 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 
 	if !currentMember {
 		// We are no longer a member of this range; clean up our local data.
-		log.V(1).Infof("destroying local data from range %d", rng.Desc().RaftID)
+		if log.V(1) {
+			log.Infof("destroying local data from range %d", rng.Desc().RaftID)
+		}
 		if err := rng.rm.RemoveRange(rng); err != nil {
 			return err
 		}
@@ -126,7 +128,9 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
-		log.V(1).Infof("removing merged range %d", rng.Desc().RaftID)
+		if log.V(1) {
+			log.Infof("removing merged range %d", rng.Desc().RaftID)
+		}
 		if err := rng.rm.RemoveRange(rng); err != nil {
 			return err
 		}

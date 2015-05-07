@@ -22,7 +22,7 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/clog"
 )
 
 // A WeightedValue is used to represent the items sampled by
@@ -99,7 +99,7 @@ func (rs *WeightedReservoirSample) Consider(value interface{}) {
 // computing x**1/weight may be ill-behaved.
 func (rs *WeightedReservoirSample) ConsiderWeighted(value interface{}, weight float64) {
 	if weight <= 0 {
-		glog.Warningf("reservoir sample received non-positive weight %f", weight)
+		clog.Warningf("reservoir sample received non-positive weight %f", weight)
 		return
 	}
 	h := rs.Heap

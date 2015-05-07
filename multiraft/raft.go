@@ -24,84 +24,84 @@ import (
 	"github.com/coreos/etcd/raft"
 )
 
-// init installs an adapter to use glog for all log messages from raft.
+// init installs an adapter to use clog for all log messages from raft.
 func init() {
-	raft.SetLogger(&glogLogger{})
+	raft.SetLogger(&clogLogger{})
 }
 
-// *glogLogger implements the raft.Logger interface. Note that all methods
+// *clogLogger implements the raft.Logger interface. Note that all methods
 // must be defined on the pointer type rather than the value type because
 // (at least in the go 1.4 compiler), methods on a value type called through
 // an interface pointer go through an additional layer of indirection that
 // appears on the stack, and would make all our stack frame offsets incorrect.
 //
 // Raft is fairly verbose at the "info" level, so we map "info" messages to
-// glog.V(1) and "debug" messages to glog.V(2).
+// clog.V(1) and "debug" messages to clog.V(2).
 //
 // This file is named raft.go instead of something like logger.go because this
 // file's name is used to determine the vmodule parameter: --vmodule=raft=1
-type glogLogger struct{}
+type clogLogger struct{}
 
-func (*glogLogger) Debug(v ...interface{}) {
+func (*clogLogger) Debug(v ...interface{}) {
 	if log.V(2) {
 		log.InfoDepth(1, v...)
 	}
 }
 
-func (*glogLogger) Debugf(format string, v ...interface{}) {
+func (*clogLogger) Debugf(format string, v ...interface{}) {
 	if log.V(2) {
 		s := fmt.Sprintf(format, v...)
 		log.InfoDepth(1, s)
 	}
 }
 
-func (*glogLogger) Info(v ...interface{}) {
+func (*clogLogger) Info(v ...interface{}) {
 	if log.V(1) {
 		log.InfoDepth(1, v...)
 	}
 }
 
-func (*glogLogger) Infof(format string, v ...interface{}) {
+func (*clogLogger) Infof(format string, v ...interface{}) {
 	if log.V(1) {
 		s := fmt.Sprintf(format, v...)
 		log.InfoDepth(1, s)
 	}
 }
 
-func (*glogLogger) Warning(v ...interface{}) {
+func (*clogLogger) Warning(v ...interface{}) {
 	log.WarningDepth(1, v...)
 }
 
-func (*glogLogger) Warningf(format string, v ...interface{}) {
+func (*clogLogger) Warningf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
 	log.WarningDepth(1, s)
 }
 
-func (*glogLogger) Error(v ...interface{}) {
+func (*clogLogger) Error(v ...interface{}) {
 	log.ErrorDepth(1, v...)
 }
 
-func (*glogLogger) Errorf(format string, v ...interface{}) {
+func (*clogLogger) Errorf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
 	log.ErrorDepth(1, s)
 }
 
-func (*glogLogger) Fatal(v ...interface{}) {
+func (*clogLogger) Fatal(v ...interface{}) {
 	log.FatalDepth(1, v...)
 }
 
-func (*glogLogger) Fatalf(format string, v ...interface{}) {
+func (*clogLogger) Fatalf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
 	log.FatalDepth(1, s)
 }
 
-func (*glogLogger) Panic(v ...interface{}) {
+func (*clogLogger) Panic(v ...interface{}) {
 	s := fmt.Sprint(v...)
 	log.ErrorDepth(1, s)
 	panic(s)
 }
 
-func (*glogLogger) Panicf(format string, v ...interface{}) {
+func (*clogLogger) Panicf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
 	log.ErrorDepth(1, s)
 	panic(s)

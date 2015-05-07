@@ -14,10 +14,10 @@ github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3
 github.com/cockroachdb/c-snappy 0975dbfba5147722a2cad2229f34aad2ee85c2b4
+github.com/cockroachdb/clog d2542376307a54ad0ff768be384c3c589ffacca1
 github.com/coreos/etcd e5f2f401450b56947e231336f9e8350059428036
 github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
 github.com/gogo/protobuf bc946d07d1016848dfd2507f90f0859c9471681e
-github.com/golang/glog 44145f04b68cf362d9c4df2182967c2275eaefed
 github.com/golang/lint 39d15d55e9777df34cdffde4f406ab27fd2e60c0
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata 7362d4b6b2ce6a7d3c28b523a6e40629f4d81116
