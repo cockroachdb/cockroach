@@ -19,6 +19,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -221,29 +222,14 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 }
 
-// startServerAndGetStatus will startup a server with a short scan interval,
-// wait for the scan to completed, fetch the request status based on the
-// keyPrefix. The test server and fetched status are returned. The caller is
-// responsible to stop the server.
-func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byte) {
-	ts := &TestServer{}
-	ts.Ctx = NewTestContext()
-	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
-	ts.StoresPerNode = 3
-	if err := ts.Start(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Make sure the node is spun up and that a full scan of the ranges in the
-	// stores is complete.  The best way to do that is to wait twice.
-	ts.node.waitForScanCompletion()
-	ts.node.waitForScanCompletion()
-
+// getRequest returns the the results of a get request to the test server with
+// the given path.  It returns the contents of the body of the result.
+func getRequest(t *testing.T, ts *TestServer, path string) []byte {
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+ts.ServingAddr()+keyPrefix, nil)
+	req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+ts.ServingAddr()+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,15 +250,39 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 	if err != nil {
 		t.Fatal(err)
 	}
+	return body
+}
+
+// startServerAndGetStatus will startup a server with a short scan interval,
+// wait for the scan to completed, fetch the request status based on the
+// keyPrefix. The test server and fetched status are returned. The caller is
+// responsible to stop the server.
+// TODO(Bram): Add more nodes.
+func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byte) {
+	ts := &TestServer{}
+	ts.Ctx = NewTestContext()
+	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
+	ts.StoresPerNode = 3
+	if err := ts.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure the node is spun up and that a full scan of the ranges in the
+	// stores is complete.  The best way to do that is to wait twice.
+	ts.node.waitForScanCompletion()
+	ts.node.waitForScanCompletion()
+
+	body := getRequest(t, ts, keyPrefix)
 	return ts, body
 }
 
 // TestNodeStatusResponse verifies that node status returns the expected
 // results.
-// TODO(Bram): Add more nodes.
 func TestNodeStatusResponse(t *testing.T) {
 	ts, body := startServerAndGetStatus(t, statusNodeKeyPrefix)
 	defer ts.Stop()
+
+	// First fetch all the node statuses.
 	nodeStatuses := []proto.NodeStatus{}
 	if err := json.Unmarshal(body, &nodeStatuses); err != nil {
 		t.Fatal(err)
@@ -284,11 +294,23 @@ func TestNodeStatusResponse(t *testing.T) {
 	if !reflect.DeepEqual(ts.node.Descriptor, nodeStatuses[0].Desc) {
 		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatuses[0].Desc)
 	}
+
+	// Now fetch each one individually. Loop through the nodeStatuses to use the
+	// ids only.
+	for _, oldNodeStatus := range nodeStatuses {
+		nodeStatus := &proto.NodeStatus{}
+		body := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodeKeyPrefix, oldNodeStatus.Desc.NodeID))
+		if err := json.Unmarshal(body, &nodeStatus); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
+			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatus.Desc)
+		}
+	}
 }
 
 // TestStoreStatusResponse verifies that node status returns the expected
 // results.
-// TODO(Bram): Add more nodes.
 func TestStoreStatusResponse(t *testing.T) {
 	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
 	defer ts.Stop()
@@ -315,6 +337,17 @@ func TestStoreStatusResponse(t *testing.T) {
 		storeStatus.Desc.Capacity = proto.StoreCapacity{}
 		if !reflect.DeepEqual(*desc, storeStatus.Desc) {
 			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, storeStatus.Desc)
+		}
+
+		// Also fetch the each status individually.
+		fetchedStoreStatus := &proto.StoreStatus{}
+		body := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoreKeyPrefix, storeStatus.Desc.StoreID))
+		if err := json.Unmarshal(body, &fetchedStoreStatus); err != nil {
+			t.Fatal(err)
+		}
+		fetchedStoreStatus.Desc.Capacity = proto.StoreCapacity{}
+		if !reflect.DeepEqual(*desc, fetchedStoreStatus.Desc) {
+			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, fetchedStoreStatus.Desc)
 		}
 	}
 }
