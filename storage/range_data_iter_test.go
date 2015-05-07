@@ -101,7 +101,6 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
-		dormantRaft:   true, // elections would write hard state to engine
 	}
 	tc.Start(t)
 	defer tc.Stop()

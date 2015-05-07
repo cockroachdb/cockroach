@@ -108,9 +108,6 @@ type testContext struct {
 	stopper       *util.Stopper
 	bootstrapMode bootstrapMode
 	feed          *util.Feed
-	// when true, do not automatically create the Raft group for the first
-	// range and wait for elections.
-	dormantRaft bool
 }
 
 // testContext.Start initializes the test context with a single range covering the
@@ -2040,7 +2037,7 @@ func disabledTestRaftStorage(t *testing.T) {
 		func(t *testing.T) storagetest.WriteableStorage {
 			// Make sure the Raft group doesn't auto-start, or the elections
 			// will write HardState which confuses storagetest.
-			tc = testContext{dormantRaft: true}
+			tc = testContext{}
 			tc.Start(t)
 			return tc.rng
 		},
