@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Matt Tracy (matt.r.tracy@gmail.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package ts
 

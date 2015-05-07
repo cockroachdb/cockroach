@@ -75,3 +75,27 @@ func (br *InternalBatchResponse) Add(reply Response) {
 	}
 	br.Responses = append(br.Responses, union)
 }
+
+// Average returns the average value for this sample.
+func (samp *InternalTimeSeriesSample) Average() float64 {
+	if samp.Count == 0 {
+		return 0
+	}
+	return samp.Sum / float64(samp.Count)
+}
+
+// Maximum returns the maximum value encountered by this sample.
+func (samp *InternalTimeSeriesSample) Maximum() float64 {
+	if samp.Count < 2 {
+		return samp.Sum
+	}
+	return samp.GetMax()
+}
+
+// Minimum returns the minimum value encountered by this sample.
+func (samp *InternalTimeSeriesSample) Minimum() float64 {
+	if samp.Count < 2 {
+		return samp.Sum
+	}
+	return samp.GetMin()
+}

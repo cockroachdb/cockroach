@@ -31,6 +31,9 @@ type Resolution int64
 const (
 	// Resolution10s stores data with a sample resolution of 10 seconds.
 	Resolution10s Resolution = 1
+	// resolution1ns stores data with a sample resolution of 1 nanosecond. Used
+	// only for testing.
+	resolution1ns Resolution = 999
 )
 
 // sampleDurationByResolution is a map used to retrieve the sample duration
@@ -38,6 +41,7 @@ const (
 // nanoseconds.
 var sampleDurationByResolution = map[Resolution]int64{
 	Resolution10s: int64(time.Second * 10),
+	resolution1ns: 1, // 1ns resolution only for tests.
 }
 
 // keyDurationByResolution is a map used to retrieve the key duration
@@ -46,6 +50,7 @@ var sampleDurationByResolution = map[Resolution]int64{
 // in nanoseconds.
 var keyDurationByResolution = map[Resolution]int64{
 	Resolution10s: int64(time.Hour),
+	resolution1ns: 10, // 1ns resolution only for tests.
 }
 
 // SampleDuration returns the sample duration corresponding to this resolution
