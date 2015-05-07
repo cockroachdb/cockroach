@@ -98,6 +98,9 @@ func TestMethods(t *testing.T) {
 		// Test that empty keys are not acceptable, but empty values are.
 		{methodGet, "", nil, http.StatusBadRequest, nil},
 		{methodPost, "", nil, http.StatusBadRequest, nil},
+		{methodPut, "", nil, http.StatusBadRequest, nil},
+		{methodDelete, "", nil, http.StatusBadRequest, nil},
+		{methodHead, "", nil, http.StatusBadRequest, nil},
 		{methodPut, testKey, nil, http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusOK, nil},
 		{methodGet, testKey, nil, http.StatusOK, nil},
@@ -440,7 +443,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 	s := startServer(t)
 	defer s.Stop()
 
-	encKey := "%00some%2Fkey%20that%20encodes%E4%B8%96%E7%95%8C"
+	encKey := "%00some-key%20that%20encodes%E4%B8%96%E7%95%8C"
 	encBody := "%00some%2FBODY%20that%20encodes"
 	url := testContext.RequestScheme() + "://" + s.ServingAddr() + EntryPrefix + encKey
 	postURL(testContext, url, strings.NewReader(encBody), t)
@@ -453,7 +456,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 		t.Fatalf("expected body to be %q; got %q", encBody, string(pr.Value.Bytes))
 	}
 	// Lookup results direclty from the underlying engine.
-	key := proto.Key("\x00some/key that encodes世界")
+	key := proto.Key("\x00some-key that encodes世界")
 	val, err := engine.MVCCGet(s.Engines[0], key, s.Clock().Now(), false, nil)
 	if err != nil {
 		t.Errorf("unable to fetch value for key %s: %s", key, err)

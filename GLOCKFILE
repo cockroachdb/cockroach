@@ -21,6 +21,7 @@ github.com/golang/glog 44145f04b68cf362d9c4df2182967c2275eaefed
 github.com/golang/lint 39d15d55e9777df34cdffde4f406ab27fd2e60c0
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata 7362d4b6b2ce6a7d3c28b523a6e40629f4d81116
+github.com/julienschmidt/httprouter 8c199fb6259ffc1af525cc3ad52ee60ba8359669
 github.com/kisielk/errcheck eb516cb958915b69ad14384890b4d37bd910c9f3
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
 github.com/robfig/glock 78c45da050a4d993d12ad07e8ddb10a4891ac701
