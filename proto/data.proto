@@ -297,12 +297,8 @@ message TimeSeriesDatapoint {
   // The timestamp when this datapoint is located, expressed in nanoseconds
   // since the unix epoch.
   optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
-  // An integer representation of the value of this datapoint. If this field
-  // is set, then 'float_value' must not be set.
-  optional int64 int_value = 2;
-  // A floating point representation of the value of this datapoint. If this
-  // field is set, then 'int_value' must not be set.
-  optional float float_value = 3;
+  // A floating point representation of the value of this datapoint.
+  optional double value = 2 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesData is a set of observations of a single variable value at

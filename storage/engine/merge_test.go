@@ -31,20 +31,12 @@ import (
 
 var testtime = int64(-446061360000000000)
 
-type tsIntSample struct {
+type tsSample struct {
 	offset int32
 	count  uint32
-	sum    int64
-	max    int64
-	min    int64
-}
-
-type tsFloatSample struct {
-	offset int32
-	count  uint32
-	sum    float32
-	max    float32
-	min    float32
+	sum    float64
+	max    float64
+	min    float64
 }
 
 func gibberishString(n int) string {
@@ -81,50 +73,22 @@ func appender(s string) []byte {
 	return mustMarshal(v)
 }
 
-// timeSeriesInt generates a simple InternalTimeSeriesData object which starts
-// at the given timestamp and has samples of the given duration. Samples have
-// int values.
-func timeSeriesInt(start int64, duration int64, samples ...tsIntSample) []byte {
+// timeSeries generates a simple InternalTimeSeriesData object which starts
+// at the given timestamp and has samples of the given duration.
+func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 	ts := &proto.InternalTimeSeriesData{
 		StartTimestampNanos: start,
 		SampleDurationNanos: duration,
 	}
 	for _, sample := range samples {
 		newSample := &proto.InternalTimeSeriesSample{
-			Offset:   sample.offset,
-			IntCount: sample.count,
-			IntSum:   gogoproto.Int64(sample.sum),
+			Offset: sample.offset,
+			Count:  sample.count,
+			Sum:    sample.sum,
 		}
 		if sample.count > 1 {
-			newSample.IntMax = gogoproto.Int64(sample.max)
-			newSample.IntMin = gogoproto.Int64(sample.min)
-		}
-		ts.Samples = append(ts.Samples, newSample)
-	}
-	v, err := ts.ToValue()
-	if err != nil {
-		panic(err)
-	}
-	return mustMarshal(&proto.MVCCMetadata{Value: v})
-}
-
-// timeSeriesFloat generates a simple InternalTimeSeriesData object which starts
-// at the given timestamp and has samples of the given duration. Samples have
-// float values.
-func timeSeriesFloat(start int64, duration int64, samples ...tsFloatSample) []byte {
-	ts := &proto.InternalTimeSeriesData{
-		StartTimestampNanos: start,
-		SampleDurationNanos: duration,
-	}
-	for _, sample := range samples {
-		newSample := &proto.InternalTimeSeriesSample{
-			Offset:     sample.offset,
-			FloatCount: sample.count,
-			FloatSum:   gogoproto.Float32(sample.sum),
-		}
-		if sample.count > 1 {
-			newSample.FloatMax = gogoproto.Float32(sample.max)
-			newSample.FloatMin = gogoproto.Float32(sample.min)
+			newSample.Max = gogoproto.Float64(sample.max)
+			newSample.Min = gogoproto.Float64(sample.min)
 		}
 		ts.Samples = append(ts.Samples, newSample)
 	}
@@ -148,36 +112,36 @@ func TestGoMerge(t *testing.T) {
 		{counter(0), nil},
 		{appender(""), nil},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
 			nil,
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
 			appender("a"),
 		},
 		{
 			appender("a"),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime+1, 1000, []tsIntSample{
+			timeSeries(testtime+1, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 100, []tsIntSample{
+			timeSeries(testtime, 100, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
 		},
@@ -257,109 +221,78 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{
 			nil,
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
 		},
 		{
 			nil,
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{2, 1, 5, 5, 5},
 				{1, 1, 5, 5, 5},
 				{2, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 				{2, 2, 10, 5, 5},
 			}...),
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{2, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 				{2, 1, 5, 5, 5},
 			}...),
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 				{3, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{2, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 				{2, 1, 5, 5, 5},
 				{3, 1, 5, 5, 5},
 			}...),
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 10, 10, 10},
 				{1, 1, 5, 5, 5},
 				{2, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 100, 100, 100},
 				{2, 1, 5, 5, 5},
 				{3, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 3, 115, 100, 5},
 				{2, 2, 10, 5, 5},
 				{3, 1, 5, 5, 5},
 			}...),
 		},
 		{
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{2, 1, 5, 5, 5},
 			}...),
-			timeSeriesInt(testtime, 1000, []tsIntSample{
+			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
 				{2, 1, 5, 5, 5},
-			}...),
-		},
-		{
-			timeSeriesFloat(testtime, 1000, []tsFloatSample{
-				{1, 1, 5, 5, 5},
-				{3, 1, 5, 5, 5},
-			}...),
-			timeSeriesFloat(testtime, 1000, []tsFloatSample{
-				{2, 1, 5, 5, 5},
-			}...),
-			timeSeriesFloat(testtime, 1000, []tsFloatSample{
-				{1, 1, 5, 5, 5},
-				{2, 1, 5, 5, 5},
-				{3, 1, 5, 5, 5},
-			}...),
-		},
-		{
-			timeSeriesFloat(testtime, 1000, []tsFloatSample{
-				{1, 1, 10, 10, 10},
-				{1, 1, 5, 5, 5},
-				{2, 1, 5, 5, 5},
-			}...),
-			timeSeriesFloat(testtime, 1000, []tsFloatSample{
-				{1, 1, 100, 100, 100},
-				{2, 1, 5, 5, 5},
-				{3, 1, 5, 5, 5},
-			}...),
-			timeSeriesFloat(testtime, 1000, []tsFloatSample{
-				{1, 3, 115, 100, 5},
-				{2, 2, 10, 5, 5},
-				{3, 1, 5, 5, 5},
 			}...),
 		},
 	}

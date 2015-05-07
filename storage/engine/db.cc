@@ -355,28 +355,16 @@ bool IsTimeSeriesData(const cockroach::proto::Value *val) {
         && val->tag() == cockroach::proto::InternalValueType_Name(cockroach::proto::_CR_TS);
 }
 
-long GetIntMax(const cockroach::proto::InternalTimeSeriesSample *sample) {
-    if (sample->has_int_max()) return sample->int_max();
-    if (sample->has_int_sum()) return sample->int_sum();
-    return std::numeric_limits<long>::min();
+double GetMax(const cockroach::proto::InternalTimeSeriesSample *sample) {
+    if (sample->has_max()) return sample->max();
+    if (sample->has_sum()) return sample->sum();
+    return std::numeric_limits<double>::min();
 }
 
-long GetIntMin(const cockroach::proto::InternalTimeSeriesSample *sample) {
-    if (sample->has_int_min()) return sample->int_min();
-    if (sample->has_int_sum()) return sample->int_sum();
-    return std::numeric_limits<long>::max();
-}
-
-float GetFloatMax(const cockroach::proto::InternalTimeSeriesSample *sample) {
-    if (sample->has_float_max()) return sample->float_max();
-    if (sample->has_float_sum()) return sample->float_sum();
-    return std::numeric_limits<float>::min();
-}
-
-float GetFloatMin(const cockroach::proto::InternalTimeSeriesSample *sample) {
-    if (sample->has_float_min()) return sample->float_min();
-    if (sample->has_float_sum()) return sample->float_sum();
-    return std::numeric_limits<float>::max();
+double GetMin(const cockroach::proto::InternalTimeSeriesSample *sample) {
+    if (sample->has_min()) return sample->min();
+    if (sample->has_sum()) return sample->sum();
+    return std::numeric_limits<double>::max();
 }
 
 // AccumulateTimeSeriesSamples accumulates the individual values of two
@@ -385,27 +373,16 @@ float GetFloatMin(const cockroach::proto::InternalTimeSeriesSample *sample) {
 void AccumulateTimeSeriesSamples(cockroach::proto::InternalTimeSeriesSample* dest,
         const cockroach::proto::InternalTimeSeriesSample &src) {
     // Accumulate integer values
-    int total_int_count = dest->int_count() + src.int_count();
-    if (total_int_count > 1) {
+    int total_count = dest->count() + src.count();
+    if (total_count > 1) {
         // Keep explicit max and min values.
-        dest->set_int_max(std::max(GetIntMax(dest), GetIntMax(&src)));
-        dest->set_int_min(std::min(GetIntMin(dest), GetIntMin(&src)));
+        dest->set_max(std::max(GetMax(dest), GetMax(&src)));
+        dest->set_min(std::min(GetMin(dest), GetMin(&src)));
     }
-    if (total_int_count > 0) {
-        dest->set_int_sum(dest->int_sum() + src.int_sum());
+    if (total_count > 0) {
+        dest->set_sum(dest->sum() + src.sum());
     }
-    dest->set_int_count(total_int_count);
-
-    int total_float_count = dest->float_count() + src.float_count();
-    if (total_float_count > 1) {
-        // Keep explicit max and min values.
-        dest->set_float_max(std::max(GetFloatMax(dest), GetFloatMax(&src)));
-        dest->set_float_min(std::min(GetFloatMin(dest), GetFloatMin(&src)));
-    }
-    if (total_float_count > 0) {
-        dest->set_float_sum(dest->float_sum() + src.float_sum());
-    }
-    dest->set_float_count(total_float_count);
+    dest->set_count(total_count);
 }
 
 // MergeTimeSeriesValues attempts to merge two Values which contain

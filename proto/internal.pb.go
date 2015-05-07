@@ -1101,36 +1101,20 @@ func (m *InternalTimeSeriesData) GetSamples() []*InternalTimeSeriesSample {
 //
 // If the count of measurements is 1, then max and min fields may be omitted
 // and assumed equal to the sum field.
-//
-// The variable being measured may be either an integer or a floating point;
-// therefore, there are two fields each for "sum", "max" and "min" to hold
-// either an integer or floating point number. In practice, only one set of
-// these fields should be present for any individual sample; however, int and
-// float values are recorded in parallel, allowing clients to write both floats
-// and integers to the same value. These are recorded separately to retain
-// precision, but are easily combined by higher-level logic at query time.
 type InternalTimeSeriesSample struct {
 	// Temporal offset from the "start_timestamp" of the InternalTimeSeriesData
 	// collection this data point is part in. The units of this value are
 	// determined by the value of the "sample_duration_milliseconds" field of
 	// the TimeSeriesData collection.
 	Offset int32 `protobuf:"varint,1,opt,name=offset" json:"offset"`
-	// Count of integer measurements taken within this sample.
-	IntCount uint32 `protobuf:"varint,2,opt,name=int_count" json:"int_count"`
-	// Sum of all integer measurements.
-	IntSum *int64 `protobuf:"varint,3,opt,name=int_sum" json:"int_sum,omitempty"`
-	// Maximum encountered integer measurement in this sample.
-	IntMax *int64 `protobuf:"varint,4,opt,name=int_max" json:"int_max,omitempty"`
-	// Minimum encountered integer measurement in this sample.
-	IntMin *int64 `protobuf:"varint,5,opt,name=int_min" json:"int_min,omitempty"`
-	// Count of floating point measurements taken within this sample.
-	FloatCount uint32 `protobuf:"varint,6,opt,name=float_count" json:"float_count"`
-	// Sum of all floating point measurements.
-	FloatSum *float32 `protobuf:"fixed32,7,opt,name=float_sum" json:"float_sum,omitempty"`
-	// Maximum encountered floating point measurement in this sample.
-	FloatMax *float32 `protobuf:"fixed32,8,opt,name=float_max" json:"float_max,omitempty"`
-	// Minimum encountered floating point measurement in this sample.
-	FloatMin         *float32 `protobuf:"fixed32,9,opt,name=float_min" json:"float_min,omitempty"`
+	// Count of measurements taken within this sample.
+	Count uint32 `protobuf:"varint,6,opt,name=count" json:"count"`
+	// Sum of all measurements.
+	Sum float64 `protobuf:"fixed64,7,opt,name=sum" json:"sum"`
+	// Maximum encountered measurement in this sample.
+	Max *float64 `protobuf:"fixed64,8,opt,name=max" json:"max,omitempty"`
+	// Minimum encountered measurement in this sample.
+	Min              *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -1145,58 +1129,30 @@ func (m *InternalTimeSeriesSample) GetOffset() int32 {
 	return 0
 }
 
-func (m *InternalTimeSeriesSample) GetIntCount() uint32 {
+func (m *InternalTimeSeriesSample) GetCount() uint32 {
 	if m != nil {
-		return m.IntCount
+		return m.Count
 	}
 	return 0
 }
 
-func (m *InternalTimeSeriesSample) GetIntSum() int64 {
-	if m != nil && m.IntSum != nil {
-		return *m.IntSum
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetIntMax() int64 {
-	if m != nil && m.IntMax != nil {
-		return *m.IntMax
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetIntMin() int64 {
-	if m != nil && m.IntMin != nil {
-		return *m.IntMin
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetFloatCount() uint32 {
+func (m *InternalTimeSeriesSample) GetSum() float64 {
 	if m != nil {
-		return m.FloatCount
+		return m.Sum
 	}
 	return 0
 }
 
-func (m *InternalTimeSeriesSample) GetFloatSum() float32 {
-	if m != nil && m.FloatSum != nil {
-		return *m.FloatSum
+func (m *InternalTimeSeriesSample) GetMax() float64 {
+	if m != nil && m.Max != nil {
+		return *m.Max
 	}
 	return 0
 }
 
-func (m *InternalTimeSeriesSample) GetFloatMax() float32 {
-	if m != nil && m.FloatMax != nil {
-		return *m.FloatMax
-	}
-	return 0
-}
-
-func (m *InternalTimeSeriesSample) GetFloatMin() float32 {
-	if m != nil && m.FloatMin != nil {
-		return *m.FloatMin
+func (m *InternalTimeSeriesSample) GetMin() float64 {
+	if m != nil && m.Min != nil {
+		return *m.Min
 	}
 	return 0
 }
@@ -4819,75 +4775,9 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntCount", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.IntCount |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntSum", wireType)
-			}
-			var v int64
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.IntSum = &v
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntMax", wireType)
-			}
-			var v int64
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.IntMax = &v
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntMin", wireType)
-			}
-			var v int64
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.IntMin = &v
 		case 6:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FloatCount", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -4895,59 +4785,70 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.FloatCount |= (uint32(b) & 0x7F) << shift
+				m.Count |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 7:
-			if wireType != 5 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FloatSum", wireType)
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sum", wireType)
 			}
-			var v uint32
-			i := index + 4
+			var v uint64
+			i := index + 8
 			if i > l {
 				return io.ErrUnexpectedEOF
 			}
 			index = i
-			v = uint32(data[i-4])
-			v |= uint32(data[i-3]) << 8
-			v |= uint32(data[i-2]) << 16
-			v |= uint32(data[i-1]) << 24
-			v2 := math.Float32frombits(v)
-			m.FloatSum = &v2
+			v = uint64(data[i-8])
+			v |= uint64(data[i-7]) << 8
+			v |= uint64(data[i-6]) << 16
+			v |= uint64(data[i-5]) << 24
+			v |= uint64(data[i-4]) << 32
+			v |= uint64(data[i-3]) << 40
+			v |= uint64(data[i-2]) << 48
+			v |= uint64(data[i-1]) << 56
+			m.Sum = math.Float64frombits(v)
 		case 8:
-			if wireType != 5 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FloatMax", wireType)
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Max", wireType)
 			}
-			var v uint32
-			i := index + 4
+			var v uint64
+			i := index + 8
 			if i > l {
 				return io.ErrUnexpectedEOF
 			}
 			index = i
-			v = uint32(data[i-4])
-			v |= uint32(data[i-3]) << 8
-			v |= uint32(data[i-2]) << 16
-			v |= uint32(data[i-1]) << 24
-			v2 := math.Float32frombits(v)
-			m.FloatMax = &v2
+			v = uint64(data[i-8])
+			v |= uint64(data[i-7]) << 8
+			v |= uint64(data[i-6]) << 16
+			v |= uint64(data[i-5]) << 24
+			v |= uint64(data[i-4]) << 32
+			v |= uint64(data[i-3]) << 40
+			v |= uint64(data[i-2]) << 48
+			v |= uint64(data[i-1]) << 56
+			v2 := math.Float64frombits(v)
+			m.Max = &v2
 		case 9:
-			if wireType != 5 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FloatMin", wireType)
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Min", wireType)
 			}
-			var v uint32
-			i := index + 4
+			var v uint64
+			i := index + 8
 			if i > l {
 				return io.ErrUnexpectedEOF
 			}
 			index = i
-			v = uint32(data[i-4])
-			v |= uint32(data[i-3]) << 8
-			v |= uint32(data[i-2]) << 16
-			v |= uint32(data[i-1]) << 24
-			v2 := math.Float32frombits(v)
-			m.FloatMin = &v2
+			v = uint64(data[i-8])
+			v |= uint64(data[i-7]) << 8
+			v |= uint64(data[i-6]) << 16
+			v |= uint64(data[i-5]) << 24
+			v |= uint64(data[i-4]) << 32
+			v |= uint64(data[i-3]) << 40
+			v |= uint64(data[i-2]) << 48
+			v |= uint64(data[i-1]) << 56
+			v2 := math.Float64frombits(v)
+			m.Min = &v2
 		default:
 			var sizeOfWire int
 			for {
@@ -6069,25 +5970,13 @@ func (m *InternalTimeSeriesSample) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovInternal(uint64(m.Offset))
-	n += 1 + sovInternal(uint64(m.IntCount))
-	if m.IntSum != nil {
-		n += 1 + sovInternal(uint64(*m.IntSum))
+	n += 1 + sovInternal(uint64(m.Count))
+	n += 9
+	if m.Max != nil {
+		n += 9
 	}
-	if m.IntMax != nil {
-		n += 1 + sovInternal(uint64(*m.IntMax))
-	}
-	if m.IntMin != nil {
-		n += 1 + sovInternal(uint64(*m.IntMin))
-	}
-	n += 1 + sovInternal(uint64(m.FloatCount))
-	if m.FloatSum != nil {
-		n += 5
-	}
-	if m.FloatMax != nil {
-		n += 5
-	}
-	if m.FloatMin != nil {
-		n += 5
+	if m.Min != nil {
+		n += 9
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -7622,41 +7511,21 @@ func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.Offset))
-	data[i] = 0x10
-	i++
-	i = encodeVarintInternal(data, i, uint64(m.IntCount))
-	if m.IntSum != nil {
-		data[i] = 0x18
-		i++
-		i = encodeVarintInternal(data, i, uint64(*m.IntSum))
-	}
-	if m.IntMax != nil {
-		data[i] = 0x20
-		i++
-		i = encodeVarintInternal(data, i, uint64(*m.IntMax))
-	}
-	if m.IntMin != nil {
-		data[i] = 0x28
-		i++
-		i = encodeVarintInternal(data, i, uint64(*m.IntMin))
-	}
 	data[i] = 0x30
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.FloatCount))
-	if m.FloatSum != nil {
-		data[i] = 0x3d
+	i = encodeVarintInternal(data, i, uint64(m.Count))
+	data[i] = 0x39
+	i++
+	i = encodeFixed64Internal(data, i, uint64(math.Float64bits(m.Sum)))
+	if m.Max != nil {
+		data[i] = 0x41
 		i++
-		i = encodeFixed32Internal(data, i, uint32(math.Float32bits(*m.FloatSum)))
+		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(*m.Max)))
 	}
-	if m.FloatMax != nil {
-		data[i] = 0x45
+	if m.Min != nil {
+		data[i] = 0x49
 		i++
-		i = encodeFixed32Internal(data, i, uint32(math.Float32bits(*m.FloatMax)))
-	}
-	if m.FloatMin != nil {
-		data[i] = 0x4d
-		i++
-		i = encodeFixed32Internal(data, i, uint32(math.Float32bits(*m.FloatMin)))
+		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(*m.Min)))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)

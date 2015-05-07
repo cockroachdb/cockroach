@@ -1828,36 +1828,26 @@ class TimeSeriesDatapoint : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 timestamp_nanos() const;
   inline void set_timestamp_nanos(::google::protobuf::int64 value);
 
-  // optional int64 int_value = 2;
-  inline bool has_int_value() const;
-  inline void clear_int_value();
-  static const int kIntValueFieldNumber = 2;
-  inline ::google::protobuf::int64 int_value() const;
-  inline void set_int_value(::google::protobuf::int64 value);
-
-  // optional float float_value = 3;
-  inline bool has_float_value() const;
-  inline void clear_float_value();
-  static const int kFloatValueFieldNumber = 3;
-  inline float float_value() const;
-  inline void set_float_value(float value);
+  // optional double value = 2;
+  inline bool has_value() const;
+  inline void clear_value();
+  static const int kValueFieldNumber = 2;
+  inline double value() const;
+  inline void set_value(double value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.TimeSeriesDatapoint)
  private:
   inline void set_has_timestamp_nanos();
   inline void clear_has_timestamp_nanos();
-  inline void set_has_int_value();
-  inline void clear_has_int_value();
-  inline void set_has_float_value();
-  inline void clear_has_float_value();
+  inline void set_has_value();
+  inline void clear_has_value();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int64 timestamp_nanos_;
-  ::google::protobuf::int64 int_value_;
-  float float_value_;
+  double value_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -4331,52 +4321,28 @@ inline void TimeSeriesDatapoint::set_timestamp_nanos(::google::protobuf::int64 v
   // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesDatapoint.timestamp_nanos)
 }
 
-// optional int64 int_value = 2;
-inline bool TimeSeriesDatapoint::has_int_value() const {
+// optional double value = 2;
+inline bool TimeSeriesDatapoint::has_value() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void TimeSeriesDatapoint::set_has_int_value() {
+inline void TimeSeriesDatapoint::set_has_value() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void TimeSeriesDatapoint::clear_has_int_value() {
+inline void TimeSeriesDatapoint::clear_has_value() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void TimeSeriesDatapoint::clear_int_value() {
-  int_value_ = GOOGLE_LONGLONG(0);
-  clear_has_int_value();
+inline void TimeSeriesDatapoint::clear_value() {
+  value_ = 0;
+  clear_has_value();
 }
-inline ::google::protobuf::int64 TimeSeriesDatapoint::int_value() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesDatapoint.int_value)
-  return int_value_;
+inline double TimeSeriesDatapoint::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesDatapoint.value)
+  return value_;
 }
-inline void TimeSeriesDatapoint::set_int_value(::google::protobuf::int64 value) {
-  set_has_int_value();
-  int_value_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesDatapoint.int_value)
-}
-
-// optional float float_value = 3;
-inline bool TimeSeriesDatapoint::has_float_value() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void TimeSeriesDatapoint::set_has_float_value() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void TimeSeriesDatapoint::clear_has_float_value() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void TimeSeriesDatapoint::clear_float_value() {
-  float_value_ = 0;
-  clear_has_float_value();
-}
-inline float TimeSeriesDatapoint::float_value() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesDatapoint.float_value)
-  return float_value_;
-}
-inline void TimeSeriesDatapoint::set_float_value(float value) {
-  set_has_float_value();
-  float_value_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesDatapoint.float_value)
+inline void TimeSeriesDatapoint::set_value(double value) {
+  set_has_value();
+  value_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesDatapoint.value)
 }
 
 // -------------------------------------------------------------------

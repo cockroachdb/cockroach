@@ -488,7 +488,7 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 		StartTimestampNanos: 0,
 		SampleDurationNanos: 1000,
 		Samples: []*proto.InternalTimeSeriesSample{
-			{Offset: 0, IntCount: 1, IntSum: gogoproto.Int64(5)},
+			{Offset: 0, Count: 1, Sum: 5.0},
 		},
 	}
 	value, err := ts.ToValue()

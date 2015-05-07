@@ -590,14 +590,6 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 	resultByKeyTime := map[int64]*InternalTimeSeriesData{}
 
 	for _, dp := range ts.Datapoints {
-		// Validate the datapoint.
-		if dp.IntValue == nil && dp.FloatValue == nil {
-			return nil, util.Errorf("datapoint %v has no value.", dp)
-		}
-		if dp.IntValue != nil && dp.FloatValue != nil {
-			return nil, util.Errorf("datapoint %v has both integer and float data.", dp)
-		}
-
 		// Determine which InternalTimeSeriesData this datapoint belongs to,
 		// creating if it has not already been created for a previous sample.
 		keyTime := (dp.TimestampNanos / keyDuration) * keyDuration
@@ -614,13 +606,10 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 		// Create a new sample for this datapoint and place it into the
 		// InternalTimeSeriesData.
 		sampleOffset := int32((dp.TimestampNanos - keyTime) / sampleDuration)
-		sample := &InternalTimeSeriesSample{Offset: sampleOffset}
-		if dp.IntValue != nil {
-			sample.IntCount = 1
-			sample.IntSum = dp.IntValue
-		} else {
-			sample.FloatCount = 1
-			sample.FloatSum = dp.FloatValue
+		sample := &InternalTimeSeriesSample{
+			Offset: sampleOffset,
+			Count:  1,
+			Sum:    dp.Value,
 		}
 		itsd.Samples = append(itsd.Samples, sample)
 	}

@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -87,21 +86,16 @@ type storeStatusRecorder struct {
 	timestampNanos int64
 }
 
-// recordInt records a single int value from the StoreStatusMonitor as a
+// recordInt records a single int64 value from the StoreStatusMonitor as a
 // proto.TimeSeriesData object.
 func (ssr *storeStatusRecorder) recordInt(name string, data int64) proto.TimeSeriesData {
 	return proto.TimeSeriesData{
 		Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, ssr.ID),
 		Datapoints: []*proto.TimeSeriesDatapoint{
-			intDatapoint(ssr.timestampNanos, data),
+			{
+				TimestampNanos: ssr.timestampNanos,
+				Value:          float64(data),
+			},
 		},
-	}
-}
-
-// intDatapoint quickly generates an integer-valued datapoint.
-func intDatapoint(timestamp, val int64) *proto.TimeSeriesDatapoint {
-	return &proto.TimeSeriesDatapoint{
-		TimestampNanos: timestamp,
-		IntValue:       gogoproto.Int64(val),
 	}
 }

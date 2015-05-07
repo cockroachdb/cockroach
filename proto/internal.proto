@@ -401,14 +401,6 @@ message InternalTimeSeriesData {
 //
 // If the count of measurements is 1, then max and min fields may be omitted
 // and assumed equal to the sum field.
-//
-// The variable being measured may be either an integer or a floating point;
-// therefore, there are two fields each for "sum", "max" and "min" to hold
-// either an integer or floating point number. In practice, only one set of
-// these fields should be present for any individual sample; however, int and
-// float values are recorded in parallel, allowing clients to write both floats
-// and integers to the same value. These are recorded separately to retain
-// precision, but are easily combined by higher-level logic at query time.
 message InternalTimeSeriesSample {
   // Temporal offset from the "start_timestamp" of the InternalTimeSeriesData
   // collection this data point is part in. The units of this value are
@@ -416,23 +408,14 @@ message InternalTimeSeriesSample {
   // the TimeSeriesData collection.
   optional int32 offset = 1 [(gogoproto.nullable) = false];
 
-  // Count of integer measurements taken within this sample.
-  optional uint32 int_count = 2 [(gogoproto.nullable) = false];
-  // Sum of all integer measurements.
-  optional int64 int_sum = 3;
-  // Maximum encountered integer measurement in this sample.
-  optional int64 int_max = 4;
-  // Minimum encountered integer measurement in this sample.
-  optional int64 int_min = 5;
-
-  // Count of floating point measurements taken within this sample.
-  optional uint32 float_count = 6 [(gogoproto.nullable) = false];
-  // Sum of all floating point measurements.
-  optional float float_sum = 7;
-  // Maximum encountered floating point measurement in this sample.
-  optional float float_max = 8;
-  // Minimum encountered floating point measurement in this sample.
-  optional float float_min = 9;
+  // Count of measurements taken within this sample.
+  optional uint32 count = 6 [(gogoproto.nullable) = false];
+  // Sum of all measurements.
+  optional double sum = 7 [(gogoproto.nullable) = false];
+  // Maximum encountered measurement in this sample.
+  optional double max = 8;
+  // Minimum encountered measurement in this sample.
+  optional double min = 9;
 }
 
 // RaftTruncatedState contains metadata about the truncated portion of the raft log.
