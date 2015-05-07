@@ -125,7 +125,7 @@ func (db *testSender) sendOne(call client.Call) {
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
 		header.RaftID = rng.Desc().RaftID
 		header.Replica = *rng.GetReplica()
-		db.store.ExecuteCmd(client.Call{Args: call.Args, Reply: call.Reply})
+		db.store.ExecuteCmd(call)
 	} else {
 		call.Reply.Header().SetGoError(proto.NewRangeKeyMismatchError(header.Key, header.EndKey, nil))
 	}

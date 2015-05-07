@@ -2258,13 +2258,16 @@ func TestInternalRangeLookupFirstRange(t *testing.T) {
 	defer tc.Stop()
 
 	reply := proto.InternalRangeLookupResponse{}
-	if err := tc.store.ExecuteCmd(&proto.InternalRangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
-			RaftID: 1,
-			Key:    proto.Key{},
+	if err := tc.store.ExecuteCmd(client.Call{
+		Args: &proto.InternalRangeLookupRequest{
+			RequestHeader: proto.RequestHeader{
+				RaftID: 1,
+				Key:    proto.Key{},
+			},
+			MaxRanges: 1,
 		},
-		MaxRanges: 1,
-	}, &reply); err != nil {
+		Reply: &reply,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	expected := []proto.RangeDescriptor{*tc.rng.Desc()}
