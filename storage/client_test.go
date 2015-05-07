@@ -54,15 +54,15 @@ func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool, context *storage.StoreContext) (*storage.Store, *util.Stopper) {
+	bootstrap bool, sCtx *storage.StoreContext) (*storage.Store, *util.Stopper) {
 	stopper := util.NewStopper()
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
 	var ctx *storage.StoreContext
-	if context == nil {
+	if sCtx == nil {
 		ctx = &storage.StoreContext{}
 		*ctx = storage.TestStoreContext
 	} else {
-		ctx = context
+		ctx = sCtx
 	}
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()

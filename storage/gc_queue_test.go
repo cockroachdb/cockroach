@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -186,7 +187,7 @@ func TestGCQueueProcess(t *testing.T) {
 				dArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
 				dArgs.Txn.Timestamp = datum.ts
 			}
-			if err := tc.rng.AddCmd(dArgs, dReply, true); err != nil {
+			if err := tc.rng.AddCmd(context.Background(), dArgs, dReply, true); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
@@ -196,7 +197,7 @@ func TestGCQueueProcess(t *testing.T) {
 				pArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
 				pArgs.Txn.Timestamp = datum.ts
 			}
-			if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+			if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}

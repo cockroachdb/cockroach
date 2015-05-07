@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/coreos/etcd/raft"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -77,7 +78,7 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 	}
 }
 
-// boostrapMode controls how the first range is created in testContext.
+// boostrapMode controls how the first range is created in testlog.
 type bootstrapMode int
 
 const (
@@ -110,7 +111,7 @@ type testContext struct {
 	feed          *util.Feed
 }
 
-// testContext.Start initializes the test context with a single range covering the
+// testlog.Start initializes the test context with a single range covering the
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB) {
 	if tc.stopper == nil {
@@ -286,20 +287,20 @@ func TestRangeReadConsistency(t *testing.T) {
 	gArgs.Timestamp = tc.clock.Now()
 
 	// Try consistent read and verify success.
-	if err := tc.rng.AddCmd(gArgs, gReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true); err != nil {
 		t.Errorf("expected success on consistent read: %s", err)
 	}
 
 	// Try a consensus read and verify error.
 	gArgs.ReadConsistency = proto.CONSENSUS
-	if err := tc.rng.AddCmd(gArgs, gReply, true); err == nil {
+	if err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true); err == nil {
 		t.Errorf("expected error on consensus read")
 	}
 
 	// Try an inconsistent read within a transaction.
 	gArgs.ReadConsistency = proto.INCONSISTENT
 	gArgs.Txn = newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
-	if err := tc.rng.AddCmd(gArgs, gReply, true); err == nil {
+	if err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true); err == nil {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
@@ -314,13 +315,13 @@ func TestRangeReadConsistency(t *testing.T) {
 	})
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
-	err := tc.rng.AddCmd(gArgs, gReply, true)
+	err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true)
 	if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}
 
 	gArgs.ReadConsistency = proto.INCONSISTENT
-	if err := tc.rng.AddCmd(gArgs, gReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true); err != nil {
 		t.Errorf("expected success reading with inconsistent: %s", err)
 	}
 }
@@ -333,7 +334,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 
 	splitTestRange(tc.store, proto.Key("a"), proto.Key("a"), t)
 	gArgs, gReply := getArgs(proto.Key("b"), 1, tc.store.StoreID())
-	err := tc.rng.AddCmd(gArgs, gReply, true)
+	err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true)
 	if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", err)
 	}
@@ -417,7 +418,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		err := tc.rng.AddCmd(test.args, test.reply, true)
+		err := tc.rng.AddCmd(context.Background(), test.args, test.reply, true)
 		if _, ok := err.(*proto.NotLeaderError); !ok {
 			t.Errorf("%d: expected not leader error: %s", i, err)
 		}
@@ -605,7 +606,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.AddCmd(req, reply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), req, reply, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -647,7 +648,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.AddCmd(req, reply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), req, reply, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -888,7 +889,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 
 		test.args.Header().Timestamp = tc.clock.Now()
 
-		if err := tc.rng.AddCmd(test.args, test.reply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), test.args, test.reply, true); err != nil {
 			t.Fatal(err)
 		}
 		if held, expired := tc.rng.HasLeaderLease(test.args.Header().Timestamp); !held || expired {
@@ -918,7 +919,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	tc.manualClock.Set(t0.Nanoseconds())
 	gArgs, gReply := getArgs([]byte("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
-	err := tc.rng.AddCmd(gArgs, gReply, true)
+	err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -927,7 +928,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	tc.manualClock.Set(t1.Nanoseconds())
 	pArgs, pReply := putArgs([]byte("b"), []byte("1"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
-	err = tc.rng.AddCmd(pArgs, pReply, true)
+	err = tc.rng.AddCmd(context.Background(), pArgs, pReply, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -988,7 +989,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		go func() {
 			args, reply := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RaftID, tc.store.StoreID())
 			args.Header().User = "Foo"
-			err := tc.rng.AddCmd(args, reply, true)
+			err := tc.rng.AddCmd(context.Background(), args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
 			}
@@ -999,7 +1000,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		cmd2Done := make(chan struct{})
 		go func() {
 			args, reply := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc().RaftID, tc.store.StoreID())
-			err := tc.rng.AddCmd(args, reply, true)
+			err := tc.rng.AddCmd(context.Background(), args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
 			}
@@ -1010,7 +1011,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		cmd3Done := make(chan struct{})
 		go func() {
 			args, reply := readOrWriteArgs(key2, true, tc.rng.Desc().RaftID, tc.store.StoreID())
-			err := tc.rng.AddCmd(args, reply, true)
+			err := tc.rng.AddCmd(context.Background(), args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
 			}
@@ -1072,7 +1073,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	go func() {
 		args, reply := putArgs(key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
 		args.CmdID.Random = 1
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1084,7 +1085,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	go func() {
 		args, reply := getArgs(key, tc.rng.Desc().RaftID, tc.store.StoreID())
 		args.ReadConsistency = proto.INCONSISTENT
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1121,12 +1122,12 @@ func TestRangeUseTSCache(t *testing.T) {
 	tc.manualClock.Set(t0.Nanoseconds())
 	args, reply := getArgs([]byte("a"), 1, tc.store.StoreID())
 	args.Timestamp = tc.clock.Now()
-	err := tc.rng.AddCmd(args, reply, true)
+	err := tc.rng.AddCmd(context.Background(), args, reply, true)
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
-	err = tc.rng.AddCmd(pArgs, pReply, true)
+	err = tc.rng.AddCmd(context.Background(), pArgs, pReply, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1148,12 +1149,12 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	args, reply := getArgs([]byte("a"), 1, tc.store.StoreID())
 	args.Timestamp = tc.clock.Now()
 	args.ReadConsistency = proto.INCONSISTENT
-	err := tc.rng.AddCmd(args, reply, true)
+	err := tc.rng.AddCmd(context.Background(), args, reply, true)
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
-	err = tc.rng.AddCmd(pArgs, pReply, true)
+	err = tc.rng.AddCmd(context.Background(), pArgs, pReply, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1179,19 +1180,19 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs, pReply := putArgs(key, []byte("value"), 1, tc.store.StoreID())
 		pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
-		if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 			t.Fatalf("test %d: %s", i, err)
 		}
 
 		// Now attempt read or write.
 		args, reply := readOrWriteArgs(key, read, tc.rng.Desc().RaftID, tc.store.StoreID())
 		args.Header().Timestamp = tc.clock.Now() // later timestamp
-		if err := tc.rng.AddCmd(args, reply, true); err == nil {
+		if err := tc.rng.AddCmd(context.Background(), args, reply, true); err == nil {
 			t.Errorf("test %d: expected failure", i)
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
-		if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 			t.Fatalf("test %d: %s", i, err)
 		}
 		if !pReply.Timestamp.Equal(pArgs.Timestamp) {
@@ -1217,7 +1218,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	gArgs, gReply := getArgs(key, 1, tc.store.StoreID())
 	gArgs.Txn = txn
 	gArgs.Timestamp = txn.Timestamp
-	if err := tc.rng.AddCmd(gArgs, gReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), gArgs, gReply, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1225,7 +1226,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	pArgs, pReply := putArgs(key, []byte("value"), 1, tc.store.StoreID())
 	pArgs.Txn = txn
 	pArgs.Timestamp = pArgs.Txn.Timestamp
-	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	if !pReply.Timestamp.Equal(pArgs.Timestamp) {
@@ -1236,7 +1237,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	pArgs.Txn = nil
 	expTS := pArgs.Timestamp
 	expTS.Logical++
-	if err := tc.rng.AddCmd(pArgs, pReply, true); err == nil {
+	if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err == nil {
 		t.Errorf("expected write intent error")
 	}
 	if !pReply.Timestamp.Equal(expTS) {
@@ -1270,7 +1271,7 @@ func TestRangeIdempotence(t *testing.T) {
 			} else {
 				args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
 			}
-			err := tc.rng.AddCmd(&args, &reply, true)
+			err := tc.rng.AddCmd(context.Background(), &args, &reply, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1309,7 +1310,7 @@ func TestRangeResponseCacheError(t *testing.T) {
 
 	args, reply := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
-	err := tc.rng.AddCmd(args, reply, true)
+	err := tc.rng.AddCmd(context.Background(), args, reply, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1323,7 +1324,7 @@ func TestRangeResponseCacheError(t *testing.T) {
 
 	// Now try increment again and verify error.
 	reply.Reset()
-	err = tc.rng.AddCmd(args, reply, true)
+	err = tc.rng.AddCmd(context.Background(), args, reply, true)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -1342,7 +1343,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		args, reply := endTxnArgs(txn, commit, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
-		if err := tc.rng.AddCmd(args, reply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 			t.Error(err)
 		}
 		expStatus := proto.COMMITTED
@@ -1356,7 +1357,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
 		hbArgs, hbReply := heartbeatArgs(txn, 1, tc.store.StoreID())
-		if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), hbArgs, hbReply, true); err != nil {
 			t.Error(err)
 		}
 		if hbReply.Txn.Status != expStatus || hbReply.Txn.LastHeartbeat != nil {
@@ -1380,7 +1381,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		// Start out with a heartbeat to the transaction.
 		hbArgs, hbReply := heartbeatArgs(txn, 1, tc.store.StoreID())
 		hbArgs.Timestamp = txn.Timestamp
-		if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), hbArgs, hbReply, true); err != nil {
 			t.Error(err)
 		}
 		if hbReply.Txn.Status != proto.PENDING || hbReply.Txn.LastHeartbeat == nil {
@@ -1389,7 +1390,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 
 		args, reply := endTxnArgs(txn, commit, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
-		if err := tc.rng.AddCmd(args, reply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 			t.Error(err)
 		}
 		expStatus := proto.COMMITTED
@@ -1433,7 +1434,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		args, reply := endTxnArgs(txn, test.commit, 1, tc.store.StoreID())
 		tc.manualClock.Set(1)
 		args.Timestamp = tc.clock.Now()
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if test.expErr {
 			if err == nil {
 				t.Errorf("expected error")
@@ -1470,7 +1471,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	// Start out with a heartbeat to the transaction.
 	hbArgs, hbReply := heartbeatArgs(txn, 1, tc.store.StoreID())
 	hbArgs.Timestamp = txn.Timestamp
-	if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), hbArgs, hbReply, true); err != nil {
 		t.Error(err)
 	}
 
@@ -1479,7 +1480,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	args.Timestamp = txn.Timestamp
 	args.Txn.Epoch = txn.Epoch + 1
 	args.Txn.Priority = txn.Priority + 1
-	if err := tc.rng.AddCmd(args, reply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 		t.Error(err)
 	}
 	if reply.Txn.Status != proto.COMMITTED {
@@ -1536,7 +1537,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.Key = test.key
 		args, reply := endTxnArgs(txn, true, 1, tc.store.StoreID())
 		args.Timestamp = txn.Timestamp
-		verifyErrorMatches(tc.rng.AddCmd(args, reply, true), test.expErrRegexp, t)
+		verifyErrorMatches(tc.rng.AddCmd(context.Background(), args, reply, true), test.expErrRegexp, t)
 	}
 }
 
@@ -1552,7 +1553,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 
 	args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
 	args.Key = pusher.Key
-	verifyErrorMatches(tc.rng.AddCmd(args, reply, true), ".*should match pushee.*", t)
+	verifyErrorMatches(tc.rng.AddCmd(context.Background(), args, reply, true), ".*should match pushee.*", t)
 }
 
 // TestInternalPushTxnAlreadyCommittedOrAborted verifies success
@@ -1573,13 +1574,13 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		// End the pushee's transaction.
 		etArgs, etReply := endTxnArgs(pushee, status == proto.COMMITTED, 1, tc.store.StoreID())
 		etArgs.Timestamp = pushee.Timestamp
-		if err := tc.rng.AddCmd(etArgs, etReply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), etArgs, etReply, true); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now try to push what's already committed or aborted.
 		args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
-		if err := tc.rng.AddCmd(args, reply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 			t.Fatal(err)
 		}
 		if reply.PusheeTxn.Status != status {
@@ -1630,7 +1631,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		pushee.Timestamp = test.startTS
 		hbArgs, hbReply := heartbeatArgs(pushee, 1, tc.store.StoreID())
 		hbArgs.Timestamp = pushee.Timestamp
-		if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), hbArgs, hbReply, true); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1638,7 +1639,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
 		args, reply := pushTxnArgs(pusher, pushee, proto.ABORT_TXN, 1, tc.store.StoreID())
-		if err := tc.rng.AddCmd(args, reply, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 			t.Fatal(err)
 		}
 		expTxn := gogoproto.Clone(pushee).(*proto.Transaction)
@@ -1701,7 +1702,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		if test.heartbeat != nil {
 			hbArgs, hbReply := heartbeatArgs(pushee, 1, tc.store.StoreID())
 			hbArgs.Timestamp = *test.heartbeat
-			if err := tc.rng.AddCmd(hbArgs, hbReply, true); err != nil {
+			if err := tc.rng.AddCmd(context.Background(), hbArgs, hbReply, true); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1711,7 +1712,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
 		args.Timestamp = tc.clock.Now()
 		args.Timestamp.Logical = 0
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
@@ -1774,7 +1775,7 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
 		}
@@ -1805,7 +1806,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 
 	// Now, push the transaction with args.Abort=false.
 	args, reply := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
-	if err := tc.rng.AddCmd(args, reply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
 	expTS := pusher.Timestamp
@@ -1837,7 +1838,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 
 	// Now, push the transaction with args.Abort=false.
 	args, reply := pushTxnArgs(pusher, pushee, proto.PUSH_TIMESTAMP, 1, tc.store.StoreID())
-	if err := tc.rng.AddCmd(args, reply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
 	if !reply.PusheeTxn.Timestamp.Equal(pushee.Timestamp) {
@@ -1882,7 +1883,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Put a value.
 	pArgs, pReply := putArgs([]byte("a"), []byte("value1"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
-	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS := proto.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
@@ -1892,7 +1893,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
 	pArgs.Txn = &proto.Transaction{ID: util.NewUUID4(), Timestamp: pArgs.Timestamp}
-	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS = proto.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
@@ -1910,7 +1911,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	rArgs.Txn.Status = proto.COMMITTED
 	rReply := &proto.InternalResolveIntentResponse{}
-	if err := tc.rng.AddCmd(rArgs, rReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), rArgs, rReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS = proto.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
@@ -1919,7 +1920,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Delete the 1st value.
 	dArgs, dReply := deleteArgs([]byte("a"), 1, tc.store.StoreID())
 	dArgs.Timestamp = tc.clock.Now()
-	if err := tc.rng.AddCmd(dArgs, dReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), dArgs, dReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS = proto.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
@@ -1943,13 +1944,13 @@ func TestInternalMerge(t *testing.T) {
 	for _, str := range stringArgs {
 		mergeArgs, resp := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1,
 			tc.store.StoreID())
-		if err := tc.rng.AddCmd(mergeArgs, resp, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), mergeArgs, resp, true); err != nil {
 			t.Fatalf("unexpected error from InternalMerge: %s", err.Error())
 		}
 	}
 
 	getArgs, resp := getArgs(key, 1, tc.store.StoreID())
-	if err := tc.rng.AddCmd(getArgs, resp, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), getArgs, resp, true); err != nil {
 		t.Fatalf("unexpected error from Get: %s", err.Error())
 	}
 	if resp.Value == nil {
@@ -1973,7 +1974,7 @@ func TestInternalTruncateLog(t *testing.T) {
 	var indexes []uint64
 	for i := 0; i < 10; i++ {
 		args, resp := incrementArgs([]byte("a"), int64(i), 1, tc.store.StoreID())
-		if err := tc.rng.AddCmd(args, resp, true); err != nil {
+		if err := tc.rng.AddCmd(context.Background(), args, resp, true); err != nil {
 			t.Fatal(err)
 		}
 		idx, err := tc.rng.LastIndex()
@@ -1985,7 +1986,7 @@ func TestInternalTruncateLog(t *testing.T) {
 
 	// Discard the first half of the log
 	truncateArgs, truncateResp := internalTruncateLogArgs(indexes[5], 1, tc.store.StoreID())
-	if err := tc.rng.AddCmd(truncateArgs, truncateResp, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), truncateArgs, truncateResp, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2068,7 +2069,7 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs, pReply := putArgs(key, value, 1, tc.store.StoreID())
-	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	args := &proto.ConditionalPutRequest{
@@ -2086,7 +2087,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 	reply := &proto.ConditionalPutResponse{}
-	err := tc.rng.AddCmd(args, reply, true)
+	err := tc.rng.AddCmd(context.Background(), args, reply, true)
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
@@ -2135,7 +2136,7 @@ func TestAppliedIndex(t *testing.T) {
 	var sum int64
 	for i := int64(1); i <= 10; i++ {
 		args, reply := incrementArgs([]byte("a"), i, 1, tc.store.StoreID())
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2194,7 +2195,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		MaxRanges: 1,
 	}
 	rlReply := &proto.InternalRangeLookupResponse{}
-	if err := tc.rng.AddCmd(rlArgs, rlReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), rlArgs, rlReply, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2210,14 +2211,14 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	pArgs, pReply := putArgs(engine.RangeMetaKey(key), data, 1, tc.store.StoreID())
 	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 	pArgs.Timestamp = pArgs.Txn.Timestamp
-	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
+	if err := tc.rng.AddCmd(context.Background(), pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now lookup the range; should get old value + write intent error.
 	rlArgs.Key = engine.RangeMetaKey(proto.Key("A"))
 	rlArgs.Timestamp = proto.ZeroTimestamp
-	err = tc.rng.AddCmd(rlArgs, rlReply, true)
+	err = tc.rng.AddCmd(context.Background(), rlArgs, rlReply, true)
 	if wiErr, ok := err.(*proto.WriteIntentError); !ok || len(wiErr.Intents) != 1 {
 		t.Errorf("expected write intent error with 1 key; got %s", err)
 	}
@@ -2231,7 +2232,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		rlArgs.Timestamp = proto.ZeroTimestamp
 		rlReply.Reset()
-		if err = tc.rng.AddCmd(rlArgs, rlReply, true); err != nil {
+		if err = tc.rng.AddCmd(context.Background(), rlArgs, rlReply, true); err != nil {
 			t.Fatal(err)
 		}
 		if reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
@@ -2300,7 +2301,7 @@ func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
 	args, reply := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := tc.rng.AddCmd(args, reply, true)
+		err := tc.rng.AddCmd(context.Background(), args, reply, true)
 		if err != nil {
 			b.Fatal(err)
 		}
