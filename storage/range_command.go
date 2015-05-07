@@ -351,18 +351,8 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
-	var metaPrefix proto.Key
-	var startKey proto.Key
-	if len(args.Key) > 0 {
-		// ValidateRangeMetaKey ensures that key is either empty or starts with a meta prefix.
-		metaPrefix = proto.Key(args.Key[:len(engine.KeyMeta1Prefix)])
-		startKey = proto.Key(args.Key).Next()
-	} else {
-		// If args.Key is empty, we want the first entry in meta1.
-		metaPrefix = engine.KeyMeta1Prefix
-		startKey = engine.KeyMeta1Prefix
-	}
-	kvs, err := engine.MVCCScan(batch, startKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, false, args.Txn)
+	startKey, endKey := engine.DecodeRangeMetaKey(args.Key)
+	kvs, err := engine.MVCCScan(batch, startKey, endKey, rangeCount, args.Timestamp, false, args.Txn)
 	if err != nil {
 		if wiErr, ok := err.(*proto.WriteIntentError); ok && args.IgnoreIntents {
 			// NOTE (subtle): in general, we want to try to clean up dangling

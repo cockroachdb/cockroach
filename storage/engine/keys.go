@@ -275,6 +275,18 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	return nil
 }
 
+// DecodeRangeMetaKey returns the bounds within which the desired meta
+// record can be found. The given key must be a valid RangeMetaKey.
+func DecodeRangeMetaKey(key proto.Key) (proto.Key, proto.Key) {
+	if len(key) == 0 {
+		// Special case KeyMin: find the first entry in meta1.
+		return KeyMeta1Prefix, KeyMeta1Prefix.PrefixEnd()
+	}
+	// Otherwise find the first entry greater than the given key in the same meta prefix.
+	metaPrefix := proto.Key(key[:len(KeyMeta1Prefix)])
+	return key.Next(), metaPrefix.PrefixEnd()
+}
+
 // Constants for stat key construction.
 var (
 	// StatLiveBytes counts how many bytes are "live", including bytes
