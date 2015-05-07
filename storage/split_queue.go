@@ -95,7 +95,8 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 			}
 			if err := sq.db.Run(client.Call{
 				Args:  req,
-				Reply: &proto.AdminSplitResponse{}}); err != nil {
+				Reply: &proto.AdminSplitResponse{},
+			}); err != nil {
 				return util.Errorf("unable to split at key %q: %s", splitKey, err)
 			}
 		}
@@ -107,9 +108,14 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 		return err
 	}
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
-		rng.AddCmd(&proto.AdminSplitRequest{
-			RequestHeader: proto.RequestHeader{Key: rng.Desc().StartKey},
-		}, &proto.AdminSplitResponse{}, true)
+		rng.AddCmd(
+			client.Call{
+				Args: &proto.AdminSplitRequest{
+					RequestHeader: proto.RequestHeader{Key: rng.Desc().StartKey},
+				},
+				Reply: &proto.AdminSplitResponse{},
+			}, true)
+
 	}
 	return nil
 }

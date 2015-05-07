@@ -145,7 +145,7 @@ func (ls *LocalSender) Send(call client.Call) {
 			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
 			header.Txn.MaxTimestamp = header.Txn.Timestamp
 		}
-		store.ExecuteCmd(call.Args, call.Reply)
+		store.ExecuteCmd(call)
 	}
 }
 
