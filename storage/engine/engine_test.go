@@ -325,22 +325,22 @@ func TestEngineMerge(t *testing.T) {
 			{
 				proto.EncodedKey("timeseriesmerged"),
 				[][]byte{
-					timeSeriesInt(testtime, 1000, []tsIntSample{
+					timeSeries(testtime, 1000, []tsSample{
 						{1, 1, 5, 5, 5},
 					}...),
-					timeSeriesInt(testtime, 1000, []tsIntSample{
+					timeSeries(testtime, 1000, []tsSample{
 						{2, 1, 5, 5, 5},
 						{1, 2, 10, 7, 3},
 					}...),
-					timeSeriesInt(testtime, 1000, []tsIntSample{
+					timeSeries(testtime, 1000, []tsSample{
 						{10, 1, 5, 5, 5},
 					}...),
-					timeSeriesInt(testtime, 1000, []tsIntSample{
+					timeSeries(testtime, 1000, []tsSample{
 						{5, 1, 5, 5, 5},
 						{3, 1, 5, 5, 5},
 					}...),
 				},
-				timeSeriesInt(testtime, 1000, []tsIntSample{
+				timeSeries(testtime, 1000, []tsSample{
 					{1, 3, 15, 7, 3},
 					{2, 1, 5, 5, 5},
 					{3, 1, 5, 5, 5},

@@ -223,19 +223,11 @@ func (mds *modelDataSource) GetTimeSeriesData() []proto.TimeSeriesData {
 	return data
 }
 
-// intDatapoint quickly generates an integer-valued datapoint.
-func intDatapoint(timestamp int64, val int64) *proto.TimeSeriesDatapoint {
+// datapoint quickly generates a time series datapoint.
+func datapoint(timestamp int64, val float64) *proto.TimeSeriesDatapoint {
 	return &proto.TimeSeriesDatapoint{
 		TimestampNanos: timestamp,
-		IntValue:       gogoproto.Int64(val),
-	}
-}
-
-// floatDatapoint quickly generates an integer-valued datapoint.
-func floatDatapoint(timestamp int64, val float32) *proto.TimeSeriesDatapoint {
-	return &proto.TimeSeriesDatapoint{
-		TimestampNanos: timestamp,
-		FloatValue:     gogoproto.Float32(val),
+		Value:          val,
 	}
 }
 
@@ -251,7 +243,7 @@ func TestStoreTimeSeries(t *testing.T) {
 		{
 			Name: "test.metric",
 			Datapoints: []*proto.TimeSeriesDatapoint{
-				intDatapoint(-446061360000000000, 100),
+				datapoint(-446061360000000000, 100),
 			},
 		},
 	})
@@ -265,9 +257,9 @@ func TestStoreTimeSeries(t *testing.T) {
 			Name:   "test.metric.float",
 			Source: "cpu01",
 			Datapoints: []*proto.TimeSeriesDatapoint{
-				floatDatapoint(1428713843000000000, 100.0),
-				floatDatapoint(1428713843000000001, 50.2),
-				floatDatapoint(1428713843000000002, 90.9),
+				datapoint(1428713843000000000, 100.0),
+				datapoint(1428713843000000001, 50.2),
+				datapoint(1428713843000000002, 90.9),
 			},
 		},
 	})
@@ -276,9 +268,9 @@ func TestStoreTimeSeries(t *testing.T) {
 			Name:   "test.metric.float",
 			Source: "cpu02",
 			Datapoints: []*proto.TimeSeriesDatapoint{
-				floatDatapoint(1428713843000000000, 900.8),
-				floatDatapoint(1428713843000000001, 30.12),
-				floatDatapoint(1428713843000000002, 72.324),
+				datapoint(1428713843000000000, 900.8),
+				datapoint(1428713843000000001, 30.12),
+				datapoint(1428713843000000002, 72.324),
 			},
 		},
 	})
@@ -291,9 +283,9 @@ func TestStoreTimeSeries(t *testing.T) {
 		{
 			Name: "test.metric",
 			Datapoints: []*proto.TimeSeriesDatapoint{
-				intDatapoint(-446061360000000001, 200),
-				intDatapoint(450000000000000000, 1),
-				intDatapoint(460000000000000000, 777),
+				datapoint(-446061360000000001, 200),
+				datapoint(450000000000000000, 1),
+				datapoint(460000000000000000, 777),
 			},
 		},
 	})
@@ -317,18 +309,18 @@ func TestPollSource(t *testing.T) {
 					Name:   "test.metric.float",
 					Source: "cpu01",
 					Datapoints: []*proto.TimeSeriesDatapoint{
-						floatDatapoint(1428713843000000000, 100.0),
-						floatDatapoint(1428713843000000001, 50.2),
-						floatDatapoint(1428713843000000002, 90.9),
+						datapoint(1428713843000000000, 100.0),
+						datapoint(1428713843000000001, 50.2),
+						datapoint(1428713843000000002, 90.9),
 					},
 				},
 				{
 					Name:   "test.metric.float",
 					Source: "cpu02",
 					Datapoints: []*proto.TimeSeriesDatapoint{
-						floatDatapoint(1428713843000000000, 900.8),
-						floatDatapoint(1428713843000000001, 30.12),
-						floatDatapoint(1428713843000000002, 72.324),
+						datapoint(1428713843000000000, 900.8),
+						datapoint(1428713843000000001, 30.12),
+						datapoint(1428713843000000002, 72.324),
 					},
 				},
 			},
@@ -336,7 +328,7 @@ func TestPollSource(t *testing.T) {
 				{
 					Name: "test.metric",
 					Datapoints: []*proto.TimeSeriesDatapoint{
-						intDatapoint(-446061360000000000, 100),
+						datapoint(-446061360000000000, 100),
 					},
 				},
 			},

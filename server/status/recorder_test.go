@@ -115,7 +115,10 @@ func TestNodeStatusRecorder(t *testing.T) {
 		return proto.TimeSeriesData{
 			Name: fmt.Sprintf(storeTimeSeriesNameFmt, name, proto.StoreID(storeId)),
 			Datapoints: []*proto.TimeSeriesDatapoint{
-				intDatapoint(time, val),
+				{
+					TimestampNanos: time,
+					Value:          float64(val),
+				},
 			},
 		}
 	}

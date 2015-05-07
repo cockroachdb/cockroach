@@ -3231,96 +3231,56 @@ class InternalTimeSeriesSample : public ::google::protobuf::Message {
   inline ::google::protobuf::int32 offset() const;
   inline void set_offset(::google::protobuf::int32 value);
 
-  // optional uint32 int_count = 2;
-  inline bool has_int_count() const;
-  inline void clear_int_count();
-  static const int kIntCountFieldNumber = 2;
-  inline ::google::protobuf::uint32 int_count() const;
-  inline void set_int_count(::google::protobuf::uint32 value);
+  // optional uint32 count = 6;
+  inline bool has_count() const;
+  inline void clear_count();
+  static const int kCountFieldNumber = 6;
+  inline ::google::protobuf::uint32 count() const;
+  inline void set_count(::google::protobuf::uint32 value);
 
-  // optional int64 int_sum = 3;
-  inline bool has_int_sum() const;
-  inline void clear_int_sum();
-  static const int kIntSumFieldNumber = 3;
-  inline ::google::protobuf::int64 int_sum() const;
-  inline void set_int_sum(::google::protobuf::int64 value);
+  // optional double sum = 7;
+  inline bool has_sum() const;
+  inline void clear_sum();
+  static const int kSumFieldNumber = 7;
+  inline double sum() const;
+  inline void set_sum(double value);
 
-  // optional int64 int_max = 4;
-  inline bool has_int_max() const;
-  inline void clear_int_max();
-  static const int kIntMaxFieldNumber = 4;
-  inline ::google::protobuf::int64 int_max() const;
-  inline void set_int_max(::google::protobuf::int64 value);
+  // optional double max = 8;
+  inline bool has_max() const;
+  inline void clear_max();
+  static const int kMaxFieldNumber = 8;
+  inline double max() const;
+  inline void set_max(double value);
 
-  // optional int64 int_min = 5;
-  inline bool has_int_min() const;
-  inline void clear_int_min();
-  static const int kIntMinFieldNumber = 5;
-  inline ::google::protobuf::int64 int_min() const;
-  inline void set_int_min(::google::protobuf::int64 value);
-
-  // optional uint32 float_count = 6;
-  inline bool has_float_count() const;
-  inline void clear_float_count();
-  static const int kFloatCountFieldNumber = 6;
-  inline ::google::protobuf::uint32 float_count() const;
-  inline void set_float_count(::google::protobuf::uint32 value);
-
-  // optional float float_sum = 7;
-  inline bool has_float_sum() const;
-  inline void clear_float_sum();
-  static const int kFloatSumFieldNumber = 7;
-  inline float float_sum() const;
-  inline void set_float_sum(float value);
-
-  // optional float float_max = 8;
-  inline bool has_float_max() const;
-  inline void clear_float_max();
-  static const int kFloatMaxFieldNumber = 8;
-  inline float float_max() const;
-  inline void set_float_max(float value);
-
-  // optional float float_min = 9;
-  inline bool has_float_min() const;
-  inline void clear_float_min();
-  static const int kFloatMinFieldNumber = 9;
-  inline float float_min() const;
-  inline void set_float_min(float value);
+  // optional double min = 9;
+  inline bool has_min() const;
+  inline void clear_min();
+  static const int kMinFieldNumber = 9;
+  inline double min() const;
+  inline void set_min(double value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalTimeSeriesSample)
  private:
   inline void set_has_offset();
   inline void clear_has_offset();
-  inline void set_has_int_count();
-  inline void clear_has_int_count();
-  inline void set_has_int_sum();
-  inline void clear_has_int_sum();
-  inline void set_has_int_max();
-  inline void clear_has_int_max();
-  inline void set_has_int_min();
-  inline void clear_has_int_min();
-  inline void set_has_float_count();
-  inline void clear_has_float_count();
-  inline void set_has_float_sum();
-  inline void clear_has_float_sum();
-  inline void set_has_float_max();
-  inline void clear_has_float_max();
-  inline void set_has_float_min();
-  inline void clear_has_float_min();
+  inline void set_has_count();
+  inline void clear_has_count();
+  inline void set_has_sum();
+  inline void clear_has_sum();
+  inline void set_has_max();
+  inline void clear_has_max();
+  inline void set_has_min();
+  inline void clear_has_min();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int32 offset_;
-  ::google::protobuf::uint32 int_count_;
-  ::google::protobuf::int64 int_sum_;
-  ::google::protobuf::int64 int_max_;
-  ::google::protobuf::int64 int_min_;
-  ::google::protobuf::uint32 float_count_;
-  float float_sum_;
-  float float_max_;
-  float float_min_;
+  ::google::protobuf::uint32 count_;
+  double sum_;
+  double max_;
+  double min_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
@@ -7665,196 +7625,100 @@ inline void InternalTimeSeriesSample::set_offset(::google::protobuf::int32 value
   // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.offset)
 }
 
-// optional uint32 int_count = 2;
-inline bool InternalTimeSeriesSample::has_int_count() const {
+// optional uint32 count = 6;
+inline bool InternalTimeSeriesSample::has_count() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void InternalTimeSeriesSample::set_has_int_count() {
+inline void InternalTimeSeriesSample::set_has_count() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void InternalTimeSeriesSample::clear_has_int_count() {
+inline void InternalTimeSeriesSample::clear_has_count() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void InternalTimeSeriesSample::clear_int_count() {
-  int_count_ = 0u;
-  clear_has_int_count();
+inline void InternalTimeSeriesSample::clear_count() {
+  count_ = 0u;
+  clear_has_count();
 }
-inline ::google::protobuf::uint32 InternalTimeSeriesSample::int_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.int_count)
-  return int_count_;
+inline ::google::protobuf::uint32 InternalTimeSeriesSample::count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.count)
+  return count_;
 }
-inline void InternalTimeSeriesSample::set_int_count(::google::protobuf::uint32 value) {
-  set_has_int_count();
-  int_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.int_count)
+inline void InternalTimeSeriesSample::set_count(::google::protobuf::uint32 value) {
+  set_has_count();
+  count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.count)
 }
 
-// optional int64 int_sum = 3;
-inline bool InternalTimeSeriesSample::has_int_sum() const {
+// optional double sum = 7;
+inline bool InternalTimeSeriesSample::has_sum() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void InternalTimeSeriesSample::set_has_int_sum() {
+inline void InternalTimeSeriesSample::set_has_sum() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void InternalTimeSeriesSample::clear_has_int_sum() {
+inline void InternalTimeSeriesSample::clear_has_sum() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void InternalTimeSeriesSample::clear_int_sum() {
-  int_sum_ = GOOGLE_LONGLONG(0);
-  clear_has_int_sum();
+inline void InternalTimeSeriesSample::clear_sum() {
+  sum_ = 0;
+  clear_has_sum();
 }
-inline ::google::protobuf::int64 InternalTimeSeriesSample::int_sum() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.int_sum)
-  return int_sum_;
+inline double InternalTimeSeriesSample::sum() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.sum)
+  return sum_;
 }
-inline void InternalTimeSeriesSample::set_int_sum(::google::protobuf::int64 value) {
-  set_has_int_sum();
-  int_sum_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.int_sum)
+inline void InternalTimeSeriesSample::set_sum(double value) {
+  set_has_sum();
+  sum_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.sum)
 }
 
-// optional int64 int_max = 4;
-inline bool InternalTimeSeriesSample::has_int_max() const {
+// optional double max = 8;
+inline bool InternalTimeSeriesSample::has_max() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-inline void InternalTimeSeriesSample::set_has_int_max() {
+inline void InternalTimeSeriesSample::set_has_max() {
   _has_bits_[0] |= 0x00000008u;
 }
-inline void InternalTimeSeriesSample::clear_has_int_max() {
+inline void InternalTimeSeriesSample::clear_has_max() {
   _has_bits_[0] &= ~0x00000008u;
 }
-inline void InternalTimeSeriesSample::clear_int_max() {
-  int_max_ = GOOGLE_LONGLONG(0);
-  clear_has_int_max();
+inline void InternalTimeSeriesSample::clear_max() {
+  max_ = 0;
+  clear_has_max();
 }
-inline ::google::protobuf::int64 InternalTimeSeriesSample::int_max() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.int_max)
-  return int_max_;
+inline double InternalTimeSeriesSample::max() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.max)
+  return max_;
 }
-inline void InternalTimeSeriesSample::set_int_max(::google::protobuf::int64 value) {
-  set_has_int_max();
-  int_max_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.int_max)
+inline void InternalTimeSeriesSample::set_max(double value) {
+  set_has_max();
+  max_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.max)
 }
 
-// optional int64 int_min = 5;
-inline bool InternalTimeSeriesSample::has_int_min() const {
+// optional double min = 9;
+inline bool InternalTimeSeriesSample::has_min() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-inline void InternalTimeSeriesSample::set_has_int_min() {
+inline void InternalTimeSeriesSample::set_has_min() {
   _has_bits_[0] |= 0x00000010u;
 }
-inline void InternalTimeSeriesSample::clear_has_int_min() {
+inline void InternalTimeSeriesSample::clear_has_min() {
   _has_bits_[0] &= ~0x00000010u;
 }
-inline void InternalTimeSeriesSample::clear_int_min() {
-  int_min_ = GOOGLE_LONGLONG(0);
-  clear_has_int_min();
+inline void InternalTimeSeriesSample::clear_min() {
+  min_ = 0;
+  clear_has_min();
 }
-inline ::google::protobuf::int64 InternalTimeSeriesSample::int_min() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.int_min)
-  return int_min_;
+inline double InternalTimeSeriesSample::min() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.min)
+  return min_;
 }
-inline void InternalTimeSeriesSample::set_int_min(::google::protobuf::int64 value) {
-  set_has_int_min();
-  int_min_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.int_min)
-}
-
-// optional uint32 float_count = 6;
-inline bool InternalTimeSeriesSample::has_float_count() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void InternalTimeSeriesSample::set_has_float_count() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void InternalTimeSeriesSample::clear_has_float_count() {
-  _has_bits_[0] &= ~0x00000020u;
-}
-inline void InternalTimeSeriesSample::clear_float_count() {
-  float_count_ = 0u;
-  clear_has_float_count();
-}
-inline ::google::protobuf::uint32 InternalTimeSeriesSample::float_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.float_count)
-  return float_count_;
-}
-inline void InternalTimeSeriesSample::set_float_count(::google::protobuf::uint32 value) {
-  set_has_float_count();
-  float_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.float_count)
-}
-
-// optional float float_sum = 7;
-inline bool InternalTimeSeriesSample::has_float_sum() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void InternalTimeSeriesSample::set_has_float_sum() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void InternalTimeSeriesSample::clear_has_float_sum() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void InternalTimeSeriesSample::clear_float_sum() {
-  float_sum_ = 0;
-  clear_has_float_sum();
-}
-inline float InternalTimeSeriesSample::float_sum() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.float_sum)
-  return float_sum_;
-}
-inline void InternalTimeSeriesSample::set_float_sum(float value) {
-  set_has_float_sum();
-  float_sum_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.float_sum)
-}
-
-// optional float float_max = 8;
-inline bool InternalTimeSeriesSample::has_float_max() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
-}
-inline void InternalTimeSeriesSample::set_has_float_max() {
-  _has_bits_[0] |= 0x00000080u;
-}
-inline void InternalTimeSeriesSample::clear_has_float_max() {
-  _has_bits_[0] &= ~0x00000080u;
-}
-inline void InternalTimeSeriesSample::clear_float_max() {
-  float_max_ = 0;
-  clear_has_float_max();
-}
-inline float InternalTimeSeriesSample::float_max() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.float_max)
-  return float_max_;
-}
-inline void InternalTimeSeriesSample::set_float_max(float value) {
-  set_has_float_max();
-  float_max_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.float_max)
-}
-
-// optional float float_min = 9;
-inline bool InternalTimeSeriesSample::has_float_min() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
-}
-inline void InternalTimeSeriesSample::set_has_float_min() {
-  _has_bits_[0] |= 0x00000100u;
-}
-inline void InternalTimeSeriesSample::clear_has_float_min() {
-  _has_bits_[0] &= ~0x00000100u;
-}
-inline void InternalTimeSeriesSample::clear_float_min() {
-  float_min_ = 0;
-  clear_has_float_min();
-}
-inline float InternalTimeSeriesSample::float_min() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalTimeSeriesSample.float_min)
-  return float_min_;
-}
-inline void InternalTimeSeriesSample::set_float_min(float value) {
-  set_has_float_min();
-  float_min_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.float_min)
+inline void InternalTimeSeriesSample::set_min(double value) {
+  set_has_min();
+  min_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalTimeSeriesSample.min)
 }
 
 // -------------------------------------------------------------------

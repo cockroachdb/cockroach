@@ -739,13 +739,9 @@ type TimeSeriesDatapoint struct {
 	// The timestamp when this datapoint is located, expressed in nanoseconds
 	// since the unix epoch.
 	TimestampNanos int64 `protobuf:"varint,1,opt,name=timestamp_nanos" json:"timestamp_nanos"`
-	// An integer representation of the value of this datapoint. If this field
-	// is set, then 'float_value' must not be set.
-	IntValue *int64 `protobuf:"varint,2,opt,name=int_value" json:"int_value,omitempty"`
-	// A floating point representation of the value of this datapoint. If this
-	// field is set, then 'int_value' must not be set.
-	FloatValue       *float32 `protobuf:"fixed32,3,opt,name=float_value" json:"float_value,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	// A floating point representation of the value of this datapoint.
+	Value            float64 `protobuf:"fixed64,2,opt,name=value" json:"value"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *TimeSeriesDatapoint) Reset()         { *m = TimeSeriesDatapoint{} }
@@ -759,16 +755,9 @@ func (m *TimeSeriesDatapoint) GetTimestampNanos() int64 {
 	return 0
 }
 
-func (m *TimeSeriesDatapoint) GetIntValue() int64 {
-	if m != nil && m.IntValue != nil {
-		return *m.IntValue
-	}
-	return 0
-}
-
-func (m *TimeSeriesDatapoint) GetFloatValue() float32 {
-	if m != nil && m.FloatValue != nil {
-		return *m.FloatValue
+func (m *TimeSeriesDatapoint) GetValue() float64 {
+	if m != nil {
+		return m.Value
 	}
 	return 0
 }
@@ -2693,38 +2682,24 @@ func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 				}
 			}
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntValue", wireType)
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
 			}
-			var v int64
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.IntValue = &v
-		case 3:
-			if wireType != 5 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FloatValue", wireType)
-			}
-			var v uint32
-			i := index + 4
+			var v uint64
+			i := index + 8
 			if i > l {
 				return io.ErrUnexpectedEOF
 			}
 			index = i
-			v = uint32(data[i-4])
-			v |= uint32(data[i-3]) << 8
-			v |= uint32(data[i-2]) << 16
-			v |= uint32(data[i-1]) << 24
-			v2 := math.Float32frombits(v)
-			m.FloatValue = &v2
+			v = uint64(data[i-8])
+			v |= uint64(data[i-7]) << 8
+			v |= uint64(data[i-6]) << 16
+			v |= uint64(data[i-5]) << 24
+			v |= uint64(data[i-4]) << 32
+			v |= uint64(data[i-3]) << 40
+			v |= uint64(data[i-2]) << 48
+			v |= uint64(data[i-1]) << 56
+			m.Value = math.Float64frombits(v)
 		default:
 			var sizeOfWire int
 			for {
@@ -3329,12 +3304,7 @@ func (m *TimeSeriesDatapoint) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.TimestampNanos))
-	if m.IntValue != nil {
-		n += 1 + sovData(uint64(*m.IntValue))
-	}
-	if m.FloatValue != nil {
-		n += 5
-	}
+	n += 9
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -4071,16 +4041,9 @@ func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintData(data, i, uint64(m.TimestampNanos))
-	if m.IntValue != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintData(data, i, uint64(*m.IntValue))
-	}
-	if m.FloatValue != nil {
-		data[i] = 0x1d
-		i++
-		i = encodeFixed32Data(data, i, uint32(math.Float32bits(*m.FloatValue)))
-	}
+	data[i] = 0x11
+	i++
+	i = encodeFixed64Data(data, i, uint64(math.Float64bits(m.Value)))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

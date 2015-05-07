@@ -30,19 +30,19 @@ func TestTimeSeriesToValue(t *testing.T) {
 		SampleDurationNanos: 1000000000,
 		Samples: []*InternalTimeSeriesSample{
 			{
-				Offset:   1,
-				IntCount: 1,
-				IntSum:   gogoproto.Int64(1),
+				Offset: 1,
+				Count:  1,
+				Sum:    64,
 			},
 			{
-				Offset:   2,
-				IntCount: 1,
-				IntSum:   gogoproto.Int64(2),
+				Offset: 2,
+				Count:  1,
+				Sum:    2,
 			},
 			{
-				Offset:   3,
-				IntCount: 1,
-				IntSum:   gogoproto.Int64(3),
+				Offset: 3,
+				Count:  1,
+				Sum:    3,
 			},
 		},
 	}

@@ -425,17 +425,10 @@ func ts(name string, dps ...*TimeSeriesDatapoint) *TimeSeriesData {
 	}
 }
 
-func tsdpi(ts time.Duration, val int64) *TimeSeriesDatapoint {
+func tsdp(ts time.Duration, val float64) *TimeSeriesDatapoint {
 	return &TimeSeriesDatapoint{
 		TimestampNanos: int64(ts),
-		IntValue:       gogoproto.Int64(val),
-	}
-}
-
-func tsdpf(ts time.Duration, val float32) *TimeSeriesDatapoint {
-	return &TimeSeriesDatapoint{
-		TimestampNanos: int64(ts),
-		FloatValue:     gogoproto.Float32(val),
+		Value:          val,
 	}
 }
 
@@ -464,102 +457,16 @@ func TestToInternal(t *testing.T) {
 			nil,
 		},
 		{
-			time.Hour.Nanoseconds(),
-			time.Second.Nanoseconds(),
-			true,
-			ts("error.series",
-				tsdpi((time.Hour*50)+(time.Second*5), 1),
-				&TimeSeriesDatapoint{},
-			),
-			nil,
-		},
-		{
-			time.Hour.Nanoseconds(),
-			time.Second.Nanoseconds(),
-			true,
-			ts("error.series",
-				tsdpi((time.Hour*50)+(time.Second*5), 1),
-				&TimeSeriesDatapoint{
-					IntValue:   gogoproto.Int64(5),
-					FloatValue: gogoproto.Float32(5.0),
-				},
-			),
-			nil,
-		},
-		{
-			time.Hour.Nanoseconds(),
-			time.Second.Nanoseconds(),
-			false,
-			ts("test.series",
-				tsdpi((time.Hour*50)+(time.Second*5), 1),
-				tsdpi((time.Hour*51)+(time.Second*3), 2),
-				tsdpi((time.Hour*50)+(time.Second*10), 3),
-				tsdpi((time.Hour*53), 4),
-				tsdpi((time.Hour*50)+(time.Second*5)+1, 5),
-				tsdpi((time.Hour*53)+(time.Second*15), 0),
-			),
-			[]*InternalTimeSeriesData{
-				{
-					StartTimestampNanos: int64(time.Hour * 50),
-					SampleDurationNanos: int64(time.Second),
-					Samples: []*InternalTimeSeriesSample{
-						{
-							Offset:   5,
-							IntCount: 1,
-							IntSum:   gogoproto.Int64(1),
-						},
-						{
-							Offset:   10,
-							IntCount: 1,
-							IntSum:   gogoproto.Int64(3),
-						},
-						{
-							Offset:   5,
-							IntCount: 1,
-							IntSum:   gogoproto.Int64(5),
-						},
-					},
-				},
-				{
-					StartTimestampNanos: int64(time.Hour * 51),
-					SampleDurationNanos: int64(time.Second),
-					Samples: []*InternalTimeSeriesSample{
-						{
-							Offset:   3,
-							IntCount: 1,
-							IntSum:   gogoproto.Int64(2),
-						},
-					},
-				},
-				{
-					StartTimestampNanos: int64(time.Hour * 53),
-					SampleDurationNanos: int64(time.Second),
-					Samples: []*InternalTimeSeriesSample{
-						{
-							Offset:   0,
-							IntCount: 1,
-							IntSum:   gogoproto.Int64(4),
-						},
-						{
-							Offset:   15,
-							IntCount: 1,
-							IntSum:   gogoproto.Int64(0),
-						},
-					},
-				},
-			},
-		},
-		{
 			(time.Hour * 24).Nanoseconds(),
 			(time.Minute * 20).Nanoseconds(),
 			false,
 			ts("test.series",
-				tsdpf((time.Hour*5)+(time.Minute*5), 1.0),
-				tsdpf((time.Hour*24)+(time.Minute*39), 2.0),
-				tsdpf((time.Hour*10)+(time.Minute*10), 3.0),
-				tsdpf((time.Hour*48), 4.0),
-				tsdpf((time.Hour*15)+(time.Minute*22)+1, 5.0),
-				tsdpf((time.Hour*52)+(time.Minute*15), 0.0),
+				tsdp((time.Hour*5)+(time.Minute*5), 1.0),
+				tsdp((time.Hour*24)+(time.Minute*39), 2.0),
+				tsdp((time.Hour*10)+(time.Minute*10), 3.0),
+				tsdp((time.Hour*48), 4.0),
+				tsdp((time.Hour*15)+(time.Minute*22)+1, 5.0),
+				tsdp((time.Hour*52)+(time.Minute*15), 0.0),
 			),
 			[]*InternalTimeSeriesData{
 				{
@@ -567,19 +474,19 @@ func TestToInternal(t *testing.T) {
 					SampleDurationNanos: int64(time.Minute * 20),
 					Samples: []*InternalTimeSeriesSample{
 						{
-							Offset:     15,
-							FloatCount: 1,
-							FloatSum:   gogoproto.Float32(1.0),
+							Offset: 15,
+							Count:  1,
+							Sum:    1.0,
 						},
 						{
-							Offset:     30,
-							FloatCount: 1,
-							FloatSum:   gogoproto.Float32(3.0),
+							Offset: 30,
+							Count:  1,
+							Sum:    3.0,
 						},
 						{
-							Offset:     46,
-							FloatCount: 1,
-							FloatSum:   gogoproto.Float32(5.0),
+							Offset: 46,
+							Count:  1,
+							Sum:    5.0,
 						},
 					},
 				},
@@ -588,9 +495,9 @@ func TestToInternal(t *testing.T) {
 					SampleDurationNanos: int64(time.Minute * 20),
 					Samples: []*InternalTimeSeriesSample{
 						{
-							Offset:     1,
-							FloatCount: 1,
-							FloatSum:   gogoproto.Float32(2.0),
+							Offset: 1,
+							Count:  1,
+							Sum:    2.0,
 						},
 					},
 				},
@@ -599,14 +506,14 @@ func TestToInternal(t *testing.T) {
 					SampleDurationNanos: int64(time.Minute * 20),
 					Samples: []*InternalTimeSeriesSample{
 						{
-							Offset:     0,
-							FloatCount: 1,
-							FloatSum:   gogoproto.Float32(4.0),
+							Offset: 0,
+							Count:  1,
+							Sum:    4.0,
 						},
 						{
-							Offset:     12,
-							FloatCount: 1,
-							FloatSum:   gogoproto.Float32(0.0),
+							Offset: 12,
+							Count:  1,
+							Sum:    0.0,
 						},
 					},
 				},

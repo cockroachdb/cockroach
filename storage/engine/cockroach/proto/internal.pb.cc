@@ -675,16 +675,12 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalTimeSeriesData));
   InternalTimeSeriesSample_descriptor_ = file->message_type(26);
-  static const int InternalTimeSeriesSample_offsets_[9] = {
+  static const int InternalTimeSeriesSample_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, offset_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, int_count_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, int_sum_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, int_max_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, int_min_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, float_count_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, float_sum_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, float_max_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, float_min_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, count_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, sum_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, max_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, min_),
   };
   InternalTimeSeriesSample_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -1064,21 +1060,18 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "nalTimeSeriesData\022#\n\025start_timestamp_nan"
     "os\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample_duration_nanos\030"
     "\002 \001(\003B\004\310\336\037\000\022:\n\007samples\030\003 \003(\0132).cockroach"
-    ".proto.InternalTimeSeriesSample\"\320\001\n\030Inte"
-    "rnalTimeSeriesSample\022\024\n\006offset\030\001 \001(\005B\004\310\336"
-    "\037\000\022\027\n\tint_count\030\002 \001(\rB\004\310\336\037\000\022\017\n\007int_sum\030\003"
-    " \001(\003\022\017\n\007int_max\030\004 \001(\003\022\017\n\007int_min\030\005 \001(\003\022\031"
-    "\n\013float_count\030\006 \001(\rB\004\310\336\037\000\022\021\n\tfloat_sum\030\007"
-    " \001(\002\022\021\n\tfloat_max\030\010 \001(\002\022\021\n\tfloat_min\030\t \001"
-    "(\002\"=\n\022RaftTruncatedState\022\023\n\005index\030\001 \001(\004B"
-    "\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"z\n\020RaftSnapsho"
-    "tData\022>\n\002KV\030\001 \003(\0132*.cockroach.proto.Raft"
-    "SnapshotData.KeyValueB\006\342\336\037\002KV\032&\n\010KeyValu"
-    "e\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014*G\n\013PushTxn"
-    "Type\022\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022"
-    "\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000*%\n\021InternalValueT"
-    "ype\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342"
-    "\036\001", 6962);
+    ".proto.InternalTimeSeriesSample\"r\n\030Inter"
+    "nalTimeSeriesSample\022\024\n\006offset\030\001 \001(\005B\004\310\336\037"
+    "\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001(\001B\004\310\336\037"
+    "\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001(\001\"=\n\022RaftTrunc"
+    "atedState\022\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002"
+    " \001(\004B\004\310\336\037\000\"z\n\020RaftSnapshotData\022>\n\002KV\030\001 \003"
+    "(\0132*.cockroach.proto.RaftSnapshotData.Ke"
+    "yValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014\022"
+    "\r\n\005value\030\002 \001(\014*G\n\013PushTxnType\022\022\n\016PUSH_TI"
+    "MESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANUP_TXN\020"
+    "\002\032\004\210\243\036\000*%\n\021InternalValueType\022\n\n\006_CR_TS\020\001"
+    "\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 6867);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -10390,14 +10383,10 @@ void InternalTimeSeriesData::Swap(InternalTimeSeriesData* other) {
 
 #ifndef _MSC_VER
 const int InternalTimeSeriesSample::kOffsetFieldNumber;
-const int InternalTimeSeriesSample::kIntCountFieldNumber;
-const int InternalTimeSeriesSample::kIntSumFieldNumber;
-const int InternalTimeSeriesSample::kIntMaxFieldNumber;
-const int InternalTimeSeriesSample::kIntMinFieldNumber;
-const int InternalTimeSeriesSample::kFloatCountFieldNumber;
-const int InternalTimeSeriesSample::kFloatSumFieldNumber;
-const int InternalTimeSeriesSample::kFloatMaxFieldNumber;
-const int InternalTimeSeriesSample::kFloatMinFieldNumber;
+const int InternalTimeSeriesSample::kCountFieldNumber;
+const int InternalTimeSeriesSample::kSumFieldNumber;
+const int InternalTimeSeriesSample::kMaxFieldNumber;
+const int InternalTimeSeriesSample::kMinFieldNumber;
 #endif  // !_MSC_VER
 
 InternalTimeSeriesSample::InternalTimeSeriesSample()
@@ -10419,14 +10408,10 @@ InternalTimeSeriesSample::InternalTimeSeriesSample(const InternalTimeSeriesSampl
 void InternalTimeSeriesSample::SharedCtor() {
   _cached_size_ = 0;
   offset_ = 0;
-  int_count_ = 0u;
-  int_sum_ = GOOGLE_LONGLONG(0);
-  int_max_ = GOOGLE_LONGLONG(0);
-  int_min_ = GOOGLE_LONGLONG(0);
-  float_count_ = 0u;
-  float_sum_ = 0;
-  float_max_ = 0;
-  float_min_ = 0;
+  count_ = 0u;
+  sum_ = 0;
+  max_ = 0;
+  min_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -10472,10 +10457,9 @@ void InternalTimeSeriesSample::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 255) {
-    ZR_(offset_, float_max_);
+  if (_has_bits_[0 / 32] & 31) {
+    ZR_(offset_, min_);
   }
-  float_min_ = 0;
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -10504,123 +10488,63 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_int_count;
+        if (input->ExpectTag(48)) goto parse_count;
         break;
       }
 
-      // optional uint32 int_count = 2;
-      case 2: {
-        if (tag == 16) {
-         parse_int_count:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, &int_count_)));
-          set_has_int_count();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(24)) goto parse_int_sum;
-        break;
-      }
-
-      // optional int64 int_sum = 3;
-      case 3: {
-        if (tag == 24) {
-         parse_int_sum:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &int_sum_)));
-          set_has_int_sum();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(32)) goto parse_int_max;
-        break;
-      }
-
-      // optional int64 int_max = 4;
-      case 4: {
-        if (tag == 32) {
-         parse_int_max:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &int_max_)));
-          set_has_int_max();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(40)) goto parse_int_min;
-        break;
-      }
-
-      // optional int64 int_min = 5;
-      case 5: {
-        if (tag == 40) {
-         parse_int_min:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &int_min_)));
-          set_has_int_min();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(48)) goto parse_float_count;
-        break;
-      }
-
-      // optional uint32 float_count = 6;
+      // optional uint32 count = 6;
       case 6: {
         if (tag == 48) {
-         parse_float_count:
+         parse_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, &float_count_)));
-          set_has_float_count();
+                 input, &count_)));
+          set_has_count();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(61)) goto parse_float_sum;
+        if (input->ExpectTag(57)) goto parse_sum;
         break;
       }
 
-      // optional float float_sum = 7;
+      // optional double sum = 7;
       case 7: {
-        if (tag == 61) {
-         parse_float_sum:
+        if (tag == 57) {
+         parse_sum:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   float, ::google::protobuf::internal::WireFormatLite::TYPE_FLOAT>(
-                 input, &float_sum_)));
-          set_has_float_sum();
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &sum_)));
+          set_has_sum();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(69)) goto parse_float_max;
+        if (input->ExpectTag(65)) goto parse_max;
         break;
       }
 
-      // optional float float_max = 8;
+      // optional double max = 8;
       case 8: {
-        if (tag == 69) {
-         parse_float_max:
+        if (tag == 65) {
+         parse_max:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   float, ::google::protobuf::internal::WireFormatLite::TYPE_FLOAT>(
-                 input, &float_max_)));
-          set_has_float_max();
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &max_)));
+          set_has_max();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(77)) goto parse_float_min;
+        if (input->ExpectTag(73)) goto parse_min;
         break;
       }
 
-      // optional float float_min = 9;
+      // optional double min = 9;
       case 9: {
-        if (tag == 77) {
-         parse_float_min:
+        if (tag == 73) {
+         parse_min:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   float, ::google::protobuf::internal::WireFormatLite::TYPE_FLOAT>(
-                 input, &float_min_)));
-          set_has_float_min();
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &min_)));
+          set_has_min();
         } else {
           goto handle_unusual;
         }
@@ -10658,44 +10582,24 @@ void InternalTimeSeriesSample::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->offset(), output);
   }
 
-  // optional uint32 int_count = 2;
-  if (has_int_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(2, this->int_count(), output);
+  // optional uint32 count = 6;
+  if (has_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(6, this->count(), output);
   }
 
-  // optional int64 int_sum = 3;
-  if (has_int_sum()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->int_sum(), output);
+  // optional double sum = 7;
+  if (has_sum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(7, this->sum(), output);
   }
 
-  // optional int64 int_max = 4;
-  if (has_int_max()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->int_max(), output);
+  // optional double max = 8;
+  if (has_max()) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(8, this->max(), output);
   }
 
-  // optional int64 int_min = 5;
-  if (has_int_min()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->int_min(), output);
-  }
-
-  // optional uint32 float_count = 6;
-  if (has_float_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(6, this->float_count(), output);
-  }
-
-  // optional float float_sum = 7;
-  if (has_float_sum()) {
-    ::google::protobuf::internal::WireFormatLite::WriteFloat(7, this->float_sum(), output);
-  }
-
-  // optional float float_max = 8;
-  if (has_float_max()) {
-    ::google::protobuf::internal::WireFormatLite::WriteFloat(8, this->float_max(), output);
-  }
-
-  // optional float float_min = 9;
-  if (has_float_min()) {
-    ::google::protobuf::internal::WireFormatLite::WriteFloat(9, this->float_min(), output);
+  // optional double min = 9;
+  if (has_min()) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(9, this->min(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -10713,44 +10617,24 @@ void InternalTimeSeriesSample::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->offset(), target);
   }
 
-  // optional uint32 int_count = 2;
-  if (has_int_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(2, this->int_count(), target);
+  // optional uint32 count = 6;
+  if (has_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(6, this->count(), target);
   }
 
-  // optional int64 int_sum = 3;
-  if (has_int_sum()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->int_sum(), target);
+  // optional double sum = 7;
+  if (has_sum()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteDoubleToArray(7, this->sum(), target);
   }
 
-  // optional int64 int_max = 4;
-  if (has_int_max()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->int_max(), target);
+  // optional double max = 8;
+  if (has_max()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteDoubleToArray(8, this->max(), target);
   }
 
-  // optional int64 int_min = 5;
-  if (has_int_min()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->int_min(), target);
-  }
-
-  // optional uint32 float_count = 6;
-  if (has_float_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(6, this->float_count(), target);
-  }
-
-  // optional float float_sum = 7;
-  if (has_float_sum()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteFloatToArray(7, this->float_sum(), target);
-  }
-
-  // optional float float_max = 8;
-  if (has_float_max()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteFloatToArray(8, this->float_max(), target);
-  }
-
-  // optional float float_min = 9;
-  if (has_float_min()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteFloatToArray(9, this->float_min(), target);
+  // optional double min = 9;
+  if (has_min()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteDoubleToArray(9, this->min(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -10772,56 +10656,26 @@ int InternalTimeSeriesSample::ByteSize() const {
           this->offset());
     }
 
-    // optional uint32 int_count = 2;
-    if (has_int_count()) {
+    // optional uint32 count = 6;
+    if (has_count()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt32Size(
-          this->int_count());
+          this->count());
     }
 
-    // optional int64 int_sum = 3;
-    if (has_int_sum()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->int_sum());
+    // optional double sum = 7;
+    if (has_sum()) {
+      total_size += 1 + 8;
     }
 
-    // optional int64 int_max = 4;
-    if (has_int_max()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->int_max());
+    // optional double max = 8;
+    if (has_max()) {
+      total_size += 1 + 8;
     }
 
-    // optional int64 int_min = 5;
-    if (has_int_min()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->int_min());
-    }
-
-    // optional uint32 float_count = 6;
-    if (has_float_count()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt32Size(
-          this->float_count());
-    }
-
-    // optional float float_sum = 7;
-    if (has_float_sum()) {
-      total_size += 1 + 4;
-    }
-
-    // optional float float_max = 8;
-    if (has_float_max()) {
-      total_size += 1 + 4;
-    }
-
-  }
-  if (_has_bits_[8 / 32] & (0xffu << (8 % 32))) {
-    // optional float float_min = 9;
-    if (has_float_min()) {
-      total_size += 1 + 4;
+    // optional double min = 9;
+    if (has_min()) {
+      total_size += 1 + 8;
     }
 
   }
@@ -10854,31 +10708,17 @@ void InternalTimeSeriesSample::MergeFrom(const InternalTimeSeriesSample& from) {
     if (from.has_offset()) {
       set_offset(from.offset());
     }
-    if (from.has_int_count()) {
-      set_int_count(from.int_count());
+    if (from.has_count()) {
+      set_count(from.count());
     }
-    if (from.has_int_sum()) {
-      set_int_sum(from.int_sum());
+    if (from.has_sum()) {
+      set_sum(from.sum());
     }
-    if (from.has_int_max()) {
-      set_int_max(from.int_max());
+    if (from.has_max()) {
+      set_max(from.max());
     }
-    if (from.has_int_min()) {
-      set_int_min(from.int_min());
-    }
-    if (from.has_float_count()) {
-      set_float_count(from.float_count());
-    }
-    if (from.has_float_sum()) {
-      set_float_sum(from.float_sum());
-    }
-    if (from.has_float_max()) {
-      set_float_max(from.float_max());
-    }
-  }
-  if (from._has_bits_[8 / 32] & (0xffu << (8 % 32))) {
-    if (from.has_float_min()) {
-      set_float_min(from.float_min());
+    if (from.has_min()) {
+      set_min(from.min());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -10904,14 +10744,10 @@ bool InternalTimeSeriesSample::IsInitialized() const {
 void InternalTimeSeriesSample::Swap(InternalTimeSeriesSample* other) {
   if (other != this) {
     std::swap(offset_, other->offset_);
-    std::swap(int_count_, other->int_count_);
-    std::swap(int_sum_, other->int_sum_);
-    std::swap(int_max_, other->int_max_);
-    std::swap(int_min_, other->int_min_);
-    std::swap(float_count_, other->float_count_);
-    std::swap(float_sum_, other->float_sum_);
-    std::swap(float_max_, other->float_max_);
-    std::swap(float_min_, other->float_min_);
+    std::swap(count_, other->count_);
+    std::swap(sum_, other->sum_);
+    std::swap(max_, other->max_);
+    std::swap(min_, other->min_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

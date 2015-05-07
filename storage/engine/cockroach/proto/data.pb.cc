@@ -351,10 +351,9 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(GCMetadata));
   TimeSeriesDatapoint_descriptor_ = file->message_type(15);
-  static const int TimeSeriesDatapoint_offsets_[3] = {
+  static const int TimeSeriesDatapoint_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, timestamp_nanos_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, int_value_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, float_value_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, value_),
   };
   TimeSeriesDatapoint_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -572,25 +571,25 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "s\030\005 \001(\003B\004\310\336\037\000\022%\n\005value\030\006 \001(\0132\026.cockroach"
     ".proto.Value\"H\n\nGCMetadata\022\035\n\017last_scan_"
     "nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos"
-    "\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n\017timesta"
-    "mp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022"
-    "\023\n\013float_value\030\003 \001(\002\"t\n\016TimeSeriesData\022\022"
-    "\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\006source\030\002 \001(\tB\004\310\336\037\000"
-    "\0228\n\ndatapoints\030\003 \003(\0132$.cockroach.proto.T"
-    "imeSeriesDatapoint\"\300\002\n\tMVCCStats\022\030\n\nlive"
-    "_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310"
-    "\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_b"
-    "ytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336"
-    "\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count"
-    "\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_count\030\010 \001(\003B\004\310\336\037\000"
-    "\022\030\n\nintent_age\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_a"
-    "ge\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCBytesAge\022\037\n\021last_upd"
-    "ate_nanos\030\013 \001(\003B\004\310\336\037\000*>\n\021ReplicaChangeTy"
-    "pe\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032"
-    "\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000"
-    "\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatu"
-    "s\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED"
-    "\020\002\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 3149);
+    "\030\002 \001(\003\"I\n\023TimeSeriesDatapoint\022\035\n\017timesta"
+    "mp_nanos\030\001 \001(\003B\004\310\336\037\000\022\023\n\005value\030\002 \001(\001B\004\310\336\037"
+    "\000\"t\n\016TimeSeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022"
+    "\024\n\006source\030\002 \001(\tB\004\310\336\037\000\0228\n\ndatapoints\030\003 \003("
+    "\0132$.cockroach.proto.TimeSeriesDatapoint\""
+    "\300\002\n\tMVCCStats\022\030\n\nlive_bytes\030\001 \001(\003B\004\310\336\037\000\022"
+    "\027\n\tkey_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\003 "
+    "\001(\003B\004\310\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n"
+    "\nlive_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_count\030\006 \001"
+    "(\003B\004\310\336\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022\032\n\014int"
+    "ent_count\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_age\030\t \001("
+    "\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037\000\342\336\037\nG"
+    "CBytesAge\022\037\n\021last_update_nanos\030\013 \001(\003B\004\310\336"
+    "\037\000*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000"
+    "\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationT"
+    "ype\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036"
+    "\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tC"
+    "OMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005proto\340\342"
+    "\036\001\310\342\036\001\320\342\036\001", 3130);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -5804,8 +5803,7 @@ void GCMetadata::Swap(GCMetadata* other) {
 
 #ifndef _MSC_VER
 const int TimeSeriesDatapoint::kTimestampNanosFieldNumber;
-const int TimeSeriesDatapoint::kIntValueFieldNumber;
-const int TimeSeriesDatapoint::kFloatValueFieldNumber;
+const int TimeSeriesDatapoint::kValueFieldNumber;
 #endif  // !_MSC_VER
 
 TimeSeriesDatapoint::TimeSeriesDatapoint()
@@ -5827,8 +5825,7 @@ TimeSeriesDatapoint::TimeSeriesDatapoint(const TimeSeriesDatapoint& from)
 void TimeSeriesDatapoint::SharedCtor() {
   _cached_size_ = 0;
   timestamp_nanos_ = GOOGLE_LONGLONG(0);
-  int_value_ = GOOGLE_LONGLONG(0);
-  float_value_ = 0;
+  value_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -5874,7 +5871,7 @@ void TimeSeriesDatapoint::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  ZR_(timestamp_nanos_, float_value_);
+  ZR_(timestamp_nanos_, value_);
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -5903,33 +5900,18 @@ bool TimeSeriesDatapoint::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_int_value;
+        if (input->ExpectTag(17)) goto parse_value;
         break;
       }
 
-      // optional int64 int_value = 2;
+      // optional double value = 2;
       case 2: {
-        if (tag == 16) {
-         parse_int_value:
+        if (tag == 17) {
+         parse_value:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &int_value_)));
-          set_has_int_value();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(29)) goto parse_float_value;
-        break;
-      }
-
-      // optional float float_value = 3;
-      case 3: {
-        if (tag == 29) {
-         parse_float_value:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   float, ::google::protobuf::internal::WireFormatLite::TYPE_FLOAT>(
-                 input, &float_value_)));
-          set_has_float_value();
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &value_)));
+          set_has_value();
         } else {
           goto handle_unusual;
         }
@@ -5967,14 +5949,9 @@ void TimeSeriesDatapoint::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->timestamp_nanos(), output);
   }
 
-  // optional int64 int_value = 2;
-  if (has_int_value()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->int_value(), output);
-  }
-
-  // optional float float_value = 3;
-  if (has_float_value()) {
-    ::google::protobuf::internal::WireFormatLite::WriteFloat(3, this->float_value(), output);
+  // optional double value = 2;
+  if (has_value()) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(2, this->value(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -5992,14 +5969,9 @@ void TimeSeriesDatapoint::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->timestamp_nanos(), target);
   }
 
-  // optional int64 int_value = 2;
-  if (has_int_value()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->int_value(), target);
-  }
-
-  // optional float float_value = 3;
-  if (has_float_value()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteFloatToArray(3, this->float_value(), target);
+  // optional double value = 2;
+  if (has_value()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteDoubleToArray(2, this->value(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6021,16 +5993,9 @@ int TimeSeriesDatapoint::ByteSize() const {
           this->timestamp_nanos());
     }
 
-    // optional int64 int_value = 2;
-    if (has_int_value()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->int_value());
-    }
-
-    // optional float float_value = 3;
-    if (has_float_value()) {
-      total_size += 1 + 4;
+    // optional double value = 2;
+    if (has_value()) {
+      total_size += 1 + 8;
     }
 
   }
@@ -6063,11 +6028,8 @@ void TimeSeriesDatapoint::MergeFrom(const TimeSeriesDatapoint& from) {
     if (from.has_timestamp_nanos()) {
       set_timestamp_nanos(from.timestamp_nanos());
     }
-    if (from.has_int_value()) {
-      set_int_value(from.int_value());
-    }
-    if (from.has_float_value()) {
-      set_float_value(from.float_value());
+    if (from.has_value()) {
+      set_value(from.value());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -6093,8 +6055,7 @@ bool TimeSeriesDatapoint::IsInitialized() const {
 void TimeSeriesDatapoint::Swap(TimeSeriesDatapoint* other) {
   if (other != this) {
     std::swap(timestamp_nanos_, other->timestamp_nanos_);
-    std::swap(int_value_, other->int_value_);
-    std::swap(float_value_, other->float_value_);
+    std::swap(value_, other->value_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
