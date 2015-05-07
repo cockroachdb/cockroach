@@ -68,6 +68,13 @@ build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GO
 build:
 	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
+.PHONY: install
+install: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
+install: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
+install: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
+install:
+	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v
+
 # Similar to "testrace", we want to cache the build before running the
 # tests.
 .PHONY: test
@@ -97,7 +104,6 @@ testbuild:
 	  $(GO) test -tags '$(TAGS)' $(GOFLAGS) -c -i $$p || exit $?; \
 	done
 
-
 .PHONY: coverage
 coverage: build
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
@@ -105,6 +111,9 @@ coverage: build
 .PHONY: acceptance
 acceptance:
 # The first `stop` stops and cleans up any containers from previous runs.
+#
+# TODO(pmattis): replace with acceptance/run.sh once we've switched to
+# using build/builder.sh on circleci.
 	(cd $(RUN) && export COCKROACH_IMAGE="$(COCKROACH_IMAGE)" && \
 	  ../build/build-docker-dev.sh && \
 	  ./local-cluster.sh stop && \
