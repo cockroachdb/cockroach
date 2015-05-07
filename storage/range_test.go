@@ -2254,6 +2254,32 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	}
 }
 
+// TestInternalLookupFirstRange tests that InternalRangeLookup works correctly
+// with the first range (StartKey==KeyMin). Normally we look up this range
+// in gossip instead of executing the RPC, but InternalRangeLookup is still
+// used when up-to-date information is required.
+func TestInternalRangeLookupFirstRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	reply := proto.InternalRangeLookupResponse{}
+	if err := tc.store.ExecuteCmd(&proto.InternalRangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
+			RaftID: 1,
+			Key:    proto.Key{},
+		},
+		MaxRanges: 1,
+	}, &reply); err != nil {
+		t.Fatal(err)
+	}
+	expected := []proto.RangeDescriptor{*tc.rng.Desc()}
+	if !reflect.DeepEqual(reply.Ranges, expected) {
+		t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)
+	}
+}
+
 // benchmarkEvents is designed to determine the impact of sending events on the
 // performance of write commands. This benchmark can be run with or without
 // events, and with or without a consumer reading the events.
