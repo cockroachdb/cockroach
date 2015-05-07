@@ -428,8 +428,4 @@ func TestRapidMembershipChange(t *testing.T) {
 
 	}
 	close(teardown)
-
-	// TODO(tschottdorf): get the stray RaftMessage calls under control.
-	// Maybe they should be ignored by leaktest?
-	time.Sleep(20 * time.Millisecond)
 }
