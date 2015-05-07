@@ -111,7 +111,9 @@ func TestOffsetMeasurement(t *testing.T) {
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
-	s.RegisterName("Heartbeat", heartbeat)
+	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+		t.Fatalf("Unable to register heartbeat service: %s", err)
+	}
 
 	// Create a client that is 10 nanoseconds behind the server.
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
@@ -151,7 +153,9 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
-	s.RegisterName("Heartbeat", heartbeat)
+	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+		t.Fatalf("Unable to register heartbeat service: %s", err)
+	}
 
 	// Create a client that receives a heartbeat right after the
 	// maximumClockReadingDelay.
@@ -195,7 +199,9 @@ func TestFailedOffestMeasurement(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 		ready:              make(chan struct{}),
 	}
-	s.RegisterName("Heartbeat", heartbeat)
+	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+		t.Fatalf("Unable to register heartbeat service: %s", err)
+	}
 
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.NewManualClock(0)

@@ -229,7 +229,9 @@ func ClearRange(engine Engine, start, end proto.EncodedKey) (int, error) {
 	defer b.Close()
 	count := 0
 	if err := engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
-		b.Clear(kv.Key)
+		if err := b.Clear(kv.Key); err != nil {
+			return false, err
+		}
 		count++
 		return false, nil
 	}); err != nil {

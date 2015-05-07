@@ -79,24 +79,28 @@ func monotonicUnixNano() int64 {
 // String returns a string representation of an infostore.
 func (is *infoStore) String() string {
 	buf := bytes.Buffer{}
-	prepend := ""
 	if count := is.infoCount(); count > 0 {
 		buf.WriteString(fmt.Sprintf("infostore contains %d info(s)", count))
 	} else {
 		buf.WriteString("infostore is empty")
 	}
+
+	prepend := ""
+
 	// Compute delta of groups and infos.
-	is.visitInfos(func(g *group) error {
-		buf.WriteString(prepend)
+	if err := is.visitInfos(func(g *group) error {
+		str := fmt.Sprintf("%sgroup %q", prepend, g.Prefix)
 		prepend = ", "
-		buf.WriteString(fmt.Sprintf("group %q", g.Prefix))
-		return nil
+		_, err := buf.WriteString(str)
+		return err
 	}, func(i *info) error {
-		buf.WriteString(prepend)
+		str := fmt.Sprintf("%sinfo %q: %+v", prepend, i.Key, i.Val)
 		prepend = ", "
-		buf.WriteString(fmt.Sprintf("info %q: %+v", i.Key, i.Val))
-		return nil
-	})
+		_, err := buf.WriteString(str)
+		return err
+	}); err != nil {
+		log.Errorf("failed to properly construct string representation of infoStore: %s", err)
+	}
 	return buf.String()
 }
 
@@ -246,7 +250,8 @@ func (is *infoStore) infoCount() uint32 {
 // originator and this node.
 func (is *infoStore) maxHops() uint32 {
 	var maxHops uint32
-	is.visitInfos(nil, func(i *info) error {
+	// will never error because `return nil` below
+	_ = is.visitInfos(nil, func(i *info) error {
 		if i.Hops > maxHops {
 			maxHops = i.Hops
 		}
@@ -348,11 +353,11 @@ func (is *infoStore) combine(delta *infoStore) int {
 	// it. Extract the infos from the group and combine them
 	// one-by-one using addInfo.
 	var freshCount int
-	delta.visitInfos(func(g *group) error {
+	if err := delta.visitInfos(func(g *group) error {
 		if _, ok := is.Groups[g.Prefix]; !ok {
 			// Make a copy of the group.
 			gCopy := newGroup(g.Prefix, g.Limit, g.TypeOf)
-			is.registerGroup(gCopy)
+			return is.registerGroup(gCopy)
 		}
 		return nil
 	}, func(i *info) error {
@@ -360,11 +365,14 @@ func (is *infoStore) combine(delta *infoStore) int {
 		i.seq = is.seqGen
 		i.Hops++
 		i.peerID = delta.NodeID
-		if is.addInfo(i) == nil {
+		err := is.addInfo(i)
+		if err == nil {
 			freshCount++
 		}
-		return nil
-	})
+		return err
+	}); err != nil {
+		log.Errorf("failed to properly combine infoStores: %s", err)
+	}
 	return freshCount
 }
 
@@ -382,16 +390,17 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 	delta := newInfoStore(is.NodeID, is.NodeAddr)
 
 	// Compute delta of groups and infos.
-	is.visitInfos(func(g *group) error {
+	if err := is.visitInfos(func(g *group) error {
 		gDelta := newGroup(g.Prefix, g.Limit, g.TypeOf)
-		delta.registerGroup(gDelta)
-		return nil
+		return delta.registerGroup(gDelta)
 	}, func(i *info) error {
 		if i.isFresh(nodeID, seq) {
-			delta.addInfo(i)
+			return delta.addInfo(i)
 		}
 		return nil
-	})
+	}); err != nil {
+		log.Errorf("failed to properly create delta infoStore: %s", err)
+	}
 
 	delta.MaxSeq = is.MaxSeq
 	return delta
@@ -401,7 +410,8 @@ func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 // with info.Hops > maxHops.
 func (is *infoStore) distant(maxHops uint32) *nodeSet {
 	ns := newNodeSet(0)
-	is.visitInfos(nil, func(i *info) error {
+	// will never error because `return nil` below
+	_ = is.visitInfos(nil, func(i *info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
 		}
@@ -417,7 +427,8 @@ func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
 	for node := range nodes.nodes {
 		contrib[node] = 0
 	}
-	is.visitInfos(nil, func(i *info) error {
+	// will never error because `return nil` below
+	_ = is.visitInfos(nil, func(i *info) error {
 		contrib[i.peerID]++
 		return nil
 	})

@@ -328,9 +328,11 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		tmpKV.User = call.Args.Header().User
 		tmpKV.UserPriority = call.Args.Header().GetUserPriority()
 		call.Reply.Reset()
-		tmpKV.RunTransaction(txnOpts, func(txn *client.Txn) error {
+		if err := tmpKV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 			return txn.Run(call)
-		})
+		}); err != nil {
+			log.Warning(err)
+		}
 	case nil:
 		var txn *proto.Transaction
 		var resolved []proto.Key

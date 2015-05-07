@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
 
@@ -43,7 +44,7 @@ func ExampleSetAndGetPerms() {
 	defer stopper.Stop()
 
 	testConfigFn := createTestConfigFile(testPermConfig)
-	defer os.Remove(testConfigFn)
+	defer util.CleanupDir(testConfigFn)
 
 	testData := []struct {
 		prefix proto.Key
@@ -106,7 +107,7 @@ func ExampleLsPerms() {
 	defer stopper.Stop()
 
 	testConfigFn := createTestConfigFile(testPermConfig)
-	defer os.Remove(testConfigFn)
+	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
 		engine.KeyMin,
@@ -165,7 +166,7 @@ func ExampleRmPerms() {
 	defer stopper.Stop()
 
 	testConfigFn := createTestConfigFile(testPermConfig)
-	defer os.Remove(testConfigFn)
+	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
 		engine.KeyMin,

@@ -420,27 +420,31 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 	}
 	defer l.Close()
 
-	go http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqBody, err := ioutil.ReadAll(r.Body)
-		defer r.Body.Close()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+	go func() {
+		if err := http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reqBody, err := ioutil.ReadAll(r.Body)
+			defer r.Body.Close()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			req := &msg.EchoRequest{}
+			if err := proto.Unmarshal(reqBody, req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			resp := &msg.EchoResponse{Msg: req.Msg}
+			body, err := proto.Marshal(resp)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/x-protobuf")
+			w.Write(body)
+		})); err != nil {
+			b.Fatal(err)
 		}
-		req := &msg.EchoRequest{}
-		if err := proto.Unmarshal(reqBody, req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		resp := &msg.EchoResponse{Msg: req.Msg}
-		body, err := proto.Marshal(resp)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		w.Write(body)
-	}))
+	}()
 
 	echoMsg := randString(size)
 	url := fmt.Sprintf("http://%s", l.Addr())

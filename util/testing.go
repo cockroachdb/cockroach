@@ -81,13 +81,13 @@ func CreateNTempDirs(t Tester, prefix string, n int) []string {
 
 // CleanupDir removes the passed-in directory and all contents. Errors are ignored.
 func CleanupDir(dir string) {
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 }
 
-// CleanupDirs removes all passed-in directories and their contents.
+// CleanupDirs removes all passed-in directories and their contents. Errors are ignored.
 func CleanupDirs(dirs []string) {
 	for _, dir := range dirs {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 	}
 }
 

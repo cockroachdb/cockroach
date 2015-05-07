@@ -513,7 +513,8 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 			MaxAttempts: 0,                // indefinite retries
 			Stopper:     stopper,          // stop no matter what on stopper
 		}
-		util.RetryWithBackoff(retryOptions, func() (util.RetryStatus, error) {
+		// will never error because infinite retries
+		_ = util.RetryWithBackoff(retryOptions, func() (util.RetryStatus, error) {
 			g.mu.Lock()
 			hasSentinel := g.is.getInfo(KeySentinel) != nil
 			g.mu.Unlock()

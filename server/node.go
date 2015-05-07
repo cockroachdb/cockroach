@@ -414,7 +414,8 @@ func (n *Node) startGossip(stopper *util.Stopper) {
 // gossipCapacities calls capacity on each store and adds it to the
 // gossip network.
 func (n *Node) gossipCapacities() {
-	n.lSender.VisitStores(func(s *storage.Store) error {
+	// will never error because `return nil` below
+	_ = n.lSender.VisitStores(func(s *storage.Store) error {
 		s.GossipCapacity()
 		return nil
 	})
@@ -434,7 +435,8 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				rangeCount := 0
 				stats := &proto.MVCCStats{}
 				accessedStoreIDs := []int32{}
-				n.lSender.VisitStores(func(store *storage.Store) error {
+				// will never error because `return nil` below
+				_ = n.lSender.VisitStores(func(store *storage.Store) error {
 					storeStatus, err := store.GetStatus()
 					if err != nil {
 						log.Error(err)

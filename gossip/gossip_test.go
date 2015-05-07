@@ -31,21 +31,27 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
-	g.AddInfo("i", int64(1), time.Hour)
+	if err := g.AddInfo("i", int64(1), time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
 		t.Errorf("error fetching int64: %v", err)
 	}
 	if _, err := g.GetInfo("i2"); err == nil {
 		t.Errorf("expected error fetching nonexistent key \"i2\"")
 	}
-	g.AddInfo("f", float64(3.14), time.Hour)
+	if err := g.AddInfo("f", float64(3.14), time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	if val, err := g.GetInfo("f"); val.(float64) != float64(3.14) || err != nil {
 		t.Errorf("error fetching float64: %v", err)
 	}
 	if _, err := g.GetInfo("f2"); err == nil {
 		t.Errorf("expected error fetching nonexistent key \"f2\"")
 	}
-	g.AddInfo("s", "b", time.Hour)
+	if err := g.AddInfo("s", "b", time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	if val, err := g.GetInfo("s"); val.(string) != "b" || err != nil {
 		t.Errorf("error fetching string: %v", err)
 	}
@@ -61,9 +67,13 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	g := New(rpcContext, TestInterval, TestBootstrap)
 
 	// For int64.
-	g.RegisterGroup("i", 3, MinGroup)
+	if err := g.RegisterGroup("i", 3, MinGroup); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 3; i++ {
-		g.AddInfo(fmt.Sprintf("i.%d", i), int64(i), time.Hour)
+		if err := g.AddInfo(fmt.Sprintf("i.%d", i), int64(i), time.Hour); err != nil {
+			t.Fatal(err)
+		}
 	}
 	values, err := g.GetGroupInfos("i")
 	if err != nil {
@@ -82,9 +92,13 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 
 	// For float64.
-	g.RegisterGroup("f", 3, MinGroup)
+	if err := g.RegisterGroup("f", 3, MinGroup); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 3; i++ {
-		g.AddInfo(fmt.Sprintf("f.%d", i), float64(i), time.Hour)
+		if err := g.AddInfo(fmt.Sprintf("f.%d", i), float64(i), time.Hour); err != nil {
+			t.Fatal(err)
+		}
 	}
 	values, err = g.GetGroupInfos("f")
 	if err != nil {
@@ -100,9 +114,13 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 
 	// For string.
-	g.RegisterGroup("s", 3, MinGroup)
+	if err := g.RegisterGroup("s", 3, MinGroup); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 3; i++ {
-		g.AddInfo(fmt.Sprintf("s.%d", i), fmt.Sprintf("%d", i), time.Hour)
+		if err := g.AddInfo(fmt.Sprintf("s.%d", i), fmt.Sprintf("%d", i), time.Hour); err != nil {
+			t.Fatal(err)
+		}
 	}
 	values, err = g.GetGroupInfos("s")
 	if err != nil {

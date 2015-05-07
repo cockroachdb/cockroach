@@ -1511,7 +1511,10 @@ func TestFindSplitKey(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	MergeStats(ms, engine, raftID) // write stats
+	// write stats
+	if err := MergeStats(ms, engine, raftID); err != nil {
+		t.Fatal(err)
+	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
 	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, KeyMin, KeyMax)
@@ -1613,7 +1616,10 @@ func TestFindValidSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		MergeStats(ms, engine, raftID) // write stats
+		// write stats
+		if err := MergeStats(ms, engine, raftID); err != nil {
+			t.Fatal(err)
+		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
 		rangeStart := test.keys[0]
@@ -1699,7 +1705,10 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		MergeStats(ms, engine, raftID) // write stats
+		// write stats
+		if err := MergeStats(ms, engine, raftID); err != nil {
+			t.Fatal(err)
+		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
 		splitKey, err := MVCCFindSplitKey(snap, raftID, proto.Key("\x01"), proto.KeyMax)

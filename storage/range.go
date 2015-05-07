@@ -701,7 +701,10 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 	if wait {
 		return completionFunc()
 	}
-	go completionFunc()
+	go func() {
+		// error is lost forever :()
+		_ = completionFunc()
+	}()
 	return nil
 }
 

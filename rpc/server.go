@@ -127,7 +127,13 @@ func (s *Server) Listen() error {
 // listener.
 func (s *Server) Serve(handler http.Handler) {
 	s.handler = handler
-	go http.Serve(s.listener, s)
+	go func() {
+		if err := http.Serve(s.listener, s); err != nil {
+			// FIXME: uncommenting the line below break tests
+			_ = err
+			// log.Fatal(err)
+		}
+	}()
 }
 
 // Start runs the RPC server. After this method returns, the socket

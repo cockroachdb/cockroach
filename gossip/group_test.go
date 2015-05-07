@@ -203,12 +203,16 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 
 // insertRandomInfos inserts random values into group and returns
 // a slice of info objects.
-func insertRandomInfos(g *group, count int) infoSlice {
+func insertRandomInfos(t *testing.T, g *group, count int) infoSlice {
 	infos := make(infoSlice, count)
 
 	for i := 0; i < count; i++ {
-		infos[i] = newTestInfo(fmt.Sprintf("a.%d", i), rand.Float64())
-		g.addInfo(infos[i])
+		info := newTestInfo(fmt.Sprintf("a.%d", i), rand.Float64())
+
+		// we don't care if this errors
+		_, _ = g.addInfo(info)
+
+		infos[i] = info
 	}
 
 	return infos
@@ -219,12 +223,13 @@ func insertRandomInfos(g *group, count int) infoSlice {
 func TestGroups100Keys(t *testing.T) {
 	// Start by adding random infos to min group.
 	minGroup := newGroup("a", 100, MinGroup)
-	infos := insertRandomInfos(minGroup, 1000)
+	infos := insertRandomInfos(t, minGroup, 1000)
 
 	// Insert same infos into the max group.
 	maxGroup := newGroup("a", 100, MaxGroup)
 	for _, i := range infos {
-		maxGroup.addInfo(i)
+		// we don't care if this errors
+		_, _ = maxGroup.addInfo(i)
 	}
 	sort.Sort(infos)
 
@@ -302,7 +307,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 // TestGroupGetInfo verifies info selection by key.
 func TestGroupGetInfo(t *testing.T) {
 	g := newGroup("a", 10, MinGroup)
-	infos := insertRandomInfos(g, 10)
+	infos := insertRandomInfos(t, g, 10)
 	for _, i := range infos {
 		if i != g.getInfo(i.Key) {
 			t.Error("could not fetch info", i)
@@ -320,7 +325,9 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	g := newGroup("a", 10, MinGroup)
 	i := newTestInfo("a.a", int64(1))
 	i.TTLStamp = i.Timestamp + int64(time.Nanosecond)
-	g.addInfo(i)
+	if _, err := g.addInfo(i); err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(time.Nanosecond)
 	if g.getInfo(i.Key) != nil {
 		t.Error("shouldn't have been able to fetch key with short TTL")
@@ -331,8 +338,12 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	info1 := newTestInfo("a.1", int64(1))
 	info2 := newTestInfo("a.2", int64(2))
 	info2.TTLStamp = i.Timestamp + int64(time.Nanosecond)
-	g.addInfo(info1)
-	g.addInfo(info2)
+	if _, err := g.addInfo(info1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.addInfo(info2); err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait until info2 is expired.
 	time.Sleep(time.Nanosecond)
@@ -361,9 +372,15 @@ func TestGroupWithStructVal(t *testing.T) {
 	i1 := newTestInfo("a.a", &testValue{3, "a"})
 	i2 := newTestInfo("a.b", &testValue{1, "b"})
 	i3 := newTestInfo("a.c", &testValue{2, "c"})
-	g.addInfo(i1)
-	g.addInfo(i2)
-	g.addInfo(i3)
+	if _, err := g.addInfo(i1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.addInfo(i2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.addInfo(i3); err != nil {
+		t.Fatal(err)
+	}
 
 	infos := g.infosAsSlice()
 	if infos[0].Val != i2.Val || infos[1].Val != i3.Val || infos[2].Val != i1.Val {

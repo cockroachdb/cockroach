@@ -158,8 +158,7 @@ func InsertRange(txn *client.Txn, key proto.Key) error {
 		// If the root has changed, update the tree to point to it.
 		tc.setRootKey(&root.Key)
 	}
-	tc.flush()
-	return nil
+	return tc.flush()
 }
 
 // insert performs the insertion of a new range into the RangeTree. It will

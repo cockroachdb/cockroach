@@ -346,10 +346,12 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	var configs []interface{}
-	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
 		configs = append(configs, config)
 		return false, nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	expConfigs := []interface{}{config3, config2, config1}
 	if !reflect.DeepEqual(expConfigs, configs) {
 		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
@@ -357,13 +359,15 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 
 	// Now, stop partway through by returning done=true.
 	configs = []interface{}{}
-	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return true, nil
 		}
 		return false, nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	expConfigs = []interface{}{config3, config2}
 	if !reflect.DeepEqual(expConfigs, configs) {
 		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
@@ -371,13 +375,15 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 
 	// Now, stop partway through by returning an error.
 	configs = []interface{}{}
-	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return false, util.Errorf("foo")
 		}
 		return false, nil
-	})
+	}); err == nil {
+		t.Fatalf("expected an error, but didn't get one")
+	}
 	if !reflect.DeepEqual(expConfigs, configs) {
 		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
 	}
@@ -412,11 +418,13 @@ func TestVisitPrefixes(t *testing.T) {
 	for i, test := range testData {
 		ranges := [][2]proto.Key{}
 		configs := []interface{}{}
-		pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config interface{}) (bool, error) {
+		if err := pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config interface{}) (bool, error) {
 			ranges = append(ranges, [2]proto.Key{start, end})
 			configs = append(configs, config)
 			return false, nil
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if !reflect.DeepEqual(test.expRanges, ranges) {
 			t.Errorf("%d: expected ranges %+v; got %+v", i, test.expRanges, ranges)
 		}
@@ -427,13 +435,15 @@ func TestVisitPrefixes(t *testing.T) {
 
 	// Now, stop partway through by returning done=true.
 	configs := []interface{}{}
-	pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return true, nil
 		}
 		return false, nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	expConfigs := []interface{}{config1, config4}
 	if !reflect.DeepEqual(expConfigs, configs) {
 		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
@@ -441,13 +451,15 @@ func TestVisitPrefixes(t *testing.T) {
 
 	// Now, stop partway through by returning an error.
 	configs = []interface{}{}
-	pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return false, util.Errorf("foo")
 		}
 		return false, nil
-	})
+	}); err == nil {
+		t.Fatalf("expected an error, but didn't get one")
+	}
 	if !reflect.DeepEqual(expConfigs, configs) {
 		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
 	}

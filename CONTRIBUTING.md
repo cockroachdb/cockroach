@@ -26,7 +26,7 @@ offer. Note that the first time you run `make` various dependent libraries and t
 downloaded and installed which can be somewhat time consuming. Be patient.
 
 Note that if you edit a `.proto` file you will need to manually regenerate the associated
-`.pb.{go,cc,h}` files using `go generate`.
+`.pb.{go,cc,h}` files using `go generate ./...`.
 
 To add or update a dependency:
 - `go get -u` to update the dependencies or `go get {package}` to add a dependency
@@ -43,7 +43,7 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
   [Contributor License Agreement](https://www.clahub.com/agreements/cockroachdb/cockroach).
 
 + Create a local feature branch to do work on, ideally on one thing at a time.
-  If you are working on your own fork, see 
+  If you are working on your own fork, see
   [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
   on forking in Go, which ensures that Go import paths will be correct.
 

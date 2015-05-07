@@ -392,7 +392,9 @@ func TestRapidMembershipChange(t *testing.T) {
 			cmdID := fmt.Sprintf(cmdIDFormat, seq)
 		retry:
 			for {
-				cluster.nodes[0].CreateGroup(groupID)
+				if err := cluster.nodes[0].CreateGroup(groupID); err != nil {
+					t.Fatal(err)
+				}
 				if log.V(1) {
 					log.Infof("%-3d: try    %s", i, cmdID)
 				}
@@ -409,7 +411,9 @@ func TestRapidMembershipChange(t *testing.T) {
 					return
 				}
 			}
-			cluster.nodes[0].RemoveGroup(groupID)
+			if err := cluster.nodes[0].RemoveGroup(groupID); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 

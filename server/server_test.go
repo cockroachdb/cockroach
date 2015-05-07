@@ -48,7 +48,9 @@ func createTestConfigFile(body string) string {
 		log.Fatalf("failed to open temporary file: %v", err)
 	}
 	defer f.Close()
-	f.Write([]byte(body))
+	if _, err = f.Write([]byte(body)); err != nil {
+		log.Fatalf("failed to write to temporary file: %v", err)
+	}
 	return f.Name()
 }
 

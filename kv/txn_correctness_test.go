@@ -49,7 +49,8 @@ func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 		UseV1Info:   true,
 	}
 
-	lSender.VisitStores(func(s *storage.Store) error {
+	// will never error because `return nil` below
+	_ = lSender.VisitStores(func(s *storage.Store) error {
 		s.SetRangeRetryOptions(client.DefaultTxnRetryOptions)
 		return nil
 	})
