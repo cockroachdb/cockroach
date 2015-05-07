@@ -2142,3 +2142,32 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 		t.Fatal("expected error garbage collecting an intent")
 	}
 }
+
+// TestResovleIntentWithLowerEpoch verifies that trying to resolve
+// an intent at an epoch that is lower than the epoch of the intent
+// leaves the intent untouched.
+func TestResovleIntentWithLowerEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	// Lay down an intent with a high epoch.
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1e2); err != nil {
+		t.Fatal(err)
+	}
+	// Resolve the intent with a low epoch.
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the intent was not cleared.
+	metaKey := MVCCEncodeKey(testKey1)
+	meta := &proto.MVCCMetadata{}
+	ok, _, _, err := engine.GetProto(metaKey, meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("intent should not be cleared by resolve intent request with lower epoch")
+	}
+}
