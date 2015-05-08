@@ -20,6 +20,7 @@ package multiraft
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -369,6 +370,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
+	var wg sync.WaitGroup
 	proposers := 5
 
 	numCommit := int32(200)
@@ -377,15 +379,17 @@ func TestRapidMembershipChange(t *testing.T) {
 	groupID := uint64(1)
 
 	cluster.createGroup(groupID, 0, 1 /* replicas */)
-	cmdID := int32(0) // updated atomically from now on
+	startSeq := int32(0) // updated atomically from now on
 
 	cmdIDFormat := "%0" + fmt.Sprintf("%d", commandIDLen) + "d"
 	teardown := make(chan struct{})
 
 	proposerFn := func(i int) {
+		defer wg.Done()
+
 		var seq int32
 		for {
-			seq = atomic.AddInt32(&cmdID, 1)
+			seq = atomic.AddInt32(&startSeq, 1)
 			if seq > numCommit {
 				break
 			}
@@ -418,6 +422,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	}
 
 	for i := 0; i < proposers; i++ {
+		wg.Add(1)
 		go proposerFn(i)
 	}
 
@@ -432,4 +437,10 @@ func TestRapidMembershipChange(t *testing.T) {
 
 	}
 	close(teardown)
+	// Because ending the test case is racy with the test itself, we wait until
+	// all our goroutines have finished their work before we allow the test to
+	// forcible terminate. This solves a race condition on `t`, which is
+	// otherwise subject to concurrent access from our goroutine and the go
+	// testing machinery.
+	wg.Wait()
 }
