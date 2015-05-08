@@ -365,11 +365,12 @@ func (is *infoStore) combine(delta *infoStore) int {
 		i.seq = is.seqGen
 		i.Hops++
 		i.peerID = delta.NodeID
-		err := is.addInfo(i)
-		if err == nil {
+		// Errors from addInfo here are not a problem; they simply
+		// indicate that the data in *is is newer than in *delta.
+		if err := is.addInfo(i); err == nil {
 			freshCount++
 		}
-		return err
+		return nil
 	}); err != nil {
 		log.Errorf("failed to properly combine infoStores: %s", err)
 	}
