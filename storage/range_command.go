@@ -108,7 +108,7 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = header.Timestamp
 
-	// A ReadUncertaintyIntervalError contains the timestamp of the value
+	// A ReadWithinUncertaintyIntervalError contains the timestamp of the value
 	// that provoked the conflict. However, we forward the timestamp to the
 	// node's time here. The reason is that the caller (which is always
 	// transactional when this error occurs) in our implementation wants to
