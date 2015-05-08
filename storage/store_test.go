@@ -158,6 +158,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
+	store.WaitForInit()
 	return store, manual, stopper
 }
 

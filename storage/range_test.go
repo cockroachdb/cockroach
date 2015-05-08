@@ -163,6 +163,7 @@ func (tc *testContext) Start(t testing.TB) {
 		if err := tc.store.Start(tc.stopper); err != nil {
 			t.Fatal(err)
 		}
+		tc.store.WaitForInit()
 	}
 
 	initConfigs(tc.engine, t)
