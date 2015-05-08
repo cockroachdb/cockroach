@@ -17,10 +17,11 @@
 
 package log
 
-import "github.com/golang/glog"
+import "github.com/cockroachdb/clog"
 
 func init() {
-	glog.CopyStandardLogTo("INFO")
+	// TODO this should go to our logger.
+	clog.CopyStandardLogTo("INFO")
 }
 
 // FatalOnPanic recovers from a panic and exits the process with a
@@ -35,73 +36,72 @@ func FatalOnPanic() {
 
 // Info logs to the INFO log.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-var Info = glog.Info
+var Info = clog.Info
 
 // Infof logs to the INFO log.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-var Infof = glog.Infof
+var Infof = clog.Infof
 
 // Infoln logs to the INFO log.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-var Infoln = glog.Infoln
+var Infoln = clog.Infoln
 
 // InfoDepth logs to the INFO log, ofsetting the caller's stack frame by 'depth'
-var InfoDepth = glog.InfoDepth
+var InfoDepth = clog.InfoDepth
 
 // Warning logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-var Warning = glog.Warning
+var Warning = clog.Warning
 
 // Warningf logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-var Warningf = glog.Warningf
+var Warningf = clog.Warningf
 
 // Warningln logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-var Warningln = glog.Warningln
+var Warningln = clog.Warningln
 
 // WarningDepth logs to the INFO and WARNING logs, ofsetting the caller's stack frame by 'depth'
-var WarningDepth = glog.WarningDepth
+var WarningDepth = clog.WarningDepth
 
 // Error logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-var Error = glog.Error
+var Error = clog.Error
 
 // Errorf logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-var Errorf = glog.Errorf
+var Errorf = clog.Errorf
 
 // Errorln logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-var Errorln = glog.Errorln
+var Errorln = clog.Errorln
 
 // ErrorDepth logs to the INFO, WARNING, and ERROR logs, ofsetting the caller's stack
 // frame by 'depth'
-var ErrorDepth = glog.ErrorDepth
+var ErrorDepth = clog.ErrorDepth
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-var Fatal = glog.Fatal
+var Fatal = clog.Fatal
 
 // Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-var Fatalf = glog.Fatalf
+var Fatalf = clog.Fatalf
 
 // Fatalln logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-var Fatalln = glog.Fatalln
+var Fatalln = clog.Fatalln
 
 // FatalDepth logs to the INFO, WARNING, and ERROR, and FATAL logs, ofsetting the caller's stack
 // frame by 'depth', then calls os.Exit(255).
-var FatalDepth = glog.FatalDepth
+var FatalDepth = clog.FatalDepth
 
-// V wraps glog.V. See that documentation for details.
-// glog has a custom type alias for bool and implements logging functions on
-// it; we don't want to have that here since the calls would go straight to
-// the glog package and not to whatever functions we define here.
-// TODO(tschottdorf): restored the original, see @bdarnell's comment on #925.
-// We still should not use the chained logger.
-var V = glog.V
+// V wraps clog.VDepth. See that documentation for details.
+// We can't use clog.V(i).Infof (etc) directly since we want to use the
+// functions defined here.
+func V(level clog.Level) bool {
+	return clog.VDepth(level, 1)
+}

@@ -57,7 +57,7 @@ func interestingGoroutines() (gs []string) {
 			strings.Contains(stack, "created by runtime.gc") ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/leaktest.interestingGoroutines") ||
 			strings.Contains(stack, "runtime.MHeap_Scavenger") ||
-			strings.Contains(stack, "golang/glog.init") {
+			strings.Contains(stack, "cockroachdb/clog.init") {
 			continue
 		}
 		gs = append(gs, stack)

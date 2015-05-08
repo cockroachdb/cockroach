@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	// This is a bit silly. Require glog in order for -logstderr to be
+	// This is a bit silly. Require log in order for -logstderr to be
 	// defined which is set for all tests by the toplevel Makefile.
-	_ "github.com/golang/glog"
+	_ "github.com/cockroachdb/cockroach/util/log"
 )
 
 type testCase struct {
