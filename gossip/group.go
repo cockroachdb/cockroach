@@ -202,13 +202,12 @@ func (g *group) addInfo(i *info) (contentsChanged bool, err error) {
 	// value of prospective info is lower, take the minimum of the two
 	// Hops values.
 	if existingInfo, ok := g.Infos[i.Key]; ok {
-		if existingInfo.Timestamp < i.Timestamp ||
-			(existingInfo.Timestamp == i.Timestamp && existingInfo.Hops > i.Hops) {
-			g.removeInternal(existingInfo)
-		} else {
-			err = util.Errorf("current group info %+v newer than proposed info %+v", existingInfo, i)
+		if i.Timestamp < existingInfo.Timestamp ||
+			(i.Timestamp == existingInfo.Timestamp && i.Hops >= existingInfo.Hops) {
+			err = util.Errorf("info %+v older than current info %+v", i, existingInfo)
 			return
 		}
+		g.removeInternal(existingInfo)
 		contentsChanged = !reflect.DeepEqual(existingInfo.Val, i.Val)
 	} else {
 		// No preexisting info means contentsChanged is true.

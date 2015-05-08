@@ -1394,7 +1394,9 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Ranges = append(m.Ranges, RangeDescriptor{})
-			m.Ranges[len(m.Ranges)-1].Unmarshal(data[index:postIndex])
+			if err := m.Ranges[len(m.Ranges)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -1639,7 +1641,9 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Keys = append(m.Keys, InternalGCRequest_GCKey{})
-			m.Keys[len(m.Keys)-1].Unmarshal(data[index:postIndex])
+			if err := m.Keys[len(m.Keys)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3368,7 +3372,9 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Requests = append(m.Requests, InternalRequestUnion{})
-			m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex])
+			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3457,7 +3463,9 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Responses = append(m.Responses, InternalResponseUnion{})
-			m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex])
+			if err := m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -4716,7 +4724,9 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Samples = append(m.Samples, &InternalTimeSeriesSample{})
-			m.Samples[len(m.Samples)-1].Unmarshal(data[index:postIndex])
+			if err := m.Samples[len(m.Samples)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -4984,7 +4994,9 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.KV = append(m.KV, &RaftSnapshotData_KeyValue{})
-			m.KV[len(m.KV)-1].Unmarshal(data[index:postIndex])
+			if err := m.KV[len(m.KV)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
 			index = postIndex
 		default:
 			var sizeOfWire int
