@@ -3,9 +3,12 @@
 ### Getting and building
 
 ### Assumed
- * A working GCC (on mac os x something like `xcode-select --install` will get you started)
- * [Go environment](http://golang.org/doc/code.html)
- * Git and Mercurial (for retrieving dependencies)
+ * A working C++ compiler (on mac os x something like `xcode-select
+   --install` will get you started). The compiler must support C++11
+   (GCC 4.9+ and clang 3.6+ are known to work).
+ * [Go environment](http://golang.org/doc/code.html). Currently a
+   64-bit version of go is required.
+ * Git and Mercurial (for retrieving dependencies).
 
 If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
 
