@@ -116,7 +116,7 @@ acceptance:
 
 .PHONY: check
 check:
-	errcheck -ignore 'bytes:Write.*,compress/gzip:Close,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' $(PKG)
+	errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' $(PKG)
 
 .PHONY: clean
 clean:
