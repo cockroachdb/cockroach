@@ -239,6 +239,7 @@ type Store struct {
 	stopper        *util.Stopper
 	startedAt      int64
 	nodeDesc       *proto.NodeDescriptor
+	initComplete   sync.WaitGroup // Signaled by async init tasks
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
@@ -493,20 +494,27 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	return nil
 }
 
+// WaitForInit waits for any asynchronous processes begun in Start()
+// to complete their initialization. In particular, this includes
+// gossiping. In some cases this may block until the range GC queue
+// has completed its scan. Only for testing.
+func (s *Store) WaitForInit() {
+	s.initComplete.Wait()
+}
+
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
 func (s *Store) startGossip() error {
-	// Go through one iteration synchronously before returning. This makes sure
-	// that everything is gossiped when the store finishes starting.
-	if err := s.maybeGossipConfigs(); err != nil {
-		return err
-	}
-	if err := s.maybeGossipFirstRange(); err != nil {
-		return err
-	}
-	// Periodic updates run in a goroutine.
+	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
+	// of their first iteration.
+	s.initComplete.Add(1)
 	s.stopper.RunWorker(func() {
+		// Run the first time without waiting for the Ticker and signal the WaitGroup.
+		if err := s.maybeGossipFirstRange(); err != nil {
+			log.Warningf("error gossiping first range data: %s", err)
+		}
+		s.initComplete.Done()
 		ticker := time.NewTicker(clusterIDGossipInterval)
 		for {
 			select {
@@ -520,7 +528,12 @@ func (s *Store) startGossip() error {
 		}
 	})
 
+	s.initComplete.Add(1)
 	s.stopper.RunWorker(func() {
+		if err := s.maybeGossipConfigs(); err != nil {
+			log.Warningf("error gossiping configs: %s", err)
+		}
+		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
 		for {
 			select {

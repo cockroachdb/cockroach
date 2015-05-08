@@ -220,6 +220,7 @@ func (m *multiTestContext) addStore(t *testing.T) {
 	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
+	store.WaitForInit()
 	m.stores = append(m.stores, store)
 	if len(m.senders) == idx {
 		m.senders = append(m.senders, kv.NewLocalSender())
