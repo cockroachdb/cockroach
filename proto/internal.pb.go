@@ -58,24 +58,27 @@ func (x *PushTxnType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// InternalValueType defines a set of string constants placed in the "tag" field
-// of Value messages which are created internally. These are defined as a
-// protocol buffer enumeration so that they can be used portably between our Go
-// and C code.
+// InternalValueType defines a set of string constants placed in the
+// "tag" field of Value messages which are created internally. These
+// are defined as a protocol buffer enumeration so that they can be
+// used portably between our Go and C code. The tags are used by the
+// RocksDB Merge Operator to perform specialized merges.
 type InternalValueType int32
 
 const (
-	// _CR_TS is applied to values which contain InternalTimeSeriesData. This
-	// tag is used by the RocksDB Merge Operator to perform a specialized merge
-	// for this data.
+	// _CR_TS is applied to values which contain InternalTimeSeriesData.
 	_CR_TS InternalValueType = 1
+	// _CR_STATS is applied to values which contain MVCCStats.
+	_CR_STATS InternalValueType = 2
 )
 
 var InternalValueType_name = map[int32]string{
 	1: "_CR_TS",
+	2: "_CR_STATS",
 }
 var InternalValueType_value = map[string]int32{
-	"_CR_TS": 1,
+	"_CR_TS":    1,
+	"_CR_STATS": 2,
 }
 
 func (x InternalValueType) Enum() *InternalValueType {
@@ -1394,9 +1397,7 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Ranges = append(m.Ranges, RangeDescriptor{})
-			if err := m.Ranges[len(m.Ranges)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Ranges[len(m.Ranges)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -1641,9 +1642,7 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Keys = append(m.Keys, InternalGCRequest_GCKey{})
-			if err := m.Keys[len(m.Keys)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Keys[len(m.Keys)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3372,9 +3371,7 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Requests = append(m.Requests, InternalRequestUnion{})
-			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3463,9 +3460,7 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Responses = append(m.Responses, InternalResponseUnion{})
-			if err := m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -4724,9 +4719,7 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Samples = append(m.Samples, &InternalTimeSeriesSample{})
-			if err := m.Samples[len(m.Samples)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Samples[len(m.Samples)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -4994,9 +4987,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.KV = append(m.KV, &RaftSnapshotData_KeyValue{})
-			if err := m.KV[len(m.KV)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.KV[len(m.KV)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int

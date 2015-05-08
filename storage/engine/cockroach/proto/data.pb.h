@@ -2207,10 +2207,24 @@ class MVCCStats : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 gc_bytes_age() const;
   inline void set_gc_bytes_age(::google::protobuf::int64 value);
 
-  // optional int64 last_update_nanos = 11;
+  // optional int64 sys_bytes = 12;
+  inline bool has_sys_bytes() const;
+  inline void clear_sys_bytes();
+  static const int kSysBytesFieldNumber = 12;
+  inline ::google::protobuf::int64 sys_bytes() const;
+  inline void set_sys_bytes(::google::protobuf::int64 value);
+
+  // optional int64 sys_count = 13;
+  inline bool has_sys_count() const;
+  inline void clear_sys_count();
+  static const int kSysCountFieldNumber = 13;
+  inline ::google::protobuf::int64 sys_count() const;
+  inline void set_sys_count(::google::protobuf::int64 value);
+
+  // optional int64 last_update_nanos = 30;
   inline bool has_last_update_nanos() const;
   inline void clear_last_update_nanos();
-  static const int kLastUpdateNanosFieldNumber = 11;
+  static const int kLastUpdateNanosFieldNumber = 30;
   inline ::google::protobuf::int64 last_update_nanos() const;
   inline void set_last_update_nanos(::google::protobuf::int64 value);
 
@@ -2236,6 +2250,10 @@ class MVCCStats : public ::google::protobuf::Message {
   inline void clear_has_intent_age();
   inline void set_has_gc_bytes_age();
   inline void clear_has_gc_bytes_age();
+  inline void set_has_sys_bytes();
+  inline void clear_has_sys_bytes();
+  inline void set_has_sys_count();
+  inline void clear_has_sys_count();
   inline void set_has_last_update_nanos();
   inline void clear_has_last_update_nanos();
 
@@ -2253,6 +2271,8 @@ class MVCCStats : public ::google::protobuf::Message {
   ::google::protobuf::int64 intent_count_;
   ::google::protobuf::int64 intent_age_;
   ::google::protobuf::int64 gc_bytes_age_;
+  ::google::protobuf::int64 sys_bytes_;
+  ::google::protobuf::int64 sys_count_;
   ::google::protobuf::int64 last_update_nanos_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
@@ -5054,15 +5074,63 @@ inline void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.MVCCStats.gc_bytes_age)
 }
 
-// optional int64 last_update_nanos = 11;
-inline bool MVCCStats::has_last_update_nanos() const {
+// optional int64 sys_bytes = 12;
+inline bool MVCCStats::has_sys_bytes() const {
   return (_has_bits_[0] & 0x00000400u) != 0;
 }
-inline void MVCCStats::set_has_last_update_nanos() {
+inline void MVCCStats::set_has_sys_bytes() {
   _has_bits_[0] |= 0x00000400u;
 }
-inline void MVCCStats::clear_has_last_update_nanos() {
+inline void MVCCStats::clear_has_sys_bytes() {
   _has_bits_[0] &= ~0x00000400u;
+}
+inline void MVCCStats::clear_sys_bytes() {
+  sys_bytes_ = GOOGLE_LONGLONG(0);
+  clear_has_sys_bytes();
+}
+inline ::google::protobuf::int64 MVCCStats::sys_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.MVCCStats.sys_bytes)
+  return sys_bytes_;
+}
+inline void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
+  set_has_sys_bytes();
+  sys_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.MVCCStats.sys_bytes)
+}
+
+// optional int64 sys_count = 13;
+inline bool MVCCStats::has_sys_count() const {
+  return (_has_bits_[0] & 0x00000800u) != 0;
+}
+inline void MVCCStats::set_has_sys_count() {
+  _has_bits_[0] |= 0x00000800u;
+}
+inline void MVCCStats::clear_has_sys_count() {
+  _has_bits_[0] &= ~0x00000800u;
+}
+inline void MVCCStats::clear_sys_count() {
+  sys_count_ = GOOGLE_LONGLONG(0);
+  clear_has_sys_count();
+}
+inline ::google::protobuf::int64 MVCCStats::sys_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.MVCCStats.sys_count)
+  return sys_count_;
+}
+inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
+  set_has_sys_count();
+  sys_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.MVCCStats.sys_count)
+}
+
+// optional int64 last_update_nanos = 30;
+inline bool MVCCStats::has_last_update_nanos() const {
+  return (_has_bits_[0] & 0x00001000u) != 0;
+}
+inline void MVCCStats::set_has_last_update_nanos() {
+  _has_bits_[0] |= 0x00001000u;
+}
+inline void MVCCStats::clear_has_last_update_nanos() {
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void MVCCStats::clear_last_update_nanos() {
   last_update_nanos_ = GOOGLE_LONGLONG(0);

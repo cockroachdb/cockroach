@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -2194,4 +2195,63 @@ func TestResovleIntentWithLowerEpoch(t *testing.T) {
 	if !ok {
 		t.Fatal("intent should not be cleared by resolve intent request with lower epoch")
 	}
+}
+
+// runMVCCStatsMerge merges MVCCStats values. Values are written
+// at a rate of writesPerRead writes for every read.
+func runMVCCStatsMerge(writesPerRead int, b *testing.B) {
+	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
+	defer rocksdb.Close()
+
+	ms := proto.MVCCStats{
+		LiveBytes:       1,
+		KeyBytes:        1,
+		ValBytes:        1,
+		IntentBytes:     1,
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		IntentCount:     1,
+		IntentAge:       1,
+		GCBytesAge:      1,
+		SysBytes:        1,
+		SysCount:        1,
+		LastUpdateNanos: 1,
+	}
+	if err := SetStats(&ms, rocksdb, 1); err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(int64(unsafe.Sizeof(ms)))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err := MergeStats(&ms, rocksdb, 1); err != nil {
+			b.Fatal(err)
+		}
+		// Every writesPerRead writes, read the underlying stats to force a merge.
+		if i%writesPerRead == 0 {
+			var readMS proto.MVCCStats
+			if err := MVCCGetRangeStats(rocksdb, 1, &readMS); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCStatsMerge1For1(b *testing.B) {
+	runMVCCStatsMerge(1, b)
+}
+
+func BenchmarkMVCCStatsMerge10For1(b *testing.B) {
+	runMVCCStatsMerge(10, b)
+}
+
+func BenchmarkMVCCStatsMerge100For1(b *testing.B) {
+	runMVCCStatsMerge(100, b)
+}
+
+func BenchmarkMVCCStatsMerge1000For1(b *testing.B) {
+	runMVCCStatsMerge(1000, b)
 }

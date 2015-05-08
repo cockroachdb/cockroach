@@ -81,6 +81,13 @@ func (ri *rangeDataIterator) Close() {
 	ri.iter.Close()
 }
 
+// Seek seeks to the specified key.
+func (ri *rangeDataIterator) Seek(key []byte) {
+	ri.iter.Seek(key)
+	ri.advance()
+}
+
+// Valid returns whether the underlying iterator is valid.
 func (ri *rangeDataIterator) Valid() bool {
 	return ri.iter.Valid()
 }
@@ -100,6 +107,12 @@ func (ri *rangeDataIterator) Key() proto.EncodedKey {
 // Value returns the current Value for the iteration if valid.
 func (ri *rangeDataIterator) Value() []byte {
 	return ri.iter.Value()
+}
+
+// ValueProto unmarshals the current value into the provided message
+// if valid.
+func (ri *rangeDataIterator) ValueProto(msg gogoproto.Message) error {
+	return gogoproto.Unmarshal(ri.iter.Value(), msg)
 }
 
 // Error returns the Error for the iteration if applicable.

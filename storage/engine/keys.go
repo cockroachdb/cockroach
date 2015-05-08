@@ -319,6 +319,8 @@ var (
 	StatIntentAge = proto.Key("intent-age")
 	// StatGCBytesAge counts the total age of gc'able bytes.
 	StatGCBytesAge = proto.Key("gc-age")
+	StatSysBytes   = proto.Key("sys-bytes")
+	StatSysCount   = proto.Key("sys-count")
 	// StatLastUpdateNanos counts nanoseconds since the unix epoch for
 	// the last update to the intent / GC'able bytes ages. This really
 	// is tracking the wall time as at last update, but is a merged

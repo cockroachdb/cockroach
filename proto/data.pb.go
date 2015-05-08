@@ -851,6 +851,7 @@ func (m *TimeSeriesQueryResult) GetDatapoints() []*TimeSeriesDatapoint {
 //  - Key count (count of all keys, including keys with deleted tombstones)
 //  - Value count (all versions, including deleted tombstones)
 //  - Intents (provisional values written during txns)
+//  - System key counts and byte totals
 type MVCCStats struct {
 	LiveBytes        int64  `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
 	KeyBytes         int64  `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`
@@ -862,7 +863,9 @@ type MVCCStats struct {
 	IntentCount      int64  `protobuf:"varint,8,opt,name=intent_count" json:"intent_count"`
 	IntentAge        int64  `protobuf:"varint,9,opt,name=intent_age" json:"intent_age"`
 	GCBytesAge       int64  `protobuf:"varint,10,opt,name=gc_bytes_age" json:"gc_bytes_age"`
-	LastUpdateNanos  int64  `protobuf:"varint,11,opt,name=last_update_nanos" json:"last_update_nanos"`
+	SysBytes         int64  `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
+	SysCount         int64  `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
+	LastUpdateNanos  int64  `protobuf:"varint,30,opt,name=last_update_nanos" json:"last_update_nanos"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -936,6 +939,20 @@ func (m *MVCCStats) GetIntentAge() int64 {
 func (m *MVCCStats) GetGCBytesAge() int64 {
 	if m != nil {
 		return m.GCBytesAge
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetSysBytes() int64 {
+	if m != nil {
+		return m.SysBytes
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetSysCount() int64 {
+	if m != nil {
+		return m.SysCount
 	}
 	return 0
 }
@@ -1784,9 +1801,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.UpdatedReplicas = append(m.UpdatedReplicas, Replica{})
-			if err := m.UpdatedReplicas[len(m.UpdatedReplicas)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.UpdatedReplicas[len(m.UpdatedReplicas)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -1931,11 +1946,8 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.Intents = append(m.Intents, v)
-			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Intents = append(m.Intents, Key{})
+			m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -2851,9 +2863,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Datapoints = append(m.Datapoints, &TimeSeriesDatapoint{})
-			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -2962,9 +2972,7 @@ func (m *TimeSeriesQueryResult) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Datapoints = append(m.Datapoints, &TimeSeriesDatapoint{})
-			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -3158,7 +3166,37 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 11:
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SysBytes", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.SysBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 13:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SysCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.SysCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 30:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
 			}
@@ -3523,7 +3561,9 @@ func (m *MVCCStats) Size() (n int) {
 	n += 1 + sovData(uint64(m.IntentCount))
 	n += 1 + sovData(uint64(m.IntentAge))
 	n += 1 + sovData(uint64(m.GCBytesAge))
-	n += 1 + sovData(uint64(m.LastUpdateNanos))
+	n += 1 + sovData(uint64(m.SysBytes))
+	n += 1 + sovData(uint64(m.SysCount))
+	n += 2 + sovData(uint64(m.LastUpdateNanos))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -4368,7 +4408,15 @@ func (m *MVCCStats) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x50
 	i++
 	i = encodeVarintData(data, i, uint64(m.GCBytesAge))
-	data[i] = 0x58
+	data[i] = 0x60
+	i++
+	i = encodeVarintData(data, i, uint64(m.SysBytes))
+	data[i] = 0x68
+	i++
+	i = encodeVarintData(data, i, uint64(m.SysCount))
+	data[i] = 0xf0
+	i++
+	data[i] = 0x1
 	i++
 	i = encodeVarintData(data, i, uint64(m.LastUpdateNanos))
 	if m.XXX_unrecognized != nil {

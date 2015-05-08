@@ -338,6 +338,7 @@ message TimeSeriesQueryResult {
 //  - Key count (count of all keys, including keys with deleted tombstones)
 //  - Value count (all versions, including deleted tombstones)
 //  - Intents (provisional values written during txns)
+//  - System key counts and byte totals
 message MVCCStats {
   optional int64 live_bytes = 1 [(gogoproto.nullable) = false];
   optional int64 key_bytes = 2 [(gogoproto.nullable) = false];
@@ -349,5 +350,7 @@ message MVCCStats {
   optional int64 intent_count = 8 [(gogoproto.nullable) = false];
   optional int64 intent_age = 9 [(gogoproto.nullable) = false];
   optional int64 gc_bytes_age = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge" ];
-  optional int64 last_update_nanos = 11 [(gogoproto.nullable) = false];
+  optional int64 sys_bytes = 12 [(gogoproto.nullable) = false];
+  optional int64 sys_count = 13 [(gogoproto.nullable) = false];
+  optional int64 last_update_nanos = 30 [(gogoproto.nullable) = false];
 }

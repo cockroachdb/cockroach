@@ -1227,9 +1227,7 @@ func (m *WriteIntentError) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Intents = append(m.Intents, WriteIntentError_Intent{})
-			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		case 2:
 			if wireType != 0 {

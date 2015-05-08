@@ -621,9 +621,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Replicas = append(m.Replicas, Replica{})
-			if err := m.Replicas[len(m.Replicas)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Replicas[len(m.Replicas)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -895,9 +893,7 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.ReplicaAttrs = append(m.ReplicaAttrs, Attributes{})
-			if err := m.ReplicaAttrs[len(m.ReplicaAttrs)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.ReplicaAttrs[len(m.ReplicaAttrs)-1].Unmarshal(data[index:postIndex])
 			index = postIndex
 		case 2:
 			if wireType != 0 {
@@ -1149,8 +1145,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.LeftKey = &v
+			m.LeftKey = &Key{}
 			if err := m.LeftKey.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
@@ -1175,8 +1170,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.RightKey = &v
+			m.RightKey = &Key{}
 			if err := m.RightKey.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}

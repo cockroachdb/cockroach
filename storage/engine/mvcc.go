@@ -70,6 +70,12 @@ func MergeStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
 	if err := MVCCMergeRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge); err != nil {
 		return err
 	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatSysBytes, ms.SysBytes); err != nil {
+		return err
+	}
+	if err := MVCCMergeRangeStat(engine, raftID, StatSysCount, ms.SysCount); err != nil {
+		return err
+	}
 	if err := MVCCMergeRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos); err != nil {
 		return err
 	}
@@ -106,6 +112,12 @@ func SetStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
 		return err
 	}
 	if err := MVCCSetRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatSysBytes, ms.SysBytes); err != nil {
+		return err
+	}
+	if err := MVCCSetRangeStat(engine, raftID, StatSysCount, ms.SysCount); err != nil {
 		return err
 	}
 	if err := MVCCSetRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos); err != nil {
@@ -394,6 +406,12 @@ func MVCCGetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
 		return err
 	}
 	if ms.GCBytesAge, err = MVCCGetRangeStat(engine, raftID, StatGCBytesAge); err != nil {
+		return err
+	}
+	if ms.SysBytes, err = MVCCGetRangeStat(engine, raftID, StatSysBytes); err != nil {
+		return err
+	}
+	if ms.SysCount, err = MVCCGetRangeStat(engine, raftID, StatSysCount); err != nil {
 		return err
 	}
 	if ms.LastUpdateNanos, err = MVCCGetRangeStat(engine, raftID, StatLastUpdateNanos); err != nil {

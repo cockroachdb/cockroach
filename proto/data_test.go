@@ -420,6 +420,59 @@ func TestNodeList(t *testing.T) {
 	}
 }
 
+func TestMVCCStatsToValue(t *testing.T) {
+	msOriginal := &MVCCStats{
+		LiveBytes:       1,
+		KeyBytes:        1,
+		ValBytes:        1,
+		IntentBytes:     1,
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		IntentCount:     1,
+		IntentAge:       1,
+		GCBytesAge:      1,
+		SysBytes:        1,
+		SysCount:        1,
+		LastUpdateNanos: 1,
+	}
+
+	// Wrap into a Value.
+	valueOriginal, err := msOriginal.ToValue()
+	if err != nil {
+		t.Fatalf("error marshaling MVCCStats: %s", err.Error())
+	}
+	if a, e := valueOriginal.GetTag(), _CR_STATS.String(); a != e {
+		t.Errorf("Value did not have expected tag value of %s, had %s", e, a)
+	}
+
+	// Ensure the Value's 'bytes' field contains the marshalled stats.
+	msEncoded, err := gogoproto.Marshal(msOriginal)
+	if err != nil {
+		t.Fatalf("error marshaling TimeSeriesData: %s", err.Error())
+	}
+	if a, e := valueOriginal.Bytes, msEncoded; !bytes.Equal(a, e) {
+		t.Errorf("bytes field was not properly encoded: expected %v, got %v", e, a)
+	}
+
+	// Extract the stats from the Value.
+	msNew, err := MVCCStatsFromValue(valueOriginal)
+	if err != nil {
+		t.Errorf("error extracting stats: %s", err.Error())
+	}
+	if !gogoproto.Equal(msOriginal, msNew) {
+		t.Errorf("extracted stats not equivalent to original; %v != %v", msNew, msOriginal)
+	}
+
+	// Make sure ExtractMVCCStats doesn't work on non-stats values
+	valueNotMs := &Value{
+		Bytes: []byte("testvalue"),
+	}
+	if _, err := MVCCStatsFromValue(valueNotMs); err == nil {
+		t.Errorf("did not receive expected error when extracting stats from regular Byte value.")
+	}
+}
+
 func ts(name string, dps ...*TimeSeriesDatapoint) *TimeSeriesData {
 	return &TimeSeriesData{
 		Name:       name,
