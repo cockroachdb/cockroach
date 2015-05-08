@@ -374,9 +374,9 @@ func TestStoreRangeIterator(t *testing.T) {
 	if ec := iter.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
-	// Insert range as second range.
-	rng := createRange(store, 11, proto.Key("a000"), proto.Key("a001"))
-	if err := store.AddRange(rng); err != nil {
+	// Split the first range to insert a new range as second range.
+	rng := createRange(store, 11, proto.Key("a000"), proto.Key("a01"))
+	if err = store.SplitRange(store.LookupRange(proto.Key("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
 	// Estimated count will still be 9, as it's cached, but next() will refresh.
