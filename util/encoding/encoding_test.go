@@ -346,17 +346,73 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 	testCustomEncodeUint64(testCases, EncodeUvarint, t)
 }
 
-// TestDecodeInvalidUvarint tests that invalid uvarint encodings panic.
-func TestDecodeInvalidUvarint(t *testing.T) {
-	tests := []struct{
-		name    string // name printed with errors.
-		buf     []byte // buf contains an invalid uvarint to decode.
-		pattern string // pattern is a regexp that matches the panic string.
+// TestDecodeInvalid tests that decoding invalid bytes panics.
+func TestDecodeInvalid(t *testing.T) {
+	tests := []struct {
+		name    string       // name printed with errors.
+		buf     []byte       // buf contains an invalid uvarint to decode.
+		pattern string       // pattern matches the panic string.
+		decode  func([]byte) // decode is called with buf.
 	}{
 		{
-			name:    "length of 9 bytes",
+			name:    "DecodeUvarint, length of 9 bytes",
 			buf:     []byte{0x11, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
 			pattern: "invalid uvarint length of [0-9]+",
+			decode:  func(b []byte) { DecodeUvarint(b) },
+		},
+		{
+			name:    "DecodeVarint, overflows int64",
+			buf:     []byte{0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			pattern: "varint [0-9]+ overflows int64",
+			decode:  func(b []byte) { DecodeVarint(b) },
+		},
+		{
+			name:    "Bytes, no terminator",
+			buf:     []byte{'a'},
+			pattern: "did not find terminator",
+			decode:  func(b []byte) { DecodeBytes(b, nil) },
+		},
+		{
+			name:    "Bytes, malformed escape",
+			buf:     []byte{'a', 0x00},
+			pattern: "malformed escape",
+			decode:  func(b []byte) { DecodeBytes(b, nil) },
+		},
+		{
+			name:    "Bytes, invalid escape 1",
+			buf:     []byte{'a', 0x00, 0x00},
+			pattern: "unknown escape",
+			decode:  func(b []byte) { DecodeBytes(b, nil) },
+		},
+		{
+			name:    "Bytes, invalid escape 2",
+			buf:     []byte{'a', 0x00, 0x02},
+			pattern: "unknown escape",
+			decode:  func(b []byte) { DecodeBytes(b, nil) },
+		},
+		{
+			name:    "BytesDecreasing, no terminator",
+			buf:     []byte{^byte('a')},
+			pattern: "did not find terminator",
+			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
+		},
+		{
+			name:    "BytesDecreasing, malformed escape",
+			buf:     []byte{^byte('a'), 0xff},
+			pattern: "malformed escape",
+			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
+		},
+		{
+			name:    "BytesDecreasing, invalid escape 1",
+			buf:     []byte{^byte('a'), 0xff, 0xff},
+			pattern: "unknown escape",
+			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
+		},
+		{
+			name:    "BytesDecreasing, invalid escape 2",
+			buf:     []byte{^byte('a'), 0xff, 0xfd},
+			pattern: "unknown escape",
+			decode:  func(b []byte) { DecodeBytesDecreasing(b, nil) },
 		},
 	}
 	for _, test := range tests {
@@ -377,42 +433,7 @@ func TestDecodeInvalidUvarint(t *testing.T) {
 					t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, str)
 				}
 			}()
-			DecodeUvarint(test.buf)
-		}()
-	}
-}
-
-// TestDecodeInvalidVarint tests that invalid varint encodings panic.
-func TestDecodeInvalidVarint(t *testing.T) {
-	tests := []struct{
-		name    string // name printed with errors.
-		buf     []byte // buf contains an invalid varint to decode.
-		pattern string // pattern is a regexp that matches the panic string.
-	}{
-		{
-			name:    "overflows int64",
-			buf:     []byte{0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-			pattern: "varint [0-9]+ overflows int64",
-		},
-	}
-	for _, test := range tests {
-		func() {
-			defer func() {
-				r := recover()
-				if r == nil {
-					t.Error("%q, expected panic", test.name)
-				}
-				str := fmt.Sprint(r)
-				match, err := regexp.MatchString(test.pattern, str)
-				if err != nil {
-					t.Errorf("%q, couldn't match regexp: %v", test.name, err)
-					return
-				}
-				if !match {
-					t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, str)
-				}
-			}()
-			DecodeVarint(test.buf)
+			test.decode(test.buf)
 		}()
 	}
 }
@@ -520,48 +541,6 @@ func TestEncodeDecodeBytesDecreasing(t *testing.T) {
 		if string(remainder) != "remainder" {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
-	}
-}
-
-func TestDecodeInvalidBytes(t *testing.T) {
-	testCases := []struct {
-		value []byte
-	}{
-		{[]byte{'a'}},             // no terminator
-		{[]byte{'a', 0x00}},       // malformed escape
-		{[]byte{'a', 0x00, 0x00}}, // invalid escape
-		{[]byte{'a', 0x00, 0x02}}, // invalid escape
-	}
-	for _, c := range testCases {
-		func() {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Error("expected panic")
-				}
-			}()
-			DecodeBytes(c.value, nil)
-		}()
-	}
-}
-
-func TestDecodeInvalidBytesDecreasing(t *testing.T) {
-	testCases := []struct {
-		value []byte
-	}{
-		{[]byte{^byte('a')}},             // no terminator
-		{[]byte{^byte('a'), 0xff}},       // malformed escape
-		{[]byte{^byte('a'), 0xff, 0xff}}, // invalid escape
-		{[]byte{^byte('a'), 0xff, 0xfd}}, // invalid escape
-	}
-	for _, c := range testCases {
-		func() {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Error("expected panic")
-				}
-			}()
-			DecodeBytesDecreasing(c.value, nil)
-		}()
 	}
 }
 
