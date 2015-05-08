@@ -689,12 +689,6 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 		// timestamp for successive writes to the same key or key range.
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
 
-		// If the original client didn't wait (e.g. resolve write intent),
-		// log execution errors so they're surfaced somewhere.
-		if !wait && err != nil {
-			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
-				args.Method(), args, err)
-		}
 		return err
 	}
 
@@ -702,8 +696,12 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 		return completionFunc()
 	}
 	go func() {
-		// error is lost forever :()
-		_ = completionFunc()
+		// If the original client didn't wait (e.g. resolve write intent),
+		// log execution errors so they're surfaced somewhere.
+		if err := completionFunc(); err != nil {
+			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
+				args.Method(), args, err)
+		}
 	}()
 	return nil
 }
