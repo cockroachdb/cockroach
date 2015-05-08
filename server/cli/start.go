@@ -216,7 +216,9 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) {
-	server.SendQuit(Context)
+	if err := server.SendQuit(Context); err != nil {
+		log.Error(err)
+	}
 }
 
 var nodeCmds = []*cobra.Command{

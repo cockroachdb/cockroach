@@ -185,7 +185,9 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0 * time.Nanosecond
 	c := make(chan interface{})
 	go func() {
-		sendPing(opts, []net.Addr{addr}, rpcContext)
+		if _, err := sendPing(opts, []net.Addr{addr}, rpcContext); err == nil {
+			t.Fatalf("expected error when client is closed")
+		}
 		close(c)
 	}()
 	select {

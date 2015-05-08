@@ -414,11 +414,10 @@ func (n *node) unregisterGroup(groupID uint64) {
 // synchronization.
 type state struct {
 	*MultiRaft
-	groups        map[uint64]*group
-	nodes         map[NodeID]*node
-	electionTimer *time.Timer
-	writeTask     *writeTask
-	stopper       *util.Stopper
+	groups    map[uint64]*group
+	nodes     map[NodeID]*node
+	writeTask *writeTask
+	stopper   *util.Stopper
 }
 
 func newState(m *MultiRaft) *state {
@@ -710,7 +709,7 @@ func (s *state) createGroup(groupID uint64) error {
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
 	if len(cs.Nodes) == 1 && s.MultiRaft.nodeID == NodeID(cs.Nodes[0]) {
-		s.multiNode.Campaign(context.Background(), groupID)
+		return s.multiNode.Campaign(context.Background(), groupID)
 	}
 	return nil
 }

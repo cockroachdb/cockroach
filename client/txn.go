@@ -116,11 +116,11 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 		return util.RetryBreak, err
 	})
 	if err != nil && t.haveTxnWrite {
-		etArgs := &proto.EndTransactionRequest{Commit: false}
-		etReply := &proto.EndTransactionResponse{}
-		t.Run(Call{Args: etArgs, Reply: etReply})
-		if etReply.Header().GoError() != nil {
-			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
+		if replyErr := t.Run(Call{
+			Args:  &proto.EndTransactionRequest{Commit: false},
+			Reply: &proto.EndTransactionResponse{},
+		}); replyErr != nil {
+			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
 		return err
 	}

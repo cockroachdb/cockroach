@@ -41,7 +41,9 @@ func init() {
 		}
 	}
 	if !hasLogDir && !hasAlsoLogStderr {
-		flag.CommandLine.Set("alsologtostderr", "true")
+		if err := flag.CommandLine.Set("alsologtostderr", "true"); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 

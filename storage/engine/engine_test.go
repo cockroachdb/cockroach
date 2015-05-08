@@ -105,7 +105,9 @@ func TestEngineBatchCommit(t *testing.T) {
 		batch := e.NewBatch()
 		defer batch.Close()
 		for i := 0; i < numWrites; i++ {
-			batch.Put(key, []byte(strconv.Itoa(i)))
+			if err := batch.Put(key, []byte(strconv.Itoa(i))); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if err := batch.Commit(); err != nil {
 			t.Fatal(err)
@@ -184,7 +186,9 @@ func TestEngineBatch(t *testing.T) {
 				currentBatch[k] = batch[shuffledIndices[k]]
 			}
 			// Reset the key
-			engine.Clear(key)
+			if err := engine.Clear(key); err != nil {
+				t.Fatal(err)
+			}
 			// Run it once with individual operations and remember the result.
 			for i, op := range currentBatch {
 				if err := apply(engine, op); err != nil {
@@ -195,9 +199,13 @@ func TestEngineBatch(t *testing.T) {
 			expectedValue := get(engine, key)
 			// Run the whole thing as a batch and compare.
 			b := engine.NewBatch()
-			b.Clear(key)
+			if err := b.Clear(key); err != nil {
+				t.Fatal(err)
+			}
 			for _, op := range currentBatch {
-				apply(b, op)
+				if err := apply(b, op); err != nil {
+					t.Fatal(err)
+				}
 			}
 			// Try getting the value from the batch.
 			actualValue := get(b, key)
@@ -357,8 +365,12 @@ func TestEngineMerge(t *testing.T) {
 			}
 			result, _ := engine.Get(tc.testKey)
 			var resultV, expectedV proto.MVCCMetadata
-			gogoproto.Unmarshal(result, &resultV)
-			gogoproto.Unmarshal(tc.expected, &expectedV)
+			if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+				t.Fatal(err)
+			}
+			if err := gogoproto.Unmarshal(tc.expected, &expectedV); err != nil {
+				t.Fatal(err)
+			}
 			if !reflect.DeepEqual(resultV, expectedV) {
 				t.Errorf("unexpected append-merge result: %v != %v", resultV, expectedV)
 			}
@@ -557,7 +569,9 @@ func TestSnapshot(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		key := []byte("a")
 		val1 := []byte("1")
-		engine.Put(key, val1)
+		if err := engine.Put(key, val1); err != nil {
+			t.Fatal(err)
+		}
 		val, _ := engine.Get(key)
 		if !bytes.Equal(val, val1) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -568,7 +582,9 @@ func TestSnapshot(t *testing.T) {
 		defer snap.Close()
 
 		val2 := []byte("2")
-		engine.Put(key, val2)
+		if err := engine.Put(key, val2); err != nil {
+			t.Fatal(err)
+		}
 		val, _ = engine.Get(key)
 		valSnapshot, error := snap.Get(key)
 		if error != nil {
@@ -607,7 +623,9 @@ func TestSnapshotMethods(t *testing.T) {
 		keys := [][]byte{[]byte("a"), []byte("b")}
 		vals := [][]byte{[]byte("1"), []byte("2")}
 		for i := range keys {
-			engine.Put(keys[i], vals[i])
+			if err := engine.Put(keys[i], vals[i]); err != nil {
+				t.Fatal(err)
+			}
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()

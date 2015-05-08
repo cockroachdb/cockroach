@@ -347,8 +347,10 @@ func TestKVClientEmptyValues(t *testing.T) {
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.User = storage.UserRoot
 
-	kvClient.Run(client.Put(proto.Key("a"), []byte{}))
-	kvClient.Run(client.Call{
+	if err := kvClient.Run(client.Put(proto.Key("a"), []byte{})); err != nil {
+		t.Error(err)
+	}
+	if err := kvClient.Run(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("b"),
@@ -358,17 +360,23 @@ func TestKVClientEmptyValues(t *testing.T) {
 			},
 		},
 		Reply: &proto.PutResponse{},
-	})
+	}); err != nil {
+		t.Error(err)
+	}
 
 	getCall := client.Get(proto.Key("a"))
 	getResp := getCall.Reply.(*proto.GetResponse)
-	kvClient.Run(getCall)
+	if err := kvClient.Run(getCall); err != nil {
+		t.Error(err)
+	}
 	if bytes := getResp.Value.Bytes; bytes == nil || len(bytes) != 0 {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 	getCall = client.Get(proto.Key("b"))
 	getResp = getCall.Reply.(*proto.GetResponse)
-	kvClient.Run(getCall)
+	if err := kvClient.Run(getCall); err != nil {
+		t.Error(err)
+	}
 	if intVal := getResp.Value.Integer; intVal == nil || *intVal != 0 {
 		t.Errorf("expected non-nil 0-valued integer; got %p, %d", getResp.Value.Integer, getResp.Value.GetInteger())
 	}
@@ -391,7 +399,7 @@ func TestKVClientBatch(t *testing.T) {
 	}
 
 	if err := kvClient.Run(calls...); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 
 	for i, call := range calls {
@@ -407,7 +415,7 @@ func TestKVClientBatch(t *testing.T) {
 		client.Scan(proto.Key("key 05"), proto.Key("key 10"), 0),
 	}
 	if err := kvClient.Run(calls...); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 
 	scan1 := calls[0].Reply.(*proto.ScanResponse)

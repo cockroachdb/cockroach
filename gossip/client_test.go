@@ -48,12 +48,14 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 		t.Fatal(err)
 	}
 	local = New(lRPCContext, gossipInterval, TestBootstrap)
-	local.SetNodeDescriptor(&proto.NodeDescriptor{
+	if err := local.SetNodeDescriptor(&proto.NodeDescriptor{
 		NodeID: 1,
 		Address: proto.Addr{
 			Network: laddr.Network(),
 			Address: laddr.String(),
-		}})
+		}}); err != nil {
+		t.Fatal(err)
+	}
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
 	rRPCContext := rpc.NewContext(rclock, tlsConfig, nil)
@@ -62,13 +64,15 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, gossipInterval, TestBootstrap)
-	local.SetNodeDescriptor(&proto.NodeDescriptor{
+	if err := local.SetNodeDescriptor(&proto.NodeDescriptor{
 		NodeID: 2,
 		Address: proto.Addr{
 			Network: raddr.Network(),
 			Address: raddr.String(),
 		},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	stopper = util.NewStopper()
 	stopper.AddCloser(lserver)
 	stopper.AddCloser(rserver)
@@ -81,8 +85,12 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 // TestClientGossip verifies a client can gossip a delta to the server.
 func TestClientGossip(t *testing.T) {
 	local, remote, stopper := startGossip(t)
-	local.AddInfo("local-key", "local value", time.Second)
-	remote.AddInfo("remote-key", "remote value", time.Second)
+	if err := local.AddInfo("local-key", "local value", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.AddInfo("remote-key", "remote value", time.Second); err != nil {
+		t.Fatal(err)
+	}
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)

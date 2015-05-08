@@ -120,7 +120,9 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 
 	s.kvDB = kv.NewDBServer(sender)
 	if s.ctx.ExperimentalRPCServer {
-		s.kvDB.RegisterRPC(s.rpc)
+		if err = s.kvDB.RegisterRPC(s.rpc); err != nil {
+			return nil, err
+		}
 	}
 	s.kvREST = kv.NewRESTServer(s.kv)
 	// TODO(bdarnell): make StoreConfig configurable.

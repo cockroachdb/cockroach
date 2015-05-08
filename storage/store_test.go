@@ -125,7 +125,9 @@ func (db *testSender) sendOne(call client.Call) {
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
 		header.RaftID = rng.Desc().RaftID
 		header.Replica = *rng.GetReplica()
-		db.store.ExecuteCmd(call)
+		if err := db.store.ExecuteCmd(call); err != nil {
+			call.Reply.Header().SetGoError(err)
+		}
 	} else {
 		call.Reply.Header().SetGoError(proto.NewRangeKeyMismatchError(header.Key, header.EndKey, nil))
 	}
@@ -1316,7 +1318,7 @@ func TestRaftNodeID(t *testing.T) {
 	for _, c := range panicCases {
 		func() {
 			defer func() {
-				recover()
+				_ = recover()
 			}()
 			x := MakeRaftNodeID(c.nodeID, c.storeID)
 			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected panic",

@@ -66,18 +66,26 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
 	}
-	g.AddInfo(gossip.KeySentinel, "cluster1", time.Hour)
-	g.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
-	g.AddInfo(gossip.KeyFirstRangeDescriptor, testRangeDescriptor, time.Hour)
+	if err := g.AddInfo(gossip.KeySentinel, "cluster1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddInfo(gossip.KeyFirstRangeDescriptor, testRangeDescriptor, time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	nodeIDKey := gossip.MakeNodeIDKey(1)
-	g.AddInfo(nodeIDKey, &proto.NodeDescriptor{
+	if err := g.AddInfo(nodeIDKey, &proto.NodeDescriptor{
 		NodeID: 1,
 		Address: proto.Addr{
 			Network: testAddress.Network(),
 			Address: testAddress.String(),
 		},
 		Attrs: proto.Attributes{Attrs: []string{"attr1", "attr2"}},
-	}, time.Hour)
+	}, time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	return g
 }
 
@@ -86,7 +94,9 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	g := makeTestGossip(t)
-	g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 1})
+	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
 	raftID := int64(99)
 
 	nodeAttrs := map[int32][]string{
@@ -225,7 +235,9 @@ func TestSendRPCOrder(t *testing.T) {
 			if i == 1 {
 				nd.Attrs = proto.Attributes{Attrs: tc.attrs}
 			}
-			g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour)
+			if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
+				t.Fatal(err)
+			}
 
 			descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
 				NodeID:  proto.NodeID(i),
@@ -402,8 +414,9 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	// Add first RangeDescriptor to a node different from the node for
 	// this dist sender and ensure that this dist sender has the
 	// information within a given time.
-	n.Nodes[1].Gossip.AddInfo(
-		gossip.KeyFirstRangeDescriptor, *expectedDesc, time.Hour)
+	if err := n.Nodes[1].Gossip.AddInfo(gossip.KeyFirstRangeDescriptor, *expectedDesc, time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	maxCycles := 10
 	n.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
 		desc, err := ds.getFirstRangeDescriptor()
@@ -444,7 +457,9 @@ func TestVerifyPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
 	}
-	ds.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
+	if err := ds.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour); err != nil {
+		t.Fatal(err)
+	}
 
 	allRequestTypes := []proto.Request{
 		&proto.ContainsRequest{},

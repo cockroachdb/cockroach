@@ -133,9 +133,7 @@ func (ls *LocalSender) Send(call client.Call) {
 	if err == nil {
 		store, err = ls.GetStore(header.Replica.StoreID)
 	}
-	if err != nil {
-		call.Reply.Header().SetGoError(err)
-	} else {
+	if err == nil {
 		// For calls that read data within a txn, we can avoid uncertainty
 		// related retries in certain situations. If the node is in
 		// "CertainNodes", we need not worry about uncertain reads any
@@ -145,7 +143,10 @@ func (ls *LocalSender) Send(call client.Call) {
 			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
 			header.Txn.MaxTimestamp = header.Txn.Timestamp
 		}
-		store.ExecuteCmd(call)
+		err = store.ExecuteCmd(call)
+	}
+	if err != nil {
+		call.Reply.Header().SetGoError(err)
 	}
 }
 

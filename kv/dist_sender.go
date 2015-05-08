@@ -230,7 +230,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	return permMap.VisitPrefixes(header.Key, headerEnd,
 		func(start, end proto.Key, config interface{}) (bool, error) {
 			hasPerm := false
-			permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, config interface{}) (bool, error) {
+			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, config interface{}) (bool, error) {
 				perm := config.(*proto.PermConfig)
 				if proto.IsRead(args) && !perm.CanRead(header.User) {
 					return false, nil
@@ -241,7 +241,9 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 				// Return done = true, as permissions have been granted by this config.
 				hasPerm = true
 				return true, nil
-			})
+			}); err != nil {
+				return false, err
+			}
 			if !hasPerm {
 				if len(header.EndKey) == 0 {
 					return false, util.Errorf("user %q cannot invoke %s at %q", header.User, args.Method(), start)

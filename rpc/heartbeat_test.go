@@ -37,7 +37,9 @@ func TestHeartbeatReply(t *testing.T) {
 		Ping: "testPing",
 	}
 	response := &proto.PingResponse{}
-	heartbeat.Ping(request, response)
+	if err := heartbeat.Ping(request, response); err != nil {
+		t.Fatal(err)
+	}
 
 	if response.Pong != request.Ping {
 		t.Errorf("expected %s to be equal to %s", response.Pong, request.Ping)
@@ -67,8 +69,12 @@ func TestManualHeartbeat(t *testing.T) {
 	manualHeartbeat.ready <- struct{}{}
 	manualResponse := &proto.PingResponse{}
 	regularResponse := &proto.PingResponse{}
-	regularHeartbeat.Ping(request, regularResponse)
-	manualHeartbeat.Ping(request, manualResponse)
+	if err := regularHeartbeat.Ping(request, regularResponse); err != nil {
+		t.Fatal(err)
+	}
+	if err := manualHeartbeat.Ping(request, manualResponse); err != nil {
+		t.Fatal(err)
+	}
 
 	// Ensure that the response is the same as with a normal heartbeat.
 	if manualResponse.Pong != regularResponse.Pong {

@@ -769,7 +769,9 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 			// need to remove old version.
 			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
 				versionKey := mvccEncodeTimestamp(metaKey, meta.Timestamp)
-				engine.Clear(versionKey)
+				if err := engine.Clear(versionKey); err != nil {
+					return err
+				}
 			}
 			newMeta = &buf.newMeta
 			*newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
@@ -911,7 +913,9 @@ func MVCCMerge(engine Engine, ms *proto.MVCCStats, key proto.Key, value proto.Va
 	if err != nil {
 		return err
 	}
-	engine.Merge(metaKey, data)
+	if err = engine.Merge(metaKey, data); err != nil {
+		return err
+	}
 	updateStatsOnMerge(ms, key, int64(len(value.Bytes)))
 	return nil
 }
@@ -1128,8 +1132,12 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 			if err != nil {
 				return err
 			}
-			engine.Clear(origKey)
-			engine.Put(newKey, valBytes)
+			if err = engine.Clear(origKey); err != nil {
+				return err
+			}
+			if err = engine.Put(newKey, valBytes); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -1148,7 +1156,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 
 	// First clear the intent value.
 	latestKey := MVCCEncodeVersionKey(key, meta.Timestamp)
-	engine.Clear(latestKey)
+	if err := engine.Clear(latestKey); err != nil {
+		return err
+	}
 
 	// Compute the next possible mvcc value for this key.
 	nextKey := latestKey.Next()
@@ -1160,7 +1170,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 	}
 	// If there is no other version, we should just clean up the key entirely.
 	if len(kvs) == 0 {
-		engine.Clear(metaKey)
+		if err = engine.Clear(metaKey); err != nil {
+			return err
+		}
 		// Clear stat counters attributable to the intent we're aborting.
 		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, origAgeSeconds, 0)
 	} else {
@@ -1268,7 +1280,9 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 			}
 			ageSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 			updateStatsOnGC(ms, gcKey.Key, int64(len(iter.Key())), int64(len(iter.Value())), meta, ageSeconds)
-			engine.Clear(iter.Key())
+			if err := engine.Clear(iter.Key()); err != nil {
+				return err
+			}
 		}
 
 		// Now, iterate through all values, GC'ing ones which have expired.
@@ -1282,7 +1296,9 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 			if !gcKey.Timestamp.Less(ts) {
 				ageSeconds := timestamp.WallTime/1E9 - ts.WallTime/1E9
 				updateStatsOnGC(ms, gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, ageSeconds)
-				engine.Clear(iter.Key())
+				if err := engine.Clear(iter.Key()); err != nil {
+					return err
+				}
 			}
 		}
 	}

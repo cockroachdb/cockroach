@@ -138,10 +138,14 @@ func TestBatchGet(t *testing.T) {
 	}
 }
 
-func compareMergedValues(result, expected []byte) bool {
+func compareMergedValues(t *testing.T, result, expected []byte) bool {
 	var resultV, expectedV proto.MVCCMetadata
-	gogoproto.Unmarshal(result, &resultV)
-	gogoproto.Unmarshal(expected, &expectedV)
+	if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+		t.Fatal(err)
+	}
+	if err := gogoproto.Unmarshal(expected, &expectedV); err != nil {
+		t.Fatal(err)
+	}
 	return reflect.DeepEqual(resultV, expectedV)
 }
 
@@ -180,7 +184,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !compareMergedValues(val, appender("a-valueappend")) {
+	if !compareMergedValues(t, val, appender("a-valueappend")) {
 		t.Error("mismatch of \"a\"")
 	}
 
@@ -188,7 +192,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !compareMergedValues(val, appender("append")) {
+	if !compareMergedValues(t, val, appender("append")) {
 		t.Error("mismatch of \"b\"")
 	}
 
@@ -196,7 +200,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !compareMergedValues(val, appender("c-valueappend")) {
+	if !compareMergedValues(t, val, appender("c-valueappend")) {
 		t.Error("mismatch of \"c\"")
 	}
 }
@@ -210,7 +214,9 @@ func TestBatchProto(t *testing.T) {
 	defer b.Close()
 
 	kv := &proto.RawKeyValue{Key: proto.EncodedKey("a"), Value: []byte("value")}
-	PutProto(b, proto.EncodedKey("proto"), kv)
+	if _, _, err := PutProto(b, proto.EncodedKey("proto"), kv); err != nil {
+		t.Fatal(err)
+	}
 	getKV := &proto.RawKeyValue{}
 	ok, keySize, valSize, err := b.GetProto(proto.EncodedKey("proto"), getKV)
 	if !ok || err != nil {
@@ -413,7 +419,7 @@ func TestBatchConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !compareMergedValues(val, appender("bar")) {
+	if !compareMergedValues(t, val, appender("bar")) {
 		t.Error("mismatch of \"a\"")
 	}
 	// Write an engine value.

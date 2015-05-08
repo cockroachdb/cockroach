@@ -363,13 +363,19 @@ func createTestInfoStore(t *testing.T) *infoStore {
 	// Insert 10 keys each for groupA, groupB and non-group successively.
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(fmt.Sprintf("a.%d", i), float64(i), time.Second)
-		is.addInfo(infoA)
+		if err := is.addInfo(infoA); err != nil {
+			t.Fatal(err)
+		}
 
 		infoB := is.newInfo(fmt.Sprintf("b.%d", i), float64(i+1), time.Second)
-		is.addInfo(infoB)
+		if err := is.addInfo(infoB); err != nil {
+			t.Fatal(err)
+		}
 
 		infoC := is.newInfo(fmt.Sprintf("c.%d", i), float64(i+2), time.Second)
-		is.addInfo(infoC)
+		if err := is.addInfo(infoC); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	return is
@@ -428,7 +434,9 @@ func TestInfoStoreDistant(t *testing.T) {
 		inf := is.newInfo(fmt.Sprintf("b.%d", i), float64(i), time.Second)
 		inf.Hops = uint32(i + 1)
 		inf.NodeID = nodes[i]
-		is.addInfo(inf)
+		if err := is.addInfo(inf); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for i := 0; i < len(nodes); i++ {
@@ -455,7 +463,9 @@ func TestLeastUseful(t *testing.T) {
 
 	inf1 := is.newInfo("a1", float64(1), time.Second)
 	inf1.peerID = 1
-	is.addInfo(inf1)
+	if err := is.addInfo(inf1); err != nil {
+		t.Fatal(err)
+	}
 	if is.leastUseful(set) != 0 {
 		t.Error("not expecting a node from an empty set")
 	}
@@ -467,7 +477,9 @@ func TestLeastUseful(t *testing.T) {
 
 	inf2 := is.newInfo("a2", float64(2), time.Second)
 	inf2.peerID = 1
-	is.addInfo(inf2)
+	if err := is.addInfo(inf2); err != nil {
+		t.Fatal(err)
+	}
 	if is.leastUseful(set) != nodes[0] {
 		t.Error("expecting nodes[0] as least useful")
 	}
@@ -479,7 +491,9 @@ func TestLeastUseful(t *testing.T) {
 
 	inf3 := is.newInfo("a3", float64(3), time.Second)
 	inf3.peerID = 2
-	is.addInfo(inf3)
+	if err := is.addInfo(inf3); err != nil {
+		t.Fatal(err)
+	}
 	if is.leastUseful(set) != nodes[1] {
 		t.Error("expecting nodes[1] as least useful")
 	}
@@ -522,9 +536,33 @@ func TestCallbacks(t *testing.T) {
 	// Add infos twice and verify callbacks aren't called for same timestamps.
 	wg.Add(5)
 	for i := 0; i < 2; i++ {
-		is.addInfo(i1)
-		is.addInfo(i2)
-		is.addInfo(i3)
+		if err := is.addInfo(i1); err != nil {
+			if i == 0 {
+				t.Error(err)
+			}
+		} else {
+			if i != 0 {
+				t.Errorf("expected error on run #%d, but didn't get one", i)
+			}
+		}
+		if err := is.addInfo(i2); err != nil {
+			if i == 0 {
+				t.Error(err)
+			}
+		} else {
+			if i != 0 {
+				t.Errorf("expected error on run #%d, but didn't get one", i)
+			}
+		}
+		if err := is.addInfo(i3); err != nil {
+			if i == 0 {
+				t.Error(err)
+			}
+		} else {
+			if i != 0 {
+				t.Errorf("expected error on run #%d, but didn't get one", i)
+			}
+		}
 		wg.Wait()
 
 		if expKeys := []string{"key1-true"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
@@ -541,7 +579,9 @@ func TestCallbacks(t *testing.T) {
 	// Update an info.
 	i1 = is.newInfo("key1", float64(2), time.Second)
 	wg.Add(2)
-	is.addInfo(i1)
+	if err := is.addInfo(i1); err != nil {
+		t.Error(err)
+	}
 	wg.Wait()
 
 	if expKeys := []string{"key1-true", "key1-true"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
@@ -579,8 +619,12 @@ func TestRegisterCallback(t *testing.T) {
 
 	i1 := is.newInfo("key1", float64(1), time.Second)
 	i2 := is.newInfo("key2", float64(1), time.Second)
-	is.addInfo(i1)
-	is.addInfo(i2)
+	if err := is.addInfo(i1); err != nil {
+		t.Fatal(err)
+	}
+	if err := is.addInfo(i2); err != nil {
+		t.Fatal(err)
+	}
 
 	wg.Add(2)
 	is.registerCallback("key.*", cb.Add)

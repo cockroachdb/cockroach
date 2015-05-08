@@ -456,7 +456,9 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	sort.Sort(s.rangesByKey)
 
 	// Start Raft processing goroutines.
-	s.multiraft.Start(s.stopper)
+	if err = s.multiraft.Start(s.stopper); err != nil {
+		return err
+	}
 	s.processRaft()
 
 	// Start the scanner.
@@ -616,7 +618,10 @@ func (s *Store) GossipCapacity() {
 	// Unique gossip key per store.
 	keyMaxCapacity := gossip.MakeMaxAvailCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
 	// Gossip store descriptor.
-	s.ctx.Gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
+	err = s.ctx.Gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
+	if err != nil {
+		log.Warning(err)
+	}
 }
 
 // maybeSplitRangesByConfigs determines ranges which should be
@@ -826,7 +831,9 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 
-	engine.MergeStats(ms, batch, 1)
+	if err := engine.MergeStats(ms, batch, 1); err != nil {
+		return err
+	}
 	if err := batch.Commit(); err != nil {
 		return err
 	}

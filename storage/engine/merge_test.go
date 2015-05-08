@@ -209,8 +209,12 @@ func TestGoMerge(t *testing.T) {
 			continue
 		}
 		var resultV, expectedV proto.MVCCMetadata
-		gogoproto.Unmarshal(result, &resultV)
-		gogoproto.Unmarshal(c.expected, &expectedV)
+		if err := gogoproto.Unmarshal(result, &resultV); err != nil {
+			t.Fatal(err)
+		}
+		if err := gogoproto.Unmarshal(c.expected, &expectedV); err != nil {
+			t.Fatal(err)
+		}
 		if !reflect.DeepEqual(resultV, expectedV) {
 			t.Errorf("goMerge error: %d: want %+v, got %+v", i, expectedV, resultV)
 		}

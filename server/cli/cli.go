@@ -43,7 +43,6 @@ Output build version information.
 		fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
 		fmt.Fprintf(w, "Build Deps:\n\t%s\n",
 			strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
-		w.Flush()
 	},
 }
 

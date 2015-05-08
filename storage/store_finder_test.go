@@ -75,10 +75,18 @@ func TestStoreFinder(t *testing.T) {
 		"k3": struct{}{},
 		"k4": struct{}{},
 	}
-	s.gossip.AddInfo("k1", matchingStore, time.Hour)
-	s.gossip.AddInfo("k2", supersetStore, time.Hour)
-	s.gossip.AddInfo("k3", unmatchingStore, time.Hour)
-	s.gossip.AddInfo("k4", emptyStore, time.Hour)
+	if err := s.gossip.AddInfo("k1", matchingStore, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.gossip.AddInfo("k2", supersetStore, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.gossip.AddInfo("k3", unmatchingStore, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.gossip.AddInfo("k4", emptyStore, time.Hour); err != nil {
+		t.Fatal(err)
+	}
 
 	expected := []string{matchingStore.Attrs.SortedString(), supersetStore.Attrs.SortedString()}
 	stores, err := s.findStores(proto.Attributes{Attrs: required})

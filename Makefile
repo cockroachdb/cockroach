@@ -114,9 +114,10 @@ acceptance:
 	  ./local-cluster.sh start && \
 	  ./local-cluster.sh stop)
 
-.PHONY: errcheck
-errcheck:
-	errcheck -ignore='os:Close,net:Close,code.google.com/p/biogo.store/interval:.*,io:Write,bytes:Write.*' $(PKG)
+.PHONY: check
+check:
+	# TODO(tamird): contribute a patch to gogoproto that makes it pass errcheck and then remove this ignore
+	errcheck -ignore 'bytes:Write.*,compress/gzip:Close,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' -ignorepkg github.com/cockroachdb/cockroach/proto $(PKG)
 
 .PHONY: clean
 clean:

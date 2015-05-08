@@ -85,18 +85,22 @@ func NewNetwork(nodeCount int, networkType string,
 		}
 
 		node := gossip.New(rpcContext, gossipInterval, bootstrap)
-		node.SetNodeDescriptor(&proto.NodeDescriptor{
+		if err := node.SetNodeDescriptor(&proto.NodeDescriptor{
 			NodeID: proto.NodeID(i + 1),
 			Address: proto.Addr{
 				Network: addrs[i].Network(),
 				Address: addrs[i].String(),
 			},
-		})
+		}); err != nil {
+			log.Fatal(err)
+		}
 		node.Start(servers[i], stopper)
 		stopper.AddCloser(servers[i])
 		// Node 0 gossips node count.
 		if i == 0 {
-			node.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour)
+			if err := node.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour); err != nil {
+				log.Fatal(err)
+			}
 		}
 		nodes[i] = &Node{Gossip: node, Addr: addrs[i], Server: servers[i]}
 	}
@@ -155,7 +159,9 @@ func (n *Network) SimulateNetwork(
 		select {
 		case <-gossipTimeout:
 			// Node 0 gossips sentinel every cycle.
-			nodes[0].Gossip.AddInfo(gossip.KeySentinel, int64(cycle), time.Hour)
+			if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, int64(cycle), time.Hour); err != nil {
+				log.Fatal(err)
+			}
 			if !simCallback(cycle, n) {
 				complete = true
 			}
@@ -177,7 +183,9 @@ func (n *Network) RunUntilFullyConnected() int {
 		nodes := network.Nodes
 		// Every node should gossip.
 		for i := 0; i < len(nodes); i++ {
-			nodes[i].Gossip.AddInfo(nodes[i].Addr.String(), int64(cycle), time.Hour)
+			if err := nodes[i].Gossip.AddInfo(nodes[i].Addr.String(), int64(cycle), time.Hour); err != nil {
+				log.Fatal(err)
+			}
 		}
 		if network.isNetworkConnected() {
 			connectedAtCycle = cycle

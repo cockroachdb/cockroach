@@ -70,12 +70,14 @@ func (db *testDescriptorDB) getRangeDescriptor(key proto.Key,
 	db.hitCount++
 	metadataKey := engine.RangeMetaKey(key)
 
+	var err error
+
 	// Recursively call into cache as the real DB would, terminating recursion
 	// when a meta1key is encountered.
 	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
-		db.cache.LookupRangeDescriptor(metadataKey, options)
+		_, err = db.cache.LookupRangeDescriptor(metadataKey, options)
 	}
-	return db.getDescriptor(key), nil
+	return db.getDescriptor(key), err
 }
 
 func (db *testDescriptorDB) splitRange(t *testing.T, key proto.Key) {
