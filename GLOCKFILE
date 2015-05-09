@@ -15,7 +15,7 @@ github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/cockroachdb/clog d2542376307a54ad0ff768be384c3c589ffacca1
-github.com/coreos/etcd b24dd8e4e67d7203c5a68cd43de4f6ffcfff5e66
+github.com/coreos/etcd 42783c1faa17d5463528be35f1bc320516d5258c
 github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
 github.com/gogo/protobuf e888c342b46b97d9bf828e98ac755d227b57d6e8
 github.com/golang/lint dea130113ab8ebacb52dbce09c9a4c92951afdca
@@ -26,7 +26,7 @@ github.com/kisielk/errcheck a48456c583c0111c8310fc59335f6496b8eb85f1
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
 github.com/robfig/glock 08e6ace4e089bf5c211592f64a24082e54b887b5
 github.com/spf13/cobra bba56042cf767e329430e7c7f68c3f9f640b4b8b
-github.com/spf13/pflag 8730624c6c03fa1c5b8ae471cb5e4d735784d32a
-golang.org/x/net a8c61998a557a37435f719980da368469c10bfed
-golang.org/x/tools 96f6cfbb921ad6d191c67d09a6d4c4fd056403ae
+github.com/spf13/pflag f1e68ce945b0710375b5cccee37318a3d13fdf8c
+golang.org/x/net e0403b4e005737430c05a57aac078479844f919c
+golang.org/x/tools d00f0cb57d439b122af924676c6d45d3106891c9
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
