@@ -195,23 +195,23 @@ type StoreEventListener interface {
 // will run until the Subscription's events channel is closed.
 func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
 	for event := range sub.Events() {
-		switch event := event.(type) {
+		switch specificEvent := event.(type) {
 		case *StartStoreEvent:
-			l.OnStartStore(event)
+			l.OnStartStore(specificEvent)
 		case *AddRangeEvent:
-			l.OnAddRange(event)
+			l.OnAddRange(specificEvent)
 		case *UpdateRangeEvent:
-			l.OnUpdateRange(event)
+			l.OnUpdateRange(specificEvent)
 		case *RemoveRangeEvent:
-			l.OnRemoveRange(event)
+			l.OnRemoveRange(specificEvent)
 		case *SplitRangeEvent:
-			l.OnSplitRange(event)
+			l.OnSplitRange(specificEvent)
 		case *MergeRangeEvent:
-			l.OnMergeRange(event)
+			l.OnMergeRange(specificEvent)
 		case *BeginScanRangesEvent:
-			l.OnBeginScanRanges(event)
+			l.OnBeginScanRanges(specificEvent)
 		case *EndScanRangesEvent:
-			l.OnEndScanRanges(event)
+			l.OnEndScanRanges(specificEvent)
 		}
 	}
 }

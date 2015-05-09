@@ -546,7 +546,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 	defer engine.Close()
 
 	ts := []proto.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
-	kvs := []proto.KeyValue{
+	fixtureKVs := []proto.KeyValue{
 		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
 		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
 		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
@@ -554,7 +554,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		proto.KeyValue{Key: testKey3, Value: proto.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
 		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
 	}
-	for i, kv := range kvs {
+	for i, kv := range fixtureKVs {
 		var txn *proto.Transaction
 		if i == 2 {
 			txn = txn1
@@ -580,7 +580,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				{Key: testKey1, Txn: *txn1},
 				{Key: testKey4, Txn: *txn2},
 			},
-			expValues: []proto.KeyValue{kvs[3], kvs[4]},
+			expValues: []proto.KeyValue{fixtureKVs[3], fixtureKVs[4]},
 		},
 		{
 			consistent: true,
@@ -588,7 +588,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			expIntents: []proto.WriteIntentError_Intent{
 				{Key: testKey4, Txn: *txn2},
 			},
-			expValues: []proto.KeyValue{kvs[2], kvs[3], kvs[4]},
+			expValues: []proto.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
 		},
 		{
 			consistent: true,
@@ -596,7 +596,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			expIntents: []proto.WriteIntentError_Intent{
 				{Key: testKey1, Txn: *txn1},
 			},
-			expValues: []proto.KeyValue{kvs[3], kvs[4], kvs[5]},
+			expValues: []proto.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
 		},
 		{
 			consistent: false,
@@ -605,7 +605,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				{Key: testKey1, Txn: *txn1},
 				{Key: testKey4, Txn: *txn2},
 			},
-			expValues: []proto.KeyValue{kvs[0], kvs[3], kvs[4], kvs[1]},
+			expValues: []proto.KeyValue{fixtureKVs[0], fixtureKVs[3], fixtureKVs[4], fixtureKVs[1]},
 		},
 	}
 
@@ -1316,8 +1316,14 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+
 	value, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value1.Bytes, value.Bytes)
@@ -1325,16 +1331,18 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1Commit, makeTS(1, 0)))
-	if err != nil {
+	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil); value != nil || err != nil {
+	if value, err = MVCCGet(engine, testKey1, makeTS(0, 1), true, nil); value != nil || err != nil {
 		t.Fatalf("expected both value and err to be nil: %+v, %v", value, err)
 	}
 
 	value, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, nil)
+	if err != nil {
+		t.Error(err)
+	}
 	if !value.Timestamp.Equal(makeTS(1, 0)) {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
 	}
@@ -1349,8 +1357,13 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
 	value, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value1.Bytes, value.Bytes)
@@ -1358,17 +1371,19 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1, makeTS(1, 0)))
-	if err != nil {
+	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, nil); value != nil || err == nil {
+	if value, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, nil); value != nil || err == nil {
 		t.Fatalf("expected both value nil and err to be a writeIntentError: %+v", value)
 	}
 
 	// Can still fetch the value using txn1.
 	value, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, txn1)
+	if err != nil {
+		t.Error(err)
+	}
 	if !value.Timestamp.Equal(makeTS(1, 0)) {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
 	}

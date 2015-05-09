@@ -59,8 +59,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
 	var ctx *storage.StoreContext
 	if context == nil {
-		ctx = &storage.StoreContext{}
-		*ctx = storage.TestStoreContext
+		ctx = &storage.TestStoreContext
 	} else {
 		ctx = context
 	}

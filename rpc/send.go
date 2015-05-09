@@ -242,8 +242,8 @@ func sendOne(client *Client, timeout time.Duration, method string, args, reply i
 			}
 		} else {
 			// Verify response data integrity if this is a proto response.
-			if resp, ok := reply.(proto.Response); ok {
-				if req, ok := args.(proto.Request); ok {
+			if resp, respOk := reply.(proto.Response); respOk {
+				if req, reqOk := args.(proto.Request); reqOk {
 					if err := resp.Verify(req); err != nil {
 						c <- err
 						return

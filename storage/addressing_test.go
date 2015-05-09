@@ -186,12 +186,12 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			if len(expMetas) != len(metas) {
 				t.Errorf("len(expMetas) != len(metas); %d != %d", len(expMetas), len(metas))
 			} else {
-				for i, meta := range expMetas {
-					if !meta.key.Equal(metas[i].key) {
-						fmt.Printf("%d: expected %q vs %q\n", i, meta.key, metas[i].key)
+				for j, meta := range expMetas {
+					if !meta.key.Equal(metas[j].key) {
+						fmt.Printf("%d: expected %q vs %q\n", j, meta.key, metas[j].key)
 					}
-					if !reflect.DeepEqual(meta.desc, metas[i].desc) {
-						fmt.Printf("%d: expected %q vs %q and %s vs %s\n", i, meta.key, metas[i].key, meta.desc, metas[i].desc)
+					if !reflect.DeepEqual(meta.desc, metas[j].desc) {
+						fmt.Printf("%d: expected %q vs %q and %s vs %s\n", j, meta.key, metas[j].key, meta.desc, metas[j].desc)
 					}
 				}
 			}

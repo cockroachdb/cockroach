@@ -110,7 +110,7 @@ func TestWillOverflow(t *testing.T) {
 	}
 }
 
-func testBasicEncodeDecode32(enc func([]byte, uint32) []byte,
+func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
 	dec func([]byte) ([]byte, uint32), decreasing bool, t *testing.T) {
 	testCases := []uint32{
 		0, 1,
@@ -122,7 +122,7 @@ func testBasicEncodeDecode32(enc func([]byte, uint32) []byte,
 
 	var lastEnc []byte
 	for i, v := range testCases {
-		enc := enc(nil, v)
+		enc := encFunc(nil, v)
 		if i > 0 {
 			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
 				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
@@ -146,9 +146,9 @@ type testCaseUint32 struct {
 }
 
 func testCustomEncodeUint32(testCases []testCaseUint32,
-	enc func([]byte, uint32) []byte, t *testing.T) {
+	encFunc func([]byte, uint32) []byte, t *testing.T) {
 	for _, test := range testCases {
-		enc := enc(nil, test.value)
+		enc := encFunc(nil, test.value)
 		if bytes.Compare(enc, test.expEnc) != 0 {
 			t.Errorf("expected [% x]; got [% x]", test.expEnc, enc)
 		}
@@ -177,7 +177,7 @@ func TestEncodeDecodeUint32Decreasing(t *testing.T) {
 	testCustomEncodeUint32(testCases, EncodeUint32Decreasing, t)
 }
 
-func testBasicEncodeDecodeUint64(enc func([]byte, uint64) []byte,
+func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
 	dec func([]byte) ([]byte, uint64), decreasing bool, t *testing.T) {
 	testCases := []uint64{
 		0, 1,
@@ -193,7 +193,7 @@ func testBasicEncodeDecodeUint64(enc func([]byte, uint64) []byte,
 
 	var lastEnc []byte
 	for i, v := range testCases {
-		enc := enc(nil, v)
+		enc := encFunc(nil, v)
 		if i > 0 {
 			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
 				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
@@ -211,7 +211,7 @@ func testBasicEncodeDecodeUint64(enc func([]byte, uint64) []byte,
 	}
 }
 
-func testBasicEncodeDecodeInt64(enc func([]byte, int64) []byte,
+func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
 	dec func([]byte) ([]byte, int64), decreasing bool, t *testing.T) {
 	testCases := []int64{
 		math.MinInt64, math.MinInt64 + 1,
@@ -235,7 +235,7 @@ func testBasicEncodeDecodeInt64(enc func([]byte, int64) []byte,
 
 	var lastEnc []byte
 	for i, v := range testCases {
-		enc := enc(nil, v)
+		enc := encFunc(nil, v)
 		if i > 0 {
 			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
 				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
@@ -259,9 +259,9 @@ type testCaseInt64 struct {
 }
 
 func testCustomEncodeInt64(testCases []testCaseInt64,
-	enc func([]byte, int64) []byte, t *testing.T) {
+	encFunc func([]byte, int64) []byte, t *testing.T) {
 	for _, test := range testCases {
-		enc := enc(nil, test.value)
+		enc := encFunc(nil, test.value)
 		if bytes.Compare(enc, test.expEnc) != 0 {
 			t.Errorf("expected [% x]; got [% x]", test.expEnc, enc)
 		}
@@ -274,9 +274,9 @@ type testCaseUint64 struct {
 }
 
 func testCustomEncodeUint64(testCases []testCaseUint64,
-	enc func([]byte, uint64) []byte, t *testing.T) {
+	encFunc func([]byte, uint64) []byte, t *testing.T) {
 	for _, test := range testCases {
-		enc := enc(nil, test.value)
+		enc := encFunc(nil, test.value)
 		if bytes.Compare(enc, test.expEnc) != 0 {
 			t.Errorf("expected [% x]; got [% x]", test.expEnc, enc)
 		}

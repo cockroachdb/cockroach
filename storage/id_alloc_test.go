@@ -141,12 +141,12 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
 
-	id, err := idAlloc.Allocate()
+	firstID, err := idAlloc.Allocate()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id != 2 {
-		t.Errorf("expected ID is 2, but got: %d", id)
+	if firstID != 2 {
+		t.Errorf("expected ID is 2, but got: %d", firstID)
 	}
 
 	// Make Allocator invalid.

@@ -313,7 +313,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 	// Both replicas have a complete list in Desc.Replicas
 	for i, store := range mtc.stores {
-		rng, err := store.GetRange(1)
+		rng, err = store.GetRange(1)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -197,9 +197,7 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// Stub to be changed in each test case.
-	verifyCall := func(o rpc.Options, addrs []net.Addr) error {
-		return util.Errorf("was not supposed to be invoked")
-	}
+	var verifyCall func(rpc.Options, []net.Addr) error
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
 		addrs []net.Addr, _ func(addr net.Addr) interface{},

@@ -115,7 +115,6 @@ func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
 	// TODO(Tobias): This is highly provisional, interpreting everything as a
 	// varint until we have decided upon and implemented the actual encoding.
 	// If the value exists, attempt to decode it as a varint.
-	var numBytes int
 	int64Val, numBytes := binary.Varint(v)
 	if numBytes == 0 {
 		return nil, util.Errorf("%v cannot be decoded; not varint-encoded", v)
@@ -260,25 +259,25 @@ func DecodeVarint(b []byte) ([]byte, int64) {
 	length := int(b[0]) - 8
 	if length < 0 {
 		length = -length
-		b = b[1:]
-		if len(b) < length {
-			panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", b))
+		remB := b[1:]
+		if len(remB) < length {
+			panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", remB))
 		}
 		var v int64
 		// Use the ones-complement of each encoded byte in order to build
 		// up a positive number, then take the ones-complement again to
 		// arrive at our negative value.
-		for _, t := range b[:length] {
+		for _, t := range remB[:length] {
 			v = (v << 8) | int64(^t)
 		}
-		return b[length:], ^v
+		return remB[length:], ^v
 	}
 
-	b, v := DecodeUvarint(b)
+	remB, v := DecodeUvarint(b)
 	if v > math.MaxInt64 {
 		panic(fmt.Sprintf("varint %d overflows int64", v))
 	}
-	return b, int64(v)
+	return remB, int64(v)
 }
 
 // DecodeVarintDecreasing decodes a uint64 value which was encoded

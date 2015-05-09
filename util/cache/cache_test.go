@@ -120,7 +120,7 @@ func TestCacheEviction(t *testing.T) {
 		t.Fatal("expected get to succeed with value 4321")
 	}
 	// Verify eviction of first key.
-	if _, ok := mc.Get(testKey("a")); ok {
+	if _, ok = mc.Get(testKey("a")); ok {
 		t.Fatal("unexpected success getting evicted key")
 	}
 }

@@ -504,8 +504,8 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := proto.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
-	rTS, _ := tc.rng.tsCache.GetMax(proto.Key("a"), nil /* end */, nil /* txn */)
-	baseLowWater := rTS.WallTime
+	baseRTS, _ := tc.rng.tsCache.GetMax(proto.Key("a"), nil /* end */, nil /* txn */)
+	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
 		nodeID      multiraft.NodeID

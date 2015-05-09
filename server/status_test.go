@@ -299,8 +299,8 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := &proto.NodeStatus{}
-		body := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodeKeyPrefix, oldNodeStatus.Desc.NodeID))
-		if err := json.Unmarshal(body, &nodeStatus); err != nil {
+		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodeKeyPrefix, oldNodeStatus.Desc.NodeID))
+		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
@@ -341,8 +341,8 @@ func TestStoreStatusResponse(t *testing.T) {
 
 		// Also fetch the each status individually.
 		fetchedStoreStatus := &proto.StoreStatus{}
-		body := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoreKeyPrefix, storeStatus.Desc.StoreID))
-		if err := json.Unmarshal(body, &fetchedStoreStatus); err != nil {
+		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoreKeyPrefix, storeStatus.Desc.StoreID))
+		if err := json.Unmarshal(requestBody, &fetchedStoreStatus); err != nil {
 			t.Fatal(err)
 		}
 		fetchedStoreStatus.Desc.Capacity = proto.StoreCapacity{}

@@ -236,14 +236,14 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected %v; got %v", kv, getKV)
 	}
 	// Before commit, proto will not be available via engine.
-	if ok, _, _, err := e.GetProto(proto.EncodedKey("proto"), getKV); ok || err != nil {
+	if ok, _, _, err = e.GetProto(proto.EncodedKey("proto"), getKV); ok || err != nil {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _, _, err := e.GetProto(proto.EncodedKey("proto"), getKV); !ok || err != nil {
+	if ok, _, _, err = e.GetProto(proto.EncodedKey("proto"), getKV); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if !reflect.DeepEqual(getKV, kv) {

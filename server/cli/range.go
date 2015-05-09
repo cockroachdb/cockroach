@@ -66,16 +66,16 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	for _, r := range resp.Rows {
+	for _, row := range resp.Rows {
 		desc := &proto.RangeDescriptor{}
-		if err := gogoproto.Unmarshal(r.Value.Bytes, desc); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", r.Key)
+		if err := gogoproto.Unmarshal(row.Value.Bytes, desc); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", row.Key)
 			continue
 		}
 		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RaftID)
-		for i, r := range desc.Replicas {
+		for i, replica := range desc.Replicas {
 			fmt.Printf("\t%d: node-id=%d store-id=%d attrs=%v\n",
-				i, r.NodeID, r.StoreID, r.Attrs.Attrs)
+				i, replica.NodeID, replica.StoreID, replica.Attrs.Attrs)
 		}
 	}
 }

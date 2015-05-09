@@ -1,4 +1,5 @@
 cmd bitbucket.org/tebeka/go2xunit
+cmd github.com/barakmich/go-nyet
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
@@ -9,6 +10,7 @@ cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
 bitbucket.org/tebeka/go2xunit 77968f802fb3
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
+github.com/barakmich/go-nyet fba7607fa3f727680833b0c44f35b448dbe5c5a8
 github.com/biogo/store e1f74b3c58befe661feed7fa4cf52436de753128
 github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8

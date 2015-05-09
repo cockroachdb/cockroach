@@ -74,13 +74,13 @@ func TestQueuePriorityQueue(t *testing.T) {
 	heap.Init(&pq)
 
 	// Insert a new item and then modify its priority.
-	item := &rangeItem{
+	priorityItem := &rangeItem{
 		value:    &Range{},
 		priority: 1.0,
 	}
-	heap.Push(&pq, item)
-	pq.update(item, 4.0)
-	expRanges[0] = item.value
+	heap.Push(&pq, priorityItem)
+	pq.update(priorityItem, 4.0)
+	expRanges[0] = priorityItem.value
 
 	// Take the items out; they should arrive in decreasing priority order.
 	for i := 0; pq.Len() > 0; i++ {

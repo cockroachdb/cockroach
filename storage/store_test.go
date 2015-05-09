@@ -1017,8 +1017,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Read pushee's txn.
 	txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
 	var txn proto.Transaction
-	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn)
-	if !ok || err != nil {
+	if ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn); !ok || err != nil {
 		t.Fatalf("not found or err: %s", err)
 	}
 	if txn.Status != proto.ABORTED {
@@ -1042,7 +1041,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// been aborted.
 	etArgs, etReply := endTxnArgs(pushee, true, 1, store.StoreID())
 	etArgs.Timestamp = pushee.Timestamp
-	err = store.ExecuteCmd(client.Call{Args: etArgs, Reply: etReply})
+	err := store.ExecuteCmd(client.Call{Args: etArgs, Reply: etReply})
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
 	}

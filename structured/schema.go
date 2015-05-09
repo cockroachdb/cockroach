@@ -226,10 +226,10 @@ var validIndexTypes = map[string]struct{}{
 // NewGoSchema returns a schema using name and key and a map from
 // Table Key to an instance of a Go struct corresponding to the
 // Table (the Table name is derived from the Go struct name).
-func NewGoSchema(name, key string, schemaMap map[string]interface{}) (*Schema, error) {
+func NewGoSchema(name, schemaKey string, schemaMap map[string]interface{}) (*Schema, error) {
 	s := &Schema{
 		Name: name,
-		Key:  key,
+		Key:  schemaKey,
 	}
 	for key, strct := range schemaMap {
 		table, err := getTableSchema(key, strct)

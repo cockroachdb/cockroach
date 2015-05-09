@@ -247,11 +247,10 @@ func TestMatchesByPrefix(t *testing.T) {
 // for splitting ranges.
 func TestSplitRangeByPrefixesError(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	pcc, err := NewPrefixConfigMap([]*PrefixConfig{})
-	if err == nil {
+	if _, err := NewPrefixConfigMap([]*PrefixConfig{}); err == nil {
 		t.Error("expected error building config map with no default prefix")
 	}
-	pcc = buildTestPrefixConfigMap()
+	pcc := buildTestPrefixConfigMap()
 	// Key order is reversed.
 	if _, err := pcc.SplitRangeByPrefixes(engine.KeyMax, engine.KeyMin); err == nil {
 		t.Error("expected error with reversed keys")
