@@ -1018,6 +1018,9 @@ func (s *Store) RemoveRange(rng *Range) error {
 		return util.Errorf("couldn't find range in rangesByKey slice")
 	}
 	s.rangesByKey = append(s.rangesByKey[:n], s.rangesByKey[n+1:]...)
+
+	s.scanner.RemoveRange(rng)
+
 	return nil
 }
 
