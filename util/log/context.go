@@ -19,15 +19,6 @@ package log
 
 import "golang.org/x/net/context"
 
-type level int
-
-const (
-	levelInfo level = iota
-	levelWarning
-	levelError
-	levelFatal
-)
-
 // Add takes a context and an additional even number of arguments,
 // interpreted as key-value pairs. These are added on top of the
 // supplied context and the resulting context returned.

@@ -50,6 +50,13 @@ func logKV(buf *bytes.Buffer, kvs ...[]interface{}) {
 	for kvi := range kvs {
 		kv = kvs[kvi]
 		l := len(kv)
+		if l%2 != 0 {
+			// TODO(tschottdorf,mrtracy): Consider just making the best of it
+			// instead of panicking. A rare code path with an error like this
+			// could panic an otherwise working system.
+			panic(fmt.Sprintf("odd number of key-value pairs passed: %v", kv))
+		}
+
 		for i = 0; i < l; i++ {
 			if i%2 == 0 {
 				if kvi != 0 || i != 0 {
@@ -72,33 +79,27 @@ func logKV(buf *bytes.Buffer, kvs ...[]interface{}) {
 				buf.WriteString(strconv.Quote(s))
 			}
 		}
-		if i%2 != 0 {
-			panic(fmt.Sprintf("odd number of key-value pairs passed: %v", kv))
-		}
 	}
 	buf.WriteString("\n")
 }
 
-func kvPrint(kvs ...[]interface{}) func(*bytes.Buffer) {
-	return func(buf *bytes.Buffer) {
-		logKV(buf, kvs...)
-	}
-}
-
 func headerKV(sev clog.Severity, depth int, msg string) []interface{} {
-	ret := make([]interface{}, 10)
-	ret[0], ret[1] = "level", clog.SeverityName[sev]
-	ret[2], ret[3] = "time", time.Now().Format(time.RFC3339)
-	ret[4], ret[6] = "file", "line"
-	ret[5], ret[7] = clog.Caller(depth + 1)
-	ret[8], ret[9] = "msg", msg
-	return ret
+	file, line := clog.Caller(depth + 1)
+	return []interface{}{
+		"level", clog.SeverityName[sev],
+		"time", time.Now().Format(time.RFC3339),
+		"file", file,
+		"line", line,
+		"msg", msg,
+	}
 }
 
 func logDepth(ctx context.Context, depth int, sev clog.Severity, msg string, kvs []interface{}) {
 	// TODO(tschottdorf): logging hooks should have their entry point here.
-	clog.PrintWith(sev, depth+1,
-		kvPrint(headerKV(sev, depth+1, msg), contextKV(ctx), kvs))
+	clog.PrintWith(sev, depth+1, func(buf *bytes.Buffer) {
+		logKV(buf, headerKV(sev, depth+3, msg), contextKV(ctx), kvs)
+	})
+
 }
 
 // Infoc logs to the WARNING and INFO logs. It extracts values from the
@@ -120,7 +121,8 @@ func Infof(format string, args ...interface{}) {
 	logDepth(nil, 1, clog.InfoLog, fmt.Sprintf(format, args...), nil)
 }
 
-// InfoDepth logs to the INFO log, ofsetting the caller's stack frame by 'depth'
+// InfoDepth logs to the INFO log, offsetting the caller's stack frame by
+// 'depth'.
 func InfoDepth(depth int, args ...interface{}) {
 	logDepth(nil, depth+1, clog.InfoLog, fmt.Sprint(args...), nil)
 }
@@ -146,7 +148,8 @@ func Warningf(format string, args ...interface{}) {
 	logDepth(nil, 1, clog.WarningLog, fmt.Sprintf(format, args...), nil)
 }
 
-// WarningDepth logs to the WARNING and INFO logs, ofsetting the caller's stack frame by 'depth'
+// WarningDepth logs to the WARNING and INFO logs, offsetting the caller's
+// stack frame by 'depth'.
 func WarningDepth(depth int, args ...interface{}) {
 	logDepth(nil, depth+1, clog.WarningLog, fmt.Sprint(args...), nil)
 }
@@ -171,7 +174,8 @@ func Errorf(format string, args ...interface{}) {
 	logDepth(nil, 1, clog.ErrorLog, fmt.Sprintf(format, args...), nil)
 }
 
-// ErrorDepth logs to the ERROR, WARNING, and INFO logs, ofsetting the caller's stack frame by 'depth'
+// ErrorDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
+// caller's stack frame by 'depth'.
 func ErrorDepth(depth int, args ...interface{}) {
 	logDepth(nil, depth+1, clog.ErrorLog, fmt.Sprint(args...), nil)
 }
@@ -201,7 +205,7 @@ func Fatalf(format string, args ...interface{}) {
 
 // FatalDepth logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255),
-// ofsetting the caller's stack frame by 'depth'
+// offsetting the caller's stack frame by 'depth'.
 func FatalDepth(depth int, args ...interface{}) {
 	logDepth(nil, depth+1, clog.FatalLog, fmt.Sprint(args...), nil)
 }
