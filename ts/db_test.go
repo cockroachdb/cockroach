@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Matt Tracy (matt.r.tracy@gmail.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package ts
 
@@ -44,8 +44,9 @@ import (
 // model to the actual data stored in the cockroach engine, ensuring that the
 // data matches.
 type testModel struct {
-	t         testing.TB
-	modelData map[string]*proto.Value
+	t           testing.TB
+	modelData   map[string]*proto.Value
+	seenSources map[string]bool
 	*kv.LocalTestCluster
 	DB *DB
 }
@@ -56,6 +57,7 @@ func newTestModel(t *testing.T) *testModel {
 	return &testModel{
 		t:                t,
 		modelData:        make(map[string]*proto.Value),
+		seenSources:      make(map[string]bool),
 		LocalTestCluster: &kv.LocalTestCluster{},
 	}
 }
@@ -142,6 +144,9 @@ func (tm *testModel) assertKeyCount(expected int) {
 }
 
 func (tm *testModel) storeInModel(r Resolution, data proto.TimeSeriesData) {
+	// Note the source, used to construct keys for model queries.
+	tm.seenSources[data.Source] = true
+
 	// Process and store data in the model.
 	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
 	if err != nil {

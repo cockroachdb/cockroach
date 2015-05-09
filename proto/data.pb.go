@@ -803,6 +803,45 @@ func (m *TimeSeriesData) GetDatapoints() []*TimeSeriesDatapoint {
 	return nil
 }
 
+// TimeSeriesQueryResult is the response to a query over time series data. It
+// is similar to the TimeSeriesData message, but contains a list of sources
+// instead of a single source.
+type TimeSeriesQueryResult struct {
+	// A string which uniquely identifies the variable from which this data was
+	// measured.
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	// A list of sources from which the data was aggregated.
+	Sources []string `protobuf:"bytes,2,rep,name=sources" json:"sources"`
+	// Datapoints describing the queried data.
+	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,3,rep,name=datapoints" json:"datapoints,omitempty"`
+	XXX_unrecognized []byte                 `json:"-"`
+}
+
+func (m *TimeSeriesQueryResult) Reset()         { *m = TimeSeriesQueryResult{} }
+func (m *TimeSeriesQueryResult) String() string { return proto1.CompactTextString(m) }
+func (*TimeSeriesQueryResult) ProtoMessage()    {}
+
+func (m *TimeSeriesQueryResult) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *TimeSeriesQueryResult) GetSources() []string {
+	if m != nil {
+		return m.Sources
+	}
+	return nil
+}
+
+func (m *TimeSeriesQueryResult) GetDatapoints() []*TimeSeriesDatapoint {
+	if m != nil {
+		return m.Datapoints
+	}
+	return nil
+}
+
 // MVCCStats tracks byte and instance counts for:
 //  - Live key/values (i.e. what a scan at current time will reveal;
 //    note that this includes intent keys and values, but not keys and
@@ -2839,6 +2878,117 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *TimeSeriesQueryResult) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[index:postIndex])
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sources", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Sources = append(m.Sources, string(data[index:postIndex]))
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Datapoints", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Datapoints = append(m.Datapoints, &TimeSeriesDatapoint{})
+			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
 func (m *MVCCStats) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -3325,6 +3475,29 @@ func (m *TimeSeriesData) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = len(m.Source)
 	n += 1 + l + sovData(uint64(l))
+	if len(m.Datapoints) > 0 {
+		for _, e := range m.Datapoints {
+			l = e.Size()
+			n += 1 + l + sovData(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryResult) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovData(uint64(l))
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			l = len(s)
+			n += 1 + l + sovData(uint64(l))
+		}
+	}
 	if len(m.Datapoints) > 0 {
 		for _, e := range m.Datapoints {
 			l = e.Size()
@@ -4080,6 +4253,58 @@ func (m *TimeSeriesData) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Source)))
 	i += copy(data[i:], m.Source)
+	if len(m.Datapoints) > 0 {
+		for _, msg := range m.Datapoints {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintData(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryResult) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryResult) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintData(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			data[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
 	if len(m.Datapoints) > 0 {
 		for _, msg := range m.Datapoints {
 			data[i] = 0x1a

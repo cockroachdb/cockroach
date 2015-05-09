@@ -54,6 +54,7 @@ class MVCCMetadata;
 class GCMetadata;
 class TimeSeriesDatapoint;
 class TimeSeriesData;
+class TimeSeriesQueryResult;
 class MVCCStats;
 
 enum ReplicaChangeType {
@@ -1966,6 +1967,120 @@ class TimeSeriesData : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static TimeSeriesData* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class TimeSeriesQueryResult : public ::google::protobuf::Message {
+ public:
+  TimeSeriesQueryResult();
+  virtual ~TimeSeriesQueryResult();
+
+  TimeSeriesQueryResult(const TimeSeriesQueryResult& from);
+
+  inline TimeSeriesQueryResult& operator=(const TimeSeriesQueryResult& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const TimeSeriesQueryResult& default_instance();
+
+  void Swap(TimeSeriesQueryResult* other);
+
+  // implements Message ----------------------------------------------
+
+  TimeSeriesQueryResult* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const TimeSeriesQueryResult& from);
+  void MergeFrom(const TimeSeriesQueryResult& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string name = 1;
+  inline bool has_name() const;
+  inline void clear_name();
+  static const int kNameFieldNumber = 1;
+  inline const ::std::string& name() const;
+  inline void set_name(const ::std::string& value);
+  inline void set_name(const char* value);
+  inline void set_name(const char* value, size_t size);
+  inline ::std::string* mutable_name();
+  inline ::std::string* release_name();
+  inline void set_allocated_name(::std::string* name);
+
+  // repeated string sources = 2;
+  inline int sources_size() const;
+  inline void clear_sources();
+  static const int kSourcesFieldNumber = 2;
+  inline const ::std::string& sources(int index) const;
+  inline ::std::string* mutable_sources(int index);
+  inline void set_sources(int index, const ::std::string& value);
+  inline void set_sources(int index, const char* value);
+  inline void set_sources(int index, const char* value, size_t size);
+  inline ::std::string* add_sources();
+  inline void add_sources(const ::std::string& value);
+  inline void add_sources(const char* value);
+  inline void add_sources(const char* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& sources() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_sources();
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+  inline int datapoints_size() const;
+  inline void clear_datapoints();
+  static const int kDatapointsFieldNumber = 3;
+  inline const ::cockroach::proto::TimeSeriesDatapoint& datapoints(int index) const;
+  inline ::cockroach::proto::TimeSeriesDatapoint* mutable_datapoints(int index);
+  inline ::cockroach::proto::TimeSeriesDatapoint* add_datapoints();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint >&
+      datapoints() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint >*
+      mutable_datapoints();
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.TimeSeriesQueryResult)
+ private:
+  inline void set_has_name();
+  inline void clear_has_name();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* name_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> sources_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint > datapoints_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
+
+  void InitAsDefaultInstance();
+  static TimeSeriesQueryResult* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -4528,6 +4643,170 @@ TimeSeriesData::datapoints() const {
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint >*
 TimeSeriesData::mutable_datapoints() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.TimeSeriesData.datapoints)
+  return &datapoints_;
+}
+
+// -------------------------------------------------------------------
+
+// TimeSeriesQueryResult
+
+// optional string name = 1;
+inline bool TimeSeriesQueryResult::has_name() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void TimeSeriesQueryResult::set_has_name() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void TimeSeriesQueryResult::clear_has_name() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void TimeSeriesQueryResult::clear_name() {
+  if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    name_->clear();
+  }
+  clear_has_name();
+}
+inline const ::std::string& TimeSeriesQueryResult::name() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesQueryResult.name)
+  return *name_;
+}
+inline void TimeSeriesQueryResult::set_name(const ::std::string& value) {
+  set_has_name();
+  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    name_ = new ::std::string;
+  }
+  name_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesQueryResult.name)
+}
+inline void TimeSeriesQueryResult::set_name(const char* value) {
+  set_has_name();
+  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    name_ = new ::std::string;
+  }
+  name_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.TimeSeriesQueryResult.name)
+}
+inline void TimeSeriesQueryResult::set_name(const char* value, size_t size) {
+  set_has_name();
+  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    name_ = new ::std::string;
+  }
+  name_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.TimeSeriesQueryResult.name)
+}
+inline ::std::string* TimeSeriesQueryResult::mutable_name() {
+  set_has_name();
+  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    name_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TimeSeriesQueryResult.name)
+  return name_;
+}
+inline ::std::string* TimeSeriesQueryResult::release_name() {
+  clear_has_name();
+  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = name_;
+    name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void TimeSeriesQueryResult::set_allocated_name(::std::string* name) {
+  if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete name_;
+  }
+  if (name) {
+    set_has_name();
+    name_ = name;
+  } else {
+    clear_has_name();
+    name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TimeSeriesQueryResult.name)
+}
+
+// repeated string sources = 2;
+inline int TimeSeriesQueryResult::sources_size() const {
+  return sources_.size();
+}
+inline void TimeSeriesQueryResult::clear_sources() {
+  sources_.Clear();
+}
+inline const ::std::string& TimeSeriesQueryResult::sources(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesQueryResult.sources)
+  return sources_.Get(index);
+}
+inline ::std::string* TimeSeriesQueryResult::mutable_sources(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TimeSeriesQueryResult.sources)
+  return sources_.Mutable(index);
+}
+inline void TimeSeriesQueryResult::set_sources(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesQueryResult.sources)
+  sources_.Mutable(index)->assign(value);
+}
+inline void TimeSeriesQueryResult::set_sources(int index, const char* value) {
+  sources_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.TimeSeriesQueryResult.sources)
+}
+inline void TimeSeriesQueryResult::set_sources(int index, const char* value, size_t size) {
+  sources_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.TimeSeriesQueryResult.sources)
+}
+inline ::std::string* TimeSeriesQueryResult::add_sources() {
+  return sources_.Add();
+}
+inline void TimeSeriesQueryResult::add_sources(const ::std::string& value) {
+  sources_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.proto.TimeSeriesQueryResult.sources)
+}
+inline void TimeSeriesQueryResult::add_sources(const char* value) {
+  sources_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.proto.TimeSeriesQueryResult.sources)
+}
+inline void TimeSeriesQueryResult::add_sources(const char* value, size_t size) {
+  sources_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.proto.TimeSeriesQueryResult.sources)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+TimeSeriesQueryResult::sources() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.TimeSeriesQueryResult.sources)
+  return sources_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+TimeSeriesQueryResult::mutable_sources() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.TimeSeriesQueryResult.sources)
+  return &sources_;
+}
+
+// repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+inline int TimeSeriesQueryResult::datapoints_size() const {
+  return datapoints_.size();
+}
+inline void TimeSeriesQueryResult::clear_datapoints() {
+  datapoints_.Clear();
+}
+inline const ::cockroach::proto::TimeSeriesDatapoint& TimeSeriesQueryResult::datapoints(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesQueryResult.datapoints)
+  return datapoints_.Get(index);
+}
+inline ::cockroach::proto::TimeSeriesDatapoint* TimeSeriesQueryResult::mutable_datapoints(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TimeSeriesQueryResult.datapoints)
+  return datapoints_.Mutable(index);
+}
+inline ::cockroach::proto::TimeSeriesDatapoint* TimeSeriesQueryResult::add_datapoints() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.TimeSeriesQueryResult.datapoints)
+  return datapoints_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint >&
+TimeSeriesQueryResult::datapoints() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.TimeSeriesQueryResult.datapoints)
+  return datapoints_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint >*
+TimeSeriesQueryResult::mutable_datapoints() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.TimeSeriesQueryResult.datapoints)
   return &datapoints_;
 }
 

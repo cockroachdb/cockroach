@@ -72,6 +72,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* TimeSeriesData_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   TimeSeriesData_reflection_ = NULL;
+const ::google::protobuf::Descriptor* TimeSeriesQueryResult_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  TimeSeriesQueryResult_reflection_ = NULL;
 const ::google::protobuf::Descriptor* MVCCStats_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   MVCCStats_reflection_ = NULL;
@@ -383,7 +386,24 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(TimeSeriesData));
-  MVCCStats_descriptor_ = file->message_type(17);
+  TimeSeriesQueryResult_descriptor_ = file->message_type(17);
+  static const int TimeSeriesQueryResult_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesQueryResult, name_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesQueryResult, sources_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesQueryResult, datapoints_),
+  };
+  TimeSeriesQueryResult_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      TimeSeriesQueryResult_descriptor_,
+      TimeSeriesQueryResult::default_instance_,
+      TimeSeriesQueryResult_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesQueryResult, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesQueryResult, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(TimeSeriesQueryResult));
+  MVCCStats_descriptor_ = file->message_type(18);
   static const int MVCCStats_offsets_[11] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, live_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, key_bytes_),
@@ -458,6 +478,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     TimeSeriesData_descriptor_, &TimeSeriesData::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    TimeSeriesQueryResult_descriptor_, &TimeSeriesQueryResult::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     MVCCStats_descriptor_, &MVCCStats::default_instance());
 }
 
@@ -498,6 +520,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto() {
   delete TimeSeriesDatapoint_reflection_;
   delete TimeSeriesData::default_instance_;
   delete TimeSeriesData_reflection_;
+  delete TimeSeriesQueryResult::default_instance_;
+  delete TimeSeriesQueryResult_reflection_;
   delete MVCCStats::default_instance_;
   delete MVCCStats_reflection_;
 }
@@ -576,20 +600,23 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "\000\"t\n\016TimeSeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022"
     "\024\n\006source\030\002 \001(\tB\004\310\336\037\000\0228\n\ndatapoints\030\003 \003("
     "\0132$.cockroach.proto.TimeSeriesDatapoint\""
-    "\300\002\n\tMVCCStats\022\030\n\nlive_bytes\030\001 \001(\003B\004\310\336\037\000\022"
-    "\027\n\tkey_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\003 "
-    "\001(\003B\004\310\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n"
-    "\nlive_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_count\030\006 \001"
-    "(\003B\004\310\336\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022\032\n\014int"
-    "ent_count\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_age\030\t \001("
-    "\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037\000\342\336\037\nG"
-    "CBytesAge\022\037\n\021last_update_nanos\030\013 \001(\003B\004\310\336"
-    "\037\000*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000"
-    "\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationT"
-    "ype\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036"
-    "\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tC"
-    "OMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005proto\340\342"
-    "\036\001\310\342\036\001\320\342\036\001", 3130);
+    "|\n\025TimeSeriesQueryResult\022\022\n\004name\030\001 \001(\tB\004"
+    "\310\336\037\000\022\025\n\007sources\030\002 \003(\tB\004\310\336\037\000\0228\n\ndatapoint"
+    "s\030\003 \003(\0132$.cockroach.proto.TimeSeriesData"
+    "point\"\300\002\n\tMVCCStats\022\030\n\nlive_bytes\030\001 \001(\003B"
+    "\004\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_by"
+    "tes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310"
+    "\336\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_cou"
+    "nt\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022"
+    "\032\n\014intent_count\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_ag"
+    "e\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037"
+    "\000\342\336\037\nGCBytesAge\022\037\n\021last_update_nanos\030\013 \001"
+    "(\003B\004\310\336\037\000*>\n\021ReplicaChangeType\022\017\n\013ADD_REP"
+    "LICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsol"
+    "ationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020"
+    "\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020"
+    "\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005p"
+    "roto\340\342\036\001\310\342\036\001\320\342\036\001", 3256);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -609,6 +636,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   GCMetadata::default_instance_ = new GCMetadata();
   TimeSeriesDatapoint::default_instance_ = new TimeSeriesDatapoint();
   TimeSeriesData::default_instance_ = new TimeSeriesData();
+  TimeSeriesQueryResult::default_instance_ = new TimeSeriesQueryResult();
   MVCCStats::default_instance_ = new MVCCStats();
   Timestamp::default_instance_->InitAsDefaultInstance();
   Value::default_instance_->InitAsDefaultInstance();
@@ -627,6 +655,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   GCMetadata::default_instance_->InitAsDefaultInstance();
   TimeSeriesDatapoint::default_instance_->InitAsDefaultInstance();
   TimeSeriesData::default_instance_->InitAsDefaultInstance();
+  TimeSeriesQueryResult::default_instance_->InitAsDefaultInstance();
   MVCCStats::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto);
 }
@@ -6410,6 +6439,338 @@ void TimeSeriesData::Swap(TimeSeriesData* other) {
   ::google::protobuf::Metadata metadata;
   metadata.descriptor = TimeSeriesData_descriptor_;
   metadata.reflection = TimeSeriesData_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int TimeSeriesQueryResult::kNameFieldNumber;
+const int TimeSeriesQueryResult::kSourcesFieldNumber;
+const int TimeSeriesQueryResult::kDatapointsFieldNumber;
+#endif  // !_MSC_VER
+
+TimeSeriesQueryResult::TimeSeriesQueryResult()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.TimeSeriesQueryResult)
+}
+
+void TimeSeriesQueryResult::InitAsDefaultInstance() {
+}
+
+TimeSeriesQueryResult::TimeSeriesQueryResult(const TimeSeriesQueryResult& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.TimeSeriesQueryResult)
+}
+
+void TimeSeriesQueryResult::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+TimeSeriesQueryResult::~TimeSeriesQueryResult() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.TimeSeriesQueryResult)
+  SharedDtor();
+}
+
+void TimeSeriesQueryResult::SharedDtor() {
+  if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete name_;
+  }
+  if (this != default_instance_) {
+  }
+}
+
+void TimeSeriesQueryResult::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* TimeSeriesQueryResult::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return TimeSeriesQueryResult_descriptor_;
+}
+
+const TimeSeriesQueryResult& TimeSeriesQueryResult::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  return *default_instance_;
+}
+
+TimeSeriesQueryResult* TimeSeriesQueryResult::default_instance_ = NULL;
+
+TimeSeriesQueryResult* TimeSeriesQueryResult::New() const {
+  return new TimeSeriesQueryResult;
+}
+
+void TimeSeriesQueryResult::Clear() {
+  if (has_name()) {
+    if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+      name_->clear();
+    }
+  }
+  sources_.Clear();
+  datapoints_.Clear();
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool TimeSeriesQueryResult::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.TimeSeriesQueryResult)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional string name = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_name()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->name().data(), this->name().length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "name");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_sources;
+        break;
+      }
+
+      // repeated string sources = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_sources:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->add_sources()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->sources(this->sources_size() - 1).data(),
+            this->sources(this->sources_size() - 1).length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "sources");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_sources;
+        if (input->ExpectTag(26)) goto parse_datapoints;
+        break;
+      }
+
+      // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_datapoints:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                input, add_datapoints()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_datapoints;
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.TimeSeriesQueryResult)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.TimeSeriesQueryResult)
+  return false;
+#undef DO_
+}
+
+void TimeSeriesQueryResult::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.TimeSeriesQueryResult)
+  // optional string name = 1;
+  if (has_name()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->name().data(), this->name().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "name");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->name(), output);
+  }
+
+  // repeated string sources = 2;
+  for (int i = 0; i < this->sources_size(); i++) {
+  ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+    this->sources(i).data(), this->sources(i).length(),
+    ::google::protobuf::internal::WireFormat::SERIALIZE,
+    "sources");
+    ::google::protobuf::internal::WireFormatLite::WriteString(
+      2, this->sources(i), output);
+  }
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+  for (int i = 0; i < this->datapoints_size(); i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, this->datapoints(i), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.TimeSeriesQueryResult)
+}
+
+::google::protobuf::uint8* TimeSeriesQueryResult::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.TimeSeriesQueryResult)
+  // optional string name = 1;
+  if (has_name()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->name().data(), this->name().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "name");
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+        1, this->name(), target);
+  }
+
+  // repeated string sources = 2;
+  for (int i = 0; i < this->sources_size(); i++) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->sources(i).data(), this->sources(i).length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "sources");
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteStringToArray(2, this->sources(i), target);
+  }
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+  for (int i = 0; i < this->datapoints_size(); i++) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, this->datapoints(i), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.TimeSeriesQueryResult)
+  return target;
+}
+
+int TimeSeriesQueryResult::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional string name = 1;
+    if (has_name()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->name());
+    }
+
+  }
+  // repeated string sources = 2;
+  total_size += 1 * this->sources_size();
+  for (int i = 0; i < this->sources_size(); i++) {
+    total_size += ::google::protobuf::internal::WireFormatLite::StringSize(
+      this->sources(i));
+  }
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+  total_size += 1 * this->datapoints_size();
+  for (int i = 0; i < this->datapoints_size(); i++) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        this->datapoints(i));
+  }
+
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void TimeSeriesQueryResult::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const TimeSeriesQueryResult* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const TimeSeriesQueryResult*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void TimeSeriesQueryResult::MergeFrom(const TimeSeriesQueryResult& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  sources_.MergeFrom(from.sources_);
+  datapoints_.MergeFrom(from.datapoints_);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_name()) {
+      set_name(from.name());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void TimeSeriesQueryResult::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void TimeSeriesQueryResult::CopyFrom(const TimeSeriesQueryResult& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool TimeSeriesQueryResult::IsInitialized() const {
+
+  return true;
+}
+
+void TimeSeriesQueryResult::Swap(TimeSeriesQueryResult* other) {
+  if (other != this) {
+    std::swap(name_, other->name_);
+    sources_.Swap(&other->sources_);
+    datapoints_.Swap(&other->datapoints_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata TimeSeriesQueryResult::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = TimeSeriesQueryResult_descriptor_;
+  metadata.reflection = TimeSeriesQueryResult_reflection_;
   return metadata;
 }
 
