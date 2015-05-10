@@ -18,7 +18,6 @@
 package simulation
 
 import (
-	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -35,14 +34,12 @@ import (
 // server.
 type Node struct {
 	Gossip *gossip.Gossip
-	Addr   net.Addr
 	Server *rpc.Server
 }
 
 // Network provides access to a test gossip network of nodes.
 type Network struct {
 	Nodes          []*Node
-	Addrs          []net.Addr
 	NetworkType    string        // "tcp" or "unix"
 	GossipInterval time.Duration // The length of a round of gossip
 	Stopper        *util.Stopper
@@ -62,52 +59,58 @@ func NewNetwork(nodeCount int, networkType string,
 	rpcContext := rpc.NewContext(clock, tlsConfig, nil)
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
-	servers := make([]*rpc.Server, nodeCount)
-	addrs := make([]net.Addr, nodeCount)
-	for i := 0; i < nodeCount; i++ {
-		addr := util.CreateTestAddr(networkType)
-		servers[i] = rpc.NewServer(addr, rpcContext)
-		if err := servers[i].Start(); err != nil {
+
+	stopper := util.NewStopper()
+
+	nodes := make([]*Node, nodeCount)
+	for i := range nodes {
+		server := rpc.NewServer(util.CreateTestAddr(networkType), rpcContext)
+		if err := server.Start(); err != nil {
 			log.Fatal(err)
 		}
-		addrs[i] = servers[i].Addr()
+		nodes[i] = &Node{Server: server}
 	}
-	stopper := util.NewStopper()
-	nodes := make([]*Node, nodeCount)
-	for i := 0; i < nodeCount; i++ {
+
+	var numResolvers int
+	if len(nodes) > 3 {
+		numResolvers = 3
+	} else {
+		numResolvers = len(nodes)
+	}
+
+	for i, leftNode := range nodes {
 		// Build new resolvers for each instance or we'll get data races.
-		var bootstrap []gossip.Resolver
-		for i, addr := range addrs {
-			if i >= 3 {
-				break
-			}
-			bootstrap = append(bootstrap, gossip.NewResolverFromAddress(addr))
+		var resolvers []gossip.Resolver
+		for _, rightNode := range nodes[:numResolvers] {
+			resolvers = append(resolvers, gossip.NewResolverFromAddress(rightNode.Server.Addr()))
 		}
 
-		node := gossip.New(rpcContext, gossipInterval, bootstrap)
-		if err := node.SetNodeDescriptor(&proto.NodeDescriptor{
+		gossipNode := gossip.New(rpcContext, gossipInterval, resolvers)
+		addr := leftNode.Server.Addr()
+		if err := gossipNode.SetNodeDescriptor(&proto.NodeDescriptor{
 			NodeID: proto.NodeID(i + 1),
 			Address: proto.Addr{
-				Network: addrs[i].Network(),
-				Address: addrs[i].String(),
+				Network: addr.Network(),
+				Address: addr.String(),
 			},
 		}); err != nil {
 			log.Fatal(err)
 		}
-		node.Start(servers[i], stopper)
-		stopper.AddCloser(servers[i])
-		// Node 0 gossips node count.
+
+		gossipNode.Start(leftNode.Server, stopper)
+		stopper.AddCloser(leftNode.Server)
+
+		// Node 0 gossips gossip count.
 		if i == 0 {
-			if err := node.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour); err != nil {
+			if err := gossipNode.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour); err != nil {
 				log.Fatal(err)
 			}
 		}
-		nodes[i] = &Node{Gossip: node, Addr: addrs[i], Server: servers[i]}
+		leftNode.Gossip = gossipNode
 	}
 
 	return &Network{
 		Nodes:          nodes,
-		Addrs:          addrs,
 		NetworkType:    networkType,
 		GossipInterval: gossipInterval,
 		Stopper:        stopper,
@@ -117,9 +120,9 @@ func NewNetwork(nodeCount int, networkType string,
 // GetNodeFromAddr returns the simulation node associated with
 // provided network address, or nil if there is no such node.
 func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
-	for i := 0; i < len(n.Nodes); i++ {
-		if n.Nodes[i].Addr.String() == addr {
-			return n.Nodes[i], true
+	for _, node := range n.Nodes {
+		if node.Server.Addr().String() == addr {
+			return node, true
 		}
 	}
 	return nil, false
@@ -128,9 +131,9 @@ func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
 // GetNodeFromID returns the simulation node associated with
 // provided node ID, or nil if there is no such node.
 func (n *Network) GetNodeFromID(nodeID proto.NodeID) (*Node, bool) {
-	for i := 0; i < len(n.Nodes); i++ {
-		if n.Nodes[i].Gossip.GetNodeID() == nodeID {
-			return n.Nodes[i], true
+	for _, node := range n.Nodes {
+		if node.Gossip.GetNodeID() == nodeID {
+			return node, true
 		}
 	}
 	return nil, false
@@ -180,10 +183,9 @@ func (n *Network) Stop() {
 func (n *Network) RunUntilFullyConnected() int {
 	var connectedAtCycle int
 	n.SimulateNetwork(func(cycle int, network *Network) bool {
-		nodes := network.Nodes
 		// Every node should gossip.
-		for i := 0; i < len(nodes); i++ {
-			if err := nodes[i].Gossip.AddInfo(nodes[i].Addr.String(), int64(cycle), time.Hour); err != nil {
+		for _, node := range network.Nodes {
+			if err := node.Gossip.AddInfo(node.Server.Addr().String(), int64(cycle), time.Hour); err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -200,11 +202,10 @@ func (n *Network) RunUntilFullyConnected() int {
 // with no partitions (i.e. every node knows every other node's
 // network address).
 func (n *Network) isNetworkConnected() bool {
-	for i := 0; i < len(n.Nodes); i++ {
-		for keyIdx := 0; keyIdx < len(n.Addrs); keyIdx++ {
-			_, err := n.Nodes[i].Gossip.GetInfo(n.Addrs[keyIdx].String())
-			if err != nil {
-				log.Infof("error: %v", err)
+	for _, leftNode := range n.Nodes {
+		for _, rightNode := range n.Nodes {
+			if _, err := leftNode.Gossip.GetInfo(rightNode.Server.Addr().String()); err != nil {
+				log.Info(err)
 				return false
 			}
 		}
