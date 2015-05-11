@@ -19,4 +19,5 @@
 package securitytest
 
 //go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -prefix ../../resource ../../resource/test_certs/...
+//go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go

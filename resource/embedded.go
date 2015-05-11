@@ -285,20 +285,20 @@ type _bintree_t struct {
 }
 
 var _bintree = &_bintree_t{nil, map[string]*_bintree_t{
-	"ui": &_bintree_t{nil, map[string]*_bintree_t{
-		"css": &_bintree_t{nil, map[string]*_bintree_t{
-			"main.css":          &_bintree_t{ui_css_main_css, map[string]*_bintree_t{}},
-			"rest_explorer.css": &_bintree_t{ui_css_rest_explorer_css, map[string]*_bintree_t{}},
+	"ui": {nil, map[string]*_bintree_t{
+		"css": {nil, map[string]*_bintree_t{
+			"main.css":          {ui_css_main_css, map[string]*_bintree_t{}},
+			"rest_explorer.css": {ui_css_rest_explorer_css, map[string]*_bintree_t{}},
 		}},
-		"index.html": &_bintree_t{ui_index_html, map[string]*_bintree_t{}},
-		"js": &_bintree_t{nil, map[string]*_bintree_t{
-			"controllers": &_bintree_t{nil, map[string]*_bintree_t{
-				"rest_explorer.js": &_bintree_t{ui_js_controllers_rest_explorer_js, map[string]*_bintree_t{}},
+		"index.html": {ui_index_html, map[string]*_bintree_t{}},
+		"js": {nil, map[string]*_bintree_t{
+			"controllers": {nil, map[string]*_bintree_t{
+				"rest_explorer.js": {ui_js_controllers_rest_explorer_js, map[string]*_bintree_t{}},
 			}},
-			"main.js": &_bintree_t{ui_js_main_js, map[string]*_bintree_t{}},
+			"main.js": {ui_js_main_js, map[string]*_bintree_t{}},
 		}},
-		"templates": &_bintree_t{nil, map[string]*_bintree_t{
-			"rest_explorer.html": &_bintree_t{ui_templates_rest_explorer_html, map[string]*_bintree_t{}},
+		"templates": {nil, map[string]*_bintree_t{
+			"rest_explorer.html": {ui_templates_rest_explorer_html, map[string]*_bintree_t{}},
 		}},
 	}},
 }}

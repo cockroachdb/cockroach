@@ -22,6 +22,7 @@ package resource
 // When changing files included here, you may add the `-debug` flag, which will
 // avoid embedding any files (but instead passes them through from disk). This
 // avoids having to recompile before testing changes.
+
 //go:generate go-bindata -pkg resource -mode 0644 -modtime 1400000000 -o ./embedded.go ./ui/...
-// `go vet` complains about the go file created by go-bindata, so we groom it.
+//go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go
