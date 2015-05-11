@@ -150,13 +150,12 @@ func TestBootstrapCluster(t *testing.T) {
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
-	stopper := util.NewStopper()
+	eagerStopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
-	if err != nil {
+	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper); err != nil {
 		t.Fatal(err)
 	}
-	stopper.Stop()
+	eagerStopper.Stop()
 
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
@@ -238,13 +237,13 @@ func TestNodeJoin(t *testing.T) {
 // TestCorruptedClusterID verifies that a node fails to start when a
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
-	stopper := util.NewStopper()
+	eagerStopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
+	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stopper.Stop()
+	eagerStopper.Stop()
 
 	// Set the cluster ID to an empty string.
 	sIdent := proto.StoreIdent{

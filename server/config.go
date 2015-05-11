@@ -87,9 +87,9 @@ func RunGetZone(ctx *Context, keyPrefix string) {
 // The type of config that is listed is based on the passed in prefix.
 // The optional regexp is applied to the complete list and matching prefixes
 // displayed.
-func runLsConfigs(ctx *Context, prefix, pattern string) {
-	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", ctx.RequestScheme(), ctx.Addr, prefix), nil)
+func runLsConfigs(ctx *Context, getPrefix, pattern string) {
+	friendlyName := getFriendlyNameFromPrefix(getPrefix)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", ctx.RequestScheme(), ctx.Addr, getPrefix), nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -113,8 +113,7 @@ func runLsConfigs(ctx *Context, prefix, pattern string) {
 	}
 	for _, prefix := range prefixes {
 		if re != nil {
-			unescaped, err := url.QueryUnescape(prefix)
-			if err != nil || !re.MatchString(unescaped) {
+			if unescaped, err := url.QueryUnescape(prefix); err != nil || !re.MatchString(unescaped) {
 				continue
 			}
 		}

@@ -440,9 +440,9 @@ func TestInfoStoreDistant(t *testing.T) {
 	}
 
 	for i := 0; i < len(nodes); i++ {
-		nodes := is.distant(uint32(i))
-		if nodes.len() != 3-i {
-			t.Errorf("%d nodes (not %d) should be over maxHops = %d", 3-i, nodes.len(), i)
+		nodesLen := is.distant(uint32(i)).len()
+		if nodesLen != 3-i {
+			t.Errorf("%d nodes (not %d) should be over maxHops = %d", 3-i, nodesLen, i)
 		}
 	}
 }

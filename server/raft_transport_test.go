@@ -59,7 +59,7 @@ func TestSendAndReceive(t *testing.T) {
 	nodeIDs := []multiraft.NodeID{}
 	transports := []multiraft.Transport{}
 	channels := []ChannelServer{}
-	for server := 0; server < numServers; server++ {
+	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
 		server := rpc.NewServer(util.CreateTestAddr("tcp"), rpcContext)
 		if err := server.Start(); err != nil {
 			t.Fatal(err)

@@ -247,7 +247,7 @@ func parseHistory(txnIdx int, history string, t *testing.T) []*cmd {
 	elems := strings.Split(history, " ")
 	for _, elem := range elems {
 		match := cmdRE.FindStringSubmatch(elem)
-		if match == nil {
+		if len(match) < 2 {
 			t.Fatalf("failed to parse command %q", elem)
 		}
 		fn, ok := cmdDict[match[1]]

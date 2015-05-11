@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/rpc/codec"
@@ -127,11 +128,13 @@ func (s *Server) Listen() error {
 // listener.
 func (s *Server) Serve(handler http.Handler) {
 	s.handler = handler
+
 	go func() {
 		if err := http.Serve(s.listener, s); err != nil {
-			// FIXME: uncommenting the line below break tests
-			_ = err
-			// log.Fatal(err)
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				return
+			}
+			log.Fatal(err)
 		}
 	}()
 }

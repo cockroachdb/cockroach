@@ -774,7 +774,7 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 				}
 			}
 			newMeta = &buf.newMeta
-			*newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+			buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 		} else if timestamp.Less(meta.Timestamp) && meta.Txn == nil {
 			// If we receive a Put request to write before an already-
 			// committed version, send write tool old error.
@@ -791,7 +791,7 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 		// Create key metadata.
 		meta = nil
 		newMeta = &buf.newMeta
-		*newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+		buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 	}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
@@ -969,7 +969,7 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 // keys, At each step of the iteration, f() is invoked with the
 // current key/value pair. If f returns true (done) or an error, the
 // iteration stops and the error is propagated.
-func MVCCIterate(engine Engine, key, endKey proto.Key, timestamp proto.Timestamp,
+func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Timestamp,
 	consistent bool, txn *proto.Transaction, f func(proto.KeyValue) (bool, error)) error {
 	if !consistent && txn != nil {
 		return util.Errorf("cannot allow inconsistent reads within a transaction")
@@ -985,7 +985,7 @@ func MVCCIterate(engine Engine, key, endKey proto.Key, timestamp proto.Timestamp
 	// allocations.
 	encEndKey := mvccEncodeKey(buf.key[0:0], endKey)
 	keyBuf := encEndKey[len(encEndKey):]
-	encKey := mvccEncodeKey(keyBuf, key)
+	encKey := mvccEncodeKey(keyBuf, startKey)
 
 	// Get a new iterator and define our getEarlierFunc using iter.Seek.
 	iter := engine.NewIterator()
@@ -1182,7 +1182,8 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 		}
 		// Get the bytes for the next version so we have size for stat counts.
 		value := proto.MVCCValue{}
-		ok, _, valueSize, err := engine.GetProto(kvs[0].Key, &value)
+		var valueSize int64
+		ok, _, valueSize, err = engine.GetProto(kvs[0].Key, &value)
 		if err != nil || !ok {
 			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
 		}
@@ -1537,7 +1538,9 @@ func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, boo
 	} else if len(tsBytes) != 12 {
 		panic(fmt.Sprintf("there should be 12 bytes for encoded timestamp: %q", tsBytes))
 	}
-	tsBytes, walltime := encoding.DecodeUint64Decreasing(tsBytes)
-	tsBytes, logical := encoding.DecodeUint32Decreasing(tsBytes)
+	var walltime uint64
+	var logical uint32
+	tsBytes, walltime = encoding.DecodeUint64Decreasing(tsBytes)
+	tsBytes, logical = encoding.DecodeUint32Decreasing(tsBytes)
 	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true
 }

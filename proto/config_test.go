@@ -155,12 +155,13 @@ func TestPermConfig(t *testing.T) {
 	}
 }
 
-func verifyOrdering(attrs []string, rs ReplicaSlice, prefixLen int) bool {
+func verifyOrdering(attrs []string, replicas ReplicaSlice, prefixLen int) bool {
 	prevMatchIndex := len(attrs)
-	for i := range rs {
+	for i, replica := range replicas {
 		matchIndex := -1
-		for j := range attrs {
-			if j >= len(rs[i].Attrs.Attrs) || rs[i].Attrs.Attrs[j] != attrs[j] {
+
+		for j, attr := range attrs {
+			if j >= len(replica.Attrs.Attrs) || replica.Attrs.Attrs[j] != attr {
 				break
 			}
 			matchIndex = j

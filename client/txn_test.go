@@ -75,7 +75,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		{makeTS(20, 1), makeTS(20, 1)},
 	}
 
-	testIdx := 0
+	var testIdx int
 	kv := NewKV(nil, newTestSender(func(call Call) {
 		test := testCases[testIdx]
 		if !test.expRequestTS.Equal(call.Args.Header().Txn.Timestamp) {

@@ -80,11 +80,11 @@ func TestGetPutDeleteSchema(t *testing.T) {
 		Name: "Carl's Blankets",
 		Key:  "foo",
 	}
-	b, err := json.Marshal(sch)
+	marshalledBytes, err := json.Marshal(sch)
 	if err != nil {
 		t.Fatalf("could not marshal Schema: %v", err)
 	}
-	payload := bytes.NewBuffer(b)
+	payload := bytes.NewBuffer(marshalledBytes)
 	testCases := []struct {
 		method     string
 		path       string
@@ -118,12 +118,12 @@ func TestGetPutDeleteSchema(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != tc.statusCode {
-			b, err := ioutil.ReadAll(resp.Body)
+			bytes, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-				t.Errorf("[%s] %s: could not read response body: %v", tc.method, tc.path, string(b))
+				t.Errorf("[%s] %s: could not read response body: %v", tc.method, tc.path, string(bytes))
 				continue
 			}
-			t.Errorf("[%s] %s: unexpected response status code: expected %d, got %d. Body: %s", tc.method, tc.path, tc.statusCode, resp.StatusCode, string(b))
+			t.Errorf("[%s] %s: unexpected response status code: expected %d, got %d. Body: %s", tc.method, tc.path, tc.statusCode, resp.StatusCode, string(bytes))
 			continue
 		}
 		var resResp struct {
