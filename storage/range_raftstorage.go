@@ -376,9 +376,11 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
-	// Read range stats.
-	stats, err := newRangeStats(desc.RaftID, batch)
+	// Copy range stats to new range.
+	oldStats := r.stats
+	r.stats, err = newRangeStats(desc.RaftID, batch)
 	if err != nil {
+		r.stats = oldStats
 		return err
 	}
 
@@ -403,9 +405,8 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
 	atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
 
-	// Save the descriptor, stats and lease.
+	// Atomically update the descriptor and lease.
 	r.SetDesc(&desc)
-	r.stats = stats
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 	return nil
 }
