@@ -462,9 +462,6 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	}
 	s.processRaft()
 
-	// Start the scanner.
-	s.scanner.Start(s.ctx.Clock, s.stopper)
-
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.ctx.Gossip != nil {
@@ -486,6 +483,19 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		if err := s.startGossip(); err != nil {
 			return err
 		}
+
+		// Start the scanner. The construction here makes sure that the scanner
+		// only starts after Gossip has connected, and that it does not block Start
+		// from returning (as doing so might prevent Gossip from ever connecting).
+		s.stopper.RunWorker(func() {
+			select {
+			case <-s.ctx.Gossip.Connected:
+				s.scanner.Start(s.ctx.Clock, s.stopper)
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		})
+
 	}
 
 	// Set the started flag (for unittests).

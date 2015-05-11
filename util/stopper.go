@@ -133,8 +133,9 @@ func (s *Stopper) Stop() {
 	close(s.stopped)
 }
 
-// ShouldStop returns a channel which will be closed when Stop() has
-// been invoked. SetStopped() should be called to confirm.
+// ShouldStop returns a channel which will be closed when Stop() has been
+// invoked and outstanding tasks have drained. SetStopped() should be called
+// to confirm.
 func (s *Stopper) ShouldStop() <-chan struct{} {
 	if s == nil {
 		// A nil stopper will never signal ShouldStop, but will also never panic.
