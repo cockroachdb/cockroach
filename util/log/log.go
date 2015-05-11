@@ -102,9 +102,10 @@ func logDepth(ctx context.Context, depth int, sev clog.Severity, msg string, kvs
 
 }
 
-// Infoc logs to the WARNING and INFO logs. It extracts values from the
-// Field keys specified in this package and logs them along with the given
-// message and any additional pairs specified as consecutive elements in kvs.
+// Infoc logs to the WARNING and INFO logs. It extracts values from the context
+// using the Field keys specified in this package and logs them along with the
+// given message and any additional pairs specified as consecutive elements in
+// kvs.
 func Infoc(ctx context.Context, msg string, kvs ...interface{}) {
 	logDepth(ctx, 1, clog.InfoLog, msg, kvs)
 }
@@ -128,8 +129,9 @@ func InfoDepth(depth int, args ...interface{}) {
 }
 
 // Warningc logs to the WARNING and INFO logs. It extracts values from the
-// Field keys specified in this package and logs them along with the given
-// message and any additional pairs specified as consecutive elements in kvs.
+// context using the Field keys specified in this package and logs them along
+// with the given message and any additional pairs specified as consecutive
+// elements in kvs.
 func Warningc(ctx context.Context, msg string, kvs ...interface{}) {
 	logDepth(ctx, 1, clog.WarningLog, msg, kvs)
 }
@@ -180,9 +182,9 @@ func ErrorDepth(depth int, args ...interface{}) {
 	logDepth(nil, depth+1, clog.ErrorLog, fmt.Sprint(args...), nil)
 }
 
-// Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs,
-// including a stack trace of all running goroutines, then calls os.Exit(255).
-// It extracts values from the Field keys specified in this package and logs
+// Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
+// trace of all running goroutines, then calls os.Exit(255). It extracts values
+// from the context using the Field keys specified in this package and logs
 // them along with the given message and any additional pairs specified as
 // consecutive elements in kvs.
 func Fatalc(ctx context.Context, msg string, kvs ...interface{}) {
