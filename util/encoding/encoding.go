@@ -323,7 +323,38 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 // EncodeUvarintDecreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
 func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
-	return EncodeUvarint(b, ^v)
+	switch {
+	case v == 0:
+		return append(b, 8)
+	case v <= 0xff:
+		v=^v
+		return append(b, 7, byte(v))
+	case v <= 0xffff:
+		v=^v
+		return append(b, 6, byte(v>>8), byte(v))
+	case v <= 0xffffff:
+		v=^v
+		return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
+	case v <= 0xffffffff:
+		v=^v
+		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+	case v <= 0xffffffffff:
+		v=^v
+		return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+			byte(v))
+	case v <= 0xffffffffffff:
+		v=^v
+		return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+			byte(v>>8), byte(v))
+	case v <= 0xffffffffffffff:
+		v=^v
+		return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+			byte(v>>16), byte(v>>8), byte(v))
+	default:
+		v=^v
+		return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+	}
 }
 
 // DecodeUvarint decodes a varint encoded uint64 from the input
@@ -352,8 +383,21 @@ func DecodeUvarint(b []byte) ([]byte, uint64) {
 // DecodeUvarintDecreasing decodes a uint64 value which was encoded
 // using EncodeUvarintDecreasing.
 func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
-	leftover, v := DecodeUvarint(b)
-	return leftover, ^v
+	if len(b) == 0 {
+		panic("insufficient bytes to decode var uint64 int value")
+	}
+	length := 8 - int(b[0])
+	b = b[1:] // skip length byte
+	if length < 0 || length > 8 {
+		panic(fmt.Sprintf("invalid uvarint length of %d", length))
+	} else if len(b) < length {
+		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %v", b))
+	}
+	var x uint64
+	for _, t := range b[:length] {
+		x = (x << 8) | uint64(^t)
+	}
+	return b[length:], x
 }
 
 const (
