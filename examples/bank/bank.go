@@ -19,6 +19,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -35,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+var useTransaction = flag.Bool("use-transaction", true, "Turn off to disable transaction.")
+
 // Makes an id string from an id int.
 func makeAccountID(id int) []byte {
 	return []byte(fmt.Sprintf("%09d", id))
@@ -42,9 +45,9 @@ func makeAccountID(id int) []byte {
 
 // Bank stores all the bank related state.
 type Bank struct {
-	kvClient        *client.KV
-	numAccounts     int
-	numTransactions int32
+	kvClient     *client.KV
+	numAccounts  int
+	numTransfers int32
 }
 
 // Helper function to read bytes received on a Get Call response.
@@ -64,44 +67,33 @@ func readInt64(call client.Call) (int64, error) {
 	return 0, nil
 }
 
-// moveMoney() moves an amount between two accounts if the amount
-// is available in the from account. Returns true on success.
-func (bank *Bank) moveMoney(from, to []byte, amount int64) bool {
-	// Early exit when from == to
-	if bytes.Compare(from, to) == 0 {
-		return true
-	}
-	txnOpts := &client.TransactionOptions{Name: fmt.Sprintf("Transferring %s-%s-%d", from, to, amount)}
+// Read the balances in all the accounts and return them.
+func (bank *Bank) readAllAccountsWithScan() []int64 {
+	balances := make([]int64, bank.numAccounts)
+	txnOpts := &client.TransactionOptions{Name: "Reading all balances"}
 	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
-		fromGet := client.Get(proto.Key(from))
-		toGet := client.Get(proto.Key(to))
-		if err := txn.Run(fromGet, toGet); err != nil {
-			return err
+		call := client.Scan(makeAccountID(0), makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		if err := txn.Run(call); err != nil {
+			log.Fatal(err)
 		}
-		// Read from value.
-		fromValue, err := readInt64(fromGet)
-		if err != nil {
-			return err
+		// Copy responses into balances.
+		scan := call.Reply.(*proto.ScanResponse)
+		if len(scan.Rows) != bank.numAccounts {
+			log.Fatalf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
 		}
-		// Ensure there is enough cash.
-		if fromValue < amount {
-			return nil
+		for i := 0; i < bank.numAccounts; i++ {
+			value, err := strconv.ParseInt(string(scan.Rows[i].Value.Bytes), 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+			balances[i] = value
 		}
-		// Read to value.
-		toValue, errRead := readInt64(toGet)
-		if errRead != nil {
-			return errRead
-		}
-		// Update both accounts.
-		txn.Prepare(client.Put(proto.Key(from), []byte(fmt.Sprintf("%d", fromValue-amount))))
-		txn.Prepare(client.Put(proto.Key(to), []byte(fmt.Sprintf("%d", toValue+amount))))
 		return nil
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	atomic.AddInt32(&bank.numTransactions, 1)
-	return true
+	return balances
 }
 
 // Read the balances in all the accounts and return them.
@@ -111,7 +103,7 @@ func (bank *Bank) readAllAccounts() []int64 {
 	txnOpts := &client.TransactionOptions{Name: "Reading all balances"}
 	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		for i := 0; i < bank.numAccounts; i++ {
-			calls[i] = client.Get(proto.Key(makeAccountID(i)))
+			calls[i] = client.Get(makeAccountID(i))
 		}
 		if err := txn.Run(calls...); err != nil {
 			log.Fatal(err)
@@ -138,8 +130,58 @@ func (bank *Bank) continuousMoneyTransfer() {
 	for {
 		from := makeAccountID(rand.Intn(bank.numAccounts))
 		to := makeAccountID(rand.Intn(bank.numAccounts))
-		exchange := rand.Int63n(100)
-		bank.moveMoney(from, to, exchange)
+		// Continue when from == to
+		if bytes.Equal(from, to) {
+			continue
+		}
+		exchangeAmount := rand.Int63n(100)
+		// transferMoney transfers exchangeAmount between the two accounts
+		// using transaction txn if its non nil
+		transferMoney := func(txn *client.Txn) error {
+			fromGet := client.Get(from)
+			toGet := client.Get(to)
+			if txn != nil {
+				if err := txn.Run(fromGet, toGet); err != nil {
+					return err
+				}
+			} else {
+				if err := bank.kvClient.Run(fromGet, toGet); err != nil {
+					return err
+				}
+			}
+			// Read from value.
+			fromValue, err := readInt64(fromGet)
+			if err != nil {
+				return err
+			}
+			// Ensure there is enough cash.
+			if fromValue < exchangeAmount {
+				return nil
+			}
+			// Read to value.
+			toValue, errRead := readInt64(toGet)
+			if errRead != nil {
+				return errRead
+			}
+			// Update both accounts.
+			fromPut := []byte(fmt.Sprintf("%d", fromValue-exchangeAmount))
+			toPut := []byte(fmt.Sprintf("%d", toValue+exchangeAmount))
+			if txn != nil {
+				txn.Prepare(client.Put(from, fromPut), client.Put(to, toPut))
+			} else {
+				bank.kvClient.Run(client.Put(from, fromPut), client.Put(to, toPut))
+			}
+			return nil
+		}
+		if *useTransaction {
+			txnOpts := &client.TransactionOptions{Name: fmt.Sprintf("Transferring %s-%s-%d", from, to, exchangeAmount)}
+			if err := bank.kvClient.RunTransaction(txnOpts, transferMoney); err != nil {
+				log.Fatal(err)
+			}
+		} else if err := transferMoney(nil); err != nil {
+			log.Fatal(err)
+		}
+		atomic.AddInt32(&bank.numTransfers, 1)
 	}
 }
 
@@ -147,7 +189,7 @@ func (bank *Bank) continuousMoneyTransfer() {
 func (bank *Bank) initBankAccounts(cash int64) {
 	calls := make([]client.Call, bank.numAccounts)
 	for i := 0; i < bank.numAccounts; i++ {
-		calls[i] = client.Put(proto.Key(makeAccountID(i)), []byte(fmt.Sprintf("%d", cash)))
+		calls[i] = client.Put(makeAccountID(i), []byte(fmt.Sprintf("%d", cash)))
 	}
 	if err := bank.kvClient.Run(calls...); err != nil {
 		log.Fatal(err)
@@ -158,7 +200,7 @@ func (bank *Bank) periodicallyCheckBalances(initCash int64) {
 	for {
 		// Sleep for a bit to allow money transfers to happen in the background.
 		time.Sleep(time.Second)
-		fmt.Printf("%d transactions were executed\n\n", bank.numTransactions)
+		fmt.Printf("%d transfers were executed.\n\n", bank.numTransfers)
 		// Check that all the money is accounted for.
 		balances := bank.readAllAccounts()
 		var totalAmount int64
@@ -167,7 +209,7 @@ func (bank *Bank) periodicallyCheckBalances(initCash int64) {
 			totalAmount += balances[i]
 		}
 		if totalAmount != int64(bank.numAccounts)*initCash {
-			err := fmt.Sprintf("\nTotal cash in the bank = %d\n", totalAmount)
+			err := fmt.Sprintf("\nTotal cash in the bank = %d.\n", totalAmount)
 			log.Fatal(err)
 		}
 		fmt.Printf("\nThe bank is in good order\n\n")
@@ -175,7 +217,11 @@ func (bank *Bank) periodicallyCheckBalances(initCash int64) {
 }
 
 func main() {
-	fmt.Printf("A simple program that keeps moving money between bank accounts\n\n")
+	fmt.Printf("A simple program that keeps moving money between bank accounts.\n\n")
+	flag.Parse()
+	if !*useTransaction {
+		fmt.Printf("Use of a transaction has been disabled.\n")
+	}
 	// Run a test cockroach instance to represent the bank.
 	security.SetReadFileFn(securitytest.Asset)
 	serv := server.StartTestServer(nil)
