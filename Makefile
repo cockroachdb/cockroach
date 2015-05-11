@@ -117,7 +117,7 @@ acceptance:
 .PHONY: check
 check:
 	errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' $(PKG)
-	go-nyet $(PKG) | grep -vE '(Weird type of StarExpr|Unknown types|`matchIndex`|`c`|embedded\.go)' | tee /dev/stderr | test ! -s /dev/stdin
+	! go-nyet $(PKG) | grep -vE '(Weird type of StarExpr|Unknown types|`matchIndex`|`c`|embedded\.go)'
 
 .PHONY: clean
 clean:
