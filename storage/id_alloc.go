@@ -45,7 +45,7 @@ var IDAllocationRetryOpts = util.RetryOptions{
 // of arbitrary size starting at a minimum ID.
 type IDAllocator struct {
 	idKey     atomic.Value
-	db        *client.KV
+	db        *client.DB
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
 	ids       chan int64 // Channel of available IDs
@@ -66,7 +66,7 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &IDAllocator{
-		db:        db,
+		db:        db.NewDB(),
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
@@ -103,32 +103,32 @@ func (ia *IDAllocator) Allocate() (int64, error) {
 // special allocationTrigger ID is inserted which causes allocation
 // to occur before IDs run out to hide Increment latency.
 func (ia *IDAllocator) allocateBlock(incr int64) {
-	var ir *proto.IncrementResponse
+	var newValue int64
 	retryOpts := IDAllocationRetryOpts
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		idKey := ia.idKey.Load().(proto.Key)
-		call := client.Increment(idKey, incr)
-		ir = call.Reply.(*proto.IncrementResponse)
-		if err := ia.db.Run(call); err != nil {
-			log.Warningf("unable to allocate %d ids from %s: %s", incr, ia.idKey, err)
-			return util.RetryContinue, err
+		r := ia.db.Inc(idKey, incr)
+		if r.Err != nil {
+			log.Warningf("unable to allocate %d ids from %s: %s", incr, idKey, r.Err)
+			return util.RetryContinue, r.Err
 		}
+		newValue = r.Rows[0].ValueInt()
 		return util.RetryBreak, nil
 	})
 	if err != nil {
 		panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
 	}
 
-	if ir.NewValue <= ia.minID {
+	if newValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
-			ir.NewValue, ia.minID, ia.minID-ir.NewValue)
-		ia.allocateBlock(ia.minID - ir.NewValue + ia.blockSize - 1)
+			newValue, ia.minID, ia.minID-newValue)
+		ia.allocateBlock(ia.minID - newValue + ia.blockSize - 1)
 		return
 	}
 
 	// Add all new ids to the channel for consumption.
-	start := ir.NewValue - ia.blockSize + 1
-	end := ir.NewValue + 1
+	start := newValue - ia.blockSize + 1
+	end := newValue + 1
 	if start < ia.minID {
 		start = ia.minID
 	}

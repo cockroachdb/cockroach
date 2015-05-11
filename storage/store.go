@@ -224,6 +224,7 @@ type Store struct {
 
 	Ident          proto.StoreIdent
 	ctx            StoreContext
+	kvDB           *client.DB
 	engine         engine.Engine   // The underlying key-value store
 	_allocator     *allocator      // Makes allocation decisions
 	raftIDAlloc    *IDAllocator    // Raft ID allocator
@@ -351,6 +352,7 @@ func (s *Store) IsStarted() bool {
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *util.Stopper) error {
 	s.stopper = stopper
+	s.kvDB = s.ctx.DB.NewDB()
 
 	if s.Ident.NodeID == 0 {
 		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
@@ -1195,8 +1197,11 @@ func (s *Store) resolveWriteIntentError(wiErr *proto.WriteIntentError, rng *Rang
 		}
 		bArgs.Add(pushArgs)
 	}
+	b := &client.Batch{}
+	b.InternalAddCall(client.Call{Args: bArgs, Reply: bReply})
+
 	// Run all pushes in parallel.
-	if pushErr := s.ctx.DB.Run(client.Call{Args: bArgs, Reply: bReply}); pushErr != nil {
+	if pushErr := s.kvDB.Run(b); pushErr != nil {
 		if log.V(1) {
 			log.Infof("pushes for %+v failed: %s", wiErr.Intents, pushErr)
 		}
@@ -1403,11 +1408,15 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 		return nil, nil
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	storeStatus := &proto.StoreStatus{}
-	if err := s.ctx.DB.Run(client.GetProto(key, storeStatus)); err != nil {
+	r := s.kvDB.Get(key)
+	if r.Err != nil {
+		return nil, r.Err
+	}
+	status := &proto.StoreStatus{}
+	if err := r.Rows[0].ValueProto(status); err != nil {
 		return nil, err
 	}
-	return storeStatus, nil
+	return status, nil
 }
 
 // WaitForRangeScanCompletion waits until the next range scan is complete and
@@ -1436,8 +1445,8 @@ func (s *Store) updateStoreStatus() {
 		Stats:      proto.MVCCStats(scannerStats.MVCC),
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	if err := s.ctx.DB.Run(client.PutProto(key, status)); err != nil {
-		log.Error(err)
+	if r := s.kvDB.Put(key, status); r.Err != nil {
+		log.Error(r.Err)
 	}
 }
 

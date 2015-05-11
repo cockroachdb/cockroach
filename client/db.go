@@ -305,7 +305,8 @@ func (db *DB) Run(b *Batch) error {
 	if err := db.kv.Run(b.calls...); err != nil {
 		return err
 	}
-	return b.fillResults()
+	b.fillResults()
+	return nil
 }
 
 // Tx executes retryable in the context of a distributed transaction. The
@@ -450,7 +451,8 @@ func (tx *Tx) Run(b *Batch) error {
 	if err := tx.txn.Run(b.calls...); err != nil {
 		return err
 	}
-	return b.fillResults()
+	b.fillResults()
+	return nil
 }
 
 // Commit executes the operations queued up within a batch and commits the
@@ -512,7 +514,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults() error {
+func (b *Batch) fillResults() {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -520,27 +522,37 @@ func (b *Batch) fillResults() error {
 		for k := 0; k < result.calls; k++ {
 			call := b.calls[offset+k]
 
+			if result.Err == nil {
+				result.Err = call.Reply.Header().GoError()
+			}
+
 			switch t := call.Reply.(type) {
 			case *proto.GetResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.GetRequest).Key)
-				row.setValue(t.Value)
+				if result.Err == nil {
+					row.setValue(t.Value)
+				}
 			case *proto.PutResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.PutRequest).Key)
-				// TODO(pmattis): Don't set the value on error.
-				row.setValue(&call.Args.(*proto.PutRequest).Value)
+				if result.Err == nil {
+					row.setValue(&call.Args.(*proto.PutRequest).Value)
+				}
 			case *proto.ConditionalPutResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.ConditionalPutRequest).Key)
-				// TODO(pmattis): Don't set the value on error.
-				row.setValue(&call.Args.(*proto.ConditionalPutRequest).Value)
+				if result.Err == nil {
+					row.setValue(&call.Args.(*proto.ConditionalPutRequest).Value)
+				}
 			case *proto.IncrementResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.IncrementRequest).Key)
-				// TODO(pmattis): Should IncrementResponse contain a
-				// proto.Value so that the timestamp can be returned?
-				row.Value = &t.NewValue
+				if result.Err == nil {
+					// TODO(pmattis): Should IncrementResponse contain a
+					// proto.Value so that the timestamp can be returned?
+					row.Value = &t.NewValue
+				}
 			case *proto.ScanResponse:
 				result.Rows = make([]KeyValue, len(t.Rows))
 				for j, kv := range t.Rows {
@@ -551,17 +563,47 @@ func (b *Batch) fillResults() error {
 			case *proto.DeleteResponse:
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.DeleteRequest).Key)
-			case *proto.DeleteRangeResponse:
-			case *proto.EndTransactionResponse:
+
 			case *proto.AdminMergeResponse:
 			case *proto.AdminSplitResponse:
+			case *proto.DeleteRangeResponse:
+			case *proto.EndTransactionResponse:
+			case *proto.InternalBatchResponse:
+			case *proto.InternalGCResponse:
+			case *proto.InternalMergeResponse:
+			case *proto.InternalPushTxnResponse:
+			case *proto.InternalRangeLookupResponse:
+			case *proto.InternalResolveIntentResponse:
+				// Nothing to do for these methods as they do not generate any
+				// rows. For the proto.Internal* responses the caller will have hold of
+				// the response object itself.
+
 			default:
-				return fmt.Errorf("unsupported reply: %T", call.Reply)
+				if result.Err == nil {
+					result.Err = fmt.Errorf("unsupported reply: %T", call.Reply)
+				}
 			}
 		}
 		offset += result.calls
 	}
-	return nil
+}
+
+// InternalAddCall adds the specified call to the batch. It is intended for
+// internal use only. It is an error to use InternalAddCall to execute
+// operations that are available via the Batch methods (e.g. Get).
+func (b *Batch) InternalAddCall(call Call) {
+	switch call.Args.(type) {
+	case *proto.GetRequest,
+		*proto.PutRequest,
+		*proto.ConditionalPutRequest,
+		*proto.IncrementRequest,
+		*proto.ScanRequest,
+		*proto.DeleteRequest,
+		*proto.DeleteRangeRequest:
+		panic(fmt.Errorf("unsupported internal request type: %T", call.Args))
+	}
+	b.calls = append(b.calls, call)
+	b.initResult(1 /* calls */, 0 /* numRows */, nil)
 }
 
 // Get retrieves one or more keys. A new result will be appended to the batch

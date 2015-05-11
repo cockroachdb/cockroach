@@ -39,14 +39,14 @@ const (
 // or along intersecting accounting or zone config boundaries.
 type splitQueue struct {
 	*baseQueue
-	db     *client.KV
+	db     *client.DB
 	gossip *gossip.Gossip
 }
 
 // newSplitQueue returns a new instance of splitQueue.
 func newSplitQueue(db *client.KV, gossip *gossip.Gossip) *splitQueue {
 	sq := &splitQueue{
-		db:     db,
+		db:     db.NewDB(),
 		gossip: gossip,
 	}
 	sq.baseQueue = newBaseQueue("split", sq, splitQueueMaxSize)
@@ -89,15 +89,8 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 	if len(splitKeys) > 0 {
 		log.Infof("splitting range %q-%q at keys %v", rng.Desc().StartKey, rng.Desc().EndKey, splitKeys)
 		for _, splitKey := range splitKeys {
-			req := &proto.AdminSplitRequest{
-				RequestHeader: proto.RequestHeader{Key: splitKey},
-				SplitKey:      splitKey,
-			}
-			if err := sq.db.Run(client.Call{
-				Args:  req,
-				Reply: &proto.AdminSplitResponse{},
-			}); err != nil {
-				return util.Errorf("unable to split at key %q: %s", splitKey, err)
+			if r := sq.db.AdminSplit(splitKey, splitKey); r.Err != nil {
+				return util.Errorf("unable to split at key %q: %s", splitKey, r.Err)
 			}
 		}
 		return nil
