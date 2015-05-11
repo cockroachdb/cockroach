@@ -169,7 +169,7 @@ func (bank *Bank) continuousMoneyTransfer() {
 			if txn != nil {
 				txn.Prepare(client.Put(from, fromPut), client.Put(to, toPut))
 			} else {
-				bank.kvClient.Run(client.Put(from, fromPut), client.Put(to, toPut))
+				return bank.kvClient.Run(client.Put(from, fromPut), client.Put(to, toPut))
 			}
 			return nil
 		}
