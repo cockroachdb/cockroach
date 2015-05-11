@@ -326,31 +326,31 @@ func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 	case v == 0:
 		return append(b, 8)
 	case v <= 0xff:
-		v=^v
+		v = ^v
 		return append(b, 7, byte(v))
 	case v <= 0xffff:
-		v=^v
+		v = ^v
 		return append(b, 6, byte(v>>8), byte(v))
 	case v <= 0xffffff:
-		v=^v
+		v = ^v
 		return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
-		v=^v
+		v = ^v
 		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
-		v=^v
+		v = ^v
 		return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
-		v=^v
+		v = ^v
 		return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
-		v=^v
+		v = ^v
 		return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
-		v=^v
+		v = ^v
 		return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
