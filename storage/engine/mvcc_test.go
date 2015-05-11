@@ -1779,6 +1779,12 @@ func verifyStats(debug string, ms *proto.MVCCStats, expMS *proto.MVCCStats, t *t
 	if ms.GCBytesAge != expMS.GCBytesAge {
 		t.Errorf("%s: mvcc gcBytesAge %d; expected %d", debug, ms.GCBytesAge, expMS.GCBytesAge)
 	}
+	if ms.SysBytes != expMS.SysBytes {
+		t.Errorf("%s: mvcc sysBytes %d; expected %d", debug, ms.SysBytes, expMS.SysBytes)
+	}
+	if ms.SysCount != expMS.SysCount {
+		t.Errorf("%s: mvcc sysCount %d; expected %d", debug, ms.SysCount, expMS.SysCount)
+	}
 }
 
 // TestMVCCStatsBasic writes a value, then deletes it as an intent via
@@ -1809,7 +1815,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	vKeySize := mvccVersionTimestampSize
 	vValSize := encodedSize(&proto.MVCCValue{Value: &value}, t)
 
-	expMS := &proto.MVCCStats{
+	expMS := proto.MVCCStats{
 		LiveBytes: mKeySize + mValSize + vKeySize + vValSize,
 		LiveCount: 1,
 		KeyBytes:  mKeySize + vKeySize,
@@ -1817,7 +1823,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		ValBytes:  mValSize + vValSize,
 		ValCount:  1,
 	}
-	verifyStats("after put", ms, expMS, t)
+	verifyStats("after put", ms, &expMS, t)
 
 	// Delete the value using a transaction.
 	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1*1E9, 0)}
@@ -1828,7 +1834,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	m2ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := encodedSize(&proto.MVCCValue{Deleted: true}, t)
-	expMS2 := &proto.MVCCStats{
+	expMS2 := proto.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,
 		KeyCount:    1,
 		ValBytes:    m2ValSize + vValSize + v2ValSize,
@@ -1838,7 +1844,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		IntentAge:   0,
 		GCBytesAge:  vValSize + vKeySize, // immediately recognizes GC'able bytes from old value
 	}
-	verifyStats("after delete", ms, expMS2, t)
+	verifyStats("after delete", ms, &expMS2, t)
 
 	// Resolve the deletion by aborting it.
 	txn.Status = proto.ABORTED
@@ -1846,7 +1852,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Stats should equal same as before the deletion after aborting the intent.
-	verifyStats("after abort", ms, expMS, t)
+	verifyStats("after abort", ms, &expMS, t)
 
 	// Re-delete, but this time, we're going to commit it.
 	txn.Status = proto.PENDING
@@ -1856,7 +1862,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	// GCBytesAge will be x2 seconds now.
 	expMS2.GCBytesAge = (vValSize + vKeySize) * 2
-	verifyStats("after 2nd delete", ms, expMS2, t) // should be same as before.
+	verifyStats("after 2nd delete", ms, &expMS2, t) // should be same as before.
 
 	// Put another intent, which should age deleted intent.
 	ts4 := makeTS(4*1E9, 0)
@@ -1870,7 +1876,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mVal2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := encodedSize(&proto.MVCCValue{Value: &value2}, t)
-	expMS3 := &proto.MVCCStats{
+	expMS3 := proto.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
 		ValBytes:    m2ValSize + vValSize + v2ValSize + mVal2Size + vVal2Size,
@@ -1881,7 +1887,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		IntentCount: 2,
 		GCBytesAge:  (vValSize + vKeySize) * 2,
 	}
-	verifyStats("after 2nd put", ms, expMS3, t)
+	verifyStats("after 2nd put", ms, &expMS3, t)
 
 	// Now commit both values.
 	txn.Status = proto.COMMITTED
@@ -1893,7 +1899,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
 	m2Val2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4}, t)
-	expMS4 := &proto.MVCCStats{
+	expMS4 := proto.MVCCStats{
 		KeyBytes:   mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:   2,
 		ValBytes:   m3ValSize + vValSize + v2ValSize + m2Val2Size + vVal2Size,
@@ -1903,7 +1909,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		IntentAge:  -1,
 		GCBytesAge: (vValSize+vKeySize)*2 + (m3ValSize - m2ValSize), // subtract off difference in metas
 	}
-	verifyStats("after commit", ms, expMS4, t)
+	verifyStats("after commit", ms, &expMS4, t)
 
 	// Write over existing value to create GC'able bytes.
 	ts5 := makeTS(10*1E9, 0) // skip ahead 6s
@@ -1915,7 +1921,20 @@ func TestMVCCStatsBasic(t *testing.T) {
 	expMS5.ValBytes += vVal2Size
 	expMS5.ValCount = 4
 	expMS5.GCBytesAge += (vKey2Size + vVal2Size) * 6 // since we skipped ahead 6s
-	verifyStats("after overwrite", ms, expMS5, t)
+	verifyStats("after overwrite", ms, &expMS5, t)
+
+	// Write a transaction record which is a system-local key.
+	txnKey := TransactionKey(txn.Key, txn.ID)
+	txnVal := proto.Value{Bytes: []byte("txn-data")}
+	if err := MVCCPut(engine, ms, txnKey, proto.ZeroTimestamp, txnVal, nil); err != nil {
+		t.Fatal(err)
+	}
+	txnKeySize := int64(len(MVCCEncodeKey(txnKey)))
+	txnValSize := encodedSize(&proto.MVCCMetadata{Value: &txnVal}, t)
+	expMS6 := expMS5
+	expMS6.SysBytes += txnKeySize + txnValSize
+	expMS6.SysCount++
+	verifyStats("after sys-local key", ms, &expMS6, t)
 }
 
 // TestMVCCStatsWithRandomRuns creates a random sequence of puts,
@@ -2003,7 +2022,10 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Every 10th step, verify the stats via manual engine scan.
 		if i%10 == 0 {
 			// Compute the stats manually.
-			expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax, int64(i+1)*1E9)
+			iter := engine.NewIterator()
+			iter.Seek(KeyMin)
+			expMS, err := MVCCComputeStats(iter, int64(i+1)*1E9)
+			iter.Close()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2108,7 +2130,10 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	// Verify aggregated stats match computed stats after GC.
-	expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax, ts3.WallTime)
+	iter := engine.NewIterator()
+	iter.Seek(KeyMin)
+	expMS, err := MVCCComputeStats(iter, ts3.WallTime)
+	iter.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2218,6 +2243,7 @@ func runMVCCStatsMerge(writesPerRead int, b *testing.B) {
 		SysCount:        1,
 		LastUpdateNanos: 1,
 	}
+	expMS := ms
 	if err := SetStats(&ms, rocksdb, 1); err != nil {
 		b.Fatal(err)
 	}
@@ -2228,11 +2254,15 @@ func runMVCCStatsMerge(writesPerRead int, b *testing.B) {
 		if err := MergeStats(&ms, rocksdb, 1); err != nil {
 			b.Fatal(err)
 		}
+		expMS.Add(&ms)
 		// Every writesPerRead writes, read the underlying stats to force a merge.
 		if i%writesPerRead == 0 {
 			var readMS proto.MVCCStats
 			if err := MVCCGetRangeStats(rocksdb, 1, &readMS); err != nil {
 				b.Fatal(err)
+			}
+			if !reflect.DeepEqual(readMS, expMS) {
+				b.Fatalf("%d: expected %+v; got %+v", i, expMS, readMS)
 			}
 		}
 	}

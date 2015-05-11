@@ -338,7 +338,7 @@ message TimeSeriesQueryResult {
 //  - Key count (count of all keys, including keys with deleted tombstones)
 //  - Value count (all versions, including deleted tombstones)
 //  - Intents (provisional values written during txns)
-//  - System key counts and byte totals
+//  - System-local key counts and byte totals
 message MVCCStats {
   optional int64 live_bytes = 1 [(gogoproto.nullable) = false];
   optional int64 key_bytes = 2 [(gogoproto.nullable) = false];

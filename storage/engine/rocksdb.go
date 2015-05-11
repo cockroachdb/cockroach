@@ -201,6 +201,7 @@ func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
 		return
 	}
 	if result.len <= 0 {
+		msg.Reset()
 		return
 	}
 	ok = true

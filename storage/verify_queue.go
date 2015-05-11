@@ -79,7 +79,7 @@ func (vq *verifyQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ boo
 // checksum is checked on load.
 func (vq *verifyQueue) process(now proto.Timestamp, rng *Range) error {
 	snap := rng.rm.Engine().NewSnapshot()
-	iter := newRangeDataIterator(rng, snap)
+	iter := newRangeDataIterator(rng.Desc(), snap)
 	defer iter.Close()
 	defer snap.Close()
 

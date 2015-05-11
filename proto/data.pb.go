@@ -851,7 +851,7 @@ func (m *TimeSeriesQueryResult) GetDatapoints() []*TimeSeriesDatapoint {
 //  - Key count (count of all keys, including keys with deleted tombstones)
 //  - Value count (all versions, including deleted tombstones)
 //  - Intents (provisional values written during txns)
-//  - System key counts and byte totals
+//  - System-local key counts and byte totals
 type MVCCStats struct {
 	LiveBytes        int64  `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
 	KeyBytes         int64  `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`

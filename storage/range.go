@@ -262,7 +262,7 @@ func (r *Range) String() string {
 
 // Destroy cleans up all data associated with this range.
 func (r *Range) Destroy() error {
-	iter := newRangeDataIterator(r, r.rm.Engine())
+	iter := newRangeDataIterator(r.Desc(), r.rm.Engine())
 	defer iter.Close()
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()
@@ -822,7 +822,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()
 
-	// Create an proto.MVCCStats instance.
+	// Create a proto.MVCCStats instance.
 	ms := proto.MVCCStats{}
 
 	// Execute the command; the error will also be set in the reply header.

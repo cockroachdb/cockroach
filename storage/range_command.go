@@ -75,11 +75,11 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	case *proto.InternalRangeLookupRequest:
 		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case *proto.InternalHeartbeatTxnRequest:
-		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
+		r.InternalHeartbeatTxn(batch, ms, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case *proto.InternalGCRequest:
 		r.InternalGC(batch, ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
 	case *proto.InternalPushTxnRequest:
-		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
+		r.InternalPushTxn(batch, ms, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case *proto.InternalResolveIntentRequest:
 		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case *proto.InternalMergeRequest:
@@ -268,7 +268,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 	}
 
 	// Persist the transaction record with updated status (& possibly timestamp).
-	if err := engine.MVCCPutProto(batch, nil, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -290,8 +290,10 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 		// Run appropriate trigger.
 		if reply.Txn.Status == proto.COMMITTED {
 			if ct.SplitTrigger != nil {
+				*ms = proto.MVCCStats{} // clear stats, as split will recompute from scratch.
 				reply.SetGoError(r.splitTrigger(batch, ct.SplitTrigger))
 			} else if ct.MergeTrigger != nil {
+				*ms = proto.MVCCStats{} // clear stats, as merge will recompute from scratch.
 				reply.SetGoError(r.mergeTrigger(batch, ct.MergeTrigger))
 			} else if ct.ChangeReplicasTrigger != nil {
 				reply.SetGoError(r.changeReplicasTrigger(ct.ChangeReplicasTrigger))
@@ -411,7 +413,8 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
+func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *proto.MVCCStats,
+	args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	key := engine.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	var txn proto.Transaction
@@ -432,7 +435,7 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.MVCCPutProto(batch, nil, key, proto.ZeroTimestamp, nil, &txn); err != nil {
+		if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &txn); err != nil {
 			reply.SetGoError(err)
 			return
 		}
@@ -491,7 +494,7 @@ func (r *Range) InternalGC(batch engine.Engine, ms *proto.MVCCStats, args *proto
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
+func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		reply.SetGoError(util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key))
 		return
@@ -614,7 +617,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	}
 
 	// Persist the pushed transaction using zero timestamp for inline value.
-	if err := engine.MVCCPutProto(batch, nil, key, proto.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -743,7 +746,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, nil, engine.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, engine.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -901,7 +904,9 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 
 	// Compute stats for updated range.
 	now := r.rm.Clock().Timestamp()
-	ms, err := engine.MVCCComputeStats(r.rm.Engine(), split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey, now.WallTime)
+	iter := newRangeDataIterator(&split.UpdatedDesc, batch)
+	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
+	iter.Close()
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
@@ -923,7 +928,9 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	}
 
 	// Compute stats for new range.
-	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey, now.WallTime)
+	iter = newRangeDataIterator(&split.NewDesc, batch)
+	ms, err = engine.MVCCComputeStats(iter, now.WallTime)
+	iter.Close()
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
@@ -1055,8 +1062,9 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 
 	// Compute stats for updated range.
 	now := r.rm.Clock().Timestamp()
-	ms, err := engine.MVCCComputeStats(r.rm.Engine(), merge.UpdatedDesc.StartKey,
-		merge.UpdatedDesc.EndKey, now.WallTime)
+	iter := newRangeDataIterator(&merge.UpdatedDesc, batch)
+	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
+	iter.Close()
 	if err != nil {
 		return util.Errorf("unable to compute stats for the range after merge: %s", err)
 	}

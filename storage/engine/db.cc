@@ -374,7 +374,8 @@ bool MergeMVCCStatsValues(cockroach::proto::Value *left, const cockroach::proto:
     // this code must be updated to reflect any additions to the
     // MVCCStats struct. This is meant to prevent any added fields
     // being silently ignored on merge.
-    if (sizeof(cockroach::proto::MVCCStats) != 112) {
+    if (sizeof(cockroach::proto::MVCCStats) != 128) {
+        fprintf(stderr, "sizeof MVCCStats struct %lu != 128\n", sizeof(cockroach::proto::MVCCStats));
         rocksdb::Warn(logger,
                 "MVCCStats custom merge iterator has not been updated to match proto definition.");
         return false;
