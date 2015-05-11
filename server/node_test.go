@@ -69,7 +69,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		if gossipBS == addr {
 			gossipBS = rpcServer.Addr()
 		}
-		g.SetResolvers([]gossip.Resolver{gossip.NewResolverFromAddress(gossipBS)})
+		g.SetResolvers([]util.Resolver{util.NewResolverFromAddress(gossipBS)})
 		g.Start(rpcServer, stopper)
 	}
 	ctx.Gossip = g

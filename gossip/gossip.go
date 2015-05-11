@@ -95,7 +95,7 @@ const (
 
 var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
-	TestBootstrap = []Resolver{}
+	TestBootstrap = []util.Resolver{}
 )
 
 func init() {
@@ -121,12 +121,12 @@ type Gossip struct {
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
 	resolverIdx int
-	resolvers   []Resolver
+	resolvers   []util.Resolver
 	triedAll    bool // True when all resolvers have been tried once
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []Resolver) *Gossip {
+func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []util.Resolver) *Gossip {
 	g := &Gossip{
 		Connected:     make(chan struct{}),
 		RPCContext:    rpcContext,
@@ -172,7 +172,7 @@ func (g *Gossip) SetNodeDescriptor(desc *proto.NodeDescriptor) error {
 
 // SetResolvers initializes the set of gossip resolvers used to
 // find nodes to bootstrap the gossip network.
-func (g *Gossip) SetResolvers(resolvers []Resolver) {
+func (g *Gossip) SetResolvers(resolvers []util.Resolver) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.resolverIdx = 0
@@ -195,7 +195,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
 		if nd, ok := i.Val.(*proto.NodeDescriptor); ok {
-			return util.MakeRawAddr(nd.Address.Network, nd.Address.Address), nil
+			return util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address), nil
 		}
 		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
 	}

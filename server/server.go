@@ -103,7 +103,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	rpcContext := rpc.NewContext(s.clock, tlsConfig, stopper)
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
-	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", addr), rpcContext)
+	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapResolvers)
 
@@ -156,11 +156,11 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
-		selfResolver, err := gossip.NewResolver(s.rpc.Addr().String())
+		selfResolver, err := util.NewResolver(s.rpc.Addr().String())
 		if err != nil {
 			return err
 		}
-		s.gossip.SetResolvers([]gossip.Resolver{selfResolver})
+		s.gossip.SetResolvers([]util.Resolver{selfResolver})
 	}
 	s.gossip.Start(s.rpc, s.stopper)
 

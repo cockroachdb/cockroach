@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -148,9 +149,9 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"lb=127.0.0.1:9005",
 	}
 
-	resolvers := []Resolver{}
+	resolvers := []util.Resolver{}
 	for _, rs := range resolverSpecs {
-		resolver, err := NewResolver(rs)
+		resolver, err := util.NewResolver(rs)
 		if err == nil {
 			resolvers = append(resolvers, resolver)
 		}

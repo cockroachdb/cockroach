@@ -15,13 +15,12 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package gossip
+package util
 
 import (
 	"net"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -68,9 +67,9 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 			// "tcp" resolvers point to a single host. "lb" have an unknown of number of backends.
 			sr.exhausted = true
 		}
-		return util.MakeRawAddr("tcp", sr.addr), nil
+		return MakeUnresolvedAddr("tcp", sr.addr), nil
 	}
-	return nil, util.Errorf("unknown address type: %q", sr.typ)
+	return nil, Errorf("unknown address type: %q", sr.typ)
 }
 
 // IsExhausted returns whether the resolver can yield further
@@ -101,23 +100,23 @@ func NewResolver(spec string) (Resolver, error) {
 		typ = strings.TrimSpace(parts[0])
 		addr = strings.TrimSpace(parts[1])
 	} else {
-		return nil, util.Errorf("unable to parse gossip resolver spec: %q", spec)
+		return nil, Errorf("unable to parse gossip resolver spec: %q", spec)
 	}
 
 	// We should not have an empty address at this point.
 	if len(addr) == 0 {
-		return nil, util.Errorf("invalid address value in gossip resolver spec: %q", spec)
+		return nil, Errorf("invalid address value in gossip resolver spec: %q", spec)
 	}
 
 	// Validate the type.
 	if _, ok := validTypes[typ]; !ok {
-		return nil, util.Errorf("unknown address type in gossip resolver spec: %q, "+
+		return nil, Errorf("unknown address type in gossip resolver spec: %q, "+
 			"valid types are %s", spec, validTypes)
 	}
 
 	// If we're on tcp or lb make sure we fill in the host when not specified (eg: ":8080")
 	if typ == "tcp" || typ == "lb" {
-		addr = util.EnsureHost(addr)
+		addr = EnsureHost(addr)
 	}
 
 	return &socketResolver{typ: typ, addr: addr}, nil

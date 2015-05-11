@@ -50,7 +50,7 @@ var testRangeDescriptor = proto.RangeDescriptor{
 	},
 }
 
-var testAddress = util.MakeRawAddr("tcp", "node1:8080")
+var testAddress = util.MakeUnresolvedAddr("tcp", "node1:8080")
 
 func makeTestGossip(t *testing.T) *gossip.Gossip {
 	n := simulation.NewNetwork(1, "unix", gossip.TestInterval)
@@ -220,7 +220,7 @@ func TestSendRPCOrder(t *testing.T) {
 			Replicas: nil,
 		}
 		for i := int32(1); i <= 5; i++ {
-			addr := util.MakeRawAddr("tcp", fmt.Sprintf("node%d", i))
+			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 			addrToNode[addr.String()] = i
 			nd := &proto.NodeDescriptor{
 				NodeID: proto.NodeID(i),

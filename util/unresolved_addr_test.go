@@ -15,28 +15,19 @@
 //
 // Author: jqmp (jaqueramaphan@gmail.com)
 
-// TODO(jqmp): Needs testing.
-
 package util
 
-// RawAddr is a super-simple implementation of net.Addr.
-type RawAddr struct {
-	// These fields are only exported so that gob can see them.
-	NetworkField string
-	StringField  string
-}
+import "testing"
 
-// MakeRawAddr creates a new RawAddr from a network and raw address string.
-func MakeRawAddr(network string, str string) RawAddr {
-	return RawAddr{NetworkField: network, StringField: str}
-}
+func TestUnresolvedAddr(t *testing.T) {
+	network := "tcp"
+	str := "host:1234"
+	addr := MakeUnresolvedAddr(network, str)
 
-// Network returns the address's network name.
-func (a RawAddr) Network() string {
-	return a.NetworkField
-}
-
-// String returns the address's string form.
-func (a RawAddr) String() string {
-	return a.StringField
+	if addr.Network() != network {
+		t.Errorf("Expected addr.Network() to be %s; got %s", network, addr.Network())
+	}
+	if addr.String() != str {
+		t.Errorf("Expected addr.String() to be %s; got %s", str, addr.String())
+	}
 }
