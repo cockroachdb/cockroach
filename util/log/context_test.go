@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,17 +18,19 @@
 package log
 
 import (
-	"bytes"
+	"fmt"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
-func TestLogKV(t *testing.T) {
-	buf := bytes.NewBuffer(nil)
-	kvs := []interface{}{"test", 5, error(nil), "test\t\n", struct{}{}, struct{}{}}
-	logKV(buf, kvs)
-	exp := []byte("test=\"5\" <nil>=\"test\\t\\n\" {}=\"{}\"\n")
-	act := buf.Bytes()
-	if !bytes.Equal(exp, act) {
-		t.Fatalf("expected %s, got %s", string(exp), string(act))
+// TestContextKV tests adding log fields to a context out of order and
+// retrieving them in their proper order.
+func TestContextKV(t *testing.T) {
+	kvs := []interface{}{Method, "Put", NodeID, 5, Err, fmt.Errorf("everything broke")}
+	exp := append([]interface{}(nil), kvs[2], kvs[3], kvs[0], kvs[1], kvs[4], kvs[5])
+	ctx := Add(context.Background(), kvs...)
+	if ckv := contextKV(ctx); fmt.Sprintf("%+v", exp) != fmt.Sprintf("%+v", ckv) {
+		t.Fatalf("expected %+v, got %+v", exp, ckv)
 	}
 }
