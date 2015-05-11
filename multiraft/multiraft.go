@@ -232,7 +232,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 		}
 		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
 			if log.V(4) {
-				log.Infof("node %v: coalesced heartbeat step failed for message %s", s.nodeID, groupID,
+				log.Infof("node %v: coalesced heartbeat step to group %v failed for message %s", s.nodeID, groupID,
 					raft.DescribeMessage(req.Message, s.EntryFormatter))
 			}
 		}
@@ -267,7 +267,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 		}
 		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
 			if log.V(4) {
-				log.Infof("node %v: coalesced heartbeat response step failed for message %s", s.nodeID, groupID,
+				log.Infof("node %v: coalesced heartbeat response step to group %v failed for message %s", s.nodeID, groupID,
 					raft.DescribeMessage(req.Message, s.EntryFormatter))
 			}
 		}
@@ -502,7 +502,7 @@ func (s *state) start(stopper *util.Stopper) {
 
 					if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
 						if log.V(4) {
-							log.Infof("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
+							log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
 								raft.DescribeMessage(req.Message, s.EntryFormatter))
 						}
 					}
