@@ -15,23 +15,6 @@ if [ "${GO_SKIP_PRECOMMIT_CHECKS}" != "1" -a -n "${gofiles}" ]; then
     exit 1
   fi
 
-  # Check for lint errors.
-  found_lint=0
-  for gofile in ${gofiles}
-  do
-      lint_errors=$(golint ${gofile} 2>&1)
-      if [ -n "${lint_errors}" ]; then
-          if [ ${found_lint} -eq 0 ]; then
-              echo -e >&2 "\nGo files with lint errors:"
-              found_lint=1
-          fi
-          echo >&2 "  golint ${gofile}"
-      fi
-  done
-  if [ ${found_lint} -eq 1 ]; then
-      exit 1
-  fi
-
   # Check for vet errors.
   unvetted=$(go tool vet ${gofiles} 2>&1 | awk -F: '{print $1}' | uniq)
   if [ -n "${unvetted}" ]; then

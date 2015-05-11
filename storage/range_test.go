@@ -152,7 +152,7 @@ func (tc *testContext) Start(t testing.TB) {
 			t.Fatal(err)
 		}
 		// We created the store without a real KV client, so it can't perform splits.
-		tc.store.splitQueue.disabled = true
+		tc.store._splitQueue.disabled = true
 
 		if tc.rng == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := tc.store.BootstrapRange(); err != nil {
