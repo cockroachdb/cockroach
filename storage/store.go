@@ -225,10 +225,10 @@ type Store struct {
 	Ident          proto.StoreIdent
 	ctx            StoreContext
 	engine         engine.Engine   // The underlying key-value store
-	allocator      *allocator      // Makes allocation decisions
+	_allocator     *allocator      // Makes allocation decisions
 	raftIDAlloc    *IDAllocator    // Raft ID allocator
 	gcQueue        *gcQueue        // Garbage collection queue
-	splitQueue     *splitQueue     // Range splitting queue
+	_splitQueue    *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
 	replicateQueue *replicateQueue // Replication queue
 	rangeGCQueue   *rangeGCQueue   // Range GC queue
@@ -321,7 +321,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		ctx:         ctx,
 		StoreFinder: sf,
 		engine:      eng,
-		allocator:   newAllocator(sf.findStores),
+		_allocator:  newAllocator(sf.findStores),
 		ranges:      map[int64]*Range{},
 		nodeDesc:    nodeDesc,
 	}
@@ -329,11 +329,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	// Add range scanner and configure with queues.
 	s.scanner = newRangeScanner(ctx.ScanInterval, newStoreRangeIterator(s), s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
-	s.splitQueue = newSplitQueue(s.ctx.DB, s.ctx.Gossip)
+	s._splitQueue = newSplitQueue(s.ctx.DB, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock)
+	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
 	s.rangeGCQueue = newRangeGCQueue(s.ctx.DB)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue(), s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
 
 	return s
 }
@@ -662,7 +662,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) {
 			continue
 		}
-		s.splitQueue.MaybeAdd(s.rangesByKey[n], s.ctx.Clock.Now())
+		s.splitQueue().MaybeAdd(s.rangesByKey[n], s.ctx.Clock.Now())
 	}
 }
 
@@ -886,13 +886,13 @@ func (s *Store) Engine() engine.Engine { return s.engine }
 func (s *Store) DB() *client.KV { return s.ctx.DB }
 
 // Allocator accessor.
-func (s *Store) Allocator() *allocator { return s.allocator }
+func (s *Store) allocator() *allocator { return s._allocator }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 
 // SplitQueue accessor.
-func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
+func (s *Store) splitQueue() *splitQueue { return s._splitQueue }
 
 // Stopper accessor.
 func (s *Store) Stopper() *util.Stopper { return s.stopper }

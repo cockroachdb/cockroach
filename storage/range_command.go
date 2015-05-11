@@ -379,7 +379,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 				key, txn := wiErr.Intents[0].Key, &wiErr.Intents[0].Txn
 				val, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
 				reply.SetGoError(err)
-				kvs = []proto.KeyValue{proto.KeyValue{Key: key, Value: *val}}
+				kvs = []proto.KeyValue{{Key: key, Value: *val}}
 			}
 		} else {
 			reply.SetGoError(err)

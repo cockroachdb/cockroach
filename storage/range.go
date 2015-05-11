@@ -151,9 +151,9 @@ type pendingCmd struct {
 	done  chan error // Used to signal waiting RPC handler
 }
 
-// A RangeManager is an interface satisfied by Store through which ranges
+// A rangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for splitting.
-type RangeManager interface {
+type rangeManager interface {
 	// Accessors for shared state.
 	ClusterID() string
 	StoreID() proto.StoreID
@@ -161,9 +161,9 @@ type RangeManager interface {
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	DB() *client.KV
-	Allocator() *allocator
+	allocator() *allocator
 	Gossip() *gossip.Gossip
-	SplitQueue() *splitQueue
+	splitQueue() *splitQueue
 	Stopper() *util.Stopper
 	EventFeed() StoreEventFeed
 
@@ -199,7 +199,7 @@ func (l *leaseRejectedError) Error() string {
 // as appropriate.
 type Range struct {
 	desc     unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
-	rm       RangeManager   // Makes some store methods available
+	rm       rangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
 	// Held while a split, merge, or replica change is underway.
@@ -220,7 +220,7 @@ type Range struct {
 }
 
 // NewRange initializes the range using the given metadata.
-func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
+func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 	r := &Range{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
@@ -991,6 +991,6 @@ func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixC
 func (r *Range) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
-		r.rm.SplitQueue().MaybeAdd(r, r.rm.Clock().Now())
+		r.rm.splitQueue().MaybeAdd(r, r.rm.Clock().Now())
 	}
 }

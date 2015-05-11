@@ -22,7 +22,7 @@ github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
 github.com/gogo/protobuf e888c342b46b97d9bf828e98ac755d227b57d6e8
 github.com/golang/lint dea130113ab8ebacb52dbce09c9a4c92951afdca
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
-github.com/jteeuwen/go-bindata a15f234cb17d79763724a937aa3580fa98e7b930
+github.com/jteeuwen/go-bindata d0a5f1749d7a5a9a9787b0932416082c7bd0609d
 github.com/julienschmidt/httprouter 8c199fb6259ffc1af525cc3ad52ee60ba8359669
 github.com/kisielk/errcheck a48456c583c0111c8310fc59335f6496b8eb85f1
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be

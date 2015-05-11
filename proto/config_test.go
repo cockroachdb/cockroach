@@ -179,19 +179,19 @@ func verifyOrdering(attrs []string, replicas ReplicaSlice, prefixLen int) bool {
 
 func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 	replicaAttrs := [][]string{
-		[]string{"us-west-1a", "gpu"},
-		[]string{"us-east-1a", "pdu1", "gpu"},
-		[]string{"us-east-1a", "pdu1", "fio"},
-		[]string{"breaker", "us-east-1a", "pdu1", "fio"},
-		[]string{""},
-		[]string{"us-west-1a", "pdu1", "fio"},
-		[]string{"us-west-1a", "pdu1", "fio", "aux"},
+		{"us-west-1a", "gpu"},
+		{"us-east-1a", "pdu1", "gpu"},
+		{"us-east-1a", "pdu1", "fio"},
+		{"breaker", "us-east-1a", "pdu1", "fio"},
+		{""},
+		{"us-west-1a", "pdu1", "fio"},
+		{"us-west-1a", "pdu1", "fio", "aux"},
 	}
 	attrs := [][]string{
-		[]string{"us-carl"},
-		[]string{"us-west-1a", "pdu1", "fio"},
-		[]string{"us-west-1a"},
-		[]string{"", "pdu1", "fio"},
+		{"us-carl"},
+		{"us-west-1a", "pdu1", "fio"},
+		{"us-west-1a"},
+		{"", "pdu1", "fio"},
 	}
 
 	for i, attr := range attrs {
