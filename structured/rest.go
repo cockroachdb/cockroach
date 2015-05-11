@@ -245,8 +245,8 @@ func writeResourceResponse(w http.ResponseWriter, statusCode int, data []interfa
 	resp := newResourceResponse(statusCode, data, err)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(resp.Meta.StatusCode)
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Warningf("unable to encode response: %v", err)
+	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
+		log.Warningf("unable to encode response: %v", encErr)
 		return
 	}
 }
