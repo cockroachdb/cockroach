@@ -15,12 +15,21 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-var crApp = angular.module('cockroach', ['ngRoute']);
+var crApp = angular.module('cockroach', [
+	'ngRoute',	
+]);
+
 crApp.config(['$routeProvider', function(routeProvider) {
-  routeProvider.when('/rest-explorer', {
+  routeProvider.
+  when('/rest-explorer', {
     controller:'RestExplorerCtrl',
     templateUrl:'/templates/rest_explorer.html'
-  }).otherwise({
+  }).
+    when('/monitor', {
+	controller:'MonitorCtrl',
+    templateUrl:'/templates/monitor.html'
+  }).
+  otherwise({
     redirectTo:'/'
   });
 }]);
