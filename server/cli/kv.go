@@ -37,15 +37,16 @@ import (
 var osExit = os.Exit
 var osStderr = os.Stderr
 
-func makeKVClient() (*client.KV, error) {
-	httpSender, err := client.NewHTTPSender(util.EnsureHost(Context.Addr), &Context.Context)
+func makeDBClient() *client.DB {
+	// TODO(pmattis): Initialize the user to something more
+	// reasonable. Perhaps Context.Addr should be considered a URL.
+	db, err := client.Open("https://root@" + util.EnsureHost(Context.Addr) +
+		"?certs=" + Context.Certs)
 	if err != nil {
-		return nil, err
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
 	}
-	kv := client.NewKV(nil, httpSender)
-	// TODO(pmattis): Initialize this to something more reasonable
-	kv.User = "root"
-	return kv, nil
+	return db
 }
 
 // A getCmd command gets the value for the specified key.
@@ -63,29 +64,26 @@ func runGet(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
 	key := proto.Key(args[0])
-	call := client.Get(key)
-	resp := call.Reply.(*proto.GetResponse)
-	if err := kv.Run(call); err != nil {
-		fmt.Fprintf(osStderr, "get failed: %s\n", err)
+	r := kvDB.Get(key)
+	if r.Err != nil {
+		fmt.Fprintf(osStderr, "get failed: %s\n", r.Err)
 		osExit(1)
 		return
 	}
-	if resp.Value == nil {
+	if !r.Rows[0].Exists() {
 		fmt.Fprintf(osStderr, "%s not found\n", key)
 		osExit(1)
 		return
 	}
-	if resp.Value.Integer != nil {
-		fmt.Printf("%d\n", *resp.Value.Integer)
+	if i, ok := r.Rows[0].Value.(*int64); ok {
+		fmt.Printf("%d\n", *i)
 	} else {
-		fmt.Printf("%s\n", resp.Value.Bytes)
+		fmt.Printf("%s\n", r.Rows[0].Value)
 	}
 }
 
@@ -119,20 +117,16 @@ func runPut(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
-	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-	err = kv.RunTransaction(opts, func(txn *client.Txn) error {
+	err := kvDB.Tx(func(tx *client.Tx) error {
+		b := &client.Batch{}
 		for i := 0; i < len(args); i += 2 {
-			key := proto.Key(args[i])
-			value := []byte(args[i+1])
-			txn.Prepare(client.Put(key, value))
+			b.Put(args[i], args[i+1])
 		}
-		return nil
+		return tx.Commit(b)
 	})
 	if err != nil {
 		fmt.Fprintf(osStderr, "put failed: %s\n", err)
@@ -164,10 +158,8 @@ func runInc(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
 	amount := 1
@@ -180,15 +172,13 @@ func runInc(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	key := proto.Key(args[0])
-	call := client.Increment(key, int64(amount))
-	resp := call.Reply.(*proto.IncrementResponse)
-	if err := kv.Run(call); err != nil {
-		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
+	key := args[0]
+	if r := kvDB.Inc(key, int64(amount)); r.Err != nil {
+		fmt.Fprintf(osStderr, "increment failed: %s\n", r.Err)
 		osExit(1)
-		return
+	} else {
+		fmt.Printf("%d\n", r.Rows[0].ValueInt())
 	}
-	fmt.Printf("%d\n", resp.NewValue)
 }
 
 // A delCmd command sets the value for one or more keys.
@@ -216,19 +206,16 @@ func runDel(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
-	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-	err = kv.RunTransaction(opts, func(txn *client.Txn) error {
+	err := kvDB.Tx(func(tx *client.Tx) error {
+		b := &client.Batch{}
 		for i := 0; i < len(args); i++ {
-			key := proto.Key(args[i])
-			txn.Prepare(client.Delete(key))
+			b.Del(args[i])
 		}
-		return nil
+		return tx.Commit(b)
 	})
 	if err != nil {
 		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
@@ -276,32 +263,29 @@ func runScan(cmd *cobra.Command, args []string) {
 		endKey = proto.KeyMax
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
 	// TODO(pmattis): Add a flag for the number of results to scan.
-	call := client.Scan(startKey, endKey, 1000)
-	resp := call.Reply.(*proto.ScanResponse)
-	if err := kv.Run(call); err != nil {
-		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
+	r := kvDB.Scan(startKey, endKey, 1000)
+	if r.Err != nil {
+		fmt.Fprintf(osStderr, "scan failed: %s\n", r.Err)
 		osExit(1)
 		return
 	}
-
-	for _, r := range resp.Rows {
-		if bytes.HasPrefix(r.Key, []byte{0}) {
+	for _, row := range r.Rows {
+		if bytes.HasPrefix(row.Key, []byte{0}) {
 			// TODO(pmattis): Pretty-print system keys.
-			fmt.Printf("%s\n", r.Key)
+			fmt.Printf("%s\n", row.Key)
 			continue
 		}
 
-		if r.Value.Integer != nil {
-			fmt.Printf("%s\t%d\n", r.Key, *r.Value.Integer)
+		key := proto.Key(row.Key)
+		if i, ok := row.Value.(*int64); ok {
+			fmt.Printf("%s\t%d\n", key, *i)
 		} else {
-			fmt.Printf("%s\t%s\n", r.Key, r.Value.Bytes)
+			fmt.Printf("%s\t%s\n", key, row.Value)
 		}
 	}
 }
