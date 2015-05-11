@@ -249,7 +249,7 @@ func TestRestoreReplicas(t *testing.T) {
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
-	rng, err := mtc.stores[0].GetRange(1)
+	firstRng, err := mtc.stores[0].GetRange(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
+	if err := firstRng.ChangeReplicas(proto.ADD_REPLICA,
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
@@ -313,7 +313,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 	// Both replicas have a complete list in Desc.Replicas
 	for i, store := range mtc.stores {
-		rng, err = store.GetRange(1)
+		rng, err := store.GetRange(1)
 		if err != nil {
 			t.Fatal(err)
 		}
