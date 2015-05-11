@@ -195,6 +195,7 @@ type StoreEventListener interface {
 // will run until the Subscription's events channel is closed.
 func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
 	for event := range sub.Events() {
+		// TODO(tamird): https://github.com/barakmich/go-nyet/issues/7
 		switch specificEvent := event.(type) {
 		case *StartStoreEvent:
 			l.OnStartStore(specificEvent)
