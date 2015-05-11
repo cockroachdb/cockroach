@@ -145,7 +145,7 @@ func (bank *Bank) moveMoney(from, to []byte, amount int64) bool {
 }
 
 // Read the balances in all the accounts and return them.
-func (bank *Bank) readAllAccounts() []int64 {
+func (bank *Bank) readAllAccountsWithScan() []int64 {
 	balances := make([]int64, bank.numAccounts)
 	txnOpts := &client.TransactionOptions{Name: "Reading all balances"}
 	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
@@ -164,6 +164,34 @@ func (bank *Bank) readAllAccounts() []int64 {
 				log.Fatal(err)
 			}
 			balances[i] = value
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return balances
+}
+
+// Read the balances in all the accounts and return them.
+func (bank *Bank) readAllAccounts() []int64 {
+	balances := make([]int64, bank.numAccounts)
+	calls := make([]client.Call, bank.numAccounts)
+	txnOpts := &client.TransactionOptions{Name: "Reading all balances"}
+	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
+		for i := 0; i < bank.numAccounts; i++ {
+			calls[i] = client.Get(proto.Key(makeAccountID(i)))
+		}
+		if err := txn.Run(calls...); err != nil {
+			log.Fatal(err)
+		}
+		// Copy responses into balances.
+		for i := 0; i < bank.numAccounts; i++ {
+			if value, err := readInt64(calls[i]); err != nil {
+				log.Fatal(err)
+			} else {
+				balances[i] = value
+			}
 		}
 		return nil
 	})
