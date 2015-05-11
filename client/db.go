@@ -150,10 +150,10 @@ type DB struct {
 // The certs parameter can be used to override the default directory
 // to use for client certificates. In tests, the directory
 // "test_certs" uses the embedded test certificates.
-func Open(addr string) *DB {
+func Open(addr string) (*DB, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	ctx := &base.Context{}
@@ -173,12 +173,12 @@ func Open(addr string) *DB {
 		log.Fatalf("unknown scheme: %s", u.Scheme)
 	}
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	kv := NewKV(nil, sender)
 	kv.User = u.User.Username()
-	return &DB{kv: kv}
+	return &DB{kv: kv}, nil
 }
 
 // Get retrieves one or more keys. Each requested key will have a corresponding
@@ -189,7 +189,7 @@ func Open(addr string) *DB {
 //   // string(r.Rows[1].Key) == "b"
 //   // string(r.Rows[2].Key) == "c"
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Get(keys ...interface{}) Result {
 	return runOne(db, db.B.Get(keys...))
@@ -200,8 +200,8 @@ func (db *DB) Get(keys ...interface{}) Result {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. A value can be any key type or a proto.Message.
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (db *DB) Put(key, value interface{}) Result {
 	return runOne(db, db.B.Put(key, value))
 }
@@ -213,8 +213,8 @@ func (db *DB) Put(key, value interface{}) Result {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. A value can be any key type or a proto.Message.
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (db *DB) CPut(key, value, expValue interface{}) Result {
 	return runOne(db, db.B.CPut(key, value, expValue))
 }
@@ -226,7 +226,7 @@ func (db *DB) CPut(key, value, expValue interface{}) Result {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Inc(key interface{}, value int64) Result {
 	return runOne(db, db.B.Inc(key, value))
@@ -237,7 +237,7 @@ func (db *DB) Inc(key interface{}, value int64) Result {
 // The returned Result will contain up to maxRows rows and Result.Err will
 // indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) Result {
 	return runOne(db, db.B.Scan(begin, end, maxRows))
@@ -247,7 +247,7 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) Result {
 //
 // Each key will have a corresponding row in the returned Result.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Del(keys ...interface{}) Result {
 	return runOne(db, db.B.Del(keys...))
@@ -260,10 +260,31 @@ func (db *DB) Del(keys ...interface{}) Result {
 //
 // TODO(pmattis): Perhaps the result should return which rows were deleted.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) DelRange(begin, end interface{}) Result {
 	return runOne(db, db.B.DelRange(begin, end))
+}
+
+// AdminMerge merges the range containing key and the subsequent
+// range. After the merge operation is complete, the range containing
+// key will contain all of the key/value pairs of the subsequent range
+// and the subsequent range will no longer exist.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (db *DB) AdminMerge(key interface{}) Result {
+	return runOne(db, (&Batch{}).adminMerge(key))
+}
+
+// AdminSplit splits the range containing key. If splitKey is non-nil it
+// specifies the key to split the range at, otherwise an appropriate key is
+// chosen automatically.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (db *DB) AdminSplit(key, splitKey interface{}) Result {
+	return runOne(db, (&Batch{}).adminSplit(key, splitKey))
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -314,6 +335,20 @@ type Tx struct {
 	txn *Txn
 }
 
+// SetSnapshotIsolation sets the transaction's isolation type to
+// snapshot. Transactions default to serializable isolation. The
+// isolation must be set before any operations are performed on the
+// transaction.
+//
+// TODO(pmattis): This isn't tested yet but will be as part of the
+// conversion of client_test.go.
+func (tx *Tx) SetSnapshotIsolation() {
+	// TODO(pmattis): Panic if the transaction has already had
+	// operations run on it. Needs to tie into the Txn reset in case of
+	// retries.
+	tx.txn.txn.Isolation = proto.SNAPSHOT
+}
+
 // Get retrieves one or more keys. Each requested key will have a corresponding
 // row in the returned Result.
 //
@@ -322,7 +357,7 @@ type Tx struct {
 //   // string(r.Rows[1].Key) == "b"
 //   // string(r.Rows[2].Key) == "c"
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (tx *Tx) Get(keys ...interface{}) Result {
 	return runOne(tx, tx.B.Get(keys...))
@@ -333,8 +368,8 @@ func (tx *Tx) Get(keys ...interface{}) Result {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. A value can be any key type or a proto.Message.
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (tx *Tx) Put(key, value interface{}) Result {
 	return runOne(tx, tx.B.Put(key, value))
 }
@@ -346,8 +381,8 @@ func (tx *Tx) Put(key, value interface{}) Result {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. A value can be any key type or a proto.Message.
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (tx *Tx) CPut(key, value, expValue interface{}) Result {
 	return runOne(tx, tx.B.CPut(key, value, expValue))
 }
@@ -359,7 +394,7 @@ func (tx *Tx) CPut(key, value, expValue interface{}) Result {
 // The returned Result will contain a single row and Result.Err will indicate
 // success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (tx *Tx) Inc(key interface{}, value int64) Result {
 	return runOne(tx, tx.B.Inc(key, value))
@@ -370,7 +405,7 @@ func (tx *Tx) Inc(key interface{}, value int64) Result {
 // The returned Result will contain up to maxRows rows and Result.Err will
 // indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (tx *Tx) Scan(begin, end interface{}, maxRows int64) Result {
 	return runOne(tx, tx.B.Scan(begin, end, maxRows))
@@ -380,7 +415,7 @@ func (tx *Tx) Scan(begin, end interface{}, maxRows int64) Result {
 //
 // Each key will have a corresponding row in the returned Result.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (tx *Tx) Del(keys ...interface{}) Result {
 	return runOne(tx, tx.B.Del(keys...))
@@ -391,7 +426,7 @@ func (tx *Tx) Del(keys ...interface{}) Result {
 // The returned Result will contain 0 rows and Result.Err will indicate success
 // or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (tx *Tx) DelRange(begin, end interface{}) Result {
 	return runOne(tx, tx.B.DelRange(begin, end))
@@ -518,6 +553,8 @@ func (b *Batch) fillResults() error {
 				row.Key = []byte(call.Args.(*proto.DeleteRequest).Key)
 			case *proto.DeleteRangeResponse:
 			case *proto.EndTransactionResponse:
+			case *proto.AdminMergeResponse:
+			case *proto.AdminSplitResponse:
 			default:
 				return fmt.Errorf("unsupported reply: %T", call.Reply)
 			}
@@ -535,7 +572,7 @@ func (b *Batch) fillResults() error {
 //   // string(r.Rows[1].Key) == "b"
 //   // string(r.Rows[2].Key) == "c"
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Get(keys ...interface{}) *Batch {
 	var calls []Call
@@ -557,8 +594,8 @@ func (b *Batch) Get(keys ...interface{}) *Batch {
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. A value can be any key type or a proto.Message.
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (b *Batch) Put(key, value interface{}) *Batch {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -582,8 +619,8 @@ func (b *Batch) Put(key, value interface{}) *Batch {
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. A value can be any key type or a proto.Message.
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (b *Batch) CPut(key, value, expValue interface{}) *Batch {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -612,7 +649,7 @@ func (b *Batch) CPut(key, value, expValue interface{}) *Batch {
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Inc(key interface{}, value int64) *Batch {
 	k, err := marshalKey(key)
@@ -630,7 +667,7 @@ func (b *Batch) Inc(key interface{}, value int64) *Batch {
 // A new result will be appended to the batch which will contain up to maxRows
 // rows and Result.Err will indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Scan(s, e interface{}, maxRows int64) *Batch {
 	begin, err := marshalKey(s)
@@ -653,7 +690,7 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) *Batch {
 // A new result will be appended to the batch and each key will have a
 // corresponding row in the returned Result.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Del(keys ...interface{}) *Batch {
 	var calls []Call
@@ -675,7 +712,7 @@ func (b *Batch) Del(keys ...interface{}) *Batch {
 // A new result will be appended to the batch which will contain 0 rows and
 // Result.Err will indicate success or failure.
 //
-// A key can be either a byte slice, a string, a fmt.Stringer or an
+// key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) DelRange(s, e interface{}) *Batch {
 	begin, err := marshalKey(s)
@@ -689,6 +726,52 @@ func (b *Batch) DelRange(s, e interface{}) *Batch {
 		return b
 	}
 	b.calls = append(b.calls, DeleteRange(proto.Key(begin), proto.Key(end)))
+	b.initResult(1, 0, nil)
+	return b
+}
+
+// adminMerge is only exported on DB. It is here for symmetry with the
+// other operations.
+func (b *Batch) adminMerge(key interface{}) *Batch {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return b
+	}
+	req := &proto.AdminMergeRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: proto.Key(k),
+		},
+	}
+	resp := &proto.AdminMergeResponse{}
+	b.calls = append(b.calls, Call{Args: req, Reply: resp})
+	b.initResult(1, 0, nil)
+	return b
+}
+
+// adminSplit is only exported on DB. It is here for symmetry with the
+// other operations.
+func (b *Batch) adminSplit(key, splitKey interface{}) *Batch {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return b
+	}
+	req := &proto.AdminSplitRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: proto.Key(k),
+		},
+	}
+	if splitKey != nil {
+		ak, err := marshalKey(splitKey)
+		if err != nil {
+			b.initResult(0, 0, err)
+			return b
+		}
+		req.SplitKey = proto.Key(ak)
+	}
+	resp := &proto.AdminSplitResponse{}
+	b.calls = append(b.calls, Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)
 	return b
 }
@@ -724,35 +807,37 @@ func (b batcher) DelRange(begin, end interface{}) *Batch {
 }
 
 func marshalKey(k interface{}) ([]byte, error) {
+	// Note that the ordering here is important. In particular, proto.Key is also
+	// a fmt.Stringer.
 	switch t := k.(type) {
+	case string:
+		return []byte(t), nil
+	case proto.Key:
+		return []byte(t), nil
+	case []byte:
+		return t, nil
 	case encoding.BinaryMarshaler:
 		return t.MarshalBinary()
 	case fmt.Stringer:
 		return []byte(t.String()), nil
-	case string:
-		return []byte(t), nil
-	case []byte:
-		return t, nil
-	case proto.Key:
-		return []byte(t), nil
 	}
 	return nil, fmt.Errorf("unable to marshal key: %T", k)
 }
 
 func marshalValue(v interface{}) ([]byte, error) {
 	switch t := v.(type) {
-	case encoding.BinaryMarshaler:
-		return t.MarshalBinary()
-	case gogoproto.Message:
-		return gogoproto.Marshal(t)
-	case fmt.Stringer:
-		return []byte(t.String()), nil
+	case nil:
+		return nil, nil
 	case string:
 		return []byte(t), nil
 	case []byte:
 		return t, nil
-	case nil:
-		return nil, nil
+	case gogoproto.Message:
+		return gogoproto.Marshal(t)
+	case encoding.BinaryMarshaler:
+		return t.MarshalBinary()
+	case fmt.Stringer:
+		return []byte(t.String()), nil
 	}
 	return nil, fmt.Errorf("unable to marshal value: %T", v)
 }

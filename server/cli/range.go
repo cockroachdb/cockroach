@@ -21,11 +21,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 
-	gogoproto "github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 )
 
@@ -53,22 +51,20 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		startKey = engine.KeyMeta2Prefix
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+	kvDB := makeDBClient()
+	if kvDB == nil {
+		return
+	}
+	r := kvDB.Scan(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
+	if r.Err != nil {
+		fmt.Fprintf(os.Stderr, "scan failed: %s\n", r.Err)
 		osExit(1)
 		return
 	}
-	call := client.Scan(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
-	resp := call.Reply.(*proto.ScanResponse)
-	if err := kv.Run(call); err != nil {
-		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		os.Exit(1)
-	}
 
-	for _, row := range resp.Rows {
+	for _, row := range r.Rows {
 		desc := &proto.RangeDescriptor{}
-		if err := gogoproto.Unmarshal(row.Value.Bytes, desc); err != nil {
+		if err := row.ValueProto(desc); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", row.Key)
 			continue
 		}
@@ -104,22 +100,13 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 		splitKey = proto.Key(args[1])
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
-	req := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: key,
-		},
-		SplitKey: splitKey,
-	}
-	resp := &proto.AdminSplitResponse{}
-	if err := kv.Run(client.Call{Args: req, Reply: resp}); err != nil {
-		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
-		os.Exit(1)
+	if r := kvDB.AdminSplit(key, splitKey); r.Err != nil {
+		fmt.Fprintf(os.Stderr, "split failed: %s\n", r.Err)
+		osExit(1)
 	}
 }
 
@@ -139,21 +126,13 @@ func runMergeRange(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	kv, err := makeKVClient()
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
-		osExit(1)
+	kvDB := makeDBClient()
+	if kvDB == nil {
 		return
 	}
-	req := &proto.AdminMergeRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: proto.Key(args[0]),
-		},
-	}
-	resp := &proto.AdminMergeResponse{}
-	if err := kv.Run(client.Call{Args: req, Reply: resp}); err != nil {
-		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
-		os.Exit(1)
+	if r := kvDB.AdminMerge(args[0]); r.Err != nil {
+		fmt.Fprintf(os.Stderr, "merge failed: %s\n", r.Err)
+		osExit(1)
 	}
 }
 

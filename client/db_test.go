@@ -19,6 +19,7 @@ package client_test
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/server"
@@ -26,7 +27,10 @@ import (
 
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
-	db := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
+	db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
+	if err != nil {
+		log.Fatal(err)
+	}
 	return s, db
 }
 
