@@ -547,12 +547,12 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 
 	ts := []proto.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
 	fixtureKVs := []proto.KeyValue{
-		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
-		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
-		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
-		proto.KeyValue{Key: testKey2, Value: proto.Value{Bytes: []byte("testValue2"), Timestamp: &ts[3]}},
-		proto.KeyValue{Key: testKey3, Value: proto.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
-		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
+		{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1 pre"), Timestamp: &ts[0]}},
+		{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4 pre"), Timestamp: &ts[1]}},
+		{Key: testKey1, Value: proto.Value{Bytes: []byte("testValue1"), Timestamp: &ts[2]}},
+		{Key: testKey2, Value: proto.Value{Bytes: []byte("testValue2"), Timestamp: &ts[3]}},
+		{Key: testKey3, Value: proto.Value{Bytes: []byte("testValue3"), Timestamp: &ts[4]}},
+		{Key: testKey4, Value: proto.Value{Bytes: []byte("testValue4"), Timestamp: &ts[5]}},
 	}
 	for i, kv := range fixtureKVs {
 		var txn *proto.Transaction

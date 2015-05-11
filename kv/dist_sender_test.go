@@ -100,11 +100,11 @@ func TestSendRPCOrder(t *testing.T) {
 	raftID := int64(99)
 
 	nodeAttrs := map[int32][]string{
-		1: []string{}, // The local node, set in each test case.
-		2: []string{"us", "west", "gpu"},
-		3: []string{"eu", "dublin", "pdu2", "gpu"},
-		4: []string{"us", "east", "gpu"},
-		5: []string{"us", "east", "gpu", "flaky"},
+		1: {}, // The local node, set in each test case.
+		2: {"us", "west", "gpu"},
+		3: {"eu", "dublin", "pdu2", "gpu"},
+		4: {"us", "east", "gpu"},
+		5: {"us", "east", "gpu", "flaky"},
 	}
 
 	// Gets filled below to identify the replica by its address.

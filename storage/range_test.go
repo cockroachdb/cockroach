@@ -2292,7 +2292,7 @@ func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
 	if consumeEvents {
 		sub := tc.feed.Subscribe()
 		consumeStopper.RunWorker(func() {
-			for _ = range sub.Events() {
+			for range sub.Events() {
 				eventC++
 			}
 		})

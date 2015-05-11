@@ -241,7 +241,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 
 	// Compare events to expected values.
 	expected := map[proto.StoreID][]string{
-		proto.StoreID(1): []string{
+		proto.StoreID(1): {
 			"StartStore",
 			"BeginScanRanges",
 			"AddRange rid=1, live=348",
@@ -250,7 +250,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
-		proto.StoreID(2): []string{
+		proto.StoreID(2): {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
@@ -258,7 +258,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
-		proto.StoreID(3): []string{
+		proto.StoreID(3): {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",

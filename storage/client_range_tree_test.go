@@ -142,7 +142,7 @@ func TestSetupRangeTree(t *testing.T) {
 		RootKey: engine.KeyMin,
 	}
 	nodes := map[string]proto.RangeTreeNode{
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
@@ -176,13 +176,13 @@ func TestInsertRight(t *testing.T) {
 		RootKey: keyA,
 	}
 	nodes := map[string]proto.RangeTreeNode{
-		string(keyA): proto.RangeTreeNode{
+		string(keyA): {
 			Key:       keyA,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     false,
@@ -204,19 +204,19 @@ func TestInsertRight(t *testing.T) {
 		RootKey: keyA,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyA): proto.RangeTreeNode{
+		string(keyA): {
 			Key:       keyA,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 			RightKey:  &keyB,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyB): proto.RangeTreeNode{
+		string(keyB): {
 			Key:       keyB,
 			ParentKey: engine.KeyMin,
 			Black:     true,
@@ -238,25 +238,25 @@ func TestInsertRight(t *testing.T) {
 		RootKey: keyA,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyA): proto.RangeTreeNode{
+		string(keyA): {
 			Key:       keyA,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 			RightKey:  &keyC,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyC): proto.RangeTreeNode{
+		string(keyC): {
 			Key:       keyC,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyB,
 		},
-		string(keyB): proto.RangeTreeNode{
+		string(keyB): {
 			Key:       keyB,
 			ParentKey: engine.KeyMin,
 			Black:     false,
@@ -278,31 +278,31 @@ func TestInsertRight(t *testing.T) {
 		RootKey: keyC,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyC): proto.RangeTreeNode{
+		string(keyC): {
 			Key:       keyC,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyA,
 			RightKey:  &keyD,
 		},
-		string(keyA): proto.RangeTreeNode{
+		string(keyA): {
 			Key:       keyA,
 			ParentKey: engine.KeyMin,
 			Black:     false,
 			LeftKey:   &engine.KeyMin,
 			RightKey:  &keyB,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyB): proto.RangeTreeNode{
+		string(keyB): {
 			Key:       keyB,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyD): proto.RangeTreeNode{
+		string(keyD): {
 			Key:       keyD,
 			ParentKey: engine.KeyMin,
 			Black:     true,
@@ -324,37 +324,37 @@ func TestInsertRight(t *testing.T) {
 		RootKey: keyC,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyC): proto.RangeTreeNode{
+		string(keyC): {
 			Key:       keyC,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyA,
 			RightKey:  &keyE,
 		},
-		string(keyA): proto.RangeTreeNode{
+		string(keyA): {
 			Key:       keyA,
 			ParentKey: engine.KeyMin,
 			Black:     false,
 			LeftKey:   &engine.KeyMin,
 			RightKey:  &keyB,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyB): proto.RangeTreeNode{
+		string(keyB): {
 			Key:       keyB,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyE): proto.RangeTreeNode{
+		string(keyE): {
 			Key:       keyE,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyD,
 		},
-		string(keyD): proto.RangeTreeNode{
+		string(keyD): {
 			Key:       keyD,
 			ParentKey: engine.KeyMin,
 			Black:     false,
@@ -391,13 +391,13 @@ func TestInsertLeft(t *testing.T) {
 		RootKey: keyE,
 	}
 	nodes := map[string]proto.RangeTreeNode{
-		string(keyE): proto.RangeTreeNode{
+		string(keyE): {
 			Key:       keyE,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     false,
@@ -419,19 +419,19 @@ func TestInsertLeft(t *testing.T) {
 		RootKey: keyD,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): proto.RangeTreeNode{
+		string(keyD): {
 			Key:       keyD,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 			RightKey:  &keyE,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyE): proto.RangeTreeNode{
+		string(keyE): {
 			Key:       keyE,
 			ParentKey: engine.KeyMin,
 			Black:     true,
@@ -453,26 +453,26 @@ func TestInsertLeft(t *testing.T) {
 		RootKey: keyD,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): proto.RangeTreeNode{
+		string(keyD): {
 			Key:       keyD,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyC,
 			RightKey:  &keyE,
 		},
-		string(keyC): proto.RangeTreeNode{
+		string(keyC): {
 			Key:       keyC,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     false,
 		},
 
-		string(keyE): proto.RangeTreeNode{
+		string(keyE): {
 			Key:       keyE,
 			ParentKey: engine.KeyMin,
 			Black:     true,
@@ -494,31 +494,31 @@ func TestInsertLeft(t *testing.T) {
 		RootKey: keyD,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): proto.RangeTreeNode{
+		string(keyD): {
 			Key:       keyD,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyB,
 			RightKey:  &keyE,
 		},
-		string(keyB): proto.RangeTreeNode{
+		string(keyB): {
 			Key:       keyB,
 			ParentKey: engine.KeyMin,
 			Black:     false,
 			LeftKey:   &engine.KeyMin,
 			RightKey:  &keyC,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyC): proto.RangeTreeNode{
+		string(keyC): {
 			Key:       keyC,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyE): proto.RangeTreeNode{
+		string(keyE): {
 			Key:       keyE,
 			ParentKey: engine.KeyMin,
 			Black:     true,
@@ -540,37 +540,37 @@ func TestInsertLeft(t *testing.T) {
 		RootKey: keyD,
 	}
 	nodes = map[string]proto.RangeTreeNode{
-		string(keyD): proto.RangeTreeNode{
+		string(keyD): {
 			Key:       keyD,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &keyB,
 			RightKey:  &keyE,
 		},
-		string(keyB): proto.RangeTreeNode{
+		string(keyB): {
 			Key:       keyB,
 			ParentKey: engine.KeyMin,
 			Black:     false,
 			LeftKey:   &keyA,
 			RightKey:  &keyC,
 		},
-		string(keyA): proto.RangeTreeNode{
+		string(keyA): {
 			Key:       keyA,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 			LeftKey:   &engine.KeyMin,
 		},
-		string(engine.KeyMin): proto.RangeTreeNode{
+		string(engine.KeyMin): {
 			Key:       engine.KeyMin,
 			ParentKey: engine.KeyMin,
 			Black:     false,
 		},
-		string(keyC): proto.RangeTreeNode{
+		string(keyC): {
 			Key:       keyC,
 			ParentKey: engine.KeyMin,
 			Black:     true,
 		},
-		string(keyE): proto.RangeTreeNode{
+		string(keyE): {
 			Key:       keyE,
 			ParentKey: engine.KeyMin,
 			Black:     true,

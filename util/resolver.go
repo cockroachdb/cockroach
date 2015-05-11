@@ -77,9 +77,9 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 func (sr *socketResolver) IsExhausted() bool { return sr.exhausted }
 
 var validTypes = map[string]struct{}{
-	"tcp":  struct{}{},
-	"lb":   struct{}{},
-	"unix": struct{}{},
+	"tcp":  {},
+	"lb":   {},
+	"unix": {},
 }
 
 // NewResolver takes a resolver specification and returns a new resolver.
