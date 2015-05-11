@@ -273,8 +273,8 @@ func AssetDir(name string) ([]string, error) {
 		return nil, fmt.Errorf("Asset %s not found", name)
 	}
 	rv := make([]string, 0, len(node.Children))
-	for name := range node.Children {
-		rv = append(rv, name)
+	for childName := range node.Children {
+		rv = append(rv, childName)
 	}
 	return rv, nil
 }
