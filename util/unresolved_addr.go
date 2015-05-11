@@ -15,19 +15,32 @@
 //
 // Author: jqmp (jaqueramaphan@gmail.com)
 
+// TODO(jqmp): Needs testing.
+
 package util
 
-import "testing"
+// UnresolvedAddr is an unresolved version of net.Addr.
+type UnresolvedAddr struct {
+	// These fields are only exported so that gob can see them.
+	NetworkField string
+	StringField  string
+}
 
-func TestRawAddr(t *testing.T) {
-	network := "tcp"
-	str := "host:1234"
-	addr := MakeRawAddr(network, str)
+// MakeUnresolvedAddr creates a new UnresolvedAddr from a network
+// and raw address string.
+func MakeUnresolvedAddr(network string, str string) UnresolvedAddr {
+	return UnresolvedAddr{
+		NetworkField: network,
+		StringField:  str,
+	}
+}
 
-	if addr.Network() != network {
-		t.Errorf("Expected addr.Network() to be %s; got %s", network, addr.Network())
-	}
-	if addr.String() != str {
-		t.Errorf("Expected addr.String() to be %s; got %s", str, addr.String())
-	}
+// Network returns the address's network name.
+func (a UnresolvedAddr) Network() string {
+	return a.NetworkField
+}
+
+// String returns the address's string form.
+func (a UnresolvedAddr) String() string {
+	return a.StringField
 }

@@ -176,7 +176,7 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 			log.Warningf("asked for port %s, got %s", oldPort, newPort)
 		}
 
-		return util.MakeRawAddr("tcp", net.JoinHostPort(host, newPort)), nil
+		return util.MakeUnresolvedAddr("tcp", net.JoinHostPort(host, newPort)), nil
 
 	case "unix":
 		if oldAddr.String() != newAddr.String() {

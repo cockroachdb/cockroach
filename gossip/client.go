@@ -41,7 +41,7 @@ const (
 func init() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&net.UnixAddr{})
-	gob.Register(&util.RawAddr{})
+	gob.Register(&util.UnresolvedAddr{})
 }
 
 // client is a client-side RPC connection to a gossip peer node.

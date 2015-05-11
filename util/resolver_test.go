@@ -15,12 +15,10 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package gossip
+package util
 
 import (
 	"testing"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestParseResolverSpec(t *testing.T) {
@@ -32,7 +30,7 @@ func TestParseResolverSpec(t *testing.T) {
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
 		{"127.0.0.1:8080", true, "tcp", "127.0.0.1:8080"},
-		{":8080", true, "tcp", util.EnsureHost(":8080")},
+		{":8080", true, "tcp", EnsureHost(":8080")},
 		{"127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"lb=127.0.0.1", true, "lb", "127.0.0.1"},
