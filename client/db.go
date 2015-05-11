@@ -26,8 +26,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/testutils"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -141,19 +141,27 @@ type DB struct {
 // Open creates a new database handle to the cockroach cluster specified by
 // addr. The cluster is identified by a URL with the format:
 //
-//   (http|https|rpc|rpcs)://[<user>@]<host>:<port>
+//   (http|https|rpc|rpcs)://[<user>@]<host>:<port>[?certs=<dir>]
 //
 // The rpc and rpcs schemes use a variant of Go's builtin rpc library for
 // communication with the cluster. This protocol is lower overhead and more
 // efficient than http.
+//
+// The certs parameter can be used to override the default directory
+// to use for client certificates. In tests, the directory
+// "test_certs" uses the embedded test certificates.
 func Open(addr string) *DB {
 	u, err := url.Parse(addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// TODO(pmattis): This isn't right.
-	ctx := testutils.NewTestBaseContext()
+	ctx := &base.Context{}
+	ctx.InitDefaults()
+	q := u.Query()
+	if dir := q["certs"]; len(dir) > 0 {
+		ctx.Certs = dir[0]
+	}
 
 	var sender KVSender
 	switch u.Scheme {
