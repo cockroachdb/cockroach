@@ -500,7 +500,8 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, existTxn)
+	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp,
+		true /* consistent */, nil /* txn */, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -512,9 +513,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
 		}
-		if reply.PusheeTxn.Timestamp.Less(args.PusheeTxn.Timestamp) {
-			reply.PusheeTxn.Timestamp = args.PusheeTxn.Timestamp
-		}
+		reply.PusheeTxn.Timestamp.Forward(args.PusheeTxn.Timestamp)
 		if reply.PusheeTxn.Priority < args.PusheeTxn.Priority {
 			reply.PusheeTxn.Priority = args.PusheeTxn.Priority
 		}
@@ -584,7 +583,8 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
+		(reply.PusheeTxn.Priority == priority && args.Txn != nil &&
+			args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.
 		if log.V(1) {
