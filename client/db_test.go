@@ -26,7 +26,7 @@ import (
 
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
-	db := client.Open("https://root@" + s.ServingAddr())
+	db := client.Open("https://root@" + s.ServingAddr() + "?certs=test_certs")
 	return s, db
 }
 
