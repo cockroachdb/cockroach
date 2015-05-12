@@ -92,7 +92,7 @@ func (lt *localInterceptableTransport) Stop(id NodeID) {
 	lt.mu.Unlock()
 }
 
-func (lt *localInterceptableTransport) Send(id NodeID, req *RaftMessageRequest) error {
+func (lt *localInterceptableTransport) Send(req *RaftMessageRequest) error {
 	select {
 	case lt.messages <- req:
 	case <-lt.stopper.ShouldStop():

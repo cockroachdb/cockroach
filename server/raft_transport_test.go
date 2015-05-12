@@ -113,7 +113,7 @@ func TestSendAndReceive(t *testing.T) {
 				},
 			}
 
-			if err := transports[from].Send(multiraft.NodeID(nodeIDs[to]), req); err != nil {
+			if err := transports[from].Send(req); err != nil {
 				t.Errorf("Unable to send message from %d to %d: %s", nodeIDs[from], nodeIDs[to], err)
 			}
 		}

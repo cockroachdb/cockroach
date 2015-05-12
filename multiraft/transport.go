@@ -42,8 +42,8 @@ type Transport interface {
 	// Stop undoes a previous Listen.
 	Stop(id NodeID)
 
-	// Send a message to the given node.
-	Send(id NodeID, req *RaftMessageRequest) error
+	// Send a message to the node specified in the request's To field.
+	Send(req *RaftMessageRequest) error
 
 	// Close all associated connections.
 	Close()
@@ -179,8 +179,8 @@ func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
 	return client, err
 }
 
-func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
-	client, err := lt.getClient(id)
+func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
+	client, err := lt.getClient(NodeID(req.Message.To))
 	if err != nil {
 		return err
 	}
