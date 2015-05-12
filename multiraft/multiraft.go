@@ -20,7 +20,6 @@ package multiraft
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"time"
 
@@ -30,6 +29,8 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 )
+
+const noGroup = uint64(0)
 
 // An ErrGroupDeleted is returned for commands which are pending while their
 // group is deleted.
@@ -207,16 +208,12 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 		// some group, so we need to respond so it can activate the recovery process.
 		log.Warningf("node %v: not fanning out heartbeat from unknown node %v (but responding anyway)",
 			s.nodeID, fromID)
-		err := s.Transport.Send(fromID, &RaftMessageRequest{
-			GroupID: math.MaxUint64,
-			Message: raftpb.Message{
+		s.sendMessage(noGroup,
+			raftpb.Message{
 				From: uint64(s.nodeID),
+				To:   req.Message.From,
 				Type: raftpb.MsgHeartbeatResp,
-			},
-		})
-		if err != nil {
-			log.Errorf("node %v: error sending heartbeat response to %v", s.nodeID, fromID)
-		}
+			})
 		return
 	}
 	cnt := 0
@@ -585,19 +582,12 @@ func (s *state) coalescedHeartbeat() {
 		if log.V(6) {
 			log.Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
 		}
-		msg := raftpb.Message{
-			From: uint64(s.nodeID),
-			To:   uint64(nodeID),
-			Type: raftpb.MsgHeartbeat,
-		}
-		err := s.Transport.Send(nodeID,
-			&RaftMessageRequest{
-				GroupID: math.MaxUint64, // irrelevant
-				Message: msg,
+		s.sendMessage(noGroup,
+			raftpb.Message{
+				From: uint64(s.nodeID),
+				To:   uint64(nodeID),
+				Type: raftpb.MsgHeartbeat,
 			})
-		if err != nil {
-			log.Errorf("node %v: error sending coalesced heartbeat to %v: %s", s.nodeID, nodeID, err)
-		}
 	}
 }
 
@@ -897,7 +887,8 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 	return commandID
 }
 
-// sendMessage sends a raft message on the given group.
+// sendMessage sends a raft message on the given group. Coalesced heartbeats
+// address nodes, not groups; they will use the noGroup constant as groupID.
 func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
 	if log.V(6) {
 		log.Infof("node %v sending message %.200s to %v", s.nodeID,
@@ -908,8 +899,14 @@ func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
 		if log.V(4) {
 			log.Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
 		}
-		if err := s.addNode(nodeID, groupID); err != nil {
-			log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
+		if err := s.addNode(nodeID); err != nil {
+			log.Errorf("node %v: error adding node %v: %v", s.nodeID, nodeID, err)
+		}
+		if groupID > 0 {
+			if err := s.addNode(nodeID, groupID); err != nil {
+				log.Errorf("node %v: error adding group %v to node %v: %v",
+					s.nodeID, groupID, nodeID, err)
+			}
 		}
 	}
 	err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
