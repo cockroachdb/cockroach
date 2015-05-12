@@ -174,16 +174,9 @@ func initFlags(ctx *server.Context) {
 		cmd.MarkFlagRequired("certs")
 	}
 
-	var clientCmds []*cobra.Command
-	clientCmds = append(clientCmds, kvCmds...)
-	clientCmds = append(clientCmds, rangeCmds...)
-	clientCmds = append(clientCmds, acctCmds...)
-	clientCmds = append(clientCmds, permCmds...)
-	clientCmds = append(clientCmds, zoneCmds...)
-	clientCmds = append(clientCmds, quitCmd)
-
+	clientCmds := []*cobra.Command{kvCmd, rangeCmd, acctCmd, permCmd, zoneCmd, quitCmd}
 	for _, cmd := range clientCmds {
-		f := cmd.Flags()
+		f := cmd.PersistentFlags()
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])

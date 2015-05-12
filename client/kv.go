@@ -31,23 +31,6 @@ type TransactionOptions struct {
 	UserPriority int32
 }
 
-// KVSender is an interface for sending a request to a Key-Value
-// database backend.
-type KVSender interface {
-	// Send invokes the Call.Method with Call.Args and sets the result
-	// in Call.Reply.
-	Send(Call)
-}
-
-// KVSenderFunc is an adapter to allow the use of ordinary functions
-// as KVSenders.
-type KVSenderFunc func(Call)
-
-// Send calls f(c).
-func (f KVSenderFunc) Send(c Call) {
-	f(c)
-}
-
 // A Clock is an interface which provides the current time.
 type Clock interface {
 	// Now returns nanoseconds since the Jan 1, 1970 GMT.

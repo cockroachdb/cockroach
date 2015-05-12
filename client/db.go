@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"encoding"
 	"fmt"
-	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -140,11 +139,16 @@ type DB struct {
 // Open creates a new database handle to the cockroach cluster specified by
 // addr. The cluster is identified by a URL with the format:
 //
-//   (http|https|rpc|rpcs)://[<user>@]<host>:<port>[?certs=<dir>]
+//   <sender>://[<user>@]<host>:<port>[?certs=<dir>]
 //
-// The rpc and rpcs schemes use a variant of Go's builtin rpc library for
+// The URL scheme (<sender>) specifies which transport to use for talking to
+// the cockroach cluster. Currently allowable values are: http, https, rpc,
+// rpcs. The rpc and rpcs senders use a variant of Go's builtin rpc library for
 // communication with the cluster. This protocol is lower overhead and more
-// efficient than http.
+// efficient than http. The decision between the encrypted (https, rpcs) and
+// unencrypted senders (http, rpc) depends on the settings of the cluster. A
+// given cluster supports either encrypted or unencrypted traffic, but not
+// both.
 //
 // The certs parameter can be used to override the default directory
 // to use for client certificates. In tests, the directory
@@ -162,15 +166,7 @@ func Open(addr string) (*DB, error) {
 		ctx.Certs = dir[0]
 	}
 
-	var sender KVSender
-	switch u.Scheme {
-	case "http", "https":
-		sender, err = NewHTTPSender(u.Host, ctx)
-	case "rpc", "rpcs":
-		sender, err = NewRPCSender(u.Host, ctx)
-	default:
-		log.Fatalf("unknown scheme: %s", u.Scheme)
-	}
+	sender, err := newSender(u, ctx)
 	if err != nil {
 		return nil, err
 	}
