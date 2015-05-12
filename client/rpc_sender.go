@@ -20,6 +20,7 @@ package client
 import (
 	"fmt"
 	"net"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -27,6 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+func init() {
+	f := func(u *url.URL, ctx *base.Context) (KVSender, error) {
+		ctx.Insecure = (u.Scheme != "rpcs")
+		return NewRPCSender(u.Host, ctx)
+	}
+	RegisterSender("rpc", f)
+	RegisterSender("rpcs", f)
+}
 
 // RPCSender is an implementation of KVSender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting

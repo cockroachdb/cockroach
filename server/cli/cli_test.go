@@ -32,6 +32,11 @@ type cliTest struct {
 }
 
 func newCLITest() cliTest {
+	// Reset the client context for each test. We don't reset the
+	// pointer (because they are tied into the flags), but instead
+	// overwrite the existing struct's values.
+	*Context = *server.NewContext()
+
 	osExit = func(int) {}
 	osStderr = os.Stdout
 
@@ -53,6 +58,7 @@ func (c cliTest) Run(line string) {
 	args = append(args, fmt.Sprintf("--certs=%s", security.EmbeddedCertsDir))
 	args = append(args, a[1:]...)
 
+	fmt.Fprintf(os.Stderr, "%s\n", args)
 	fmt.Printf("%s\n", line)
 	if err := Run(args); err != nil {
 		fmt.Printf("%s\n", err)
@@ -96,6 +102,28 @@ func ExampleBasic() {
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
+	// node drained and shutdown: ok
+}
+
+func ExampleInsecure() {
+	c := cliTest{}
+	c.TestServer = &server.TestServer{}
+	c.Ctx = server.NewTestContext()
+	c.Ctx.Insecure = true
+	if err := c.Start(); err != nil {
+		log.Fatalf("Could not start server: %v", err)
+	}
+
+	c.Run("kv --insecure put a 1 b 2")
+	c.Run("kv --insecure scan")
+	c.Run("quit --insecure")
+
+	// Output:
+	// kv --insecure put a 1 b 2
+	// kv --insecure scan
+	// "a"	1
+	// "b"	2
+	// quit --insecure
 	// node drained and shutdown: ok
 }
 

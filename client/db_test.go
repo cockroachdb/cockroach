@@ -217,3 +217,31 @@ func ExampleTx_Commit() {
 	// 0: aa=1
 	// 1: ab=2
 }
+
+func ExampleDB_Insecure() {
+	s := &server.TestServer{}
+	s.Ctx = server.NewTestContext()
+	s.Ctx.Insecure = true
+	if err := s.Start(); err != nil {
+		log.Fatalf("Could not start server: %v", err)
+	}
+	log.Printf("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
+	defer s.Stop()
+
+	db, err := client.Open("http://root@" + s.ServingAddr())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := db.Put("aa", "1"); err != nil {
+		panic(err)
+	}
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
+
+	// Output:
+	// aa=1
+}

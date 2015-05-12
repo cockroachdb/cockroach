@@ -24,6 +24,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/c-snappy"
@@ -41,6 +42,15 @@ const (
 	// server having too many requests.
 	StatusTooManyRequests = 429
 )
+
+func init() {
+	f := func(u *url.URL, ctx *base.Context) (KVSender, error) {
+		ctx.Insecure = (u.Scheme != "https")
+		return NewHTTPSender(u.Host, ctx)
+	}
+	RegisterSender("http", f)
+	RegisterSender("https", f)
+}
 
 // httpSendError wraps any error returned when sending an HTTP request
 // in order to signal the retry loop that it should backoff and retry.
