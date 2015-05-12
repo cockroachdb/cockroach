@@ -38,9 +38,9 @@ func ExampleDB_Get() {
 	s, db := setup()
 	defer s.Stop()
 
-	result := db.Get("aa")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
@@ -52,13 +52,12 @@ func ExampleDB_Put() {
 	s, db := setup()
 	defer s.Stop()
 
-	result := db.Put("aa", "1")
-	if result.Err != nil {
-		panic(result.Err)
+	if _, err := db.Put("aa", "1"); err != nil {
+		panic(err)
 	}
-	result = db.Get("aa")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
@@ -70,46 +69,41 @@ func ExampleDB_CPut() {
 	s, db := setup()
 	defer s.Stop()
 
-	result := db.Put("aa", "1")
-	if result.Err != nil {
-		panic(result.Err)
+	if _, err := db.Put("aa", "1"); err != nil {
+		panic(err)
 	}
-	result = db.CPut("aa", "2", "1")
-	if result.Err != nil {
-		panic(result.Err)
+	if _, err := db.CPut("aa", "2", "1"); err != nil {
+		panic(err)
 	}
-	result = db.Get("aa")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
-	result = db.CPut("aa", "3", "1")
-	if result.Err == nil {
+	if _, err = db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
-	result = db.Get("aa")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err = db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
-	result = db.CPut("bb", "4", "1")
-	if result.Err == nil {
+	if _, err = db.CPut("bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
-	result = db.Get("bb")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err = db.Get("bb")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("bb=%s\n", result.Rows[0].ValueBytes())
-	result = db.CPut("bb", "4", nil)
-	if result.Err != nil {
-		panic(result.Err)
+	if _, err = db.CPut("bb", "4", nil); err != nil {
+		panic(err)
 	}
-	result = db.Get("bb")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err = db.Get("bb")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("bb=%s\n", result.Rows[0].ValueBytes())
 
@@ -124,13 +118,12 @@ func ExampleDB_Inc() {
 	s, db := setup()
 	defer s.Stop()
 
-	result := db.Inc("aa", 100)
-	if result.Err != nil {
-		panic(result.Err)
+	if _, err := db.Inc("aa", 100); err != nil {
+		panic(err)
 	}
-	result = db.Get("aa")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%d\n", result.Rows[0].ValueInt())
 
@@ -143,8 +136,7 @@ func ExampleBatch() {
 	defer s.Stop()
 
 	b := db.B.Get("aa").Put("bb", "2")
-	err := db.Run(b)
-	if err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	for _, result := range b.Results {
@@ -163,13 +155,12 @@ func ExampleDB_Scan() {
 	defer s.Stop()
 
 	b := db.B.Put("aa", "1").Put("ab", "2").Put("bb", "3")
-	err := db.Run(b)
-	if err != nil {
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
-	result := db.Scan("a", "b", 100)
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Scan("a", "b", 100)
+	if err != nil {
+		panic(err)
 	}
 	for i, row := range result.Rows {
 		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
@@ -184,17 +175,15 @@ func ExampleDB_Del() {
 	s, db := setup()
 	defer s.Stop()
 
-	err := db.Run(db.B.Put("aa", "1").Put("ab", "2").Put("ac", "3"))
-	if err != nil {
+	if err := db.Run(db.B.Put("aa", "1").Put("ab", "2").Put("ac", "3")); err != nil {
 		panic(err)
 	}
-	result := db.Del("ab")
-	if result.Err != nil {
-		panic(result.Err)
+	if _, err := db.Del("ab"); err != nil {
+		panic(err)
 	}
-	result = db.Scan("a", "b", 100)
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Scan("a", "b", 100)
+	if err != nil {
+		panic(err)
 	}
 	for i, row := range result.Rows {
 		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
@@ -216,9 +205,9 @@ func ExampleTx_Commit() {
 		panic(err)
 	}
 
-	result := db.Get("aa", "ab")
-	if result.Err != nil {
-		panic(result.Err)
+	result, err := db.Get("aa", "ab")
+	if err != nil {
+		panic(err)
 	}
 	for i, row := range result.Rows {
 		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())

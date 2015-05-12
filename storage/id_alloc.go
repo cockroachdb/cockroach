@@ -107,10 +107,10 @@ func (ia *IDAllocator) allocateBlock(incr int64) {
 	retryOpts := IDAllocationRetryOpts
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		idKey := ia.idKey.Load().(proto.Key)
-		r := ia.db.Inc(idKey, incr)
-		if r.Err != nil {
-			log.Warningf("unable to allocate %d ids from %s: %s", incr, idKey, r.Err)
-			return util.RetryContinue, r.Err
+		r, err := ia.db.Inc(idKey, incr)
+		if err != nil {
+			log.Warningf("unable to allocate %d ids from %s: %s", incr, idKey, err)
+			return util.RetryContinue, err
 		}
 		newValue = r.Rows[0].ValueInt()
 		return util.RetryBreak, nil

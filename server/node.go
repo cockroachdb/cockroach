@@ -75,9 +75,9 @@ type nodeServer Node
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(db *client.DB) (proto.NodeID, error) {
-	r := db.Inc(engine.KeyNodeIDGenerator, 1)
-	if r.Err != nil {
-		return 0, util.Errorf("unable to allocate node ID: %s", r.Err)
+	r, err := db.Inc(engine.KeyNodeIDGenerator, 1)
+	if err != nil {
+		return 0, util.Errorf("unable to allocate node ID: %s", err)
 	}
 	return proto.NodeID(r.Rows[0].ValueInt()), nil
 }
@@ -86,9 +86,9 @@ func allocateNodeID(db *client.DB) (proto.NodeID, error) {
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.StoreID, error) {
-	r := db.Inc(engine.KeyStoreIDGenerator, inc)
-	if r.Err != nil {
-		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, r.Err)
+	r, err := db.Inc(engine.KeyStoreIDGenerator, inc)
+	if err != nil {
+		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
 	return proto.StoreID(r.Rows[0].ValueInt() - inc + 1), nil
 }

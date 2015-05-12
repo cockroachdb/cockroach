@@ -69,9 +69,9 @@ func runGet(cmd *cobra.Command, args []string) {
 		return
 	}
 	key := proto.Key(args[0])
-	r := kvDB.Get(key)
-	if r.Err != nil {
-		fmt.Fprintf(osStderr, "get failed: %s\n", r.Err)
+	r, err := kvDB.Get(key)
+	if err != nil {
+		fmt.Fprintf(osStderr, "get failed: %s\n", err)
 		osExit(1)
 		return
 	}
@@ -173,8 +173,8 @@ func runInc(cmd *cobra.Command, args []string) {
 	}
 
 	key := args[0]
-	if r := kvDB.Inc(key, int64(amount)); r.Err != nil {
-		fmt.Fprintf(osStderr, "increment failed: %s\n", r.Err)
+	if r, err := kvDB.Inc(key, int64(amount)); err != nil {
+		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
 		osExit(1)
 	} else {
 		fmt.Printf("%d\n", r.Rows[0].ValueInt())
@@ -268,9 +268,9 @@ func runScan(cmd *cobra.Command, args []string) {
 		return
 	}
 	// TODO(pmattis): Add a flag for the number of results to scan.
-	r := kvDB.Scan(startKey, endKey, 1000)
-	if r.Err != nil {
-		fmt.Fprintf(osStderr, "scan failed: %s\n", r.Err)
+	r, err := kvDB.Scan(startKey, endKey, 1000)
+	if err != nil {
+		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
 		osExit(1)
 		return
 	}

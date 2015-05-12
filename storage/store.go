@@ -1408,9 +1408,9 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 		return nil, nil
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	r := s.kvDB.Get(key)
-	if r.Err != nil {
-		return nil, r.Err
+	r, err := s.kvDB.Get(key)
+	if err != nil {
+		return nil, err
 	}
 	status := &proto.StoreStatus{}
 	if err := r.Rows[0].ValueProto(status); err != nil {
@@ -1445,8 +1445,8 @@ func (s *Store) updateStoreStatus() {
 		Stats:      proto.MVCCStats(scannerStats.MVCC),
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	if r := s.kvDB.Put(key, status); r.Err != nil {
-		log.Error(r.Err)
+	if _, err := s.kvDB.Put(key, status); err != nil {
+		log.Error(err)
 	}
 }
 
