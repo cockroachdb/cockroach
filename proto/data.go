@@ -661,5 +661,6 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
-	return fmt.Sprintf("%s-%s@%d", l.Start, l.Expiration, l.RaftNodeID)
+	nodeID, storeID := DecodeRaftNodeID(RaftNodeID(l.RaftNodeID))
+	return fmt.Sprintf("%s-%s @%d:%d", l.Start, l.Expiration, nodeID, storeID)
 }

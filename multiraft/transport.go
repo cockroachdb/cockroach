@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -37,10 +38,10 @@ type Transport interface {
 	// Listen informs the Transport of the local node's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id NodeID, server ServerInterface) error
+	Listen(id proto.RaftNodeID, server ServerInterface) error
 
 	// Stop undoes a previous Listen.
-	Stop(id NodeID)
+	Stop(id proto.RaftNodeID)
 
 	// Send a message to the node specified in the request's To field.
 	Send(req *RaftMessageRequest) error
@@ -71,8 +72,8 @@ var (
 
 type localRPCTransport struct {
 	mu        sync.Mutex
-	listeners map[NodeID]net.Listener
-	clients   map[NodeID]*rpc.Client
+	listeners map[proto.RaftNodeID]net.Listener
+	clients   map[proto.RaftNodeID]*rpc.Client
 	conns     map[net.Conn]struct{}
 	closed    chan struct{}
 }
@@ -84,14 +85,14 @@ type localRPCTransport struct {
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
 	return &localRPCTransport{
-		listeners: make(map[NodeID]net.Listener),
-		clients:   make(map[NodeID]*rpc.Client),
+		listeners: make(map[proto.RaftNodeID]net.Listener),
+		clients:   make(map[proto.RaftNodeID]*rpc.Client),
 		conns:     make(map[net.Conn]struct{}),
 		closed:    make(chan struct{}),
 	}
 }
 
-func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface) error {
 	rpcServer := rpc.NewServer()
 	err := rpcServer.RegisterName("MultiRaft", server)
 	if err != nil {
@@ -138,7 +139,7 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 	}
 }
 
-func (lt *localRPCTransport) Stop(id NodeID) {
+func (lt *localRPCTransport) Stop(id proto.RaftNodeID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.listeners[id].Close()
@@ -149,7 +150,7 @@ func (lt *localRPCTransport) Stop(id NodeID) {
 	}
 }
 
-func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
+func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*rpc.Client, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 
@@ -180,7 +181,7 @@ func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
 }
 
 func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
-	client, err := lt.getClient(NodeID(req.Message.To))
+	client, err := lt.getClient(proto.RaftNodeID(req.Message.To))
 	if err != nil {
 		return err
 	}

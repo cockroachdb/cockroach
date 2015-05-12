@@ -20,6 +20,7 @@ package proto
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,6 +75,33 @@ func (n *StoreID) Unmarshal(bytes []byte) error {
 	}
 	*n = StoreID(x)
 	return nil
+}
+
+// RaftNodeID is a custom type for a Raft node ID. A raft node ID
+// is composed of a concatenation of NodeID + StoreID.
+type RaftNodeID uint64
+
+// Format implements the fmt.Formatter interface.
+func (n RaftNodeID) Format(f fmt.State, verb rune) {
+	// Note: this implementation doesn't handle the width and precision
+	// specifiers such as "%20.10s".
+	fmt.Fprint(f, strconv.FormatInt(int64(n), 16))
+}
+
+// MakeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
+func MakeRaftNodeID(n NodeID, s StoreID) RaftNodeID {
+	if n < 0 || s <= 0 {
+		// Zeroes are likely the result of incomplete initialization.
+		// TODO(bdarnell): should we disallow NodeID==0? It should never occur in
+		// production but many tests use it.
+		panic("NodeID must be >= 0 and StoreID must be > 0")
+	}
+	return RaftNodeID(n)<<32 | RaftNodeID(s)
+}
+
+// DecodeRaftNodeID converts a RaftNodeID into its component NodeID and StoreID.
+func DecodeRaftNodeID(n RaftNodeID) (NodeID, StoreID) {
+	return NodeID(n >> 32), StoreID(n & 0xffffffff)
 }
 
 // IsSubset returns whether attributes list a is a subset of

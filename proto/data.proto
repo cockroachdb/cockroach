@@ -259,7 +259,7 @@ message Lease {
   // The expiration is a timestamp at which the lease will expire.
   optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
   // The Raft NodeID on which the would-be lease holder lives.
-  optional uint64 raft_node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftNodeID" ];
+  optional uint64 raft_node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftNodeID"];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

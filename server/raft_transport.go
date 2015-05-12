@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -41,7 +40,7 @@ type rpcTransport struct {
 	rpcServer  *rpc.Server
 	rpcContext *rpc.Context
 	mu         sync.Mutex
-	servers    map[multiraft.NodeID]multiraft.ServerInterface
+	servers    map[proto.RaftNodeID]multiraft.ServerInterface
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
@@ -51,7 +50,7 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		gossip:     gossip,
 		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
-		servers:    make(map[multiraft.NodeID]multiraft.ServerInterface),
+		servers:    make(map[proto.RaftNodeID]multiraft.ServerInterface),
 	}
 
 	err := t.rpcServer.RegisterName(raftServiceName, (*transportRPCServer)(t))
@@ -76,7 +75,7 @@ func (t *transportRPCServer) RaftMessage(protoReq *proto.RaftMessageRequest,
 	}
 
 	t.mu.Lock()
-	server, ok := t.servers[multiraft.NodeID(req.Message.To)]
+	server, ok := t.servers[proto.RaftNodeID(req.Message.To)]
 	t.mu.Unlock()
 
 	if ok {
@@ -88,7 +87,7 @@ func (t *transportRPCServer) RaftMessage(protoReq *proto.RaftMessageRequest,
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface
 // to receive proxied messages.
-func (t *rpcTransport) Listen(id multiraft.NodeID, server multiraft.ServerInterface) error {
+func (t *rpcTransport) Listen(id proto.RaftNodeID, server multiraft.ServerInterface) error {
 	t.mu.Lock()
 	t.servers[id] = server
 	t.mu.Unlock()
@@ -96,7 +95,7 @@ func (t *rpcTransport) Listen(id multiraft.NodeID, server multiraft.ServerInterf
 }
 
 // Stop implements the multiraft.Transport interface by unregistering the server id.
-func (t *rpcTransport) Stop(id multiraft.NodeID) {
+func (t *rpcTransport) Stop(id proto.RaftNodeID) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.servers, id)
@@ -111,7 +110,7 @@ func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
 		return err
 	}
 
-	nodeID, _ := storage.DecodeRaftNodeID(multiraft.NodeID(req.Message.To))
+	nodeID, _ := proto.DecodeRaftNodeID(proto.RaftNodeID(req.Message.To))
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		return err

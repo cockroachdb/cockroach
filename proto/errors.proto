@@ -131,6 +131,13 @@ message ConditionFailedError {
   optional Value actual_value = 1;
 }
 
+// A LeaseRejectedError indicates that the requested replica could
+// not acquire the desired lease because of an existing leader lease.
+message LeaseRejectedError {
+  optional Lease Requested = 1 [(gogoproto.nullable) = false];
+  optional Lease Existing = 2 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -147,6 +154,7 @@ message ErrorDetail {
     WriteTooOldError write_too_old = 10;
     OpRequiresTxnError op_requires_txn = 11;
     ConditionFailedError condition_failed = 12;
+    LeaseRejectedError lease_rejected = 13;
   }
 }
 

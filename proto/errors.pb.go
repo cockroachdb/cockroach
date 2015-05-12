@@ -357,6 +357,32 @@ func (m *ConditionFailedError) GetActualValue() *Value {
 	return nil
 }
 
+// A LeaseRejectedError indicates that the requested replica could
+// not acquire the desired lease because of an existing leader lease.
+type LeaseRejectedError struct {
+	Requested        Lease  `protobuf:"bytes,1,opt" json:"Requested"`
+	Existing         Lease  `protobuf:"bytes,2,opt" json:"Existing"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *LeaseRejectedError) Reset()         { *m = LeaseRejectedError{} }
+func (m *LeaseRejectedError) String() string { return proto1.CompactTextString(m) }
+func (*LeaseRejectedError) ProtoMessage()    {}
+
+func (m *LeaseRejectedError) GetRequested() Lease {
+	if m != nil {
+		return m.Requested
+	}
+	return Lease{}
+}
+
+func (m *LeaseRejectedError) GetExisting() Lease {
+	if m != nil {
+		return m.Existing
+	}
+	return Lease{}
+}
+
 // ErrorDetail is a union type containing all available errors.
 type ErrorDetail struct {
 	NotLeader                     *NotLeaderError                     `protobuf:"bytes,1,opt,name=not_leader" json:"not_leader,omitempty"`
@@ -371,6 +397,7 @@ type ErrorDetail struct {
 	WriteTooOld                   *WriteTooOldError                   `protobuf:"bytes,10,opt,name=write_too_old" json:"write_too_old,omitempty"`
 	OpRequiresTxn                 *OpRequiresTxnError                 `protobuf:"bytes,11,opt,name=op_requires_txn" json:"op_requires_txn,omitempty"`
 	ConditionFailed               *ConditionFailedError               `protobuf:"bytes,12,opt,name=condition_failed" json:"condition_failed,omitempty"`
+	LeaseRejected                 *LeaseRejectedError                 `protobuf:"bytes,13,opt,name=lease_rejected" json:"lease_rejected,omitempty"`
 	XXX_unrecognized              []byte                              `json:"-"`
 }
 
@@ -458,6 +485,13 @@ func (m *ErrorDetail) GetOpRequiresTxn() *OpRequiresTxnError {
 func (m *ErrorDetail) GetConditionFailed() *ConditionFailedError {
 	if m != nil {
 		return m.ConditionFailed
+	}
+	return nil
+}
+
+func (m *ErrorDetail) GetLeaseRejected() *LeaseRejectedError {
+	if m != nil {
+		return m.LeaseRejected
 	}
 	return nil
 }
@@ -1561,6 +1595,96 @@ func (m *ConditionFailedError) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *LeaseRejectedError) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Requested", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Requested.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Existing", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Existing.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
 func (m *ErrorDetail) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -1904,6 +2028,33 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseRejected", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LeaseRejected == nil {
+				m.LeaseRejected = &LeaseRejectedError{}
+			}
+			if err := m.LeaseRejected.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -2087,6 +2238,9 @@ func (this *ErrorDetail) GetValue() interface{} {
 	if this.ConditionFailed != nil {
 		return this.ConditionFailed
 	}
+	if this.LeaseRejected != nil {
+		return this.LeaseRejected
+	}
 	return nil
 }
 
@@ -2116,6 +2270,8 @@ func (this *ErrorDetail) SetValue(value interface{}) bool {
 		this.OpRequiresTxn = vt
 	case *ConditionFailedError:
 		this.ConditionFailed = vt
+	case *LeaseRejectedError:
+		this.LeaseRejected = vt
 	default:
 		return false
 	}
@@ -2292,6 +2448,19 @@ func (m *ConditionFailedError) Size() (n int) {
 	return n
 }
 
+func (m *LeaseRejectedError) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Requested.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	l = m.Existing.Size()
+	n += 1 + l + sovErrors(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *ErrorDetail) Size() (n int) {
 	var l int
 	_ = l
@@ -2341,6 +2510,10 @@ func (m *ErrorDetail) Size() (n int) {
 	}
 	if m.ConditionFailed != nil {
 		l = m.ConditionFailed.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.LeaseRejected != nil {
+		l = m.LeaseRejected.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -2825,6 +2998,43 @@ func (m *ConditionFailedError) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
+func (m *LeaseRejectedError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *LeaseRejectedError) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
+	n18, err := m.Requested.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
+	n19, err := m.Existing.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *ErrorDetail) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -2844,121 +3054,131 @@ func (m *ErrorDetail) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
-		n18, err := m.NotLeader.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n18
-	}
-	if m.RangeNotFound != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
-		n19, err := m.RangeNotFound.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n19
-	}
-	if m.RangeKeyMismatch != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
-		n20, err := m.RangeKeyMismatch.MarshalTo(data[i:])
+		n20, err := m.NotLeader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n20
 	}
-	if m.ReadWithinUncertaintyInterval != nil {
-		data[i] = 0x22
+	if m.RangeNotFound != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
-		n21, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
+		n21, err := m.RangeNotFound.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n21
 	}
-	if m.TransactionAborted != nil {
-		data[i] = 0x2a
+	if m.RangeKeyMismatch != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
-		n22, err := m.TransactionAborted.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
+		n22, err := m.RangeKeyMismatch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n22
 	}
-	if m.TransactionPush != nil {
-		data[i] = 0x32
+	if m.ReadWithinUncertaintyInterval != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
-		n23, err := m.TransactionPush.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
+		n23, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n23
 	}
-	if m.TransactionRetry != nil {
-		data[i] = 0x3a
+	if m.TransactionAborted != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
-		n24, err := m.TransactionRetry.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
+		n24, err := m.TransactionAborted.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n24
 	}
-	if m.TransactionStatus != nil {
-		data[i] = 0x42
+	if m.TransactionPush != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
-		n25, err := m.TransactionStatus.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
+		n25, err := m.TransactionPush.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n25
 	}
-	if m.WriteIntent != nil {
-		data[i] = 0x4a
+	if m.TransactionRetry != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
-		n26, err := m.WriteIntent.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
+		n26, err := m.TransactionRetry.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n26
 	}
-	if m.WriteTooOld != nil {
-		data[i] = 0x52
+	if m.TransactionStatus != nil {
+		data[i] = 0x42
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
-		n27, err := m.WriteTooOld.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
+		n27, err := m.TransactionStatus.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n27
 	}
-	if m.OpRequiresTxn != nil {
-		data[i] = 0x5a
+	if m.WriteIntent != nil {
+		data[i] = 0x4a
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
-		n28, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
+		n28, err := m.WriteIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n28
 	}
-	if m.ConditionFailed != nil {
-		data[i] = 0x62
+	if m.WriteTooOld != nil {
+		data[i] = 0x52
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
-		n29, err := m.ConditionFailed.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
+		n29, err := m.WriteTooOld.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n29
+	}
+	if m.OpRequiresTxn != nil {
+		data[i] = 0x5a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
+		n30, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n30
+	}
+	if m.ConditionFailed != nil {
+		data[i] = 0x62
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
+		n31, err := m.ConditionFailed.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n31
+	}
+	if m.LeaseRejected != nil {
+		data[i] = 0x6a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
+		n32, err := m.LeaseRejected.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n32
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3000,11 +3220,11 @@ func (m *Error) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n30, err := m.Detail.MarshalTo(data[i:])
+		n33, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n33
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)

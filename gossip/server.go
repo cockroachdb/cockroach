@@ -104,8 +104,12 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
 			return util.Errorf("infostore could not be decoded: %s", err)
 		}
-		if log.V(1) {
-			log.Infof("received delta infostore from client %s: %s", addr, delta)
+		if delta.infoCount() > 0 {
+			if log.V(1) {
+				log.Infof("gossip: received %s", delta)
+			} else {
+				log.Infof("gossip: received %d info(s) from %s", delta.infoCount(), addr)
+			}
 		}
 		s.is.combine(delta)
 	}
@@ -125,9 +129,6 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 			log.Fatalf("infostore could not be encoded: %s", err)
 		}
 		reply.Delta = buf.Bytes()
-		if delta.infoCount() > 0 {
-			log.Infof("gossip: client %s sent %d info(s)", addr, delta.infoCount())
-		}
 	}
 	return nil
 }

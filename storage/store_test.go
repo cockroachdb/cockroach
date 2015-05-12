@@ -1296,7 +1296,7 @@ func TestRaftNodeID(t *testing.T) {
 	cases := []struct {
 		nodeID   proto.NodeID
 		storeID  proto.StoreID
-		expected multiraft.NodeID
+		expected proto.RaftNodeID
 	}{
 		{0, 1, 1},
 		{1, 1, 0x100000001},
@@ -1304,12 +1304,12 @@ func TestRaftNodeID(t *testing.T) {
 		{math.MaxInt32, math.MaxInt32, 0x7fffffff7fffffff},
 	}
 	for _, c := range cases {
-		x := MakeRaftNodeID(c.nodeID, c.storeID)
+		x := proto.MakeRaftNodeID(c.nodeID, c.storeID)
 		if x != c.expected {
 			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected %v",
 				c.nodeID, c.storeID, x, c.expected)
 		}
-		n, s := DecodeRaftNodeID(x)
+		n, s := proto.DecodeRaftNodeID(x)
 		if n != c.nodeID || s != c.storeID {
 			t.Errorf("decodeRaftNodeID(%v) returned %v, %v; expected %v, %v",
 				x, n, s, c.nodeID, c.storeID)
@@ -1329,7 +1329,7 @@ func TestRaftNodeID(t *testing.T) {
 			defer func() {
 				_ = recover()
 			}()
-			x := MakeRaftNodeID(c.nodeID, c.storeID)
+			x := proto.MakeRaftNodeID(c.nodeID, c.storeID)
 			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected panic",
 				c.nodeID, c.storeID, x)
 		}()

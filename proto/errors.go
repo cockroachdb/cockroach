@@ -45,6 +45,11 @@ func (e *NotLeaderError) Error() string {
 	return fmt.Sprintf("replica %s not leader; leader is %s", e.Replica, e.Leader)
 }
 
+// Error formats error.
+func (e *LeaseRejectedError) Error() string {
+	return fmt.Sprintf("cannot replace lease %s with %s", e.Existing, e.Requested)
+}
+
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
 func NewRangeNotFoundError(raftID int64) *RangeNotFoundError {
 	return &RangeNotFoundError{

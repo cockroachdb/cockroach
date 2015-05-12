@@ -311,7 +311,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		RaftNodeID: uint64(MakeRaftNodeID(2, 2)), // a different node
+		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)), // a different node
 	})
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
@@ -355,7 +355,7 @@ func TestRangeHasLeaderLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)),
 	})
 	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now().Add(15, 0)); held || expired {
 		t.Errorf("expected another replica to have leader lease")
@@ -380,7 +380,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)),
 	})
 
 	header := proto.RequestHeader{
@@ -472,7 +472,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)),
 	})
 
 	// Expire that lease.
@@ -508,7 +508,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
-		nodeID      multiraft.NodeID
+		nodeID      proto.RaftNodeID
 		start       proto.Timestamp
 		expiration  proto.Timestamp
 		expLowWater int64
@@ -520,7 +520,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 		// Renew the lease but shorten expiration.
 		{tc.store.RaftNodeID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
 		// Lease is held by another.
-		{MakeRaftNodeID(2, 2), now.Add(29, 0), now.Add(50, 0), baseLowWater},
+		{proto.MakeRaftNodeID(2, 2), now.Add(29, 0), now.Add(50, 0), baseLowWater},
 		// Lease is regranted to this replica.
 		{tc.store.RaftNodeID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
 	}

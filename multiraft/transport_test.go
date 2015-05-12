@@ -21,12 +21,13 @@ import (
 	"log"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 type localInterceptableTransport struct {
 	mu        sync.Mutex
-	listeners map[NodeID]ServerInterface
+	listeners map[proto.RaftNodeID]ServerInterface
 	messages  chan *RaftMessageRequest
 	Events    chan *interceptMessage
 	stopper   *util.Stopper
@@ -38,7 +39,7 @@ type localInterceptableTransport struct {
 // which they are queued, intercepted and blocked until acknowledged.
 func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 	lt := &localInterceptableTransport{
-		listeners: make(map[NodeID]ServerInterface),
+		listeners: make(map[proto.RaftNodeID]ServerInterface),
 		messages:  make(chan *RaftMessageRequest),
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
@@ -63,7 +64,7 @@ func (lt *localInterceptableTransport) start() {
 				lt.Events <- iMsg
 				<-ack
 				lt.mu.Lock()
-				srv, ok := lt.listeners[NodeID(msg.Message.To)]
+				srv, ok := lt.listeners[proto.RaftNodeID(msg.Message.To)]
 				lt.mu.Unlock()
 				if !ok {
 					continue
@@ -79,14 +80,14 @@ func (lt *localInterceptableTransport) start() {
 	})
 }
 
-func (lt *localInterceptableTransport) Listen(id NodeID, server ServerInterface) error {
+func (lt *localInterceptableTransport) Listen(id proto.RaftNodeID, server ServerInterface) error {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.listeners[id] = server
 	return nil
 }
 
-func (lt *localInterceptableTransport) Stop(id NodeID) {
+func (lt *localInterceptableTransport) Stop(id proto.RaftNodeID) {
 	lt.mu.Lock()
 	delete(lt.listeners, id)
 	lt.mu.Unlock()
