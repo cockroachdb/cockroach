@@ -110,7 +110,7 @@ func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
 		return err
 	}
 
-	nodeID, _ := proto.DecodeRaftNodeID(multiraft.NodeID(req.Message.To))
+	nodeID, _ := proto.DecodeRaftNodeID(proto.RaftNodeID(req.Message.To))
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		return err

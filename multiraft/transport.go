@@ -181,7 +181,7 @@ func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*rpc.Client, error)
 }
 
 func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
-	client, err := lt.getClient(NodeID(req.Message.To))
+	client, err := lt.getClient(proto.RaftNodeID(req.Message.To))
 	if err != nil {
 		return err
 	}
