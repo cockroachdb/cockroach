@@ -1326,3 +1326,46 @@ func TestRaftNodeID(t *testing.T) {
 		}()
 	}
 }
+
+// fakeRangeQueue implements the rangeQueue interface and
+// records which range is passed to MaybeRemove.
+type fakeRangeQueue struct {
+	maybeRemovedRngs chan *Range
+}
+
+func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
+	// Do nothing
+}
+
+func (fq *fakeRangeQueue) MaybeAdd(rng *Range, t proto.Timestamp) {
+	// Do nothing
+}
+
+func (fq *fakeRangeQueue) MaybeRemove(rng *Range) {
+	fq.maybeRemovedRngs <- rng
+}
+
+// TestMaybeRemove tests that MaybeRemove is called when a range is removed.
+func TestMaybeRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	fq := &fakeRangeQueue{
+		maybeRemovedRngs: make(chan *Range),
+	}
+	store.scanner.AddQueues(fq)
+
+	rng, err := store.GetRange(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := store.RemoveRange(rng); err != nil {
+		t.Error(err)
+	}
+	// MaybeRemove is called.
+	removedRng := <-fq.maybeRemovedRngs
+	if removedRng != rng {
+		t.Errorf("Unexpected removed range %v", removedRng)
+	}
+}
