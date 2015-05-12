@@ -853,7 +853,6 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, ar
 		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
 		// After successful commit, update cached stats and appliedIndex value.
 		atomic.StoreUint64(&r.appliedIndex, index)
-		r.stats.Update(ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 		// Maybe update gossip configs on a put.

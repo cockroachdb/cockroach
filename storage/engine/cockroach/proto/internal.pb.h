@@ -92,12 +92,11 @@ inline bool PushTxnType_Parse(
     PushTxnType_descriptor(), name, value);
 }
 enum InternalValueType {
-  _CR_TS = 1,
-  _CR_STATS = 2
+  _CR_TS = 1
 };
 bool InternalValueType_IsValid(int value);
 const InternalValueType InternalValueType_MIN = _CR_TS;
-const InternalValueType InternalValueType_MAX = _CR_STATS;
+const InternalValueType InternalValueType_MAX = _CR_TS;
 const int InternalValueType_ARRAYSIZE = InternalValueType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor();

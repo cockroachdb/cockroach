@@ -323,9 +323,9 @@ message TimeSeriesQueryResult {
   // A string which uniquely identifies the variable from which this data was
   // measured.
   optional string name = 1 [(gogoproto.nullable) = false];
-  // A list of sources from which the data was aggregated. 
+  // A list of sources from which the data was aggregated.
   repeated string sources = 2 [(gogoproto.nullable) = false];
-  // Datapoints describing the queried data. 
+  // Datapoints describing the queried data.
   repeated TimeSeriesDatapoint datapoints = 3;
 }
 

@@ -1528,7 +1528,7 @@ func TestFindSplitKey(t *testing.T) {
 		}
 	}
 	// write stats
-	if err := MergeStats(ms, engine, raftID); err != nil {
+	if err := MVCCSetRangeStats(engine, raftID, ms); err != nil {
 		t.Fatal(err)
 	}
 	snap := engine.NewSnapshot()
@@ -1633,7 +1633,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 			}
 		}
 		// write stats
-		if err := MergeStats(ms, engine, raftID); err != nil {
+		if err := MVCCSetRangeStats(engine, raftID, ms); err != nil {
 			t.Fatal(err)
 		}
 		snap := engine.NewSnapshot()
@@ -1722,7 +1722,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			}
 		}
 		// write stats
-		if err := MergeStats(ms, engine, raftID); err != nil {
+		if err := MVCCSetRangeStats(engine, raftID, ms); err != nil {
 			t.Fatal(err)
 		}
 		snap := engine.NewSnapshot()
@@ -2222,9 +2222,8 @@ func TestResovleIntentWithLowerEpoch(t *testing.T) {
 	}
 }
 
-// runMVCCStatsMerge merges MVCCStats values. Values are written
-// at a rate of writesPerRead writes for every read.
-func runMVCCStatsMerge(writesPerRead int, b *testing.B) {
+// BenchmarkMVCCStats set MVCCStats values.
+func BenchmarkMVCCStats(b *testing.B) {
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	defer rocksdb.Close()
 
@@ -2243,45 +2242,14 @@ func runMVCCStatsMerge(writesPerRead int, b *testing.B) {
 		SysCount:        1,
 		LastUpdateNanos: 1,
 	}
-	expMS := ms
-	if err := SetStats(&ms, rocksdb, 1); err != nil {
-		b.Fatal(err)
-	}
 	b.SetBytes(int64(unsafe.Sizeof(ms)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		if err := MergeStats(&ms, rocksdb, 1); err != nil {
+		if err := MVCCSetRangeStats(rocksdb, 1, &ms); err != nil {
 			b.Fatal(err)
-		}
-		expMS.Add(&ms)
-		// Every writesPerRead writes, read the underlying stats to force a merge.
-		if i%writesPerRead == 0 {
-			var readMS proto.MVCCStats
-			if err := MVCCGetRangeStats(rocksdb, 1, &readMS); err != nil {
-				b.Fatal(err)
-			}
-			if !reflect.DeepEqual(readMS, expMS) {
-				b.Fatalf("%d: expected %+v; got %+v", i, expMS, readMS)
-			}
 		}
 	}
 
 	b.StopTimer()
-}
-
-func BenchmarkMVCCStatsMerge1For1(b *testing.B) {
-	runMVCCStatsMerge(1, b)
-}
-
-func BenchmarkMVCCStatsMerge10For1(b *testing.B) {
-	runMVCCStatsMerge(10, b)
-}
-
-func BenchmarkMVCCStatsMerge100For1(b *testing.B) {
-	runMVCCStatsMerge(100, b)
-}
-
-func BenchmarkMVCCStatsMerge1000For1(b *testing.B) {
-	runMVCCStatsMerge(1000, b)
 }

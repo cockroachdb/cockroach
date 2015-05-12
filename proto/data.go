@@ -658,34 +658,6 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 	ms.LastUpdateNanos -= oms.LastUpdateNanos
 }
 
-// ToValue generates a Value message which contains an encoded copy of
-// the staats in its "bytes" field. The returned Value will also have
-// its "tag" string set to the _CR_STATS constant.
-func (ms *MVCCStats) ToValue() (*Value, error) {
-	b, err := gogoproto.Marshal(ms)
-	if err != nil {
-		return nil, err
-	}
-	return &Value{
-		Bytes: b,
-		Tag:   gogoproto.String(_CR_STATS.String()),
-	}, nil
-}
-
-// MVCCStatsFromValue attempts to extract an MVCCStats
-// message from the "bytes" field of the given value.
-func MVCCStatsFromValue(value *Value) (*MVCCStats, error) {
-	if value.GetTag() != _CR_STATS.String() {
-		return nil, util.Errorf("value is not tagged as containing MVCCStats: %v", value)
-	}
-	var ms MVCCStats
-	err := gogoproto.Unmarshal(value.Bytes, &ms)
-	if err != nil {
-		return nil, util.Errorf("MVCCStats could not be unmarshalled from value: %v %s", value, err)
-	}
-	return &ms, nil
-}
-
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {

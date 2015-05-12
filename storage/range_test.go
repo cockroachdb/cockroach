@@ -1857,14 +1857,6 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats, t 
 	if !reflect.DeepEqual(expMS, ms) {
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
-	// Also verify the GetRangeSize method.
-	rangeSize, err := engine.MVCCGetRangeSize(eng, raftID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if expSize := expMS.KeyBytes + expMS.ValBytes; expSize != rangeSize {
-		t.Errorf("expected range size %d; got %d", expSize, rangeSize)
-	}
 }
 
 // TestRangeStatsComputation verifies that commands executed against a

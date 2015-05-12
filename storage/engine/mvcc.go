@@ -38,30 +38,6 @@ const (
 	mvccVersionTimestampSize int64 = 12
 )
 
-// MergeStats merges accumulated stats to stat counters for specified range.
-func MergeStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
-	value, err := ms.ToValue()
-	if err != nil {
-		return err
-	}
-	if err := MVCCMerge(engine, nil, RangeStatsKey(raftID), *value); err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetStats sets stat counters for specified range.
-func SetStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
-	value, err := ms.ToValue()
-	if err != nil {
-		return err
-	}
-	if err := MVCCPut(engine, nil, RangeStatsKey(raftID), proto.ZeroTimestamp, *value, nil); err != nil {
-		return err
-	}
-	return nil
-}
-
 // updateStatsForKey returns whether or not the bytes and counts for
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
@@ -315,22 +291,16 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 	return bytes * ageSeconds
 }
 
-// MVCCGetRangeSize returns the size of the range, equal to the sum of
-// the key and value stats.
-// TODO(spencer): remove this.
-func MVCCGetRangeSize(engine Engine, raftID int64) (int64, error) {
-	var ms proto.MVCCStats
-	if err := MVCCGetRangeStats(engine, raftID, &ms); err != nil {
-		return 0, err
-	}
-	return ms.KeyBytes + ms.ValBytes, nil
-}
-
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the supplied MVCCStats struct.
 func MVCCGetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
 	_, err := MVCCGetProto(engine, RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
 	return err
+}
+
+// MVCCSetRangeStats sets stat counters for specified range.
+func MVCCSetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
+	return MVCCPutProto(engine, nil, RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
@@ -1299,10 +1269,11 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 	encEndKey := MVCCEncodeKey(endKey)
 
 	// Get range size from stats.
-	rangeSize, err := MVCCGetRangeSize(engine, raftID)
-	if err != nil {
+	var ms proto.MVCCStats
+	if err := MVCCGetRangeStats(engine, raftID, &ms); err != nil {
 		return nil, err
 	}
+	rangeSize := ms.KeyBytes + ms.ValBytes
 
 	targetSize := rangeSize / 2
 	sizeSoFar := int64(0)

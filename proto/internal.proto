@@ -351,8 +351,6 @@ enum InternalValueType {
   option (gogoproto.goproto_enum_prefix) = false;
   // _CR_TS is applied to values which contain InternalTimeSeriesData.
   _CR_TS = 1;
-  // _CR_STATS is applied to values which contain MVCCStats.
-  _CR_STATS = 2;
 }
 
 // InternalTimeSeriesData is a collection of data samples for some measurable

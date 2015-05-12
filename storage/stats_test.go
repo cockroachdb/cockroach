@@ -58,7 +58,7 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	if err := engine.SetStats(&ms, tc.engine, 1); err != nil {
+	if err := engine.MVCCSetRangeStats(tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
 	s, err := newRangeStats(1, tc.engine)
@@ -93,7 +93,6 @@ func TestRangeStatsMerge(t *testing.T) {
 	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 10*1E9); err != nil {
 		t.Fatal(err)
 	}
-	tc.rng.stats.Update(ms)
 	expMS := proto.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
@@ -118,7 +117,6 @@ func TestRangeStatsMerge(t *testing.T) {
 	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 20*1E9); err != nil {
 		t.Fatal(err)
 	}
-	tc.rng.stats.Update(ms)
 	expMS = proto.MVCCStats{
 		LiveBytes:       2,
 		KeyBytes:        4,

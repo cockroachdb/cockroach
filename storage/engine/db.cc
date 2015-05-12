@@ -342,67 +342,6 @@ bool WillOverflow(int64_t a, int64_t b) {
   return (std::numeric_limits<int64_t>::min() - b) > a;
 }
 
-// IsMVCCStatsData returns true if the given protobuffer Value contains an
-// MVCCStats message.
-bool IsMVCCStatsData(const cockroach::proto::Value *val) {
-    return val->has_tag()
-        && val->tag() == cockroach::proto::InternalValueType_Name(cockroach::proto::_CR_STATS);
-}
-
-// MergeMVCCStatsValues merges two Values which contain MVCCStats values by
-// accumulating each of the int64 fields. Returns true if the merge is
-// successful.
-//
-// Note that this method must be kept in sync with the fields available in
-// data.proto.
-bool MergeMVCCStatsValues(cockroach::proto::Value *left, const cockroach::proto::Value &right,
-        bool full_merge, rocksdb::Logger* logger) {
-    // Attempt to parse MVCCStats from both Values.
-    cockroach::proto::MVCCStats left_ms;
-    cockroach::proto::MVCCStats right_ms;
-    if (!left_ms.ParseFromString(left->bytes())) {
-        rocksdb::Warn(logger,
-                "left MVCCStats could not be parsed from bytes.");
-        return false;
-    }
-    if (!right_ms.ParseFromString(right.bytes())) {
-        rocksdb::Warn(logger,
-                "right MVCCStats could not be parsed from bytes.");
-        return false;
-    }
-    // Static check which enforces the note in the comment above that
-    // this code must be updated to reflect any additions to the
-    // MVCCStats struct. This is meant to prevent any added fields
-    // being silently ignored on merge.
-    if (sizeof(cockroach::proto::MVCCStats) != 128) {
-        fprintf(stderr, "sizeof MVCCStats struct %lu != 128\n", sizeof(cockroach::proto::MVCCStats));
-        rocksdb::Warn(logger,
-                "MVCCStats custom merge iterator has not been updated to match proto definition.");
-        return false;
-    }
-
-    // Accumulate values regardless of whether or not this is a full merge.
-#define set(x) left_ms.set_##x(left_ms.x() + right_ms.x())
-
-    set(live_bytes);
-    set(key_bytes);
-    set(val_bytes);
-    set(intent_bytes);
-    set(live_count);
-    set(key_count);
-    set(val_count);
-    set(intent_count);
-    set(intent_age);
-    set(gc_bytes_age);
-    set(sys_bytes);
-    set(sys_count);
-    set(last_update_nanos);
-
-    left_ms.SerializeToString(left->mutable_bytes());
-
-    return true;
-}
-
 // Method used to sort InternalTimeSeriesSamples.
 bool TimeSeriesSampleOrdering(const cockroach::proto::InternalTimeSeriesSample* a,
         const cockroach::proto::InternalTimeSeriesSample* b) {
@@ -605,13 +544,6 @@ bool MergeValues(cockroach::proto::Value *left, const cockroach::proto::Value &r
                 return false;
             }
             return MergeTimeSeriesValues(left, right, full_merge, logger);
-        } else if (IsMVCCStatsData(left) || IsMVCCStatsData(&right)) {
-            if (!IsMVCCStatsData(left) || !IsMVCCStatsData(&right)) {
-                rocksdb::Warn(logger,
-                        "inconsistent value types for merging mvcc stats data (type(left) != type(right))");
-                return false;
-            }
-            return MergeMVCCStatsValues(left, right, full_merge, logger);
         } else {
             *left->mutable_bytes() += right.bytes();
         }
