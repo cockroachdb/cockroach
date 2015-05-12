@@ -885,11 +885,12 @@ func marshalValue(v interface{}) ([]byte, error) {
 	return nil, fmt.Errorf("unable to marshal value: %T", v)
 }
 
-type runner interface {
+// Runner only exports the Run method on a batch of operations.
+type Runner interface {
 	Run(b *Batch) error
 }
 
-func runOne(r runner, b *Batch) (Result, error) {
+func runOne(r Runner, b *Batch) (Result, error) {
 	if err := r.Run(b); err != nil {
 		return Result{Err: err}, err
 	}
