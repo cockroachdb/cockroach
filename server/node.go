@@ -74,39 +74,23 @@ type nodeServer Node
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(db *client.KV) (proto.NodeID, error) {
-	iReply := &proto.IncrementResponse{}
-	if err := db.Run(client.Call{
-		Args: &proto.IncrementRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:  engine.KeyNodeIDGenerator,
-				User: storage.UserRoot,
-			},
-			Increment: 1,
-		},
-		Reply: iReply}); err != nil {
-		return 0, util.Errorf("unable to allocate node ID: %s", err)
+func allocateNodeID(db *client.DB) (proto.NodeID, error) {
+	r := db.Inc(engine.KeyNodeIDGenerator, 1)
+	if r.Err != nil {
+		return 0, util.Errorf("unable to allocate node ID: %s", r.Err)
 	}
-	return proto.NodeID(iReply.NewValue), nil
+	return proto.NodeID(r.Rows[0].ValueInt()), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
-func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.StoreID, error) {
-	iReply := &proto.IncrementResponse{}
-	if err := db.Run(client.Call{
-		Args: &proto.IncrementRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:  engine.KeyStoreIDGenerator,
-				User: storage.UserRoot,
-			},
-			Increment: inc,
-		},
-		Reply: iReply}); err != nil {
-		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
+func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.StoreID, error) {
+	r := db.Inc(engine.KeyStoreIDGenerator, inc)
+	if r.Err != nil {
+		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, r.Err)
 	}
-	return proto.StoreID(iReply.NewValue - inc + 1), nil
+	return proto.StoreID(r.Rows[0].ValueInt() - inc + 1), nil
 }
 
 // BootstrapCluster bootstraps a multiple stores using the provided engines and
@@ -123,6 +107,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
 	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
+	localDB.User = storage.UserRoot
 	ctx.DB = localDB
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	for i, eng := range engines {
@@ -160,13 +145,14 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 		lSender.AddStore(s)
 
 		// Initialize node and store ids.  Only initialize the node once.
+		kvDB := localDB.NewDB()
 		if i == 0 {
-			if nodeID, err := allocateNodeID(localDB); nodeID != sIdent.NodeID || err != nil {
+			if nodeID, err := allocateNodeID(kvDB); nodeID != sIdent.NodeID || err != nil {
 				return nil, util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
-		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, localDB); storeID != sIdent.StoreID || err != nil {
+		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, kvDB); storeID != sIdent.StoreID || err != nil {
 			return nil, util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
@@ -214,7 +200,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.ctx.DB)
+		id, err = allocateNodeID(n.ctx.DB.NewDB())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -344,7 +330,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB.NewDB())
 	if err != nil {
 		log.Fatal(err)
 	}

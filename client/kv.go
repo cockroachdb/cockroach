@@ -88,6 +88,14 @@ func NewKV(ctx *Context, sender KVSender) *KV {
 	}
 }
 
+// NewDB returns a new database handle using KV for the underlying
+// communication.
+//
+// TODO(pmattis): Remove once we plumb usage of DB everywhere.
+func (kv *KV) NewDB() *DB {
+	return &DB{kv: kv}
+}
+
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
 func (kv *KV) Run(calls ...Call) (err error) {
