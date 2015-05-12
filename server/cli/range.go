@@ -55,9 +55,9 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	r := kvDB.Scan(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
-	if r.Err != nil {
-		fmt.Fprintf(os.Stderr, "scan failed: %s\n", r.Err)
+	r, err := kvDB.Scan(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		osExit(1)
 		return
 	}
@@ -104,8 +104,8 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	if r := kvDB.AdminSplit(key, splitKey); r.Err != nil {
-		fmt.Fprintf(os.Stderr, "split failed: %s\n", r.Err)
+	if _, err := kvDB.AdminSplit(key, splitKey); err != nil {
+		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		osExit(1)
 	}
 }
@@ -130,8 +130,8 @@ func runMergeRange(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	if r := kvDB.AdminMerge(args[0]); r.Err != nil {
-		fmt.Fprintf(os.Stderr, "merge failed: %s\n", r.Err)
+	if _, err := kvDB.AdminMerge(args[0]); err != nil {
+		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		osExit(1)
 	}
 }

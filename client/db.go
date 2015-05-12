@@ -112,10 +112,6 @@ type Result struct {
 	Rows []KeyValue
 }
 
-func (r Result) Error() string {
-	return r.Err.Error()
-}
-
 func (r Result) String() string {
 	if r.Err != nil {
 		return r.Err.Error()
@@ -194,7 +190,7 @@ func Open(addr string) (*DB, error) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Get(keys ...interface{}) Result {
+func (db *DB) Get(keys ...interface{}) (Result, error) {
 	return runOne(db, db.B.Get(keys...))
 }
 
@@ -205,7 +201,7 @@ func (db *DB) Get(keys ...interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (db *DB) Put(key, value interface{}) Result {
+func (db *DB) Put(key, value interface{}) (Result, error) {
 	return runOne(db, db.B.Put(key, value))
 }
 
@@ -218,7 +214,7 @@ func (db *DB) Put(key, value interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (db *DB) CPut(key, value, expValue interface{}) Result {
+func (db *DB) CPut(key, value, expValue interface{}) (Result, error) {
 	return runOne(db, db.B.CPut(key, value, expValue))
 }
 
@@ -231,7 +227,7 @@ func (db *DB) CPut(key, value, expValue interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Inc(key interface{}, value int64) Result {
+func (db *DB) Inc(key interface{}, value int64) (Result, error) {
 	return runOne(db, db.B.Inc(key, value))
 }
 
@@ -242,7 +238,7 @@ func (db *DB) Inc(key interface{}, value int64) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Scan(begin, end interface{}, maxRows int64) Result {
+func (db *DB) Scan(begin, end interface{}, maxRows int64) (Result, error) {
 	return runOne(db, db.B.Scan(begin, end, maxRows))
 }
 
@@ -252,7 +248,7 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Del(keys ...interface{}) Result {
+func (db *DB) Del(keys ...interface{}) (Result, error) {
 	return runOne(db, db.B.Del(keys...))
 }
 
@@ -265,7 +261,7 @@ func (db *DB) Del(keys ...interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) DelRange(begin, end interface{}) Result {
+func (db *DB) DelRange(begin, end interface{}) (Result, error) {
 	return runOne(db, db.B.DelRange(begin, end))
 }
 
@@ -276,7 +272,7 @@ func (db *DB) DelRange(begin, end interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) AdminMerge(key interface{}) Result {
+func (db *DB) AdminMerge(key interface{}) (Result, error) {
 	return runOne(db, (&Batch{}).adminMerge(key))
 }
 
@@ -286,7 +282,7 @@ func (db *DB) AdminMerge(key interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) AdminSplit(key, splitKey interface{}) Result {
+func (db *DB) AdminSplit(key, splitKey interface{}) (Result, error) {
 	return runOne(db, (&Batch{}).adminSplit(key, splitKey))
 }
 
@@ -308,8 +304,7 @@ func (db *DB) Run(b *Batch) error {
 	if err := db.kv.Run(b.calls...); err != nil {
 		return err
 	}
-	b.fillResults()
-	return nil
+	return b.fillResults()
 }
 
 // Tx executes retryable in the context of a distributed transaction. The
@@ -363,7 +358,7 @@ func (tx *Tx) SetSnapshotIsolation() {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Get(keys ...interface{}) Result {
+func (tx *Tx) Get(keys ...interface{}) (Result, error) {
 	return runOne(tx, tx.B.Get(keys...))
 }
 
@@ -374,7 +369,7 @@ func (tx *Tx) Get(keys ...interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) Put(key, value interface{}) Result {
+func (tx *Tx) Put(key, value interface{}) (Result, error) {
 	return runOne(tx, tx.B.Put(key, value))
 }
 
@@ -387,7 +382,7 @@ func (tx *Tx) Put(key, value interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) CPut(key, value, expValue interface{}) Result {
+func (tx *Tx) CPut(key, value, expValue interface{}) (Result, error) {
 	return runOne(tx, tx.B.CPut(key, value, expValue))
 }
 
@@ -400,7 +395,7 @@ func (tx *Tx) CPut(key, value, expValue interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Inc(key interface{}, value int64) Result {
+func (tx *Tx) Inc(key interface{}, value int64) (Result, error) {
 	return runOne(tx, tx.B.Inc(key, value))
 }
 
@@ -411,7 +406,7 @@ func (tx *Tx) Inc(key interface{}, value int64) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Scan(begin, end interface{}, maxRows int64) Result {
+func (tx *Tx) Scan(begin, end interface{}, maxRows int64) (Result, error) {
 	return runOne(tx, tx.B.Scan(begin, end, maxRows))
 }
 
@@ -421,7 +416,7 @@ func (tx *Tx) Scan(begin, end interface{}, maxRows int64) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Del(keys ...interface{}) Result {
+func (tx *Tx) Del(keys ...interface{}) (Result, error) {
 	return runOne(tx, tx.B.Del(keys...))
 }
 
@@ -432,7 +427,7 @@ func (tx *Tx) Del(keys ...interface{}) Result {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) DelRange(begin, end interface{}) Result {
+func (tx *Tx) DelRange(begin, end interface{}) (Result, error) {
 	return runOne(tx, tx.B.DelRange(begin, end))
 }
 
@@ -454,8 +449,7 @@ func (tx *Tx) Run(b *Batch) error {
 	if err := tx.txn.Run(b.calls...); err != nil {
 		return err
 	}
-	b.fillResults()
-	return nil
+	return b.fillResults()
 }
 
 // Commit executes the operations queued up within a batch and commits the
@@ -517,7 +511,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults() {
+func (b *Batch) fillResults() error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -589,6 +583,14 @@ func (b *Batch) fillResults() {
 		}
 		offset += result.calls
 	}
+
+	for i := range b.Results {
+		result := &b.Results[i]
+		if result.Err != nil {
+			return result.Err
+		}
+	}
+	return nil
 }
 
 // InternalAddCall adds the specified call to the batch. It is intended for
@@ -891,9 +893,10 @@ type runner interface {
 	Run(b *Batch) error
 }
 
-func runOne(r runner, b *Batch) Result {
+func runOne(r runner, b *Batch) (Result, error) {
 	if err := r.Run(b); err != nil {
-		return Result{Err: err}
+		return Result{Err: err}, err
 	}
-	return b.Results[0]
+	res := b.Results[0]
+	return res, res.Err
 }
