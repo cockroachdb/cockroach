@@ -38,55 +38,104 @@ func ExampleDB_Get() {
 	s, db := setup()
 	defer s.Stop()
 
-	fmt.Println(db.Get("aa").String())
+	result := db.Get("aa")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
 	// Output:
-	// 0: aa=nil
+	// aa=
 }
 
 func ExampleDB_Put() {
 	s, db := setup()
 	defer s.Stop()
 
-	_ = db.Put("aa", "1")
-	fmt.Println(db.Get("aa").String())
+	result := db.Put("aa", "1")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	result = db.Get("aa")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
 	// Output:
-	// 0: aa=1
+	// aa=1
 }
 
 func ExampleDB_CPut() {
 	s, db := setup()
 	defer s.Stop()
 
-	_ = db.Put("aa", "1")
-	_ = db.CPut("aa", "2", "1")
-	fmt.Println(db.Get("aa").String())
+	result := db.Put("aa", "1")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	result = db.CPut("aa", "2", "1")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	result = db.Get("aa")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
-	_ = db.CPut("aa", "3", "1")
-	fmt.Println(db.Get("aa").String())
+	result = db.CPut("aa", "3", "1")
+	if result.Err == nil {
+		panic("expected error from conditional put")
+	}
+	result = db.Get("aa")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("aa=%s\n", result.Rows[0].ValueBytes())
 
-	_ = db.CPut("bb", "4", "1")
-	fmt.Println(db.Get("bb").String())
-	_ = db.CPut("bb", "4", nil)
-	fmt.Println(db.Get("bb").String())
+	result = db.CPut("bb", "4", "1")
+	if result.Err == nil {
+		panic("expected error from conditional put")
+	}
+	result = db.Get("bb")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("bb=%s\n", result.Rows[0].ValueBytes())
+	result = db.CPut("bb", "4", nil)
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	result = db.Get("bb")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("bb=%s\n", result.Rows[0].ValueBytes())
 
 	// Output:
-	// 0: aa=2
-	// 0: aa=2
-	// 0: bb=nil
-	// 0: bb=4
+	// aa=2
+	// aa=2
+	// bb=
+	// bb=4
 }
 
 func ExampleDB_Inc() {
 	s, db := setup()
 	defer s.Stop()
 
-	_ = db.Inc("aa", 100)
-	fmt.Println(db.Get("aa").String())
+	result := db.Inc("aa", 100)
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	result = db.Get("aa")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	fmt.Printf("aa=%d\n", result.Rows[0].ValueInt())
 
 	// Output:
-	// 0: aa=100
+	// aa=100
 }
 
 func ExampleBatch() {
@@ -94,13 +143,19 @@ func ExampleBatch() {
 	defer s.Stop()
 
 	b := db.B.Get("aa").Put("bb", "2")
-	_ = db.Run(b)
-	fmt.Println(b.Results[0].String())
-	fmt.Println(b.Results[1].String())
+	err := db.Run(b)
+	if err != nil {
+		panic(err)
+	}
+	for _, result := range b.Results {
+		for _, row := range result.Rows {
+			fmt.Printf("%s=%s\n", row.Key, row.ValueBytes())
+		}
+	}
 
 	// Output:
-	// 0: aa=nil
-	// 0: bb=2
+	// aa=
+	// bb=2
 }
 
 func ExampleDB_Scan() {
@@ -108,8 +163,17 @@ func ExampleDB_Scan() {
 	defer s.Stop()
 
 	b := db.B.Put("aa", "1").Put("ab", "2").Put("bb", "3")
-	_ = db.Run(b)
-	fmt.Println(db.Scan("a", "b", 100).String())
+	err := db.Run(b)
+	if err != nil {
+		panic(err)
+	}
+	result := db.Scan("a", "b", 100)
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	for i, row := range result.Rows {
+		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	}
 
 	// Output:
 	// 0: aa=1
@@ -120,9 +184,21 @@ func ExampleDB_Del() {
 	s, db := setup()
 	defer s.Stop()
 
-	_ = db.Run(db.B.Put("aa", "1").Put("ab", "2").Put("ac", "3"))
-	_ = db.Del("ab")
-	fmt.Println(db.Scan("a", "b", 100).String())
+	err := db.Run(db.B.Put("aa", "1").Put("ab", "2").Put("ac", "3"))
+	if err != nil {
+		panic(err)
+	}
+	result := db.Del("ab")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	result = db.Scan("a", "b", 100)
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	for i, row := range result.Rows {
+		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	}
 
 	// Output:
 	// 0: aa=1
@@ -133,11 +209,20 @@ func ExampleTx_Commit() {
 	s, db := setup()
 	defer s.Stop()
 
-	_ = db.Tx(func(tx *client.Tx) error {
+	err := db.Tx(func(tx *client.Tx) error {
 		return tx.Commit(tx.B.Put("aa", "1").Put("ab", "2"))
 	})
+	if err != nil {
+		panic(err)
+	}
 
-	fmt.Println(db.Get("aa", "ab").String())
+	result := db.Get("aa", "ab")
+	if result.Err != nil {
+		panic(result.Err)
+	}
+	for i, row := range result.Rows {
+		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	}
 
 	// Output:
 	// 0: aa=1

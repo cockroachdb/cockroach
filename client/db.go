@@ -74,6 +74,9 @@ func (kv *KeyValue) setValue(v *proto.Value) {
 // ValueBytes returns the value as a byte slice. This method will panic if the
 // value's type is not a byte slice.
 func (kv *KeyValue) ValueBytes() []byte {
+	if kv.Value == nil {
+		return nil
+	}
 	return kv.Value.([]byte)
 }
 
