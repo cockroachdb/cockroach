@@ -133,11 +133,11 @@ func (db *testSender) sendOne(call client.Call) {
 	}
 }
 
-// createTestStore creates a test store using an in-memory
-// engine. Returns the store, the store clock's manual unix nanos time
-// and a stopper. The caller is responsible for stopping the stopper
-// upon completion.
-func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
+// createTestStoreWithoutStart creates a test store using an in-memory
+// engine without starting the store. It returns the store, the store
+// clock's manual unix nanos time and a stopper. The caller is
+// responsible for stopping the stopper upon completion.
+func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	stopper := util.NewStopper()
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
 	ctx := TestStoreContext
@@ -155,6 +155,15 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
+	return store, manual, stopper
+}
+
+// createTestStore creates a test store using an in-memory
+// engine. It returns the store, the store clock's manual unix nanos time
+// and a stopper. The caller is responsible for stopping the stopper
+// upon completion.
+func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
+	store, manual, stopper := createTestStoreWithoutStart(t)
 	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
@@ -1348,13 +1357,20 @@ func (fq *fakeRangeQueue) MaybeRemove(rng *Range) {
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
 func TestMaybeRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, _, stopper := createTestStore(t)
+	store, _, stopper := createTestStoreWithoutStart(t)
 	defer stopper.Stop()
 
+	// Add a queue to the scanner before starting the store and running the scanner.
+	// This is necessary to avoid data race.
 	fq := &fakeRangeQueue{
 		maybeRemovedRngs: make(chan *Range),
 	}
 	store.scanner.AddQueues(fq)
+
+	if err := store.Start(stopper); err != nil {
+		t.Fatal(err)
+	}
+	store.WaitForInit()
 
 	rng, err := store.GetRange(1)
 	if err != nil {
