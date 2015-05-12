@@ -28,7 +28,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -695,10 +694,9 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	isExtension := prevLease.RaftNodeID == args.Lease.RaftNodeID
 	effectiveStart := args.Lease.Start
 	// We return this error in "normal" lease-overlap related failures.
-	rErr := &leaseRejectedError{
-		PrevLease:      *prevLease,
-		Lease:          args.Lease,
-		EffectiveStart: effectiveStart,
+	rErr := &proto.LeaseRejectedError{
+		Existing:  *prevLease,
+		Requested: args.Lease,
 	}
 
 	// Verify details of new lease request. The start of this lease must
@@ -729,7 +727,6 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	} else {
 		effectiveStart.Backward(prevLease.Expiration.Next())
 	}
-	rErr.EffectiveStart = effectiveStart
 
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
@@ -759,10 +756,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// node.
 	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
-
-		nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(args.Lease.RaftNodeID))
-		log.Infof("range %d: new leader lease for store %d on node %d: %s - %s",
-			r.Desc().RaftID, storeID, nodeID, args.Lease.Start, args.Lease.Expiration)
+		log.Infof("range %d: new leader lease %s", r.Desc().RaftID, args.Lease)
 	}
 
 	// Gossip configs in the event this range contains config info.

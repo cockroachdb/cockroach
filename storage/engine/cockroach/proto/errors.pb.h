@@ -51,6 +51,7 @@ class WriteIntentError_Intent;
 class WriteTooOldError;
 class OpRequiresTxnError;
 class ConditionFailedError;
+class LeaseRejectedError;
 class ErrorDetail;
 class Error;
 
@@ -1236,6 +1237,99 @@ class ConditionFailedError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class LeaseRejectedError : public ::google::protobuf::Message {
+ public:
+  LeaseRejectedError();
+  virtual ~LeaseRejectedError();
+
+  LeaseRejectedError(const LeaseRejectedError& from);
+
+  inline LeaseRejectedError& operator=(const LeaseRejectedError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const LeaseRejectedError& default_instance();
+
+  void Swap(LeaseRejectedError* other);
+
+  // implements Message ----------------------------------------------
+
+  LeaseRejectedError* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const LeaseRejectedError& from);
+  void MergeFrom(const LeaseRejectedError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.Lease Requested = 1;
+  inline bool has_requested() const;
+  inline void clear_requested();
+  static const int kRequestedFieldNumber = 1;
+  inline const ::cockroach::proto::Lease& requested() const;
+  inline ::cockroach::proto::Lease* mutable_requested();
+  inline ::cockroach::proto::Lease* release_requested();
+  inline void set_allocated_requested(::cockroach::proto::Lease* requested);
+
+  // optional .cockroach.proto.Lease Existing = 2;
+  inline bool has_existing() const;
+  inline void clear_existing();
+  static const int kExistingFieldNumber = 2;
+  inline const ::cockroach::proto::Lease& existing() const;
+  inline ::cockroach::proto::Lease* mutable_existing();
+  inline ::cockroach::proto::Lease* release_existing();
+  inline void set_allocated_existing(::cockroach::proto::Lease* existing);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.LeaseRejectedError)
+ private:
+  inline void set_has_requested();
+  inline void clear_has_requested();
+  inline void set_has_existing();
+  inline void clear_has_existing();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::Lease* requested_;
+  ::cockroach::proto::Lease* existing_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static LeaseRejectedError* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ErrorDetail : public ::google::protobuf::Message {
  public:
   ErrorDetail();
@@ -1272,6 +1366,7 @@ class ErrorDetail : public ::google::protobuf::Message {
     kWriteTooOld = 10,
     kOpRequiresTxn = 11,
     kConditionFailed = 12,
+    kLeaseRejected = 13,
     VALUE_NOT_SET = 0,
   };
 
@@ -1413,6 +1508,15 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline ::cockroach::proto::ConditionFailedError* release_condition_failed();
   inline void set_allocated_condition_failed(::cockroach::proto::ConditionFailedError* condition_failed);
 
+  // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
+  inline bool has_lease_rejected() const;
+  inline void clear_lease_rejected();
+  static const int kLeaseRejectedFieldNumber = 13;
+  inline const ::cockroach::proto::LeaseRejectedError& lease_rejected() const;
+  inline ::cockroach::proto::LeaseRejectedError* mutable_lease_rejected();
+  inline ::cockroach::proto::LeaseRejectedError* release_lease_rejected();
+  inline void set_allocated_lease_rejected(::cockroach::proto::LeaseRejectedError* lease_rejected);
+
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.ErrorDetail)
  private:
@@ -1428,6 +1532,7 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void set_has_write_too_old();
   inline void set_has_op_requires_txn();
   inline void set_has_condition_failed();
+  inline void set_has_lease_rejected();
 
   inline bool has_value();
   void clear_value();
@@ -1450,6 +1555,7 @@ class ErrorDetail : public ::google::protobuf::Message {
     ::cockroach::proto::WriteTooOldError* write_too_old_;
     ::cockroach::proto::OpRequiresTxnError* op_requires_txn_;
     ::cockroach::proto::ConditionFailedError* condition_failed_;
+    ::cockroach::proto::LeaseRejectedError* lease_rejected_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -2589,6 +2695,92 @@ inline void ConditionFailedError::set_allocated_actual_value(::cockroach::proto:
 
 // -------------------------------------------------------------------
 
+// LeaseRejectedError
+
+// optional .cockroach.proto.Lease Requested = 1;
+inline bool LeaseRejectedError::has_requested() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void LeaseRejectedError::set_has_requested() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void LeaseRejectedError::clear_has_requested() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void LeaseRejectedError::clear_requested() {
+  if (requested_ != NULL) requested_->::cockroach::proto::Lease::Clear();
+  clear_has_requested();
+}
+inline const ::cockroach::proto::Lease& LeaseRejectedError::requested() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.LeaseRejectedError.Requested)
+  return requested_ != NULL ? *requested_ : *default_instance_->requested_;
+}
+inline ::cockroach::proto::Lease* LeaseRejectedError::mutable_requested() {
+  set_has_requested();
+  if (requested_ == NULL) requested_ = new ::cockroach::proto::Lease;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.LeaseRejectedError.Requested)
+  return requested_;
+}
+inline ::cockroach::proto::Lease* LeaseRejectedError::release_requested() {
+  clear_has_requested();
+  ::cockroach::proto::Lease* temp = requested_;
+  requested_ = NULL;
+  return temp;
+}
+inline void LeaseRejectedError::set_allocated_requested(::cockroach::proto::Lease* requested) {
+  delete requested_;
+  requested_ = requested;
+  if (requested) {
+    set_has_requested();
+  } else {
+    clear_has_requested();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.LeaseRejectedError.Requested)
+}
+
+// optional .cockroach.proto.Lease Existing = 2;
+inline bool LeaseRejectedError::has_existing() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void LeaseRejectedError::set_has_existing() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void LeaseRejectedError::clear_has_existing() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void LeaseRejectedError::clear_existing() {
+  if (existing_ != NULL) existing_->::cockroach::proto::Lease::Clear();
+  clear_has_existing();
+}
+inline const ::cockroach::proto::Lease& LeaseRejectedError::existing() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.LeaseRejectedError.Existing)
+  return existing_ != NULL ? *existing_ : *default_instance_->existing_;
+}
+inline ::cockroach::proto::Lease* LeaseRejectedError::mutable_existing() {
+  set_has_existing();
+  if (existing_ == NULL) existing_ = new ::cockroach::proto::Lease;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.LeaseRejectedError.Existing)
+  return existing_;
+}
+inline ::cockroach::proto::Lease* LeaseRejectedError::release_existing() {
+  clear_has_existing();
+  ::cockroach::proto::Lease* temp = existing_;
+  existing_ = NULL;
+  return temp;
+}
+inline void LeaseRejectedError::set_allocated_existing(::cockroach::proto::Lease* existing) {
+  delete existing_;
+  existing_ = existing;
+  if (existing) {
+    set_has_existing();
+  } else {
+    clear_has_existing();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.LeaseRejectedError.Existing)
+}
+
+// -------------------------------------------------------------------
+
 // ErrorDetail
 
 // optional .cockroach.proto.NotLeaderError not_leader = 1;
@@ -3104,6 +3296,49 @@ inline void ErrorDetail::set_allocated_condition_failed(::cockroach::proto::Cond
   if (condition_failed) {
     set_has_condition_failed();
     value_.condition_failed_ = condition_failed;
+  }
+}
+
+// optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
+inline bool ErrorDetail::has_lease_rejected() const {
+  return value_case() == kLeaseRejected;
+}
+inline void ErrorDetail::set_has_lease_rejected() {
+  _oneof_case_[0] = kLeaseRejected;
+}
+inline void ErrorDetail::clear_lease_rejected() {
+  if (has_lease_rejected()) {
+    delete value_.lease_rejected_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::LeaseRejectedError& ErrorDetail::lease_rejected() const {
+  return has_lease_rejected() ? *value_.lease_rejected_
+                      : ::cockroach::proto::LeaseRejectedError::default_instance();
+}
+inline ::cockroach::proto::LeaseRejectedError* ErrorDetail::mutable_lease_rejected() {
+  if (!has_lease_rejected()) {
+    clear_value();
+    set_has_lease_rejected();
+    value_.lease_rejected_ = new ::cockroach::proto::LeaseRejectedError;
+  }
+  return value_.lease_rejected_;
+}
+inline ::cockroach::proto::LeaseRejectedError* ErrorDetail::release_lease_rejected() {
+  if (has_lease_rejected()) {
+    clear_has_value();
+    ::cockroach::proto::LeaseRejectedError* temp = value_.lease_rejected_;
+    value_.lease_rejected_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void ErrorDetail::set_allocated_lease_rejected(::cockroach::proto::LeaseRejectedError* lease_rejected) {
+  clear_value();
+  if (lease_rejected) {
+    set_has_lease_rejected();
+    value_.lease_rejected_ = lease_rejected;
   }
 }
 

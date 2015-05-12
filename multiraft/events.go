@@ -18,6 +18,7 @@
 package multiraft
 
 import (
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -26,7 +27,7 @@ import (
 // an election. NodeID is zero when an election is in progress.
 type EventLeaderElection struct {
 	GroupID uint64
-	NodeID  NodeID
+	NodeID  proto.RaftNodeID
 	Term    uint64
 }
 
@@ -51,7 +52,7 @@ type EventMembershipChangeCommitted struct {
 	GroupID    uint64
 	CommandID  string
 	Index      uint64
-	NodeID     NodeID
+	NodeID     proto.RaftNodeID
 	ChangeType raftpb.ConfChangeType
 	Payload    []byte
 

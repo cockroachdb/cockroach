@@ -56,7 +56,7 @@ func TestSendAndReceive(t *testing.T) {
 	servers := []*rpc.Server{}
 	// All the rest have length numStores (note that several stores share a transport).
 	nextNodeID := proto.NodeID(1)
-	nodeIDs := []multiraft.NodeID{}
+	nodeIDs := []proto.RaftNodeID{}
 	transports := []multiraft.Transport{}
 	channels := []ChannelServer{}
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {

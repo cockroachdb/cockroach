@@ -129,22 +129,6 @@ func verifyKeys(start, end proto.Key) error {
 	return nil
 }
 
-// MakeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
-func MakeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
-	if n < 0 || s <= 0 {
-		// Zeroes are likely the result of incomplete initialization.
-		// TODO(bdarnell): should we disallow NodeID==0? It should never occur in
-		// production but many tests use it.
-		panic("NodeID must be >= 0 and StoreID must be > 0")
-	}
-	return multiraft.NodeID(n)<<32 | multiraft.NodeID(s)
-}
-
-// DecodeRaftNodeID converts a multiraft NodeID into its component NodeID and StoreID.
-func DecodeRaftNodeID(n multiraft.NodeID) (proto.NodeID, proto.StoreID) {
-	return proto.NodeID(n >> 32), proto.StoreID(n & 0xffffffff)
-}
-
 type rangeAlreadyExists struct {
 	rng *Range
 }
@@ -567,8 +551,6 @@ func (s *Store) startGossip() error {
 func (s *Store) maybeGossipFirstRange() error {
 	rng := s.LookupRange(engine.KeyMin, nil)
 	if rng != nil {
-		log.Infof("gossiping first range on store %d, range %d",
-			s.StoreID(), rng.Desc().RaftID)
 		return rng.maybeGossipFirstRange()
 	}
 	return nil
@@ -589,8 +571,6 @@ func (s *Store) maybeGossipConfigs() error {
 			// This store has no range with this configuration.
 			continue
 		}
-		log.Infof("gossiping configuration map on store %d, range %d: %s",
-			s.StoreID(), rng.Desc().RaftID, cd.gossipKey)
 		// Wake up the replica. If it acquires a fresh lease, it will
 		// gossip. If an unexpected error occurs (i.e. nobody else seems to
 		// have an active lease but we still failed to obtain it), return
@@ -874,8 +854,8 @@ func (s *Store) ClusterID() string { return s.Ident.ClusterID }
 func (s *Store) StoreID() proto.StoreID { return s.Ident.StoreID }
 
 // RaftNodeID accessor.
-func (s *Store) RaftNodeID() multiraft.NodeID {
-	return MakeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
+func (s *Store) RaftNodeID() proto.RaftNodeID {
+	return proto.MakeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
 }
 
 // Clock accessor.
@@ -1274,7 +1254,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
 		return s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
-			MakeRaftNodeID(crt.NodeID, crt.StoreID),
+			proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
 			data)
 	}
 	return s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)

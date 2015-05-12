@@ -508,7 +508,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
-		nodeID      multiraft.NodeID
+		nodeID      proto.RaftNodeID
 		start       proto.Timestamp
 		expiration  proto.Timestamp
 		expLowWater int64

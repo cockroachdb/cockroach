@@ -319,7 +319,7 @@ message InternalRaftCommandUnion {
 // sent via raft.
 message InternalRaftCommand {
   optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
-  optional uint64 origin_node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "OriginNodeID" ];
+  optional uint64 origin_node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "OriginNodeID"];
   optional InternalRaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
 }
 

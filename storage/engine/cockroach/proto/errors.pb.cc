@@ -60,6 +60,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* ConditionFailedError_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ConditionFailedError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* LeaseRejectedError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  LeaseRejectedError_reflection_ = NULL;
 const ::google::protobuf::Descriptor* ErrorDetail_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ErrorDetail_reflection_ = NULL;
@@ -76,6 +79,7 @@ struct ErrorDetailOneofInstance {
   const ::cockroach::proto::WriteTooOldError* write_too_old_;
   const ::cockroach::proto::OpRequiresTxnError* op_requires_txn_;
   const ::cockroach::proto::ConditionFailedError* condition_failed_;
+  const ::cockroach::proto::LeaseRejectedError* lease_rejected_;
 }* ErrorDetail_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* Error_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
@@ -294,8 +298,24 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ConditionFailedError));
-  ErrorDetail_descriptor_ = file->message_type(12);
-  static const int ErrorDetail_offsets_[13] = {
+  LeaseRejectedError_descriptor_ = file->message_type(12);
+  static const int LeaseRejectedError_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, requested_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, existing_),
+  };
+  LeaseRejectedError_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      LeaseRejectedError_descriptor_,
+      LeaseRejectedError::default_instance_,
+      LeaseRejectedError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseRejectedError, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(LeaseRejectedError));
+  ErrorDetail_descriptor_ = file->message_type(13);
+  static const int ErrorDetail_offsets_[14] = {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, not_leader_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, range_not_found_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, range_key_mismatch_),
@@ -308,6 +328,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, write_too_old_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, op_requires_txn_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, condition_failed_),
+    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ErrorDetail_default_oneof_instance_, lease_rejected_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, value_),
   };
   ErrorDetail_reflection_ =
@@ -323,7 +344,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ErrorDetail));
-  Error_descriptor_ = file->message_type(13);
+  Error_descriptor_ = file->message_type(14);
   static const int Error_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, retryable_),
@@ -381,6 +402,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     ConditionFailedError_descriptor_, &ConditionFailedError::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    LeaseRejectedError_descriptor_, &LeaseRejectedError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     ErrorDetail_descriptor_, &ErrorDetail::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     Error_descriptor_, &Error::default_instance());
@@ -415,6 +438,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto() {
   delete OpRequiresTxnError_reflection_;
   delete ConditionFailedError::default_instance_;
   delete ConditionFailedError_reflection_;
+  delete LeaseRejectedError::default_instance_;
+  delete LeaseRejectedError_reflection_;
   delete ErrorDetail::default_instance_;
   delete ErrorDetail_default_oneof_instance_;
   delete ErrorDetail_reflection_;
@@ -466,35 +491,39 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "_timestamp\030\002 \001(\0132\032.cockroach.proto.Times"
     "tampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError\"D\n\024Cond"
     "itionFailedError\022,\n\014actual_value\030\001 \001(\0132\026"
-    ".cockroach.proto.Value\"\314\006\n\013ErrorDetail\0225"
-    "\n\nnot_leader\030\001 \001(\0132\037.cockroach.proto.Not"
-    "LeaderErrorH\000\022>\n\017range_not_found\030\002 \001(\0132#"
-    ".cockroach.proto.RangeNotFoundErrorH\000\022D\n"
-    "\022range_key_mismatch\030\003 \001(\0132&.cockroach.pr"
-    "oto.RangeKeyMismatchErrorH\000\022_\n read_with"
-    "in_uncertainty_interval\030\004 \001(\01323.cockroac"
-    "h.proto.ReadWithinUncertaintyIntervalErr"
-    "orH\000\022G\n\023transaction_aborted\030\005 \001(\0132(.cock"
-    "roach.proto.TransactionAbortedErrorH\000\022A\n"
-    "\020transaction_push\030\006 \001(\0132%.cockroach.prot"
-    "o.TransactionPushErrorH\000\022C\n\021transaction_"
-    "retry\030\007 \001(\0132&.cockroach.proto.Transactio"
-    "nRetryErrorH\000\022E\n\022transaction_status\030\010 \001("
-    "\0132\'.cockroach.proto.TransactionStatusErr"
-    "orH\000\0229\n\014write_intent\030\t \001(\0132!.cockroach.p"
-    "roto.WriteIntentErrorH\000\022:\n\rwrite_too_old"
-    "\030\n \001(\0132!.cockroach.proto.WriteTooOldErro"
-    "rH\000\022>\n\017op_requires_txn\030\013 \001(\0132#.cockroach"
-    ".proto.OpRequiresTxnErrorH\000\022A\n\020condition"
-    "_failed\030\014 \001(\0132%.cockroach.proto.Conditio"
-    "nFailedErrorH\000:\004\310\240\037\001B\007\n\005value\"\255\001\n\005Error\022"
-    "\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001("
-    "\010B\004\310\336\037\000\022F\n\023transaction_restart\030\004 \001(\0162#.c"
-    "ockroach.proto.TransactionRestartB\004\310\336\037\000\022"
-    ",\n\006detail\030\003 \001(\0132\034.cockroach.proto.ErrorD"
-    "etail*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013"
-    "\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\023Z\005proto\340\342\036\001\310"
-    "\342\036\001\320\342\036\001", 2487);
+    ".cockroach.proto.Value\"u\n\022LeaseRejectedE"
+    "rror\022/\n\tRequested\030\001 \001(\0132\026.cockroach.prot"
+    "o.LeaseB\004\310\336\037\000\022.\n\010Existing\030\002 \001(\0132\026.cockro"
+    "ach.proto.LeaseB\004\310\336\037\000\"\213\007\n\013ErrorDetail\0225\n"
+    "\nnot_leader\030\001 \001(\0132\037.cockroach.proto.NotL"
+    "eaderErrorH\000\022>\n\017range_not_found\030\002 \001(\0132#."
+    "cockroach.proto.RangeNotFoundErrorH\000\022D\n\022"
+    "range_key_mismatch\030\003 \001(\0132&.cockroach.pro"
+    "to.RangeKeyMismatchErrorH\000\022_\n read_withi"
+    "n_uncertainty_interval\030\004 \001(\01323.cockroach"
+    ".proto.ReadWithinUncertaintyIntervalErro"
+    "rH\000\022G\n\023transaction_aborted\030\005 \001(\0132(.cockr"
+    "oach.proto.TransactionAbortedErrorH\000\022A\n\020"
+    "transaction_push\030\006 \001(\0132%.cockroach.proto"
+    ".TransactionPushErrorH\000\022C\n\021transaction_r"
+    "etry\030\007 \001(\0132&.cockroach.proto.Transaction"
+    "RetryErrorH\000\022E\n\022transaction_status\030\010 \001(\013"
+    "2\'.cockroach.proto.TransactionStatusErro"
+    "rH\000\0229\n\014write_intent\030\t \001(\0132!.cockroach.pr"
+    "oto.WriteIntentErrorH\000\022:\n\rwrite_too_old\030"
+    "\n \001(\0132!.cockroach.proto.WriteTooOldError"
+    "H\000\022>\n\017op_requires_txn\030\013 \001(\0132#.cockroach."
+    "proto.OpRequiresTxnErrorH\000\022A\n\020condition_"
+    "failed\030\014 \001(\0132%.cockroach.proto.Condition"
+    "FailedErrorH\000\022=\n\016lease_rejected\030\r \001(\0132#."
+    "cockroach.proto.LeaseRejectedErrorH\000:\004\310\240"
+    "\037\001B\007\n\005value\"\255\001\n\005Error\022\025\n\007message\030\001 \001(\tB\004"
+    "\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022F\n\023transac"
+    "tion_restart\030\004 \001(\0162#.cockroach.proto.Tra"
+    "nsactionRestartB\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034."
+    "cockroach.proto.ErrorDetail*;\n\022Transacti"
+    "onRestart\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMM"
+    "EDIATE\020\002B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 2669);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -510,6 +539,7 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
   WriteTooOldError::default_instance_ = new WriteTooOldError();
   OpRequiresTxnError::default_instance_ = new OpRequiresTxnError();
   ConditionFailedError::default_instance_ = new ConditionFailedError();
+  LeaseRejectedError::default_instance_ = new LeaseRejectedError();
   ErrorDetail::default_instance_ = new ErrorDetail();
   ErrorDetail_default_oneof_instance_ = new ErrorDetailOneofInstance;
   Error::default_instance_ = new Error();
@@ -526,6 +556,7 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
   WriteTooOldError::default_instance_->InitAsDefaultInstance();
   OpRequiresTxnError::default_instance_->InitAsDefaultInstance();
   ConditionFailedError::default_instance_->InitAsDefaultInstance();
+  LeaseRejectedError::default_instance_->InitAsDefaultInstance();
   ErrorDetail::default_instance_->InitAsDefaultInstance();
   Error::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto);
@@ -3875,6 +3906,279 @@ void ConditionFailedError::Swap(ConditionFailedError* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
+const int LeaseRejectedError::kRequestedFieldNumber;
+const int LeaseRejectedError::kExistingFieldNumber;
+#endif  // !_MSC_VER
+
+LeaseRejectedError::LeaseRejectedError()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.LeaseRejectedError)
+}
+
+void LeaseRejectedError::InitAsDefaultInstance() {
+  requested_ = const_cast< ::cockroach::proto::Lease*>(&::cockroach::proto::Lease::default_instance());
+  existing_ = const_cast< ::cockroach::proto::Lease*>(&::cockroach::proto::Lease::default_instance());
+}
+
+LeaseRejectedError::LeaseRejectedError(const LeaseRejectedError& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.LeaseRejectedError)
+}
+
+void LeaseRejectedError::SharedCtor() {
+  _cached_size_ = 0;
+  requested_ = NULL;
+  existing_ = NULL;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+LeaseRejectedError::~LeaseRejectedError() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.LeaseRejectedError)
+  SharedDtor();
+}
+
+void LeaseRejectedError::SharedDtor() {
+  if (this != default_instance_) {
+    delete requested_;
+    delete existing_;
+  }
+}
+
+void LeaseRejectedError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* LeaseRejectedError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return LeaseRejectedError_descriptor_;
+}
+
+const LeaseRejectedError& LeaseRejectedError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+LeaseRejectedError* LeaseRejectedError::default_instance_ = NULL;
+
+LeaseRejectedError* LeaseRejectedError::New() const {
+  return new LeaseRejectedError;
+}
+
+void LeaseRejectedError::Clear() {
+  if (_has_bits_[0 / 32] & 3) {
+    if (has_requested()) {
+      if (requested_ != NULL) requested_->::cockroach::proto::Lease::Clear();
+    }
+    if (has_existing()) {
+      if (existing_ != NULL) existing_->::cockroach::proto::Lease::Clear();
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool LeaseRejectedError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.LeaseRejectedError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional .cockroach.proto.Lease Requested = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_requested()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_Existing;
+        break;
+      }
+
+      // optional .cockroach.proto.Lease Existing = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_Existing:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_existing()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.LeaseRejectedError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.LeaseRejectedError)
+  return false;
+#undef DO_
+}
+
+void LeaseRejectedError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.LeaseRejectedError)
+  // optional .cockroach.proto.Lease Requested = 1;
+  if (has_requested()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, this->requested(), output);
+  }
+
+  // optional .cockroach.proto.Lease Existing = 2;
+  if (has_existing()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, this->existing(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.LeaseRejectedError)
+}
+
+::google::protobuf::uint8* LeaseRejectedError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.LeaseRejectedError)
+  // optional .cockroach.proto.Lease Requested = 1;
+  if (has_requested()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, this->requested(), target);
+  }
+
+  // optional .cockroach.proto.Lease Existing = 2;
+  if (has_existing()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, this->existing(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.LeaseRejectedError)
+  return target;
+}
+
+int LeaseRejectedError::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional .cockroach.proto.Lease Requested = 1;
+    if (has_requested()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->requested());
+    }
+
+    // optional .cockroach.proto.Lease Existing = 2;
+    if (has_existing()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->existing());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void LeaseRejectedError::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const LeaseRejectedError* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const LeaseRejectedError*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void LeaseRejectedError::MergeFrom(const LeaseRejectedError& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_requested()) {
+      mutable_requested()->::cockroach::proto::Lease::MergeFrom(from.requested());
+    }
+    if (from.has_existing()) {
+      mutable_existing()->::cockroach::proto::Lease::MergeFrom(from.existing());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void LeaseRejectedError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void LeaseRejectedError::CopyFrom(const LeaseRejectedError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool LeaseRejectedError::IsInitialized() const {
+
+  return true;
+}
+
+void LeaseRejectedError::Swap(LeaseRejectedError* other) {
+  if (other != this) {
+    std::swap(requested_, other->requested_);
+    std::swap(existing_, other->existing_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata LeaseRejectedError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = LeaseRejectedError_descriptor_;
+  metadata.reflection = LeaseRejectedError_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
 const int ErrorDetail::kNotLeaderFieldNumber;
 const int ErrorDetail::kRangeNotFoundFieldNumber;
 const int ErrorDetail::kRangeKeyMismatchFieldNumber;
@@ -3887,6 +4191,7 @@ const int ErrorDetail::kWriteIntentFieldNumber;
 const int ErrorDetail::kWriteTooOldFieldNumber;
 const int ErrorDetail::kOpRequiresTxnFieldNumber;
 const int ErrorDetail::kConditionFailedFieldNumber;
+const int ErrorDetail::kLeaseRejectedFieldNumber;
 #endif  // !_MSC_VER
 
 ErrorDetail::ErrorDetail()
@@ -3908,6 +4213,7 @@ void ErrorDetail::InitAsDefaultInstance() {
   ErrorDetail_default_oneof_instance_->write_too_old_ = const_cast< ::cockroach::proto::WriteTooOldError*>(&::cockroach::proto::WriteTooOldError::default_instance());
   ErrorDetail_default_oneof_instance_->op_requires_txn_ = const_cast< ::cockroach::proto::OpRequiresTxnError*>(&::cockroach::proto::OpRequiresTxnError::default_instance());
   ErrorDetail_default_oneof_instance_->condition_failed_ = const_cast< ::cockroach::proto::ConditionFailedError*>(&::cockroach::proto::ConditionFailedError::default_instance());
+  ErrorDetail_default_oneof_instance_->lease_rejected_ = const_cast< ::cockroach::proto::LeaseRejectedError*>(&::cockroach::proto::LeaseRejectedError::default_instance());
 }
 
 ErrorDetail::ErrorDetail(const ErrorDetail& from)
@@ -4005,6 +4311,10 @@ void ErrorDetail::clear_value() {
     }
     case kConditionFailed: {
       delete value_.condition_failed_;
+      break;
+    }
+    case kLeaseRejected: {
+      delete value_.lease_rejected_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -4182,6 +4492,19 @@ bool ErrorDetail::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(106)) goto parse_lease_rejected;
+        break;
+      }
+
+      // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
+      case 13: {
+        if (tag == 106) {
+         parse_lease_rejected:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_lease_rejected()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -4283,6 +4606,12 @@ void ErrorDetail::SerializeWithCachedSizes(
       12, this->condition_failed(), output);
   }
 
+  // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
+  if (has_lease_rejected()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      13, this->lease_rejected(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -4375,6 +4704,13 @@ void ErrorDetail::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         12, this->condition_failed(), target);
+  }
+
+  // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
+  if (has_lease_rejected()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        13, this->lease_rejected(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -4473,6 +4809,13 @@ int ErrorDetail::ByteSize() const {
           this->condition_failed());
       break;
     }
+    // optional .cockroach.proto.LeaseRejectedError lease_rejected = 13;
+    case kLeaseRejected: {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->lease_rejected());
+      break;
+    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -4549,6 +4892,10 @@ void ErrorDetail::MergeFrom(const ErrorDetail& from) {
     }
     case kConditionFailed: {
       mutable_condition_failed()->::cockroach::proto::ConditionFailedError::MergeFrom(from.condition_failed());
+      break;
+    }
+    case kLeaseRejected: {
+      mutable_lease_rejected()->::cockroach::proto::LeaseRejectedError::MergeFrom(from.lease_rejected());
       break;
     }
     case VALUE_NOT_SET: {

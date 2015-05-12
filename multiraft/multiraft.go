@@ -20,9 +20,9 @@ package multiraft
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
@@ -35,17 +35,6 @@ const noGroup = uint64(0)
 // An ErrGroupDeleted is returned for commands which are pending while their
 // group is deleted.
 var ErrGroupDeleted = errors.New("group deleted")
-
-// NodeID is a type alias for a raft node ID. Note that a raft node corresponds
-// to a cockroach node+store combination.
-type NodeID uint64
-
-// Format implements the fmt.Formatter interface.
-func (n NodeID) Format(f fmt.State, verb rune) {
-	// Note: this implementation doesn't handle the width and precision
-	// specifiers such as "%20.10s".
-	fmt.Fprint(f, strconv.FormatInt(int64(n), 16))
-}
 
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
@@ -98,7 +87,7 @@ type MultiRaft struct {
 	Config
 	multiNode       raft.MultiNode
 	Events          chan interface{}
-	nodeID          NodeID
+	nodeID          proto.RaftNodeID
 	reqChan         chan *RaftMessageRequest
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
@@ -112,9 +101,9 @@ type MultiRaft struct {
 type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
+func NewMultiRaft(nodeID proto.RaftNodeID, config *Config) (*MultiRaft, error) {
 	if nodeID == 0 {
-		return nil, util.Error("Invalid NodeID")
+		return nil, util.Error("Invalid RaftNodeID")
 	}
 	err := config.validate()
 	if err != nil {
@@ -199,7 +188,7 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
-	fromID := NodeID(req.Message.From)
+	fromID := proto.RaftNodeID(req.Message.From)
 	originNode, ok := s.nodes[fromID]
 	if !ok {
 		// When a leader considers a follower to be down, it doesn't begin recovery
@@ -245,7 +234,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
 func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
-	fromID := NodeID(req.Message.From)
+	fromID := proto.RaftNodeID(req.Message.From)
 	originNode, ok := s.nodes[fromID]
 	if !ok {
 		log.Warningf("node %v: not fanning out heartbeat response from unknown node %v",
@@ -327,7 +316,7 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
 func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
-	changeType raftpb.ConfChangeType, nodeID NodeID, payload []byte) <-chan error {
+	changeType raftpb.ConfChangeType, nodeID proto.RaftNodeID, payload []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	}
@@ -367,7 +356,7 @@ type group struct {
 
 	// leader is the node ID of the last known leader for this group, or
 	// 0 if an election is in progress.
-	leader NodeID
+	leader proto.RaftNodeID
 
 	// pending contains all commands that have been proposed but not yet
 	// committed in the current term. When a proposal is committed, nil
@@ -393,7 +382,7 @@ type removeGroupOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	nodeID   NodeID
+	nodeID   proto.RaftNodeID
 	refCount int
 	groupIDs map[uint64]struct{}
 }
@@ -412,7 +401,7 @@ func (n *node) unregisterGroup(groupID uint64) {
 type state struct {
 	*MultiRaft
 	groups    map[uint64]*group
-	nodes     map[NodeID]*node
+	nodes     map[proto.RaftNodeID]*node
 	writeTask *writeTask
 	stopper   *util.Stopper
 }
@@ -421,7 +410,7 @@ func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft: m,
 		groups:    make(map[uint64]*group),
-		nodes:     make(map[NodeID]*node),
+		nodes:     make(map[proto.RaftNodeID]*node),
 		writeTask: newWriteTask(m.Storage),
 	}
 }
@@ -616,7 +605,7 @@ func (s *state) stop() {
 // addNode creates a node and registers the given groupIDs for that
 // node. If the node already exists and possible some of the groups
 // are already registered, only the missing groups will be added in.
-func (s *state) addNode(nodeID NodeID, groupIDs ...uint64) error {
+func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...uint64) error {
 	for _, groupID := range groupIDs {
 		if _, ok := s.groups[groupID]; !ok {
 			return util.Errorf("can not add invalid group %d to node %d",
@@ -677,7 +666,7 @@ func (s *state) createGroup(groupID uint64) error {
 	}
 
 	for _, nodeID := range cs.Nodes {
-		if err := s.addNode(NodeID(nodeID), groupID); err != nil {
+		if err := s.addNode(proto.RaftNodeID(nodeID), groupID); err != nil {
 			return err
 		}
 	}
@@ -698,7 +687,7 @@ func (s *state) createGroup(groupID uint64) error {
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
-	if len(cs.Nodes) == 1 && s.MultiRaft.nodeID == NodeID(cs.Nodes[0]) {
+	if len(cs.Nodes) == 1 && s.MultiRaft.nodeID == proto.RaftNodeID(cs.Nodes[0]) {
 		return s.multiNode.Campaign(context.Background(), groupID)
 	}
 	return nil
@@ -730,7 +719,7 @@ func (s *state) removeGroup(op *removeGroupOp, readyGroups map[uint64]raft.Ready
 		op.ch <- err
 	}
 	for _, nodeID := range cs.Nodes {
-		s.nodes[NodeID(nodeID)].unregisterGroup(op.groupID)
+		s.nodes[proto.RaftNodeID(nodeID)].unregisterGroup(op.groupID)
 	}
 	// Delete any entries for this group in readyGroups.
 	if readyGroups != nil {
@@ -844,7 +833,7 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 			GroupID:    groupID,
 			CommandID:  commandID,
 			Index:      entry.Index,
-			NodeID:     NodeID(cc.NodeID),
+			NodeID:     proto.RaftNodeID(cc.NodeID),
 			ChangeType: cc.Type,
 			Payload:    payload,
 			Callback: func(err error) {
@@ -856,7 +845,7 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
-							err = s.addNode(NodeID(cc.NodeID), groupID)
+							err = s.addNode(proto.RaftNodeID(cc.NodeID), groupID)
 						case raftpb.ConfChangeRemoveNode:
 							// TODO(bdarnell): support removing nodes; fix double-application of initial entries
 						case raftpb.ConfChangeUpdateNode:
@@ -894,7 +883,7 @@ func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
 		log.Infof("node %v sending message %.200s to %v", s.nodeID,
 			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 	}
-	nodeID := NodeID(msg.To)
+	nodeID := proto.RaftNodeID(msg.To)
 	if _, ok := s.nodes[nodeID]; !ok {
 		if log.V(4) {
 			log.Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
@@ -931,7 +920,7 @@ func (s *state) maybeSendLeaderEvent(groupID uint64, g *group, ready *raft.Ready
 	term := g.committedTerm
 	if ready.SoftState != nil {
 		// Always save the leader whenever we get a SoftState.
-		g.leader = NodeID(ready.SoftState.Lead)
+		g.leader = proto.RaftNodeID(ready.SoftState.Lead)
 	}
 	if len(ready.CommittedEntries) > 0 {
 		term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
@@ -942,7 +931,7 @@ func (s *state) maybeSendLeaderEvent(groupID uint64, g *group, ready *raft.Ready
 		g.committedTerm = term
 		s.sendEvent(&EventLeaderElection{
 			GroupID: groupID,
-			NodeID:  NodeID(g.leader),
+			NodeID:  proto.RaftNodeID(g.leader),
 			Term:    g.committedTerm,
 		})
 

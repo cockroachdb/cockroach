@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -70,7 +71,7 @@ func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *tes
 			TickInterval:           time.Hour, // not in use
 			Strict:                 true,
 		}
-		mr, err := NewMultiRaft(NodeID(i+1), config)
+		mr, err := NewMultiRaft(proto.RaftNodeID(i+1), config)
 		if err != nil {
 			t.Fatal(err)
 		}

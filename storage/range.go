@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -67,7 +68,7 @@ var (
 	// partition. As such it must expire on a reasonable basis and be
 	// continually re-gossiped. The replica which is the raft leader of
 	// the first range gossips it.
-	clusterIDGossipTTL = 30 * time.Second
+	clusterIDGossipTTL = 2 * time.Minute
 	// clusterIDGossipInterval is the approximate interval at which the
 	// sentinel info is gossiped.
 	clusterIDGossipInterval = clusterIDGossipTTL / 2
@@ -78,7 +79,7 @@ var (
 	// their config maps. Even if config maps do not expire, we still
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
-	configGossipInterval = time.Minute
+	configGossipInterval = 1 * time.Minute
 )
 
 // TestingCommandFilter may be set in tests to intercept the handling
@@ -113,7 +114,7 @@ type configDescriptor struct {
 
 // configDescriptors is a slice containing the accounting, permissions
 // and zone configuration descriptors.
-var configDescriptors = []*configDescriptor{
+var configDescriptors = [3]*configDescriptor{
 	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
 	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
 	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
@@ -157,7 +158,7 @@ type rangeManager interface {
 	// Accessors for shared state.
 	ClusterID() string
 	StoreID() proto.StoreID
-	RaftNodeID() multiraft.NodeID
+	RaftNodeID() proto.RaftNodeID
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	DB() *client.KV
@@ -178,19 +179,6 @@ type rangeManager interface {
 	SplitRange(origRng, newRng *Range) error
 }
 
-// a leaseRejectedError is returned if a lease request is denied due to
-// illegal overlap with the previous lease.
-type leaseRejectedError struct {
-	EffectiveStart   proto.Timestamp
-	PrevLease, Lease proto.Lease
-}
-
-func (l *leaseRejectedError) Error() string {
-	nodeID, storeID := DecodeRaftNodeID(multiraft.NodeID(l.Lease.RaftNodeID))
-	return fmt.Sprintf("node %d, store %d: previous lease %s overlaps %s (effective %s)",
-		nodeID, storeID, &l.PrevLease, &l.Lease, l.EffectiveStart)
-}
-
 // A Range is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -209,6 +197,7 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
+	configCsums  [3]uint32      // Last-gossiped config map checksums
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 
@@ -307,7 +296,7 @@ func (r *Range) newNotLeaderError() error {
 	err := &proto.NotLeaderError{}
 	if l := r.getLease(); l.RaftNodeID != 0 {
 		_, err.Replica = r.Desc().FindReplica(r.rm.StoreID())
-		_, storeID := DecodeRaftNodeID(multiraft.NodeID(l.RaftNodeID))
+		_, storeID := proto.DecodeRaftNodeID(proto.RaftNodeID(l.RaftNodeID))
 		_, err.Leader = r.Desc().FindReplica(storeID)
 	}
 	return err
@@ -381,7 +370,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 
 // verifyLeaderLease checks whether the requesting replica (by raft
 // node ID) holds the leader lease covering the specified timestamp.
-func (r *Range) verifyLeaderLease(originRaftNodeID multiraft.NodeID, timestamp proto.Timestamp) bool {
+func (r *Range) verifyLeaderLease(originRaftNodeID proto.RaftNodeID, timestamp proto.Timestamp) bool {
 	l := r.getLease()
 	return uint64(originRaftNodeID) == l.RaftNodeID && timestamp.Less(l.Expiration)
 }
@@ -764,7 +753,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 		reply = args.CreateReply()
 	}
 
-	err := r.applyRaftCommand(index, multiraft.NodeID(raftCmd.OriginNodeID), args, reply)
+	err := r.applyRaftCommand(index, proto.RaftNodeID(raftCmd.OriginNodeID), args, reply)
 
 	if cmd != nil {
 		cmd.done <- err
@@ -776,7 +765,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 
 // applyRaftCommand applies a raft command from the replicated log to
 // the underlying state machine (i.e. the engine).
-func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, args proto.Request, reply proto.Response) error {
+func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, args proto.Request, reply proto.Response) error {
 	if index <= 0 {
 		log.Fatalf("raft command index is <= 0")
 	}
@@ -895,7 +884,7 @@ func (r *Range) getLeaseForGossip() (bool, error) {
 		switch e := err.(type) {
 		// NotLeaderError means there is an active lease, leaseRejectedError
 		// means we tried to get one but someone beat us to it.
-		case *proto.NotLeaderError, *leaseRejectedError:
+		case *proto.NotLeaderError: //, *proto.LeaseRejectedError:
 		default:
 			// Any other error is worth being logged visibly.
 			log.Warningf("could not acquire lease for first range gossip: %s", e)
@@ -915,6 +904,7 @@ func (r *Range) maybeGossipFirstRange() error {
 	if ok, err := r.getLeaseForGossip(); !ok || err != nil {
 		return err
 	}
+	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
 	}
@@ -939,7 +929,7 @@ func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}
-	for _, cd := range configDescriptors {
+	for i, cd := range configDescriptors {
 		if match(cd.keyPrefix) {
 			// Check for a bad range split. This should never happen as ranges
 			// cannot be split mid-config.
@@ -949,11 +939,13 @@ func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
 				// time being, it will only fire the first range.
 				log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
 			}
-			configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+			configMap, csum, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
 			if err != nil {
 				log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
 				continue
-			} else {
+			} else if csum != r.configCsums[i] {
+				r.configCsums[i] = csum
+				log.Infof("gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
 				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
 					log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
 					continue
@@ -964,24 +956,28 @@ func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
 }
 
 // loadConfigMap scans the config entries under keyPrefix and
-// instantiates/returns a config map. Prefix configuration maps
-// include accounting, permissions, and zones.
-func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, error) {
+// instantiates/returns a config map and its checksum. Prefix
+// configuration maps include accounting, permissions, and zones.
+func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, uint32, error) {
 	kvs, err := engine.MVCCScan(r.rm.Engine(), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var configs []*PrefixConfig
+	c := encoding.NewCRC32Checksum([]byte(nil))
+	defer encoding.ReleaseCRC32Checksum(c)
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
 		// proto encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, config); err != nil {
-			return nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
+			return nil, 0, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
 		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
+		c.Write(kv.Value.Bytes)
 	}
-	return NewPrefixConfigMap(configs)
+	m, err := NewPrefixConfigMap(configs)
+	return m, c.Sum32(), err
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range

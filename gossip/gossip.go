@@ -230,7 +230,7 @@ func (g *Gossip) GetInfo(key string) (interface{}, error) {
 func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return json.Marshal(g.is)
+	return json.MarshalIndent(g.is, "", "  ")
 }
 
 // GetGroupInfos returns a slice of info values from specified group,
