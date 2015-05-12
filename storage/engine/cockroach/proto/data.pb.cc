@@ -404,7 +404,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(TimeSeriesQueryResult));
   MVCCStats_descriptor_ = file->message_type(18);
-  static const int MVCCStats_offsets_[11] = {
+  static const int MVCCStats_offsets_[13] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, live_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, key_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, val_bytes_),
@@ -415,6 +415,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, intent_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, intent_age_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, gc_bytes_age_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, sys_bytes_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, sys_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, last_update_nanos_),
   };
   MVCCStats_reflection_ =
@@ -603,20 +605,21 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "|\n\025TimeSeriesQueryResult\022\022\n\004name\030\001 \001(\tB\004"
     "\310\336\037\000\022\025\n\007sources\030\002 \003(\tB\004\310\336\037\000\0228\n\ndatapoint"
     "s\030\003 \003(\0132$.cockroach.proto.TimeSeriesData"
-    "point\"\300\002\n\tMVCCStats\022\030\n\nlive_bytes\030\001 \001(\003B"
+    "point\"\362\002\n\tMVCCStats\022\030\n\nlive_bytes\030\001 \001(\003B"
     "\004\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_by"
     "tes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310"
     "\336\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_cou"
     "nt\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022"
     "\032\n\014intent_count\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_ag"
     "e\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037"
-    "\000\342\336\037\nGCBytesAge\022\037\n\021last_update_nanos\030\013 \001"
-    "(\003B\004\310\336\037\000*>\n\021ReplicaChangeType\022\017\n\013ADD_REP"
-    "LICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsol"
-    "ationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020"
-    "\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020"
-    "\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005p"
-    "roto\340\342\036\001\310\342\036\001\320\342\036\001", 3256);
+    "\000\342\336\037\nGCBytesAge\022\027\n\tsys_bytes\030\014 \001(\003B\004\310\336\037\000"
+    "\022\027\n\tsys_count\030\r \001(\003B\004\310\336\037\000\022\037\n\021last_update"
+    "_nanos\030\036 \001(\003B\004\310\336\037\000*>\n\021ReplicaChangeType\022"
+    "\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243"
+    "\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n"
+    "\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013"
+    "\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032"
+    "\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 3306);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -6788,6 +6791,8 @@ const int MVCCStats::kValCountFieldNumber;
 const int MVCCStats::kIntentCountFieldNumber;
 const int MVCCStats::kIntentAgeFieldNumber;
 const int MVCCStats::kGcBytesAgeFieldNumber;
+const int MVCCStats::kSysBytesFieldNumber;
+const int MVCCStats::kSysCountFieldNumber;
 const int MVCCStats::kLastUpdateNanosFieldNumber;
 #endif  // !_MSC_VER
 
@@ -6819,6 +6824,8 @@ void MVCCStats::SharedCtor() {
   intent_count_ = GOOGLE_LONGLONG(0);
   intent_age_ = GOOGLE_LONGLONG(0);
   gc_bytes_age_ = GOOGLE_LONGLONG(0);
+  sys_bytes_ = GOOGLE_LONGLONG(0);
+  sys_count_ = GOOGLE_LONGLONG(0);
   last_update_nanos_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -6868,7 +6875,9 @@ void MVCCStats::Clear() {
   if (_has_bits_[0 / 32] & 255) {
     ZR_(live_bytes_, intent_count_);
   }
-  ZR_(intent_age_, last_update_nanos_);
+  if (_has_bits_[8 / 32] & 7936) {
+    ZR_(intent_age_, last_update_nanos_);
+  }
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -6883,7 +6892,7 @@ bool MVCCStats::MergePartialFromCodedStream(
   ::google::protobuf::uint32 tag;
   // @@protoc_insertion_point(parse_start:cockroach.proto.MVCCStats)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(16383);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -7032,13 +7041,43 @@ bool MVCCStats::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(88)) goto parse_last_update_nanos;
+        if (input->ExpectTag(96)) goto parse_sys_bytes;
         break;
       }
 
-      // optional int64 last_update_nanos = 11;
-      case 11: {
-        if (tag == 88) {
+      // optional int64 sys_bytes = 12;
+      case 12: {
+        if (tag == 96) {
+         parse_sys_bytes:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &sys_bytes_)));
+          set_has_sys_bytes();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(104)) goto parse_sys_count;
+        break;
+      }
+
+      // optional int64 sys_count = 13;
+      case 13: {
+        if (tag == 104) {
+         parse_sys_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &sys_count_)));
+          set_has_sys_count();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(240)) goto parse_last_update_nanos;
+        break;
+      }
+
+      // optional int64 last_update_nanos = 30;
+      case 30: {
+        if (tag == 240) {
          parse_last_update_nanos:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -7126,9 +7165,19 @@ void MVCCStats::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(10, this->gc_bytes_age(), output);
   }
 
-  // optional int64 last_update_nanos = 11;
+  // optional int64 sys_bytes = 12;
+  if (has_sys_bytes()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(12, this->sys_bytes(), output);
+  }
+
+  // optional int64 sys_count = 13;
+  if (has_sys_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(13, this->sys_count(), output);
+  }
+
+  // optional int64 last_update_nanos = 30;
   if (has_last_update_nanos()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(11, this->last_update_nanos(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(30, this->last_update_nanos(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -7191,9 +7240,19 @@ void MVCCStats::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(10, this->gc_bytes_age(), target);
   }
 
-  // optional int64 last_update_nanos = 11;
+  // optional int64 sys_bytes = 12;
+  if (has_sys_bytes()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(12, this->sys_bytes(), target);
+  }
+
+  // optional int64 sys_count = 13;
+  if (has_sys_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(13, this->sys_count(), target);
+  }
+
+  // optional int64 last_update_nanos = 30;
   if (has_last_update_nanos()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(11, this->last_update_nanos(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(30, this->last_update_nanos(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -7280,9 +7339,23 @@ int MVCCStats::ByteSize() const {
           this->gc_bytes_age());
     }
 
-    // optional int64 last_update_nanos = 11;
-    if (has_last_update_nanos()) {
+    // optional int64 sys_bytes = 12;
+    if (has_sys_bytes()) {
       total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->sys_bytes());
+    }
+
+    // optional int64 sys_count = 13;
+    if (has_sys_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->sys_count());
+    }
+
+    // optional int64 last_update_nanos = 30;
+    if (has_last_update_nanos()) {
+      total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->last_update_nanos());
     }
@@ -7346,6 +7419,12 @@ void MVCCStats::MergeFrom(const MVCCStats& from) {
     if (from.has_gc_bytes_age()) {
       set_gc_bytes_age(from.gc_bytes_age());
     }
+    if (from.has_sys_bytes()) {
+      set_sys_bytes(from.sys_bytes());
+    }
+    if (from.has_sys_count()) {
+      set_sys_count(from.sys_count());
+    }
     if (from.has_last_update_nanos()) {
       set_last_update_nanos(from.last_update_nanos());
     }
@@ -7382,6 +7461,8 @@ void MVCCStats::Swap(MVCCStats* other) {
     std::swap(intent_count_, other->intent_count_);
     std::swap(intent_age_, other->intent_age_);
     std::swap(gc_bytes_age_, other->gc_bytes_age_);
+    std::swap(sys_bytes_, other->sys_bytes_);
+    std::swap(sys_count_, other->sys_count_);
     std::swap(last_update_nanos_, other->last_update_nanos_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);

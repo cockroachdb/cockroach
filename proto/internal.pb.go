@@ -58,16 +58,15 @@ func (x *PushTxnType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// InternalValueType defines a set of string constants placed in the "tag" field
-// of Value messages which are created internally. These are defined as a
-// protocol buffer enumeration so that they can be used portably between our Go
-// and C code.
+// InternalValueType defines a set of string constants placed in the
+// "tag" field of Value messages which are created internally. These
+// are defined as a protocol buffer enumeration so that they can be
+// used portably between our Go and C code. The tags are used by the
+// RocksDB Merge Operator to perform specialized merges.
 type InternalValueType int32
 
 const (
-	// _CR_TS is applied to values which contain InternalTimeSeriesData. This
-	// tag is used by the RocksDB Merge Operator to perform a specialized merge
-	// for this data.
+	// _CR_TS is applied to values which contain InternalTimeSeriesData.
 	_CR_TS InternalValueType = 1
 )
 

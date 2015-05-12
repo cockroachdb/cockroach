@@ -66,8 +66,7 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		{engine.RaftLogKey(r.Desc().RaftID, 1), ts0},
 		{engine.RangeGCMetadataKey(r.Desc().RaftID), ts0},
 		{engine.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
-		{engine.RangeStatKey(r.Desc().RaftID, engine.StatKeyBytes), ts0},
-		{engine.RangeStatKey(r.Desc().RaftID, engine.StatKeyCount), ts0},
+		{engine.RangeStatsKey(r.Desc().RaftID), ts0},
 		{engine.RangeDescriptorKey(r.Desc().StartKey), ts},
 		{engine.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
 		{engine.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
@@ -112,7 +111,7 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	newDesc.StartKey = proto.Key("a")
 	tc.rng.SetDesc(&newDesc)
 
-	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
+	iter := newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Error("expected empty iteration")
@@ -162,7 +161,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	keys := createRangeData(tc.rng, t)
 	postKeys := createRangeData(postRng, t)
 
-	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
+	iter := newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
 	i := 0
 	for ; iter.Valid(); iter.Next() {
@@ -187,7 +186,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	if err := tc.rng.Destroy(); err != nil {
 		t.Fatal(err)
 	}
-	iter = newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
+	iter = newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
 	if iter.Valid() {
 		t.Errorf("expected empty iteration; got first key %q", iter.Key())
@@ -201,7 +200,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 		{preRng, preKeys},
 		{postRng, postKeys},
 	} {
-		iter = newRangeDataIterator(test.r, test.r.rm.Engine())
+		iter = newRangeDataIterator(test.r.Desc(), test.r.rm.Engine())
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {

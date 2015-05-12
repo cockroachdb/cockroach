@@ -44,11 +44,6 @@ func StoreIdentKey() proto.Key {
 	return MakeStoreKey(KeyLocalStoreIdentSuffix, proto.Key{})
 }
 
-// StoreStatKey returns the key for accessing the named stat.
-func StoreStatKey(stat proto.Key) proto.Key {
-	return MakeStoreKey(KeyLocalStoreStatSuffix, stat)
-}
-
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
 func StoreStatusKey(storeID int32) proto.Key {
@@ -117,10 +112,10 @@ func RaftLastIndexKey(raftID int64) proto.Key {
 	return MakeRangeIDKey(raftID, KeyLocalRaftLastIndexSuffix, proto.Key{})
 }
 
-// RangeStatKey returns the key for accessing the named stat
+// RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Raft ID.
-func RangeStatKey(raftID int64, stat proto.Key) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRangeStatSuffix, stat)
+func RangeStatsKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRangeStatsSuffix, nil)
 }
 
 // ResponseCacheKey returns a range-local key by Raft ID for a
@@ -287,46 +282,6 @@ func DecodeRangeMetaKey(key proto.Key) (proto.Key, proto.Key) {
 	return key.Next(), metaPrefix.PrefixEnd()
 }
 
-// Constants for stat key construction.
-var (
-	// StatLiveBytes counts how many bytes are "live", including bytes
-	// from both keys and values. Live rows include only non-deleted
-	// keys and only the most recent value.
-	StatLiveBytes = proto.Key("live-bytes")
-	// StatKeyBytes counts how many bytes are used to store all keys,
-	// including bytes from deleted keys. Key bytes are re-counted for
-	// each versioned value.
-	StatKeyBytes = proto.Key("key-bytes")
-	// StatValBytes counts how many bytes are used to store all values,
-	// including all historical versions and deleted tombstones.
-	StatValBytes = proto.Key("val-bytes")
-	// StatIntentBytes counts how many bytes are used to store values
-	// which are unresolved intents. Includes bytes used for both intent
-	// keys and values.
-	StatIntentBytes = proto.Key("intent-bytes")
-	// StatLiveCount counts how many keys are "live". This includes only
-	// non-deleted keys.
-	StatLiveCount = proto.Key("live-count")
-	// StatKeyCount counts the total number of keys, including both live
-	// and deleted keys.
-	StatKeyCount = proto.Key("key-count")
-	// StatValCount counts the total number of values, including all
-	// historical versions and deleted tombstones.
-	StatValCount = proto.Key("val-count")
-	// StatIntentCount counts the number of unresolved intents.
-	StatIntentCount = proto.Key("intent-count")
-	// StatIntentAge counts the total age of unresolved intents.
-	StatIntentAge = proto.Key("intent-age")
-	// StatGCBytesAge counts the total age of gc'able bytes.
-	StatGCBytesAge = proto.Key("gc-age")
-	// StatLastUpdateNanos counts nanoseconds since the unix epoch for
-	// the last update to the intent / GC'able bytes ages. This really
-	// is tracking the wall time as at last update, but is a merged
-	// stat, with successive counts of elapsed nanos being added at each
-	// stat computation.
-	StatLastUpdateNanos = proto.Key("update-nanos")
-)
-
 // Constants for system-reserved keys in the KV map.
 var (
 	// KeyMaxLength is the maximum key length in bytes. This value is
@@ -381,8 +336,6 @@ var (
 	// KeyLocalStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	KeyLocalStoreIdentSuffix = proto.Key("iden")
-	// KeyLocalStoreStatSuffix is the suffix for store statistics.
-	KeyLocalStoreStatSuffix = proto.Key("sst-")
 
 	// KeyLocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Raft ID. The Raft ID is appended to this prefix,
@@ -416,8 +369,8 @@ var (
 	// KeyLocalRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
 	KeyLocalRangeLastVerificationTimestampSuffix = proto.Key("rlvt")
-	// KeyLocalRangeStatSuffix is the suffix for range statistics.
-	KeyLocalRangeStatSuffix = proto.Key("rst-")
+	// KeyLocalRangeStatsSuffix is the suffix for range statistics.
+	KeyLocalRangeStatsSuffix = proto.Key("stat")
 
 	// KeyLocalRangeKeyPrefix is the prefix identifying per-range data
 	// indexed by range key (either start key, or some key in the

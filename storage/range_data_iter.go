@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // keyRange is a helper struct for the rangeDataIterator.
@@ -41,31 +42,27 @@ type rangeDataIterator struct {
 	iter     engine.Iterator
 }
 
-func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
-	r.RLock()
-	startKey := r.Desc().StartKey
-	endKey := r.Desc().EndKey
-	r.RUnlock()
+func newRangeDataIterator(d *proto.RangeDescriptor, e engine.Engine) *rangeDataIterator {
 	// The first range in the keyspace starts at KeyMin, which includes the node-local
 	// space. We need the original StartKey to find the range metadata, but the
 	// actual data starts at KeyLocalMax.
-	dataStartKey := startKey
-	if startKey.Equal(engine.KeyMin) {
+	dataStartKey := d.StartKey
+	if d.StartKey.Equal(engine.KeyMin) {
 		dataStartKey = engine.KeyLocalMax
 	}
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(r.Desc().RaftID)))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(r.Desc().RaftID+1)))),
+				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID)))),
+				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID+1)))),
 			},
 			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, startKey))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, endKey))),
+				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.StartKey))),
+				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.EndKey))),
 			},
 			{
 				start: engine.MVCCEncodeKey(dataStartKey),
-				end:   engine.MVCCEncodeKey(endKey),
+				end:   engine.MVCCEncodeKey(d.EndKey),
 			},
 		},
 		iter: e.NewIterator(),
@@ -81,6 +78,13 @@ func (ri *rangeDataIterator) Close() {
 	ri.iter.Close()
 }
 
+// Seek seeks to the specified key.
+func (ri *rangeDataIterator) Seek(key []byte) {
+	ri.iter.Seek(key)
+	ri.advance()
+}
+
+// Valid returns whether the underlying iterator is valid.
 func (ri *rangeDataIterator) Valid() bool {
 	return ri.iter.Valid()
 }
@@ -100,6 +104,12 @@ func (ri *rangeDataIterator) Key() proto.EncodedKey {
 // Value returns the current Value for the iteration if valid.
 func (ri *rangeDataIterator) Value() []byte {
 	return ri.iter.Value()
+}
+
+// ValueProto unmarshals the current value into the provided message
+// if valid.
+func (ri *rangeDataIterator) ValueProto(msg gogoproto.Message) error {
+	return gogoproto.Unmarshal(ri.iter.Value(), msg)
 }
 
 // Error returns the Error for the iteration if applicable.

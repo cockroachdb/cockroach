@@ -38,112 +38,48 @@ const (
 	mvccVersionTimestampSize int64 = 12
 )
 
-// MergeStats merges accumulated stats to stat counters for specified range.
-func MergeStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
-	if err := MVCCMergeRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatValBytes, ms.ValBytes); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatLiveCount, ms.LiveCount); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatKeyCount, ms.KeyCount); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatValCount, ms.ValCount); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatIntentCount, ms.IntentCount); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatIntentAge, ms.IntentAge); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge); err != nil {
-		return err
-	}
-	if err := MVCCMergeRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos); err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetStats sets stat counters for specified range.
-func SetStats(ms *proto.MVCCStats, engine Engine, raftID int64) error {
-	if err := MVCCSetRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatValBytes, ms.ValBytes); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatLiveCount, ms.LiveCount); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatKeyCount, ms.KeyCount); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatValCount, ms.ValCount); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatIntentCount, ms.IntentCount); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatIntentAge, ms.IntentAge); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge); err != nil {
-		return err
-	}
-	if err := MVCCSetRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos); err != nil {
-		return err
-	}
-	return nil
-}
-
 // updateStatsForKey returns whether or not the bytes and counts for
-// the specified key should be tracked. Local keys are excluded.
-func updateStatsForKey(ms *proto.MVCCStats, key proto.Key) bool {
-	return ms != nil && !key.Less(KeyLocalMax)
+// the specified key should be tracked at all, and if so, whether the
+// key is system-local.
+func updateStatsForKey(ms *proto.MVCCStats, key proto.Key) (bool, bool) {
+	return ms != nil, key.Less(KeyLocalMax)
 }
 
 // updateStatsForInline updates stat counters for an inline value.
 // These are simpler as they don't involve intents or multiple
 // versions.
 func updateStatsForInline(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64) {
-	if !updateStatsForKey(ms, key) {
+	ok, sys := updateStatsForKey(ms, key)
+	if !ok {
 		return
 	}
 	// Remove counts for this key if the original size is non-zero.
 	if origMetaKeySize != 0 {
-		ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
-		ms.LiveCount--
-		ms.KeyBytes -= origMetaKeySize
-		ms.ValBytes -= origMetaValSize
-		ms.KeyCount--
-		ms.ValCount--
+		if sys {
+			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
+			ms.SysCount--
+		} else {
+			ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
+			ms.LiveCount--
+			ms.KeyBytes -= origMetaKeySize
+			ms.ValBytes -= origMetaValSize
+			ms.KeyCount--
+			ms.ValCount--
+		}
 	}
 	// Add counts for this key if the new size is non-zero.
 	if metaKeySize != 0 {
-		ms.LiveBytes += metaKeySize + metaValSize
-		ms.LiveCount++
-		ms.KeyBytes += metaKeySize
-		ms.ValBytes += metaValSize
-		ms.KeyCount++
-		ms.ValCount++
+		if sys {
+			ms.SysBytes += metaKeySize + metaValSize
+			ms.SysCount++
+		} else {
+			ms.LiveBytes += metaKeySize + metaValSize
+			ms.LiveCount++
+			ms.KeyBytes += metaKeySize
+			ms.ValBytes += metaValSize
+			ms.KeyCount++
+			ms.ValCount++
+		}
 	}
 }
 
@@ -154,11 +90,16 @@ func updateStatsForInline(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, o
 // value.Bytes byte slice. These errors are corrected during splits
 // and merges.
 func updateStatsOnMerge(ms *proto.MVCCStats, key proto.Key, valSize int64) {
-	if !updateStatsForKey(ms, key) {
+	ok, sys := updateStatsForKey(ms, key)
+	if !ok {
 		return
 	}
-	ms.LiveBytes += valSize
-	ms.ValBytes += valSize
+	if sys {
+		ms.SysBytes += valSize
+	} else {
+		ms.LiveBytes += valSize
+		ms.ValBytes += valSize
+	}
 }
 
 // updateStatsOnPut updates stat counters for a newly put value,
@@ -168,51 +109,62 @@ func updateStatsOnMerge(ms *proto.MVCCStats, key proto.Key, valSize int64) {
 // If this value is an intent, updates the intent counters.
 func updateStatsOnPut(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata, origAgeSeconds int64) {
-	if !updateStatsForKey(ms, key) {
+	ok, sys := updateStatsForKey(ms, key)
+	if !ok {
 		return
 	}
 	// Remove current live counts for this key.
 	if orig != nil {
-		// If original version value for this key wasn't deleted, subtract
-		// its contribution from live bytes in anticipation of adding in
-		// contribution from new version below.
-		if !orig.Deleted {
-			ms.LiveBytes -= orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
-			ms.LiveCount--
-			// Also, add the bytes from overwritten value to the GC'able bytes age stat.
-			ms.GCBytesAge += MVCCComputeGCBytesAge(orig.KeyBytes+orig.ValBytes, origAgeSeconds)
+		if sys {
+			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
+			ms.SysCount--
 		} else {
-			// Remove the meta byte previously counted for deleted value from GC'able bytes age stat.
-			ms.GCBytesAge -= MVCCComputeGCBytesAge(origMetaKeySize+origMetaValSize, origAgeSeconds)
-		}
-		ms.KeyBytes -= origMetaKeySize
-		ms.ValBytes -= origMetaValSize
-		ms.KeyCount--
-		// If the original metadata for this key was an intent, subtract
-		// its contribution from stat counters as it's being replaced.
-		if orig.Txn != nil {
-			// Subtract counts attributable to intent we're replacing.
-			ms.KeyBytes -= orig.KeyBytes
-			ms.ValBytes -= orig.ValBytes
-			ms.ValCount--
-			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-			ms.IntentCount--
-			ms.IntentAge -= origAgeSeconds
+			// If original version value for this key wasn't deleted, subtract
+			// its contribution from live bytes in anticipation of adding in
+			// contribution from new version below.
+			if !orig.Deleted {
+				ms.LiveBytes -= orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
+				ms.LiveCount--
+				// Also, add the bytes from overwritten value to the GC'able bytes age stat.
+				ms.GCBytesAge += MVCCComputeGCBytesAge(orig.KeyBytes+orig.ValBytes, origAgeSeconds)
+			} else {
+				// Remove the meta byte previously counted for deleted value from GC'able bytes age stat.
+				ms.GCBytesAge -= MVCCComputeGCBytesAge(origMetaKeySize+origMetaValSize, origAgeSeconds)
+			}
+			ms.KeyBytes -= origMetaKeySize
+			ms.ValBytes -= origMetaValSize
+			ms.KeyCount--
+			// If the original metadata for this key was an intent, subtract
+			// its contribution from stat counters as it's being replaced.
+			if orig.Txn != nil {
+				// Subtract counts attributable to intent we're replacing.
+				ms.KeyBytes -= orig.KeyBytes
+				ms.ValBytes -= orig.ValBytes
+				ms.ValCount--
+				ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+				ms.IntentCount--
+				ms.IntentAge -= origAgeSeconds
+			}
 		}
 	}
 
 	// If new version isn't a deletion tombstone, add it to live counters.
-	if !meta.Deleted {
-		ms.LiveBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
-		ms.LiveCount++
-	}
-	ms.KeyBytes += meta.KeyBytes + metaKeySize
-	ms.ValBytes += meta.ValBytes + metaValSize
-	ms.KeyCount++
-	ms.ValCount++
-	if meta.Txn != nil {
-		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
-		ms.IntentCount++
+	if sys {
+		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
+		ms.SysCount++
+	} else {
+		if !meta.Deleted {
+			ms.LiveBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
+			ms.LiveCount++
+		}
+		ms.KeyBytes += meta.KeyBytes + metaKeySize
+		ms.ValBytes += meta.ValBytes + metaValSize
+		ms.KeyCount++
+		ms.ValCount++
+		if meta.Txn != nil {
+			ms.IntentBytes += meta.KeyBytes + meta.ValBytes
+			ms.IntentCount++
+		}
 	}
 }
 
@@ -222,25 +174,31 @@ func updateStatsOnPut(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origM
 // counters if commit=true.
 func updateStatsOnResolve(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool, origAgeSeconds int64) {
-	if !updateStatsForKey(ms, key) {
+	ok, sys := updateStatsForKey(ms, key)
+	if !ok {
 		return
 	}
 	// We're pushing or committing an intent; update counts with
 	// difference in bytes between old metadata and new.
 	keyDiff := metaKeySize - origMetaKeySize
 	valDiff := metaValSize - origMetaValSize
-	if !meta.Deleted {
-		ms.LiveBytes += keyDiff + valDiff
+
+	if sys {
+		ms.SysBytes += keyDiff + valDiff
 	} else {
-		ms.GCBytesAge += MVCCComputeGCBytesAge(keyDiff+valDiff, origAgeSeconds)
-	}
-	ms.KeyBytes += keyDiff
-	ms.ValBytes += valDiff
-	// If committing, subtract out intent counts.
-	if commit {
-		ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
-		ms.IntentCount--
-		ms.IntentAge -= origAgeSeconds
+		if !meta.Deleted {
+			ms.LiveBytes += keyDiff + valDiff
+		} else {
+			ms.GCBytesAge += MVCCComputeGCBytesAge(keyDiff+valDiff, origAgeSeconds)
+		}
+		ms.KeyBytes += keyDiff
+		ms.ValBytes += valDiff
+		// If committing, subtract out intent counts.
+		if commit {
+			ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
+			ms.IntentCount--
+			ms.IntentAge -= origAgeSeconds
+		}
 	}
 }
 
@@ -251,41 +209,51 @@ func updateStatsOnResolve(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, o
 func updateStatsOnAbort(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
 	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata,
 	origAgeSeconds, restoredAgeSeconds int64) {
-	if !updateStatsForKey(ms, key) {
+	ok, sys := updateStatsForKey(ms, key)
+	if !ok {
 		return
 	}
 	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
-	if !orig.Deleted {
-		ms.LiveBytes -= origTotalBytes
-		ms.LiveCount--
+	if sys {
+		ms.SysBytes -= origTotalBytes
+		ms.SysCount--
 	} else {
-		// Remove the bytes from previously deleted intent from the GC'able bytes age stat.
-		ms.GCBytesAge -= MVCCComputeGCBytesAge(origTotalBytes, origAgeSeconds)
+		if !orig.Deleted {
+			ms.LiveBytes -= origTotalBytes
+			ms.LiveCount--
+		} else {
+			// Remove the bytes from previously deleted intent from the GC'able bytes age stat.
+			ms.GCBytesAge -= MVCCComputeGCBytesAge(origTotalBytes, origAgeSeconds)
+		}
+		ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
+		ms.ValBytes -= (orig.ValBytes + origMetaValSize)
+		ms.KeyCount--
+		ms.ValCount--
+		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+		ms.IntentCount--
+		ms.IntentAge -= origAgeSeconds
 	}
-	ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
-	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
-	ms.KeyCount--
-	ms.ValCount--
-	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-	ms.IntentCount--
-	ms.IntentAge -= origAgeSeconds
-
 	// If restored version isn't a deletion tombstone, add it to live counters.
 	if restored != nil {
-		if !restored.Deleted {
-			ms.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
-			ms.LiveCount++
-			// Also, remove the bytes from previously overwritten value from the GC'able bytes age stat.
-			ms.GCBytesAge -= MVCCComputeGCBytesAge(restored.KeyBytes+restored.ValBytes, restoredAgeSeconds)
+		if sys {
+			ms.SysBytes += restoredMetaKeySize + restoredMetaValSize
+			ms.SysCount++
 		} else {
-			// Add back in the meta key/value bytes to GC'able bytes age stat.
-			ms.GCBytesAge += MVCCComputeGCBytesAge(restoredMetaKeySize+restoredMetaValSize, restoredAgeSeconds)
-		}
-		ms.KeyBytes += restoredMetaKeySize
-		ms.ValBytes += restoredMetaValSize
-		ms.KeyCount++
-		if restored.Txn != nil {
-			panic("restored version should never be an intent")
+			if !restored.Deleted {
+				ms.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
+				ms.LiveCount++
+				// Also, remove the bytes from previously overwritten value from the GC'able bytes age stat.
+				ms.GCBytesAge -= MVCCComputeGCBytesAge(restored.KeyBytes+restored.ValBytes, restoredAgeSeconds)
+			} else {
+				// Add back in the meta key/value bytes to GC'able bytes age stat.
+				ms.GCBytesAge += MVCCComputeGCBytesAge(restoredMetaKeySize+restoredMetaValSize, restoredAgeSeconds)
+			}
+			ms.KeyBytes += restoredMetaKeySize
+			ms.ValBytes += restoredMetaValSize
+			ms.KeyCount++
+			if restored.Txn != nil {
+				panic("restored version should never be an intent")
+			}
 		}
 	}
 }
@@ -296,17 +264,25 @@ func updateStatsOnAbort(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, ori
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
 func updateStatsOnGC(ms *proto.MVCCStats, key proto.Key, keySize, valSize int64, meta *proto.MVCCMetadata, ageSeconds int64) {
-	if !updateStatsForKey(ms, key) {
+	ok, sys := updateStatsForKey(ms, key)
+	if !ok {
 		return
 	}
-	ms.KeyBytes -= keySize
-	ms.ValBytes -= valSize
-	if meta != nil {
-		ms.KeyCount--
+	if sys {
+		ms.SysBytes -= (keySize + valSize)
+		if meta != nil {
+			ms.SysCount--
+		}
 	} else {
-		ms.ValCount--
+		ms.KeyBytes -= keySize
+		ms.ValBytes -= valSize
+		if meta != nil {
+			ms.KeyCount--
+		} else {
+			ms.ValCount--
+		}
+		ms.GCBytesAge -= MVCCComputeGCBytesAge(keySize+valSize, ageSeconds)
 	}
-	ms.GCBytesAge -= MVCCComputeGCBytesAge(keySize+valSize, ageSeconds)
 }
 
 // MVCCComputeGCBytesAge comptues the value to assign to the specified
@@ -315,91 +291,16 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 	return bytes * ageSeconds
 }
 
-// MVCCGetRangeStat returns the value for the specified range stat, by
-// Raft ID and stat name.
-func MVCCGetRangeStat(engine Engine, raftID int64, stat proto.Key) (int64, error) {
-	val, err := MVCCGet(engine, RangeStatKey(raftID, stat), proto.ZeroTimestamp, true, nil)
-	if err != nil || val == nil {
-		return 0, err
-	}
-	return val.GetInteger(), nil
-}
-
-// MVCCSetRangeStat sets the value for the specified range stat, by
-// Raft ID and stat name.
-func MVCCSetRangeStat(engine Engine, raftID int64, stat proto.Key, statVal int64) error {
-	value := proto.Value{Integer: gogoproto.Int64(statVal)}
-	if err := MVCCPut(engine, nil, RangeStatKey(raftID, stat), proto.ZeroTimestamp, value, nil); err != nil {
-		return err
-	}
-	return nil
-}
-
-// MVCCMergeRangeStat flushes the specified stat to merge counters via
-// the provided engine instance.
-func MVCCMergeRangeStat(engine Engine, raftID int64, stat proto.Key, statVal int64) error {
-	if statVal == 0 {
-		return nil
-	}
-	value := proto.Value{Integer: gogoproto.Int64(statVal)}
-	if err := MVCCMerge(engine, nil, RangeStatKey(raftID, stat), value); err != nil {
-		return err
-	}
-	return nil
-}
-
-// MVCCGetRangeSize returns the size of the range, equal to the sum of
-// the key and value stats.
-func MVCCGetRangeSize(engine Engine, raftID int64) (int64, error) {
-	keyBytes, err := MVCCGetRangeStat(engine, raftID, StatKeyBytes)
-	if err != nil {
-		return 0, err
-	}
-	valBytes, err := MVCCGetRangeStat(engine, raftID, StatValBytes)
-	if err != nil {
-		return 0, err
-	}
-	return keyBytes + valBytes, nil
-}
-
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the supplied MVCCStats struct.
 func MVCCGetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
-	var err error
-	if ms.LiveBytes, err = MVCCGetRangeStat(engine, raftID, StatLiveBytes); err != nil {
-		return err
-	}
-	if ms.KeyBytes, err = MVCCGetRangeStat(engine, raftID, StatKeyBytes); err != nil {
-		return err
-	}
-	if ms.ValBytes, err = MVCCGetRangeStat(engine, raftID, StatValBytes); err != nil {
-		return err
-	}
-	if ms.IntentBytes, err = MVCCGetRangeStat(engine, raftID, StatIntentBytes); err != nil {
-		return err
-	}
-	if ms.LiveCount, err = MVCCGetRangeStat(engine, raftID, StatLiveCount); err != nil {
-		return err
-	}
-	if ms.KeyCount, err = MVCCGetRangeStat(engine, raftID, StatKeyCount); err != nil {
-		return err
-	}
-	if ms.ValCount, err = MVCCGetRangeStat(engine, raftID, StatValCount); err != nil {
-		return err
-	}
-	if ms.IntentCount, err = MVCCGetRangeStat(engine, raftID, StatIntentCount); err != nil {
-		return err
-	}
-	if ms.IntentAge, err = MVCCGetRangeStat(engine, raftID, StatIntentAge); err != nil {
-		return err
-	}
-	if ms.GCBytesAge, err = MVCCGetRangeStat(engine, raftID, StatGCBytesAge); err != nil {
-		return err
-	}
-	if ms.LastUpdateNanos, err = MVCCGetRangeStat(engine, raftID, StatLastUpdateNanos); err != nil {
-		return err
-	}
-	return nil
+	_, err := MVCCGetProto(engine, RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
+	return err
+}
+
+// MVCCSetRangeStats sets stat counters for specified range.
+func MVCCSetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
+	return MVCCPutProto(engine, nil, RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
@@ -1368,10 +1269,11 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 	encEndKey := MVCCEncodeKey(endKey)
 
 	// Get range size from stats.
-	rangeSize, err := MVCCGetRangeSize(engine, raftID)
-	if err != nil {
+	var ms proto.MVCCStats
+	if err := MVCCGetRangeStats(engine, raftID, &ms); err != nil {
 		return nil, err
 	}
+	rangeSize := ms.KeyBytes + ms.ValBytes
 
 	targetSize := rangeSize / 2
 	sizeSoFar := int64(0)
@@ -1426,70 +1328,73 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 // (i.e. the one with start key == KeyMin). The nowNanos arg specifies
 // the wall time in nanoseconds since the epoch and is used to compute
 // the total age of all intents.
-func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (proto.MVCCStats, error) {
-	if key.Less(KeyLocalMax) {
-		key = KeyLocalMax
-	}
-	encStartKey := MVCCEncodeKey(key)
-	encEndKey := MVCCEncodeKey(endKey)
-
+func MVCCComputeStats(iter Iterator, nowNanos int64) (proto.MVCCStats, error) {
 	ms := proto.MVCCStats{LastUpdateNanos: nowNanos}
 	first := false
 	meta := &proto.MVCCMetadata{}
 
-	err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
-		_, ts, isValue := MVCCDecodeKey(kv.Key)
+	for ; iter.Valid(); iter.Next() {
+		key, ts, isValue := MVCCDecodeKey(iter.Key())
+		_, sys := updateStatsForKey(&ms, key)
 		if !isValue {
-			totalBytes := int64(len(kv.Value)) + int64(len(kv.Key))
+			totalBytes := int64(len(iter.Value())) + int64(len(iter.Key()))
 			first = true
-			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
-				return false, util.Errorf("unable to unmarshal MVCC metadata %q: %s", kv.Value, err)
+			if err := gogoproto.Unmarshal(iter.Value(), meta); err != nil {
+				return ms, util.Errorf("unable to unmarshal MVCC metadata %b: %s", iter.Value(), err)
 			}
-			if !meta.Deleted {
-				ms.LiveBytes += totalBytes
-				ms.LiveCount++
+			if sys {
+				ms.SysBytes += int64(len(iter.Key())) + int64(len(iter.Value()))
+				ms.SysCount++
 			} else {
-				// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
-				ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
-			}
-			ms.KeyBytes += int64(len(kv.Key))
-			ms.ValBytes += int64(len(kv.Value))
-			ms.KeyCount++
-			if meta.IsInline() {
-				ms.ValCount++
-			}
-		} else {
-			totalBytes := int64(len(kv.Value)) + mvccVersionTimestampSize
-			if first {
-				first = false
 				if !meta.Deleted {
 					ms.LiveBytes += totalBytes
+					ms.LiveCount++
 				} else {
-					// First value is deleted, so it's GC'able; add key & value bytes to age stat.
+					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
 				}
-				if meta.Txn != nil {
-					ms.IntentBytes += totalBytes
-					ms.IntentCount++
-					ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
+				ms.KeyBytes += int64(len(iter.Key()))
+				ms.ValBytes += int64(len(iter.Value()))
+				ms.KeyCount++
+				if meta.IsInline() {
+					ms.ValCount++
 				}
-				if meta.KeyBytes != mvccVersionTimestampSize {
-					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", mvccVersionTimestampSize, meta.KeyBytes)
-				}
-				if meta.ValBytes != int64(len(kv.Value)) {
-					return false, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(kv.Value), meta.ValBytes)
-				}
-			} else {
-				// Overwritten value; add value bytes to the GC'able bytes age stat.
-				ms.GCBytesAge += totalBytes * (nowNanos/1E9 - ts.WallTime/1E9)
 			}
-			ms.KeyBytes += mvccVersionTimestampSize
-			ms.ValBytes += int64(len(kv.Value))
-			ms.ValCount++
+		} else {
+			totalBytes := int64(len(iter.Value())) + mvccVersionTimestampSize
+			if sys {
+				ms.SysBytes += totalBytes
+			} else {
+				if first {
+					first = false
+					if !meta.Deleted {
+						ms.LiveBytes += totalBytes
+					} else {
+						// First value is deleted, so it's GC'able; add key & value bytes to age stat.
+						ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
+					}
+					if meta.Txn != nil {
+						ms.IntentBytes += totalBytes
+						ms.IntentCount++
+						ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
+					}
+					if meta.KeyBytes != mvccVersionTimestampSize {
+						return ms, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", mvccVersionTimestampSize, meta.KeyBytes)
+					}
+					if meta.ValBytes != int64(len(iter.Value())) {
+						return ms, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(iter.Value()), meta.ValBytes)
+					}
+				} else {
+					// Overwritten value; add value bytes to the GC'able bytes age stat.
+					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - ts.WallTime/1E9)
+				}
+				ms.KeyBytes += mvccVersionTimestampSize
+				ms.ValBytes += int64(len(iter.Value()))
+				ms.ValCount++
+			}
 		}
-		return false, nil
-	})
-	return ms, err
+	}
+	return ms, nil
 }
 
 // MVCCEncodeKey makes an MVCC key for storing MVCC metadata or

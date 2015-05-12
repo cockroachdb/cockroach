@@ -49,14 +49,17 @@ func adminSplitArgs(key, splitKey []byte, raftID int64, storeID proto.StoreID) (
 	return args, reply
 }
 
-func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats, t *testing.T) {
+func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats) error {
 	var ms proto.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
-		t.Fatal(err)
+		return err
 	}
+	// Clear system counts as these are expected to vary.
+	ms.SysBytes, ms.SysCount = 0, 0
 	if !reflect.DeepEqual(expMS, ms) {
-		t.Errorf("expected stats %+v; got %+v", expMS, ms)
+		return util.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
+	return nil
 }
 
 // TestStoreRangeSplitAtIllegalKeys verifies a range cannot be split
@@ -175,14 +178,11 @@ func TestStoreRangeSplit(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	keyBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
-	if err != nil {
+	var ms proto.MVCCStats
+	if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &ms); err != nil {
 		t.Fatal(err)
 	}
-	valBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatValBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
+	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
 
 	// Split the range.
 	args, reply := adminSplitArgs(engine.KeyMin, splitKey, 1, store.StoreID())
@@ -241,22 +241,15 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non ero and
 	// exceed the original range when summed.
-	lKeyBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
-	if err != nil {
+	var left, right proto.MVCCStats
+	if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &left); err != nil {
 		t.Fatal(err)
 	}
-	lValBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatValBytes)
-	if err != nil {
+	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
+	if err := engine.MVCCGetRangeStats(store.Engine(), newRng.Desc().RaftID, &right); err != nil {
 		t.Fatal(err)
 	}
-	rKeyBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc().RaftID, engine.StatKeyBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rValBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc().RaftID, engine.StatValBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rKeyBytes, rValBytes := right.KeyBytes, right.ValBytes
 
 	if lKeyBytes == 0 || rKeyBytes == 0 {
 		t.Errorf("expected non-zero key bytes; got %d, %d", lKeyBytes, rKeyBytes)
@@ -289,7 +282,11 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 	// Verify empty range has empty stats.
 	rng := store.LookupRange(proto.Key("\x01"), nil)
-	verifyRangeStats(store.Engine(), rng.Desc().RaftID, proto.MVCCStats{}, t)
+	// NOTE that this value is expected to change over time, depending on what
+	// we store in the sys-local keyspace. Update it accordingly for this test.
+	if err := verifyRangeStats(store.Engine(), rng.Desc().RaftID, proto.MVCCStats{}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
@@ -334,6 +331,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		ValCount:    msLeft.ValCount + msRight.ValCount,
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
+	ms.SysBytes, ms.SysCount = 0, 0
 	if !reflect.DeepEqual(expMS, ms) {
 		t.Errorf("expected left and right ranges to equal original: %+v + %+v != %+v", msLeft, msRight, ms)
 	}
@@ -344,14 +342,11 @@ func TestStoreRangeSplitStats(t *testing.T) {
 func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		keyBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
-		if err != nil {
+		var ms proto.MVCCStats
+		if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &ms); err != nil {
 			t.Fatal(err)
 		}
-		valBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatValBytes)
-		if err != nil {
-			t.Fatal(err)
-		}
+		keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
 		if keyBytes+valBytes >= bytes {
 			return
 		}

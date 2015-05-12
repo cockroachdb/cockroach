@@ -854,7 +854,7 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 
-	if err := engine.MergeStats(ms, batch, 1); err != nil {
+	if err := engine.MVCCSetRangeStats(batch, 1, ms); err != nil {
 		return err
 	}
 	if err := batch.Commit(); err != nil {

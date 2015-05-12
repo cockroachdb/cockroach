@@ -1857,14 +1857,6 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats, t 
 	if !reflect.DeepEqual(expMS, ms) {
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
-	// Also verify the GetRangeSize method.
-	rangeSize, err := engine.MVCCGetRangeSize(eng, raftID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if expSize := expMS.KeyBytes + expMS.ValBytes; expSize != rangeSize {
-		t.Errorf("expected range size %d; got %d", expSize, rangeSize)
-	}
 }
 
 // TestRangeStatsComputation verifies that commands executed against a
@@ -1886,7 +1878,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(client.Call{Args: pArgs, Reply: pReply}, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS := proto.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
+	expMS := proto.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -1896,7 +1888,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(client.Call{Args: pArgs, Reply: pReply}, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
+	expMS = proto.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -1914,7 +1906,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(client.Call{Args: rArgs, Reply: rReply}, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
+	expMS = proto.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Delete the 1st value.
@@ -1923,7 +1915,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(client.Call{Args: dArgs, Reply: dReply}, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
+	expMS = proto.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 }
 

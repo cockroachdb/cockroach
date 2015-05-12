@@ -536,19 +536,14 @@ bool MergeValues(cockroach::proto::Value *left, const cockroach::proto::Value &r
                     "inconsistent value types for merge (left = bytes, right = ?)");
             return false;
         }
-        if (IsTimeSeriesData(left)) {
+        if (IsTimeSeriesData(left) || IsTimeSeriesData(&right)) {
             // The right operand must also be a time series.
-            if (!IsTimeSeriesData(&right)) {
+            if (!IsTimeSeriesData(left) || !IsTimeSeriesData(&right)) {
                 rocksdb::Warn(logger,
-                        "inconsistent value types for merge (left = TimeSeriesData, right = bytes)");
+                        "inconsistent value types for merging time series data (type(left) != type(right))");
                 return false;
             }
             return MergeTimeSeriesValues(left, right, full_merge, logger);
-        } else if (IsTimeSeriesData(&right)) {
-            // The right operand was a time series, but the left was not.
-            rocksdb::Warn(logger,
-                    "inconsistent value types for merge (left = bytes, right = TimeSeriesData");
-            return false;
         } else {
             *left->mutable_bytes() += right.bytes();
         }

@@ -109,7 +109,7 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, 
 // intents are older than intentAgeThreshold.
 func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	snap := rng.rm.Engine().NewSnapshot()
-	iter := newRangeDataIterator(rng, snap)
+	iter := newRangeDataIterator(rng.Desc(), snap)
 	defer iter.Close()
 	defer snap.Close()
 

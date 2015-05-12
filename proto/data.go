@@ -636,6 +636,8 @@ func (ms *MVCCStats) Add(oms *MVCCStats) {
 	ms.IntentCount += oms.IntentCount
 	ms.IntentAge += oms.IntentAge
 	ms.GCBytesAge += oms.GCBytesAge
+	ms.SysBytes += oms.SysBytes
+	ms.SysCount += oms.SysCount
 	ms.LastUpdateNanos += oms.LastUpdateNanos
 }
 
@@ -651,6 +653,8 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 	ms.IntentCount -= oms.IntentCount
 	ms.IntentAge -= oms.IntentAge
 	ms.GCBytesAge -= oms.GCBytesAge
+	ms.SysBytes -= oms.SysBytes
+	ms.SysCount -= oms.SysCount
 	ms.LastUpdateNanos -= oms.LastUpdateNanos
 }
 
