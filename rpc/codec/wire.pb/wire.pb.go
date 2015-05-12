@@ -39,7 +39,7 @@ package wire
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "github.com/gogo/protobuf/gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto/gogo.pb"
 
 import io "io"
 import fmt "fmt"
