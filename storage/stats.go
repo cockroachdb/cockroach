@@ -74,6 +74,8 @@ func (rs *rangeStats) GetSize() int64 {
 // the last update to range stats. Stats are stored to the underlying
 // engine and the rangeStats MVCCStats updated to reflect merged totals.
 func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *proto.MVCCStats, nowNanos int64) error {
+	rs.Lock()
+	defer rs.Unlock()
 	// Augment the current intent age.
 	diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
 	ms.LastUpdateNanos = nowNanos - rs.LastUpdateNanos
