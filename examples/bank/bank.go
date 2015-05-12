@@ -27,12 +27,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -45,76 +42,29 @@ func makeAccountID(id int) []byte {
 
 // Bank stores all the bank related state.
 type Bank struct {
-	kvClient     *client.KV
+	db           *client.DB
 	numAccounts  int
 	numTransfers int32
-}
-
-// Helper function to read bytes received on a Get Call response.
-// We could add this to the API
-func readBytes(call client.Call) []byte {
-	if gr := call.Reply.(*proto.GetResponse); gr.Value != nil {
-		return gr.Value.Bytes
-	}
-	return nil
-}
-
-// Helper function to read an int64 received on a Get Call response
-func readInt64(call client.Call) (int64, error) {
-	if resp := readBytes(call); resp != nil {
-		return strconv.ParseInt(string(resp), 10, 64)
-	}
-	return 0, nil
-}
-
-// Read the balances in all the accounts and return them.
-func (bank *Bank) readAllAccountsWithScan() []int64 {
-	balances := make([]int64, bank.numAccounts)
-	txnOpts := &client.TransactionOptions{Name: "Reading all balances"}
-	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
-		call := client.Scan(makeAccountID(0), makeAccountID(bank.numAccounts), int64(bank.numAccounts))
-		if err := txn.Run(call); err != nil {
-			log.Fatal(err)
-		}
-		// Copy responses into balances.
-		scan := call.Reply.(*proto.ScanResponse)
-		if len(scan.Rows) != bank.numAccounts {
-			log.Fatalf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
-		}
-		for i := 0; i < bank.numAccounts; i++ {
-			value, err := strconv.ParseInt(string(scan.Rows[i].Value.Bytes), 10, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-			balances[i] = value
-		}
-		return nil
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return balances
 }
 
 // Read the balances in all the accounts and return them.
 func (bank *Bank) readAllAccounts() []int64 {
 	balances := make([]int64, bank.numAccounts)
-	calls := make([]client.Call, bank.numAccounts)
-	txnOpts := &client.TransactionOptions{Name: "Reading all balances"}
-	err := bank.kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
-		for i := 0; i < bank.numAccounts; i++ {
-			calls[i] = client.Get(makeAccountID(i))
+	err := bank.db.Tx(func(tx *client.Tx) error {
+		scan := tx.Scan(makeAccountID(0), makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		if scan.Err != nil {
+			log.Fatal(scan.Err)
 		}
-		if err := txn.Run(calls...); err != nil {
-			log.Fatal(err)
+		if len(scan.Rows) != bank.numAccounts {
+			log.Fatalf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
 		}
 		// Copy responses into balances.
 		for i := 0; i < bank.numAccounts; i++ {
-			if value, err := readInt64(calls[i]); err != nil {
+			value, err := strconv.ParseInt(string(scan.Rows[i].ValueBytes()), 10, 64)
+			if err != nil {
 				log.Fatal(err)
-			} else {
-				balances[i] = value
 			}
+			balances[i] = value
 		}
 		return nil
 	})
@@ -137,20 +87,23 @@ func (bank *Bank) continuousMoneyTransfer() {
 		exchangeAmount := rand.Int63n(100)
 		// transferMoney transfers exchangeAmount between the two accounts
 		// using transaction txn if its non nil
-		transferMoney := func(txn *client.Txn) error {
-			fromGet := client.Get(from)
-			toGet := client.Get(to)
-			if txn != nil {
-				if err := txn.Run(fromGet, toGet); err != nil {
+		transferMoney := func(tx *client.Tx) error {
+			batchRead := &client.Batch{}
+			batchRead.Get(from).Get(to)
+			if tx != nil {
+				if err := tx.Run(batchRead); err != nil {
 					return err
 				}
 			} else {
-				if err := bank.kvClient.Run(fromGet, toGet); err != nil {
+				if err := bank.db.Run(batchRead); err != nil {
 					return err
 				}
 			}
 			// Read from value.
-			fromValue, err := readInt64(fromGet)
+			if batchRead.Results[0].Err != nil {
+				return batchRead.Results[0].Err
+			}
+			fromValue, err := strconv.ParseInt(string(batchRead.Results[0].Rows[0].ValueBytes()), 10, 64)
 			if err != nil {
 				return err
 			}
@@ -159,23 +112,28 @@ func (bank *Bank) continuousMoneyTransfer() {
 				return nil
 			}
 			// Read to value.
-			toValue, errRead := readInt64(toGet)
+			if batchRead.Results[1].Err != nil {
+				return batchRead.Results[1].Err
+			}
+			toValue, errRead := strconv.ParseInt(string(batchRead.Results[1].Rows[0].ValueBytes()), 10, 64)
 			if errRead != nil {
 				return errRead
 			}
 			// Update both accounts.
-			fromPut := []byte(fmt.Sprintf("%d", fromValue-exchangeAmount))
-			toPut := []byte(fmt.Sprintf("%d", toValue+exchangeAmount))
-			if txn != nil {
-				txn.Prepare(client.Put(from, fromPut), client.Put(to, toPut))
+			batchWrite := &client.Batch{}
+			batchWrite.Put(from, fmt.Sprintf("%d", fromValue-exchangeAmount))
+			batchWrite.Put(to, fmt.Sprintf("%d", toValue+exchangeAmount))
+			if tx != nil {
+				if err := tx.Run(batchWrite); err != nil {
+					return err
+				}
 			} else {
-				return bank.kvClient.Run(client.Put(from, fromPut), client.Put(to, toPut))
+				return bank.db.Run(batchWrite)
 			}
 			return nil
 		}
 		if *useTransaction {
-			txnOpts := &client.TransactionOptions{Name: fmt.Sprintf("Transferring %s-%s-%d", from, to, exchangeAmount)}
-			if err := bank.kvClient.RunTransaction(txnOpts, transferMoney); err != nil {
+			if err := bank.db.Tx(transferMoney); err != nil {
 				log.Fatal(err)
 			}
 		} else if err := transferMoney(nil); err != nil {
@@ -187,11 +145,11 @@ func (bank *Bank) continuousMoneyTransfer() {
 
 // Initialize all the bank accounts with cash.
 func (bank *Bank) initBankAccounts(cash int64) {
-	calls := make([]client.Call, bank.numAccounts)
+	batch := &client.Batch{}
 	for i := 0; i < bank.numAccounts; i++ {
-		calls[i] = client.Put(makeAccountID(i), []byte(fmt.Sprintf("%d", cash)))
+		batch = batch.Put(makeAccountID(i), fmt.Sprintf("%d", cash))
 	}
-	if err := bank.kvClient.Run(calls...); err != nil {
+	if err := bank.db.Run(batch); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -229,13 +187,12 @@ func main() {
 	// Initialize the bank.
 	var bank Bank
 	bank.numAccounts = 1000
-	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
+	// Create a database handle
+	db, err := client.Open("https://root@" + serv.ServingAddr() + "?certs=test_certs")
 	if err != nil {
 		log.Fatal(err)
 	}
-	bank.kvClient = client.NewKV(nil, sender)
-	bank.kvClient.User = storage.UserRoot
+	bank.db = db
 	// Initialize all the bank accounts.
 	const initCash = 1000
 	bank.initBankAccounts(initCash)
