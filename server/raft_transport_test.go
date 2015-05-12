@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -74,7 +73,7 @@ func TestSendAndReceive(t *testing.T) {
 
 		for store := 0; store < storesPerServer; store++ {
 			protoNodeID := nextNodeID
-			nodeID := storage.MakeRaftNodeID(protoNodeID, 1)
+			nodeID := proto.MakeRaftNodeID(protoNodeID, 1)
 			nextNodeID++
 
 			channel := make(ChannelServer, 10)

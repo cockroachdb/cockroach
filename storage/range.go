@@ -22,6 +22,7 @@ package storage
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"math/rand"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -112,9 +112,9 @@ type configDescriptor struct {
 	configI   interface{} // Config struct interface
 }
 
-// configDescriptors is a slice containing the accounting, permissions
+// configDescriptors is an array containing the accounting, permissions
 // and zone configuration descriptors.
-var configDescriptors = [3]*configDescriptor{
+var configDescriptors = [...]*configDescriptor{
 	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
 	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
 	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
@@ -197,7 +197,7 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
-	configCsums  [3]uint32      // Last-gossiped config map checksums
+	configHashes map[int][]byte // Config map sha256 hashes @ last gossip
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 
@@ -884,7 +884,7 @@ func (r *Range) getLeaseForGossip() (bool, error) {
 		switch e := err.(type) {
 		// NotLeaderError means there is an active lease, leaseRejectedError
 		// means we tried to get one but someone beat us to it.
-		case *proto.NotLeaderError: //, *proto.LeaseRejectedError:
+		case *proto.NotLeaderError, *proto.LeaseRejectedError:
 		default:
 			// Any other error is worth being logged visibly.
 			log.Warningf("could not acquire lease for first range gossip: %s", e)
@@ -939,12 +939,16 @@ func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
 				// time being, it will only fire the first range.
 				log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
 			}
-			configMap, csum, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+			configMap, hash, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
 			if err != nil {
 				log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
 				continue
-			} else if csum != r.configCsums[i] {
-				r.configCsums[i] = csum
+			}
+			if r.configHashes == nil {
+				r.configHashes = map[int][]byte{}
+			}
+			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
+				r.configHashes[i] = hash
 				log.Infof("gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
 				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
 					log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
@@ -956,28 +960,27 @@ func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
 }
 
 // loadConfigMap scans the config entries under keyPrefix and
-// instantiates/returns a config map and its checksum. Prefix
+// instantiates/returns a config map and its sha256 hash. Prefix
 // configuration maps include accounting, permissions, and zones.
-func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, uint32, error) {
+func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, []byte, error) {
 	kvs, err := engine.MVCCScan(r.rm.Engine(), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 	var configs []*PrefixConfig
-	c := encoding.NewCRC32Checksum([]byte(nil))
-	defer encoding.ReleaseCRC32Checksum(c)
+	sha := sha256.New()
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
 		// proto encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, config); err != nil {
-			return nil, 0, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
+			return nil, nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
 		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
-		c.Write(kv.Value.Bytes)
+		sha.Write(kv.Value.Bytes)
 	}
 	m, err := NewPrefixConfigMap(configs)
-	return m, c.Sum32(), err
+	return m, sha.Sum(nil), err
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range

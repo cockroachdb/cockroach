@@ -105,12 +105,10 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 			return util.Errorf("infostore could not be decoded: %s", err)
 		}
 		if delta.infoCount() > 0 {
-			if delta.infoCount() > 0 {
-				if log.V(1) {
-					log.Infof("gossip: received %s", delta)
-				} else {
-					log.Infof("gossip: received %d info(s) from %s", delta.infoCount(), addr)
-				}
+			if log.V(1) {
+				log.Infof("gossip: received %s", delta)
+			} else {
+				log.Infof("gossip: received %d info(s) from %s", delta.infoCount(), addr)
 			}
 		}
 		s.is.combine(delta)
