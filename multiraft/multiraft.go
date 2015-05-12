@@ -899,17 +899,18 @@ func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
 		if log.V(4) {
 			log.Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
 		}
-		if err := s.addNode(nodeID); err != nil {
-			log.Errorf("node %v: error adding node %v: %v", s.nodeID, nodeID, err)
+		var err error
+		if groupID != noGroup {
+			err = s.addNode(nodeID, groupID)
+		} else {
+			err = s.addNode(nodeID)
 		}
-		if groupID > 0 {
-			if err := s.addNode(nodeID, groupID); err != nil {
-				log.Errorf("node %v: error adding group %v to node %v: %v",
-					s.nodeID, groupID, nodeID, err)
-			}
+		if err != nil {
+			log.Errorf("node %v: error adding group %v to node %v: %v",
+				s.nodeID, groupID, nodeID, err)
 		}
 	}
-	err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
+	err := s.Transport.Send(&RaftMessageRequest{groupID, msg})
 	snapStatus := raft.SnapshotFinish
 	if err != nil {
 		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)

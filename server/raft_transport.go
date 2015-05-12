@@ -102,8 +102,8 @@ func (t *rpcTransport) Stop(id multiraft.NodeID) {
 	delete(t.servers, id)
 }
 
-// Send a message to the specified Node id.
-func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageRequest) error {
+// Send a message to the recipient specified in the request.
+func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
 	// Convert internal to proto formats.
 	protoReq := &proto.RaftMessageRequest{GroupID: req.GroupID}
 	var err error
@@ -111,7 +111,7 @@ func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 		return err
 	}
 
-	nodeID, _ := storage.DecodeRaftNodeID(id)
+	nodeID, _ := storage.DecodeRaftNodeID(multiraft.NodeID(req.Message.To))
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		return err
