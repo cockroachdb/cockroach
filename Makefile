@@ -117,7 +117,7 @@ acceptance:
 .PHONY: check
 check:
 	errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,github.com/spf13/cobra:Usage' $(PKG)
-	! go-nyet $(PKG) | grep -vE '(Weird type of StarExpr|Unknown types|`matchIndex`|`c`)'
+	! go-nyet $(PKG) | grep -vE '(Weird type of StarExpr|Unknown types|`matchIndex`|`c`|cannot process directory \.git)' # TODO(tamird): https://github.com/barakmich/go-nyet/pull/10
 	! golint $(PKG) | grep -vE '(\.pb\.go|embedded\.go|yyEofCode|_string\.go)'
 	! gofmt -s -l . | grep -vF 'No Exceptions'
 	! goimports -l . | grep -vF 'No Exceptions'
