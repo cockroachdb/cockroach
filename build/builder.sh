@@ -4,7 +4,7 @@ set -eu
 
 image="cockroachdb/builder"
 
-if [ "${1:-}" = "init" ]; then
+function init() {
     docker build --tag="${image}" - <<EOF
 FROM golang:1.4.2
 
@@ -14,34 +14,40 @@ RUN apt-get update -y && \
  apt-get clean autoclean && \
  apt-get autoremove -y && \
  rm -rf /tmp/* && \
- ln -s /usr/bin/nodejs /usr/bin/node && \
- apt-get remove --auto-remove -y npm
+ ln -s /usr/bin/nodejs /usr/bin/node
 RUN go get golang.org/x/tools/cmd/vet
 
 CMD ["/bin/bash"]
 EOF
+}
+
+if [ "${1:-}" = "init" ]; then
+    init
+    exit 0
+fi
+
+if [ "${1:-}" = "push" ]; then
+    init
+    tag="$(date +%Y%m%d-%H%M%S)"
+    docker tag "${image}" "${image}:${tag}"
+    docker push "${image}:${tag}"
     exit 0
 fi
 
 gopath0="${GOPATH%%:*}"
-dockerVers=$(docker version | grep 'Server version:' | awk '{print $NF}')
-rm=""
 
-case "${dockerVers}" in
-  0.*|1.[012345]*)
-    # Removing volume containers fails on older versions of docker with
-    # the error:
-    #
-    #   Failed to destroy btrfs snapshot: operation not permitted
-    ;;
-  *)
+if [ "${CIRCLE_ARTIFACTS:-}" != "" ]; then
+    # HACK: Removal of docker containers fails on circleci with the
+    # error: "Driver btrfs failed to remove root filesystem". So if
+    # we're running on circleci, just leave the containers around.
+    rm=""
+else
     rm="--rm"
-    ;;
-esac
-
+fi
+	   
 tty=""
 if test -t 0; then
-  tty="--tty"
+    tty="--tty"
 fi
 
 # Run our build container with a set of volumes mounted that will
