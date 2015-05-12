@@ -47,6 +47,7 @@ type Bank struct {
 	numTransfers int32
 }
 
+// Account holds all the customers account information
 type Account struct {
 	Balance int64
 }
@@ -63,19 +64,19 @@ func (a *Account) decode(b []byte) error {
 func (bank *Bank) sumAllAccounts() int64 {
 	var result int64
 	err := bank.db.Tx(func(tx *client.Tx) error {
-		scan := tx.Scan(makeAccountID(0), makeAccountID(bank.numAccounts), int64(bank.numAccounts))
-		if scan.Err != nil {
-			log.Fatal(scan.Err)
+		scan, err := tx.Scan(makeAccountID(0), makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		if err != nil {
+			return err
 		}
 		if len(scan.Rows) != bank.numAccounts {
-			log.Fatalf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
+			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
 		}
 		// Copy responses into balances.
 		for i := 0; i < bank.numAccounts; i++ {
 			account := &Account{}
 			err := account.decode(scan.Rows[i].ValueBytes())
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 			// fmt.Printf("Account %d contains %d$\n", i, account.Balance)
 			result += account.Balance
@@ -158,7 +159,7 @@ func (bank *Bank) initBankAccounts(cash int64) {
 		log.Fatal(err)
 	}
 	for i := 0; i < bank.numAccounts; i++ {
-		batch = batch.Put(makeAccountID(i), value)
+		batch.Put(makeAccountID(i), value)
 	}
 	if err := bank.db.Run(batch); err != nil {
 		log.Fatal(err)
