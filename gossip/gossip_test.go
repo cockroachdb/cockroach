@@ -150,7 +150,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"lb=127.0.0.1:9005",
 	}
 
-	resolvers := []base.Resolver{}
+	resolvers := []resolver.Resolver{}
 	for _, rs := range resolverSpecs {
 		resolver, err := resolver.NewResolver(&base.Context{}, rs)
 		if err == nil {

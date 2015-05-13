@@ -105,7 +105,7 @@ type Context struct {
 
 	// GossipBootstrapResolvers is a list of gossip resolvers used
 	// to find bootstrap nodes for connecting to the gossip network.
-	GossipBootstrapResolvers []base.Resolver
+	GossipBootstrapResolvers []resolver.Resolver
 
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
@@ -197,8 +197,8 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
-func (ctx *Context) parseGossipBootstrapResolvers() ([]base.Resolver, error) {
-	var bootstrapResolvers []base.Resolver
+func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
+	var bootstrapResolvers []resolver.Resolver
 	addresses := strings.Split(ctx.GossipBootstrap, ",")
 	for _, address := range addresses {
 		if len(address) == 0 {

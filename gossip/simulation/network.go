@@ -20,7 +20,6 @@ package simulation
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
@@ -82,7 +81,7 @@ func NewNetwork(nodeCount int, networkType string,
 
 	for i, leftNode := range nodes {
 		// Build new resolvers for each instance or we'll get data races.
-		var resolvers []base.Resolver
+		var resolvers []resolver.Resolver
 		for _, rightNode := range nodes[:numResolvers] {
 			resolvers = append(resolvers, resolver.NewResolverFromAddress(rightNode.Server.Addr()))
 		}

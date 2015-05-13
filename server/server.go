@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/c-snappy"
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -162,7 +161,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 		if err != nil {
 			return err
 		}
-		s.gossip.SetResolvers([]base.Resolver{selfResolver})
+		s.gossip.SetResolvers([]resolver.Resolver{selfResolver})
 	}
 	s.gossip.Start(s.rpc, s.stopper)
 

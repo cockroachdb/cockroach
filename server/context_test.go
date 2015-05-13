@@ -21,7 +21,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 )
 
@@ -56,7 +55,7 @@ func TestParseGossipBootstrapAddrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []base.Resolver{r1, r2}
+	expected := []resolver.Resolver{r1, r2}
 	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
 		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
 	}
