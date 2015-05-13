@@ -50,6 +50,21 @@ func makeDBClient() *client.DB {
 	return db
 }
 
+// unquoteArg unquotes the provided argument using Go double-quoted
+// string literal rules.
+func unquoteArg(arg string, disallowSystem bool) string {
+	s, err := strconv.Unquote(`"` + arg + `"`)
+	if err != nil {
+		fmt.Fprintf(osStderr, "invalid argument %q: %s\n", arg, err)
+		osExit(1)
+	}
+	if disallowSystem && strings.HasPrefix(s, "\x00") {
+		fmt.Fprintf(osStderr, "cannot specify system key %q\n", s)
+		osExit(1)
+	}
+	return s
+}
+
 // A getCmd command gets the value for the specified key.
 var getCmd = &cobra.Command{
 	Use:   "get [options] <key>",
@@ -69,7 +84,7 @@ func runGet(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	key := proto.Key(args[0])
+	key := proto.Key(unquoteArg(args[0], false))
 	r, err := kvDB.Get(key)
 	if err != nil {
 		fmt.Fprintf(osStderr, "get failed: %s\n", err)
@@ -94,8 +109,7 @@ var putCmd = &cobra.Command{
 	Short: "sets the value for a key",
 	Long: `
 Sets the value for one or more keys. Keys and values must be provided
-in pairs on the command line. All of the key/value pairs are set within
-a transaction.
+in pairs on the command line.
 `,
 	Run: runPut,
 }
@@ -106,16 +120,10 @@ func runPut(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// TODO(pmattis): Investigate allowing keys/values to be quoted and
-	// to unquote them using strconv.Unquote.
-
 	// Do not allow system keys to be put.
-	for i := 0; i < len(args); i += 2 {
-		if strings.HasPrefix(args[i], "\x00") {
-			fmt.Fprintf(osStderr, "unable to put system key: %s\n", proto.Key(args[i]))
-			osExit(1)
-			return
-		}
+	unquoted := []string{}
+	for i := 0; i < len(args); i++ {
+		unquoted = append(unquoted, unquoteArg(args[i], i%2 == 0 /* disallow system keys */))
 	}
 
 	kvDB := makeDBClient()
@@ -124,8 +132,8 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 	err := kvDB.Tx(func(tx *client.Tx) error {
 		b := &client.Batch{}
-		for i := 0; i < len(args); i += 2 {
-			b.Put(args[i], args[i+1])
+		for i := 0; i < len(unquoted); i += 2 {
+			b.Put(unquoted[i], unquoted[i+1])
 		}
 		return tx.Commit(b)
 	})
@@ -153,12 +161,6 @@ func runInc(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	if strings.HasPrefix(args[0], "\x00") {
-		fmt.Fprintf(osStderr, "unable to increment system key: %s\n", proto.Key(args[0]))
-		osExit(1)
-		return
-	}
-
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
@@ -173,7 +175,7 @@ func runInc(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	key := args[0]
+	key := proto.Key(unquoteArg(args[0], true /* disallow system keys */))
 	if r, err := kvDB.Inc(key, int64(amount)); err != nil {
 		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
 		osExit(1)
@@ -199,12 +201,9 @@ func runDel(cmd *cobra.Command, args []string) {
 	}
 
 	// Do not allow system keys to be deleted.
+	unquoted := []string{}
 	for i := 0; i < len(args); i++ {
-		if strings.HasPrefix(args[i], "\x00") {
-			fmt.Fprintf(osStderr, "unable to delete system key: %s\n", proto.Key(args[i]))
-			osExit(1)
-			return
-		}
+		unquoted = append(unquoted, unquoteArg(args[0], i%2 == 0 /* disallow system keys */))
 	}
 
 	kvDB := makeDBClient()
@@ -213,8 +212,8 @@ func runDel(cmd *cobra.Command, args []string) {
 	}
 	err := kvDB.Tx(func(tx *client.Tx) error {
 		b := &client.Batch{}
-		for i := 0; i < len(args); i++ {
-			b.Del(args[i])
+		for i := 0; i < len(unquoted); i++ {
+			b.Del(unquoted[i])
 		}
 		return tx.Commit(b)
 	})
@@ -251,15 +250,13 @@ func runScan(cmd *cobra.Command, args []string) {
 		endKey   proto.Key
 	)
 	if len(args) >= 1 {
-		startKey = proto.Key(args[0])
+		startKey = proto.Key(unquoteArg(args[0], false))
 	} else {
 		// Start with the first key after the system key range.
-		//
-		// TODO(pmattis): Add a flag for retrieving system keys as well.
 		startKey = engine.KeySystemMax
 	}
 	if len(args) >= 2 {
-		endKey = proto.Key(args[1])
+		endKey = proto.Key(unquoteArg(args[1], false))
 	} else {
 		endKey = proto.KeyMax
 	}
@@ -286,7 +283,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		if i, ok := row.Value.(*int64); ok {
 			fmt.Printf("%s\t%d\n", key, *i)
 		} else {
-			fmt.Printf("%s\t%s\n", key, row.Value)
+			fmt.Printf("%s\t%q\n", key, row.Value)
 		}
 	}
 }
@@ -302,6 +299,11 @@ var kvCmds = []*cobra.Command{
 var kvCmd = &cobra.Command{
 	Use:   "kv",
 	Short: "get, put, increment, delete and scan key/value pairs",
+	Long: `
+Special characters in keys or values should be specified according to
+the double-quoted Go string literal rules (see
+https://golang.org/ref/spec#String_literals).
+`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 	},
