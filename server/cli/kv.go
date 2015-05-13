@@ -130,14 +130,11 @@ func runPut(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	err := kvDB.Tx(func(tx *client.Tx) error {
-		b := &client.Batch{}
-		for i := 0; i < len(unquoted); i += 2 {
-			b.Put(unquoted[i], unquoted[i+1])
-		}
-		return tx.Commit(b)
-	})
-	if err != nil {
+	b := &client.Batch{}
+	for i := 0; i < len(unquoted); i += 2 {
+		b.Put(unquoted[i], unquoted[i+1])
+	}
+	if err := kvDB.Run(b); err != nil {
 		fmt.Fprintf(osStderr, "put failed: %s\n", err)
 		osExit(1)
 		return
@@ -210,14 +207,11 @@ func runDel(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	err := kvDB.Tx(func(tx *client.Tx) error {
-		b := &client.Batch{}
-		for i := 0; i < len(unquoted); i++ {
-			b.Del(unquoted[i])
-		}
-		return tx.Commit(b)
-	})
-	if err != nil {
+	b := &client.Batch{}
+	for i := 0; i < len(unquoted); i++ {
+		b.Del(unquoted[i])
+	}
+	if err := kvDB.Run(b); err != nil {
 		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
 		osExit(1)
 		return
