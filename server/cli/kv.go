@@ -121,7 +121,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 
 	// Do not allow system keys to be put.
-	unquoted := []string{}
+	var unquoted []string
 	for i := 0; i < len(args); i++ {
 		unquoted = append(unquoted, unquoteArg(args[i], i%2 == 0 /* disallow system keys */))
 	}
@@ -201,7 +201,7 @@ func runDel(cmd *cobra.Command, args []string) {
 	}
 
 	// Do not allow system keys to be deleted.
-	unquoted := []string{}
+	var unquoted []string
 	for i := 0; i < len(args); i++ {
 		unquoted = append(unquoted, unquoteArg(args[0], i%2 == 0 /* disallow system keys */))
 	}
