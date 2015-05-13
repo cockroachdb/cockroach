@@ -57,7 +57,7 @@ import (
 // periodically on their own.
 type txnMetadata struct {
 	// txn is the transaction struct from the initial AddRequest call.
-	txn *proto.Transaction
+	txn proto.Transaction
 
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
@@ -75,9 +75,8 @@ type txnMetadata struct {
 	// is set to 0, a default timeout will be used.
 	timeoutDuration time.Duration
 
-	// closeCh is closed when the transaction has completed to exit
-	// heartbeat.
-	closeCh chan struct{}
+	// txnEnd is closed when the transaction is aborted or committed.
+	txnEnd chan struct{}
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -125,7 +124,7 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // metadata heartbeat. Any keys listed in the resolved slice have
 // already been resolved and do not receive resolve intent commands.
 func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender, stopper *util.Stopper) {
-	close(tm.closeCh) // stop heartbeat
+	close(tm.txnEnd) // stop heartbeat
 	if tm.keys.Len() > 0 {
 		if log.V(1) {
 			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
@@ -319,11 +318,11 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		var txnMeta *txnMetadata
 		if txnMeta, ok = tc.txns[string(header.Txn.ID)]; !ok {
 			txnMeta = &txnMetadata{
-				txn:             header.Txn,
+				txn:             *header.Txn,
 				keys:            cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
 				lastUpdateNanos: tc.clock.PhysicalNow(),
 				timeoutDuration: tc.clientTimeout,
-				closeCh:         make(chan struct{}),
+				txnEnd:          make(chan struct{}),
 			}
 			tc.txns[string(header.Txn.ID)] = txnMeta
 			tc.heartbeat(txnMeta)
@@ -508,7 +507,7 @@ func (tc *TxnCoordSender) heartbeat(txnMeta *txnMetadata) {
 			RequestHeader: proto.RequestHeader{
 				Key:  txnMeta.txn.Key,
 				User: storage.UserRoot,
-				Txn:  txnMeta.txn,
+				Txn:  &txnMeta.txn,
 			},
 		}
 
@@ -550,7 +549,7 @@ func (tc *TxnCoordSender) heartbeat(txnMeta *txnMetadata) {
 				}
 				tc.stopper.FinishTask()
 
-			case <-txnMeta.closeCh:
+			case <-txnMeta.txnEnd:
 				// Transaction finished.
 				return
 
