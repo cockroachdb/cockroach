@@ -20,6 +20,7 @@ package kv
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -56,22 +57,27 @@ import (
 // periodically on their own.
 type txnMetadata struct {
 	// txn is the transaction struct from the initial AddRequest call.
-	txn proto.Transaction
+	txn *proto.Transaction
 
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
 	keys *cache.IntervalCache
 
-	// lastUpdateTS is the latest time when the client sent transaction
-	// operations to this coordinator.
-	lastUpdateTS proto.Timestamp
+	// lastUpdateNanos is the latest wall time in nanos the client sent
+	// transaction operations to this coordinator. Accessed and updated
+	// atomically.
+	lastUpdateNanos int64
 
 	// timeoutDuration is the time after which the transaction should be
 	// considered abandoned by the client. That is, when
 	// current_timestamp > lastUpdateTS + timeoutDuration If this value
 	// is set to 0, a default timeout will be used.
 	timeoutDuration time.Duration
+
+	// closeCh is closed when the transaction has completed to exit
+	// heartbeat.
+	closeCh chan struct{}
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -100,11 +106,26 @@ func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 	tm.keys.Add(key, nil)
 }
 
+// setLastUpdate updates the wall time (in nanoseconds) since the most
+// recent client operation for this transaction through the coordinator.
+func (tm *txnMetadata) setLastUpdate(nowNanos int64) {
+	atomic.StoreInt64(&tm.lastUpdateNanos, nowNanos)
+}
+
+// hasClientAbandonedCoord returns true if the transaction has not
+// been updated by the client adding a request within the allowed
+// timeout.
+func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
+	timeout := nowNanos - tm.timeoutDuration.Nanoseconds()
+	return atomic.LoadInt64(&tm.lastUpdateNanos) < timeout
+}
+
 // close sends resolve intent commands for all key ranges this
 // transaction has covered, clears the keys cache and closes the
 // metadata heartbeat. Any keys listed in the resolved slice have
 // already been resolved and do not receive resolve intent commands.
 func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender, stopper *util.Stopper) {
+	close(tm.closeCh) // stop heartbeat
 	if tm.keys.Len() > 0 {
 		if log.V(1) {
 			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
@@ -246,11 +267,11 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 // sendOne sends a single call via the wrapped sender. If the call is
 // part of a transaction, the TxnCoordSender adds the transaction to a
 // map of active transactions and begins heartbeating it. Every
-// subsequent call for the same transaction updates the lastUpdateTS
-// to prevent live transactions from being considered abandoned and
-// garbage collected. Read/write mutating requests have their key or
-// key range added to the transaction's interval tree of key ranges
-// for eventual cleanup via resolved write intents.
+// subsequent call for the same transaction updates the lastUpdate
+// timestamp to prevent live transactions from being considered
+// abandoned and garbage collected. Read/write mutating requests have
+// their key or key range added to the transaction's interval tree of
+// key ranges for eventual cleanup via resolved write intents.
 //
 // On success, and if the call is part of a transaction, the affected
 // key range is recorded as live intents for eventual cleanup upon
@@ -298,15 +319,16 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		var txnMeta *txnMetadata
 		if txnMeta, ok = tc.txns[string(header.Txn.ID)]; !ok {
 			txnMeta = &txnMetadata{
-				txn:             *header.Txn,
+				txn:             header.Txn,
 				keys:            cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-				lastUpdateTS:    tc.clock.Now(),
+				lastUpdateNanos: tc.clock.PhysicalNow(),
 				timeoutDuration: tc.clientTimeout,
+				closeCh:         make(chan struct{}),
 			}
 			tc.txns[string(header.Txn.ID)] = txnMeta
-			tc.heartbeat(header.Txn)
+			tc.heartbeat(txnMeta)
 		}
-		txnMeta.lastUpdateTS = tc.clock.Now()
+		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 		txnMeta.addKeyRange(header.Key, header.EndKey)
 		tc.Unlock()
 	}
@@ -476,37 +498,17 @@ func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction, resolved []proto.Ke
 	delete(tc.txns, string(txn.ID))
 }
 
-// hasClientAbandonedCoord returns true if the transaction specified by
-// txnID has not been updated by the client adding a request within
-// the allowed timeout. If abandoned, the transaction is removed from
-// the txns map.
-func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
-	tc.Lock()
-	defer tc.Unlock()
-	txnMeta, ok := tc.txns[string(txnID)]
-	if !ok {
-		return true
-	}
-	timeout := tc.clock.Now()
-	timeout.WallTime -= txnMeta.timeoutDuration.Nanoseconds()
-	if txnMeta.lastUpdateTS.Less(timeout) {
-		delete(tc.txns, string(txnID))
-		return true
-	}
-	return false
-}
-
 // heartbeat periodically sends an InternalHeartbeatTxn RPC to an
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the TxnCoordSender is closed.
-func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
+func (tc *TxnCoordSender) heartbeat(txnMeta *txnMetadata) {
 	tc.stopper.RunWorker(func() {
 		ticker := time.NewTicker(tc.heartbeatInterval)
 		request := &proto.InternalHeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:  txn.Key,
+				Key:  txnMeta.txn.Key,
 				User: storage.UserRoot,
-				Txn:  txn,
+				Txn:  txnMeta.txn,
 			},
 		}
 
@@ -519,9 +521,12 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 				}
 				// Before we send a heartbeat, determine whether this transaction
 				// should be considered abandoned. If so, exit heartbeat.
-				if tc.hasClientAbandonedCoord(txn.ID) {
+				if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
+					tc.Lock()
+					delete(tc.txns, string(txnMeta.txn.ID))
+					tc.Unlock()
 					if log.V(1) {
-						log.Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
+						log.Infof("transaction %s abandoned; stopping heartbeat", txnMeta.txn)
 					}
 					tc.stopper.FinishTask()
 					return
@@ -537,7 +542,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 				// the heartbeat. It's either aborted or committed, and we resolve
 				// write intents accordingly.
 				if reply.GoError() != nil {
-					log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
+					log.Warningf("heartbeat to %s failed: %s", txnMeta.txn, reply.GoError())
 				} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
 					tc.cleanupTxn(reply.Txn, nil)
 					tc.stopper.FinishTask()
@@ -545,7 +550,12 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 				}
 				tc.stopper.FinishTask()
 
+			case <-txnMeta.closeCh:
+				// Transaction finished.
+				return
+
 			case <-tc.stopper.ShouldStop():
+				// System shutdown.
 				return
 			}
 		}

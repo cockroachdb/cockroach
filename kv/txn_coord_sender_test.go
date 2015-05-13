@@ -20,6 +20,7 @@ package kv
 import (
 	"bytes"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -92,10 +93,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
-	ts := txnMeta.lastUpdateTS
-	if !ts.Less(s.Clock.Now()) {
-		t.Errorf("expected earlier last update timestamp; got: %+v", ts)
-	}
+	ts := atomic.LoadInt64(&txnMeta.lastUpdateNanos)
 
 	// Advance time and send another put request. Lock the coordinator
 	// to prevent a data race.
@@ -109,8 +107,8 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(coord.txns))
 	}
 	txnMeta = coord.txns[string(txn.ID)]
-	if !ts.Less(txnMeta.lastUpdateTS) || txnMeta.lastUpdateTS.WallTime != s.Manual.UnixNano() {
-		t.Errorf("expected last update time to advance; got %+v", txnMeta.lastUpdateTS)
+	if lu := atomic.LoadInt64(&txnMeta.lastUpdateNanos); ts >= lu || lu != s.Manual.UnixNano() {
+		t.Errorf("expected last update time to advance; got %d", lu)
 	}
 }
 
@@ -417,7 +415,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 }
 
 // TestTxnCoordSenderGC verifies that the coordinator cleans up extant
-// transactions after the lastUpdateTS exceeds the timeout.
+// transactions after the lastUpdateNanos exceeds the timeout.
 func TestTxnCoordSenderGC(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
