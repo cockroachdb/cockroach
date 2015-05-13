@@ -157,7 +157,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
 	sa.User = storage.UserRoot
-	ds.Send(context.TODO(), call)
+	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}

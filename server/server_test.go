@@ -328,7 +328,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	get.Args.Header().User = storage.UserRoot
 	get.Args.Header().EndKey = writes[len(writes)-1]
-	tds.Send(context.TODO(), get)
+	tds.Send(context.Background(), get)
 	if err := get.Reply.Header().GoError(); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
@@ -336,7 +336,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	for i, k := range writes {
 		call = client.Put(k, k)
 		call.Args.Header().User = storage.UserRoot
-		tds.Send(context.TODO(), call)
+		tds.Send(context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
 		}
@@ -345,7 +345,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// so make sure we see their values in our Scan.
 		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
 		scan.Args.Header().User = storage.UserRoot
-		tds.Send(context.TODO(), scan)
+		tds.Send(context.Background(), scan)
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
 		}
@@ -368,7 +368,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		Reply: &proto.DeleteRangeResponse{},
 	}
-	tds.Send(context.TODO(), del)
+	tds.Send(context.Background(), del)
 	if err := del.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	scan.Args.Header().User = storage.UserRoot
 	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
-	tds.Send(context.TODO(), scan)
+	tds.Send(context.Background(), scan)
 	if err := scan.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +432,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		for _, k := range tc.keys {
 			call = client.Put(k, k)
 			call.Args.Header().User = storage.UserRoot
-			tds.Send(context.TODO(), call)
+			tds.Send(context.Background(), call)
 			if err := call.Reply.Header().GoError(); err != nil {
 				t.Fatal(err)
 			}
@@ -446,7 +446,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 					int64(maxResults))
 				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
 				scan.Args.Header().User = storage.UserRoot
-				tds.Send(context.TODO(), scan)
+				tds.Send(context.Background(), scan)
 				if err := scan.Reply.Header().GoError(); err != nil {
 					t.Fatal(err)
 				}

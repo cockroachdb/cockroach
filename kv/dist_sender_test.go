@@ -300,7 +300,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := client.Put(proto.Key("a"), []byte("value"))
 	reply := call.Reply.(*proto.PutResponse)
-	ds.Send(context.TODO(), call)
+	ds.Send(context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -345,7 +345,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 			},
 			Reply: &proto.InternalPushTxnResponse{},
 		}
-		ds.Send(context.TODO(), call)
+		ds.Send(context.Background(), call)
 	}
 }
 
@@ -395,7 +395,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := client.Scan(proto.Key("a"), proto.Key("d"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
-	ds.Send(context.TODO(), call)
+	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}

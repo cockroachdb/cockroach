@@ -122,7 +122,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	s.KV.Sender.Send(context.TODO(), client.Call{
+	s.KV.Sender.Send(context.Background(), client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
@@ -160,7 +160,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 
 	reply := &proto.PutResponse{}
-	s.KV.Sender.Send(context.TODO(), client.Call{
+	s.KV.Sender.Send(context.Background(), client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -342,7 +342,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		t.Fatal(pReply.GoError())
 	}
 	etReply := &proto.EndTransactionResponse{}
-	s.KV.Sender.Send(context.TODO(), client.Call{
+	s.KV.Sender.Send(context.Background(), client.Call{
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
@@ -520,7 +520,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			call.Reply.Header().SetGoError(test.err)
 		}), clock, false, stopper)
 		reply := &proto.PutResponse{}
-		ts.Send(context.TODO(), client.Call{Args: testPutReq, Reply: reply})
+		ts.Send(context.Background(), client.Call{Args: testPutReq, Reply: reply})
 
 		if reflect.TypeOf(test.err) != reflect.TypeOf(reply.GoError()) {
 			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())
