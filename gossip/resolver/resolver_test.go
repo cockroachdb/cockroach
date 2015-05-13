@@ -15,10 +15,13 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package util
+package resolver
 
 import (
 	"testing"
+
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestParseResolverSpec(t *testing.T) {
@@ -30,18 +33,20 @@ func TestParseResolverSpec(t *testing.T) {
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
 		{"127.0.0.1:8080", true, "tcp", "127.0.0.1:8080"},
-		{":8080", true, "tcp", EnsureHost(":8080")},
+		{":8080", true, "tcp", util.EnsureHost(":8080")},
 		{"127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"lb=127.0.0.1", true, "lb", "127.0.0.1"},
 		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
+		{"http-lb=localhost:8080", true, "http-lb", "localhost:8080"},
+		{"http-lb=:8080", true, "http-lb", util.EnsureHost(":8080")},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
 		{"lb=", false, "", ""},
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(tc.input)
+		resolver, err := NewResolver(&base.Context{}, tc.input)
 		if (err == nil) != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
 		}
@@ -76,7 +81,7 @@ func TestGetAddress(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(tc.resolverSpec)
+		resolver, err := NewResolver(&base.Context{}, tc.resolverSpec)
 		if err != nil {
 			t.Fatal(err)
 		}

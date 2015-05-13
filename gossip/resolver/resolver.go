@@ -15,12 +15,14 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package util
+package resolver
 
 import (
 	"net"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -33,53 +35,11 @@ type Resolver interface {
 	IsExhausted() bool
 }
 
-// socketResolver represents the different types of socket-based
-// address resolvers. Based on the Type, it may return the same
-// address multiple times (eg: "lb") or not (eg: "tcp").
-type socketResolver struct {
-	typ       string
-	addr      string
-	exhausted bool // Can we try this resolver again?
-}
-
-// Type returns the resolver type.
-func (sr *socketResolver) Type() string { return sr.typ }
-
-// Addr returns the resolver address.
-func (sr *socketResolver) Addr() string { return sr.addr }
-
-// GetAddress returns a net.Addr or error.
-func (sr *socketResolver) GetAddress() (net.Addr, error) {
-	switch sr.typ {
-	case "unix":
-		addr, err := net.ResolveUnixAddr("unix", sr.addr)
-		if err != nil {
-			return nil, err
-		}
-		sr.exhausted = true
-		return addr, nil
-	case "tcp", "lb":
-		_, err := net.ResolveTCPAddr("tcp", sr.addr)
-		if err != nil {
-			return nil, err
-		}
-		if sr.typ == "tcp" {
-			// "tcp" resolvers point to a single host. "lb" have an unknown of number of backends.
-			sr.exhausted = true
-		}
-		return MakeUnresolvedAddr("tcp", sr.addr), nil
-	}
-	return nil, Errorf("unknown address type: %q", sr.typ)
-}
-
-// IsExhausted returns whether the resolver can yield further
-// addresses.
-func (sr *socketResolver) IsExhausted() bool { return sr.exhausted }
-
 var validTypes = map[string]struct{}{
-	"tcp":  {},
-	"lb":   {},
-	"unix": {},
+	"tcp":     {},
+	"lb":      {},
+	"unix":    {},
+	"http-lb": {},
 }
 
 // NewResolver takes a resolver specification and returns a new resolver.
@@ -88,8 +48,9 @@ var validTypes = map[string]struct{}{
 // - tcp: plain hostname of ip address
 // - lb: load balancer host name or ip: points to an unknown number of backends
 // - unix: unix sockets
+// - http-lb: http load balancer: queries http(s)://<lb>/_status/nodes for node addresses
 // If "network type" is not specified, "tcp" is assumed.
-func NewResolver(spec string) (Resolver, error) {
+func NewResolver(context *base.Context, spec string) (Resolver, error) {
 	parts := strings.Split(spec, "=")
 	var typ, addr string
 	if len(parts) == 1 {
@@ -100,25 +61,29 @@ func NewResolver(spec string) (Resolver, error) {
 		typ = strings.TrimSpace(parts[0])
 		addr = strings.TrimSpace(parts[1])
 	} else {
-		return nil, Errorf("unable to parse gossip resolver spec: %q", spec)
+		return nil, util.Errorf("unable to parse gossip resolver spec: %q", spec)
 	}
 
 	// We should not have an empty address at this point.
 	if len(addr) == 0 {
-		return nil, Errorf("invalid address value in gossip resolver spec: %q", spec)
+		return nil, util.Errorf("invalid address value in gossip resolver spec: %q", spec)
 	}
 
 	// Validate the type.
 	if _, ok := validTypes[typ]; !ok {
-		return nil, Errorf("unknown address type in gossip resolver spec: %q, "+
-			"valid types are %s", spec, validTypes)
+		return nil, util.Errorf("unknown address type %q in gossip resolver spec: %q, "+
+			"valid types are %s", typ, spec, validTypes)
 	}
 
-	// If we're on tcp or lb make sure we fill in the host when not specified (eg: ":8080")
-	if typ == "tcp" || typ == "lb" {
-		addr = EnsureHost(addr)
+	// For non-unix resolvers, make sure we fill in the host when not specified (eg: ":8080")
+	if typ != "unix" {
+		addr = util.EnsureHost(addr)
 	}
 
+	// Create the actual resolver.
+	if typ == "http-lb" {
+		return &nodeLookupResolver{context: context, typ: typ, addr: addr}, nil
+	}
 	return &socketResolver{typ: typ, addr: addr}, nil
 }
 

@@ -27,8 +27,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/c-snappy"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/resource"
@@ -156,11 +158,11 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
-		selfResolver, err := util.NewResolver(s.rpc.Addr().String())
+		selfResolver, err := resolver.NewResolver(&s.ctx.Context, s.rpc.Addr().String())
 		if err != nil {
 			return err
 		}
-		s.gossip.SetResolvers([]util.Resolver{selfResolver})
+		s.gossip.SetResolvers([]base.Resolver{selfResolver})
 	}
 	s.gossip.Start(s.rpc, s.stopper)
 
