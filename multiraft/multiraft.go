@@ -255,6 +255,10 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 			s.nodeID, fromID)
 		return
 	}
+	// Term in HeartbeatResponse is no meaning in fanouting. Otherwise it
+	// will cause Leader change to Follower if another group's term is
+	// greater than this.
+	req.Message.Term = 0
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the local node is leader, don't propagate.

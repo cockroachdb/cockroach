@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -327,4 +329,56 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-done
 	stopper.Stop()
+}
+
+func TestHeartbeatResponseFanout(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	cluster := newTestCluster(nil, 3, stopper, t)
+	groupID1 := uint64(1)
+	cluster.createGroup(groupID1, 0, 3 /* replicas */)
+
+	groupID2 := uint64(2)
+	cluster.createGroup(groupID2, 0, 3 /* replicas */)
+
+	leaderIndex := 0
+
+	cluster.triggerElection(leaderIndex, groupID1)
+	event := cluster.waitForElection(leaderIndex)
+	_ = cluster.waitForElection((leaderIndex + 1) % 3)
+	_ = cluster.waitForElection((leaderIndex + 2) % 3)
+
+	if event.GroupID != groupID1 {
+		t.Fatalf("election event had incorrect groupid %v", event.GroupID)
+	}
+	if event.NodeID != cluster.nodes[leaderIndex].nodeID {
+		t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
+	}
+	for i := 2; i >= 0; i-- {
+		leaderIndex = i
+		cluster.triggerElection(leaderIndex, groupID2)
+		event := cluster.waitForElection(leaderIndex)
+		_ = cluster.waitForElection((leaderIndex + 1) % 3)
+		_ = cluster.waitForElection((leaderIndex + 2) % 3)
+
+		if event.GroupID != groupID2 {
+			t.Fatalf("election event had incorrect groupid %v", event.GroupID)
+		}
+		if event.NodeID != cluster.nodes[leaderIndex].nodeID {
+			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
+		}
+	}
+
+	cluster.nodes[0].coalescedHeartbeat()
+
+	cluster.nodes[0].SubmitCommand(groupID1, makeCommandID(), []byte("command"))
+
+	select {
+	case _ = <-cluster.events[0].CommandCommitted:
+		log.Infof("SubmitCommand succeed after Heartbeat Response fanout")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("No leader after Heartbeat Response fanout")
+	}
 }
