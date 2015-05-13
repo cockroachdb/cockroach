@@ -572,7 +572,6 @@ func TestProgressWithDownNode(t *testing.T) {
 
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("currently disabled due to data race, see #1010")
 
 	// Run the test twice, once adding the replacement before removing
 	// the downed node, and once removing the downed node first.
