@@ -388,6 +388,9 @@ type node struct {
 }
 
 func (n *node) registerGroup(groupID uint64) {
+	if groupID == noGroup {
+		panic("must not call registerGroup with noGroup")
+	}
 	n.groupIDs[groupID] = struct{}{}
 }
 
@@ -607,6 +610,9 @@ func (s *state) stop() {
 // are already registered, only the missing groups will be added in.
 func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...uint64) error {
 	for _, groupID := range groupIDs {
+		if groupID == noGroup {
+			panic(fmt.Sprintf("attempt to add dummy group to node %d", nodeID))
+		}
 		if _, ok := s.groups[groupID]; !ok {
 			return util.Errorf("can not add invalid group %d to node %d",
 				groupID, nodeID)
@@ -903,13 +909,17 @@ func (s *state) sendMessage(groupID uint64, msg raftpb.Message) {
 	snapStatus := raft.SnapshotFinish
 	if err != nil {
 		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)
-		s.multiNode.ReportUnreachable(msg.To, groupID)
+		if groupID != noGroup {
+			s.multiNode.ReportUnreachable(msg.To, groupID)
+		}
 		snapStatus = raft.SnapshotFailure
 	}
 	if msg.Type == raftpb.MsgSnap {
 		// TODO(bdarnell): add an ack for snapshots and don't report status until
 		// ack, error, or timeout.
-		s.multiNode.ReportSnapshot(msg.To, groupID, snapStatus)
+		if groupID != noGroup {
+			s.multiNode.ReportSnapshot(msg.To, groupID, snapStatus)
+		}
 	}
 }
 

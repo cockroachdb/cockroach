@@ -71,7 +71,6 @@ func waitForStopper(t testing.TB, stopper *util.Stopper) {
 
 func TestStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("currently disabled; see #1010")
 
 	// Construct a set of fake ranges to synthesize events correctly. They do
 	// not need to be added to a Store.
