@@ -765,6 +765,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 
 // applyRaftCommand applies a raft command from the replicated log to
 // the underlying state machine (i.e. the engine).
+// The caller needs to hold the range lock.
 func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, args proto.Request, reply proto.Response) error {
 	if index <= 0 {
 		log.Fatalf("raft command index is <= 0")
@@ -848,7 +849,8 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 		switch args.(type) {
 		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
 			if header.Key.Less(engine.KeySystemMax) {
-				r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+				// We hold the lock already.
+				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
 					return bytes.HasPrefix(header.Key, configPrefix)
 				})
 			}
@@ -925,7 +927,13 @@ func (r *Range) maybeGossipFirstRange() error {
 // TODO(tschottdorf): The main reason this method does not try to get the lease
 // is that InternalLeaderLease calls it, which means that we would wind up
 // deadlocking in redirectOnOrObtainLeaderLease. Can possibly simplify.
-func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
+func (r *Range) maybeGossipConfigs(match func(proto.Key) bool) {
+	r.Lock()
+	defer r.Unlock()
+	r.maybeGossipConfigsLocked(match)
+}
+
+func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool) {
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}

@@ -760,7 +760,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	}
 
 	// Gossip configs in the event this range contains config info.
-	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+	r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
 		return r.ContainsKey(configPrefix)
 	})
 }
