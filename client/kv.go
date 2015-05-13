@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 )
 
 // TransactionOptions are parameters for use with KV.RunTransaction.
@@ -104,7 +105,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 			c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
 		}
 		c.resetClientCmdID(kv.clock)
-		kv.Sender.Send(c)
+		kv.Sender.Send(context.TODO(), c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
 			log.Infof("failed %s: %s", c.Method(), err)

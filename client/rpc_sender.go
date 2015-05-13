@@ -22,6 +22,8 @@ import (
 	"net"
 	"net/url"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
@@ -76,7 +78,7 @@ func NewRPCSender(server string, context *base.Context) (*RPCSender, error) {
 // and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached
 // response.
-func (s *RPCSender) Send(call Call) {
+func (s *RPCSender) Send(_ context.Context, call Call) {
 	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
 

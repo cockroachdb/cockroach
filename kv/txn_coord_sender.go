@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -144,7 +146,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 				if log.V(1) {
 					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
 				}
-				sender.Send(call)
+				sender.Send(context.TODO(), call)
 				if call.Reply.Header().Error != nil {
 					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
 				}
@@ -195,7 +197,7 @@ func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable b
 // Send implements the client.KVSender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
-func (tc *TxnCoordSender) Send(call client.Call) {
+func (tc *TxnCoordSender) Send(_ context.Context, call client.Call) {
 	header := call.Args.Header()
 	tc.maybeBeginTxn(header)
 
@@ -277,7 +279,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 	}
 
 	// Send the command through wrapped sender.
-	tc.wrapped.Send(call)
+	tc.wrapped.Send(context.TODO(), call)
 
 	if header.Txn != nil {
 		// If not already set, copy the request txn.
@@ -530,7 +532,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 					Args:  request,
 					Reply: reply,
 				}
-				tc.wrapped.Send(call)
+				tc.wrapped.Send(context.TODO(), call)
 				// If the transaction is not in pending state, then we can stop
 				// the heartbeat. It's either aborted or committed, and we resolve
 				// write intents accordingly.

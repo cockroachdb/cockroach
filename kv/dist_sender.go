@@ -22,6 +22,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -113,6 +115,8 @@ type DistSender struct {
 	rpcSend         rpcSendFn
 	rpcRetryOptions util.RetryOptions
 }
+
+var _ client.KVSender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
@@ -483,7 +487,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 //
 // This may temporarily adjust the request headers, so the client.Call
 // must not be used concurrently until Send has returned.
-func (ds *DistSender) Send(call client.Call) {
+func (ds *DistSender) Send(_ context.Context, call client.Call) {
 
 	// TODO: Refactor this method into more manageable pieces.
 	// Verify permissions.

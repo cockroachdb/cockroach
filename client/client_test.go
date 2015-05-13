@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
@@ -60,8 +62,8 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(call client.Call) {
-	ss.wrapped.Send(call)
+func (ss *notifyingSender) Send(ctx context.Context, call client.Call) {
+	ss.wrapped.Send(ctx, call)
 	if ss.waiter != nil {
 		ss.waiter.Done()
 	}

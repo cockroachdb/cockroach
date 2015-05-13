@@ -496,7 +496,7 @@ func (n *Node) waitForScanCompletion() int64 {
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
-	n.lSender.Send(client.Call{Args: args, Reply: reply})
+	n.lSender.Send(context.TODO(), client.Call{Args: args, Reply: reply})
 	return nil
 }
 

@@ -80,7 +80,7 @@ type responseAdder interface {
 // supporting tests in this package. Transactions are not supported.
 // Since kv/ depends on storage/, we can't get access to a
 // txn_coord_sender from here.
-func (db *testSender) Send(call client.Call) {
+func (db *testSender) Send(_ context.Context, call client.Call) {
 	reqs := []requestUnion{}
 	switch t := call.Args.(type) {
 	case *proto.BatchRequest:

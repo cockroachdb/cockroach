@@ -20,6 +20,8 @@ package kv
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -50,7 +52,7 @@ func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
 }
 
 // Send implements the client.Sender interface.
-func (rls *retryableLocalSender) Send(call client.Call) {
+func (rls *retryableLocalSender) Send(_ context.Context, call client.Call) {
 	// Instant retry to handle the case of a range split, which is
 	// exposed here as a RangeKeyMismatchError.
 	retryOpts := util.RetryOptions{
@@ -64,7 +66,7 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 	}
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		call.Reply.Header().Error = nil
-		rls.LocalSender.Send(call)
+		rls.LocalSender.Send(context.TODO(), call)
 		// Check for range key mismatch error (this could happen if
 		// range was split between lookup and execution). In this case,
 		// reset header.Replica and engage retry loop.
