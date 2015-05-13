@@ -83,8 +83,8 @@ func ExampleBasic() {
 	// Output:
 	// kv put a 1 b 2
 	// kv scan
-	// "a"	1
-	// "b"	2
+	// "a"	"1"
+	// "b"	"2"
 	// kv del a
 	// kv get a
 	// "a" not found
@@ -97,10 +97,45 @@ func ExampleBasic() {
 	// kv inc c 100
 	// 111
 	// kv scan
-	// "b"	2
+	// "b"	"2"
 	// "c"	111
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
+	// quit
+	// node drained and shutdown: ok
+}
+
+func ExampleQuoted() {
+	c := newCLITest()
+
+	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
+	c.Run(`kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
+	c.Run(`kv put a\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
+	c.Run(`kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
+	c.Run(`kv scan`)
+	c.Run(`kv get a\x00`)
+	c.Run(`kv del a\x00`)
+	c.Run(`kv inc 1\x01`)
+	c.Run(`kv get 1\x01`)
+	c.Run("quit")
+
+	// Output:
+	// kv put a\x00 日本語
+	// kv put a\x01 \u65e5\u672c\u8a9e
+	// kv put a\x02 \U000065e5\U0000672c\U00008a9e
+	// kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
+	// kv scan
+	// "a\x00"	"日本語"
+	// "a\x01"	"日本語"
+	// "a\x02"	"日本語"
+	// "a\x03"	"日本語"
+	// kv get a\x00
+	// 日本語
+	// kv del a\x00
+	// kv inc 1\x01
+	// 1
+	// kv get 1\x01
+	// 1
 	// quit
 	// node drained and shutdown: ok
 }
@@ -121,8 +156,8 @@ func ExampleInsecure() {
 	// Output:
 	// kv --insecure put a 1 b 2
 	// kv --insecure scan
-	// "a"	1
-	// "b"	2
+	// "a"	"1"
+	// "b"	"2"
 	// quit --insecure
 	// node drained and shutdown: ok
 }
@@ -143,10 +178,10 @@ func ExampleSplitMergeRanges() {
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
 	// kv scan
-	// "a"	1
-	// "b"	2
-	// "c"	3
-	// "d"	4
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// range split c c
 	// range ls
 	// ""-"c" [1]
@@ -154,19 +189,19 @@ func ExampleSplitMergeRanges() {
 	// "c"-"\xff\xff" [2]
 	// 	0: node-id=1 store-id=1 attrs=[]
 	// kv scan
-	// "a"	1
-	// "b"	2
-	// "c"	3
-	// "d"	4
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// range merge b
 	// range ls
 	// ""-"\xff\xff" [1]
 	// 	0: node-id=1 store-id=1 attrs=[]
 	// kv scan
-	// "a"	1
-	// "b"	2
-	// "c"	3
-	// "d"	4
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// quit
 	// node drained and shutdown: ok
 }
