@@ -71,7 +71,7 @@ func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *tes
 			TickInterval:           time.Hour, // not in use
 			Strict:                 true,
 		}
-		mr, err := NewMultiRaft(proto.RaftNodeID(i+1), config)
+		mr, err := NewMultiRaft(proto.RaftNodeID(i+1), config, stopper)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,14 +83,14 @@ func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *tes
 		cluster.events = append(cluster.events, demux)
 		cluster.storages = append(cluster.storages, storage)
 	}
-	cluster.start(stopper)
+	cluster.start()
 	return cluster
 }
 
-func (c *testCluster) start(stopper *util.Stopper) {
+func (c *testCluster) start() {
 	// Let all the states listen before starting any.
 	for _, node := range c.nodes {
-		node.start(stopper)
+		node.start()
 	}
 }
 
