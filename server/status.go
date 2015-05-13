@@ -18,6 +18,7 @@
 package server
 
 import (
+	"net"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -137,9 +138,13 @@ func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request
 // handleLocalStatus handles GET requests for local-node status.
 func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	local := struct {
+		Address   net.Addr       `json:"address"`
 		BuildInfo util.BuildInfo `json:"buildInfo"`
 	}{
 		BuildInfo: util.GetBuildInfo(),
+	}
+	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {
+		local.Address = addr
 	}
 	b, contentType, err := util.MarshalResponse(r, local, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
