@@ -71,9 +71,13 @@ var flagUsage = map[string]string{
 	"gossip": `
         A comma-separated list of gossip addresses or resolvers for gossip
         bootstrap. Each item in the list has an optional type:
-        [type=]<address>. An unspecified type means ip address or dns. Type can
-        also be a load balancer ("lb"), a unix socket ("unix") or, for
-        single-node systems, "self".
+        [type=]<address>. An unspecified type means ip address or dns.
+        Type is one of:
+        - tcp: (default if type is omitted): plain ip address or hostname,
+          or "self" for single-node systems.
+        - unix: unix socket
+        - lb: RPC load balancer fowarding to an arbitrary node
+        - http-lb: HTTP load balancer: we query http(s)://<address>/_status/local
 `,
 	"gossip-interval": `
         Approximate interval (time.Duration) for gossiping new information to peers.

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -104,7 +105,7 @@ type Context struct {
 
 	// GossipBootstrapResolvers is a list of gossip resolvers used
 	// to find bootstrap nodes for connecting to the gossip network.
-	GossipBootstrapResolvers []util.Resolver
+	GossipBootstrapResolvers []resolver.Resolver
 
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
@@ -196,8 +197,8 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
-func (ctx *Context) parseGossipBootstrapResolvers() ([]util.Resolver, error) {
-	var bootstrapResolvers []util.Resolver
+func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
+	var bootstrapResolvers []resolver.Resolver
 	addresses := strings.Split(ctx.GossipBootstrap, ",")
 	for _, address := range addresses {
 		if len(address) == 0 {
@@ -210,7 +211,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]util.Resolver, error) {
 		if strings.HasPrefix(address, "self://") {
 			address = util.EnsureHost(ctx.Addr)
 		}
-		resolver, err := util.NewResolver(address)
+		resolver, err := resolver.NewResolver(&ctx.Context, address)
 		if err != nil {
 			return nil, err
 		}

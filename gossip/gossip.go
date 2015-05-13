@@ -63,6 +63,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
@@ -95,7 +96,7 @@ const (
 
 var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
-	TestBootstrap = []util.Resolver{}
+	TestBootstrap = []resolver.Resolver{}
 )
 
 func init() {
@@ -121,12 +122,12 @@ type Gossip struct {
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
 	resolverIdx int
-	resolvers   []util.Resolver
+	resolvers   []resolver.Resolver
 	triedAll    bool // True when all resolvers have been tried once
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []util.Resolver) *Gossip {
+func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []resolver.Resolver) *Gossip {
 	g := &Gossip{
 		Connected:     make(chan struct{}),
 		RPCContext:    rpcContext,
@@ -172,7 +173,7 @@ func (g *Gossip) SetNodeDescriptor(desc *proto.NodeDescriptor) error {
 
 // SetResolvers initializes the set of gossip resolvers used to
 // find nodes to bootstrap the gossip network.
-func (g *Gossip) SetResolvers(resolvers []util.Resolver) {
+func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.resolverIdx = 0

@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
@@ -69,7 +70,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		if gossipBS == addr {
 			gossipBS = rpcServer.Addr()
 		}
-		g.SetResolvers([]util.Resolver{util.NewResolverFromAddress(gossipBS)})
+		g.SetResolvers([]resolver.Resolver{resolver.NewResolverFromAddress(gossipBS)})
 		g.Start(rpcServer, stopper)
 	}
 	ctx.Gossip = g
