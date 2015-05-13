@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -40,7 +42,7 @@ import (
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
 	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
 	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
-	if err := store.ExecuteCmd(client.Call{Args: gArgs, Reply: gReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err != nil {
 		t.Fatalf("%v: failure getting store status: %s", testNumber, err)
 	}
 	if gReply.Value == nil {
@@ -130,11 +132,11 @@ func TestStoreStatus(t *testing.T) {
 	// Write some values left and right of the proposed split key.
 	rng := store.LookupRange([]byte("a"), nil)
 	pArgs, pReply := putArgs([]byte("a"), content, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(client.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 	pArgs, pReply = putArgs([]byte("c"), content, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(client.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,7 +159,7 @@ func TestStoreStatus(t *testing.T) {
 
 	// Split the range.
 	args, reply := adminSplitArgs(engine.KeyMin, splitKey, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(client.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,12 +183,12 @@ func TestStoreStatus(t *testing.T) {
 	// Write some values left and right of the split key.
 	rng = store.LookupRange([]byte("aa"), nil)
 	pArgs, pReply = putArgs([]byte("aa"), content, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(client.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 	rng2 := store.LookupRange([]byte("cc"), nil)
 	pArgs, pReply = putArgs([]byte("cc"), content, rng2.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(client.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 

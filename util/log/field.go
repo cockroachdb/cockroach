@@ -31,6 +31,6 @@ const (
 	Client          // TODO: client on whose behalf we're acting
 	Err             // a wrapped error message, if applicable
 	Detail          // information intended for human eyes only
-	Key             // a proto.Key related to this event.
+	Key             // a proto.Key related to an event.
 	maxField        // internal field bounding the range of allocated fields
 )

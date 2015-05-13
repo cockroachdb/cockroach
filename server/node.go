@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
@@ -35,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -101,7 +102,6 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.Stor
 // client.
 func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.KV, error) {
 	ctx := storage.StoreContext{}
-	ctx.Context = context.Background()
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
@@ -168,6 +168,12 @@ func NewNode(ctx storage.StoreContext) *Node {
 		lSender:       kv.NewLocalSender(),
 		completedScan: sync.NewCond(&sync.Mutex{}),
 	}
+}
+
+// context returns a base context for Node-level use. It is shared with
+// the local sender and contains NodeID and ClusterID (once known).
+func (n *Node) context() context.Context {
+	return n.lSender.Context
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -291,6 +297,12 @@ func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error 
 	if n.Descriptor.NodeID == 0 {
 		n.initNodeID(0)
 	}
+
+	// Now that we know our ClusterID and NodeID, store it in our LocalSender,
+	// which embeds a context.Context as a base context for requests.
+	log.Add(n.lSender,
+		log.NodeID, n.Descriptor.NodeID,
+		log.ClusterID, n.ClusterID)
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {

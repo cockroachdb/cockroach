@@ -122,12 +122,12 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.KV.User = storage.UserRoot
 	transport := multiraft.NewLocalRPCTransport()
 	ltc.Stopper.AddCloser(transport)
-	sCtx := storage.TestStoreContext
-	sCtx.Clock = ltc.Clock
-	sCtx.DB = ltc.KV
-	sCtx.Gossip = ltc.Gossip
-	sCtx.Transport = transport
-	ltc.Store = storage.NewStore(sCtx, ltc.Eng, &proto.NodeDescriptor{NodeID: 1})
+	ctx := storage.TestStoreContext
+	ctx.Clock = ltc.Clock
+	ctx.DB = ltc.KV
+	ctx.Gossip = ltc.Gossip
+	ctx.Transport = transport
+	ltc.Store = storage.NewStore(ctx, ltc.Eng, &proto.NodeDescriptor{NodeID: 1})
 	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

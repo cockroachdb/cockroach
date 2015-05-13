@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 )
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
@@ -167,6 +168,7 @@ type rangeManager interface {
 	splitQueue() *splitQueue
 	Stopper() *util.Stopper
 	EventFeed() StoreEventFeed
+	Context(context.Context) context.Context
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -259,6 +261,14 @@ func (r *Range) Destroy() error {
 		_ = batch.Clear(iter.Key())
 	}
 	return batch.Commit()
+}
+
+// context returns a context which is initialized with information about
+// this range. It is only relevant when commands need to be executed
+// on this range in the absence of a pre-existing context, such as
+// during range scanner operations.
+func (r *Range) context() context.Context {
+	return context.WithValue(r.rm.Context(nil), log.RaftID, r.Desc().RaftID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -479,7 +489,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
-func (r *Range) AddCmd(call client.Call, wait bool) error {
+func (r *Range) AddCmd(ctx context.Context, call client.Call, wait bool) error {
 	args, reply := call.Args, call.Reply
 	header := args.Header()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
@@ -490,11 +500,11 @@ func (r *Range) AddCmd(call client.Call, wait bool) error {
 
 	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
-		return r.addAdminCmd(args, reply)
+		return r.addAdminCmd(ctx, args, reply)
 	} else if proto.IsReadOnly(args) {
-		return r.addReadOnlyCmd(args, reply)
+		return r.addReadOnlyCmd(ctx, args, reply)
 	}
-	return r.addWriteCmd(args, reply, wait)
+	return r.addWriteCmd(ctx, args, reply, wait)
 }
 
 // beginCmd waits for any overlapping, already-executing commands via
@@ -535,7 +545,7 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
+func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
 	// Admin commands always require the leader lease.
 	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
 		reply.Header().SetGoError(err)
@@ -548,7 +558,7 @@ func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
 	case *proto.AdminMergeRequest:
 		r.AdminMerge(args.(*proto.AdminMergeRequest), reply.(*proto.AdminMergeResponse))
 	default:
-		return util.Errorf("unrecognized admin command type: %s", args.Method())
+		return util.Error("unrecognized admin command")
 	}
 	return reply.Header().GoError()
 }
@@ -556,14 +566,14 @@ func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
 	header := args.Header()
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
 		// But disallow any inconsistent reads within txns.
 		if header.Txn != nil {
-			reply.Header().SetGoError(util.Errorf("cannot allow inconsistent reads within a transaction"))
+			reply.Header().SetGoError(util.Error("cannot allow inconsistent reads within a transaction"))
 			return reply.Header().GoError()
 		}
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
@@ -571,7 +581,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 		}
 		return r.executeCmd(r.rm.Engine(), nil, args, reply)
 	} else if header.ReadConsistency == proto.CONSENSUS {
-		reply.Header().SetGoError(util.Errorf("consensus reads not implemented"))
+		reply.Header().SetGoError(util.Error("consensus reads not implemented"))
 		return reply.Header().GoError()
 	}
 
@@ -605,7 +615,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the response cache.
 // If wait is true, will block until the command is complete.
-func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
@@ -677,7 +687,6 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 		// of this write on success. This ensures a strictly higher
 		// timestamp for successive writes to the same key or key range.
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
-
 		return err
 	}
 
@@ -688,8 +697,9 @@ func (r *Range) addWriteCmd(args proto.Request, reply proto.Response, wait bool)
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if err := completionFunc(); err != nil {
-			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
-				args.Method(), args, err)
+			// TODO(tschottdorf): possible security risk to log args.
+			log.Warningc(ctx, "non-synchronous execution failed",
+				log.Err, err, log.Detail, args)
 		}
 	}()
 	return nil
@@ -873,7 +883,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Range) getLeaseForGossip() (bool, error) {
+func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
@@ -889,7 +899,8 @@ func (r *Range) getLeaseForGossip() (bool, error) {
 		case *proto.NotLeaderError, *proto.LeaseRejectedError:
 		default:
 			// Any other error is worth being logged visibly.
-			log.Warningf("could not acquire lease for first range gossip: %s", e)
+			log.Warningc(ctx, "could not acquire lease for range gossip",
+				log.Err, e)
 			return false, err
 		}
 	}
@@ -903,15 +914,16 @@ func (r *Range) maybeGossipFirstRange() error {
 	if !r.IsFirstRange() {
 		return nil
 	}
-	if ok, err := r.getLeaseForGossip(); !ok || err != nil {
+	ctx := r.context()
+	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
 		return err
 	}
 	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
-		log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
+		log.Errorc(ctx, "failed to gossip cluster ID", log.Err, err)
 	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
-		log.Errorf("failed to gossip first range metadata: %s", err)
+		log.Errorc(ctx, "failed to gossip first range metadata", log.Err, err)
 	}
 	return nil
 }

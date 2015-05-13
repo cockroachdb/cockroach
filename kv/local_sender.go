@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -29,6 +31,7 @@ import (
 
 // A LocalSender provides methods to access a collection of local stores.
 type LocalSender struct {
+	context.Context
 	mu       sync.RWMutex                     // Protects storeMap and addrs
 	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
 }
@@ -37,6 +40,7 @@ type LocalSender struct {
 // a collection of stores.
 func NewLocalSender() *LocalSender {
 	return &LocalSender{
+		Context:  context.Background(),
 		storeMap: map[proto.StoreID]*storage.Store{},
 	}
 }
@@ -143,7 +147,7 @@ func (ls *LocalSender) Send(call client.Call) {
 			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
 			header.Txn.MaxTimestamp = header.Txn.Timestamp
 		}
-		err = store.ExecuteCmd(call)
+		err = store.ExecuteCmd(ls.Context, call)
 	}
 	if err != nil {
 		call.Reply.Header().SetGoError(err)
