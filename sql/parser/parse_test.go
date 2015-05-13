@@ -2,13 +2,16 @@ package parser
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	// This is a bit silly. Require log in order for -logstderr to be
+	// defined which is set for all tests by the toplevel Makefile.
+	_ "github.com/cockroachdb/cockroach/util/log"
 )
 
 type testCase struct {
@@ -16,10 +19,6 @@ type testCase struct {
 	lineno int
 	input  string
 	output string
-}
-
-func init() {
-	_ = flag.Bool("logtostderr", false, "provided only since it's passed to our tests")
 }
 
 func iterateFiles(t *testing.T, pattern string) (ch chan testCase) {

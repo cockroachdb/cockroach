@@ -170,10 +170,12 @@ func NewNode(ctx storage.StoreContext) *Node {
 	}
 }
 
-// context returns a base context for Node-level use. It is shared with
-// the local sender and contains NodeID and ClusterID (once known).
+// context returns a context encapsulating the NodeID and ClusterID (or the
+// respective zero values, until that information is known).
 func (n *Node) context() context.Context {
-	return n.lSender.Context
+	return log.Add(context.Background(),
+		log.NodeID, n.Descriptor.NodeID,
+		log.ClusterID, n.ClusterID)
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -297,12 +299,6 @@ func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error 
 	if n.Descriptor.NodeID == 0 {
 		n.initNodeID(0)
 	}
-
-	// Now that we know our ClusterID and NodeID, store it in our LocalSender,
-	// which embeds a context.Context as a base context for requests.
-	log.Add(n.lSender,
-		log.NodeID, n.Descriptor.NodeID,
-		log.ClusterID, n.ClusterID)
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {
@@ -496,7 +492,9 @@ func (n *Node) waitForScanCompletion() int64 {
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
-	n.lSender.Send(context.TODO(), client.Call{Args: args, Reply: reply})
+	// TODO(tschottdorf) get a hold on the client's ip and add it to the
+	// context before dispatching.
+	n.lSender.Send((*Node)(n).context(), client.Call{Args: args, Reply: reply})
 	return nil
 }
 
