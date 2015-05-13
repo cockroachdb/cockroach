@@ -145,6 +145,11 @@ func (tc *testContext) Start(t testing.TB) {
 		ctx.Gossip = tc.gossip
 		ctx.Transport = tc.transport
 		ctx.EventFeed = tc.feed
+		// Create a test sender without setting a store. This is to deal with the
+		// circular dependency between the test sender and the store. The actual
+		// store will be passed to the sender after it is created and bootstrapped.
+		sender := &testSender{}
+		ctx.DB = client.NewKV(nil, sender)
 		tc.store = NewStore(ctx, tc.engine, &proto.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(proto.StoreIdent{
 			ClusterID: "test",
@@ -153,6 +158,8 @@ func (tc *testContext) Start(t testing.TB) {
 		}, tc.stopper); err != nil {
 			t.Fatal(err)
 		}
+		// Now that we have our actual store, monkey patch the sender used in ctx.DB.
+		sender.store = tc.store
 		// We created the store without a real KV client, so it can't perform splits.
 		tc.store._splitQueue.disabled = true
 
@@ -161,7 +168,6 @@ func (tc *testContext) Start(t testing.TB) {
 				t.Fatal(err)
 			}
 		}
-		tc.store.ctx.DB = client.NewKV(nil, &testSender{store: tc.store})
 		if err := tc.store.Start(tc.stopper); err != nil {
 			t.Fatal(err)
 		}
