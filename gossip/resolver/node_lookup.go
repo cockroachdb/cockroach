@@ -54,9 +54,16 @@ func (nl *nodeLookupResolver) Addr() string { return nl.addr }
 // GetAddress returns a net.Addr or error.
 // Upon errors, we set exhausted=true, then flip it back when called again.
 func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
+	// TODO(marc): this is a bit of a hack to allow the server to start.
+	// In single-node setups, this resolver will never return anything since
+	// the status handlers are not serving yet. Instead, we specify multiple
+	// gossip addresses (--gossip=localhost,http-lb=lb). We need this one to
+	// be exhausted from time to time so that we have a chance to hit the fixed address.
+	// Remove once the status pages are served before we've established a connection to
+	// the gossip network.
 	if nl.exhausted {
 		nl.exhausted = false
-		return nil, util.Errorf("skipping temporarily-exhausted resolved")
+		return nil, util.Errorf("skipping temporarily-exhausted resolver")
 	}
 
 	if nl.httpClient == nil {
