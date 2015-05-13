@@ -26,9 +26,9 @@ github.com/jteeuwen/go-bindata d0a5f1749d7a5a9a9787b0932416082c7bd0609d
 github.com/julienschmidt/httprouter 8c199fb6259ffc1af525cc3ad52ee60ba8359669
 github.com/kisielk/errcheck a48456c583c0111c8310fc59335f6496b8eb85f1
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
-github.com/robfig/glock 08e6ace4e089bf5c211592f64a24082e54b887b5
-github.com/spf13/cobra bba56042cf767e329430e7c7f68c3f9f640b4b8b
-github.com/spf13/pflag f1e68ce945b0710375b5cccee37318a3d13fdf8c
+github.com/robfig/glock e0f25993e42f3aff6494cf397815841a3491d890
+github.com/spf13/cobra c11766b405b388c6bbafaa1c8b3ad2eaf471b7b6
+github.com/spf13/pflag 0ed81a961505a7dfaab5490049a7a324743e6f03
 golang.org/x/net e0403b4e005737430c05a57aac078479844f919c
-golang.org/x/tools d00f0cb57d439b122af924676c6d45d3106891c9
+golang.org/x/tools 7d75e8b219c3efda2d08ae38acd6b42f8da4f5f9
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
