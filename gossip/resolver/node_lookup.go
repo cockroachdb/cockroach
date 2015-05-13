@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -34,7 +33,7 @@ import (
 const lookupTimeout = time.Second * 3
 
 // nodeLookupResolver implements Resolver.
-// It queries http(s)://<address>/_status/nodes and extracts the first node's address.
+// It queries http(s)://<address>/_status/local and extracts the node's address.
 // This is useful for http load balancers which will not forward RPC.
 // It is never exhausted.
 type nodeLookupResolver struct {
@@ -73,7 +72,7 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 
 	nl.exhausted = true
 	// TODO(marc): put common URIs in base and reuse everywhere.
-	url := fmt.Sprintf("%s://%s/_status/nodes", nl.context.RequestScheme(), nl.addr)
+	url := fmt.Sprintf("%s://%s/_status/local", nl.context.RequestScheme(), nl.addr)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -90,26 +89,23 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 		return nil, err
 	}
 
-	var nodes []*proto.NodeStatus
-	err = json.Unmarshal(contents, &nodes)
+	local := struct {
+		Address util.UnresolvedAddr `json:"address"`
+		// We ignore all other fields.
+	}{}
+
+	err = json.Unmarshal(contents, &local)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, node := range nodes {
-		if node == nil {
-			continue
-		}
-		addr, err := resolveAddress(node.Desc.Address.Network, node.Desc.Address.Address)
-		if err != nil {
-			continue
-		}
-		nl.exhausted = false
-		log.Infof("found gossip node: %+v", addr)
-		return addr, nil
+	addr, err := resolveAddress(local.Address.Network(), local.Address.String())
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, util.Errorf("no nodes addresses found in %s", contents)
+	nl.exhausted = false
+	log.Infof("found gossip node: %+v", addr)
+	return addr, nil
 }
 
 func resolveAddress(network, address string) (net.Addr, error) {
