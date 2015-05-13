@@ -36,6 +36,10 @@ const noGroup = uint64(0)
 // group is deleted.
 var ErrGroupDeleted = errors.New("group deleted")
 
+// ErrStopped is returned for commands that could not be completed before the
+// node was stopped.
+var ErrStopped = errors.New("stopped")
+
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
 	Storage   Storage
@@ -85,6 +89,7 @@ func (c *Config) validate() error {
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
+	stopper         *util.Stopper
 	multiNode       raft.MultiNode
 	Events          chan interface{}
 	nodeID          proto.RaftNodeID
@@ -101,7 +106,7 @@ type MultiRaft struct {
 type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID proto.RaftNodeID, config *Config) (*MultiRaft, error) {
+func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper) (*MultiRaft, error) {
 	if nodeID == 0 {
 		return nil, util.Error("Invalid RaftNodeID")
 	}
@@ -128,15 +133,20 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config) (*MultiRaft, error) {
 	}
 
 	m := &MultiRaft{
-		Config:          *config,
-		multiNode:       raft.StartMultiNode(uint64(nodeID)),
-		nodeID:          nodeID,
-		Events:          make(chan interface{}, 1000),
-		reqChan:         make(chan *RaftMessageRequest, 100),
-		createGroupChan: make(chan *createGroupOp, 100),
-		removeGroupChan: make(chan *removeGroupOp, 100),
-		proposalChan:    make(chan *proposal, 100),
-		callbackChan:    make(chan func(), 100),
+		Config:    *config,
+		stopper:   stopper,
+		multiNode: raft.StartMultiNode(uint64(nodeID)),
+		nodeID:    nodeID,
+
+		// Output channel.
+		Events: make(chan interface{}, 1000),
+
+		// Input channels.
+		reqChan:         make(chan *RaftMessageRequest),
+		createGroupChan: make(chan *createGroupOp),
+		removeGroupChan: make(chan *removeGroupOp),
+		proposalChan:    make(chan *proposal),
+		callbackChan:    make(chan func()),
 	}
 
 	err = m.Transport.Listen(nodeID, (*multiraftServer)(m))
@@ -148,9 +158,9 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config) (*MultiRaft, error) {
 }
 
 // Start runs the raft algorithm in a background goroutine.
-func (m *MultiRaft) Start(stopper *util.Stopper) error {
+func (m *MultiRaft) Start() error {
 	s := newState(m)
-	s.start(stopper)
+	s.start()
 	return nil
 }
 
@@ -158,8 +168,12 @@ func (m *MultiRaft) Start(stopper *util.Stopper) error {
 // when we receive a message.
 func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
-	ms.reqChan <- req
-	return nil
+	select {
+	case ms.reqChan <- req:
+		return nil
+	case <-ms.stopper.ShouldStop():
+		return ErrStopped
+	}
 }
 
 // strictErrorLog panics in strict mode and logs an error otherwise. Arguments are printf-style
@@ -406,7 +420,6 @@ type state struct {
 	groups    map[uint64]*group
 	nodes     map[proto.RaftNodeID]*node
 	writeTask *writeTask
-	stopper   *util.Stopper
 }
 
 func newState(m *MultiRaft) *state {
@@ -418,9 +431,8 @@ func newState(m *MultiRaft) *state {
 	}
 }
 
-func (s *state) start(stopper *util.Stopper) {
-	s.stopper = stopper
-	stopper.RunWorker(func() {
+func (s *state) start() {
+	s.stopper.RunWorker(func() {
 		if log.V(1) {
 			log.Infof("node %v starting", s.nodeID)
 		}
@@ -843,7 +855,8 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 			ChangeType: cc.Type,
 			Payload:    payload,
 			Callback: func(err error) {
-				s.callbackChan <- func() {
+				select {
+				case s.callbackChan <- func() {
 					if err == nil {
 						if log.V(3) {
 							log.Infof("node %v applying configuration change %v", s.nodeID, cc)
@@ -873,8 +886,10 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 					// config changes should be rare enough (and the size of the pending queue
 					// small enough) that it doesn't really matter.
 					for _, prop := range g.pending {
-						s.proposalChan <- prop
+						s.propose(prop)
 					}
+				}:
+				case <-s.stopper.ShouldStop():
 				}
 			},
 		})
@@ -947,7 +962,7 @@ func (s *state) maybeSendLeaderEvent(groupID uint64, g *group, ready *raft.Ready
 
 		// Re-submit all pending proposals
 		for _, prop := range g.pending {
-			s.proposalChan <- prop
+			s.propose(prop)
 		}
 	}
 }

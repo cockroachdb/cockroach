@@ -395,7 +395,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		ElectionTimeoutTicks:   s.ctx.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.ctx.RaftHeartbeatIntervalTicks,
 		EntryFormatter:         raftEntryFormatter,
-	}); err != nil {
+	}, s.stopper); err != nil {
 		return err
 	}
 
@@ -443,7 +443,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	sort.Sort(s.rangesByKey)
 
 	// Start Raft processing goroutines.
-	if err = s.multiraft.Start(s.stopper); err != nil {
+	if err = s.multiraft.Start(); err != nil {
 		return err
 	}
 	s.processRaft()

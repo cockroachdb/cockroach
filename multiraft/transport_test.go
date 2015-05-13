@@ -40,7 +40,7 @@ type localInterceptableTransport struct {
 func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 	lt := &localInterceptableTransport{
 		listeners: make(map[proto.RaftNodeID]ServerInterface),
-		messages:  make(chan *RaftMessageRequest),
+		messages:  make(chan *RaftMessageRequest, 100),
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
 	}
@@ -69,7 +69,10 @@ func (lt *localInterceptableTransport) start() {
 				if !ok {
 					continue
 				}
-				if err := srv.RaftMessage(msg, nil); err != nil {
+				err := srv.RaftMessage(msg, nil)
+				if err == ErrStopped {
+					return
+				} else if err != nil {
 					log.Fatal(err)
 				}
 
