@@ -291,44 +291,6 @@ message GCMetadata {
   optional int64 oldest_intent_nanos = 2;
 }
 
-// TimeSeriesDatapoint is a single point of time series data; a value associated
-// with a timestamp.
-message TimeSeriesDatapoint {
-  // The timestamp when this datapoint is located, expressed in nanoseconds
-  // since the unix epoch.
-  optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
-  // A floating point representation of the value of this datapoint.
-  optional double value = 2 [(gogoproto.nullable) = false];
-}
-
-// TimeSeriesData is a set of observations of a single variable value at
-// multiple points in time. This message contains a name and a source which, in
-// combination, uniquely identify the series being measured. The message also
-// contains a repeated set of TimeSeriesDatapoint messages representing distinct
-// measurements of the variable.
-message TimeSeriesData {
-  // A string which uniquely identifies the variable from which this data was
-  // measured.
-  optional string name = 1 [(gogoproto.nullable) = false];
-  // A string which identifies the unique source from which the variable was measured.
-  optional string source = 2 [(gogoproto.nullable) = false];
-  // Datapoints representing one or more measurements taken from the variable.
-  repeated TimeSeriesDatapoint datapoints = 3;
-}
-
-// TimeSeriesQueryResult is the response to a query over time series data. It
-// is similar to the TimeSeriesData message, but contains a list of sources
-// instead of a single source.
-message TimeSeriesQueryResult {
-  // A string which uniquely identifies the variable from which this data was
-  // measured.
-  optional string name = 1 [(gogoproto.nullable) = false];
-  // A list of sources from which the data was aggregated.
-  repeated string sources = 2 [(gogoproto.nullable) = false];
-  // Datapoints describing the queried data.
-  repeated TimeSeriesDatapoint datapoints = 3;
-}
-
 // MVCCStats tracks byte and instance counts for:
 //  - Live key/values (i.e. what a scan at current time will reveal;
 //    note that this includes intent keys and values, but not keys and

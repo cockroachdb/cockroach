@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -95,6 +96,14 @@ func (ts *TestServer) Gossip() *gossip.Gossip {
 func (ts *TestServer) Clock() *hlc.Clock {
 	if ts != nil {
 		return ts.clock
+	}
+	return nil
+}
+
+//TsDB returns the ts.DB instance used by the TestServer.
+func (ts *TestServer) TsDB() *ts.DB {
+	if ts != nil {
+		return ts.tsDB
 	}
 	return nil
 }

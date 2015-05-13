@@ -168,24 +168,22 @@ func TestSumAvgInterpolation(t *testing.T) {
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
 func (tm *testModel) assertQuery(name string, r Resolution, start, end int64,
-	expectedDatapoints int, expectedSources int) {
+	expectedDatapointCount int, expectedSourceCount int) {
 	// Query the actual server.
-	actual, err := tm.DB.Query(name, r, start, end)
+	actualDatapoints, actualSources, err := tm.DB.Query(name, r, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
-	if a, e := len(actual.Datapoints), expectedDatapoints; a != e {
+	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
 		tm.t.Fatalf("query expected %d datapoints, got %d", e, a)
 	}
-	if a, e := len(actual.Sources), expectedSources; a != e {
+	if a, e := len(actualSources), expectedSourceCount; a != e {
 		tm.t.Fatalf("query expected %d sources, got %d", e, a)
 	}
 
 	// Construct an expected result for comparison.
-	expected := proto.TimeSeriesQueryResult{
-		Name:    name,
-		Sources: make([]string, 0, 0),
-	}
+	var expectedDatapoints []*proto.TimeSeriesDatapoint
+	expectedSources := make([]string, 0, 0)
 	dataSpans := make(map[string]*dataSpan)
 
 	// Iterate over all possible sources which may have data for this query.
@@ -211,7 +209,7 @@ func (tm *testModel) assertQuery(name string, r Resolution, start, end int64,
 					sampleNanos: r.SampleDuration(),
 				}
 				dataSpans[sourceName] = ds
-				expected.Sources = append(expected.Sources, sourceName)
+				expectedSources = append(expectedSources, sourceName)
 			}
 			if err := ds.addData(data); err != nil {
 				tm.t.Fatal(err)
@@ -226,17 +224,20 @@ func (tm *testModel) assertQuery(name string, r Resolution, start, end int64,
 	}
 	iters.init()
 	for iters.isValid() {
-		expected.Datapoints = append(expected.Datapoints, &proto.TimeSeriesDatapoint{
+		expectedDatapoints = append(expectedDatapoints, &proto.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          iters.sumAvg(),
 		})
 		iters.advance()
 	}
 
-	sort.Strings(expected.Sources)
-	sort.Strings(actual.Sources)
-	if !reflect.DeepEqual(actual, &expected) {
-		tm.t.Fatalf("actual time series: %v, expected: %v", actual, &expected)
+	sort.Strings(expectedSources)
+	sort.Strings(actualSources)
+	if !reflect.DeepEqual(actualSources, expectedSources) {
+		tm.t.Errorf("actual source list: %v, expected: %v", actualSources, expectedSources)
+	}
+	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
+		tm.t.Errorf("actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints)
 	}
 }
 
