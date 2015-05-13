@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var dbName = flag.String("db-name", "", "Name of the distributed database backend.")
+var dbName = flag.String("db-name", "", "Name/URL of the distributed database backend.")
 var useTransaction = flag.Bool("use-transaction", true, "Turn off to disable transaction.")
 
 // These two flags configure a range of accounts over which the program functions.
@@ -43,16 +43,16 @@ var numAccounts = flag.Int("num-accounts", 1000, "Number of accounts in the acco
 var numParallelTransfers = flag.Int("num-parallel-transfers", 100, "Number of parallel transfers.")
 
 // Makes an id string from an id int.
-func makeAccountID(id int) []byte {
-	return []byte(fmt.Sprintf("%09d", id))
+func (bank *Bank) makeAccountID(id int) []byte {
+	return []byte(fmt.Sprintf("%09d", bank.firstAccount+id))
 }
 
 // Bank stores all the bank related state.
 type Bank struct {
 	db *client.DB
-	// First account in the account range
+	// First account in the account range.
 	firstAccount int
-	// Total number of accounts
+	// Total number of accounts.
 	numAccounts  int
 	numTransfers int32
 }
@@ -74,7 +74,7 @@ func (a *Account) decode(b []byte) error {
 func (bank *Bank) sumAllAccounts() int64 {
 	var result int64
 	err := bank.db.Tx(func(tx *client.Tx) error {
-		scan, err := tx.Scan(makeAccountID(bank.firstAccount), makeAccountID(bank.firstAccount+bank.numAccounts), int64(bank.numAccounts))
+		scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
 			return err
 		}
@@ -103,8 +103,8 @@ func (bank *Bank) sumAllAccounts() int64 {
 // random accounts.
 func (bank *Bank) continuousMoneyTransfer(cash int64) {
 	for {
-		from := makeAccountID(bank.firstAccount + rand.Intn(bank.numAccounts))
-		to := makeAccountID(bank.firstAccount + rand.Intn(bank.numAccounts))
+		from := bank.makeAccountID(rand.Intn(bank.numAccounts))
+		to := bank.makeAccountID(rand.Intn(bank.numAccounts))
 		// Continue when from == to
 		if bytes.Equal(from, to) {
 			continue
@@ -166,12 +166,13 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 func (bank *Bank) initBankAccounts(cash int64) {
 	if err := bank.db.Tx(func(tx *client.Tx) error {
 		// Check if the accounts have been initialized by another instance
-		if scan, err := tx.Scan(makeAccountID(bank.firstAccount), makeAccountID(bank.firstAccount+bank.numAccounts), int64(bank.numAccounts)); err != nil {
+		if scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts)); err != nil {
 			return err
 		} else if len(scan.Rows) == bank.numAccounts {
 			log.Warning("accounts have already been initialized")
 			return nil
 		} else if len(scan.Rows) > 0 {
+			// TODO(vivek): recover from this error
 			return fmt.Errorf("%d of %d accounts of the database are initialized", len(scan.Rows), bank.numAccounts)
 		}
 		// Let's initialize all the accounts
@@ -182,7 +183,7 @@ func (bank *Bank) initBankAccounts(cash int64) {
 			return err
 		}
 		for i := 0; i < bank.numAccounts; i++ {
-			batch.Put(makeAccountID(bank.firstAccount+i), value)
+			batch.Put(bank.makeAccountID(i), value)
 		}
 		if err := tx.Run(batch); err != nil {
 			return err
