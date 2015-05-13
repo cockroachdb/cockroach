@@ -27,6 +27,8 @@ import (
 	"golang.org/x/net/context"
 )
 
+const timeFormat = "1/2 15:04:05.000" // m/d h:m:s.nanos
+
 func init() {
 	// TODO this should go to our logger. Currently this will log with
 	// clog (=glog) format.
@@ -86,11 +88,10 @@ func logKV(buf *bytes.Buffer, kvs ...[]interface{}) {
 func headerKV(sev clog.Severity, depth int, msg string) []interface{} {
 	file, line := clog.Caller(depth + 1)
 	return []interface{}{
-		"level", clog.SeverityName[sev],
-		"time", time.Now().Format(time.RFC3339),
-		"file", file,
-		"line", line,
-		"msg", msg,
+		"L", clog.SeverityName[sev],
+		"T", time.Now().Format(timeFormat),
+		"F", file + ":" + strconv.Itoa(line),
+		"Msg", msg,
 	}
 }
 
