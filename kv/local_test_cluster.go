@@ -20,6 +20,8 @@ package kv
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -50,7 +52,7 @@ func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
 }
 
 // Send implements the client.Sender interface.
-func (rls *retryableLocalSender) Send(call client.Call) {
+func (rls *retryableLocalSender) Send(_ context.Context, call client.Call) {
 	// Instant retry to handle the case of a range split, which is
 	// exposed here as a RangeKeyMismatchError.
 	retryOpts := util.RetryOptions{
@@ -64,7 +66,7 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 	}
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		call.Reply.Header().Error = nil
-		rls.LocalSender.Send(call)
+		rls.LocalSender.Send(context.TODO(), call)
 		// Check for range key mismatch error (this could happen if
 		// range was split between lookup and execution). In this case,
 		// reset header.Replica and engage retry loop.
@@ -122,12 +124,12 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.KV.User = storage.UserRoot
 	transport := multiraft.NewLocalRPCTransport()
 	ltc.Stopper.AddCloser(transport)
-	sCtx := storage.TestStoreContext
-	sCtx.Clock = ltc.Clock
-	sCtx.DB = ltc.KV
-	sCtx.Gossip = ltc.Gossip
-	sCtx.Transport = transport
-	ltc.Store = storage.NewStore(sCtx, ltc.Eng, &proto.NodeDescriptor{NodeID: 1})
+	ctx := storage.TestStoreContext
+	ctx.Clock = ltc.Clock
+	ctx.DB = ltc.KV
+	ctx.Gossip = ltc.Gossip
+	ctx.Transport = transport
+	ltc.Store = storage.NewStore(ctx, ltc.Eng, &proto.NodeDescriptor{NodeID: 1})
 	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

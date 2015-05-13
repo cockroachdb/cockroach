@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -136,7 +138,7 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a call and invoke through sender.
-	s.sender.Send(client.Call{Args: args, Reply: reply})
+	s.sender.Send(context.TODO(), client.Call{Args: args, Reply: reply})
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
@@ -159,7 +161,7 @@ type rpcDBServer DBServer
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
 func (s *rpcDBServer) executeCmd(args proto.Request, reply proto.Response) error {
-	s.sender.Send(client.Call{Args: args, Reply: reply})
+	s.sender.Send(context.TODO(), client.Call{Args: args, Reply: reply})
 	return nil
 }
 

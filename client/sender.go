@@ -23,6 +23,8 @@ import (
 	"net/url"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 )
 
@@ -31,16 +33,16 @@ import (
 type KVSender interface {
 	// Send invokes the Call.Method with Call.Args and sets the result
 	// in Call.Reply.
-	Send(Call)
+	Send(context.Context, Call)
 }
 
 // KVSenderFunc is an adapter to allow the use of ordinary functions
 // as KVSenders.
-type KVSenderFunc func(Call)
+type KVSenderFunc func(context.Context, Call)
 
 // Send calls f(c).
-func (f KVSenderFunc) Send(c Call) {
-	f(c)
+func (f KVSenderFunc) Send(ctx context.Context, c Call) {
+	f(ctx, c)
 }
 
 type newSenderFunc func(u *url.URL, ctx *base.Context) (KVSender, error)

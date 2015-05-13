@@ -21,16 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 type txnSender struct {
 	*Txn
 }
 
-func (ts *txnSender) Send(call Call) {
+func (ts *txnSender) Send(ctx context.Context, call Call) {
 	// Send call through wrapped sender.
 	call.Args.Header().Txn = &ts.txn
-	ts.wrapped.Send(call)
+	ts.wrapped.Send(ctx, call)
 	ts.txn.Update(call.Reply.Header().Txn)
 
 	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {

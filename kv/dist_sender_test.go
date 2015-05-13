@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
@@ -298,7 +300,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := client.Put(proto.Key("a"), []byte("value"))
 	reply := call.Reply.(*proto.PutResponse)
-	ds.Send(call)
+	ds.Send(context.Background(), call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -343,7 +345,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 			},
 			Reply: &proto.InternalPushTxnResponse{},
 		}
-		ds.Send(call)
+		ds.Send(context.Background(), call)
 	}
 }
 
@@ -393,7 +395,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	call := client.Scan(proto.Key("a"), proto.Key("d"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
-	ds.Send(call)
+	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}

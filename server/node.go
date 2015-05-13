@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
@@ -35,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -101,7 +102,6 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.Stor
 // client.
 func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.KV, error) {
 	ctx := storage.StoreContext{}
-	ctx.Context = context.Background()
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
@@ -168,6 +168,14 @@ func NewNode(ctx storage.StoreContext) *Node {
 		lSender:       kv.NewLocalSender(),
 		completedScan: sync.NewCond(&sync.Mutex{}),
 	}
+}
+
+// context returns a context encapsulating the NodeID and ClusterID (or the
+// respective zero values, until that information is known).
+func (n *Node) context() context.Context {
+	return log.Add(context.Background(),
+		log.NodeID, n.Descriptor.NodeID,
+		log.ClusterID, n.ClusterID)
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -484,7 +492,9 @@ func (n *Node) waitForScanCompletion() int64 {
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
-	n.lSender.Send(client.Call{Args: args, Reply: reply})
+	// TODO(tschottdorf) get a hold on the client's ip and add it to the
+	// context before dispatching.
+	n.lSender.Send((*Node)(n).context(), client.Call{Args: args, Reply: reply})
 	return nil
 }
 

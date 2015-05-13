@@ -27,6 +27,8 @@ import (
 	"net/url"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
@@ -99,7 +101,7 @@ func NewHTTPSender(server string, ctx *base.Context) (*HTTPSender, error) {
 // and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached
 // response.
-func (s *HTTPSender) Send(call Call) {
+func (s *HTTPSender) Send(_ context.Context, call Call) {
 	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 

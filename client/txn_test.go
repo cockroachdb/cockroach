@@ -20,6 +20,8 @@ package client
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -38,7 +40,7 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 }
 
 func newTestSender(handler func(Call)) KVSenderFunc {
-	return func(call Call) {
+	return func(_ context.Context, call Call) {
 		header := call.Args.Header()
 		header.UserPriority = gogoproto.Int32(-1)
 		if header.Txn != nil && len(header.Txn.ID) == 0 {
@@ -86,7 +88,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := newTxn(kv, nil)
 
 	for testIdx = range testCases {
-		txn.kv.Sender.Send(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
 
@@ -98,7 +100,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}))
 	txn := newTxn(kv, nil)
 
-	txn.kv.Sender.Send(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
 	if len(txn.txn.ID) != 0 {
 		t.Errorf("expected txn to be cleared")

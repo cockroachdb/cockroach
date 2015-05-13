@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
@@ -155,7 +157,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
 	sa.User = storage.UserRoot
-	ds.Send(call)
+	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
