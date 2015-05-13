@@ -40,7 +40,7 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 }
 
 func newTestSender(handler func(Call)) KVSenderFunc {
-	return func(call Call) {
+	return func(_ context.Context, call Call) {
 		header := call.Args.Header()
 		header.UserPriority = gogoproto.Int32(-1)
 		if header.Txn != nil && len(header.Txn.ID) == 0 {

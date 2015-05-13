@@ -38,13 +38,11 @@ type KVSender interface {
 
 // KVSenderFunc is an adapter to allow the use of ordinary functions
 // as KVSenders.
-type KVSenderFunc func(Call)
-
-var _ KVSender = KVSenderFunc(func(Call) {})
+type KVSenderFunc func(context.Context, Call)
 
 // Send calls f(c).
-func (f KVSenderFunc) Send(_ context.Context, c Call) {
-	f(c)
+func (f KVSenderFunc) Send(ctx context.Context, c Call) {
+	f(ctx, c)
 }
 
 type newSenderFunc func(u *url.URL, ctx *base.Context) (KVSender, error)
