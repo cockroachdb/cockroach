@@ -82,19 +82,34 @@ func TestStatusJson(t *testing.T) {
 		expected  string
 	}
 
+	addr, err := s.Gossip().GetNodeIDAddress(s.Gossip().GetNodeID())
+	if err != nil {
+		t.Fatal(err)
+	}
 	testCases := []TestCase{
 		{statusKeyPrefix, "{}"},
 	}
 	// Test the /_status/local/ endpoint only in a go release branch.
 	if !strings.HasPrefix(runtime.Version(), "devel") {
-		testCases = append(testCases, TestCase{statusLocalKeyPrefix, `{
+		testCases = append(testCases, TestCase{statusLocalKeyPrefix, fmt.Sprintf(`{
+  "address": {
+    "network": "%s",
+    "string": "%s"
+  },
   "buildInfo": {
     "goVersion": "go[0-9\.]+",
     "tag": "",
     "time": "",
     "dependencies": ""
   }
-}`})
+}`, addr.Network(), addr.String())})
+	} else {
+		testCases = append(testCases, TestCase{statusLocalKeyPrefix, fmt.Sprintf(`{
+  "address": {
+    "network": "%s",
+    "string": "%s"
+  }
+}`, addr.Network(), addr.String())})
 	}
 
 	httpClient, err := testContext.GetHTTPClient()
@@ -126,7 +141,7 @@ func TestStatusJson(t *testing.T) {
 				t.Fatal(err)
 			}
 			if matches, err := regexp.Match(spec.expected, body); !matches || err != nil {
-				t.Errorf("expected match: %t; err nil: %s", matches, err)
+				t.Errorf("expected match %s; got %s; err nil: %s", spec.expected, body, err)
 			}
 		}
 	}

@@ -22,8 +22,8 @@ package util
 // UnresolvedAddr is an unresolved version of net.Addr.
 type UnresolvedAddr struct {
 	// These fields are only exported so that gob can see them.
-	NetworkField string
-	StringField  string
+	NetworkField string `json:"network"`
+	StringField  string `json:"string"`
 }
 
 // MakeUnresolvedAddr creates a new UnresolvedAddr from a network
