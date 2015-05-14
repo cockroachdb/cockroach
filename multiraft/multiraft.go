@@ -280,27 +280,35 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 	}
 }
 
-// CreateGroup creates a new consensus group and joins it. The initial membership of this
-// group is determined by the InitialState method of the group's Storage object.
-func (m *MultiRaft) CreateGroup(groupID uint64) error {
+// CreateGroup creates a new consensus group and joins it. The initial
+// membership of this group is determined by the InitialState method
+// of the group's Storage object.
+//
+// Returns an error via a channel; exactly one error value (or nil)
+// will be sent.  This pattern allows for the application to call
+// CreateGroup while holding a lock that is used by the Storage
+// implementation, then release the lock before reading the error.
+func (m *MultiRaft) CreateGroup(groupID uint64) <-chan error {
 	op := &createGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
 	m.createGroupChan <- op
-	return <-op.ch
+	return op.ch
 }
 
 // RemoveGroup destroys the consensus group with the given ID.
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
-func (m *MultiRaft) RemoveGroup(groupID uint64) error {
+//
+// Returns an error via a channel; see comment on CreateGroup for details.
+func (m *MultiRaft) RemoveGroup(groupID uint64) <-chan error {
 	op := &removeGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
 	m.removeGroupChan <- op
-	return <-op.ch
+	return op.ch
 }
 
 // SubmitCommand sends a command (a binary blob) to the cluster. This method returns
