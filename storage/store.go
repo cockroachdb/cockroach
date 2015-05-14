@@ -1003,7 +1003,7 @@ func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 func (s *Store) RemoveRange(rng *Range) error {
 	// RemoveGroup needs to access the storage, which in turn needs the
 	// lock. Some care is needed to avoid deadlocks.
-	if err := s.multiraft.RemoveGroup(uint64(rng.Desc().RaftID)); err != nil {
+	if err := <-s.multiraft.RemoveGroup(uint64(rng.Desc().RaftID)); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -1248,7 +1248,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		panic("proposed a nil command")
 	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
-	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
+	err := <-s.multiraft.CreateGroup(uint64(cmd.RaftID))
 	if err != nil {
 		ch := make(chan error, 1)
 		ch <- err

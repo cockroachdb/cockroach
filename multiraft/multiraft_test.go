@@ -123,7 +123,7 @@ func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 		}
 
 		node := c.nodes[firstNode+i]
-		err := node.CreateGroup(groupID)
+		err := <-node.CreateGroup(groupID)
 		if err != nil {
 			c.t.Fatal(err)
 		}
@@ -397,7 +397,7 @@ func TestRapidMembershipChange(t *testing.T) {
 			cmdID := fmt.Sprintf(cmdIDFormat, seq)
 		retry:
 			for {
-				if err := cluster.nodes[0].CreateGroup(groupID); err != nil {
+				if err := <-cluster.nodes[0].CreateGroup(groupID); err != nil {
 					t.Fatal(err)
 				}
 				if log.V(1) {
@@ -416,7 +416,7 @@ func TestRapidMembershipChange(t *testing.T) {
 					return
 				}
 			}
-			if err := cluster.nodes[0].RemoveGroup(groupID); err != nil {
+			if err := <-cluster.nodes[0].RemoveGroup(groupID); err != nil {
 				t.Fatal(err)
 			}
 		}
