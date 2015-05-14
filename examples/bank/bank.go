@@ -42,11 +42,6 @@ var numAccounts = flag.Int("num-accounts", 1000, "Number of accounts in the acco
 
 var numParallelTransfers = flag.Int("num-parallel-transfers", 100, "Number of parallel transfers.")
 
-// Makes an id string from an id int.
-func (bank *Bank) makeAccountID(id int) []byte {
-	return []byte(fmt.Sprintf("%09d", bank.firstAccount+id))
-}
-
 // Bank stores all the bank related state.
 type Bank struct {
 	db *client.DB
@@ -68,6 +63,11 @@ func (a Account) encode() ([]byte, error) {
 
 func (a *Account) decode(b []byte) error {
 	return json.Unmarshal(b, a)
+}
+
+// Makes an id string from an id int.
+func (bank *Bank) makeAccountID(id int) []byte {
+	return []byte(fmt.Sprintf("%09d", bank.firstAccount+id))
 }
 
 // Read the balances in all the accounts and return them.
@@ -109,7 +109,7 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 		if bytes.Equal(from, to) {
 			continue
 		}
-		exchangeAmount := rand.Int63n(cash / 10)
+		exchangeAmount := rand.Int63n(cash)
 		// transferMoney transfers exchangeAmount between the two accounts
 		transferMoney := func(runner client.Runner) error {
 			batchRead := &client.Batch{}
@@ -220,16 +220,15 @@ func main() {
 	var bank Bank
 	bank.firstAccount = *firstAccount
 	bank.numAccounts = *numAccounts
-	// Create a database handle
-	name := *dbName
 	if *dbName == "" {
 		// Run a test cockroach instance to represent the bank.
 		security.SetReadFileFn(securitytest.Asset)
 		serv := server.StartTestServer(nil)
 		defer serv.Stop()
-		name = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
+		*dbName = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
 	}
-	db, err := client.Open(name)
+	// Create a database handle
+	db, err := client.Open(*dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -240,7 +239,8 @@ func main() {
 
 	// Start all the money transfer routines.
 	for i := 0; i < *numParallelTransfers; i++ {
-		go bank.continuousMoneyTransfer(initCash)
+		// Keep transferring upto 10% of initCash between accounts.
+		go bank.continuousMoneyTransfer(initCash / 10)
 	}
 
 	bank.periodicallyCheckBalances(initCash)
