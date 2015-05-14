@@ -331,6 +331,9 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	stopper.Stop()
 }
 
+// TestHeartbeatResponseFanout check 2 raft groups on the same node distribution,
+// but each group has different Term, heartbeat response from each group should
+// not disturb other group's Term or Leadership
 func TestHeartbeatResponseFanout(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := util.NewStopper()
@@ -347,6 +350,7 @@ func TestHeartbeatResponseFanout(t *testing.T) {
 
 	cluster.triggerElection(leaderIndex, groupID1)
 	event := cluster.waitForElection(leaderIndex)
+	// Drain off the election event from other nodes.
 	_ = cluster.waitForElection((leaderIndex + 1) % 3)
 	_ = cluster.waitForElection((leaderIndex + 2) % 3)
 
@@ -356,10 +360,12 @@ func TestHeartbeatResponseFanout(t *testing.T) {
 	if event.NodeID != cluster.nodes[leaderIndex].nodeID {
 		t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
 	}
+	// GroupID2 will have 3 round of election, so it will have different
+	// term with groupID1, but both leader on the same node.
 	for i := 2; i >= 0; i-- {
 		leaderIndex = i
 		cluster.triggerElection(leaderIndex, groupID2)
-		event := cluster.waitForElection(leaderIndex)
+		event = cluster.waitForElection(leaderIndex)
 		_ = cluster.waitForElection((leaderIndex + 1) % 3)
 		_ = cluster.waitForElection((leaderIndex + 2) % 3)
 
@@ -370,9 +376,10 @@ func TestHeartbeatResponseFanout(t *testing.T) {
 			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
 		}
 	}
-
+	// Send a coalesced heartbeat.
+	// Heartbeat response from groupID2 will have a big term than which from groupID1.
 	cluster.nodes[0].coalescedHeartbeat()
-
+	// Start submit a command to see if groupID1's leader changed?
 	cluster.nodes[0].SubmitCommand(groupID1, makeCommandID(), []byte("command"))
 
 	select {
