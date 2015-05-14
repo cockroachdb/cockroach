@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -327,4 +329,63 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-done
 	stopper.Stop()
+}
+
+// TestHeartbeatResponseFanout check 2 raft groups on the same node distribution,
+// but each group has different Term, heartbeat response from each group should
+// not disturb other group's Term or Leadership
+func TestHeartbeatResponseFanout(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	cluster := newTestCluster(nil, 3, stopper, t)
+	groupID1 := uint64(1)
+	cluster.createGroup(groupID1, 0, 3 /* replicas */)
+
+	groupID2 := uint64(2)
+	cluster.createGroup(groupID2, 0, 3 /* replicas */)
+
+	leaderIndex := 0
+
+	cluster.triggerElection(leaderIndex, groupID1)
+	event := cluster.waitForElection(leaderIndex)
+	// Drain off the election event from other nodes.
+	_ = cluster.waitForElection((leaderIndex + 1) % 3)
+	_ = cluster.waitForElection((leaderIndex + 2) % 3)
+
+	if event.GroupID != groupID1 {
+		t.Fatalf("election event had incorrect groupid %v", event.GroupID)
+	}
+	if event.NodeID != cluster.nodes[leaderIndex].nodeID {
+		t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
+	}
+	// GroupID2 will have 3 round of election, so it will have different
+	// term with groupID1, but both leader on the same node.
+	for i := 2; i >= 0; i-- {
+		leaderIndex = i
+		cluster.triggerElection(leaderIndex, groupID2)
+		event = cluster.waitForElection(leaderIndex)
+		_ = cluster.waitForElection((leaderIndex + 1) % 3)
+		_ = cluster.waitForElection((leaderIndex + 2) % 3)
+
+		if event.GroupID != groupID2 {
+			t.Fatalf("election event had incorrect groupid %v", event.GroupID)
+		}
+		if event.NodeID != cluster.nodes[leaderIndex].nodeID {
+			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
+		}
+	}
+	// Send a coalesced heartbeat.
+	// Heartbeat response from groupID2 will have a big term than which from groupID1.
+	cluster.nodes[0].coalescedHeartbeat()
+	// Start submit a command to see if groupID1's leader changed?
+	cluster.nodes[0].SubmitCommand(groupID1, makeCommandID(), []byte("command"))
+
+	select {
+	case _ = <-cluster.events[0].CommandCommitted:
+		log.Infof("SubmitCommand succeed after Heartbeat Response fanout")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("No leader after Heartbeat Response fanout")
+	}
 }

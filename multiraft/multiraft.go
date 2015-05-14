@@ -247,28 +247,35 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
-func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
-	fromID := proto.RaftNodeID(req.Message.From)
+func (s *state) fanoutHeartbeatResponse(fromID proto.RaftNodeID) {
 	originNode, ok := s.nodes[fromID]
 	if !ok {
 		log.Warningf("node %v: not fanning out heartbeat response from unknown node %v",
 			s.nodeID, fromID)
 		return
 	}
+	// Term in HeartbeatResponse is no meaning in fanouting. Otherwise it
+	// will cause Leader change to Follower if another group's term is
+	// greater than this.
+	req := raftpb.Message{
+		From: uint64(fromID),
+		To:   uint64(s.nodeID),
+		Type: raftpb.MsgHeartbeatResp,
+	}
+
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the local node is leader, don't propagate.
 		if s.groups[groupID].leader != s.nodeID || fromID == s.nodeID {
 			if log.V(8) {
-				log.Infof("node %v: not fanning out heartbeat response to %v, msg is from %d and leader is %d",
-					s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+				log.Infof("node %v: not fanning out heartbeat response to %v, leader is %v",
+					s.nodeID, fromID, s.groups[groupID].leader)
 			}
 			continue
 		}
-		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
+		if err := s.multiNode.Step(context.Background(), groupID, req); err != nil {
 			if log.V(4) {
-				log.Infof("node %v: coalesced heartbeat response step to group %v failed for message %s", s.nodeID, groupID,
-					raft.DescribeMessage(req.Message, s.EntryFormatter))
+				log.Infof("node %v: coalesced heartbeat response step to group %v failed", s.nodeID, groupID)
 			}
 		}
 		cnt++
@@ -487,7 +494,7 @@ func (s *state) start() {
 				case raftpb.MsgHeartbeat:
 					s.fanoutHeartbeat(req)
 				case raftpb.MsgHeartbeatResp:
-					s.fanoutHeartbeatResponse(req)
+					s.fanoutHeartbeatResponse(proto.RaftNodeID(req.Message.From))
 				default:
 					// We only want to lazily create the group if it's not heartbeat-related;
 					// our heartbeats are coalesced and contain a dummy GroupID.
