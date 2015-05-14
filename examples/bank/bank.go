@@ -33,16 +33,21 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+var dbName = flag.String("db-name", "", "Name/URL of the distributed database backend.")
 var useTransaction = flag.Bool("use-transaction", true, "Turn off to disable transaction.")
 
-// Makes an id string from an id int.
-func makeAccountID(id int) []byte {
-	return []byte(fmt.Sprintf("%09d", id))
-}
+// These two flags configure a range of accounts over which the program functions.
+var firstAccount = flag.Int("first-account", 0, "First account in the account range.")
+var numAccounts = flag.Int("num-accounts", 1000, "Number of accounts in the account range.")
+
+var numParallelTransfers = flag.Int("num-parallel-transfers", 100, "Number of parallel transfers.")
 
 // Bank stores all the bank related state.
 type Bank struct {
-	db           *client.DB
+	db *client.DB
+	// First account in the account range.
+	firstAccount int
+	// Total number of accounts.
 	numAccounts  int
 	numTransfers int32
 }
@@ -60,25 +65,30 @@ func (a *Account) decode(b []byte) error {
 	return json.Unmarshal(b, a)
 }
 
+// Makes an id string from an id int.
+func (bank *Bank) makeAccountID(id int) []byte {
+	return []byte(fmt.Sprintf("%09d", bank.firstAccount+id))
+}
+
 // Read the balances in all the accounts and return them.
 func (bank *Bank) sumAllAccounts() int64 {
 	var result int64
 	err := bank.db.Tx(func(tx *client.Tx) error {
-		scan, err := tx.Scan(makeAccountID(0), makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
 			return err
 		}
 		if len(scan.Rows) != bank.numAccounts {
 			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
 		}
-		// Copy responses into balances.
+		// Sum up the balances.
 		for i := 0; i < bank.numAccounts; i++ {
 			account := &Account{}
 			err := account.decode(scan.Rows[i].ValueBytes())
 			if err != nil {
 				return err
 			}
-			// fmt.Printf("Account %d contains %d$\n", i, account.Balance)
+			// fmt.Printf("Account %d contains %d$\n", bank.firstAccount+i, account.Balance)
 			result += account.Balance
 		}
 		return nil
@@ -91,15 +101,15 @@ func (bank *Bank) sumAllAccounts() int64 {
 
 // continuouslyTransferMoney() keeps moving random amounts between
 // random accounts.
-func (bank *Bank) continuousMoneyTransfer() {
+func (bank *Bank) continuousMoneyTransfer(cash int64) {
 	for {
-		from := makeAccountID(rand.Intn(bank.numAccounts))
-		to := makeAccountID(rand.Intn(bank.numAccounts))
+		from := bank.makeAccountID(rand.Intn(bank.numAccounts))
+		to := bank.makeAccountID(rand.Intn(bank.numAccounts))
 		// Continue when from == to
 		if bytes.Equal(from, to) {
 			continue
 		}
-		exchangeAmount := rand.Int63n(100)
+		exchangeAmount := rand.Int63n(cash)
 		// transferMoney transfers exchangeAmount between the two accounts
 		transferMoney := func(runner client.Runner) error {
 			batchRead := &client.Batch{}
@@ -151,20 +161,38 @@ func (bank *Bank) continuousMoneyTransfer() {
 }
 
 // Initialize all the bank accounts with cash.
+// When multiple instances of the bank app are running,
+// only one gets to initialize the bank.
 func (bank *Bank) initBankAccounts(cash int64) {
-	batch := &client.Batch{}
-	account := Account{Balance: cash}
-	value, err := account.encode()
-	if err != nil {
+	if err := bank.db.Tx(func(tx *client.Tx) error {
+		// Check if the accounts have been initialized by another instance
+		if scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts)); err != nil {
+			return err
+		} else if len(scan.Rows) == bank.numAccounts {
+			log.Warning("accounts have already been initialized")
+			return nil
+		} else if len(scan.Rows) > 0 {
+			// TODO(vivek): recover from this error
+			return fmt.Errorf("%d of %d accounts of the database are initialized", len(scan.Rows), bank.numAccounts)
+		}
+		// Let's initialize all the accounts
+		batch := &client.Batch{}
+		account := Account{Balance: cash}
+		value, err := account.encode()
+		if err != nil {
+			return err
+		}
+		for i := 0; i < bank.numAccounts; i++ {
+			batch.Put(bank.makeAccountID(i), value)
+		}
+		if err := tx.Run(batch); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		log.Fatal(err)
 	}
-	for i := 0; i < bank.numAccounts; i++ {
-		batch.Put(makeAccountID(i), value)
-	}
-	if err := bank.db.Run(batch); err != nil {
-		log.Fatal(err)
-	}
-	log.Info("Done initializing all accounts\n")
+	log.Info("done initializing all accounts")
 }
 
 func (bank *Bank) periodicallyCheckBalances(initCash int64) {
@@ -188,15 +216,19 @@ func main() {
 	if !*useTransaction {
 		fmt.Printf("Use of a transaction has been disabled.\n")
 	}
-	// Run a test cockroach instance to represent the bank.
-	security.SetReadFileFn(securitytest.Asset)
-	serv := server.StartTestServer(nil)
-	defer serv.Stop()
 	// Initialize the bank.
 	var bank Bank
-	bank.numAccounts = 10
+	bank.firstAccount = *firstAccount
+	bank.numAccounts = *numAccounts
+	if *dbName == "" {
+		// Run a test cockroach instance to represent the bank.
+		security.SetReadFileFn(securitytest.Asset)
+		serv := server.StartTestServer(nil)
+		defer serv.Stop()
+		*dbName = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
+	}
 	// Create a database handle
-	db, err := client.Open("https://root@" + serv.ServingAddr() + "?certs=test_certs")
+	db, err := client.Open(*dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -206,9 +238,9 @@ func main() {
 	bank.initBankAccounts(initCash)
 
 	// Start all the money transfer routines.
-	const numTransferRoutines = 1000
-	for i := 0; i < numTransferRoutines; i++ {
-		go bank.continuousMoneyTransfer()
+	for i := 0; i < *numParallelTransfers; i++ {
+		// Keep transferring upto 10% of initCash between accounts.
+		go bank.continuousMoneyTransfer(initCash / 10)
 	}
 
 	bank.periodicallyCheckBalances(initCash)
