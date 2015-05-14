@@ -14,7 +14,10 @@
 // for names of contributors.
 //
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
+
 /// <reference path="../typings/angularjs/angular.d.ts" />
+
 var crApp = angular.module('cockroach');
-crApp.controller('MonitorCtrl', ['$scope', '$http', function (scope, http) {
-    }]);
+
+crApp.controller('MonitorCtrl', ['$scope', '$http', function(scope, http) {
+}]);

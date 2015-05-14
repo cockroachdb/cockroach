@@ -19,6 +19,8 @@
 // and stylesheets.
 package resource
 
+//go:generate tsc -p ui/ts/
+
 // If you add or change any files to the ui folder, you'll need to generate and
 // make build for the new and/or updated files to appear.
 //
