@@ -118,3 +118,25 @@ func TestRangeMetaKey(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateRangeMetaKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCases := []struct {
+		key    proto.Key
+		expErr bool
+	}{
+		{proto.KeyMin, false},
+		{proto.Key("\x00"), true},
+		{KeyMeta1Prefix[:len(KeyMeta1Prefix)-1], true},
+		{KeyMeta1Prefix, false},
+		{proto.MakeKey(KeyMeta1Prefix, proto.KeyMax), false},
+		{proto.MakeKey(KeyMeta2Prefix, proto.KeyMax), false},
+		{proto.MakeKey(KeyMeta2Prefix, proto.KeyMax.Next()), true},
+	}
+	for i, test := range testCases {
+		err := ValidateRangeMetaKey(test.key)
+		if err != nil != test.expErr {
+			t.Errorf("%d: expected error? %t: %s", i, test.expErr, err)
+		}
+	}
+}
