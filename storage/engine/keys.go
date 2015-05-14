@@ -262,9 +262,11 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	if lvl := string(prefix[len(KeyMetaPrefix)]); lvl != "1" && lvl != "2" {
 		return NewInvalidRangeMetaKeyError("meta level is not 1 or 2", key)
 	}
-	// Body of the key must sort before KeyMax
-	if !body.Less(KeyMax) {
-		return NewInvalidRangeMetaKeyError("body of range lookup is >= KeyMax", key)
+	// Body of the key must sort <= KeyMax. KeyMax might be the body in
+	// the event of doing a lookup of the key "\x00\x00meta1\xff\xff" in
+	// order to resolve an intent during a split.
+	if KeyMax.Less(body) {
+		return NewInvalidRangeMetaKeyError("body of range lookup is > KeyMax", key)
 	}
 
 	return nil

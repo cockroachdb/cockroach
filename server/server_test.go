@@ -28,7 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/c-snappy"
+	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
