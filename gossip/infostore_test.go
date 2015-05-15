@@ -571,8 +571,10 @@ func TestCallbacks(t *testing.T) {
 		if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
-		if expKeys := []string{"key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(cbAll.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
+		keys := cbAll.Keys()
+		sort.Strings(keys)
+		if expKeys := []string{"key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
 	}
 
@@ -590,8 +592,10 @@ func TestCallbacks(t *testing.T) {
 	if expKeys := []string{"key2-true"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 	}
-	if expKeys := []string{"key1-true", "key2-true", "key3-true", "key1-true"}; !reflect.DeepEqual(cbAll.Keys(), expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
+	keys := cbAll.Keys()
+	sort.Strings(keys)
+	if expKeys := []string{"key1-true", "key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(keys, expKeys) {
+		t.Errorf("expected %v, got %v", expKeys, keys)
 	}
 
 	// Register another callback with same pattern and verify it is
@@ -602,7 +606,7 @@ func TestCallbacks(t *testing.T) {
 
 	expKeys := []string{"key1-true", "key2-true", "key3-true", "key1-true", "key1-true", "key2-true", "key3-true"}
 	sort.Strings(expKeys)
-	keys := append([]string{}, cbAll.Keys()...)
+	keys = cbAll.Keys()
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, keys)
