@@ -339,12 +339,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).
 	errChan, pendingCmd := r.proposeRaftCommand(args, &proto.InternalLeaderLeaseResponse{})
-	var err error
-	if err = <-errChan; err == nil {
-		// Next if the command was committed, wait for the range to apply it.
-		err = <-pendingCmd.done
-	}
-	return err
+	return r.waitForRaftCmd(errChan, pendingCmd)
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
@@ -673,12 +668,8 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
-		// First wait for raft to commit or abort the command.
-		var err error
-		if err = <-errChan; err == nil {
-			// Next if the command was committed, wait for the range to apply it.
-			err = <-pendingCmd.done
-		} else if err == multiraft.ErrGroupDeleted {
+		err := r.waitForRaftCmd(errChan, pendingCmd)
+		if err == multiraft.ErrGroupDeleted {
 			// This error needs to be converted appropriately so that
 			// clients will retry.
 			err = proto.NewRangeNotFoundError(r.Desc().RaftID)
@@ -1010,5 +1001,27 @@ func (r *Range) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.rm.splitQueue().MaybeAdd(r, r.rm.Clock().Now())
+	}
+}
+
+// waitForRaftCmd waits for a proposed Raft command to completes.
+func (r *Range) waitForRaftCmd(errChan <-chan error, pCmd *pendingCmd) error {
+	// First wait for raft to commit or abort the command.
+	var err error
+	select {
+	case err = <-errChan:
+	case <-r.rm.Stopper().ShouldStop():
+		return util.Error("range is being stopped")
+	}
+	if err != nil {
+		return err
+	}
+
+	// Next if the command was committed, wait for the range to apply it.
+	select {
+	case err = <-pCmd.done:
+		return err
+	case <-r.rm.Stopper().ShouldStop():
+		return util.Error("range is being stopped")
 	}
 }
