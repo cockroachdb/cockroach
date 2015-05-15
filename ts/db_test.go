@@ -186,7 +186,7 @@ func (tm *testModel) storeInModel(r Resolution, data proto.TimeSeriesData) {
 // in both the model and the system under test.
 func (tm *testModel) storeTimeSeriesData(r Resolution, data []proto.TimeSeriesData) {
 	// Store data in the system under test.
-	if err := tm.DB.storeData(r, data); err != nil {
+	if err := tm.DB.StoreData(r, data); err != nil {
 		tm.t.Fatalf("error storing time series data: %s", err.Error())
 	}
 

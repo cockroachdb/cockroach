@@ -358,8 +358,8 @@ func (is unionIterator) sumAvg() float64 {
 	return sum
 }
 
-// Query returns data for the named time series during the supplied time span.
-// Data is returned as a series of consecutive data points.
+// Query returns datapoints for the named time series during the supplied time
+// span.  Data is returned as a series of consecutive data points.
 //
 // Data is queried only at the Resolution supplied: if data for the named time
 // series is not stored at the given resolution, an empty result will be
@@ -369,12 +369,12 @@ func (is unionIterator) sumAvg() float64 {
 // returned represent the average value within a sample period. Each datapoint's
 // timestamp falls in the middle of the sample period it represents.
 //
-// If data for a time series was collected from multiple sources, datapoints
-// will represent the sum across all sources at the same sample period. The
-// response will contain a list of all sources which were summed to produce the
-// result.
+// If data for the named time series was collected from multiple sources, each
+// returned datapoint will represent the sum of datapoints from all sources at
+// the same time. The returned string slices contains a list of all sources for
+// the metric which were aggregated to produce the result.
 func (db *DB) Query(name string, r Resolution, startNanos, endNanos int64) (
-	*proto.TimeSeriesQueryResult, error) {
+	[]*proto.TimeSeriesDatapoint, []string, error) {
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
@@ -385,7 +385,7 @@ func (db *DB) Query(name string, r Resolution, startNanos, endNanos int64) (
 	endKey := MakeDataKey(name, "" /* source */, r, endNanos).PrefixEnd()
 	scan := client.Scan(startKey, endKey, 0)
 	if err := db.kv.Run(scan); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	scanResponse := scan.Reply.(*proto.ScanResponse)
 
@@ -396,7 +396,7 @@ func (db *DB) Query(name string, r Resolution, startNanos, endNanos int64) (
 		_, source, _, _ := DecodeDataKey(row.Key)
 		data, err := proto.InternalTimeSeriesDataFromValue(&row.Value)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if _, ok := sourceSpans[source]; !ok {
@@ -407,32 +407,30 @@ func (db *DB) Query(name string, r Resolution, startNanos, endNanos int64) (
 			}
 		}
 		if err := sourceSpans[source].addData(data); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	response := &proto.TimeSeriesQueryResult{
-		Name:    name,
-		Sources: make([]string, 0, len(sourceSpans)),
-	}
+	var responseData []*proto.TimeSeriesDatapoint
+	sources := make([]string, 0, len(sourceSpans))
 
 	// Create an interpolatingIterator for each dataSpan.
 	iters := make(unionIterator, 0, len(sourceSpans))
 	for name, span := range sourceSpans {
-		response.Sources = append(response.Sources, name)
+		sources = append(sources, name)
 		iters = append(iters, span.newIterator())
 	}
 
 	// Iterate through all values in the iteratorSet, adding a datapoint to
 	// the response for each value.
 	iters.init()
-	for iters.isValid() {
-		response.Datapoints = append(response.Datapoints, &proto.TimeSeriesDatapoint{
+	for iters.isValid() && iters.timestamp() <= endNanos {
+		responseData = append(responseData, &proto.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          iters.sumAvg(),
 		})
 		iters.advance()
 	}
 
-	return response, nil
+	return responseData, sources, nil
 }

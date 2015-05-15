@@ -14,6 +14,7 @@
 		cockroach/proto/heartbeat.proto
 		cockroach/proto/internal.proto
 		cockroach/proto/status.proto
+		cockroach/proto/timeseries.proto
 
 	It has these top-level messages:
 		ClientCmdID

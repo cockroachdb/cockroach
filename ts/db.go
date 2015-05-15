@@ -96,14 +96,14 @@ func (p *poller) poll() {
 		return
 	}
 
-	if err := p.db.storeData(p.r, data); err != nil {
+	if err := p.db.StoreData(p.r, data); err != nil {
 		log.Warningf("error writing time series data: %s", err.Error())
 	}
 }
 
-// storeData writes the supplied time series data to the cockroach server.
+// StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
-func (db *DB) storeData(r Resolution, data []proto.TimeSeriesData) error {
+func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 	var kvs []proto.KeyValue
 
 	// Process data collection: data is converted to internal format, and a key
