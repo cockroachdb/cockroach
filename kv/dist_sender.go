@@ -464,16 +464,24 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 		a.Header().Replica = *replicaMap[addr.String()]
 		return a
 	}
-	firstReply := true
+	// RPC send will use go routine to send request and fill reply, and there is
+	// no lock for reply varible, so it may have race case which just merged
+	// reply got overwritten by RPC returned value if reply itself as RPC parameter
+	// in first try when there are multiple address to try.
+	// So here reply itself is not used as RPC parameter if there is more
+	// than 1 address to try.
 	getReply := func() interface{} {
-		if firstReply {
-			firstReply = false
+		if len(addrs) == 1 {
 			return reply
 		}
 		return gogoproto.Clone(reply)
 	}
-	_, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
+	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
+	if err == nil && reply != replies[0] {
+		gogoproto.Merge(reply, replies[0].(proto.Response))
+	}
+
 	return err
 }
 

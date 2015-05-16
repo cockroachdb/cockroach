@@ -203,8 +203,13 @@ func TestSendRPCOrder(t *testing.T) {
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
 		addrs []net.Addr, _ func(addr net.Addr) interface{},
-		_ func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		return nil, verifyCall(opts, addrs)
+		getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		err := verifyCall(opts, addrs)
+		if err == nil {
+			replies := append([]interface{}(nil), getReply())
+			return replies, nil
+		}
+		return nil, err
 	}
 
 	ctx := &DistSenderContext{
@@ -288,7 +293,8 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 				&proto.NotLeaderError{Leader: &leader})
 		}
 		first = false
-		return nil, nil
+		replies := append([]interface{}(nil), getReply())
+		return replies, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -365,7 +371,8 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 	g := makeTestGossip(t)
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		return nil, nil
+		replies := append([]interface{}(nil), getReply())
+		return replies, nil
 	}
 
 	for _, rangeLookup := range []bool{true, false} {
@@ -417,7 +424,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 				descStale = false
 			}
 			r.Ranges = append(r.Ranges, newRangeDescriptor)
-			return nil, nil
+			replies := append([]interface{}(nil), r)
+			return replies, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
@@ -427,7 +435,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
 				RequestEndKey: header.EndKey}
 		}
-		return nil, nil
+		replies := append([]interface{}(nil), getReply())
+		return replies, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -608,4 +617,67 @@ func TestVerifyPermissions(t *testing.T) {
 		}
 	}
 	n.Stop()
+}
+
+// TestSendRPCRetry verifies that sendRPC failed on first address but succeed on
+// second address, the second reply should be successfully returned back.
+func TestSendRPCRetry(t *testing.T) {
+	g := makeTestGossip(t)
+	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// Fill RangeDescriptor with 2 replicas
+	var descriptor = proto.RangeDescriptor{
+		RaftID:   1,
+		StartKey: proto.Key("a"),
+		EndKey:   proto.Key("z"),
+	}
+	for i := int32(1); i <= 2; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &proto.NodeDescriptor{
+			NodeID: proto.NodeID(i),
+			Address: proto.Addr{
+				Network: addr.Network(),
+				Address: addr.String(),
+			},
+		}
+		if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
+			NodeID:  proto.NodeID(i),
+			StoreID: proto.StoreID(i),
+		})
+	}
+	// Define our rpcSend stub which return second address trying value.
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		if method == "Node.Scan" {
+			// reply from first address failed
+			_ = getReply()
+			// reply from second address succeed
+			reply := getReply()
+			reply.(*proto.ScanResponse).Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
+			replies := []interface{}(nil)
+			replies = append(replies, reply)
+			return replies, nil
+		}
+		return nil, util.Errorf("Not expected method %v", method)
+	}
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+			return []proto.RangeDescriptor{descriptor}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	call := client.Scan(proto.Key("a"), proto.Key("d"), 1)
+	sr := call.Reply.(*proto.ScanResponse)
+	ds.Send(context.Background(), call)
+	if err := sr.GoError(); err != nil {
+		t.Fatal(err)
+	}
+	if l := len(sr.Rows); l != 1 {
+		t.Fatalf("expected 1 row; got %d", l)
+	}
 }
