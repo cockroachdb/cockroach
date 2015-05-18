@@ -5,11 +5,14 @@
         "module": "commonjs",
         "declaration": false,
         "noImplicitAny": false,
-        "removeComments": false,
+        "noEmitOnError": true,
+        "removeComments": true,
         "noLib": false,
-        "outDir": "../js"
+        "out": "./ui/js/app.js",
+        "sourceMap": false
     },
     "files": [
+        "./header.ts",
         "./app.ts",
         "./controllers/monitor.ts",
         "./controllers/rest_explorer.ts"
