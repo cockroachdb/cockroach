@@ -122,6 +122,7 @@ check:
 	! gofmt -s -l . | grep -vF 'No Exceptions'
 	! goimports -l . | grep -vF 'No Exceptions'
 	go vet $(PKG)
+	go tool vet --printfuncs=Infof,Warningf,Errorf,Fatalf .
 
 .PHONY: clean
 clean:
