@@ -145,7 +145,7 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 			} else if toValue, err := toAccount.encode(); err != nil {
 				return err
 			} else {
-				batchWrite.Put(fromValue, toValue)
+				batchWrite.Put(from, fromValue).Put(to, toValue)
 			}
 			return runner.Run(batchWrite)
 		}
