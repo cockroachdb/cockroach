@@ -115,11 +115,28 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	<-client.Ready
 
 	sContext.RemoteClocks.mu.Lock()
-	o := sContext.RemoteClocks.offsets[client.LocalAddr().String()]
+	remoteAddr := client.Addr().String()
+	o := sContext.RemoteClocks.offsets[remoteAddr]
 	sContext.RemoteClocks.mu.Unlock()
 	expServerOffset := proto.RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
-	if !o.Equal(expServerOffset) {
+	if o.Equal(expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
 	}
 	s.Close()
+
+	// Remove the offset from RemoteClocks and simulate the remote end
+	// closing the client connection. A new offset for the server should
+	// not be added to the clock monitor.
+	sContext.RemoteClocks.mu.Lock()
+	delete(sContext.RemoteClocks.offsets, remoteAddr)
+	client.Client.Close()
+	sContext.RemoteClocks.mu.Unlock()
+
+	<-client.Closed
+
+	sContext.RemoteClocks.mu.Lock()
+	if offset, ok := sContext.RemoteClocks.offsets[remoteAddr]; ok {
+		t.Errorf("unexpected updated offset: %v", offset)
+	}
+	sContext.RemoteClocks.mu.Unlock()
 }

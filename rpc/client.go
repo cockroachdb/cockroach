@@ -247,23 +247,27 @@ func (c *Client) heartbeat() error {
 		if log.V(1) {
 			log.Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		}
-		c.mu.Lock()
-		c.healthy = true
-		c.offset.MeasuredAt = receiveTime
-		if receiveTime-sendTime > maximumClockReadingDelay.Nanoseconds() {
-			c.offset = proto.InfiniteOffset
-		} else {
-			// Offset and error are measured using the remote clock reading
-			// technique described in
-			// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-			// However, we assume that drift and min message delay are 0, for
-			// now.
-			c.offset.Error = (receiveTime - sendTime) / 2
-			remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
-			c.offset.Offset = remoteTimeNow - receiveTime
+		if call.Error == nil {
+			// Only update the clock offset measurement if we actually got a
+			// successful response from the server.
+			c.mu.Lock()
+			c.healthy = true
+			c.offset.MeasuredAt = receiveTime
+			if receiveTime-sendTime > maximumClockReadingDelay.Nanoseconds() {
+				c.offset = proto.InfiniteOffset
+			} else {
+				// Offset and error are measured using the remote clock reading
+				// technique described in
+				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+				// However, we assume that drift and min message delay are 0, for
+				// now.
+				c.offset.Error = (receiveTime - sendTime) / 2
+				remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
+				c.offset.Offset = remoteTimeNow - receiveTime
+			}
+			c.mu.Unlock()
+			c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		}
-		c.mu.Unlock()
-		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		return call.Error
 	case <-time.After(heartbeatInterval * 2):
 		// Allowed twice gossip interval.

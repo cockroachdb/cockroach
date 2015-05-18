@@ -18,6 +18,7 @@
 package rpc
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -52,6 +53,10 @@ type RemoteClockMonitor struct {
 type ClusterOffsetInterval struct {
 	Lowerbound int64 // The lowerbound on the offset in nanoseconds.
 	Upperbound int64 // The upperbound on the offset in nanoseconds.
+}
+
+func (i ClusterOffsetInterval) String() string {
+	return fmt.Sprintf("{%s, %s}", time.Duration(i.Lowerbound), time.Duration(i.Upperbound))
 }
 
 // MajorityIntervalNotFoundError indicates that we could not find a majority
@@ -166,12 +171,12 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets() {
 
 			if !isHealthyOffsetInterval(offsetInterval, r.lClock.MaxOffset()) {
 				log.Fatalf("clock offset from the cluster time "+
-					"for remote clocks: %v is in interval: %v, which "+
-					"indicates that the true offset is greater than %d",
-					r.offsets, offsetInterval, r.lClock.MaxOffset())
+					"for remote clocks: %v is in interval: %s, which "+
+					"indicates that the true offset is greater than %s",
+					r.offsets, offsetInterval, time.Duration(r.lClock.MaxOffset()))
 			}
 			if log.V(1) {
-				log.Infof("healthy cluster offset: %v", offsetInterval)
+				log.Infof("healthy cluster offset: %s", offsetInterval)
 			}
 		}
 		r.mu.Lock()
@@ -214,7 +219,7 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 	sort.Sort(endpoints)
 	numClocks := len(endpoints) / 2
 	if log.V(1) {
-		log.Infof("finding offset interval for monitorInterval: %d, numOffsets %d",
+		log.Infof("finding offset interval for monitorInterval: %s, numOffsets %d",
 			monitorInterval, numClocks)
 	}
 	if numClocks == 0 {
