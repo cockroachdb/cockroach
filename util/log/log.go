@@ -23,16 +23,20 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/clog"
 	"golang.org/x/net/context"
 )
 
-const timeFormat = "1/2 15:04:05.000" // m/d h:m:s.nanos
+const humanTimeFormat = "1/2 15:04:05.00" // m/d h:m:s.ss
+const machineTimeFormat = time.RFC3339
+
+// humanLogging is controlled via pflags. If true, we want to print pretty
+// information for humans to stderr.
+var humanLogging bool
 
 func init() {
-	// TODO this should go to our logger. Currently this will log with
-	// clog (=glog) format.
-	clog.CopyStandardLogTo("INFO")
+	// TODO(tschottdorf) this should go to our logger. Currently this will log
+	// with clog (=glog) format.
+	CopyStandardLogTo("INFO")
 }
 
 // FatalOnPanic recovers from a panic and exits the process with a
@@ -45,7 +49,7 @@ func FatalOnPanic() {
 	}
 }
 
-func logKV(buf *bytes.Buffer, kvs ...[]interface{}) {
+func printStructured(buf *bytes.Buffer, kvs ...[]interface{}) {
 	var i int
 	var s string
 	var kv []interface{}
@@ -85,22 +89,32 @@ func logKV(buf *bytes.Buffer, kvs ...[]interface{}) {
 	buf.WriteString("\n")
 }
 
-func headerKV(sev clog.Severity, depth int, msg string) []interface{} {
-	file, line := clog.Caller(depth + 1)
+func headerKV(sev severity, depth int, msg string) []interface{} {
+	file, line := Caller(depth + 1)
 	return []interface{}{
-		"L", clog.SeverityName[sev],
-		"T", time.Now().Format(timeFormat),
+		"L", severityName[sev],
+		"T", time.Now().Format(machineTimeFormat),
 		"F", file + ":" + strconv.Itoa(line),
 		"Msg", msg,
 	}
 }
 
-func logDepth(ctx context.Context, depth int, sev clog.Severity, msg string, kvs []interface{}) {
-	// TODO(tschottdorf): logging hooks should have their entry point here.
-	clog.PrintWith(sev, depth+1, func(buf *bytes.Buffer) {
-		logKV(buf, headerKV(sev, depth+3, msg), contextKV(ctx), kvs)
-	})
+func printHuman(buf *bytes.Buffer, kvs ...[]interface{}) {
+	// TODO(tschottdorf): implement this next.
+	_, _ = buf.WriteString("unimplemented")
+}
 
+func logDepth(ctx context.Context, depth int, sev severity, msg string, kvs []interface{}) {
+	// TODO(tschottdorf): logging hooks should have their entry point here.
+	hKV := headerKV(sev, depth+1, msg) // be careful moving this around (depth).
+	cKV := contextKV(ctx)
+	PrintWith(sev, depth+1, func(buf *bytes.Buffer) {
+		if humanLogging {
+			printHuman(buf, hKV, cKV, kvs)
+		} else {
+			printStructured(buf, hKV, cKV, kvs)
+		}
+	})
 }
 
 // Infoc logs to the WARNING and INFO logs. It extracts values from the context
@@ -108,25 +122,25 @@ func logDepth(ctx context.Context, depth int, sev clog.Severity, msg string, kvs
 // given message and any additional pairs specified as consecutive elements in
 // kvs.
 func Infoc(ctx context.Context, msg string, kvs ...interface{}) {
-	logDepth(ctx, 1, clog.InfoLog, msg, kvs)
+	logDepth(ctx, 1, infoLog, msg, kvs)
 }
 
 // Info logs to the INFO log.
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Info(args ...interface{}) {
-	logDepth(nil, 1, clog.InfoLog, fmt.Sprint(args...), nil)
+	logDepth(nil, 1, infoLog, fmt.Sprint(args...), nil)
 }
 
 // Infof logs to the INFO log. Don't use it; use Info or Infoc instead.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
 func Infof(format string, args ...interface{}) {
-	logDepth(nil, 1, clog.InfoLog, fmt.Sprintf(format, args...), nil)
+	logDepth(nil, 1, infoLog, fmt.Sprintf(format, args...), nil)
 }
 
 // InfoDepth logs to the INFO log, offsetting the caller's stack frame by
 // 'depth'.
 func InfoDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, clog.InfoLog, fmt.Sprint(args...), nil)
+	logDepth(nil, depth+1, infoLog, fmt.Sprint(args...), nil)
 }
 
 // Warningc logs to the WARNING and INFO logs. It extracts values from the
@@ -134,53 +148,53 @@ func InfoDepth(depth int, args ...interface{}) {
 // with the given message and any additional pairs specified as consecutive
 // elements in kvs.
 func Warningc(ctx context.Context, msg string, kvs ...interface{}) {
-	logDepth(ctx, 1, clog.WarningLog, msg, kvs)
+	logDepth(ctx, 1, warningLog, msg, kvs)
 }
 
 // Warning logs to the WARNING and INFO logs.
 // Warningf logs to the WARNING and INFO logs. Don't use it; use Warning or
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Warning(args ...interface{}) {
-	logDepth(nil, 1, clog.WarningLog, fmt.Sprint(args...), nil)
+	logDepth(nil, 1, warningLog, fmt.Sprint(args...), nil)
 }
 
 // Warningf logs to the WARNING and INFO logs. Don't use it; use Warning or
 // Warningc instead. Arguments are handled in the manner of fmt.Printf; a
 // newline is appended if missing.
 func Warningf(format string, args ...interface{}) {
-	logDepth(nil, 1, clog.WarningLog, fmt.Sprintf(format, args...), nil)
+	logDepth(nil, 1, warningLog, fmt.Sprintf(format, args...), nil)
 }
 
 // WarningDepth logs to the WARNING and INFO logs, offsetting the caller's
 // stack frame by 'depth'.
 func WarningDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, clog.WarningLog, fmt.Sprint(args...), nil)
+	logDepth(nil, depth+1, warningLog, fmt.Sprint(args...), nil)
 }
 
 // Errorc logs to the ERROR, WARNING, and INFO logs. It extracts values from
 // Field keys specified in this package and logs them along with the given
 // message and any additional pairs specified as consecutive elements in kvs.
 func Errorc(ctx context.Context, msg string, kvs ...interface{}) {
-	logDepth(ctx, 1, clog.ErrorLog, msg, kvs)
+	logDepth(ctx, 1, errorLog, msg, kvs)
 }
 
 // Error logs to the ERROR, WARNING, and INFO logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Error(args ...interface{}) {
-	logDepth(nil, 1, clog.ErrorLog, fmt.Sprint(args...), nil)
+	logDepth(nil, 1, errorLog, fmt.Sprint(args...), nil)
 }
 
 // Errorf logs to the ERROR, WARNING, and INFO logs. Don't use it; use Error
 // Info or Errorc instead. Arguments are handled in the manner of fmt.Printf;
 // a newline is appended if missing.
 func Errorf(format string, args ...interface{}) {
-	logDepth(nil, 1, clog.ErrorLog, fmt.Sprintf(format, args...), nil)
+	logDepth(nil, 1, errorLog, fmt.Sprintf(format, args...), nil)
 }
 
 // ErrorDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
 // caller's stack frame by 'depth'.
 func ErrorDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, clog.ErrorLog, fmt.Sprint(args...), nil)
+	logDepth(nil, depth+1, errorLog, fmt.Sprint(args...), nil)
 }
 
 // Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
@@ -189,34 +203,32 @@ func ErrorDepth(depth int, args ...interface{}) {
 // them along with the given message and any additional pairs specified as
 // consecutive elements in kvs.
 func Fatalc(ctx context.Context, msg string, kvs ...interface{}) {
-	logDepth(ctx, 1, clog.FatalLog, msg, kvs)
+	logDepth(ctx, 1, fatalLog, msg, kvs)
 }
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Fatal(args ...interface{}) {
-	logDepth(nil, 1, clog.FatalLog, fmt.Sprint(args...), nil)
+	logDepth(nil, 1, fatalLog, fmt.Sprint(args...), nil)
 }
 
 // Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Printf; a newline is appended.
 func Fatalf(format string, args ...interface{}) {
-	logDepth(nil, 1, clog.FatalLog, fmt.Sprintf(format, args...), nil)
+	logDepth(nil, 1, fatalLog, fmt.Sprintf(format, args...), nil)
 }
 
 // FatalDepth logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255),
 // offsetting the caller's stack frame by 'depth'.
 func FatalDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, clog.FatalLog, fmt.Sprint(args...), nil)
+	logDepth(nil, depth+1, fatalLog, fmt.Sprint(args...), nil)
 }
 
 // V returns true if the logging verbosity is set to the specified level or
 // higher.
-func V(level clog.Level) bool {
-	// We can't use clog.V(i).Infof (etc) directly since we want to use the
-	// functions defined here and not those in clog.
-	return clog.VDepth(level, 1)
+func V(level level) bool {
+	return VDepth(level, 1)
 }

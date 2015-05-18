@@ -15,15 +15,8 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package server_test
-
-import (
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/util/log"
-)
+package log
 
 func init() {
-	log.SetupTestingFlags()
-	security.SetReadFileFn(securitytest.Asset)
+	SetupTestingFlags()
 }

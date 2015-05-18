@@ -20,8 +20,10 @@ package cli_test
 import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func init() {
+	log.SetupTestingFlags()
 	security.SetReadFileFn(securitytest.Asset)
 }

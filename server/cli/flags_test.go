@@ -18,24 +18,9 @@
 package cli
 
 import (
-	"flag"
 	"go/build"
-	"strings"
 	"testing"
 )
-
-func TestStdFlagToPflag(t *testing.T) {
-	cf := cockroachCmd.PersistentFlags()
-	flag.VisitAll(func(f *flag.Flag) {
-		if strings.HasPrefix(f.Name, "test.") {
-			return
-		}
-		n := normalizeStdFlagName(f.Name)
-		if pf := cf.Lookup(n); pf == nil {
-			t.Errorf("unable to find \"%s\"", n)
-		}
-	})
-}
 
 func TestNoLinkTesting(t *testing.T) {
 	if build.Default.GOPATH == "" {

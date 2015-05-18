@@ -21,10 +21,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
+	log.SetupTestingFlags()
 	leaktest.TestMainWithLeakCheck(m)
 }

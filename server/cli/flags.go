@@ -18,30 +18,11 @@
 package cli
 
 import (
-	"flag"
-	"reflect"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
 )
-
-// pflagValue wraps flag.Value and implements the extra methods of the
-// pflag.Value interface.
-type pflagValue struct {
-	flag.Value
-}
-
-func (v pflagValue) Type() string {
-	t := reflect.TypeOf(v.Value).Elem()
-	return t.Kind().String()
-}
-
-func (v pflagValue) IsBoolFlag() bool {
-	t := reflect.TypeOf(v.Value).Elem()
-	return t.Kind() == reflect.Bool
-}
 
 var flagUsage = map[string]string{
 	"addr": `
@@ -118,20 +99,13 @@ var flagUsage = map[string]string{
 `,
 }
 
-func normalizeStdFlagName(s string) string {
-	return strings.Replace(s, "_", "-", -1)
-}
-
 // initFlags sets the server.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
 func initFlags(ctx *server.Context) {
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
-	pf := cockroachCmd.PersistentFlags()
-	flag.VisitAll(func(f *flag.Flag) {
-		pf.Var(pflagValue{f.Value}, normalizeStdFlagName(f.Name), f.Usage)
-	})
+	log.InitFlags(cockroachCmd.PersistentFlags())
 
 	if f := initCmd.Flags(); true {
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])

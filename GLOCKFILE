@@ -16,7 +16,6 @@ github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
-github.com/cockroachdb/clog 3efda75b783a341e5fa6410a1fde7c0eded6b340
 github.com/coreos/etcd 42783c1faa17d5463528be35f1bc320516d5258c
 github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
 github.com/gogo/protobuf e888c342b46b97d9bf828e98ac755d227b57d6e8

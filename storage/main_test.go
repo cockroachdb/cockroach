@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
+	log.SetupTestingFlags()
 	security.SetReadFileFn(securitytest.Asset)
 }
 

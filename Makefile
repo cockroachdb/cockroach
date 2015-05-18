@@ -40,7 +40,7 @@ RACETIMEOUT  := 5m
 BENCHTIMEOUT := 5m
 # STANDARDTESTFLAGS contains flags that you probably don't want to override;
 # TESTFLAGS defaults to empty so setting it doesn't clobber anything standard.
-STANDARDTESTFLAGS := -logtostderr
+STANDARDTESTFLAGS :=
 TESTFLAGS         :=
 
 ifeq ($(STATIC),1)
