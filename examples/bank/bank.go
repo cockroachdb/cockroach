@@ -57,12 +57,19 @@ type Account struct {
 	Balance int64
 }
 
-func (a Account) encode() ([]byte, error) {
-	return json.Marshal(a)
+func (a Account) encode(retErr *error) []byte {
+	result, err := json.Marshal(a)
+	if err != nil {
+		*retErr = err
+	}
+	return result
 }
 
-func (a *Account) decode(b []byte) error {
-	return json.Unmarshal(b, a)
+func (a *Account) decode(b []byte, retErr *error) {
+	err := json.Unmarshal(b, a)
+	if err != nil {
+		*retErr = err
+	}
 }
 
 // Makes an id string from an id int.
@@ -82,16 +89,14 @@ func (bank *Bank) sumAllAccounts() int64 {
 			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
 		}
 		// Sum up the balances.
+		var decodeErr error
 		for i := 0; i < bank.numAccounts; i++ {
 			account := &Account{}
-			err := account.decode(scan.Rows[i].ValueBytes())
-			if err != nil {
-				return err
-			}
+			account.decode(scan.Rows[i].ValueBytes(), &decodeErr)
 			// fmt.Printf("Account %d contains %d$\n", bank.firstAccount+i, account.Balance)
 			result += account.Balance
 		}
-		return nil
+		return decodeErr
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -117,43 +122,36 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 			if err := runner.Run(batchRead); err != nil {
 				return err
 			}
-			if batchRead.Results[0].Err != nil {
-				return batchRead.Results[0].Err
-			}
+			var err error
 			// Read from value.
 			fromAccount := &Account{}
-			err := fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes())
+			fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes(), &err)
+			// Read to value.
+			toAccount := &Account{}
+			toAccount.decode(batchRead.Results[0].Rows[1].ValueBytes(), &err)
+			// Update both accounts.
+			fromAccount.Balance -= exchangeAmount
+			toAccount.Balance += exchangeAmount
+			fromValue := fromAccount.encode(&err)
+			toValue := toAccount.encode(&err)
 			if err != nil {
 				return err
 			}
 			// Ensure there is enough cash.
-			if fromAccount.Balance < exchangeAmount {
+			if fromAccount.Balance < 0 {
 				return nil
 			}
-			// Read to value.
-			toAccount := &Account{}
-			errRead := toAccount.decode(batchRead.Results[0].Rows[1].ValueBytes())
-			if errRead != nil {
-				return errRead
-			}
-			// Update both accounts.
 			batchWrite := &client.Batch{}
-			fromAccount.Balance -= exchangeAmount
-			toAccount.Balance += exchangeAmount
-			if fromValue, err := fromAccount.encode(); err != nil {
-				return err
-			} else if toValue, err := toAccount.encode(); err != nil {
-				return err
-			} else {
-				batchWrite.Put(from, fromValue).Put(to, toValue)
-			}
+			batchWrite.Put(from, fromValue).Put(to, toValue)
 			return runner.Run(batchWrite)
 		}
+		var err error
 		if *useTransaction {
-			if err := bank.db.Tx(func(tx *client.Tx) error { return transferMoney(tx) }); err != nil {
-				log.Fatal(err)
-			}
-		} else if err := transferMoney(bank.db); err != nil {
+			err = bank.db.Tx(func(tx *client.Tx) error { return transferMoney(tx) })
+		} else {
+			err = transferMoney(bank.db)
+		}
+		if err != nil {
 			log.Fatal(err)
 		}
 		atomic.AddInt32(&bank.numTransfers, 1)
@@ -178,17 +176,15 @@ func (bank *Bank) initBankAccounts(cash int64) {
 		// Let's initialize all the accounts
 		batch := &client.Batch{}
 		account := Account{Balance: cash}
-		value, err := account.encode()
+		var err error
+		value := account.encode(&err)
 		if err != nil {
 			return err
 		}
 		for i := 0; i < bank.numAccounts; i++ {
 			batch.Put(bank.makeAccountID(i), value)
 		}
-		if err := tx.Run(batch); err != nil {
-			return err
-		}
-		return nil
+		return tx.Run(batch)
 	}); err != nil {
 		log.Fatal(err)
 	}
@@ -203,8 +199,7 @@ func (bank *Bank) periodicallyCheckBalances(initCash int64) {
 		// Check that all the money is accounted for.
 		totalAmount := bank.sumAllAccounts()
 		if totalAmount != int64(bank.numAccounts)*initCash {
-			err := fmt.Sprintf("\nTotal cash in the bank = %d.\n", totalAmount)
-			log.Fatal(err)
+			log.Fatal(fmt.Errorf("\nTotal cash in the bank = %d.\n", totalAmount))
 		}
 		fmt.Printf("\nThe bank is in good order\n\n")
 	}
