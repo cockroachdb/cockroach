@@ -1,0 +1,20 @@
+{
+    "version": "1.4.1",
+    "compilerOptions": {
+        "target": "es5",
+        "module": "commonjs",
+        "declaration": false,
+        "noImplicitAny": false,
+        "noEmitOnError": true,
+        "removeComments": true,
+        "noLib": false,
+        "out": "./ui/js/app.js",
+        "sourceMap": false
+    },
+    "files": [
+        "./header.ts",
+        "./app.ts",
+        "./controllers/monitor.ts",
+        "./controllers/rest_explorer.ts"
+    ]
+}

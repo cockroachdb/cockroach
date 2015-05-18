@@ -25,8 +25,11 @@ Now you should be all set for `make build`, `make test` and everything else our 
 offer. Note that the first time you run `make` various dependent libraries and tools will be
 downloaded and installed which can be somewhat time consuming. Be patient.
 
-Note that if you edit a `.proto` file you will need to manually regenerate the associated
-`.pb.{go,cc,h}` files using `go generate ./...`.
+Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
+`go generate` requires the typescript transpiler `tsc`, which you can get from [typescript](http://www.typescriptlang.org/) or using `npm` with:
+`npm install -g typescript` 
+If you don't have npm, it comes with node. To get it via homebrew:
+`brew install node`
 
 To add or update a dependency:
 - `go get -u` to update the dependencies or `go get {package}` to add a dependency

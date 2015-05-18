@@ -99,3 +99,4 @@ crApp.controller('RestExplorerCtrl', ['$scope', '$http', function (scope, http) 
             http(req).success(responseFn).error(responseFn);
         };
     }]);
+//# sourceMappingURL=app.js.map
