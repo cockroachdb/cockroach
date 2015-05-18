@@ -150,6 +150,8 @@ type DB struct {
 // given cluster supports either encrypted or unencrypted traffic, but not
 // both.
 //
+// If not specified, the <user> field defaults to "root".
+//
 // The certs parameter can be used to override the default directory
 // to use for client certificates. In tests, the directory
 // "test_certs" uses the embedded test certificates.
@@ -157,6 +159,9 @@ func Open(addr string) (*DB, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
+	}
+	if u.User == nil {
+		u.User = url.User("root")
 	}
 
 	ctx := &base.Context{}

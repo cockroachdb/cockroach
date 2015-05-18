@@ -20,6 +20,7 @@ package client_test
 import (
 	"fmt"
 	"log"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/server"
@@ -244,4 +245,27 @@ func ExampleDB_Insecure() {
 
 	// Output:
 	// aa=1
+}
+
+func TestOpenArgs(t *testing.T) {
+	s := server.StartTestServer(nil)
+	defer s.Stop()
+
+	testCases := []struct {
+		addr      string
+		expectErr bool
+	}{
+		{"https://root@" + s.ServingAddr() + "?certs=test_certs", false},
+		{"https://" + s.ServingAddr() + "?certs=test_certs", false},
+		{"https://" + s.ServingAddr() + "?certs=foo", true},
+	}
+
+	for _, test := range testCases {
+		_, err := client.Open(test.addr)
+		if test.expectErr && err == nil {
+			t.Errorf("Open(%q): expected an error; got %v", test.addr, err)
+		} else if !test.expectErr && err != nil {
+			t.Errorf("Open(%q): expected no errors; got %v", test.addr, err)
+		}
+	}
 }
