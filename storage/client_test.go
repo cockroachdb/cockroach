@@ -89,17 +89,18 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 }
 
 type multiTestContext struct {
-	t           *testing.T
-	manualClock *hlc.ManualClock
-	clock       *hlc.Clock
-	gossip      *gossip.Gossip
-	transport   multiraft.Transport
-	db          *client.KV
-	feed        *util.Feed
-	engines     []engine.Engine
-	senders     []*kv.LocalSender
-	stores      []*storage.Store
-	idents      []proto.StoreIdent
+	t            *testing.T
+	storeContext *storage.StoreContext
+	manualClock  *hlc.ManualClock
+	clock        *hlc.Clock
+	gossip       *gossip.Gossip
+	transport    multiraft.Transport
+	db           *client.KV
+	feed         *util.Feed
+	engines      []engine.Engine
+	senders      []*kv.LocalSender
+	stores       []*storage.Store
+	idents       []proto.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
@@ -168,7 +169,12 @@ func (m *multiTestContext) Stop() {
 }
 
 func (m *multiTestContext) makeContext() storage.StoreContext {
-	ctx := storage.TestStoreContext
+	var ctx storage.StoreContext
+	if m.storeContext != nil {
+		ctx = *m.storeContext
+	} else {
+		ctx = storage.TestStoreContext
+	}
 	ctx.Clock = m.clock
 	ctx.DB = m.db
 	ctx.Gossip = m.gossip

@@ -363,6 +363,11 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 	return ch
 }
 
+// Status returns the current status of the given group.
+func (m *MultiRaft) Status(groupID uint64) raft.Status {
+	return m.multiNode.Status(groupID)
+}
+
 type proposal struct {
 	groupID   uint64
 	commandID string
@@ -1007,6 +1012,17 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			// This could be done with a Callback as in EventMembershipChangeCommitted
 			// or perhaps we should move away from a channel to a callback-based system.
 			s.removePending(g, g.pending[commandID], nil /* err */)
+		}
+
+		if !raft.IsEmptySnap(ready.Snapshot) {
+			// Sync the group/node mapping with the information contained in the snapshot.
+			for _, nodeID := range ready.Snapshot.Metadata.ConfState.Nodes {
+				// TODO(bdarnell): if we had any information that predated this snapshot
+				// we must remove those nodes.
+				if err := s.addNode(proto.RaftNodeID(nodeID), groupID); err != nil {
+					log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
+				}
+			}
 		}
 
 		// Process SoftState and leader changes.
