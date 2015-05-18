@@ -1298,8 +1298,8 @@ func (s *Store) processRaft() {
 						log.Fatal(err)
 					}
 					if log.V(6) {
-						log.Infof("store %d: new committed %s command at index %d",
-							cmd.Cmd.GetValue().(proto.Request).Method(), e.Index)
+						log.Infof("store %s: new committed %s command at index %d",
+							s, cmd.Cmd.GetValue().(proto.Request).Method(), e.Index)
 					}
 
 				case *multiraft.EventMembershipChangeCommitted:
