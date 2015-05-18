@@ -55,20 +55,21 @@ type Bank struct {
 // Account holds all the customers account information
 type Account struct {
 	Balance int64
+	Err     error
 }
 
-func (a Account) encode(retErr *error) []byte {
+func (a Account) encode() []byte {
 	result, err := json.Marshal(a)
 	if err != nil {
-		*retErr = err
+		a.Err = err
 	}
 	return result
 }
 
-func (a *Account) decode(b []byte, retErr *error) {
+func (a *Account) decode(b []byte) {
 	err := json.Unmarshal(b, a)
 	if err != nil {
-		*retErr = err
+		a.Err = err
 	}
 }
 
@@ -89,14 +90,13 @@ func (bank *Bank) sumAllAccounts() int64 {
 			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
 		}
 		// Sum up the balances.
-		var decodeErr error
+		account := &Account{}
 		for i := 0; i < bank.numAccounts; i++ {
-			account := &Account{}
-			account.decode(scan.Rows[i].ValueBytes(), &decodeErr)
+			account.decode(scan.Rows[i].ValueBytes())
 			// fmt.Printf("Account %d contains %d$\n", bank.firstAccount+i, account.Balance)
 			result += account.Balance
 		}
-		return decodeErr
+		return account.Err
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -122,20 +122,22 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 			if err := runner.Run(batchRead); err != nil {
 				return err
 			}
-			var err error
 			// Read from value.
 			fromAccount := &Account{}
-			fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes(), &err)
+			fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes())
 			// Read to value.
 			toAccount := &Account{}
-			toAccount.decode(batchRead.Results[0].Rows[1].ValueBytes(), &err)
+			toAccount.decode(batchRead.Results[0].Rows[1].ValueBytes())
 			// Update both accounts.
 			fromAccount.Balance -= exchangeAmount
 			toAccount.Balance += exchangeAmount
-			fromValue := fromAccount.encode(&err)
-			toValue := toAccount.encode(&err)
-			if err != nil {
-				return err
+			fromValue := fromAccount.encode()
+			toValue := toAccount.encode()
+			if fromAccount.Err != nil {
+				return fromAccount.Err
+			}
+			if toAccount.Err != nil {
+				return toAccount.Err
 			}
 			// Ensure there is enough cash.
 			if fromAccount.Balance < 0 {
@@ -177,8 +179,8 @@ func (bank *Bank) initBankAccounts(cash int64) {
 		batch := &client.Batch{}
 		account := Account{Balance: cash}
 		var err error
-		value := account.encode(&err)
-		if err != nil {
+		value := account.encode()
+		if account.Err != nil {
 			return err
 		}
 		for i := 0; i < bank.numAccounts; i++ {
