@@ -126,7 +126,11 @@ func (db *testSender) sendOne(call client.Call) {
 	header := call.Args.Header()
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
 		header.RaftID = rng.Desc().RaftID
-		header.Replica = *rng.GetReplica()
+		replica := rng.GetReplica()
+		if replica == nil {
+			call.Reply.Header().SetGoError(util.Errorf("own replica missing in range"))
+		}
+		header.Replica = *replica
 		if err := db.store.ExecuteCmd(context.Background(), call); err != nil {
 			call.Reply.Header().SetGoError(err)
 		}
