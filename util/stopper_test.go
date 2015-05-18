@@ -163,6 +163,64 @@ func TestStopperRunWorker(t *testing.T) {
 	}
 }
 
+// TestStopperQuiesce tests coordinate drain with Quiesce.
+func TestStopperQuiesce(t *testing.T) {
+	var stoppers []*Stopper
+	for i := 0; i < 3; i++ {
+		stoppers = append(stoppers, NewStopper())
+	}
+	var quiesceDone []chan struct{}
+	var startTaskDone []chan struct{}
+
+	for i := range stoppers {
+		// Create a local copy to avoid data race.
+		s := stoppers[i]
+		s.AddWorker()
+		qc := make(chan struct{})
+		quiesceDone = append(quiesceDone, qc)
+		sc := make(chan struct{})
+		startTaskDone = append(startTaskDone, sc)
+		go func() {
+			// Wait until Quiesce() is called.
+			<-qc
+			if s.StartTask() {
+				t.Error("expected StartTask to fail")
+			}
+			// Make the stoppers call Stop().
+			close(sc)
+			<-s.ShouldStop()
+			s.SetStopped()
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for _, s := range stoppers {
+			s.Quiesce()
+		}
+		// Make the tasks call StartTask().
+		for _, qc := range quiesceDone {
+			close(qc)
+		}
+
+		// Wait until StartTask() is called.
+		for _, sc := range startTaskDone {
+			<-sc
+		}
+
+		for _, s := range stoppers {
+			s.Stop()
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Millisecond):
+		t.Errorf("timed out waiting for stop")
+	}
+}
+
 type testCloser bool
 
 func (tc *testCloser) Close() {
