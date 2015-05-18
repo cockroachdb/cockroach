@@ -402,7 +402,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	}
 
 	// Copy and rearrange the replicas suitably, then return the desired order.
-	replicas := proto.ReplicaSlice(append([]proto.Replica(nil), desc.Replicas...))
+	replicas := append(proto.ReplicaSlice(nil), desc.Replicas...)
 	// Rearrange the replicas so that those replicas with long common
 	// prefix of attributes end up first. If there's no prefix, this is a
 	// no-op.
