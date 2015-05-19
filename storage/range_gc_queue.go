@@ -100,6 +100,11 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 	}
 	desc := reply.Ranges[0]
 
+	if !rng.isInitialized() {
+		// Do not process since the range might not have any replica.
+		return nil
+	}
+
 	currentMember := false
 	me := rng.GetReplica()
 	for _, rep := range desc.Replicas {
