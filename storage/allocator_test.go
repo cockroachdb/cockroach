@@ -226,8 +226,8 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
-	if result2.StoreID != 4 {
-		t.Errorf("Expected store 4; got %+v", result2)
+	if result2.StoreID != 3 && result2.StoreID != 4 {
+		t.Errorf("Expected store 3 or 4; got %+v", result2)
 	}
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
