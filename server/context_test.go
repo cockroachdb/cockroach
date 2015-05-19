@@ -28,7 +28,7 @@ func TestParseNodeAttributes(t *testing.T) {
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
-	ctx.GossipBootstrap = "self://"
+	ctx.GossipBootstrap = "self="
 	if err := ctx.Init("start"); err != nil {
 		t.Fatalf("Failed to initialize the context: %v", err)
 	}

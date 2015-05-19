@@ -204,11 +204,11 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 		if len(address) == 0 {
 			continue
 		}
-		// Special case self:// to pick a nice address that resolves
+		// Special case self= to pick a nice address that resolves
 		// uniquely for use in Gossip. This avoids having to specify
 		// the port for single-node clusters twice (once in --addr,
 		// once in --gossip).
-		if strings.HasPrefix(address, "self://") {
+		if strings.HasPrefix(address, "self=") {
 			address = util.EnsureHost(ctx.Addr)
 		}
 		resolver, err := resolver.NewResolver(&ctx.Context, address)
