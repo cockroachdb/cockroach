@@ -20,6 +20,7 @@ package kv
 import (
 	"bytes"
 	"net"
+	"reflect"
 	"time"
 
 	"golang.org/x/net/context"
@@ -464,22 +465,25 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 		a.Header().Replica = *replicaMap[addr.String()]
 		return a
 	}
-	// RPC send will use go routine to send request and fill reply, and there is
-	// no lock for reply varible, so it may have race case which just merged
-	// reply got overwritten by RPC returned value if reply itself as RPC parameter
-	// in first try when there are multiple address to try.
-	// So here reply itself is not used as RPC parameter if there is more
-	// than 1 address to try.
+	// RPCs are sent asynchronously and there is no synchronized access to
+	// the reply object, so we use the originally supplied reply
+	// as a template for the actual calls.
+	// Otherwise there maybe 2 race cases:
+	// 1. A race between the call returning (and filling in the reply) and
+	// rpc.Send cloning it for a new attempt (except when there is only
+	// one address to try, which is not a relevant case).
+	// 2. If the RPC call times out using our original reply object,
+	// we must not use it any more; the rpc call might still return
+	// and just write to it at any time.
 	getReply := func() interface{} {
-		if len(addrs) == 1 {
-			return reply
-		}
 		return gogoproto.Clone(reply)
 	}
 	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
-	if err == nil && reply != replies[0] {
-		gogoproto.Merge(reply, replies[0].(proto.Response))
+	if err == nil {
+		// Set content of replies[0] back to reply
+		dst := reflect.ValueOf(reply).Elem()
+		dst.Set(reflect.ValueOf(replies[0]).Elem())
 	}
 
 	return err
@@ -636,11 +640,12 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 		// In next iteration, query next range.
 		args.Header().Key = descNext.StartKey
 
-		if reply == call.Reply {
-			// This is a mult-range request, make a new reply object for
-			// subsequent iterations of the loop.
-			reply = args.CreateReply()
-		}
+		// This is a mult-range request, make a new reply object for
+		// each subsequent iterations of the loop.
+		// So the clone in getReply of sendRPC can be little lighter
+		// as it's a clean reply other than a filled reply by previous
+		// iteration.
+		reply = args.CreateReply()
 	}
 }
 

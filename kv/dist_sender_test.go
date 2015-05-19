@@ -206,8 +206,7 @@ func TestSendRPCOrder(t *testing.T) {
 		getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
 		err := verifyCall(opts, addrs)
 		if err == nil {
-			replies := append([]interface{}(nil), getReply())
-			return replies, nil
+			return []interface{}{getReply()}, nil
 		}
 		return nil, err
 	}
@@ -289,12 +288,13 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
 		if first {
-			getReply().(proto.Response).Header().SetGoError(
+			reply := getReply()
+			reply.(proto.Response).Header().SetGoError(
 				&proto.NotLeaderError{Leader: &leader})
+			first = false
+			return []interface{}{reply}, nil
 		}
-		first = false
-		replies := append([]interface{}(nil), getReply())
-		return replies, nil
+		return []interface{}{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -371,8 +371,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 	g := makeTestGossip(t)
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		replies := append([]interface{}(nil), getReply())
-		return replies, nil
+		return []interface{}{getReply()}, nil
 	}
 
 	for _, rangeLookup := range []bool{true, false} {
@@ -424,8 +423,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 				descStale = false
 			}
 			r.Ranges = append(r.Ranges, newRangeDescriptor)
-			replies := append([]interface{}(nil), r)
-			return replies, nil
+			return []interface{}{r}, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
@@ -435,8 +433,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
 				RequestEndKey: header.EndKey}
 		}
-		replies := append([]interface{}(nil), getReply())
-		return replies, nil
+		return []interface{}{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -658,9 +655,7 @@ func TestSendRPCRetry(t *testing.T) {
 			// reply from second address succeed
 			reply := getReply()
 			reply.(*proto.ScanResponse).Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
-			replies := []interface{}(nil)
-			replies = append(replies, reply)
-			return replies, nil
+			return []interface{}{reply}, nil
 		}
 		return nil, util.Errorf("Not expected method %v", method)
 	}
