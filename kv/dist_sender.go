@@ -39,10 +39,10 @@ import (
 
 // Default constants for timeouts.
 const (
-	defaultSendNextTimeout = 1 * time.Second
-	defaultRPCTimeout      = 15 * time.Second
+	defaultSendNextTimeout = 500 * time.Millisecond
+	defaultRPCTimeout      = 5 * time.Second
 	defaultClientTimeout   = 10 * time.Second
-	retryBackoff           = 1 * time.Second
+	retryBackoff           = 250 * time.Millisecond
 	maxRetryBackoff        = 30 * time.Second
 
 	// The default maximum number of ranges to return
@@ -524,28 +524,27 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			reply.Header().Reset()
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key, options)
-			if err == nil {
+
+			if err == nil && desc.EndKey.Less(endKey) {
 				// If the request accesses keys beyond the end of this range,
 				// get the descriptor of the adjacent range to address next.
-				if desc.EndKey.Less(endKey) {
-					if _, ok := call.Reply.(proto.Combinable); !ok {
-						return util.RetryBreak, util.Error("illegal cross-range operation", call)
-					}
-					// If there's no transaction and op spans ranges, possibly
-					// re-run as part of a transaction for consistency. The
-					// case where we don't need to re-run is if the read
-					// consistency is not required.
-					if args.Header().Txn == nil &&
-						args.Header().ReadConsistency != proto.INCONSISTENT {
-						return util.RetryBreak, &proto.OpRequiresTxnError{}
-					}
-					// This next lookup is likely for free since we've read the
-					// previous descriptor and range lookups use cache
-					// prefetching.
-					descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey, options)
-					// Truncate the request to our current range.
-					args.Header().EndKey = desc.EndKey
+				if _, ok := call.Reply.(proto.Combinable); !ok {
+					return util.RetryBreak, util.Error("illegal cross-range operation", call)
 				}
+				// If there's no transaction and op spans ranges, possibly
+				// re-run as part of a transaction for consistency. The
+				// case where we don't need to re-run is if the read
+				// consistency is not required.
+				if args.Header().Txn == nil &&
+					args.Header().ReadConsistency != proto.INCONSISTENT {
+					return util.RetryBreak, &proto.OpRequiresTxnError{}
+				}
+				// This next lookup is likely for free since we've read the
+				// previous descriptor and range lookups use cache
+				// prefetching.
+				descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey, options)
+				// Truncate the request to our current range.
+				args.Header().EndKey = desc.EndKey
 			}
 
 			if err == nil {
@@ -575,6 +574,14 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
 						return util.RetryContinue, nil
+					}
+					// For any other error, clear any cached leader: For all
+					// we know, it might be dead.
+					// TODO(tschottdorf):
+					// We check desc != nil since the error might have originated
+					// in the descriptor lookup. Might be worth refactoring.
+					if desc != nil {
+						ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
 					}
 				}
 				return util.RetryBreak, err

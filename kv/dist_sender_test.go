@@ -317,6 +317,47 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 }
 
+func TestEvictLeaderOnNonRetryableError(t *testing.T) {
+	for _, retryable := range []bool{true, false} {
+		g := makeTestGossip(t)
+		leader := proto.Replica{
+			NodeID:  99,
+			StoreID: 999,
+		}
+		first := true
+
+		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+			if first {
+				getReply().(proto.Response).Header().SetGoError(&proto.Error{
+					Message:   "boom",
+					Retryable: retryable,
+				})
+				first = false
+			}
+			return nil, nil
+		}
+
+		ctx := &DistSenderContext{
+			rpcSend: testFn,
+			rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+				return []proto.RangeDescriptor{testRangeDescriptor}, nil
+			}),
+		}
+		ds := NewDistSender(ctx, g)
+		ds.updateLeaderCache(1, leader)
+
+		call := client.Put(proto.Key("a"), []byte("value"))
+		reply := call.Reply.(*proto.PutResponse)
+		ds.Send(context.Background(), call)
+		if err := reply.GoError(); err != nil && err.Error() != "boom" {
+			t.Errorf("put encountered unexpected error: %s", err)
+		}
+		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &leader) != retryable {
+			t.Errorf("leader cache eviction: retryable=%t, but value is %v", retryable, cur)
+		}
+	}
+}
+
 // TestRangeLookupOnPushTxnIgnoresIntents verifies that if a push txn
 // request has range lookup set, the range lookup requests will have
 // ignore intents set.
