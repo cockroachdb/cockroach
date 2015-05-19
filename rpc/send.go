@@ -69,6 +69,11 @@ type rpcError struct {
 func (r rpcError) Error() string { return r.errMsg }
 
 // CanRetry implements the Retryable interface.
+// TODO(tschottdorf): the way this is used by rpc/send suggests that it
+// may be better if these weren't retriable - they are returned when the
+// connection fails, i.e. for example when a node is down or the network
+// fails. Retrying on such errors keeps the caller waiting for a long time
+// and without a positive outlook.
 func (r rpcError) CanRetry() bool { return true }
 
 // sendOneFn is overwritten in tests to mock sendOne.
