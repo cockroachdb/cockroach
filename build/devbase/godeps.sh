@@ -42,7 +42,6 @@ github.com/coreos/etcd/raft
 github.com/coreos/etcd/raft/raftpb
 github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
-github.com/cockroachdb/clog
 github.com/inconshreveable/mousetrap
 github.com/julienschmidt/httprouter
 github.com/spf13/cobra

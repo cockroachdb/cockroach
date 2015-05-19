@@ -38,10 +38,7 @@ TESTS        := ".*"
 TESTTIMEOUT  := 15s
 RACETIMEOUT  := 5m
 BENCHTIMEOUT := 5m
-# STANDARDTESTFLAGS contains flags that you probably don't want to override;
-# TESTFLAGS defaults to empty so setting it doesn't clobber anything standard.
-STANDARDTESTFLAGS := -logtostderr
-TESTFLAGS         :=
+TESTFLAGS    :=
 
 ifeq ($(STATIC),1)
 # The netgo build tag instructs the net package to try to build a
@@ -76,7 +73,7 @@ build:
 .PHONY: test
 test:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -85,11 +82,11 @@ test:
 .PHONY: testrace
 testrace:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(RACETIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) $(PKG) -timeout $(RACETIMEOUT) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image which comes without the build environment. See ./build/deploy

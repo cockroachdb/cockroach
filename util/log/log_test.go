@@ -25,7 +25,7 @@ import (
 func TestLogKV(t *testing.T) {
 	buf := bytes.NewBuffer(nil)
 	kvs := []interface{}{"test", 5, error(nil), "test\t\n", struct{}{}, struct{}{}}
-	logKV(buf, kvs)
+	printStructured(buf, kvs)
 	exp := []byte("test=\"5\" <nil>=\"test\\t\\n\" {}=\"{}\"\n")
 	act := buf.Bytes()
 	if !bytes.Equal(exp, act) {

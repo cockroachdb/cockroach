@@ -18,7 +18,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"math/rand"
 	"os"
@@ -28,24 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-func init() {
-	// If log directory has not been set, set -alsologtostderr to true.
-	var hasLogDir, hasAlsoLogStderr bool
-	for _, arg := range os.Args[1:] {
-		switch arg {
-		case "-log_dir", "--log_dir":
-			hasLogDir = true
-		case "-alsologtostderr", "--alsologtostderr":
-			hasAlsoLogStderr = true
-		}
-	}
-	if !hasLogDir && !hasAlsoLogStderr {
-		if err := flag.CommandLine.Set("alsologtostderr", "true"); err != nil {
-			log.Fatal(err)
-		}
-	}
-}
 
 func main() {
 	// Instruct Go to use all CPU cores.
