@@ -203,8 +203,6 @@ func (si *storeRangeIterator) Reset() {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	*StoreFinder
-
 	Ident          proto.StoreIdent
 	ctx            StoreContext
 	kvDB           *client.DB
@@ -299,14 +297,12 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		panic(fmt.Sprintf("invalid store configuration: %+v", &ctx))
 	}
 
-	sf := newStoreFinder(ctx.Gossip)
 	s := &Store{
-		ctx:         ctx,
-		StoreFinder: sf,
-		engine:      eng,
-		_allocator:  newAllocator(sf.findStores),
-		ranges:      map[int64]*Range{},
-		nodeDesc:    nodeDesc,
+		ctx:        ctx,
+		engine:     eng,
+		_allocator: newAllocator(ctx.Gossip),
+		ranges:     map[int64]*Range{},
+		nodeDesc:   nodeDesc,
 	}
 
 	// Add range scanner and configure with queues.
@@ -467,9 +463,6 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		// permissions don't have such a requirement.)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
-		// Callback triggers on capacity gossip from all stores.
-		capacityRegex := gossip.MakePrefixPattern(gossip.KeyMaxAvailCapacityPrefix)
-		s.ctx.Gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
 
 		// Start a single goroutine in charge of periodically gossipping the
 		// sentinel and first range metadata if we have a first range.
@@ -630,7 +623,7 @@ func (s *Store) GossipCapacity() {
 		return
 	}
 	// Unique gossip key per store.
-	keyMaxCapacity := gossip.MakeMaxAvailCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
+	keyMaxCapacity := gossip.MakeCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
 	// Gossip store descriptor.
 	err = s.ctx.Gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
 	if err != nil {
@@ -1047,6 +1040,9 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.mu.RLock()
+	capacity.RangeCount = int32(len(s.ranges))
+	s.mu.RUnlock()
 	// Initialize the store descriptor.
 	return &proto.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,

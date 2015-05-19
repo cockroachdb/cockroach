@@ -20,12 +20,14 @@ package storage_test
 import (
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -501,10 +503,14 @@ func TestStoreRangeReplicate(t *testing.T) {
 	defer mtc.Stop()
 
 	// Initialize the gossip network.
+	var wg sync.WaitGroup
+	wg.Add(len(mtc.stores))
+	key := gossip.MakePrefixPattern(gossip.KeyCapacityPrefix)
+	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ bool) { wg.Done() })
 	for _, s := range mtc.stores {
 		s.GossipCapacity()
 	}
-	mtc.stores[0].WaitForNodes(3)
+	wg.Wait()
 
 	// Once we know our peers, trigger a scan.
 	mtc.stores[0].ForceReplicationScan(t)
