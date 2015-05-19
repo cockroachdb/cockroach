@@ -128,12 +128,13 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	s.kvREST = kv.NewRESTServer(s.kv)
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
-		Clock:        s.clock,
-		DB:           s.kv,
-		Gossip:       s.gossip,
-		Transport:    s.raftTransport,
-		ScanInterval: s.ctx.ScanInterval,
-		EventFeed:    &util.Feed{},
+		Clock:           s.clock,
+		DB:              s.kv,
+		Gossip:          s.gossip,
+		Transport:       s.raftTransport,
+		ScanInterval:    s.ctx.ScanInterval,
+		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
+		EventFeed:       &util.Feed{},
 	}
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.kv, s.stopper)

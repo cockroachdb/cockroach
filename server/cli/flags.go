@@ -105,6 +105,10 @@ var flagUsage = map[string]string{
         ranges. The scan is slowed as necessary to approximately achieve this
         duration.
 `,
+	"scan-max-idle-time": `
+        Adjusts the max idle time of the scanner. This speeds up the scanner on small
+        clusters to be more responsive.
+`,
 	"stores": `
         A comma-separated list of stores, specified by a colon-separated list
         of device attributes followed by '=' and either a filepath for a
@@ -162,6 +166,8 @@ func initFlags(ctx *server.Context) {
 		// Engine flags.
 		f.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, flagUsage["cache-size"])
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, flagUsage["scan-interval"])
+		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime,
+			flagUsage["scan-max-idle-time"])
 
 		startCmd.MarkFlagRequired("gossip")
 		startCmd.MarkFlagRequired("stores")
