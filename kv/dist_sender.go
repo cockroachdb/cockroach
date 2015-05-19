@@ -39,10 +39,10 @@ import (
 
 // Default constants for timeouts.
 const (
-	defaultSendNextTimeout = 1 * time.Second
-	defaultRPCTimeout      = 15 * time.Second
+	defaultSendNextTimeout = 500 * time.Millisecond
+	defaultRPCTimeout      = 5 * time.Second
 	defaultClientTimeout   = 10 * time.Second
-	retryBackoff           = 1 * time.Second
+	retryBackoff           = 250 * time.Millisecond
 	maxRetryBackoff        = 30 * time.Second
 
 	// The default maximum number of ranges to return
