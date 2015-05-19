@@ -147,7 +147,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	for i := 0; i < numStores; i++ {
-		m.addStore(t)
+		m.addStore()
 	}
 	if m.transportStopper == nil {
 		m.transportStopper = util.NewStopper()
@@ -178,7 +178,7 @@ func (m *multiTestContext) makeContext() storage.StoreContext {
 }
 
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
-func (m *multiTestContext) addStore(t *testing.T) {
+func (m *multiTestContext) addStore() {
 	idx := len(m.stores)
 	var eng engine.Engine
 	var needBootstrap bool
@@ -192,7 +192,7 @@ func (m *multiTestContext) addStore(t *testing.T) {
 		// aren't closed when stopping and restarting the stores.
 		// These refcounts are removed in Stop().
 		if err := eng.Open(); err != nil {
-			t.Fatal(err)
+			m.t.Fatal(err)
 		}
 	}
 
@@ -205,18 +205,18 @@ func (m *multiTestContext) addStore(t *testing.T) {
 			StoreID: proto.StoreID(idx + 1),
 		}, stopper)
 		if err != nil {
-			t.Fatal(err)
+			m.t.Fatal(err)
 		}
 
 		// Bootstrap the initial range on the first store
 		if idx == 0 {
 			if err := store.BootstrapRange(); err != nil {
-				t.Fatal(err)
+				m.t.Fatal(err)
 			}
 		}
 	}
 	if err := store.Start(stopper); err != nil {
-		t.Fatal(err)
+		m.t.Fatal(err)
 	}
 	store.WaitForInit()
 	m.stores = append(m.stores, store)
