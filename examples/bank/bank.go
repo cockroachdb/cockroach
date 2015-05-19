@@ -117,9 +117,6 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 			if err := runner.Run(batchRead); err != nil {
 				return err
 			}
-			if batchRead.Results[0].Err != nil {
-				return batchRead.Results[0].Err
-			}
 			// Read from value.
 			fromAccount := &Account{}
 			err := fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes())
@@ -149,11 +146,13 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 			}
 			return runner.Run(batchWrite)
 		}
+		var err error
 		if *useTransaction {
-			if err := bank.db.Tx(func(tx *client.Tx) error { return transferMoney(tx) }); err != nil {
-				log.Fatal(err)
-			}
-		} else if err := transferMoney(bank.db); err != nil {
+			err = bank.db.Tx(func(tx *client.Tx) error { return transferMoney(tx) })
+		} else {
+			err = transferMoney(bank.db)
+		}
+		if err != nil {
 			log.Fatal(err)
 		}
 		atomic.AddInt32(&bank.numTransfers, 1)
@@ -185,10 +184,7 @@ func (bank *Bank) initBankAccounts(cash int64) {
 		for i := 0; i < bank.numAccounts; i++ {
 			batch.Put(bank.makeAccountID(i), value)
 		}
-		if err := tx.Run(batch); err != nil {
-			return err
-		}
-		return nil
+		return tx.Run(batch)
 	}); err != nil {
 		log.Fatal(err)
 	}
@@ -203,8 +199,7 @@ func (bank *Bank) periodicallyCheckBalances(initCash int64) {
 		// Check that all the money is accounted for.
 		totalAmount := bank.sumAllAccounts()
 		if totalAmount != int64(bank.numAccounts)*initCash {
-			err := fmt.Sprintf("\nTotal cash in the bank = %d.\n", totalAmount)
-			log.Fatal(err)
+			log.Fatalf("\nTotal cash in the bank = %d.\n", totalAmount)
 		}
 		fmt.Printf("\nThe bank is in good order\n\n")
 	}
