@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 )
 
 // TestStoreRecoverFromEngine verifies that the store recovers all ranges and their contents
@@ -649,5 +650,32 @@ func TestReplicateAddAndRemove(t *testing.T) {
 
 		// The removed store no longer has any of the data from the range.
 		verify([]int64{39, 0, 39, 39})
+	}
+}
+
+// TestRaftHeartbeats verifies that coalesced heartbeats are correctly
+// suppressing elections in an idle cluster.
+func TestRaftHeartbeats(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+	mtc.replicateRange(1, 0, 1, 2)
+
+	// Capture the initial term and state.
+	status := mtc.stores[0].RaftStatus(1)
+	initialTerm := status.Term
+	if status.SoftState.RaftState != raft.StateLeader {
+		t.Errorf("expected node 0 to initially be leader but was %s", status.SoftState.RaftState)
+	}
+
+	// Wait for several ticks to elapse.
+	time.Sleep(5 * mtc.makeContext().RaftTickInterval)
+	status = mtc.stores[0].RaftStatus(1)
+	if status.SoftState.RaftState != raft.StateLeader {
+		t.Errorf("expected node 0 to be leader after sleeping but was %s", status.SoftState.RaftState)
+	}
+	if status.Term != initialTerm {
+		t.Errorf("while sleeping, term changed from %d to %d", initialTerm, status.Term)
 	}
 }

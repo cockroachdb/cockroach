@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
@@ -759,6 +760,11 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 		return nil
 	}
 	return s.rangesByKey[n]
+}
+
+// RaftStatus returns the current raft status of the given range.
+func (s *Store) RaftStatus(raftID int64) raft.Status {
+	return s.multiraft.Status(uint64(raftID))
 }
 
 // BootstrapRange creates the first range in the cluster and manually
