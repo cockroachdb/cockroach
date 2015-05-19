@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	// This is a bit silly. Require log in order for -logstderr to be
-	// defined which is set for all tests by the toplevel Makefile.
+	// This is a bit silly. Require log in order to define the flags for tests
+	// run from the Makefile.
 	_ "github.com/cockroachdb/cockroach/util/log"
 )
 

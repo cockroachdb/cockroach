@@ -23,13 +23,11 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	stdLog "log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -344,26 +342,6 @@ type flushSyncWriter interface {
 	Flush() error
 	Sync() error
 	io.Writer
-}
-
-// If non-empty, overrides the choice of directory in which to write logs.
-// See createLogDirs for the full list of possible destinations.
-var logDir *string
-
-// pflagValue wraps flag.Value and implements the extra methods of the
-// pflag.Value interface.
-type pflagValue struct {
-	flag.Value
-}
-
-func (v pflagValue) Type() string {
-	t := reflect.TypeOf(v.Value).Elem()
-	return t.Kind().String()
-}
-
-func (v pflagValue) IsBoolFlag() bool {
-	t := reflect.TypeOf(v.Value).Elem()
-	return t.Kind() == reflect.Bool
 }
 
 func init() {

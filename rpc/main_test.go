@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // NewTestContext returns a rpc.Context for testing.
@@ -38,6 +37,5 @@ func NewTestContext(t *testing.T) *Context {
 }
 
 func init() {
-	log.SetupTestingFlags()
 	security.SetReadFileFn(securitytest.Asset)
 }

@@ -26,7 +26,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-const humanTimeFormat = "1/2 15:04:05.00" // m/d h:m:s.ss
+const humanTimeFormat = "1/2 15:04:05.000" // m/d h:m:s.sss
 const machineTimeFormat = time.RFC3339
 
 // humanLogging is controlled via pflags. If true, we want to print pretty

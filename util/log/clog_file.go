@@ -32,6 +32,10 @@ import (
 // MaxSize is the maximum size of a log file in bytes.
 var MaxSize uint64 = 1024 * 1024 * 1800
 
+// If non-empty, overrides the choice of directory in which to write logs.
+// See createLogDirs for the full list of possible destinations.
+var logDir *string
+
 // logDirs lists the candidate directories for new log files.
 var logDirs []string
 
