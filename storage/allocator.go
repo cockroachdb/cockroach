@@ -30,19 +30,18 @@ import (
 )
 
 const (
-	// minAvailCapacityThreshold: if the capacity of a store descriptor
-	// falls below this percentage, it will never be used as an
-	// rebalance target.
-	minAvailCapacityThreshold = 0.05
-	// maxAvailCapacityThreshold: if the mean available capacity of a
-	// list of store descriptors falls above this percentage, then the
-	// count of ranges on stores will be used to make rebalancing
-	// decisions instead of capacity.
-	maxAvailCapacityThreshold = 0.98
-	// rebalancePctFromMean: if the capacity or range count of a store
-	// is within rebalancePctFromMean of the mean, it is considered a
-	// viable target for rebalancing.
-	rebalancePctFromMean = 0.025 // 2.5%
+	// maxFractionUsedThreshold: if the fraction used of a store
+	// descriptor capacity is greater than this, it will not be used as
+	// a rebalance target.
+	maxFractionUsedThreshold = 0.95
+	// minFractionUsedThreshold: if the mean fraction used of a list of
+	// store descriptors is less than this, then range count will be used
+	// to make rebalancing decisions instead of fraction of bytes used.
+	minFractionUsedThreshold = 0.02
+	// rebalanceFromMean: if the fraction of bytes used of a store
+	// is within rebalanceFromMean of the mean, it is considered a
+	// viable target to rebalance to.
+	rebalanceFromMean = 0.025 // 2.5%
 )
 
 // stat provides a running sample size and mean.
@@ -58,17 +57,18 @@ func (s *stat) Update(x float64) {
 }
 
 // storeList keeps a list of store descriptors and associated count
-// and capacity stats across the stores.
+// and used stats across the stores.
 type storeList struct {
-	stores          []*proto.StoreDescriptor
-	count, capacity stat
+	stores      []*proto.StoreDescriptor
+	count, used stat
 }
 
-// Update updates count and capacity stats using the specified descriptor.
-func (sl *storeList) Update(s *proto.StoreDescriptor) {
+// Add adds the store descriptor to the list of stores and updates
+// maintained statistics.
+func (sl *storeList) Add(s *proto.StoreDescriptor) {
 	sl.stores = append(sl.stores, s)
 	sl.count.Update(float64(s.Capacity.RangeCount))
-	sl.capacity.Update(s.Capacity.PercentAvail())
+	sl.used.Update(s.Capacity.FractionUsed())
 }
 
 // allocator makes allocation decisions based on available capacity
@@ -76,21 +76,20 @@ func (sl *storeList) Update(s *proto.StoreDescriptor) {
 // range replica.
 //
 // The allocator listens for gossip updates from stores and updates
-// statistics for mean and variance of available capacity and total
-// range count.
+// statistics for mean of fraction of bytes used and total range count.
 //
 // When choosing a new allocation target, three candidates from
-// available stores meeting a minimum available capacity threshold
-// (minAvailCapacityThreshold) are chosen at random and the least
+// available stores meeting a max fraction of bytes used threshold
+// (maxFractionUsedThreshold) are chosen at random and the least
 // loaded of the three is selected in order to bias loading towards a
-// more balanced cluster, but while still spreading load over all
-// available servers. "Load" is defined according to capacity if mean
-// capacity is less than maxAvailCapacityThreshold; otherwise
-// according to number of ranges.
+// more balanced cluster, while still spreading load over all
+// available servers. "Load" is defined according to fraction of bytes
+// used, if greater than minFractionUsedThreshold; otherwise it's
+// defined according to range count.
 //
 // When choosing a rebalance target, a random store is selected from
-// amongst the set of stores with capacity within rebalancePctFromMean
-// from the mean.
+// amongst the set of stores with fraction of bytes within
+// rebalanceFromMean from the mean.
 type allocator struct {
 	sync.Mutex
 	gossip        *gossip.Gossip
@@ -145,7 +144,7 @@ func storeDescFromGossip(key string, g *gossip.Gossip) (*proto.StoreDescriptor, 
 // capacityGossipUpdate is a gossip callback triggered whenever capacity
 // information is gossiped. It just tracks keys used for capacity
 // gossip.
-func (a *allocator) capacityGossipUpdate(key string, contentsChanged bool) {
+func (a *allocator) capacityGossipUpdate(key string, _ bool) {
 	a.Lock()
 	defer a.Unlock()
 
@@ -157,10 +156,10 @@ func (a *allocator) capacityGossipUpdate(key string, contentsChanged bool) {
 	a.capacityKeys[key] = struct{}{}
 }
 
-// Allocate returns a suitable store for a new allocation with the
+// AllocateTarget returns a suitable store for a new allocation with the
 // required attributes. Nodes already accommodating existing replicas
 // are ruled out as targets.
-func (a *allocator) Allocate(required proto.Attributes, existing []proto.Replica) (
+func (a *allocator) AllocateTarget(required proto.Attributes, existing []proto.Replica) (
 	*proto.StoreDescriptor, error) {
 	a.Lock()
 	defer a.Unlock()
@@ -170,36 +169,35 @@ func (a *allocator) Allocate(required proto.Attributes, existing []proto.Replica
 	}
 
 	// Choose the store with the highest percent capacity available.
-	var highStore *proto.StoreDescriptor
+	var leastStore *proto.StoreDescriptor
 	for _, s := range stores {
-		if highStore == nil || s.Capacity.PercentAvail() > highStore.Capacity.PercentAvail() {
-			highStore = s
+		if leastStore == nil || s.Capacity.FractionUsed() < leastStore.Capacity.FractionUsed() {
+			leastStore = s
 		}
 	}
-	return highStore, nil
+	return leastStore, nil
 }
 
-// Rebalance returns a suitable store for a rebalance target with
-// required attributes. Rebalance targets are selected at random
-// from amongst stores which fall within an acceptable multiple
-// of standard deviations from either the capacity or range count
-// means.
-func (a *allocator) Rebalance(required proto.Attributes, existing []proto.Replica) (
+// RebalanceTarget returns a suitable store for a rebalance target
+// with required attributes. Rebalance targets are selected at random
+// from amongst stores which fall within an acceptable multiple of
+// standard deviations from either the used or range count means.
+func (a *allocator) RebalanceTarget(required proto.Attributes, existing []proto.Replica) (
 	*proto.StoreDescriptor, error) {
 	a.Lock()
 	defer a.Unlock()
-	filter := func(s *proto.StoreDescriptor, count, capacity *stat) bool {
-		// Use counts instead of capacities if the cluster has mean capacity
-		// below a threshold level. This is primarily useful for balancing
-		// load evenly in nascent deployments.
-		if capacity.mean > maxAvailCapacityThreshold {
+	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
+		// Use counts instead of capacities if the cluster has mean
+		// fraction used below a threshold level. This is primarily useful
+		// for balancing load evenly in nascent deployments.
+		if used.mean < minFractionUsedThreshold {
 			return float64(s.Capacity.RangeCount) < count.mean
 		}
-		minAvailCapacity := capacity.mean * (1 + rebalancePctFromMean)
-		if minAvailCapacityThreshold > minAvailCapacity {
-			minAvailCapacity = minAvailCapacityThreshold
+		maxFractionUsed := used.mean * (1 - rebalanceFromMean)
+		if maxFractionUsedThreshold < maxFractionUsed {
+			maxFractionUsed = maxFractionUsedThreshold
 		}
-		return s.Capacity.PercentAvail() > minAvailCapacity
+		return s.Capacity.FractionUsed() < maxFractionUsed
 	}
 	stores, err := a.selectRandom(1, required, existing, filter)
 	if err != nil {
@@ -213,12 +211,12 @@ func (a *allocator) Rebalance(required proto.Attributes, existing []proto.Replic
 func (a *allocator) ShouldRebalance(s *proto.StoreDescriptor) bool {
 	a.Lock()
 	defer a.Unlock()
-	sl := a.findStores(*s.CombinedAttrs())
+	sl := a.getStoreList(*s.CombinedAttrs())
 
-	if sl.capacity.mean > maxAvailCapacityThreshold {
+	if sl.used.mean < minFractionUsedThreshold {
 		return float64(s.Capacity.RangeCount) > sl.count.mean
 	}
-	return s.Capacity.PercentAvail() < sl.capacity.mean
+	return s.Capacity.FractionUsed() > sl.used.mean
 }
 
 // selectRandom chooses count random store descriptors which match
@@ -228,7 +226,7 @@ func (a *allocator) ShouldRebalance(s *proto.StoreDescriptor) bool {
 func (a *allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica,
 	filter func(*proto.StoreDescriptor, *stat, *stat) bool) ([]*proto.StoreDescriptor, error) {
 	var descs []*proto.StoreDescriptor
-	sl := a.findStores(required)
+	sl := a.getStoreList(required)
 	used := getUsedNodes(existing)
 
 	// Randomly permute available stores matching the required attributes.
@@ -238,7 +236,7 @@ func (a *allocator) selectRandom(count int, required proto.Attributes, existing 
 			continue
 		}
 		// Filter descriptor.
-		if filter != nil && !filter(sl.stores[idx], &sl.count, &sl.capacity) {
+		if filter != nil && !filter(sl.stores[idx], &sl.count, &sl.used) {
 			continue
 		}
 		// Add this store; exit loop if we've satisfied count.
@@ -253,7 +251,7 @@ func (a *allocator) selectRandom(count int, required proto.Attributes, existing 
 	return descs, nil
 }
 
-// findStores returns a store list matching the required attributes.
+// getStoreList returns a store list matching the required attributes.
 // Results are cached for performance.
 //
 // If it cannot retrieve a StoreDescriptor from the Store's gossip, it
@@ -262,7 +260,7 @@ func (a *allocator) selectRandom(count int, required proto.Attributes, existing 
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (a *allocator) findStores(required proto.Attributes) *storeList {
+func (a *allocator) getStoreList(required proto.Attributes) *storeList {
 	if a.storeLists == nil {
 		a.storeLists = map[string]*storeList{}
 	}
@@ -280,7 +278,7 @@ func (a *allocator) findStores(required proto.Attributes) *storeList {
 			// perhaps it expired.
 			delete(a.capacityKeys, key)
 		} else if required.IsSubset(*storeDesc.CombinedAttrs()) {
-			sl.Update(storeDesc)
+			sl.Add(storeDesc)
 		}
 	}
 
