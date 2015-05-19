@@ -20,6 +20,7 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
@@ -52,7 +53,7 @@ type stat struct {
 // Update adds the specified value to the stat, augmenting the sample
 // size & mean.
 func (s *stat) Update(x float64) {
-	s.n += 1
+	s.n++
 	s.mean += (x - s.mean) / s.n
 }
 
@@ -99,8 +100,7 @@ type allocator struct {
 	storeLists    map[string]*storeList // Cache from attributes to storeList
 }
 
-// newAllocator creates a new allocator for the store specified by
-// storeID.
+// newAllocator creates a new allocator using the specified gossip.
 func newAllocator(g *gossip.Gossip) *allocator {
 	a := &allocator{
 		gossip:  g,
@@ -117,7 +117,6 @@ func newAllocator(g *gossip.Gossip) *allocator {
 // getUsedNodes returns a set of node IDs which are already being used
 // to store replicas.
 func getUsedNodes(existing []proto.Replica) map[proto.NodeID]struct{} {
-	// Get a set of current nodes -- we never want to allocate on an existing node.
 	usedNodes := map[proto.NodeID]struct{}{}
 	for _, replica := range existing {
 		usedNodes[replica.NodeID] = struct{}{}
@@ -163,15 +162,35 @@ func (a *allocator) AllocateTarget(required proto.Attributes, existing []proto.R
 	*proto.StoreDescriptor, error) {
 	a.Lock()
 	defer a.Unlock()
-	stores, err := a.selectRandom(3, required, existing, nil)
+	return a.allocateTargetInternal(required, existing, nil)
+}
+
+func (a *allocator) allocateTargetInternal(required proto.Attributes, existing []proto.Replica,
+	filter func(*proto.StoreDescriptor, *stat, *stat) bool) (*proto.StoreDescriptor, error) {
+	stores, sl, err := a.selectRandom(3, required, existing)
 	if err != nil {
 		return nil, err
 	}
 
-	// Choose the store with the highest percent capacity available.
+	// Choose the store with the least fraction of bytes used.
 	var leastStore *proto.StoreDescriptor
 	for _, s := range stores {
-		if leastStore == nil || s.Capacity.FractionUsed() < leastStore.Capacity.FractionUsed() {
+		// Filter store descriptor.
+		if filter != nil && !filter(s, &sl.count, &sl.used) {
+			continue
+		}
+		if leastStore == nil {
+			leastStore = s
+			continue
+		}
+		// Use counts instead of capacities if the cluster has mean
+		// fraction used below a threshold level. This is primarily useful
+		// for balancing load evenly in nascent deployments.
+		if sl.used.mean < minFractionUsedThreshold {
+			if s.Capacity.RangeCount < leastStore.Capacity.RangeCount {
+				leastStore = s
+			}
+		} else if s.Capacity.FractionUsed() < leastStore.Capacity.FractionUsed() {
 			leastStore = s
 		}
 	}
@@ -179,11 +198,17 @@ func (a *allocator) AllocateTarget(required proto.Attributes, existing []proto.R
 }
 
 // RebalanceTarget returns a suitable store for a rebalance target
-// with required attributes. Rebalance targets are selected at random
-// from amongst stores which fall within an acceptable multiple of
-// standard deviations from either the used or range count means.
-func (a *allocator) RebalanceTarget(required proto.Attributes, existing []proto.Replica) (
-	*proto.StoreDescriptor, error) {
+// with required attributes. Rebalance targets are selected via the
+// same mechanism as AllocateTarget(), except the chosen target must
+// follow some additional criteria. Namely, if chosen, it must further
+// the goal of balancing the cluster.
+//
+// Simply ignoring a rebalance opportunity in the event that the
+// target chosen by AllocateTarget() doesn't fit balancing criteria
+// is perfectly fine, as other stores in the cluster will also be
+// doing their probabilistic best to rebalance. This helps prevent
+// a stampeding herd targeting an abnormally under-utilized store.
+func (a *allocator) RebalanceTarget(required proto.Attributes, existing []proto.Replica) *proto.StoreDescriptor {
 	a.Lock()
 	defer a.Unlock()
 	filter := func(s *proto.StoreDescriptor, count, used *stat) bool {
@@ -199,11 +224,11 @@ func (a *allocator) RebalanceTarget(required proto.Attributes, existing []proto.
 		}
 		return s.Capacity.FractionUsed() < maxFractionUsed
 	}
-	stores, err := a.selectRandom(1, required, existing, filter)
+	s, err := a.allocateTargetInternal(required, existing, filter)
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	return stores[0], nil
+	return s
 }
 
 // ShouldRebalance returns whether the specified store is overweight
@@ -214,17 +239,18 @@ func (a *allocator) ShouldRebalance(s *proto.StoreDescriptor) bool {
 	sl := a.getStoreList(*s.CombinedAttrs())
 
 	if sl.used.mean < minFractionUsedThreshold {
-		return float64(s.Capacity.RangeCount) > sl.count.mean
+		return s.Capacity.RangeCount > int32(math.Ceil(sl.count.mean))
 	}
 	return s.Capacity.FractionUsed() > sl.used.mean
 }
 
-// selectRandom chooses count random store descriptors which match
-// the required attributes, do not include any of the existing
-// replicas, and return true when passed to the provided filter.
-// If the supplied filter is nil, it is ignored.
-func (a *allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica,
-	filter func(*proto.StoreDescriptor, *stat, *stat) bool) ([]*proto.StoreDescriptor, error) {
+// selectRandom chooses count random store descriptors which match the
+// required attributes and do not include any of the existing
+// replicas. If the supplied filter is nil, it is ignored. Returns the
+// list of matching descriptors, and the store list matching the
+// required attributes.
+func (a *allocator) selectRandom(count int, required proto.Attributes, existing []proto.Replica) (
+	[]*proto.StoreDescriptor, *storeList, error) {
 	var descs []*proto.StoreDescriptor
 	sl := a.getStoreList(required)
 	used := getUsedNodes(existing)
@@ -235,10 +261,6 @@ func (a *allocator) selectRandom(count int, required proto.Attributes, existing 
 		if _, ok := used[sl.stores[idx].Node.NodeID]; ok {
 			continue
 		}
-		// Filter descriptor.
-		if filter != nil && !filter(sl.stores[idx], &sl.count, &sl.used) {
-			continue
-		}
 		// Add this store; exit loop if we've satisfied count.
 		descs = append(descs, sl.stores[idx])
 		if len(descs) >= count {
@@ -246,9 +268,9 @@ func (a *allocator) selectRandom(count int, required proto.Attributes, existing 
 		}
 	}
 	if len(descs) == 0 {
-		return nil, util.Errorf("no available stores for %s", required)
+		return nil, nil, util.Errorf("no available stores for %s", required)
 	}
-	return descs, nil
+	return descs, sl, nil
 }
 
 // getStoreList returns a store list matching the required attributes.
