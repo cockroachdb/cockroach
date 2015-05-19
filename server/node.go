@@ -301,8 +301,11 @@ func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error 
 	}
 
 	// Bootstrap any uninitialized stores asynchronously.
-	if bootstraps.Len() > 0 {
-		go n.bootstrapStores(bootstraps, stopper)
+	if bootstraps.Len() > 0 && stopper.StartTask() {
+		go func() {
+			n.bootstrapStores(bootstraps, stopper)
+			stopper.FinishTask()
+		}()
 	}
 
 	return nil
@@ -358,6 +361,9 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 		n.lSender.AddStore(s)
 		sIdent.StoreID++
 		log.Infof("bootstrapped store %s", s)
+		// Done regularly in Node.startGossip, but this cuts down the time
+		// until this store is used for range allocations.
+		s.GossipCapacity()
 	}
 }
 
@@ -391,13 +397,11 @@ func (n *Node) connectGossip() {
 func (n *Node) startGossip(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		ticker := time.NewTicker(gossipInterval)
+		n.gossipCapacities() // one-off run before going to sleep
 		for {
 			select {
 			case <-ticker.C:
-				if stopper.StartTask() {
-					n.gossipCapacities()
-					stopper.FinishTask()
-				}
+				n.gossipCapacities()
 			case <-stopper.ShouldStop():
 				return
 			}
