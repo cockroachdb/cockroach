@@ -20,6 +20,7 @@ package kv
 import (
 	"bytes"
 	"net"
+	"reflect"
 	"time"
 
 	"golang.org/x/net/context"
@@ -464,16 +465,24 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 		a.Header().Replica = *replicaMap[addr.String()]
 		return a
 	}
-	firstReply := true
+	// RPCs are sent asynchronously and there is no synchronized access to
+	// the reply object, so we don't pass itself to rpcSend.
+	// Otherwise there maybe a race case:
+	// If the RPC call times out using our original reply object,
+	// we must not use it any more; the rpc call might still return
+	// and just write to it at any time.
+	// args.CreateReply() should be cheaper than gogoproto.Clone which use reflect.
 	getReply := func() interface{} {
-		if firstReply {
-			firstReply = false
-			return reply
-		}
-		return gogoproto.Clone(reply)
+		return args.CreateReply()
 	}
-	_, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
+	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
+	if err == nil {
+		// Set content of replies[0] back to reply
+		dst := reflect.ValueOf(reply).Elem()
+		dst.Set(reflect.ValueOf(replies[0]).Elem())
+	}
+
 	return err
 }
 

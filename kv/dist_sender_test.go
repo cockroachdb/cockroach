@@ -135,6 +135,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	testCases := []struct {
 		args   proto.Request
+		reply  proto.Response
 		attrs  []string
 		fn     func(rpc.Options, []net.Addr) error
 		leader int32 // 0 for not caching a leader.
@@ -148,6 +149,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// Inconsistent Scan without matching attributes.
 		{
 			args:  &proto.ScanRequest{},
+			reply: &proto.ScanResponse{},
 			attrs: []string{},
 			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 		},
@@ -156,6 +158,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// go stable.
 		{
 			args:  &proto.ScanRequest{},
+			reply: &proto.ScanResponse{},
 			attrs: nodeAttrs[5],
 			// Compare only the first two resulting addresses.
 			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
@@ -165,6 +168,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// a leader.
 		{
 			args:       &proto.ScanRequest{},
+			reply:      &proto.ScanResponse{},
 			attrs:      []string{},
 			fn:         makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 			consistent: true,
@@ -173,6 +177,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// Should go random and not change anything.
 		{
 			args:  &proto.PutRequest{},
+			reply: &proto.PutResponse{},
 			attrs: []string{"nomatch"},
 			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 		},
@@ -181,6 +186,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// go stable.
 		{
 			args:  &proto.PutRequest{},
+			reply: &proto.PutResponse{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first two resulting addresses.
 			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
@@ -191,6 +197,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// (the last and second to last) in that order.
 		{
 			args:  &proto.PutRequest{},
+			reply: &proto.PutResponse{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first three resulting addresses.
 			fn:     makeVerifier(rpc.OrderStable, []int32{2, 5, 4, 0, 0}),
@@ -203,8 +210,11 @@ func TestSendRPCOrder(t *testing.T) {
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
 		addrs []net.Addr, _ func(addr net.Addr) interface{},
-		_ func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		return nil, verifyCall(opts, addrs)
+		getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		if err := verifyCall(opts, addrs); err != nil {
+			return nil, err
+		}
+		return []interface{}{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -250,17 +260,15 @@ func TestSendRPCOrder(t *testing.T) {
 			ds.leaderCache.Update(proto.RaftID(raftID), descriptor.Replicas[tc.leader-1])
 		}
 
-		// Always create the parameters for Scan, only the Header() is used
-		// anyways so it doesn't matter.
-		call := client.Scan(proto.Key("b"), proto.Key("y"), 0)
 		args := tc.args
+		reply := tc.reply
 		args.Header().RaftID = raftID // Not used in this test, but why not.
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if err := ds.sendRPC(&descriptor, args, call.Reply); err != nil {
+		if err := ds.sendRPC(&descriptor, args, reply); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -284,11 +292,13 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
 		if first {
-			getReply().(proto.Response).Header().SetGoError(
+			reply := getReply()
+			reply.(proto.Response).Header().SetGoError(
 				&proto.NotLeaderError{Leader: &leader})
+			first = false
+			return []interface{}{reply}, nil
 		}
-		first = false
-		return nil, nil
+		return []interface{}{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -328,13 +338,15 @@ func TestEvictLeaderOnNonRetryableError(t *testing.T) {
 
 		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
 			if first {
-				getReply().(proto.Response).Header().SetGoError(&proto.Error{
+				reply := getReply()
+				reply.(proto.Response).Header().SetGoError(&proto.Error{
 					Message:   "boom",
 					Retryable: retryable,
 				})
 				first = false
+				return []interface{}{reply}, nil
 			}
-			return nil, nil
+			return []interface{}{getReply()}, nil
 		}
 
 		ctx := &DistSenderContext{
@@ -365,7 +377,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 	g := makeTestGossip(t)
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		return nil, nil
+		return []interface{}{getReply()}, nil
 	}
 
 	for _, rangeLookup := range []bool{true, false} {
@@ -417,7 +429,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 				descStale = false
 			}
 			r.Ranges = append(r.Ranges, newRangeDescriptor)
-			return nil, nil
+			return []interface{}{r}, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
@@ -427,7 +439,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
 				RequestEndKey: header.EndKey}
 		}
-		return nil, nil
+		return []interface{}{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -608,4 +620,65 @@ func TestVerifyPermissions(t *testing.T) {
 		}
 	}
 	n.Stop()
+}
+
+// TestSendRPCRetry verifies that sendRPC failed on first address but succeed on
+// second address, the second reply should be successfully returned back.
+func TestSendRPCRetry(t *testing.T) {
+	g := makeTestGossip(t)
+	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// Fill RangeDescriptor with 2 replicas
+	var descriptor = proto.RangeDescriptor{
+		RaftID:   1,
+		StartKey: proto.Key("a"),
+		EndKey:   proto.Key("z"),
+	}
+	for i := 1; i <= 2; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &proto.NodeDescriptor{
+			NodeID: proto.NodeID(i),
+			Address: proto.Addr{
+				Network: addr.Network(),
+				Address: addr.String(),
+			},
+		}
+		if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
+			NodeID:  proto.NodeID(i),
+			StoreID: proto.StoreID(i),
+		})
+	}
+	// Define our rpcSend stub which returns success on the second address.
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		if method == "Node.Scan" {
+			// reply from first address failed
+			_ = getReply()
+			// reply from second address succeed
+			reply := getReply()
+			reply.(*proto.ScanResponse).Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
+			return []interface{}{reply}, nil
+		}
+		return nil, util.Errorf("Not expected method %v", method)
+	}
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+			return []proto.RangeDescriptor{descriptor}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	call := client.Scan(proto.Key("a"), proto.Key("d"), 1)
+	sr := call.Reply.(*proto.ScanResponse)
+	ds.Send(context.Background(), call)
+	if err := sr.GoError(); err != nil {
+		t.Fatal(err)
+	}
+	if l := len(sr.Rows); l != 1 {
+		t.Fatalf("expected 1 row; got %d", l)
+	}
 }
