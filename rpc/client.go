@@ -252,31 +252,32 @@ func (c *Client) heartbeat() error {
 			// successful response from the server.
 			c.mu.Lock()
 			c.healthy = true
-			c.offset.MeasuredAt = receiveTime
 			if receiveTime-sendTime > maximumClockReadingDelay.Nanoseconds() {
-				c.offset = proto.InfiniteOffset
+				c.offset.Reset()
 			} else {
 				// Offset and error are measured using the remote clock reading
 				// technique described in
 				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 				// However, we assume that drift and min message delay are 0, for
 				// now.
+				c.offset.MeasuredAt = receiveTime
 				c.offset.Uncertainty = (receiveTime - sendTime) / 2
 				remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
 				c.offset.Offset = remoteTimeNow - receiveTime
 			}
+			offset := c.offset
 			c.mu.Unlock()
-			c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
+			if offset.MeasuredAt != 0 {
+				c.remoteClocks.UpdateOffset(c.addr.String(), offset)
+			}
 		}
 		return call.Error
 	case <-time.After(heartbeatInterval * 2):
-		// Allowed twice gossip interval.
+		// Allowed twice heartbeat interval.
 		c.mu.Lock()
 		c.healthy = false
-		c.offset = proto.InfiniteOffset
-		c.offset.MeasuredAt = c.clock.PhysicalNow()
+		c.offset.Reset()
 		c.mu.Unlock()
-		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 	case <-c.Closed:
 		return util.Errorf("client is closed")

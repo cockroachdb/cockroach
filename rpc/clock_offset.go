@@ -112,8 +112,7 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 // 1. There is no prior offset for that address.
 // 2. The old offset for addr was measured before r.lastMonitoredAt. We never
 // use values during monitoring that are older than r.lastMonitoredAt.
-// 3. The new offset's error is smaller than the old offset's error. Note:
-// InfiniteOffsets implicitly have the largest error.
+// 3. The new offset's error is smaller than the old offset's error.
 //
 // The third case allows the monitor to use the most precise clock reading of
 // the remote addr during the next findOffsetInterval() invocation. We may
@@ -127,20 +126,22 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 	if r == nil {
 		return
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	oldOffset, ok := r.offsets[addr]
 
-	if !ok {
+	if oldOffset, ok := r.offsets[addr]; !ok {
 		r.offsets[addr] = offset
 	} else if oldOffset.MeasuredAt < r.lastMonitoredAt {
 		// No matter what offset is, we weren't going to use oldOffset again,
 		// because it was measured before the last cluster offset calculation.
 		r.offsets[addr] = offset
-	} else if oldOffset.MeasuredAt >= r.lastMonitoredAt &&
-		!offset.Equal(proto.InfiniteOffset) &&
-		offset.Uncertainty < oldOffset.Uncertainty {
+	} else if offset.Uncertainty < oldOffset.Uncertainty {
 		r.offsets[addr] = offset
+	}
+
+	if log.V(1) {
+		log.Infof("update offset: %s %v", addr, r.offsets[addr])
 	}
 }
 
