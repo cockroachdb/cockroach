@@ -306,6 +306,9 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 		expID            int      // expected store/node ID on allocate
 		expErr           bool
 	}{
+		// The two stores in the system have attributes:
+		//  storeID=1 {"a", "ssd"}
+		//  storeID=2 {"b", "ssd"}
 		{[]string{"a", "ssd"}, []int{}, true, 1, false},
 		{[]string{"a", "ssd"}, []int{1}, true, 2, false},
 		{[]string{"a", "ssd"}, []int{1}, false, 0, true},
