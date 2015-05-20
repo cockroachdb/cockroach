@@ -1116,7 +1116,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
 				go func() {
 					if err := s.resolveWriteIntentError(ctx, wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
-						log.Warningc(ctx, "failed to resolve on inconsistent read asynchronously", log.Err, err)
+						log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 					}
 					s.stopper.FinishTask()
 				}()
@@ -1175,9 +1175,9 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
 	pushType proto.PushTxnType, wait bool) error {
 	// TODO set key upstream.
-	ctx = log.Add(ctx, log.Err, wiErr, log.Key, args.Header().Key)
+	ctx = log.Add(ctx, log.Key, args.Header().Key)
 	if log.V(1) {
-		log.Infoc(ctx, "resolving write intent")
+		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
@@ -1204,7 +1204,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Run all pushes in parallel.
 	if pushErr := s.kvDB.Run(b); pushErr != nil {
 		if log.V(1) {
-			log.Infoc(ctx, "pushes failed", log.Err, pushErr, log.Detail, wiErr.Intents)
+			log.Infoc(ctx, "push for write intent %s failed: %s", wiErr, pushErr)
 		}
 
 		// For write/write conflicts within a transaction, propagate the

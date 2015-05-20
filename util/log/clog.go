@@ -28,6 +28,7 @@ import (
 	stdLog "log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -54,6 +55,8 @@ const (
 )
 
 const severityChar = "IWEF"
+
+const colorTermRE = "(ansi|xterm.*color)"
 
 // SeverityName provides a mapping from Severity level to a string.
 var severityName = []string{
@@ -367,8 +370,10 @@ type loggingT struct {
 	// Boolean flags. Not handled atomically because the flag.Value interface
 	// does not let us avoid the =true, and that shorthand is necessary for
 	// compatibility. TODO: does this matter enough to fix? Seems unlikely.
-	toStderr     bool // The -logtostderr flag.
-	alsoToStderr bool // The -alsologtostderr flag.
+	toStderr     bool   // The -logtostderr flag.
+	alsoToStderr bool   // The -alsologtostderr flag.
+	color        string // The -color flag.
+	hasColorTerm *bool  // Set via call to checkForColorTerm
 
 	// Level flag. Handled atomically.
 	stderrThreshold severity // The -stderrthreshold flag.
@@ -479,9 +484,9 @@ where the fields are defined as follows:
 	line             The line number
 	msg              The user-supplied message
 */
-func (l *loggingT) header(s severity, depth int) (*buffer, string, int) {
+func (l *loggingT) header(s severity, now time.Time, depth int) (*buffer, string, int) {
 	file, line := l.Caller(depth + 3) // we know we're 3 levels deep now.
-	return l.formatHeader(s, file, line), file, line
+	return l.formatHeader(s, now, file, line), file, line
 }
 
 // Caller returns the file and line of the Caller or, in case of error,
@@ -506,9 +511,8 @@ func (l *loggingT) Caller(depth int) (file string, line int) {
 }
 
 // formatHeader formats a log header using the provided file name and line number.
-func (l *loggingT) formatHeader(s severity, file string, line int) *buffer {
+func (l *loggingT) formatHeader(s severity, now time.Time, file string, line int) *buffer {
 	buf := l.getBuffer()
-	now := timeNow()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
 	}
@@ -586,17 +590,34 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-// PrintWith allows to write an arbitrary log message to the specified
+// PrintWith an arbitrary log message to be written to the specified
 // facility of the logger via the buffer supplied to the passed function.
-func PrintWith(s severity, depth int, f func(buf *bytes.Buffer)) {
-	file, line := logging.Caller(depth + 1) // since 'Caller' makes assumptions
-	buf := logging.getBuffer()
-	f(&buf.Buffer)
-	logging.output(severity(s), buf, file, line, false)
+// The map provided to the function is for output to a machine-readable
+// log and should be populated with context Field values.
+func PrintWith(s severity, depth int, f func(buf *bytes.Buffer, machineDict map[string]interface{})) {
+	now := time.Now()
+	buf, file, line := logging.header(s, now, depth)
+	machineDict := map[string]interface{}{
+		"Time": now,
+		"File": file,
+		"Line": line,
+	}
+	f(&buf.Buffer, machineDict)
+
+	// TODO(spencer,tobias): do something with machine readable data.
+	//   Most likely we'll want to write this to a separate file.
+	//
+	// jsonBytes, err := json.Marshal(machineDict)
+	// if err != nil {
+	// 	jsonBytes = []byte(fmt.Sprintf("%%!(BADJSON err=%s)", err))
+	// }
+	// os.Stderr.Write(jsonBytes)
+
+	logging.output(s, buf, file, line, false)
 }
 
 func (l *loggingT) println(s severity, args ...interface{}) {
-	buf, file, line := l.header(s, 0)
+	buf, file, line := l.header(s, time.Now(), 0)
 	fmt.Fprintln(buf, args...)
 	l.output(s, buf, file, line, false)
 }
@@ -606,7 +627,7 @@ func (l *loggingT) print(s severity, args ...interface{}) {
 }
 
 func (l *loggingT) printDepth(s severity, depth int, args ...interface{}) {
-	buf, file, line := l.header(s, depth)
+	buf, file, line := l.header(s, time.Now(), depth)
 	fmt.Fprint(buf, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
@@ -615,7 +636,7 @@ func (l *loggingT) printDepth(s severity, depth int, args ...interface{}) {
 }
 
 func (l *loggingT) printFormatted(s severity, format string, args ...interface{}) {
-	buf, file, line := l.header(s, 0)
+	buf, file, line := l.header(s, time.Now(), 0)
 	fmt.Fprintf(buf, format, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
@@ -627,7 +648,7 @@ func (l *loggingT) printFormatted(s severity, format string, args ...interface{}
 // alsoLogToStderr is true, the log message always appears on standard error; it
 // will also appear in the log file unless --logtostderr is set.
 func (l *loggingT) printWithFileLine(s severity, file string, line int, alsoToStderr bool, args ...interface{}) {
-	buf := l.formatHeader(s, file, line)
+	buf := l.formatHeader(s, time.Now(), file, line)
 	fmt.Fprint(buf, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
@@ -644,15 +665,16 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		}
 	}
 	data := buf.Bytes()
+
 	if l.toStderr {
-		_, _ = os.Stderr.Write(data)
+		_, _ = os.Stderr.Write(l.processForStderr(s, data))
 	} else {
 		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
-			_, _ = os.Stderr.Write(data)
+			_, _ = os.Stderr.Write(l.processForStderr(s, data))
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
-				_, _ = os.Stderr.Write(data) // Make sure the message appears somewhere.
+				_, _ = os.Stderr.Write(l.processForStderr(s, data)) // Make sure the message appears somewhere.
 				l.exit(err)
 			}
 		}
@@ -703,6 +725,53 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		atomic.AddInt64(&stats.lines, 1)
 		atomic.AddInt64(&stats.bytes, int64(len(data)))
 	}
+}
+
+// processForStderr colors log lines depending on severity.
+func (l *loggingT) processForStderr(s severity, data []byte) []byte {
+	switch l.color {
+	case "auto":
+		if !l.checkForColorTerm() {
+			return data
+		}
+	case "always":
+		// Colorize no matter what.
+	default:
+		return data
+	}
+	idx := bytes.Index(data, []byte("]"))
+	if idx == -1 {
+		return data
+	}
+	var prefix []byte
+	switch s {
+	case warningLog:
+		prefix = []byte("\033[0;31;49m") // red
+	case errorLog, fatalLog:
+		prefix = []byte("\033[1;31;49m") // bold & red
+	default:
+		return data
+	}
+	prefix = append(prefix, data[:idx+1]...)
+	prefix = append(prefix, []byte("\033[0m")...)
+	return append(prefix, data[idx+1:]...)
+}
+
+// checkForColorTerm attempts to verify that stderr is a character
+// device and if so, that the terminal supports color output.
+func (l *loggingT) checkForColorTerm() bool {
+	if l.hasColorTerm == nil {
+		var color bool
+		fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
+		if (fi.Mode() & os.ModeCharDevice) != 0 {
+			term := os.Getenv("TERM")
+			if match, _ := regexp.MatchString(colorTermRE, term); match {
+				color = true
+			}
+		}
+		l.hasColorTerm = &color
+	}
+	return *l.hasColorTerm
 }
 
 // timeoutFlush calls Flush and returns when it completes or after timeout

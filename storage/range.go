@@ -695,8 +695,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 		// log execution errors so they're surfaced somewhere.
 		if err := completionFunc(); err != nil {
 			// TODO(tschottdorf): possible security risk to log args.
-			log.Warningc(ctx, "non-synchronous execution failed",
-				log.Err, err, log.Detail, args)
+			log.Warningc(ctx, "async execution of %v failed: %s", args, err)
 		}
 	}()
 	return nil
@@ -896,8 +895,7 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 		case *proto.NotLeaderError, *proto.LeaseRejectedError:
 		default:
 			// Any other error is worth being logged visibly.
-			log.Warningc(ctx, "could not acquire lease for range gossip",
-				log.Err, e)
+			log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
 			return false, err
 		}
 	}
@@ -917,10 +915,10 @@ func (r *Range) maybeGossipFirstRange() error {
 	}
 	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
-		log.Errorc(ctx, "failed to gossip cluster ID", log.Err, err)
+		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
-		log.Errorc(ctx, "failed to gossip first range metadata", log.Err, err)
+		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
 	return nil
 }

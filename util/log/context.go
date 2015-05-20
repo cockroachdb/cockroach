@@ -33,20 +33,16 @@ func Add(ctx context.Context, kvs ...interface{}) context.Context {
 	return ctx
 }
 
-type kvSlice []interface{}
-
-func contextKV(ctx context.Context) kvSlice {
+func contextToDict(ctx context.Context, dict map[string]interface{}) {
 	// TODO(tschottdorf): Could put an LRU cache here if parsing the contexts
 	// turns out to be a lot of work - there will be a few static ones, and
 	// then one per client.
 	if ctx == nil {
-		return nil
+		return
 	}
-	var r []interface{}
 	for i := Field(0); i < maxField; i++ {
 		if v := ctx.Value(i); v != nil {
-			r = append(r, i, v)
+			dict[i.String()] = v
 		}
 	}
-	return r
 }

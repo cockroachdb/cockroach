@@ -19,16 +19,15 @@ package log
 
 import "flag"
 
-// InitFlags adds the logging flags on the supplied FlagSet.
+// init adds the logging flags on the supplied FlagSet.
 func init() {
 	flag.BoolVar(&logging.toStderr, "logtostderr", true, "log to standard error instead of files")
 	flag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	flag.StringVar(&logging.color, "color", "auto", "colorize standard error output according to severity; (auto | always)")
 	flag.Var(&logging.verbosity, "verbosity", "log level for V logs")
 	// TODO(tschottdorf): decide if we need this.
 	// pf.Var(&logging.stderrThreshold, "log-threshold", "logs at or above this threshold go to stderr")
 	flag.Var(&logging.vmodule, "vmodule", "comma-separated list of file=N settings for file-filtered logging")
 	flag.Var(&logging.traceLocation, "log-backtrace-at", "when logging hits line file:N, emit a stack trace")
 	logDir = flag.String("log-dir", "", "if non-empty, write log files in this directory") // in clog_file.go
-
-	flag.BoolVar(&humanLogging, "log-human", false, "log human-friendly output to stderr (slower)") // in log.go
 }
