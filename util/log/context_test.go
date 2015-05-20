@@ -18,7 +18,6 @@
 package log
 
 import (
-	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -27,10 +26,13 @@ import (
 // TestContextKV tests adding log fields to a context out of order and
 // retrieving them in their proper order.
 func TestContextKV(t *testing.T) {
-	kvs := []interface{}{Method, "Put", NodeID, 5, Err, fmt.Errorf("everything broke")}
-	exp := append([]interface{}(nil), kvs[2], kvs[3], kvs[0], kvs[1], kvs[4], kvs[5])
-	ctx := Add(context.Background(), kvs...)
-	if ckv := contextKV(ctx); fmt.Sprintf("%+v", exp) != fmt.Sprintf("%+v", ckv) {
-		t.Fatalf("expected %+v, got %+v", exp, ckv)
+	ctx := Add(context.Background(), Method, "Put", NodeID, 5)
+	dict := map[string]interface{}{}
+	contextToDict(ctx, dict)
+	if val, ok := dict[Method.String()]; !ok || val.(string) != "Put" {
+		t.Fatal("expected \"Put\" in dict")
+	}
+	if val, ok := dict[NodeID.String()]; !ok || val.(int) != 5 {
+		t.Fatal("expected 5 in dict")
 	}
 }

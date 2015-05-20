@@ -28,6 +28,7 @@ import (
 	stdLog "log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -54,6 +55,8 @@ const (
 )
 
 const severityChar = "IWEF"
+
+const colorTermRE = "(ansi|xterm.*color)"
 
 // SeverityName provides a mapping from Severity level to a string.
 var severityName = []string{
@@ -762,7 +765,7 @@ func (l *loggingT) checkForColorTerm() bool {
 		fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
 		if (fi.Mode() & os.ModeCharDevice) != 0 {
 			term := os.Getenv("TERM")
-			if strings.Contains(term, "xterm") && strings.Contains(term, "color") {
+			if match, _ := regexp.MatchString(colorTermRE, term); match {
 				color = true
 			}
 		}

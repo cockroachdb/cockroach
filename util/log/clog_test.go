@@ -85,7 +85,6 @@ func contains(s severity, str string, t *testing.T) bool {
 func setFlags() {
 	osExitFunc = os.Exit
 	logging.toStderr = false
-	humanLogging = false
 }
 
 // Test that Info works as advertised.
@@ -353,14 +352,15 @@ func TestLogBacktraceAt(t *testing.T) {
 func TestPrintWith(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
-	fn := func(buf *bytes.Buffer) {
+	fn := func(buf *bytes.Buffer, machineDict map[string]interface{}) {
 		_, _ = buf.WriteString("testz")
+		machineDict["foo"] = "bar"
 	}
 	PrintWith(infoLog, 0, fn)
 	res := contents(infoLog)
-	exp := "testz"
-	if res != exp {
-		t.Fatalf("wanted %s, got %s", exp, res)
+	exp := "] testz"
+	if !strings.Contains(res, exp) {
+		t.Fatalf("wanted log line to contain %s, got %s", exp, res)
 	}
 }
 
@@ -410,14 +410,14 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer func() {
 	}()
 
-	PrintWith(fatalLog, 0, func(buf *bytes.Buffer) {
+	PrintWith(fatalLog, 0, func(buf *bytes.Buffer, machineDict map[string]interface{}) {
 		buf.WriteString("cinap")
 	})
 
 	cont := contents(fatalLog)
 	msg := ""
-	if !strings.HasPrefix(cont, "cinap") {
-		msg = "panic output does not begin with cinap"
+	if !strings.Contains(cont, "] cinap") {
+		msg = "panic output does not contain cinap"
 	} else if strings.Count(cont, "goroutine ") < 2 {
 		msg = "stack trace contains less than two goroutines"
 	} else if !strings.Contains(cont, "clog_test") {
@@ -432,7 +432,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf, _, _ := logging.header(infoLog, 0)
+		buf, _, _ := logging.header(infoLog, time.Now(), 0)
 		logging.putBuffer(buf)
 	}
 }
