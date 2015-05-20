@@ -140,9 +140,9 @@ func TestOffsetMeasurement(t *testing.T) {
 	context.RemoteClocks.mu.Unlock()
 }
 
-// TestDelayedOffsetMeasurement tests that the client will record an
-// InfiniteOffset if the heartbeat reply exceeds the maximumClockReadingDelay,
-// but not the heartbeat timeout.
+// TestDelayedOffsetMeasurement tests that the client will record a
+// zero offset if the heartbeat reply exceeds the
+// maximumClockReadingDelay, but not the heartbeat timeout.
 func TestDelayedOffsetMeasurement(t *testing.T) {
 	serverManual := hlc.NewManualClock(10)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
@@ -173,11 +173,11 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Since the reply took too long, we should have an InfiniteOffset, even
+	// Since the reply took too long, we should have a zero offset, even
 	// though the client is still healthy because it received a heartbeat
 	// reply.
-	if o := c.RemoteOffset(); !o.Equal(proto.InfiniteOffset) {
-		t.Errorf("expected offset %v, actual %v", proto.InfiniteOffset, o)
+	if o := c.RemoteOffset(); !o.Equal(proto.RemoteOffset{}) {
+		t.Errorf("expected offset %v, actual %v", proto.RemoteOffset{}, o)
 	}
 
 	// Ensure the general offsets map was updated properly too.
@@ -217,9 +217,9 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.RemoteOffset().Equal(proto.InfiniteOffset) {
+	if !c.RemoteOffset().Equal(proto.RemoteOffset{}) {
 		t.Errorf("expected offset %v, actual %v",
-			proto.InfiniteOffset, c.RemoteOffset())
+			proto.RemoteOffset{}, c.RemoteOffset())
 	}
 }
 

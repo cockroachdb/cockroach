@@ -26,9 +26,10 @@ import "gogoproto/gogo.proto";
 // remote server. Uncertainty is the maximum error in the reading of this
 // offset, so that the real offset should be in the interval
 // [Offset - Uncertainty, Offset + Uncertainty]. If the last heartbeat timed
-// out, Offset = InfiniteOffset. Offset and Uncertainty are measured using the
-// remote clock reading technique described in
-// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+// out, Offset = 0.
+//
+// Offset and Uncertainty are measured using the remote clock reading technique
+// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 message RemoteOffset {
   option (gogoproto.goproto_stringer) = false;
 

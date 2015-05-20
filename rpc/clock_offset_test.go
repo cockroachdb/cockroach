@@ -18,6 +18,7 @@
 package rpc
 
 import (
+	"math"
 	"sort"
 	"testing"
 	"time"
@@ -63,19 +64,6 @@ func TestUpdateOffset(t *testing.T) {
 
 	// Larger error and offset3.MeasuredAt > lastMonitoredAt, so no update.
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
-		t.Errorf("expected offset %v, instead %v", offset3, o)
-	}
-
-	// InfiniteOffset, shouldn't update...ever.
-	monitor.UpdateOffset("addr", proto.InfiniteOffset)
-	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
-		t.Errorf("expected offset %v, instead %v", offset3, o)
-	}
-
-	// LastMonitoredAt moved up, InfiniteOffset should still not update.
-	monitor.lastMonitoredAt = 10
-	monitor.UpdateOffset("addr", proto.InfiniteOffset)
 	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
@@ -235,31 +223,6 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
-// TestFindOffsetIntervalWithInfinites tests that, if most of the clocks have
-// an InfiniteOffset (they missed their last heartbeat), then we get an
-// interval for an infinite offset.
-func TestFindOffsetIntervalWithInfinites(t *testing.T) {
-	offsets := map[string]proto.RemoteOffset{
-		"0": {Offset: 0, Uncertainty: 1},
-		"1": proto.InfiniteOffset,
-		"2": proto.InfiniteOffset,
-		"3": proto.InfiniteOffset,
-	}
-
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(0 * time.Nanosecond)
-	remoteClocks := &RemoteClockMonitor{
-		offsets: offsets,
-		lClock:  clock,
-	}
-	expectedInterval := ClusterOffsetInterval{
-		Lowerbound: proto.InfiniteOffset.Offset,
-		Upperbound: proto.InfiniteOffset.Offset,
-	}
-	assertClusterOffset(remoteClocks, expectedInterval, t)
-}
-
 // TestFindOffsetIntervalNoRemotes tests that we measure 0 offset if there are
 // no recent remote clock readings.
 func TestFindOffsetIntervalNoRemotes(t *testing.T) {
@@ -382,8 +345,8 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 	assertIntervalHealth(false, interval, maxOffset, t)
 
 	interval = ClusterOffsetInterval{
-		Lowerbound: proto.InfiniteOffset.Offset,
-		Upperbound: proto.InfiniteOffset.Offset,
+		Lowerbound: math.MaxInt64,
+		Upperbound: math.MaxInt64,
 	}
 	assertIntervalHealth(false, interval, maxOffset, t)
 }

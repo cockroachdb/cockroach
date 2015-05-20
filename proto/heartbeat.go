@@ -20,15 +20,8 @@ package proto
 
 import (
 	"fmt"
-	"math"
 	"time"
 )
-
-// InfiniteOffset is the offset value used if we fail to detect a heartbeat.
-var InfiniteOffset = RemoteOffset{
-	Offset:      math.MaxInt64,
-	Uncertainty: 0,
-}
 
 // Equal is a equality comparison between remote offsets.
 func (r RemoteOffset) Equal(o RemoteOffset) bool {

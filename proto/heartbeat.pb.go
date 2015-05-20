@@ -17,9 +17,10 @@ var _ = math.Inf
 // remote server. Uncertainty is the maximum error in the reading of this
 // offset, so that the real offset should be in the interval
 // [Offset - Uncertainty, Offset + Uncertainty]. If the last heartbeat timed
-// out, Offset = InfiniteOffset. Offset and Uncertainty are measured using the
-// remote clock reading technique described in
-// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+// out, Offset = 0.
+//
+// Offset and Uncertainty are measured using the remote clock reading technique
+// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 type RemoteOffset struct {
 	// The estimated offset from the remote server, in nanoseconds.
 	Offset int64 `protobuf:"varint,1,opt,name=offset" json:"offset"`
