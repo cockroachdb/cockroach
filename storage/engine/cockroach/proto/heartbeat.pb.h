@@ -101,12 +101,12 @@ class RemoteOffset : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 offset() const;
   inline void set_offset(::google::protobuf::int64 value);
 
-  // optional int64 error = 2;
-  inline bool has_error() const;
-  inline void clear_error();
-  static const int kErrorFieldNumber = 2;
-  inline ::google::protobuf::int64 error() const;
-  inline void set_error(::google::protobuf::int64 value);
+  // optional int64 uncertainty = 2;
+  inline bool has_uncertainty() const;
+  inline void clear_uncertainty();
+  static const int kUncertaintyFieldNumber = 2;
+  inline ::google::protobuf::int64 uncertainty() const;
+  inline void set_uncertainty(::google::protobuf::int64 value);
 
   // optional int64 measured_at = 3;
   inline bool has_measured_at() const;
@@ -119,8 +119,8 @@ class RemoteOffset : public ::google::protobuf::Message {
  private:
   inline void set_has_offset();
   inline void clear_has_offset();
-  inline void set_has_error();
-  inline void clear_has_error();
+  inline void set_has_uncertainty();
+  inline void clear_has_uncertainty();
   inline void set_has_measured_at();
   inline void clear_has_measured_at();
 
@@ -129,7 +129,7 @@ class RemoteOffset : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int64 offset_;
-  ::google::protobuf::int64 error_;
+  ::google::protobuf::int64 uncertainty_;
   ::google::protobuf::int64 measured_at_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fheartbeat_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fheartbeat_2eproto();
@@ -374,28 +374,28 @@ inline void RemoteOffset::set_offset(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.RemoteOffset.offset)
 }
 
-// optional int64 error = 2;
-inline bool RemoteOffset::has_error() const {
+// optional int64 uncertainty = 2;
+inline bool RemoteOffset::has_uncertainty() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void RemoteOffset::set_has_error() {
+inline void RemoteOffset::set_has_uncertainty() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void RemoteOffset::clear_has_error() {
+inline void RemoteOffset::clear_has_uncertainty() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void RemoteOffset::clear_error() {
-  error_ = GOOGLE_LONGLONG(0);
-  clear_has_error();
+inline void RemoteOffset::clear_uncertainty() {
+  uncertainty_ = GOOGLE_LONGLONG(0);
+  clear_has_uncertainty();
 }
-inline ::google::protobuf::int64 RemoteOffset::error() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RemoteOffset.error)
-  return error_;
+inline ::google::protobuf::int64 RemoteOffset::uncertainty() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RemoteOffset.uncertainty)
+  return uncertainty_;
 }
-inline void RemoteOffset::set_error(::google::protobuf::int64 value) {
-  set_has_error();
-  error_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RemoteOffset.error)
+inline void RemoteOffset::set_uncertainty(::google::protobuf::int64 value) {
+  set_has_uncertainty();
+  uncertainty_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RemoteOffset.uncertainty)
 }
 
 // optional int64 measured_at = 3;

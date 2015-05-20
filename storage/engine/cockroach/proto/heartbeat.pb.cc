@@ -43,7 +43,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fheartbeat_2eproto() {
   RemoteOffset_descriptor_ = file->message_type(0);
   static const int RemoteOffset_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RemoteOffset, offset_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RemoteOffset, error_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RemoteOffset, uncertainty_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RemoteOffset, measured_at_),
   };
   RemoteOffset_reflection_ =
@@ -130,14 +130,14 @@ void protobuf_AddDesc_cockroach_2fproto_2fheartbeat_2eproto() {
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n\037cockroach/proto/heartbeat.proto\022\017cockr"
-    "oach.proto\032\024gogoproto/gogo.proto\"Z\n\014Remo"
-    "teOffset\022\024\n\006offset\030\001 \001(\003B\004\310\336\037\000\022\023\n\005error\030"
-    "\002 \001(\003B\004\310\336\037\000\022\031\n\013measured_at\030\003 \001(\003B\004\310\336\037\000:\004"
-    "\230\240\037\000\"j\n\013PingRequest\022\022\n\004ping\030\001 \001(\tB\004\310\336\037\000\022"
-    "3\n\006offset\030\002 \001(\0132\035.cockroach.proto.Remote"
-    "OffsetB\004\310\336\037\000\022\022\n\004addr\030\003 \001(\tB\004\310\336\037\000\"=\n\014Ping"
-    "Response\022\022\n\004pong\030\001 \001(\tB\004\310\336\037\000\022\031\n\013server_t"
-    "ime\030\002 \001(\003B\004\310\336\037\000B\007Z\005proto", 344);
+    "oach.proto\032\024gogoproto/gogo.proto\"`\n\014Remo"
+    "teOffset\022\024\n\006offset\030\001 \001(\003B\004\310\336\037\000\022\031\n\013uncert"
+    "ainty\030\002 \001(\003B\004\310\336\037\000\022\031\n\013measured_at\030\003 \001(\003B\004"
+    "\310\336\037\000:\004\230\240\037\000\"j\n\013PingRequest\022\022\n\004ping\030\001 \001(\tB"
+    "\004\310\336\037\000\0223\n\006offset\030\002 \001(\0132\035.cockroach.proto."
+    "RemoteOffsetB\004\310\336\037\000\022\022\n\004addr\030\003 \001(\tB\004\310\336\037\000\"="
+    "\n\014PingResponse\022\022\n\004pong\030\001 \001(\tB\004\310\336\037\000\022\031\n\013se"
+    "rver_time\030\002 \001(\003B\004\310\336\037\000B\007Z\005proto", 350);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/heartbeat.proto", &protobuf_RegisterTypes);
   RemoteOffset::default_instance_ = new RemoteOffset();
@@ -160,7 +160,7 @@ struct StaticDescriptorInitializer_cockroach_2fproto_2fheartbeat_2eproto {
 
 #ifndef _MSC_VER
 const int RemoteOffset::kOffsetFieldNumber;
-const int RemoteOffset::kErrorFieldNumber;
+const int RemoteOffset::kUncertaintyFieldNumber;
 const int RemoteOffset::kMeasuredAtFieldNumber;
 #endif  // !_MSC_VER
 
@@ -183,7 +183,7 @@ RemoteOffset::RemoteOffset(const RemoteOffset& from)
 void RemoteOffset::SharedCtor() {
   _cached_size_ = 0;
   offset_ = GOOGLE_LONGLONG(0);
-  error_ = GOOGLE_LONGLONG(0);
+  uncertainty_ = GOOGLE_LONGLONG(0);
   measured_at_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -259,18 +259,18 @@ bool RemoteOffset::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_error;
+        if (input->ExpectTag(16)) goto parse_uncertainty;
         break;
       }
 
-      // optional int64 error = 2;
+      // optional int64 uncertainty = 2;
       case 2: {
         if (tag == 16) {
-         parse_error:
+         parse_uncertainty:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &error_)));
-          set_has_error();
+                 input, &uncertainty_)));
+          set_has_uncertainty();
         } else {
           goto handle_unusual;
         }
@@ -323,9 +323,9 @@ void RemoteOffset::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->offset(), output);
   }
 
-  // optional int64 error = 2;
-  if (has_error()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->error(), output);
+  // optional int64 uncertainty = 2;
+  if (has_uncertainty()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->uncertainty(), output);
   }
 
   // optional int64 measured_at = 3;
@@ -348,9 +348,9 @@ void RemoteOffset::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->offset(), target);
   }
 
-  // optional int64 error = 2;
-  if (has_error()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->error(), target);
+  // optional int64 uncertainty = 2;
+  if (has_uncertainty()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->uncertainty(), target);
   }
 
   // optional int64 measured_at = 3;
@@ -377,11 +377,11 @@ int RemoteOffset::ByteSize() const {
           this->offset());
     }
 
-    // optional int64 error = 2;
-    if (has_error()) {
+    // optional int64 uncertainty = 2;
+    if (has_uncertainty()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->error());
+          this->uncertainty());
     }
 
     // optional int64 measured_at = 3;
@@ -421,8 +421,8 @@ void RemoteOffset::MergeFrom(const RemoteOffset& from) {
     if (from.has_offset()) {
       set_offset(from.offset());
     }
-    if (from.has_error()) {
-      set_error(from.error());
+    if (from.has_uncertainty()) {
+      set_uncertainty(from.uncertainty());
     }
     if (from.has_measured_at()) {
       set_measured_at(from.measured_at());
@@ -451,7 +451,7 @@ bool RemoteOffset::IsInitialized() const {
 void RemoteOffset::Swap(RemoteOffset* other) {
   if (other != this) {
     std::swap(offset_, other->offset_);
-    std::swap(error_, other->error_);
+    std::swap(uncertainty_, other->uncertainty_);
     std::swap(measured_at_, other->measured_at_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);

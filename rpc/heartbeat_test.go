@@ -106,9 +106,9 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 		clock:        sContext.localClock,
 		remoteClocks: sContext.RemoteClocks,
 		offset: proto.RemoteOffset{
-			Offset:     10,
-			Error:      5,
-			MeasuredAt: 20,
+			Offset:      10,
+			Uncertainty: 5,
+			MeasuredAt:  20,
 		},
 	}
 	go client.connect(nil, sContext)
@@ -118,7 +118,7 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	remoteAddr := client.Addr().String()
 	o := sContext.RemoteClocks.offsets[remoteAddr]
 	sContext.RemoteClocks.mu.Unlock()
-	expServerOffset := proto.RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
+	expServerOffset := proto.RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
 	if o.Equal(expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
 	}

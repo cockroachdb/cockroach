@@ -41,9 +41,9 @@ func TestUpdateOffset(t *testing.T) {
 	// Case 2: The old offset for addr was measured before lastMonitoredAt.
 	monitor.lastMonitoredAt = 5
 	offset2 := proto.RemoteOffset{
-		Offset:     0,
-		Error:      20,
-		MeasuredAt: 6,
+		Offset:      0,
+		Uncertainty: 20,
+		MeasuredAt:  6,
 	}
 	monitor.UpdateOffset("addr", offset2)
 	if o := monitor.offsets["addr"]; !o.Equal(offset2) {
@@ -52,9 +52,9 @@ func TestUpdateOffset(t *testing.T) {
 
 	// Case 3: The new offset's error is smaller.
 	offset3 := proto.RemoteOffset{
-		Offset:     0,
-		Error:      10,
-		MeasuredAt: 8,
+		Offset:      0,
+		Uncertainty: 10,
+		MeasuredAt:  8,
 	}
 	monitor.UpdateOffset("addr", offset3)
 	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
@@ -118,10 +118,10 @@ func TestEndpointListSort(t *testing.T) {
 func TestBuildEndpointList(t *testing.T) {
 	// Build the offsets we will turn into an endpoint list.
 	offsets := map[string]proto.RemoteOffset{
-		"0": {Offset: 0, Error: 10},
-		"1": {Offset: 1, Error: 10},
-		"2": {Offset: 2, Error: 10},
-		"3": {Offset: 3, Error: 10},
+		"0": {Offset: 0, Uncertainty: 10},
+		"1": {Offset: 1, Uncertainty: 10},
+		"2": {Offset: 2, Uncertainty: 10},
+		"3": {Offset: 3, Uncertainty: 10},
 	}
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -162,10 +162,10 @@ func TestBuildEndpointList(t *testing.T) {
 // older offsets when we build an endpoint list.
 func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{
-		"0":         {Offset: 0, Error: 10, MeasuredAt: 11},
-		"stagnant0": {Offset: 1, Error: 10, MeasuredAt: 0},
-		"1":         {Offset: 2, Error: 10, MeasuredAt: 20},
-		"stagnant1": {Offset: 3, Error: 10, MeasuredAt: 9},
+		"0":         {Offset: 0, Uncertainty: 10, MeasuredAt: 11},
+		"stagnant0": {Offset: 1, Uncertainty: 10, MeasuredAt: 0},
+		"1":         {Offset: 2, Uncertainty: 10, MeasuredAt: 20},
+		"stagnant1": {Offset: 3, Uncertainty: 10, MeasuredAt: 9},
 	}
 
 	// The stagnant offsets older than 10ns ago will be removed.
@@ -196,10 +196,10 @@ func TestFindOffsetInterval(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
 	offsets := map[string]proto.RemoteOffset{
-		"0": {Offset: 20, Error: 10},
-		"1": {Offset: 58, Error: 20},
-		"2": {Offset: 71, Error: 25},
-		"3": {Offset: 91, Error: 31},
+		"0": {Offset: 20, Uncertainty: 10},
+		"1": {Offset: 58, Uncertainty: 20},
+		"2": {Offset: 71, Uncertainty: 25},
+		"3": {Offset: 91, Uncertainty: 31},
 	}
 
 	manual := hlc.NewManualClock(0)
@@ -219,10 +219,10 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
 	offsets := map[string]proto.RemoteOffset{
-		"0": {Offset: 0, Error: 1},
-		"1": {Offset: 1, Error: 1},
-		"2": {Offset: 3, Error: 1},
-		"3": {Offset: 4, Error: 1},
+		"0": {Offset: 0, Uncertainty: 1},
+		"1": {Offset: 1, Uncertainty: 1},
+		"2": {Offset: 3, Uncertainty: 1},
+		"3": {Offset: 4, Uncertainty: 1},
 	}
 
 	manual := hlc.NewManualClock(0)
@@ -240,7 +240,7 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 // interval for an infinite offset.
 func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{
-		"0": {Offset: 0, Error: 1},
+		"0": {Offset: 0, Uncertainty: 1},
 		"1": proto.InfiniteOffset,
 		"2": proto.InfiniteOffset,
 		"3": proto.InfiniteOffset,
@@ -279,7 +279,7 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 // of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{
-		"0": {Offset: 0, Error: 10},
+		"0": {Offset: 0, Uncertainty: 10},
 	}
 
 	manual := hlc.NewManualClock(0)
@@ -308,14 +308,14 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	}
 
 	// Two intervals overlap.
-	offsets["0"] = proto.RemoteOffset{Offset: 0, Error: 10}
-	offsets["1"] = proto.RemoteOffset{Offset: 20, Error: 10}
+	offsets["0"] = proto.RemoteOffset{Offset: 0, Uncertainty: 10}
+	offsets["1"] = proto.RemoteOffset{Offset: 20, Uncertainty: 10}
 	expectedInterval := ClusterOffsetInterval{Lowerbound: 10, Upperbound: 10}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 
 	// Two intervals don't overlap.
-	offsets["0"] = proto.RemoteOffset{Offset: 0, Error: 10}
-	offsets["1"] = proto.RemoteOffset{Offset: 30, Error: 10}
+	offsets["0"] = proto.RemoteOffset{Offset: 0, Uncertainty: 10}
+	offsets["1"] = proto.RemoteOffset{Offset: 30, Uncertainty: 10}
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
@@ -330,9 +330,9 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 	clock.SetMaxOffset(maxOffset)
 	offsets := map[string]proto.RemoteOffset{}
 	// Offsets are bigger than maxOffset, but Errors are also bigger than Offset.
-	offsets["0"] = proto.RemoteOffset{Offset: 110, Error: 300}
-	offsets["1"] = proto.RemoteOffset{Offset: 120, Error: 300}
-	offsets["2"] = proto.RemoteOffset{Offset: 130, Error: 300}
+	offsets["0"] = proto.RemoteOffset{Offset: 110, Uncertainty: 300}
+	offsets["1"] = proto.RemoteOffset{Offset: 120, Uncertainty: 300}
+	offsets["2"] = proto.RemoteOffset{Offset: 130, Uncertainty: 300}
 
 	remoteClocks := &RemoteClockMonitor{
 		offsets: offsets,
