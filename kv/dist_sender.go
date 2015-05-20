@@ -466,17 +466,14 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 		return a
 	}
 	// RPCs are sent asynchronously and there is no synchronized access to
-	// the reply object, so we use the originally supplied reply
-	// as a template for the actual calls.
-	// Otherwise there maybe 2 race cases:
-	// 1. A race between the call returning (and filling in the reply) and
-	// rpc.Send cloning it for a new attempt (except when there is only
-	// one address to try, which is not a relevant case).
-	// 2. If the RPC call times out using our original reply object,
+	// the reply object, so we don't pass itself to rpcSend.
+	// Otherwise there maybe a race case:
+	// If the RPC call times out using our original reply object,
 	// we must not use it any more; the rpc call might still return
 	// and just write to it at any time.
+	// args.CreateReply() should be cheaper than gogoproto.Clone which use reflect.
 	getReply := func() interface{} {
-		return gogoproto.Clone(reply)
+		return args.CreateReply()
 	}
 	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
@@ -640,12 +637,11 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 		// In next iteration, query next range.
 		args.Header().Key = descNext.StartKey
 
-		// This is a mult-range request, make a new reply object for
-		// each subsequent iterations of the loop.
-		// So the clone in getReply of sendRPC can be little lighter
-		// as it's a clean reply other than a filled reply by previous
-		// iteration.
-		reply = args.CreateReply()
+		if reply == call.Reply {
+			// This is a mult-range request, make a new reply object for
+			// subsequent iterations of the loop.
+			reply = args.CreateReply()
+		}
 	}
 }
 
