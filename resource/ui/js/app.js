@@ -19,83 +19,283 @@
 //
 // Authors: Bram Gruneir (bramgruneir@gmail.com)
 //		    Andrew Bonventre (andybons@gmail.com)
-//
+//		    Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
-// source: app.ts
-/// <reference path="typings/angularjs/angular.d.ts" />
-/// <reference path="typings/angularjs/angular-route.d.ts" />
-var crApp = angular.module('cockroach', [
-    'ngRoute',
-]);
-crApp.config(['$routeProvider', function (routeProvider) {
-        routeProvider.
-            when('/rest-explorer', {
-            controller: 'RestExplorerCtrl',
-            templateUrl: '/templates/rest_explorer.html'
-        }).
-            when('/monitor', {
-            controller: 'MonitorCtrl',
-            templateUrl: '/templates/monitor.html'
-        }).
-            otherwise({
-            redirectTo: '/'
-        });
-    }]);
-// source: controllers/monitor.ts
-/// <reference path="../typings/angularjs/angular.d.ts" />
-var crApp = angular.module('cockroach');
-crApp.controller('MonitorCtrl', ['$scope', '$http', function (scope, http) {
-    }]);
 // source: controllers/rest_explorer.ts
-/// <reference path="../typings/angularjs/angular.d.ts" />
-var crApp = angular.module('cockroach');
-crApp.controller('RestExplorerCtrl', ['$scope', '$http', function (scope, http) {
-        scope.kvCounterVal = 0;
-        scope.responseLog = [];
-        scope.clearResponseLog = function (e) {
-            scope.responseLog = [];
-        };
-        scope.requestPending = false;
-        scope.handleClick = function (e) {
-            e.preventDefault();
-            var method = e.target.getAttribute('data-method');
-            var endpoint = e.target.getAttribute('data-endpoint');
-            if (endpoint == '/kv/rest/range') {
-                endpoint += '?start=' + encodeURIComponent(scope.kvRangeStart);
-                if (!!scope.kvRangeEnd) {
-                    endpoint += '&end=' + encodeURIComponent(scope.kvRangeEnd);
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var RestExplorer;
+    (function (RestExplorer) {
+        var Model;
+        (function (Model) {
+            Model.singleKey = m.prop("");
+            Model.singleValue = m.prop("");
+            Model.singleCounter = m.prop(0);
+            Model.rangeStart = m.prop("");
+            Model.rangeEnd = m.prop("");
+            Model.responseLog = m.prop([]);
+            function logResponse(xhr, opts) {
+                var data;
+                if (xhr.responseType === "json") {
+                    data = JSON.stringify(xhr.response);
                 }
+                else {
+                    data = xhr.responseText;
+                }
+                data = data.length > 0 ? data : "(no response body)";
+                data = ['[', opts.method, '] ', xhr.status, ' ', opts.url, ': ', data].join('');
+                Model.responseLog().push(data);
+                return JSON.stringify(data);
             }
-            else if (!!scope.kvKey) {
-                endpoint += scope.kvKey;
+            function scan(method) {
+                var endpoint = "/kv/rest/range?start=" + encodeURIComponent(Model.rangeStart());
+                if (!!Model.rangeEnd()) {
+                    endpoint += '&end=' + encodeURIComponent(Model.rangeEnd());
+                }
+                return m.request({
+                    method: method,
+                    url: endpoint,
+                    extract: logResponse,
+                });
             }
-            var data = '';
-            if (!!scope.kvValue) {
-                data = scope.kvValue;
-            }
-            var req = {
-                method: method,
-                url: endpoint,
-                headers: {
-                    'Content-Type': 'text/plain; charset=UTF-8'
-                },
-                data: data
-            };
-            if (endpoint.indexOf('/kv/rest/counter/') != -1) {
-                req.headers = {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            Model.scan = scan;
+            function entry(method) {
+                var endpoint = "/kv/rest/entry/" + Model.singleKey();
+                var request = {
+                    method: method,
+                    url: endpoint,
+                    extract: logResponse,
+                    serialize: function (data) { return data; },
                 };
-                req.data = scope.kvCounterVal;
-            }
-            var responseFn = function (data, status, headers, config) {
-                if (typeof data == 'object') {
-                    data = JSON.stringify(data);
+                if (method === "POST") {
+                    request.config = function (xhr, opts) {
+                        xhr.setRequestHeader("Content-Type", "text/plain; charset=UTF-8");
+                        return xhr;
+                    };
+                    request.data = Model.singleValue();
                 }
-                var response = data.length > 0 ? data : '(no response body)';
-                var msg = ['[', method, '] ', status, ' ', endpoint, ': ', response].join('');
-                scope.responseLog.push(msg);
-            };
-            http(req).success(responseFn).error(responseFn);
-        };
-    }]);
+                return m.request(request);
+            }
+            Model.entry = entry;
+            function counter(method) {
+                var endpoint = "/kv/rest/counter/" + Model.singleKey();
+                var request = {
+                    method: method,
+                    url: endpoint,
+                    extract: logResponse,
+                    serialize: function (data) { return data; },
+                };
+                if (method === "POST") {
+                    request.config = function (xhr, opts) {
+                        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                        return xhr;
+                    };
+                    request.data = Model.singleCounter();
+                }
+                return m.request(request);
+            }
+            Model.counter = counter;
+            function clearLog() {
+                Model.responseLog([]);
+            }
+            Model.clearLog = clearLog;
+            ;
+        })(Model || (Model = {}));
+        function button(text, onclick, disabled) {
+            return m("input[type=button]", {
+                value: text,
+                disabled: disabled(),
+                onclick: onclick,
+            });
+        }
+        function field(text, value, disabled) {
+            return m("input[type=text]", {
+                placeholder: text,
+                disabled: disabled(),
+                value: value(),
+                onchange: m.withAttr("value", value),
+            });
+        }
+        var EntryComponent;
+        (function (EntryComponent) {
+            var Controller = (function () {
+                function Controller() {
+                    var _this = this;
+                    this.responsePending = m.prop(false);
+                    this.key = Model.singleKey;
+                    this.val = Model.singleValue;
+                    this.complete = function () { return _this.responsePending(false); };
+                    this.get = function () { return _this.request("GET"); };
+                    this.post = function () { return _this.request("POST"); };
+                    this.head = function () { return _this.request("HEAD"); };
+                    this.delete = function () { return _this.request("DELETE"); };
+                }
+                Controller.prototype.request = function (method) {
+                    this.responsePending(true);
+                    Model.entry(method).then(this.complete, this.complete);
+                };
+                return Controller;
+            })();
+            function controller() {
+                return new Controller();
+            }
+            EntryComponent.controller = controller;
+            function view(ctrl) {
+                return m("section.restExplorerControls-control", [
+                    m("h3", "K/V Pair"),
+                    m("form", [
+                        field("Key", ctrl.key, ctrl.responsePending),
+                        m.trust("&rarr;"),
+                        field("Value", ctrl.val, ctrl.responsePending),
+                        button("Get", ctrl.get, ctrl.responsePending),
+                        button("Head", ctrl.head, ctrl.responsePending),
+                        button("Put", ctrl.post, ctrl.responsePending),
+                        button("Delete", ctrl.delete, ctrl.responsePending),
+                    ])
+                ]);
+            }
+            EntryComponent.view = view;
+        })(EntryComponent || (EntryComponent = {}));
+        var RangeComponent;
+        (function (RangeComponent) {
+            var Controller = (function () {
+                function Controller() {
+                    var _this = this;
+                    this.responsePending = m.prop(false);
+                    this.rangeStart = Model.rangeStart;
+                    this.rangeEnd = Model.rangeEnd;
+                    this.complete = function () { return _this.responsePending(false); };
+                    this.get = function () { return _this.request("GET"); };
+                    this.delete = function () { return _this.request("DELETE"); };
+                }
+                Controller.prototype.request = function (method) {
+                    this.responsePending(true);
+                    Model.scan(method).then(this.complete, this.complete);
+                };
+                return Controller;
+            })();
+            function controller() {
+                return new Controller();
+            }
+            RangeComponent.controller = controller;
+            function view(ctrl) {
+                return m("section.restExplorerControls-control", [
+                    m("h3", "Range"),
+                    m("form", [
+                        field("Start", ctrl.rangeStart, ctrl.responsePending),
+                        m.trust("&rarr;"),
+                        field("End", ctrl.rangeEnd, ctrl.responsePending),
+                        button("Get", ctrl.get, ctrl.responsePending),
+                        button("Delete", ctrl.delete, ctrl.responsePending),
+                    ])
+                ]);
+            }
+            RangeComponent.view = view;
+        })(RangeComponent || (RangeComponent = {}));
+        var CounterComponent;
+        (function (CounterComponent) {
+            var Controller = (function () {
+                function Controller() {
+                    var _this = this;
+                    this.responsePending = m.prop(false);
+                    this.key = Model.singleKey;
+                    this.val = Model.singleCounter;
+                    this.complete = function () { return _this.responsePending(false); };
+                    this.get = function () { return _this.request("GET"); };
+                    this.post = function () { return _this.request("POST"); };
+                    this.head = function () { return _this.request("HEAD"); };
+                    this.delete = function () { return _this.request("DELETE"); };
+                }
+                Controller.prototype.request = function (method) {
+                    this.responsePending(true);
+                    Model.counter(method).then(this.complete, this.complete);
+                };
+                return Controller;
+            })();
+            function controller() {
+                return new Controller();
+            }
+            CounterComponent.controller = controller;
+            function view(ctrl) {
+                return m("section.restExplorerControls-control", [
+                    m("h3", "Counter"),
+                    m("form", [
+                        field("Key", ctrl.key, ctrl.responsePending),
+                        m.trust("&rarr;"),
+                        field("Value", ctrl.val, ctrl.responsePending),
+                        button("Get", ctrl.get, ctrl.responsePending),
+                        button("Head", ctrl.head, ctrl.responsePending),
+                        button("Put", ctrl.post, ctrl.responsePending),
+                        button("Delete", ctrl.delete, ctrl.responsePending),
+                    ])
+                ]);
+            }
+            CounterComponent.view = view;
+        })(CounterComponent || (CounterComponent = {}));
+        var LogComponent;
+        (function (LogComponent) {
+            function controller() {
+                return {
+                    log: Model.responseLog,
+                    clear: Model.clearLog,
+                };
+            }
+            LogComponent.controller = controller;
+            function view(ctrl) {
+                console.log("Redrawing log component");
+                return m(".restExplorerLog", [
+                    m("h3", "Console"),
+                    button("Clear", ctrl.clear, function () { return false; }),
+                    ctrl.log().map(function (str) {
+                        return m("", str);
+                    })
+                ]);
+            }
+            LogComponent.view = view;
+        })(LogComponent || (LogComponent = {}));
+        var Page;
+        (function (Page) {
+            function controller() { }
+            Page.controller = controller;
+            function view() {
+                return m(".restExplorer", [
+                    m(".restExplorerControls", [
+                        EntryComponent,
+                        RangeComponent,
+                        CounterComponent,
+                    ]),
+                    LogComponent,
+                ]);
+            }
+            Page.view = view;
+        })(Page = RestExplorer.Page || (RestExplorer.Page = {}));
+    })(RestExplorer = AdminViews.RestExplorer || (AdminViews.RestExplorer = {}));
+})(AdminViews || (AdminViews = {}));
+// source: controllers/monitor.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var Monitor;
+    (function (Monitor) {
+        var Page;
+        (function (Page) {
+            function controller() { }
+            Page.controller = controller;
+            function view() {
+                return m("h3", "Monitor Placeholder");
+            }
+            Page.view = view;
+        })(Page = Monitor.Page || (Monitor.Page = {}));
+    })(Monitor = AdminViews.Monitor || (AdminViews.Monitor = {}));
+})(AdminViews || (AdminViews = {}));
+// source: app.ts
+/// <reference path="typings/mithriljs/mithril.d.ts" />
+/// <reference path="controllers/rest_explorer.ts" />
+/// <reference path="controllers/monitor.ts" />
+m.route.mode = "hash";
+m.route(document.getElementById("root"), "/rest-explorer", {
+    "/rest-explorer": AdminViews.RestExplorer.Page,
+    "/monitor": AdminViews.Monitor.Page,
+});

@@ -19,7 +19,7 @@
 //
 // Authors: Bram Gruneir (bramgruneir@gmail.com)
 //		    Andrew Bonventre (andybons@gmail.com)
-//
+//		    Matt Tracy (matt@cockroachlabs.com)
 //
 
 var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
