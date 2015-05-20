@@ -762,7 +762,7 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 }
 
 // RaftStatus returns the current raft status of the given range.
-func (s *Store) RaftStatus(raftID int64) raft.Status {
+func (s *Store) RaftStatus(raftID int64) *raft.Status {
 	return s.multiraft.Status(uint64(raftID))
 }
 

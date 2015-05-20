@@ -364,7 +364,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 }
 
 // Status returns the current status of the given group.
-func (m *MultiRaft) Status(groupID uint64) raft.Status {
+func (m *MultiRaft) Status(groupID uint64) *raft.Status {
 	return m.multiNode.Status(groupID)
 }
 
