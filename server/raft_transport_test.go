@@ -39,11 +39,20 @@ func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 }
 
 func TestSendAndReceive(t *testing.T) {
+	defer func(t time.Duration) {
+		raftMessageTimeout = t
+	}(raftMessageTimeout)
+	// Practically disable the Raft message timeout for this test.
+	// CircleCI + Race testing is not a happy marriage for channel-based
+	// consumers.
+	raftMessageTimeout = time.Minute
 	tlsConfig, err := testContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 
 	// Create several servers, each of which has two stores (A multiraft node ID addresses
@@ -129,7 +138,7 @@ func TestSendAndReceive(t *testing.T) {
 					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
 						nodeIDs[to], nodeIDs[from], req)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("timed out waiting for message")
 			}
 		}

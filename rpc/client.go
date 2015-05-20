@@ -139,9 +139,10 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		c.mu.Unlock()
 
 		// Ensure at least one heartbeat succeeds before exiting the
-		// retry loop.
+		// retry loop. If it fails, don't retry: The node is probably
+		// dead.
 		if err = c.heartbeat(); err != nil {
-			return util.RetryContinue, err
+			return util.RetryBreak, err
 		}
 
 		// Signal client is ready by closing Ready channel.

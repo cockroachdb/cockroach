@@ -77,26 +77,25 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 	s := createTestServer(serverClock, t)
 	defer s.Close()
 
-	// Now, create a client. It should attempt a heartbeat and fail,
-	// causing retry loop to activate.
+	// Create a client. It should attempt a heartbeat and fail.
 	c := NewClient(s.Addr(), nil, s.context)
-	// does the test work
-	select {
-	case <-c.Ready:
-		t.Error("unexpected client heartbeat success")
-	case <-time.After(clientRetryOptions.Backoff * 2):
-	}
 
 	// Register a heartbeat service.
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
+
+	// The client should fail the heartbeat and be recycled.
+	<-c.Closed
+
 	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
 	}
+	// Same thing, but now the heartbeat service exists.
+	c = NewClient(s.Addr(), nil, s.context)
 
-	// A heartbeat should success and the client should become ready.
+	// A heartbeat should succeed and the client should become ready.
 	<-c.Ready
 	s.Close()
 }
