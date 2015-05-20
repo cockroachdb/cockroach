@@ -274,6 +274,7 @@ func (m *Addr) GetAddress() string {
 type StoreCapacity struct {
 	Capacity         int64  `protobuf:"varint,1,opt" json:"Capacity"`
 	Available        int64  `protobuf:"varint,2,opt" json:"Available"`
+	RangeCount       int32  `protobuf:"varint,3,opt" json:"RangeCount"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -291,6 +292,13 @@ func (m *StoreCapacity) GetCapacity() int64 {
 func (m *StoreCapacity) GetAvailable() int64 {
 	if m != nil {
 		return m.Available
+	}
+	return 0
+}
+
+func (m *StoreCapacity) GetRangeCount() int32 {
+	if m != nil {
+		return m.RangeCount
 	}
 	return 0
 }
@@ -1339,6 +1347,21 @@ func (m *StoreCapacity) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.RangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -1758,6 +1781,7 @@ func (m *StoreCapacity) Size() (n int) {
 	_ = l
 	n += 1 + sovConfig(uint64(m.Capacity))
 	n += 1 + sovConfig(uint64(m.Available))
+	n += 1 + sovConfig(uint64(m.RangeCount))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2223,6 +2247,9 @@ func (m *StoreCapacity) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Available))
+	data[i] = 0x18
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.RangeCount))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

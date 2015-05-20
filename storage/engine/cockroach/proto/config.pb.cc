@@ -235,9 +235,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Addr));
   StoreCapacity_descriptor_ = file->message_type(10);
-  static const int StoreCapacity_offsets_[2] = {
+  static const int StoreCapacity_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, capacity_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, available_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, rangecount_),
   };
   StoreCapacity_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -394,19 +395,20 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "B\004\310\336\037\000\022\037\n\nparent_key\030\003 \001(\014B\013\310\336\037\000\332\336\037\003Key\022"
     "\031\n\010left_key\030\004 \001(\014B\007\332\336\037\003Key\022\032\n\tright_key\030"
     "\005 \001(\014B\007\332\336\037\003Key\"4\n\004Addr\022\025\n\007network\030\001 \001(\tB"
-    "\004\310\336\037\000\022\025\n\007address\030\002 \001(\tB\004\310\336\037\000\"@\n\rStoreCap"
+    "\004\310\336\037\000\022\025\n\007address\030\002 \001(\tB\004\310\336\037\000\"Z\n\rStoreCap"
     "acity\022\026\n\010Capacity\030\001 \001(\003B\004\310\336\037\000\022\027\n\tAvailab"
-    "le\030\002 \001(\003B\004\310\336\037\000\"\233\001\n\016NodeDescriptor\022)\n\007nod"
-    "e_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022,\n\007"
-    "address\030\002 \001(\0132\025.cockroach.proto.AddrB\004\310\336"
-    "\037\000\0220\n\005attrs\030\003 \001(\0132\033.cockroach.proto.Attr"
-    "ibutesB\004\310\336\037\000\"\336\001\n\017StoreDescriptor\022,\n\010stor"
-    "e_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\0220"
-    "\n\005attrs\030\002 \001(\0132\033.cockroach.proto.Attribut"
-    "esB\004\310\336\037\000\0223\n\004node\030\003 \001(\0132\037.cockroach.proto"
-    ".NodeDescriptorB\004\310\336\037\000\0226\n\010capacity\030\004 \001(\0132"
-    "\036.cockroach.proto.StoreCapacityB\004\310\336\037\000B\023Z"
-    "\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 1698);
+    "le\030\002 \001(\003B\004\310\336\037\000\022\030\n\nRangeCount\030\003 \001(\005B\004\310\336\037\000"
+    "\"\233\001\n\016NodeDescriptor\022)\n\007node_id\030\001 \001(\005B\030\310\336"
+    "\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022,\n\007address\030\002 \001(\0132"
+    "\025.cockroach.proto.AddrB\004\310\336\037\000\0220\n\005attrs\030\003 "
+    "\001(\0132\033.cockroach.proto.AttributesB\004\310\336\037\000\"\336"
+    "\001\n\017StoreDescriptor\022,\n\010store_id\030\001 \001(\005B\032\310\336"
+    "\037\000\342\336\037\007StoreID\332\336\037\007StoreID\0220\n\005attrs\030\002 \001(\0132"
+    "\033.cockroach.proto.AttributesB\004\310\336\037\000\0223\n\004no"
+    "de\030\003 \001(\0132\037.cockroach.proto.NodeDescripto"
+    "rB\004\310\336\037\000\0226\n\010capacity\030\004 \001(\0132\036.cockroach.pr"
+    "oto.StoreCapacityB\004\310\336\037\000B\023Z\005proto\340\342\036\001\310\342\036\001"
+    "\320\342\036\001", 1724);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -3411,6 +3413,7 @@ void Addr::Swap(Addr* other) {
 #ifndef _MSC_VER
 const int StoreCapacity::kCapacityFieldNumber;
 const int StoreCapacity::kAvailableFieldNumber;
+const int StoreCapacity::kRangeCountFieldNumber;
 #endif  // !_MSC_VER
 
 StoreCapacity::StoreCapacity()
@@ -3433,6 +3436,7 @@ void StoreCapacity::SharedCtor() {
   _cached_size_ = 0;
   capacity_ = GOOGLE_LONGLONG(0);
   available_ = GOOGLE_LONGLONG(0);
+  rangecount_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -3478,7 +3482,7 @@ void StoreCapacity::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  ZR_(capacity_, available_);
+  ZR_(capacity_, rangecount_);
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -3522,6 +3526,21 @@ bool StoreCapacity::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(24)) goto parse_RangeCount;
+        break;
+      }
+
+      // optional int32 RangeCount = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_RangeCount:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &rangecount_)));
+          set_has_rangecount();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -3561,6 +3580,11 @@ void StoreCapacity::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->available(), output);
   }
 
+  // optional int32 RangeCount = 3;
+  if (has_rangecount()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->rangecount(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -3579,6 +3603,11 @@ void StoreCapacity::SerializeWithCachedSizes(
   // optional int64 Available = 2;
   if (has_available()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->available(), target);
+  }
+
+  // optional int32 RangeCount = 3;
+  if (has_rangecount()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->rangecount(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -3605,6 +3634,13 @@ int StoreCapacity::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->available());
+    }
+
+    // optional int32 RangeCount = 3;
+    if (has_rangecount()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->rangecount());
     }
 
   }
@@ -3640,6 +3676,9 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
     if (from.has_available()) {
       set_available(from.available());
     }
+    if (from.has_rangecount()) {
+      set_rangecount(from.rangecount());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -3665,6 +3704,7 @@ void StoreCapacity::Swap(StoreCapacity* other) {
   if (other != this) {
     std::swap(capacity_, other->capacity_);
     std::swap(available_, other->available_);
+    std::swap(rangecount_, other->rangecount_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

@@ -1129,12 +1129,21 @@ class StoreCapacity : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 available() const;
   inline void set_available(::google::protobuf::int64 value);
 
+  // optional int32 RangeCount = 3;
+  inline bool has_rangecount() const;
+  inline void clear_rangecount();
+  static const int kRangeCountFieldNumber = 3;
+  inline ::google::protobuf::int32 rangecount() const;
+  inline void set_rangecount(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.StoreCapacity)
  private:
   inline void set_has_capacity();
   inline void clear_has_capacity();
   inline void set_has_available();
   inline void clear_has_available();
+  inline void set_has_rangecount();
+  inline void clear_has_rangecount();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -1142,6 +1151,7 @@ class StoreCapacity : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::int64 capacity_;
   ::google::protobuf::int64 available_;
+  ::google::protobuf::int32 rangecount_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
@@ -2692,6 +2702,30 @@ inline void StoreCapacity::set_available(::google::protobuf::int64 value) {
   set_has_available();
   available_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.StoreCapacity.Available)
+}
+
+// optional int32 RangeCount = 3;
+inline bool StoreCapacity::has_rangecount() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void StoreCapacity::set_has_rangecount() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void StoreCapacity::clear_has_rangecount() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void StoreCapacity::clear_rangecount() {
+  rangecount_ = 0;
+  clear_has_rangecount();
+}
+inline ::google::protobuf::int32 StoreCapacity::rangecount() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreCapacity.RangeCount)
+  return rangecount_;
+}
+inline void StoreCapacity::set_rangecount(::google::protobuf::int32 value) {
+  set_has_rangecount();
+  rangecount_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreCapacity.RangeCount)
 }
 
 // -------------------------------------------------------------------

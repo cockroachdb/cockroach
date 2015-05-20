@@ -45,10 +45,10 @@ const (
 	// KeyConfigZone is the zone configuration map.
 	KeyConfigZone = "zones"
 
-	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
-	// store capacity. The suffix is composed of: <node ID>-<store ID>.
-	// The value is a storage.StoreDescriptor struct.
-	KeyMaxAvailCapacityPrefix = "max-avail-capacity"
+	// KeyCapacityPrefix is the key prefix for gossiping available store
+	// capacity. The suffix is composed of: <node ID>-<store ID>.  The
+	// value is a storage.StoreDescriptor struct.
+	KeyCapacityPrefix = "capacity"
 
 	// KeyNodeCount is the count of gossip nodes in the network. The
 	// value is an int64 containing the count of nodes in the cluster.
@@ -93,7 +93,7 @@ func MakeNodeIDKey(nodeID proto.NodeID) string {
 	return MakeKey(KeyNodeIDPrefix, nodeID.String())
 }
 
-// MakeMaxAvailCapacityKey returns the gossip key for the given store's capacity.
-func MakeMaxAvailCapacityKey(nodeID proto.NodeID, storeID proto.StoreID) string {
-	return MakeKey(KeyMaxAvailCapacityPrefix, nodeID.String(), storeID.String())
+// MakeCapacityKey returns the gossip key for the given store's capacity.
+func MakeCapacityKey(nodeID proto.NodeID, storeID proto.StoreID) string {
+	return MakeKey(KeyCapacityPrefix, nodeID.String(), "-", storeID.String())
 }
