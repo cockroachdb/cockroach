@@ -1,0 +1,54 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Tamir Duberstein (tamird@gmail.com)
+// Author: Vivek Menezes (vivek.menezes@gmail.com)
+//
+// All the protobuf messages that are used to represent a database View.
+// A View can be a join of many tables, but currently can only reference
+// a single table.
+
+syntax = "proto2";
+package cockroach.proto;
+option go_package = "proto";
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+// Column is the column metadata provided in a ResultSet.
+message Column {
+  // A name should encode a namespace, table, and column name.
+  repeated bytes name = 1;
+  // Column type, size, etc to be put here.
+}
+
+// Result is one Result in a ResultSet for a database View.
+message Result {
+  repeated bytes columns = 1;
+}
+
+// ResultSet is a slice of a database View. A View of the database can be
+// very large and is to be accommodated in a stream of ResultSet
+message ResultSet {
+  // The columns that form the view.
+  repeated Column columns = 1;
+  // Some of the results in a View. All the results are for the same columns.
+  repeated Result results = 3;
+}
+
+
