@@ -173,9 +173,7 @@ func NewNode(ctx storage.StoreContext) *Node {
 // context returns a context encapsulating the NodeID and ClusterID (or the
 // respective zero values, until that information is known).
 func (n *Node) context() context.Context {
-	return log.Add(context.Background(),
-		log.NodeID, n.Descriptor.NodeID,
-		log.ClusterID, n.ClusterID)
+	return log.Add(context.Background(), log.NodeID, n.Descriptor.NodeID)
 }
 
 // initDescriptor initializes the node descriptor with the server

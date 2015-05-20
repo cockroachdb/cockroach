@@ -23,14 +23,13 @@ type Field int
 
 //go:generate stringer -type Field
 const (
-	ClusterID Field = iota
-	NodeID          // the ID of the node
-	StoreID         // the ID of the store
-	RaftID          // the ID of the range
-	Method          // the method being executed
-	Client          // TODO: client on whose behalf we're acting
-	Err             // a wrapped error message, if applicable
-	Detail          // information intended for human eyes only
-	Key             // a proto.Key related to an event.
-	maxField        // internal field bounding the range of allocated fields
+	NodeID   Field = iota // the ID of the node
+	StoreID               // the ID of the store
+	RaftID                // the ID of the range
+	Method                // the method being executed
+	Client                // TODO: client on whose behalf we're acting
+	Key                   // a proto.Key related to an event.
+	maxField              // internal field bounding the range of allocated fields
 )
+
+type argWrapper interface{}
