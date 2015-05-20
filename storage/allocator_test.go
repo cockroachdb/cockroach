@@ -181,7 +181,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	gossipStores(s.Gossip(), singleStore, t)
-	result, err := s.allocator().AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{})
+	result, err := s.allocator().AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	result, err := s.allocator().AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{})
+	result, err := s.allocator().AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -208,7 +208,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	gossipStores(s.Gossip(), sameDCStores, t)
-	result1, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{})
+	result1, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 			Attrs:   multiDisksConfig.ReplicaAttrs[0],
 		},
 	}
-	result2, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas)
+	result2, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.Replica{})
+	result3, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []proto.Replica{}, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -246,11 +246,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	gossipStores(s.Gossip(), multiDCStores, t)
-	result1, err := s.allocator().AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{})
+	result1, err := s.allocator().AllocateTarget(multiDCConfig.ReplicaAttrs[0], []proto.Replica{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := s.allocator().AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{})
+	result2, err := s.allocator().AllocateTarget(multiDCConfig.ReplicaAttrs[1], []proto.Replica{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			StoreID: result2.StoreID,
 			Attrs:   multiDCConfig.ReplicaAttrs[1],
 		},
-	})
+	}, false)
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores")
 	}
@@ -281,12 +281,61 @@ func TestAllocatorExistingReplica(t *testing.T) {
 			StoreID: 2,
 			Attrs:   multiDisksConfig.ReplicaAttrs[0],
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	if result.Node.NodeID != 3 || result.StoreID != 4 {
 		t.Errorf("expected result to have node 3 and store 4: %+v", result)
+	}
+}
+
+// TestAllocatorRelaxConstraints verifies that attribute constraints
+// will be relaxed in order to match nodes lacking required attributes,
+// if necessary to find an allocation target.
+func TestAllocatorRelaxConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+	gossipStores(s.Gossip(), multiDCStores, t)
+
+	testCases := []struct {
+		required         []string // attribute strings
+		existing         []int    // existing store/node ID
+		relaxConstraints bool     // allow constraints to be relaxed?
+		expID            int      // expected store/node ID on allocate
+		expErr           bool
+	}{
+		// The two stores in the system have attributes:
+		//  storeID=1 {"a", "ssd"}
+		//  storeID=2 {"b", "ssd"}
+		{[]string{"a", "ssd"}, []int{}, true, 1, false},
+		{[]string{"a", "ssd"}, []int{1}, true, 2, false},
+		{[]string{"a", "ssd"}, []int{1}, false, 0, true},
+		{[]string{"a", "ssd"}, []int{1, 2}, true, 0, true},
+		{[]string{"b", "ssd"}, []int{}, true, 2, false},
+		{[]string{"b", "ssd"}, []int{1}, true, 2, false},
+		{[]string{"b", "ssd"}, []int{2}, false, 0, true},
+		{[]string{"b", "ssd"}, []int{2}, true, 1, false},
+		{[]string{"b", "ssd"}, []int{1, 2}, true, 0, true},
+		{[]string{"b", "hdd"}, []int{}, true, 2, false},
+		{[]string{"b", "hdd"}, []int{2}, true, 1, false},
+		{[]string{"b", "hdd"}, []int{2}, false, 0, true},
+		{[]string{"b", "hdd"}, []int{1, 2}, true, 0, true},
+		{[]string{"b", "ssd", "gpu"}, []int{}, true, 2, false},
+		{[]string{"b", "hdd", "gpu"}, []int{}, true, 2, false},
+	}
+	for i, test := range testCases {
+		var existing []proto.Replica
+		for _, id := range test.existing {
+			existing = append(existing, proto.Replica{NodeID: proto.NodeID(id), StoreID: proto.StoreID(id)})
+		}
+		result, err := s.allocator().AllocateTarget(proto.Attributes{Attrs: test.required}, existing, test.relaxConstraints)
+		if haveErr := (err != nil); haveErr != test.expErr {
+			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
+		} else if err == nil && proto.StoreID(test.expID) != result.StoreID {
+			t.Errorf("%d: expected result to have store %d; got %+v", i, test.expID, result)
+		}
 	}
 }
 
@@ -325,7 +374,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 	// store 1 or store 2 will be chosen, as the least loaded of the
 	// three random choices is returned.
 	for i := 0; i < 10; i++ {
-		result, err := s.allocator().AllocateTarget(proto.Attributes{}, []proto.Replica{})
+		result, err := s.allocator().AllocateTarget(proto.Attributes{}, []proto.Replica{}, false)
 		if err != nil {
 			t.Fatal(err)
 		}
