@@ -739,22 +739,30 @@ func (l *loggingT) processForStderr(s severity, data []byte) []byte {
 	default:
 		return data
 	}
-	idx := bytes.Index(data, []byte("]"))
-	if idx == -1 {
+	if len(data) < 5 {
 		return data
 	}
 	var prefix []byte
 	switch s {
+	case infoLog:
+		prefix = []byte("\033[38;5;33m") // blue
 	case warningLog:
-		prefix = []byte("\033[0;31;49m") // red
+		prefix = []byte("\033[38;5;214m") // orange
 	case errorLog, fatalLog:
-		prefix = []byte("\033[1;31;49m") // bold & red
+		prefix = []byte("\033[38;5;160m") // red
 	default:
 		return data
 	}
-	prefix = append(prefix, data[:idx+1]...)
+	prefix = append(prefix, data[:5]...)
+	idx := bytes.Index(data, []byte("]"))
+	if idx != -1 {
+		prefix = append(prefix, []byte("\033[38;5;246m")...) // gray for time, file & line
+		prefix = append(prefix, data[5:idx+1]...)            // time, file & line
+		prefix = append(prefix, []byte("\033[0m")...)
+		return append(prefix, data[idx+1:]...)
+	}
 	prefix = append(prefix, []byte("\033[0m")...)
-	return append(prefix, data[idx+1:]...)
+	return append(prefix, data[5:]...)
 }
 
 // checkForColorTerm attempts to verify that stderr is a character
