@@ -68,32 +68,37 @@ type storeStats struct {
 }
 
 // A rangeScanner iterates over ranges at a measured pace in order to
-// complete approximately one full scan per interval. Each range is
-// tested for inclusion in a sequence of prioritized range queues.
+// complete approximately one full scan per target interval in a large
+// store (in small stores it may complete faster than the target
+// interval).  Each range is tested for inclusion in a sequence of
+// prioritized range queues.
 type rangeScanner struct {
-	interval time.Duration  // Duration interval for scan loop
-	iter     rangeIterator  // Iterator to implement scan of ranges
-	queues   []rangeQueue   // Range queues managed by this scanner
-	removed  chan *Range    // Ranges to remove from queues
-	stats    unsafe.Pointer // Latest store stats object; updated atomically
-	scanFn   func()         // Function called at each complete scan iteration
+	targetInterval time.Duration  // Target duration interval for scan loop
+	maxIdleTime    time.Duration  // Max idle time for scan loop
+	iter           rangeIterator  // Iterator to implement scan of ranges
+	queues         []rangeQueue   // Range queues managed by this scanner
+	removed        chan *Range    // Ranges to remove from queues
+	stats          unsafe.Pointer // Latest store stats object; updated atomically
+	scanFn         func()         // Function called at each complete scan iteration
 	// Count of times through the scanning loop but locked by the completedScan
 	// mutex.
 	completedScan *sync.Cond
 	count         int64
 }
 
-// newRangeScanner creates a new range scanner with the provided loop interval,
+// newRangeScanner creates a new range scanner with the provided loop intervals,
 // range iterator, and range queues.  If scanFn is not nil, after a complete
 // loop that function will be called.
-func newRangeScanner(interval time.Duration, iter rangeIterator, scanFn func()) *rangeScanner {
+func newRangeScanner(targetInterval, maxIdleTime time.Duration, iter rangeIterator,
+	scanFn func()) *rangeScanner {
 	return &rangeScanner{
-		interval:      interval,
-		iter:          iter,
-		removed:       make(chan *Range, 10),
-		stats:         unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
-		scanFn:        scanFn,
-		completedScan: sync.NewCond(&sync.Mutex{}),
+		targetInterval: targetInterval,
+		maxIdleTime:    maxIdleTime,
+		iter:           iter,
+		removed:        make(chan *Range, 10),
+		stats:          unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
+		scanFn:         scanFn,
+		completedScan:  sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -150,7 +155,7 @@ func (rs *rangeScanner) WaitForScanCompletion() int64 {
 // the scan.
 func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 	elapsed := now.Sub(start)
-	remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
+	remainingNanos := rs.targetInterval.Nanoseconds() - elapsed.Nanoseconds()
 	if remainingNanos < 0 {
 		remainingNanos = 0
 	}
@@ -159,6 +164,9 @@ func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 		count = 1
 	}
 	interval := time.Duration(remainingNanos / int64(count))
+	if rs.maxIdleTime > 0 && interval > rs.maxIdleTime {
+		interval = rs.maxIdleTime
+	}
 	return interval
 }
 

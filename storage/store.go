@@ -261,6 +261,11 @@ type StoreContext struct {
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
 
+	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
+	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
+	// stores.
+	ScanMaxIdleTime time.Duration
+
 	// EventFeed is a feed to which this store will publish events.
 	EventFeed *util.Feed
 }
@@ -307,7 +312,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	}
 
 	// Add range scanner and configure with queues.
-	s.scanner = newRangeScanner(ctx.ScanInterval, newStoreRangeIterator(s), s.updateStoreStatus)
+	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeIterator(s),
+		s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
 	s._splitQueue = newSplitQueue(s.ctx.DB, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)

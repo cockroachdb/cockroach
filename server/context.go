@@ -40,6 +40,7 @@ const (
 	defaultGossipInterval   = 2 * time.Second
 	defaultCacheSize        = 1 << 30 // GB
 	defaultScanInterval     = 10 * time.Minute
+	defaultScanMaxIdleTime  = 5 * time.Second
 	defaultMetricsFrequency = 10 * time.Second
 )
 
@@ -111,6 +112,11 @@ type Context struct {
 	// visited approximately once by the range scanner.
 	ScanInterval time.Duration
 
+	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
+	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
+	// stores.
+	ScanMaxIdleTime time.Duration
+
 	// MetricsFrequency determines the frequency at which the server should
 	// record internal metrics.
 	MetricsFrequency time.Duration
@@ -124,6 +130,7 @@ func NewContext() *Context {
 		GossipInterval:   defaultGossipInterval,
 		CacheSize:        defaultCacheSize,
 		ScanInterval:     defaultScanInterval,
+		ScanMaxIdleTime:  defaultScanMaxIdleTime,
 		MetricsFrequency: defaultMetricsFrequency,
 	}
 	// Initializes base context defaults.
