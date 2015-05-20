@@ -265,18 +265,19 @@ func (c *Client) heartbeat() error {
 				remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
 				c.offset.Offset = remoteTimeNow - receiveTime
 			}
+			offset := c.offset
 			c.mu.Unlock()
-			c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
+			c.remoteClocks.UpdateOffset(c.addr.String(), offset)
 		}
 		return call.Error
 	case <-time.After(heartbeatInterval * 2):
-		// Allowed twice gossip interval.
+		// Allowed twice heartbeat interval.
 		c.mu.Lock()
 		c.healthy = false
 		c.offset = proto.InfiniteOffset
-		c.offset.MeasuredAt = c.clock.PhysicalNow()
+		offset := c.offset
 		c.mu.Unlock()
-		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
+		c.remoteClocks.UpdateOffset(c.addr.String(), offset)
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 	case <-c.Closed:
 		return util.Errorf("client is closed")

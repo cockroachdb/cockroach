@@ -67,17 +67,17 @@ func TestUpdateOffset(t *testing.T) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
-	// InfiniteOffset, shouldn't update because it has larger error.
+	// InfiniteOffset, shouldn't update...ever.
 	monitor.UpdateOffset("addr", proto.InfiniteOffset)
 	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
-	// LastMonitoredAt moved up, so InfiniteOffset can be added now.
+	// LastMonitoredAt moved up, InfiniteOffset should still not update.
 	monitor.lastMonitoredAt = 10
 	monitor.UpdateOffset("addr", proto.InfiniteOffset)
-	if o := monitor.offsets["addr"]; !o.Equal(proto.InfiniteOffset) {
-		t.Errorf("expected offset %v, instead %v", proto.InfiniteOffset, o)
+	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
+		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 }
 

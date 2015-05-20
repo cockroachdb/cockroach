@@ -182,8 +182,8 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 
 	// Ensure the general offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
-	if o := context.RemoteClocks.offsets[c.addr.String()]; !o.Equal(proto.InfiniteOffset) {
-		t.Errorf("expected offset %v, actual %v", proto.InfiniteOffset, o)
+	if o, ok := context.RemoteClocks.offsets[c.addr.String()]; ok {
+		t.Errorf("expected offset to not exist, but found %v", o)
 	}
 	context.RemoteClocks.mu.Unlock()
 }

@@ -127,20 +127,25 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 	if r == nil {
 		return
 	}
+	if offset.Equal(proto.InfiniteOffset) {
+		return
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	oldOffset, ok := r.offsets[addr]
 
-	if !ok {
+	if oldOffset, ok := r.offsets[addr]; !ok {
 		r.offsets[addr] = offset
 	} else if oldOffset.MeasuredAt < r.lastMonitoredAt {
 		// No matter what offset is, we weren't going to use oldOffset again,
 		// because it was measured before the last cluster offset calculation.
 		r.offsets[addr] = offset
-	} else if oldOffset.MeasuredAt >= r.lastMonitoredAt &&
-		!offset.Equal(proto.InfiniteOffset) &&
-		offset.Uncertainty < oldOffset.Uncertainty {
+	} else if offset.Uncertainty < oldOffset.Uncertainty {
 		r.offsets[addr] = offset
+	}
+
+	if log.V(1) {
+		log.Infof("update offset: %s %v", addr, r.offsets[addr])
 	}
 }
 
