@@ -83,7 +83,7 @@ func TestInitEngine(t *testing.T) {
 	}
 	for _, spec := range testCases {
 		ctx := NewContext()
-		ctx.Stores, ctx.GossipBootstrap = spec.key, "self://"
+		ctx.Stores, ctx.GossipBootstrap = spec.key, "self="
 		err := ctx.Init("start")
 		engines := ctx.Engines
 		if err == nil {
@@ -115,7 +115,7 @@ func TestInitEngines(t *testing.T) {
 
 	ctx := NewContext()
 	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
-	ctx.GossipBootstrap = "self://"
+	ctx.GossipBootstrap = "self="
 	expEngines := []struct {
 		attrs proto.Attributes
 		isMem bool
