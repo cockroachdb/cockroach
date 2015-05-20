@@ -23,19 +23,19 @@ option go_package = "proto";
 import "gogoproto/gogo.proto";
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
-// remote server. Error is the maximum error in the reading of this offset, so
-// that the real offset should be in the interval [Offset - Error, Offset
-// + Error]. If the last heartbeat timed out, Offset = InfiniteOffset.
-//
-// Offset and error are measured using the remote clock reading technique
-// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+// remote server. Uncertainty is the maximum error in the reading of this
+// offset, so that the real offset should be in the interval
+// [Offset - Uncertainty, Offset + Uncertainty]. If the last heartbeat timed
+// out, Offset = InfiniteOffset. Offset and Uncertainty are measured using the
+// remote clock reading technique described in
+// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 message RemoteOffset {
   option (gogoproto.goproto_stringer) = false;
 
   // The estimated offset from the remote server, in nanoseconds.
   optional int64 offset = 1 [(gogoproto.nullable) = false];
   // The maximum error of the measured offset, in nanoseconds.
-  optional int64 error = 2 [(gogoproto.nullable) = false];
+  optional int64 uncertainty = 2 [(gogoproto.nullable) = false];
   // Measurement time, in nanoseconds from unix epoch.
   optional int64 measured_at = 3 [(gogoproto.nullable) = false];
 }

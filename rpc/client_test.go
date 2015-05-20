@@ -127,7 +127,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedOffset := proto.RemoteOffset{Offset: 5, Error: 5, MeasuredAt: 10}
+	expectedOffset := proto.RemoteOffset{Offset: 5, Uncertainty: 5, MeasuredAt: 10}
 	if o := c.RemoteOffset(); !o.Equal(expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}

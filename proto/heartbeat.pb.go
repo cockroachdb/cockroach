@@ -14,17 +14,17 @@ var _ = proto1.Marshal
 var _ = math.Inf
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
-// remote server. Error is the maximum error in the reading of this offset, so
-// that the real offset should be in the interval [Offset - Error, Offset
-// + Error]. If the last heartbeat timed out, Offset = InfiniteOffset.
-//
-// Offset and error are measured using the remote clock reading technique
-// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+// remote server. Uncertainty is the maximum error in the reading of this
+// offset, so that the real offset should be in the interval
+// [Offset - Uncertainty, Offset + Uncertainty]. If the last heartbeat timed
+// out, Offset = InfiniteOffset. Offset and Uncertainty are measured using the
+// remote clock reading technique described in
+// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 type RemoteOffset struct {
 	// The estimated offset from the remote server, in nanoseconds.
 	Offset int64 `protobuf:"varint,1,opt,name=offset" json:"offset"`
 	// The maximum error of the measured offset, in nanoseconds.
-	Error int64 `protobuf:"varint,2,opt,name=error" json:"error"`
+	Uncertainty int64 `protobuf:"varint,2,opt,name=uncertainty" json:"uncertainty"`
 	// Measurement time, in nanoseconds from unix epoch.
 	MeasuredAt       int64  `protobuf:"varint,3,opt,name=measured_at" json:"measured_at"`
 	XXX_unrecognized []byte `json:"-"`
@@ -40,9 +40,9 @@ func (m *RemoteOffset) GetOffset() int64 {
 	return 0
 }
 
-func (m *RemoteOffset) GetError() int64 {
+func (m *RemoteOffset) GetUncertainty() int64 {
 	if m != nil {
-		return m.Error
+		return m.Uncertainty
 	}
 	return 0
 }

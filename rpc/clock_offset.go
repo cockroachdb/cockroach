@@ -139,7 +139,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 		r.offsets[addr] = offset
 	} else if oldOffset.MeasuredAt >= r.lastMonitoredAt &&
 		!offset.Equal(proto.InfiniteOffset) &&
-		offset.Error < oldOffset.Error {
+		offset.Uncertainty < oldOffset.Uncertainty {
 		r.offsets[addr] = offset
 	}
 }
@@ -295,11 +295,11 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 		}
 
 		lowpoint := endpoint{
-			offset:  o.Offset - o.Error - r.lClock.MaxOffset().Nanoseconds(),
+			offset:  o.Offset - o.Uncertainty - r.lClock.MaxOffset().Nanoseconds(),
 			endType: -1,
 		}
 		highpoint := endpoint{
-			offset:  o.Offset + o.Error + r.lClock.MaxOffset().Nanoseconds(),
+			offset:  o.Offset + o.Uncertainty + r.lClock.MaxOffset().Nanoseconds(),
 			endType: +1,
 		}
 		endpoints = append(endpoints, lowpoint, highpoint)

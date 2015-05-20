@@ -261,7 +261,7 @@ func (c *Client) heartbeat() error {
 				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 				// However, we assume that drift and min message delay are 0, for
 				// now.
-				c.offset.Error = (receiveTime - sendTime) / 2
+				c.offset.Uncertainty = (receiveTime - sendTime) / 2
 				remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
 				c.offset.Offset = remoteTimeNow - receiveTime
 			}
