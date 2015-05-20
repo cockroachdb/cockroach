@@ -292,8 +292,8 @@ var AdminViews;
 })(AdminViews || (AdminViews = {}));
 // source: app.ts
 /// <reference path="typings/mithriljs/mithril.d.ts" />
-/// <reference path="controllers/rest_explorer.ts" />
-/// <reference path="controllers/monitor.ts" />
+/// <reference path="pages/rest_explorer.ts" />
+/// <reference path="pages/monitor.ts" />
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/rest-explorer", {
     "/rest-explorer": AdminViews.RestExplorer.Page,

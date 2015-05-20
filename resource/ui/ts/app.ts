@@ -1,7 +1,7 @@
 // source: app.ts
 /// <reference path="typings/mithriljs/mithril.d.ts" />
-/// <reference path="controllers/rest_explorer.ts" />
-/// <reference path="controllers/monitor.ts" />
+/// <reference path="pages/rest_explorer.ts" />
+/// <reference path="pages/monitor.ts" />
 
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Bram Gruneir (bramgruneir@gmail.com)
