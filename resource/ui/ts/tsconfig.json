@@ -14,7 +14,7 @@
     "files": [
         "./header.ts",
         "./app.ts",
-        "./controllers/monitor.ts",
-        "./controllers/rest_explorer.ts"
+        "./pages/monitor.ts",
+        "./pages/rest_explorer.ts"
     ]
 }
