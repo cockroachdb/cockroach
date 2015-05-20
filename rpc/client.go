@@ -124,7 +124,7 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		retryOpts = *opts
 	}
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
-	retryOpts.Stopper = context.stopper
+	retryOpts.Stopper = context.Stopper
 
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)

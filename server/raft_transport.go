@@ -20,6 +20,7 @@ package server
 
 import (
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -30,8 +31,9 @@ import (
 )
 
 const (
-	raftServiceName = "MultiRaft"
-	raftMessageName = raftServiceName + ".RaftMessage"
+	raftServiceName    = "MultiRaft"
+	raftMessageName    = raftServiceName + ".RaftMessage"
+	raftMessageTimeout = time.Second
 )
 
 // rpcTransport handles the rpc messages for multiraft.
@@ -116,28 +118,42 @@ func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
 		return err
 	}
 
-	client := rpc.NewClient(addr, nil, t.rpcContext)
-	select {
-	case <-client.Ready:
-	case <-client.Closed:
-		return util.Errorf("raft client failed to connect")
-	}
+	// NewClient can block, so fire-and-forget from here on.
+	// TODO(tschottdorf): An unbounded number of goroutines may be launched
+	// here. We should put a closer for each goroutine in a list and limit
+	// the number of concurrent requests so that the oldest request gets
+	// killed when a threshold is reached.
+	go func() {
+		deadline := time.After(raftMessageTimeout)
+		client := rpc.NewClient(addr, nil, t.rpcContext)
+		select {
+		case <-client.Closed:
+			log.Errorf("raft client failed to connect")
+			return
+		case <-deadline:
+			log.Errorf("call timed out after %s", raftMessageTimeout)
+			return
+		case <-client.Ready:
+		}
 
-	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
-	select {
-	case <-call.Done:
-		// If the call failed synchronously, report an error.
-		return call.Error
-	default:
-		// Otherwise, fire-and-forget.
-		go func() {
-			<-call.Done
-			if call.Error != nil {
-				log.Errorf("raft message failed: %s", call.Error)
-			}
-		}()
-		return nil
-	}
+		// The client may not yet have connected, but we don't care.
+		call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
+		select {
+		case <-t.rpcContext.Stopper.ShouldStop():
+			return
+		case <-client.Closed:
+			log.Errorf("raft client failed to connect")
+			return
+		case <-deadline:
+			log.Errorf("call timed out after %s", raftMessageTimeout)
+			return
+		case <-call.Done:
+		}
+		if call.Error != nil {
+			log.Errorf("raft message failed: %s", call.Error)
+		}
+	}()
+	return nil
 }
 
 // Close shuts down an rpcTransport.
