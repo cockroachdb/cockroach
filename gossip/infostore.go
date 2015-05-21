@@ -69,7 +69,7 @@ func monotonicUnixNano() int64 {
 	defer monoTimeMu.Unlock()
 
 	now := time.Now().UnixNano()
-	if now == lastTime {
+	if now <= lastTime {
 		now = lastTime + 1
 	}
 	lastTime = now
