@@ -406,7 +406,9 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
 
 	// Atomically update the descriptor and lease.
-	r.SetDesc(&desc)
+	if err := r.SetDesc(&desc); err != nil {
+		return err
+	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 	return nil
 }

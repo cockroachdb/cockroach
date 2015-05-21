@@ -179,6 +179,7 @@ type rangeManager interface {
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
 	RemoveRange(rng *Range) error
 	SplitRange(origRng, newRng *Range) error
+	ProcessRangeDescriptorUpdate(rng *Range) error
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -219,7 +220,8 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	r.SetDesc(desc)
+	// Do not call SetDesc to avoid calling ProcessRangeDescriptorUpdate().
+	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 
 	lastIndex, err := r.loadLastIndex()
 	if err != nil {
@@ -420,11 +422,21 @@ func (r *Range) Desc() *proto.RangeDescriptor {
 	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
 }
 
-// SetDesc atomically sets the range's descriptor. This method should
-// be called in the context of having metaLock held, as is the case
-// for merging, splitting and updating the replica set.
-func (r *Range) SetDesc(desc *proto.RangeDescriptor) {
+// SetDesc atomically sets the range's descriptor. This method calls
+// ProcessRangeDescriptorUpdate() to make the range manager handle the
+// descriptor update. Note that ProcessRangeDescriptorUpdate()
+// acquires the metaLock.
+//
+// This method should be called in the context of having metaLock held,
+// as is the case for merging, splitting and updating the replica set.
+// TODO(bdarnell): Revisit the metaLock.
+func (r *Range) SetDesc(desc *proto.RangeDescriptor) error {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
+	if r.rm == nil {
+		// r.rm is null in some tests.
+		return nil
+	}
+	return r.rm.ProcessRangeDescriptorUpdate(r)
 }
 
 // GetReplica returns the replica for this range from the range descriptor.

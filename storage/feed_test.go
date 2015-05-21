@@ -94,7 +94,9 @@ func TestStoreEventFeed(t *testing.T) {
 			},
 		},
 	}
-	rng1.SetDesc(desc1)
+	if err := rng1.SetDesc(desc1); err != nil {
+		t.Fatal(err)
+	}
 	rng2 := &Range{
 		stats: &rangeStats{
 			raftID: desc2.RaftID,
@@ -105,7 +107,9 @@ func TestStoreEventFeed(t *testing.T) {
 			},
 		},
 	}
-	rng2.SetDesc(desc2)
+	if err := rng2.SetDesc(desc2); err != nil {
+		t.Fatal(err)
+	}
 	diffStats := &proto.MVCCStats{
 		IntentBytes: 30,
 		IntentAge:   20,

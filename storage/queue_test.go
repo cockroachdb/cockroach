@@ -97,9 +97,13 @@ func TestQueuePriorityQueue(t *testing.T) {
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r1 := &Range{}
-	r1.SetDesc(&proto.RangeDescriptor{RaftID: 1})
+	if err := r1.SetDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+		t.Fatal(err)
+	}
 	r2 := &Range{}
-	r2.SetDesc(&proto.RangeDescriptor{RaftID: 2})
+	if err := r2.SetDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+		t.Fatal(err)
+	}
 	shouldAddMap := map[*Range]bool{
 		r1: true,
 		r2: true,
@@ -179,9 +183,13 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r1 := &Range{}
-	r1.SetDesc(&proto.RangeDescriptor{RaftID: 1})
+	if err := r1.SetDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+		t.Fatal(err)
+	}
 	r2 := &Range{}
-	r2.SetDesc(&proto.RangeDescriptor{RaftID: 2})
+	if err := r2.SetDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+		t.Fatal(err)
+	}
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 			shouldQueue = true
@@ -222,7 +230,9 @@ func TestBaseQueueProcess(t *testing.T) {
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r := &Range{}
-	r.SetDesc(&proto.RangeDescriptor{RaftID: 1})
+	if err := r.SetDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+		t.Fatal(err)
+	}
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 			shouldQueue = true

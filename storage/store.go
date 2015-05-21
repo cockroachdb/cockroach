@@ -224,9 +224,10 @@ type Store struct {
 	nodeDesc       *proto.NodeDescriptor
 	initComplete   sync.WaitGroup // Signaled by async init tasks
 
-	mu          sync.RWMutex     // Protects variables below...
-	ranges      map[int64]*Range // Map of ranges by Raft ID
-	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
+	mu           sync.RWMutex     // Protects variables below...
+	ranges       map[int64]*Range // Map of ranges by Raft ID
+	rangesByKey  RangeSlice       // Sorted slice of ranges by StartKey
+	uninitRanges map[int64]*Range // Map of uninitialized ranges by Raft ID
 }
 
 var _ multiraft.Storage = &Store{}
@@ -304,11 +305,12 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	}
 
 	s := &Store{
-		ctx:        ctx,
-		engine:     eng,
-		_allocator: newAllocator(ctx.Gossip),
-		ranges:     map[int64]*Range{},
-		nodeDesc:   nodeDesc,
+		ctx:          ctx,
+		engine:       eng,
+		_allocator:   newAllocator(ctx.Gossip),
+		ranges:       map[int64]*Range{},
+		uninitRanges: map[int64]*Range{},
+		nodeDesc:     nodeDesc,
 	}
 
 	// Add range scanner and configure with queues.
@@ -925,7 +927,9 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	// the new range.
 	copy := *origRng.Desc()
 	copy.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
-	origRng.SetDesc(&copy)
+	if err := origRng.SetDesc(&copy); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err := s.addRangeInternal(newRng, true)
@@ -965,7 +969,9 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	// Update the end key of the subsuming range.
 	copy := *subsumingRng.Desc()
 	copy.EndKey = updatedEndKey
-	subsumingRng.SetDesc(&copy)
+	if err := subsumingRng.SetDesc(&copy); err != nil {
+		return err
+	}
 
 	s.feed.mergeRange(subsumingRng, subsumedRng)
 	return nil
@@ -990,16 +996,28 @@ func (s *Store) AddRange(rng *Range) error {
 // presupposes the store's lock is held. Returns a rangeAlreadyExists error if
 // a range with the same Raft ID has already been added to this store.
 func (s *Store) addRangeInternal(rng *Range, resort bool) error {
+	if !rng.isInitialized() {
+		return util.Errorf("attempted to add uninitialized range %s", rng)
+	}
+
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
-	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {
-		return &rangeAlreadyExists{exRng}
+	if err := s.addRangeToRangeMap(rng); err != nil {
+		return err
 	}
-	s.ranges[rng.Desc().RaftID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	if resort {
 		sort.Sort(s.rangesByKey)
 	}
+	return nil
+}
+
+// addRangeToRangeMap adds the range to the ranges map.
+func (s *Store) addRangeToRangeMap(rng *Range) error {
+	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {
+		return &rangeAlreadyExists{exRng}
+	}
+	s.ranges[rng.Desc().RaftID] = rng
 	return nil
 }
 
@@ -1027,6 +1045,28 @@ func (s *Store) RemoveRange(rng *Range) error {
 
 	s.scanner.RemoveRange(rng)
 
+	return nil
+}
+
+// ProcessRangeDescriptorUpdate is called whenever a range's
+// descriptor is updated. Currently, it adds a range to the rangesByS
+// slice if it has not yet been added.
+func (s *Store) ProcessRangeDescriptorUpdate(rng *Range) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !rng.isInitialized() {
+		return util.Errorf("attempted to process uninitialized range %s", rng)
+	}
+
+	if _, ok := s.uninitRanges[rng.Desc().RaftID]; !ok {
+		// Do nothing if the range has already been initialized.
+		return nil
+	}
+	delete(s.uninitRanges, rng.Desc().RaftID)
+
+	s.rangesByKey = append(s.rangesByKey, rng)
+	sort.Sort(s.rangesByKey)
 	return nil
 }
 
@@ -1365,10 +1405,13 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 		if err != nil {
 			panic(err) // TODO(bdarnell)
 		}
-		err = s.addRangeInternal(r, true)
-		if err != nil {
+		// Add the range to range map, but not rangesByKey since
+		// the range's start key is unknown. The range will be
+		// added to rangesByKey later when a snapshot is applied.
+		if err = s.addRangeToRangeMap(r); err != nil {
 			panic(err) // TODO(bdarnell)
 		}
+		s.uninitRanges[r.Desc().RaftID] = r
 	}
 	return r
 }
