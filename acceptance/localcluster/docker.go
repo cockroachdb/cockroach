@@ -303,3 +303,35 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 		Port: port,
 	}
 }
+
+// GetJSON retrieves the URL specified by https://Addr(<port>)<path>
+// and unmarshals the result as JSON.
+func (c *Container) GetJSON(port, path string, v interface{}) error {
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}}
+	resp, err := client.Get(fmt.Sprintf("https://%s%s", c.Addr(port), path))
+	if err != nil {
+		if log.V(1) {
+			log.Info(err)
+		}
+		return err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		if log.V(1) {
+			log.Info(err)
+		}
+		return err
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		if log.V(1) {
+			log.Info(err)
+		}
+	}
+	return nil
+}

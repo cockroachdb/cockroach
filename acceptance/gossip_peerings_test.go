@@ -20,32 +20,20 @@
 package acceptance
 
 import (
-	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func checkGossipNodes(client *http.Client, node *localcluster.Container) int {
-	resp, err := client.Get(fmt.Sprintf("https://%s/_status/gossip", node.Addr("")))
-	if err != nil {
-		return 0
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return 0
-	}
+func checkGossipNodes(node *localcluster.Container) int {
 	var m map[string]interface{}
-	if err := json.Unmarshal(b, &m); err != nil {
+	if err := node.GetJSON("", "/_status/gossip", &m); err != nil {
 		return 0
 	}
 	count := 0
@@ -58,43 +46,34 @@ func checkGossipNodes(client *http.Client, node *localcluster.Container) int {
 	return count
 }
 
-func checkGossipPeerings(t *testing.T, l *localcluster.Cluster, attempts int) {
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}}
+func checkGossipPeerings(t *testing.T, l *localcluster.Cluster, d time.Duration) {
+	expected := len(l.Nodes) * len(l.Nodes)
+	log.Infof("waiting for complete gossip network of %d peerings", expected)
 
-	log.Infof("waiting for complete gossip network of %d peerings",
-		len(l.Nodes)*len(l.Nodes))
-
-	for i := 0; i < attempts; i++ {
+	util.SucceedsWithin(t, d, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
-			return
+			return nil
 		case e := <-l.Events:
 			if log.V(1) {
 				log.Infof("%+v", e)
 			}
-			continue
+			return fmt.Errorf("event: %+v", e)
 		case <-time.After(1 * time.Second):
 			break
 		}
 		found := 0
 		for j := 0; j < len(l.Nodes); j++ {
-			found += checkGossipNodes(client, l.Nodes[j])
+			found += checkGossipNodes(l.Nodes[j])
 		}
 		fmt.Fprintf(os.Stderr, "%d ", found)
-		if found == len(l.Nodes)*len(l.Nodes) {
+		if found == expected {
 			fmt.Printf("... all nodes verified in the cluster\n")
-			return
+			return nil
 		}
-	}
-
-	fmt.Fprintf(os.Stderr, "\n")
-	t.Errorf("failed to verify all nodes in cluster\n")
+		return fmt.Errorf("found %d of %d", found, expected)
+	})
 }
 
 func TestGossipPeerings(t *testing.T) {
@@ -103,5 +82,5 @@ func TestGossipPeerings(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
-	checkGossipPeerings(t, l, 20)
+	checkGossipPeerings(t, l, 20*time.Second)
 }
