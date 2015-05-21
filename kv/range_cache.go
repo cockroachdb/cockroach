@@ -109,11 +109,11 @@ func (rmc *rangeDescriptorCache) String() string {
 func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	options lookupOptions) (*proto.RangeDescriptor, error) {
 	_, r := rmc.getCachedRangeDescriptor(key)
-	if log.V(1) {
-		log.Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
-	}
 	if r != nil {
 		return r, nil
+	}
+	if log.V(1) {
+		log.Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
 	}
 
 	rs, err := rmc.db.getRangeDescriptor(key, options)

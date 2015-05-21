@@ -408,7 +408,11 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batch
 		if args.Header().UserPriority == nil {
 			args.Header().UserPriority = batchArgs.UserPriority
 		}
-		args.Header().Txn = batchArgs.Txn
+		// Only update the individual calls' Txn from the batch if there isn't
+		// one already.
+		if args.Header().Txn == nil {
+			args.Header().Txn = batchArgs.Txn
+		}
 
 		// Create a reply from the method type and add to batch response.
 		if i >= len(batchReply.Responses) {
