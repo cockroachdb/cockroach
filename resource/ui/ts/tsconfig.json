@@ -14,7 +14,10 @@
     "files": [
         "./header.ts",
         "./app.ts",
+        "./models/timeseries.ts",
+        "./components/metrics.ts",
         "./pages/monitor.ts",
-        "./pages/rest_explorer.ts"
+        "./pages/rest_explorer.ts",
+        "./pages/graph.ts"
     ]
 }

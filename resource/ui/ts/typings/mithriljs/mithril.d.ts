@@ -147,9 +147,11 @@ declare module _mithril {
 		(): T;
 		(value: T): T;
 		then<U>(success: (value: T) => U): MithrilPromise<U>;
+		then<U>(success: (value: T) => U): MithrilPromise<U>;
 		then<U>(success: (value: T) => MithrilPromise<U>): MithrilPromise<U>;
-		then<U,V>(success: (value: T) => U, error: (value: Error) => V): MithrilPromise<U>|MithrilPromise<V>;
-		then<U,V>(success: (value: T) => MithrilPromise<U>, error: (value: Error) => V): MithrilPromise<U>|MithrilPromise<V>;
+		then<V>(success:void, error: (value: Error) => V): MithrilPromise<T>;
+		then<U,V>(success: (value: T) => U, error: (value: Error) => V): MithrilPromise<U>;
+		then<U,V>(success: (value: T) => MithrilPromise<U>, error: (value: Error) => V): MithrilPromise<U>;
 	}
 	interface MithrilXHROptions {
 		method?: string;
