@@ -218,6 +218,16 @@ func (c *Container) Unpause() error {
 	return c.client.UnpauseContainer(c.Id)
 }
 
+// Restart restarts a running container.
+// Container will be killed after 'timeout' seconds if it fails to stop.
+func (c *Container) Restart(timeoutSeconds int) error {
+	if err := c.client.RestartContainer(c.Id, timeoutSeconds); err != nil {
+		return err
+	}
+	// We need to refresh the container metadata. Ports change on restart.
+	return c.Inspect()
+}
+
 // Wait waits for a running container to exit.
 func (c *Container) Wait() error {
 	// TODO(pmattis): dockerclient does not support the "wait" method

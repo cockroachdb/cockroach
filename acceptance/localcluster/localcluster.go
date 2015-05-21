@@ -106,7 +106,7 @@ type Cluster struct {
 	vols           *Container
 	Nodes          []*Container
 	Events         chan Event
-	certsDir       string
+	CertsDir       string
 	monitorStopper chan struct{}
 }
 
@@ -217,12 +217,12 @@ func (l *Cluster) createVolumes() {
 		panic(err)
 	}
 
-	l.certsDir, err = ioutil.TempDir(os.TempDir(), "localcluster.")
+	l.CertsDir, err = ioutil.TempDir(os.TempDir(), "localcluster.")
 	if err != nil {
 		panic(err)
 	}
 
-	binds := []string{l.certsDir + ":/certs"}
+	binds := []string{l.CertsDir + ":/certs"}
 	if *cockroachImage == builderImage {
 		path, err := filepath.Abs(*cockroachBinary)
 		if err != nil {
@@ -395,9 +395,9 @@ func (l *Cluster) Stop() {
 		maybePanic(l.vols.Kill())
 		l.vols = nil
 	}
-	if l.certsDir != "" {
-		_ = os.RemoveAll(l.certsDir)
-		l.certsDir = ""
+	if l.CertsDir != "" {
+		_ = os.RemoveAll(l.CertsDir)
+		l.CertsDir = ""
 	}
 	for i, n := range l.Nodes {
 		if n != nil {
