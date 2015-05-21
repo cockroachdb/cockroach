@@ -14,10 +14,13 @@
     "files": [
         "./header.ts",
         "./app.ts",
+        "./models/node_status.ts",
+        "./models/stats.ts",
         "./models/timeseries.ts",
         "./components/metrics.ts",
+        "./pages/graph.ts",
+        "./pages/nodes.ts",
         "./pages/monitor.ts",
-        "./pages/rest_explorer.ts",
-        "./pages/graph.ts"
+        "./pages/rest_explorer.ts"
     ]
 }

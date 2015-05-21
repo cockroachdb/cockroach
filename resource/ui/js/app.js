@@ -17,12 +17,12 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Authors: Bram Gruneir (bramgruneir@gmail.com)
+// Authors: Bram Gruneir (bram.gruneir@gmail.com)
 //		    Andrew Bonventre (andybons@gmail.com)
 //		    Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
-// source: controllers/rest_explorer.ts
+// source: pages/rest_explorer.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -272,7 +272,7 @@ var AdminViews;
         })(Page = RestExplorer.Page || (RestExplorer.Page = {}));
     })(RestExplorer = AdminViews.RestExplorer || (AdminViews.RestExplorer = {}));
 })(AdminViews || (AdminViews = {}));
-// source: controllers/monitor.ts
+// source: pages/monitor.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -459,7 +459,7 @@ var Components;
         })(LineGraph = Metrics.LineGraph || (Metrics.LineGraph = {}));
     })(Metrics = Components.Metrics || (Components.Metrics = {}));
 })(Components || (Components = {}));
-// source: controllers/monitor.ts
+// source: pages/graph.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../models/timeseries.ts" />
@@ -485,14 +485,141 @@ var AdminViews;
         })(Page = Graph.Page || (Graph.Page = {}));
     })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
 })(AdminViews || (AdminViews = {}));
+// source: models/stats.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// source: models/node_status.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="stats.ts" />
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
+var Models;
+(function (Models) {
+    var NodeStatus;
+    (function (NodeStatus) {
+        var Nodes = (function () {
+            function Nodes() {
+                this._data = m.prop({});
+                this.desc = m.prop({});
+                this.statuses = m.prop({});
+            }
+            Nodes.prototype.Query = function () {
+                var _this = this;
+                var url = "/_status/nodes/";
+                return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                    .then(function (results) {
+                    results.d.forEach(function (status) {
+                        if (_this._data()[status.desc.node_id] == null) {
+                            _this._data()[status.desc.node_id] = [];
+                        }
+                        _this._data()[status.desc.node_id].push(status);
+                        _this.statuses()[status.desc.node_id] = status;
+                    });
+                    _this._pruneOldEntries();
+                    _this._updateDescriptions();
+                    return results;
+                });
+            };
+            Nodes.prototype._updateDescriptions = function () {
+                this.desc({});
+                var nodeId;
+                for (nodeId in this._data()) {
+                    this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
+                }
+            };
+            Nodes.prototype._pruneOldEntries = function () {
+                var nodeId;
+                for (nodeId in this._data()) {
+                    var status = this._data()[nodeId];
+                    if (status.length > Nodes._dataLimit) {
+                        status = status.sclice(status.length - Nodes._dataPrunedSize, status.length - 1);
+                    }
+                }
+            };
+            Nodes._dataLimit = 100000;
+            Nodes._dataPrunedSize = 90000;
+            return Nodes;
+        })();
+        NodeStatus.Nodes = Nodes;
+        function nonJsonErrors(xhr, opts) {
+            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
+        }
+    })(NodeStatus = Models.NodeStatus || (Models.NodeStatus = {}));
+})(Models || (Models = {}));
+// source: pages/nodes.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../models/node_status.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var Nodes;
+    (function (Nodes) {
+        Nodes.nodeStatuses = new Models.NodeStatus.Nodes();
+        var Controller = (function () {
+            function Controller() {
+                Nodes.nodeStatuses.Query();
+                this._interval = setInterval(function () { return Nodes.nodeStatuses.Query(); }, Controller._queryEveryMS);
+            }
+            Controller.prototype.onunload = function () {
+                clearInterval(this._interval);
+            };
+            Controller._queryEveryMS = 10000;
+            return Controller;
+        })();
+        Nodes.Controller = Controller;
+        var NodesPage;
+        (function (NodesPage) {
+            function controller() {
+                return new Controller();
+            }
+            NodesPage.controller = controller;
+            function view(ctrl) {
+                return m("div", [
+                    m("h2", "Nodes Status"),
+                    m("div", [
+                        m("h3", "Nodes"),
+                        m("ul", [
+                            Object.keys(Nodes.nodeStatuses.desc()).sort().map(function (nodeId) {
+                                var desc = Nodes.nodeStatuses.desc()[nodeId];
+                                return m("li", { key: desc.node_id }, m("a[href=/nodes/" + nodeId + "]", { config: m.route }, "ID:" + nodeId + " Address:" + desc.address.network + "-" + desc.address.address));
+                            }),
+                        ]),
+                    ])
+                ]);
+            }
+            NodesPage.view = view;
+        })(NodesPage = Nodes.NodesPage || (Nodes.NodesPage = {}));
+        var NodePage;
+        (function (NodePage) {
+            function controller() {
+                return new Controller();
+            }
+            NodePage.controller = controller;
+            function view(ctrl) {
+                var nodeId = m.route.param("node_id");
+                return m("div", [
+                    m("h2", "Node Status"),
+                    m("div", [
+                        m("h3", "Node: " + nodeId),
+                        m("p", JSON.stringify(Nodes.nodeStatuses.statuses()[nodeId]))
+                    ])
+                ]);
+            }
+            NodePage.view = view;
+        })(NodePage = Nodes.NodePage || (Nodes.NodePage = {}));
+    })(Nodes = AdminViews.Nodes || (AdminViews.Nodes = {}));
+})(AdminViews || (AdminViews = {}));
 // source: app.ts
 /// <reference path="typings/mithriljs/mithril.d.ts" />
 /// <reference path="pages/rest_explorer.ts" />
 /// <reference path="pages/monitor.ts" />
 /// <reference path="pages/graph.ts" />
+/// <reference path="pages/nodes.ts" />
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/rest-explorer", {
     "/rest-explorer": AdminViews.RestExplorer.Page,
     "/monitor": AdminViews.Monitor.Page,
     "/graph": AdminViews.Graph.Page,
+    "/node": AdminViews.Nodes.NodesPage,
+    "/nodes": AdminViews.Nodes.NodesPage,
+    "/node/:node_id": AdminViews.Nodes.NodePage,
+    "/nodes/:node_id": AdminViews.Nodes.NodePage
 });
