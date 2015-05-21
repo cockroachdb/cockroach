@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
@@ -62,43 +63,93 @@ func exists(path string) bool {
 	return true
 }
 
+func node(i int) string {
+	return fmt.Sprintf("roach%d.%s", i, domain)
+}
+
+func data(i int) string {
+	return fmt.Sprintf("/data%d", i)
+}
+
+// The various event types.
+const (
+	EventCreate     = "create"
+	EventDestroy    = "destroy"
+	EventDie        = "die"
+	EventExecCreate = "exec_create"
+	EventExecStart  = "exec_start"
+	EventExport     = "export"
+	EventKill       = "kill"
+	EventOom        = "oom"
+	EventPause      = "pause"
+	EventRestart    = "restart"
+	EventStart      = "start"
+	EventStop       = "stop"
+	EventUnpause    = "unpause"
+)
+
+// Event for a node containing a node index and the type of event.
+type Event struct {
+	NodeIndex int
+	Status    string
+}
+
 // Cluster manages a local cockroach cluster running on docker. The cluster is
 // composed of a "dns" container which automatically registers dns entries for
 // the cockroach nodes, a "volumes" container which manages the persistent
 // volumes used for certs and node data and N cockroach nodes.
 type Cluster struct {
-	client   dockerclient.Client
-	dns      *Container
-	vols     *Container
-	Nodes    []*Container
-	certsDir string
-	stopper  chan struct{}
+	client         dockerclient.Client
+	stopper        chan struct{}
+	mu             sync.Mutex // Protects the fields below
+	dns            *Container
+	vols           *Container
+	Nodes          []*Container
+	Events         chan Event
+	certsDir       string
+	monitorStopper chan struct{}
 }
 
 // Create creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
 func Create(numNodes int, stopper chan struct{}) *Cluster {
+	select {
+	case <-stopper:
+		// The stopper was already closed, exit early.
+		os.Exit(1)
+	default:
+	}
+
 	if *cockroachImage == builderImage && !exists(*cockroachBinary) {
 		log.Fatalf("\"%s\": does not exist", *cockroachBinary)
 	}
 
 	return &Cluster{
 		client:  newDockerClient(),
-		Nodes:   make([]*Container, numNodes),
 		stopper: stopper,
+		Nodes:   make([]*Container, numNodes),
 	}
 }
 
+// stopOnPanic is invoked as a deferred function in Start in order to attempt
+// to tear down the cluster if a panic occurs while starting it. If the panic
+// was initiated by the stopper being closed (which panicOnStop notices) then
+// the process is exited with a failure code.
 func (l *Cluster) stopOnPanic() {
 	if r := recover(); r != nil {
 		l.Stop()
 		if r != l {
 			panic(r)
 		}
+		os.Exit(1)
 	}
 }
 
+// panicOnStop tests whether the stopper channel has been closed and panics if
+// it has. This allows polling for whether to stop and avoids nasty locking
+// complications with trying to call Stop at arbitrary points such as in the
+// middle of creating a container.
 func (l *Cluster) panicOnStop() {
 	if l.stopper == nil {
 		panic(l)
@@ -146,7 +197,7 @@ func (l *Cluster) createVolumes() {
 
 	vols := map[string]struct{}{}
 	for i := range l.Nodes {
-		vols[l.data(i)] = struct{}{}
+		vols[data(i)] = struct{}{}
 	}
 	create := func() (*Container, error) {
 		return createContainer(l.client, dockerclient.ContainerConfig{
@@ -224,7 +275,7 @@ func (l *Cluster) createNodeCerts() {
 	log.Infof("creating node certs: ./certs")
 	var nodes []string
 	for i := range l.Nodes {
-		nodes = append(nodes, l.node(i))
+		nodes = append(nodes, node(i))
 	}
 	args := []string{"cert", "--certs=/certs", "create-node"}
 	args = append(args, nodes...)
@@ -236,7 +287,7 @@ func (l *Cluster) createNodeCerts() {
 
 func (l *Cluster) initCluster() {
 	log.Infof("initializing cluster")
-	c := l.createRoach(-1, "init", "--stores=ssd="+l.data(0))
+	c := l.createRoach(-1, "init", "--stores=ssd="+data(0))
 	defer c.mustRemove()
 	maybePanic(c.Start(nil, nil, l.vols))
 	maybePanic(c.Wait())
@@ -245,23 +296,64 @@ func (l *Cluster) initCluster() {
 func (l *Cluster) startNode(i int) *Container {
 	cmd := []string{
 		"start",
-		"--stores=ssd=" + l.data(i),
+		"--stores=ssd=" + data(i),
 		"--certs=/certs",
-		"--addr=" + l.node(i) + ":8080",
-		"--gossip=" + l.node(0) + ":8080",
+		"--addr=" + node(i) + ":8080",
+		"--gossip=" + node(0) + ":8080",
 	}
 	c := l.createRoach(i, cmd...)
 	maybePanic(c.Start(nil, l.dns, l.vols))
 	maybePanic(c.Inspect())
-	c.Name = l.node(i)
+	c.Name = node(i)
 	log.Infof("started %s: %s", c.Name, c.Addr(""))
 	return c
 }
 
-// Start starts the cluster. Returns false if the cluster did not start
-// properly.
-func (l *Cluster) Start() bool {
+func (l *Cluster) processEvent(e dockerclient.EventOrError) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if e.Error != nil {
+		l.Events <- Event{NodeIndex: -1, Status: EventDie}
+		return false
+	}
+
+	for i, n := range l.Nodes {
+		if n != nil && n.Id == e.Id {
+			l.Events <- Event{NodeIndex: i, Status: e.Status}
+			return true
+		}
+	}
+
+	// TODO(pmattis): When we add the ability to start/stop/restart nodes we'll
+	// need to keep around a map of old node container ids in order to ignore
+	// events on those containers.
+
+	// An event on any other container is unexpected. Die.
+	select {
+	case <-l.stopper:
+	default:
+		// There is a very tiny race here: the signal handler might be closing the
+		// stopper simultaneously.
+		close(l.stopper)
+	}
+	return false
+}
+
+func (l *Cluster) monitor(ch <-chan dockerclient.EventOrError) {
+	for {
+		if !l.processEvent(<-ch) {
+			break
+		}
+	}
+}
+
+// Start starts the cluster.
+func (l *Cluster) Start() {
 	defer l.stopOnPanic()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	l.runDockerSpy()
 	l.createVolumes()
@@ -269,32 +361,32 @@ func (l *Cluster) Start() bool {
 	l.createNodeCerts()
 	l.initCluster()
 
+	if l.Events != nil {
+		l.monitorStopper = make(chan struct{})
+		ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
+		if err != nil {
+			panic(err)
+		}
+		go l.monitor(ch)
+	}
+
 	for i := range l.Nodes {
 		l.Nodes[i] = l.startNode(i)
 	}
-
-	// TODO(pmattis):
-	// ch, err := l.client.MonitorEvents(nil, nil)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// go func() {
-	// 	for {
-	// 		e := <-ch
-	// 		if e.Error != nil {
-	// 			log.Println(e.Error)
-	// 			break
-	// 		}
-	// 		log.Println(e.Event)
-	// 	}
-	// }()
-
-	// Mildy tricky: we return false on failure by recovering from a panic.
-	return true
 }
 
 // Stop stops the clusters. It is safe to stop the cluster multiple times.
 func (l *Cluster) Stop() {
+	log.Infof("stopping")
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.monitorStopper != nil {
+		close(l.monitorStopper)
+		l.monitorStopper = nil
+	}
+
 	if l.dns != nil {
 		maybePanic(l.dns.Kill())
 		l.dns = nil
@@ -313,12 +405,4 @@ func (l *Cluster) Stop() {
 			l.Nodes[i] = nil
 		}
 	}
-}
-
-func (l *Cluster) node(i int) string {
-	return fmt.Sprintf("roach%d.%s", i, domain)
-}
-
-func (l *Cluster) data(i int) string {
-	return fmt.Sprintf("/data%d", i)
 }
