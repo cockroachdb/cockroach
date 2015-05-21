@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+
+	gorpc "net/rpc"
 )
 
 const (
@@ -40,11 +42,6 @@ const (
 	// corresponding instance of processQueue will shut down.
 	raftIdleTimeout = time.Minute
 )
-
-// raftMessageTimeout specifies the acceptable wait time for a single
-// message to a node to succeed.
-// It is a variable to adapt it for race testing on slow machines.
-var raftMessageTimeout = 1 * time.Second
 
 // rpcTransport handles the rpc messages for multiraft.
 type rpcTransport struct {
@@ -115,9 +112,16 @@ func (t *rpcTransport) Stop(id proto.RaftNodeID) {
 	delete(t.servers, id)
 }
 
-func (t *rpcTransport) processQueue(nodeID proto.RaftNodeID) {
+// processQueue creates a client and sends messages from its designated queue
+// via that client, exiting when the client fails or when it idles out. All
+// messages remaining in the queue at that point are lost and a new instance of
+// processQueue should be started by the next message to be sent.
+// TODO(tschottdorf) should let MultiRaft know if the node is down;
+// need a feedback mechanism for that. Potentially easiest is to arrange for
+// the next call to Send() to fail appropriately.
+func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 	t.mu.Lock()
-	ch, ok := t.queues[nodeID]
+	ch, ok := t.queues[raftNodeID]
 	t.mu.Unlock()
 	if !ok {
 		return
@@ -125,21 +129,51 @@ func (t *rpcTransport) processQueue(nodeID proto.RaftNodeID) {
 	// Clean-up when the loop below shuts down.
 	defer func() {
 		t.mu.Lock()
-		delete(t.queues, nodeID)
+		delete(t.queues, raftNodeID)
 		t.mu.Unlock()
 	}()
+
+	nodeID, _ := proto.DecodeRaftNodeID(raftNodeID)
+	addr, err := t.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		log.Errorf("could not get address for node %d: %s", nodeID, err)
+	}
+	client := rpc.NewClient(addr, nil, t.rpcContext)
+	select {
+	case <-t.rpcContext.Stopper.ShouldStop():
+		return
+	case <-client.Closed:
+		log.Warningf("raft client for node %d failed to connect", nodeID)
+		return
+	case <-time.After(raftIdleTimeout):
+		// Should never happen.
+		log.Errorf("raft client for node %d stuck connecting", nodeID)
+		return
+	case <-client.Ready:
+	}
+
+	done := make(chan *gorpc.Call, cap(ch))
 	var req *multiraft.RaftMessageRequest
 	protoReq := &proto.RaftMessageRequest{}
+	protoResp := &proto.RaftMessageResponse{}
 	for {
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
 			return
 		case <-time.After(raftIdleTimeout):
 			return
+		case <-client.Closed:
+			log.Warningf("raft client for node %d closed", nodeID)
+			return
+		case call := <-done:
+			if call.Error != nil {
+				log.Errorf("raft message to node %d failed: %s", nodeID, call.Error)
+			}
+			continue
 		case req = <-ch:
 		}
 		if req == nil {
-			continue
+			return
 		}
 
 		// Convert to proto format.
@@ -148,47 +182,14 @@ func (t *rpcTransport) processQueue(nodeID proto.RaftNodeID) {
 		var err error
 		if protoReq.Msg, err = req.Message.Marshal(); err != nil {
 			log.Errorf("could not marshal message: %s", err)
+			continue
 		}
 
-		nodeID, _ := proto.DecodeRaftNodeID(proto.RaftNodeID(req.Message.To))
-		addr, err := t.gossip.GetNodeIDAddress(nodeID)
-		if err != nil {
-			log.Errorf("could not get address for node %d: %s", nodeID, err)
-		}
-
-		deadline := time.After(raftMessageTimeout)
-		client := rpc.NewClient(addr, nil, t.rpcContext)
-		// TODO(tschottdorf) should let MultiRaft know that the node is gone;
-		// need a feedback mechanism for that.
-		// Potentially easiest is to arrange for the next call to Send() to
-		// fail appropriately.
-		select {
-		case <-t.rpcContext.Stopper.ShouldStop():
+		if !client.IsHealthy() {
+			log.Warningf("raft client for node %d unhealthy", nodeID)
 			return
-		case <-client.Closed:
-			log.Errorf("raft client failed to connect")
-			continue
-		case <-deadline:
-			log.Errorf("call timed out after %s", raftMessageTimeout)
-			continue
-		case <-client.Ready:
 		}
-
-		call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
-		select {
-		case <-t.rpcContext.Stopper.ShouldStop():
-			return
-		case <-client.Closed:
-			log.Errorf("raft client failed to connect")
-			continue
-		case <-deadline:
-			log.Errorf("call timed out after %s", raftMessageTimeout)
-			continue
-		case <-call.Done:
-		}
-		if call.Error != nil {
-			log.Errorf("raft message failed: %s", call.Error)
-		}
+		client.Go(raftMessageName, protoReq, protoResp, done)
 	}
 }
 
