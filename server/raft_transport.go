@@ -20,6 +20,7 @@ package server
 
 import (
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -27,11 +28,19 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+
+	gorpc "net/rpc"
 )
 
 const (
 	raftServiceName = "MultiRaft"
 	raftMessageName = raftServiceName + ".RaftMessage"
+	// Outgoing messages are queued on a per-node basis on a channel of
+	// this size.
+	raftSendBufferSize = 500
+	// When no message has been sent to a Node for that duration, the
+	// corresponding instance of processQueue will shut down.
+	raftIdleTimeout = time.Minute
 )
 
 // rpcTransport handles the rpc messages for multiraft.
@@ -41,6 +50,7 @@ type rpcTransport struct {
 	rpcContext *rpc.Context
 	mu         sync.Mutex
 	servers    map[proto.RaftNodeID]multiraft.ServerInterface
+	queues     map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
@@ -51,6 +61,7 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
 		servers:    make(map[proto.RaftNodeID]multiraft.ServerInterface),
+		queues:     make(map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest),
 	}
 
 	err := t.rpcServer.RegisterName(raftServiceName, (*transportRPCServer)(t))
@@ -101,43 +112,105 @@ func (t *rpcTransport) Stop(id proto.RaftNodeID) {
 	delete(t.servers, id)
 }
 
-// Send a message to the recipient specified in the request.
-func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
-	// Convert internal to proto formats.
-	protoReq := &proto.RaftMessageRequest{GroupID: req.GroupID}
-	var err error
-	if protoReq.Msg, err = req.Message.Marshal(); err != nil {
-		return err
+// processQueue creates a client and sends messages from its designated queue
+// via that client, exiting when the client fails or when it idles out. All
+// messages remaining in the queue at that point are lost and a new instance of
+// processQueue should be started by the next message to be sent.
+// TODO(tschottdorf) should let MultiRaft know if the node is down;
+// need a feedback mechanism for that. Potentially easiest is to arrange for
+// the next call to Send() to fail appropriately.
+func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
+	t.mu.Lock()
+	ch, ok := t.queues[raftNodeID]
+	t.mu.Unlock()
+	if !ok {
+		return
 	}
+	// Clean-up when the loop below shuts down.
+	defer func() {
+		t.mu.Lock()
+		delete(t.queues, raftNodeID)
+		t.mu.Unlock()
+	}()
 
-	nodeID, _ := proto.DecodeRaftNodeID(proto.RaftNodeID(req.Message.To))
+	nodeID, _ := proto.DecodeRaftNodeID(raftNodeID)
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
-		return err
+		log.Errorf("could not get address for node %d: %s", nodeID, err)
 	}
-
 	client := rpc.NewClient(addr, nil, t.rpcContext)
 	select {
-	case <-client.Ready:
+	case <-t.rpcContext.Stopper.ShouldStop():
+		return
 	case <-client.Closed:
-		return util.Errorf("raft client failed to connect")
+		log.Warningf("raft client for node %d failed to connect", nodeID)
+		return
+	case <-time.After(raftIdleTimeout):
+		// Should never happen.
+		log.Errorf("raft client for node %d stuck connecting", nodeID)
+		return
+	case <-client.Ready:
 	}
 
-	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
-	select {
-	case <-call.Done:
-		// If the call failed synchronously, report an error.
-		return call.Error
-	default:
-		// Otherwise, fire-and-forget.
-		go func() {
-			<-call.Done
+	done := make(chan *gorpc.Call, cap(ch))
+	var req *multiraft.RaftMessageRequest
+	protoReq := &proto.RaftMessageRequest{}
+	protoResp := &proto.RaftMessageResponse{}
+	for {
+		select {
+		case <-t.rpcContext.Stopper.ShouldStop():
+			return
+		case <-time.After(raftIdleTimeout):
+			return
+		case <-client.Closed:
+			log.Warningf("raft client for node %d closed", nodeID)
+			return
+		case call := <-done:
 			if call.Error != nil {
-				log.Errorf("raft message failed: %s", call.Error)
+				log.Errorf("raft message to node %d failed: %s", nodeID, call.Error)
 			}
-		}()
-		return nil
+			continue
+		case req = <-ch:
+		}
+		if req == nil {
+			return
+		}
+
+		// Convert to proto format.
+		protoReq.Reset()
+		protoReq.GroupID = req.GroupID
+		var err error
+		if protoReq.Msg, err = req.Message.Marshal(); err != nil {
+			log.Errorf("could not marshal message: %s", err)
+			continue
+		}
+
+		if !client.IsHealthy() {
+			log.Warningf("raft client for node %d unhealthy", nodeID)
+			return
+		}
+		client.Go(raftMessageName, protoReq, protoResp, done)
 	}
+}
+
+// Send a message to the recipient specified in the request.
+func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
+	raftNodeID := proto.RaftNodeID(req.Message.To)
+	t.mu.Lock()
+	ch, ok := t.queues[raftNodeID]
+	if !ok {
+		ch = make(chan *multiraft.RaftMessageRequest, raftSendBufferSize)
+		t.queues[raftNodeID] = ch
+		go t.processQueue(raftNodeID)
+	}
+	t.mu.Unlock()
+
+	select {
+	case ch <- req:
+	default:
+		return util.Errorf("queue for node %d is full", req.Message.To)
+	}
+	return nil
 }
 
 // Close shuts down an rpcTransport.

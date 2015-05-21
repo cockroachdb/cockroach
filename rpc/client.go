@@ -124,7 +124,7 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		retryOpts = *opts
 	}
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
-	retryOpts.Stopper = context.stopper
+	retryOpts.Stopper = context.Stopper
 
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)
@@ -139,9 +139,10 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		c.mu.Unlock()
 
 		// Ensure at least one heartbeat succeeds before exiting the
-		// retry loop.
+		// retry loop. If it fails, don't retry: The node is probably
+		// dead.
 		if err = c.heartbeat(); err != nil {
-			return util.RetryContinue, err
+			return util.RetryBreak, err
 		}
 
 		// Signal client is ready by closing Ready channel.

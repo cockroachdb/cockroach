@@ -11,7 +11,7 @@ import (
 type Context struct {
 	localClock   *hlc.Clock
 	tlsConfig    *tls.Config
-	stopper      *util.Stopper
+	Stopper      *util.Stopper
 	RemoteClocks *RemoteClockMonitor
 	DisableCache bool // Disable client cache when calling NewClient()
 }
@@ -21,7 +21,7 @@ func NewContext(clock *hlc.Clock, config *tls.Config, stopper *util.Stopper) *Co
 	return &Context{
 		localClock:   clock,
 		tlsConfig:    config,
-		stopper:      stopper,
+		Stopper:      stopper,
 		RemoteClocks: newRemoteClockMonitor(clock),
 	}
 }
@@ -32,7 +32,7 @@ func (c *Context) Copy() *Context {
 	return &Context{
 		localClock:   c.localClock,
 		tlsConfig:    c.tlsConfig,
-		stopper:      c.stopper,
+		Stopper:      c.Stopper,
 		RemoteClocks: newRemoteClockMonitor(c.localClock),
 		DisableCache: c.DisableCache,
 	}

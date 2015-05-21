@@ -43,7 +43,9 @@ func TestSendAndReceive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 
 	// Create several servers, each of which has two stores (A multiraft node ID addresses
@@ -129,7 +131,7 @@ func TestSendAndReceive(t *testing.T) {
 					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
 						nodeIDs[to], nodeIDs[from], req)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("timed out waiting for message")
 			}
 		}
