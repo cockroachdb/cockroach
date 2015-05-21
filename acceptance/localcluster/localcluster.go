@@ -335,14 +335,15 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError) bool {
 	default:
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
+		log.Errorf("stopping due to unexpected event: %+v", e)
 		close(l.stopper)
 	}
 	return false
 }
 
 func (l *Cluster) monitor(ch <-chan dockerclient.EventOrError) {
-	for {
-		if !l.processEvent(<-ch) {
+	for e := range ch {
+		if !l.processEvent(e) {
 			break
 		}
 	}
