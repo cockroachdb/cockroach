@@ -327,8 +327,18 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 }
 
-func TestEvictLeaderOnNonRetryableError(t *testing.T) {
-	for _, retryable := range []bool{true, false} {
+func TestEvictCacheOnError(t *testing.T) {
+	// if rpcError is true, the first attempt gets an RPC error, otherwise
+	// the RPC call succeeds but there is an error in the RequestHeader.
+	// Currently leader and cached range descriptor are treated equally.
+	testCases := []struct{ rpcError, retryable, shouldClearLeader, shouldClearReplica bool }{
+		{false, false, false, false}, // non-retryable replica error
+		{false, true, false, false},  // retryable replica error
+		{true, false, true, true},    // RPC error aka all nodes dead
+		{true, true, false, false},   // retryable RPC error
+	}
+
+	for i, tc := range testCases {
 		g := makeTestGossip(t)
 		leader := proto.Replica{
 			NodeID:  99,
@@ -337,16 +347,20 @@ func TestEvictLeaderOnNonRetryableError(t *testing.T) {
 		first := true
 
 		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-			if first {
-				reply := getReply()
-				reply.(proto.Response).Header().SetGoError(&proto.Error{
-					Message:   "boom",
-					Retryable: retryable,
-				})
-				first = false
-				return []interface{}{reply}, nil
+			if !first {
+				return []interface{}{getReply()}, nil
 			}
-			return []interface{}{getReply()}, nil
+			first = false
+			err := &proto.Error{
+				Message:   "boom",
+				Retryable: tc.retryable,
+			}
+			if tc.rpcError {
+				return nil, err
+			}
+			reply := getReply()
+			reply.(proto.Response).Header().SetGoError(err)
+			return []interface{}{reply}, nil
 		}
 
 		ctx := &DistSenderContext{
@@ -364,8 +378,12 @@ func TestEvictLeaderOnNonRetryableError(t *testing.T) {
 		if err := reply.GoError(); err != nil && err.Error() != "boom" {
 			t.Errorf("put encountered unexpected error: %s", err)
 		}
-		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &leader) != retryable {
-			t.Errorf("leader cache eviction: retryable=%t, but value is %v", retryable, cur)
+		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
+			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
+		}
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key)
+		if cachedDesc == nil != tc.shouldClearReplica {
+			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
 	}
 }

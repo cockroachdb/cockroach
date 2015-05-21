@@ -556,16 +556,39 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				args.Header().EndKey = desc.EndKey
 			}
 
+			// If we're still error-free so far, try to send the call.
+			var rpcErr error
 			if err == nil {
-				err = ds.sendRPC(desc, args, reply)
-				if err == nil && reply.Header().Error != nil {
-					err = reply.Header().GoError()
-				}
+				rpcErr = ds.sendRPC(desc, args, reply)
+				err = rpcErr
+			}
+
+			// If the RPC went through fine, an error (if any) is in the reply.
+			if err == nil {
+				err = reply.Header().GoError()
+			}
+
+			// For an RPC error to occur, we've must've been unable to contact
+			// any replicas. In this case, likely all nodes are down; this
+			// should really only happen if either the replica set is dead or
+			// we have an old descriptor which does not have a list of current
+			// nodes; we hope it's the latter.
+			// TODO(tschottdorf): individual rpc calls always return an
+			// rpcError, which is always retriable. Thus, rpc.Send will always
+			// return retriable errors if everything is unreachable. That seems
+			// awkward; rpcError should probably not be retriable (rpc.Send
+			// will still succeed if it manages to talk to *anyone*), and
+			// then we can clear the cache here only for retriable errors.
+			// It amounts to the same situations though.
+			if rpcErr != nil {
+				ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
+				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
 			}
 
 			if err != nil {
 				log.Warningf("failed to invoke %s: %s", call.Method(), err)
-				// If retryable, allow retry. For range not found or range
+
+				// If retriable, allow retry. For range not found or range
 				// key mismatch errors, we don't backoff on the retry,
 				// but reset the backoff loop so we can retry immediately.
 				switch err.(type) {
@@ -583,14 +606,6 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
 						return util.RetryContinue, nil
-					}
-					// For any other error, clear any cached leader: For all
-					// we know, it might be dead.
-					// TODO(tschottdorf):
-					// We check desc != nil since the error might have originated
-					// in the descriptor lookup. Might be worth refactoring.
-					if desc != nil {
-						ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
 					}
 				}
 				return util.RetryBreak, err
@@ -638,7 +653,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 		args.Header().Key = descNext.StartKey
 
 		if reply == call.Reply {
-			// This is a mult-range request, make a new reply object for
+			// This is a multi-range request, make a new reply object for
 			// subsequent iterations of the loop.
 			reply = args.CreateReply()
 		}
