@@ -265,10 +265,9 @@ func TestCorruptedClusterID(t *testing.T) {
 
 // compareNodeStatus ensures that the actual node status for the passed in
 // node is updated correctly. It checks that the Node Descriptor, StoreIDs,
-// RangeCount, StartedAt, LeaderRangeCount, ReplicatedRangeCount and
-// AvailableRangeCount are exactly correct and that the bytes and counts
-// for Live, Key and Val are at least the expected value.  And that UpdatedAt
-// has increased.
+// RangeCount, StartedAt, ReplicatedRangeCount and are exactly correct and that
+// the bytes and counts for Live, Key and Val are at least the expected value.
+// And that UpdatedAt has increased.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.NodeStatus, testNumber int) *proto.NodeStatus {
 	nodeStatusKey := engine.NodeStatusKey(int32(node.Descriptor.NodeID))
@@ -297,14 +296,8 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 	if !reflect.DeepEqual(expectedNodeStatus.Desc, nodeStatus.Desc) {
 		t.Errorf("%v: Description does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
 	}
-	if expectedNodeStatus.LeaderRangeCount != nodeStatus.LeaderRangeCount {
-		t.Errorf("%v: LeaderRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
-	}
 	if expectedNodeStatus.ReplicatedRangeCount != nodeStatus.ReplicatedRangeCount {
 		t.Errorf("%v: ReplicatedRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
-	}
-	if expectedNodeStatus.AvailableRangeCount != nodeStatus.AvailableRangeCount {
-		t.Errorf("%v: AvailableRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
 	}
 
 	// There values must >= to the older value.

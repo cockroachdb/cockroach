@@ -35,9 +35,9 @@ import (
 
 // compareStoreStatus ensures that the actual store status for the passed in
 // store is updated correctly. It checks that the Desc.StoreID, Desc.Attrs,
-// Desc.Node, Desc.Capacity.Capacity, NodeID, RangeCount, LeaderRangeCount,
-// ReplicatedRangeCount and AvailableRangeCount are exactly correct and that
-// the bytes and counts for Live, Key and Val are at least the expected value.
+// Desc.Node, Desc.Capacity.Capacity, NodeID, RangeCount, ReplicatedRangeCount
+// are exactly correct and that the bytes and counts for Live, Key and Val are
+// at least the expected value.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
 	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
@@ -72,14 +72,8 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	if expectedStoreStatus.RangeCount != storeStatus.RangeCount {
 		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
-	if expectedStoreStatus.LeaderRangeCount != storeStatus.LeaderRangeCount {
-		t.Errorf("%v: actual LeaderRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
-	}
 	if expectedStoreStatus.ReplicatedRangeCount != storeStatus.ReplicatedRangeCount {
 		t.Errorf("%v: actual ReplicatedRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
-	}
-	if expectedStoreStatus.AvailableRangeCount != storeStatus.AvailableRangeCount {
-		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
 
 	// Values should be >= to expected values.
