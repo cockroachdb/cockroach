@@ -37,13 +37,9 @@ import (
 // It uses the cluster certs dir.
 func makeDBClient(cluster *localcluster.Cluster, node int) (*client.DB, error) {
 	// We always run these tests with certs.
-	db, err := client.Open("https://root@" +
+	return client.Open("https://root@" +
 		cluster.Nodes[node].Addr("").String() +
 		"?certs=" + cluster.CertsDir)
-	if err != nil {
-		return nil, util.Errorf("failed to initialize DB client: %s", err)
-	}
-	return db, nil
 }
 
 func countRangeReplicas(client *client.DB) (int, error) {
@@ -57,71 +53,62 @@ func countRangeReplicas(client *client.DB) (int, error) {
 		if err := row.ValueProto(desc); err != nil {
 			return 0, err
 		}
-		return len(desc.Replicas), nil
-		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RaftID)
-		return len(desc.Replicas), nil
-		for i, replica := range desc.Replicas {
-			fmt.Printf("\t%d: node-id=%d store-id=%d attrs=%v\n",
-				i, replica.NodeID, replica.StoreID, replica.Attrs.Attrs)
+		if string(desc.StartKey) == "" {
+			return len(desc.Replicas), nil
 		}
 	}
-	return 0, util.Errorf("Problem!")
+	return 0, util.Errorf("first range not found")
 }
 
-func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, attempts int, done chan error) {
-	go func() {
-		// Always talk to node 0..
-		client, err := makeDBClient(cluster, 0)
+func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, attempts int) {
+	// Always talk to node 0.
+	client, err := makeDBClient(cluster, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantedReplicas := 3
+	if len(cluster.Nodes) < 3 {
+		wantedReplicas = len(cluster.Nodes)
+	}
+
+	log.Infof("waiting for first range to have %d replicas", wantedReplicas)
+
+	for i := 0; i < attempts; i++ {
+		select {
+		case <-stopper:
+			t.Fatalf("interrupted")
+			return
+		case e := <-cluster.Events:
+			if log.V(1) {
+				log.Infof("%+v", e)
+			}
+			continue
+		case <-time.After(1 * time.Second):
+			break
+		}
+
+		found, err := countRangeReplicas(client)
 		if err != nil {
-			done <- err
+			t.Fatal(err)
 			return
 		}
 
-		wantedReplicas := 3
-		if len(cluster.Nodes) < 3 {
-			wantedReplicas = len(cluster.Nodes)
+		fmt.Fprintf(os.Stderr, "%d ", found)
+		if found == wantedReplicas {
+			fmt.Printf("... correct number of replicas found\n")
+			return
 		}
+	}
 
-		log.Infof("waiting for first range to have %d replicas", wantedReplicas)
-
-		for i := 0; i < attempts; i++ {
-			found, err := countRangeReplicas(client)
-			if err != nil {
-				done <- err
-				return
-			}
-
-			fmt.Fprintf(os.Stderr, "%d ", found)
-			if found == wantedReplicas {
-				fmt.Printf("... correct number of replicas found\n")
-				done <- nil
-				return
-			}
-			time.Sleep(1 * time.Second)
-		}
-
-		fmt.Fprintf(os.Stderr, "\n")
-		done <- util.Error("failed to replicate first range")
-	}()
+	t.Errorf("failed to replicate first range")
 }
 
 func TestRangeReplication(t *testing.T) {
-	cluster := localcluster.Create(*numNodes, stopper)
-	if !cluster.Start() {
-		return
-	}
-	defer cluster.Stop()
+	l := localcluster.Create(*numNodes, stopper)
+	l.Events = make(chan localcluster.Event, 10)
+	l.Start()
+	defer l.Stop()
 
-	done := make(chan error)
-	checkRangeReplication(t, cluster, 20, done)
-
-	var err error
-	select {
-	case <-stopper:
-		return
-	case err = <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	checkRangeReplication(t, l, 20)
 }

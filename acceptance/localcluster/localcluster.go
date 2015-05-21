@@ -106,7 +106,7 @@ type Cluster struct {
 	vols           *Container
 	Nodes          []*Container
 	Events         chan Event
-	certsDir       string
+	CertsDir       string
 	monitorStopper chan struct{}
 }
 

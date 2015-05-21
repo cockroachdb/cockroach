@@ -104,9 +104,4 @@ func TestGossipPeerings(t *testing.T) {
 	defer l.Stop()
 
 	checkGossipPeerings(t, l, 20)
-
-	select {
-	case <-stopper:
-	case <-done:
-	}
 }
