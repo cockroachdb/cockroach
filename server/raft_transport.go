@@ -122,11 +122,19 @@ func (t *rpcTransport) processQueue(nodeID proto.RaftNodeID) {
 	if !ok {
 		return
 	}
+	// Clean-up when the loop below shuts down.
+	defer func() {
+		t.mu.Lock()
+		delete(t.queues, nodeID)
+		t.mu.Unlock()
+	}()
 	var req *multiraft.RaftMessageRequest
 	protoReq := &proto.RaftMessageRequest{}
 	for {
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
+			return
+		case <-time.After(raftIdleTimeout):
 			return
 		case req = <-ch:
 		}
