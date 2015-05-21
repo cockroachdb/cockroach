@@ -29,16 +29,19 @@ option (gogoproto.unmarshaler_all) = true;
 
 // StoreStatus contains the stats needed to calculate the current status of a
 // store.
-message StoreStatus {  
+message StoreStatus {
   optional StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
   optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];
   optional MVCCStats stats = 6 [(gogoproto.nullable) = false];
+  optional int32 leader_range_count = 7 [(gogoproto.nullable) = false];
+  optional int32 replicated_range_count = 8 [(gogoproto.nullable) = false];
+  optional int32 available_range_count = 9 [(gogoproto.nullable) = false];
 }
 
-// NodeStatus contains the stats needed to calculate the current status of a 
+// NodeStatus contains the stats needed to calculate the current status of a
 // node.
 message NodeStatus {
   optional NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
@@ -47,5 +50,7 @@ message NodeStatus {
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];
   optional MVCCStats stats = 6 [(gogoproto.nullable) = false];
-
+  optional int32 leader_range_count = 7 [(gogoproto.nullable) = false];
+  optional int32 replicated_range_count = 8 [(gogoproto.nullable) = false];
+  optional int32 available_range_count = 9 [(gogoproto.nullable) = false];
 }

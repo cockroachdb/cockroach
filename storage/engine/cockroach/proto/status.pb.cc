@@ -38,13 +38,16 @@ void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto() {
       "cockroach/proto/status.proto");
   GOOGLE_CHECK(file != NULL);
   StoreStatus_descriptor_ = file->message_type(0);
-  static const int StoreStatus_offsets_[6] = {
+  static const int StoreStatus_offsets_[9] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, desc_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, range_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, started_at_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, updated_at_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, stats_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, leader_range_count_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, replicated_range_count_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, available_range_count_),
   };
   StoreStatus_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -58,13 +61,16 @@ void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(StoreStatus));
   NodeStatus_descriptor_ = file->message_type(1);
-  static const int NodeStatus_offsets_[6] = {
+  static const int NodeStatus_offsets_[9] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, desc_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, store_ids_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, range_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, started_at_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, updated_at_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, stats_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, leader_range_count_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, replicated_range_count_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeStatus, available_range_count_),
   };
   NodeStatus_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -117,19 +123,24 @@ void protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto() {
     "\n\034cockroach/proto/status.proto\022\017cockroac"
     "h.proto\032\032cockroach/proto/data.proto\032\034coc"
     "kroach/proto/config.proto\032\024gogoproto/gog"
-    "o.proto\"\356\001\n\013StoreStatus\0224\n\004desc\030\001 \001(\0132 ."
+    "o.proto\"\333\002\n\013StoreStatus\0224\n\004desc\030\001 \001(\0132 ."
     "cockroach.proto.StoreDescriptorB\004\310\336\037\000\022)\n"
     "\007node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID"
     "\022\031\n\013range_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_a"
     "t\030\004 \001(\003B\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022"
     "/\n\005stats\030\006 \001(\0132\032.cockroach.proto.MVCCSta"
-    "tsB\004\310\336\037\000\"\346\001\n\nNodeStatus\0223\n\004desc\030\001 \001(\0132\037."
-    "cockroach.proto.NodeDescriptorB\004\310\336\037\000\022#\n\t"
-    "store_ids\030\002 \003(\005B\020\310\336\037\000\342\336\037\010StoreIDs\022\031\n\013ran"
-    "ge_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003"
-    "B\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stat"
-    "s\030\006 \001(\0132\032.cockroach.proto.MVCCStatsB\004\310\336\037"
-    "\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 622);
+    "tsB\004\310\336\037\000\022 \n\022leader_range_count\030\007 \001(\005B\004\310\336"
+    "\037\000\022$\n\026replicated_range_count\030\010 \001(\005B\004\310\336\037\000"
+    "\022#\n\025available_range_count\030\t \001(\005B\004\310\336\037\000\"\323\002"
+    "\n\nNodeStatus\0223\n\004desc\030\001 \001(\0132\037.cockroach.p"
+    "roto.NodeDescriptorB\004\310\336\037\000\022#\n\tstore_ids\030\002"
+    " \003(\005B\020\310\336\037\000\342\336\037\010StoreIDs\022\031\n\013range_count\030\003 "
+    "\001(\005B\004\310\336\037\000\022\030\n\nstarted_at\030\004 \001(\003B\004\310\336\037\000\022\030\n\nu"
+    "pdated_at\030\005 \001(\003B\004\310\336\037\000\022/\n\005stats\030\006 \001(\0132\032.c"
+    "ockroach.proto.MVCCStatsB\004\310\336\037\000\022 \n\022leader"
+    "_range_count\030\007 \001(\005B\004\310\336\037\000\022$\n\026replicated_r"
+    "ange_count\030\010 \001(\005B\004\310\336\037\000\022#\n\025available_rang"
+    "e_count\030\t \001(\005B\004\310\336\037\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 840);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/status.proto", &protobuf_RegisterTypes);
   StoreStatus::default_instance_ = new StoreStatus();
@@ -155,6 +166,9 @@ const int StoreStatus::kRangeCountFieldNumber;
 const int StoreStatus::kStartedAtFieldNumber;
 const int StoreStatus::kUpdatedAtFieldNumber;
 const int StoreStatus::kStatsFieldNumber;
+const int StoreStatus::kLeaderRangeCountFieldNumber;
+const int StoreStatus::kReplicatedRangeCountFieldNumber;
+const int StoreStatus::kAvailableRangeCountFieldNumber;
 #endif  // !_MSC_VER
 
 StoreStatus::StoreStatus()
@@ -183,6 +197,9 @@ void StoreStatus::SharedCtor() {
   started_at_ = GOOGLE_LONGLONG(0);
   updated_at_ = GOOGLE_LONGLONG(0);
   stats_ = NULL;
+  leader_range_count_ = 0;
+  replicated_range_count_ = 0;
+  available_range_count_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -230,8 +247,9 @@ void StoreStatus::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 63) {
+  if (_has_bits_[0 / 32] & 255) {
     ZR_(node_id_, updated_at_);
+    ZR_(leader_range_count_, replicated_range_count_);
     if (has_desc()) {
       if (desc_ != NULL) desc_->::cockroach::proto::StoreDescriptor::Clear();
     }
@@ -239,6 +257,7 @@ void StoreStatus::Clear() {
       if (stats_ != NULL) stats_->::cockroach::proto::MVCCStats::Clear();
     }
   }
+  available_range_count_ = 0;
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -338,6 +357,51 @@ bool StoreStatus::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(56)) goto parse_leader_range_count;
+        break;
+      }
+
+      // optional int32 leader_range_count = 7;
+      case 7: {
+        if (tag == 56) {
+         parse_leader_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &leader_range_count_)));
+          set_has_leader_range_count();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(64)) goto parse_replicated_range_count;
+        break;
+      }
+
+      // optional int32 replicated_range_count = 8;
+      case 8: {
+        if (tag == 64) {
+         parse_replicated_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &replicated_range_count_)));
+          set_has_replicated_range_count();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(72)) goto parse_available_range_count;
+        break;
+      }
+
+      // optional int32 available_range_count = 9;
+      case 9: {
+        if (tag == 72) {
+         parse_available_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &available_range_count_)));
+          set_has_available_range_count();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -399,6 +463,21 @@ void StoreStatus::SerializeWithCachedSizes(
       6, this->stats(), output);
   }
 
+  // optional int32 leader_range_count = 7;
+  if (has_leader_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(7, this->leader_range_count(), output);
+  }
+
+  // optional int32 replicated_range_count = 8;
+  if (has_replicated_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(8, this->replicated_range_count(), output);
+  }
+
+  // optional int32 available_range_count = 9;
+  if (has_available_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(9, this->available_range_count(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -441,6 +520,21 @@ void StoreStatus::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         6, this->stats(), target);
+  }
+
+  // optional int32 leader_range_count = 7;
+  if (has_leader_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(7, this->leader_range_count(), target);
+  }
+
+  // optional int32 replicated_range_count = 8;
+  if (has_replicated_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(8, this->replicated_range_count(), target);
+  }
+
+  // optional int32 available_range_count = 9;
+  if (has_available_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(9, this->available_range_count(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -497,6 +591,29 @@ int StoreStatus::ByteSize() const {
           this->stats());
     }
 
+    // optional int32 leader_range_count = 7;
+    if (has_leader_range_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->leader_range_count());
+    }
+
+    // optional int32 replicated_range_count = 8;
+    if (has_replicated_range_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->replicated_range_count());
+    }
+
+  }
+  if (_has_bits_[8 / 32] & (0xffu << (8 % 32))) {
+    // optional int32 available_range_count = 9;
+    if (has_available_range_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->available_range_count());
+    }
+
   }
   if (!unknown_fields().empty()) {
     total_size +=
@@ -542,6 +659,17 @@ void StoreStatus::MergeFrom(const StoreStatus& from) {
     if (from.has_stats()) {
       mutable_stats()->::cockroach::proto::MVCCStats::MergeFrom(from.stats());
     }
+    if (from.has_leader_range_count()) {
+      set_leader_range_count(from.leader_range_count());
+    }
+    if (from.has_replicated_range_count()) {
+      set_replicated_range_count(from.replicated_range_count());
+    }
+  }
+  if (from._has_bits_[8 / 32] & (0xffu << (8 % 32))) {
+    if (from.has_available_range_count()) {
+      set_available_range_count(from.available_range_count());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -571,6 +699,9 @@ void StoreStatus::Swap(StoreStatus* other) {
     std::swap(started_at_, other->started_at_);
     std::swap(updated_at_, other->updated_at_);
     std::swap(stats_, other->stats_);
+    std::swap(leader_range_count_, other->leader_range_count_);
+    std::swap(replicated_range_count_, other->replicated_range_count_);
+    std::swap(available_range_count_, other->available_range_count_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -595,6 +726,9 @@ const int NodeStatus::kRangeCountFieldNumber;
 const int NodeStatus::kStartedAtFieldNumber;
 const int NodeStatus::kUpdatedAtFieldNumber;
 const int NodeStatus::kStatsFieldNumber;
+const int NodeStatus::kLeaderRangeCountFieldNumber;
+const int NodeStatus::kReplicatedRangeCountFieldNumber;
+const int NodeStatus::kAvailableRangeCountFieldNumber;
 #endif  // !_MSC_VER
 
 NodeStatus::NodeStatus()
@@ -622,6 +756,9 @@ void NodeStatus::SharedCtor() {
   started_at_ = GOOGLE_LONGLONG(0);
   updated_at_ = GOOGLE_LONGLONG(0);
   stats_ = NULL;
+  leader_range_count_ = 0;
+  replicated_range_count_ = 0;
+  available_range_count_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -669,16 +806,17 @@ void NodeStatus::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 61) {
-    ZR_(started_at_, updated_at_);
+  if (_has_bits_[0 / 32] & 253) {
+    ZR_(started_at_, leader_range_count_);
     if (has_desc()) {
       if (desc_ != NULL) desc_->::cockroach::proto::NodeDescriptor::Clear();
     }
-    range_count_ = 0;
     if (has_stats()) {
       if (stats_ != NULL) stats_->::cockroach::proto::MVCCStats::Clear();
     }
+    replicated_range_count_ = 0;
   }
+  available_range_count_ = 0;
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -783,6 +921,51 @@ bool NodeStatus::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(56)) goto parse_leader_range_count;
+        break;
+      }
+
+      // optional int32 leader_range_count = 7;
+      case 7: {
+        if (tag == 56) {
+         parse_leader_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &leader_range_count_)));
+          set_has_leader_range_count();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(64)) goto parse_replicated_range_count;
+        break;
+      }
+
+      // optional int32 replicated_range_count = 8;
+      case 8: {
+        if (tag == 64) {
+         parse_replicated_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &replicated_range_count_)));
+          set_has_replicated_range_count();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(72)) goto parse_available_range_count;
+        break;
+      }
+
+      // optional int32 available_range_count = 9;
+      case 9: {
+        if (tag == 72) {
+         parse_available_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &available_range_count_)));
+          set_has_available_range_count();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -845,6 +1028,21 @@ void NodeStatus::SerializeWithCachedSizes(
       6, this->stats(), output);
   }
 
+  // optional int32 leader_range_count = 7;
+  if (has_leader_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(7, this->leader_range_count(), output);
+  }
+
+  // optional int32 replicated_range_count = 8;
+  if (has_replicated_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(8, this->replicated_range_count(), output);
+  }
+
+  // optional int32 available_range_count = 9;
+  if (has_available_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(9, this->available_range_count(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -888,6 +1086,21 @@ void NodeStatus::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         6, this->stats(), target);
+  }
+
+  // optional int32 leader_range_count = 7;
+  if (has_leader_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(7, this->leader_range_count(), target);
+  }
+
+  // optional int32 replicated_range_count = 8;
+  if (has_replicated_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(8, this->replicated_range_count(), target);
+  }
+
+  // optional int32 available_range_count = 9;
+  if (has_available_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(9, this->available_range_count(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -935,6 +1148,29 @@ int NodeStatus::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->stats());
+    }
+
+    // optional int32 leader_range_count = 7;
+    if (has_leader_range_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->leader_range_count());
+    }
+
+    // optional int32 replicated_range_count = 8;
+    if (has_replicated_range_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->replicated_range_count());
+    }
+
+  }
+  if (_has_bits_[8 / 32] & (0xffu << (8 % 32))) {
+    // optional int32 available_range_count = 9;
+    if (has_available_range_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->available_range_count());
     }
 
   }
@@ -990,6 +1226,17 @@ void NodeStatus::MergeFrom(const NodeStatus& from) {
     if (from.has_stats()) {
       mutable_stats()->::cockroach::proto::MVCCStats::MergeFrom(from.stats());
     }
+    if (from.has_leader_range_count()) {
+      set_leader_range_count(from.leader_range_count());
+    }
+    if (from.has_replicated_range_count()) {
+      set_replicated_range_count(from.replicated_range_count());
+    }
+  }
+  if (from._has_bits_[8 / 32] & (0xffu << (8 % 32))) {
+    if (from.has_available_range_count()) {
+      set_available_range_count(from.available_range_count());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -1019,6 +1266,9 @@ void NodeStatus::Swap(NodeStatus* other) {
     std::swap(started_at_, other->started_at_);
     std::swap(updated_at_, other->updated_at_);
     std::swap(stats_, other->stats_);
+    std::swap(leader_range_count_, other->leader_range_count_);
+    std::swap(replicated_range_count_, other->replicated_range_count_);
+    std::swap(available_range_count_, other->available_range_count_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

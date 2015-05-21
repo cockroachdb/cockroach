@@ -141,6 +141,27 @@ class StoreStatus : public ::google::protobuf::Message {
   inline ::cockroach::proto::MVCCStats* release_stats();
   inline void set_allocated_stats(::cockroach::proto::MVCCStats* stats);
 
+  // optional int32 leader_range_count = 7;
+  inline bool has_leader_range_count() const;
+  inline void clear_leader_range_count();
+  static const int kLeaderRangeCountFieldNumber = 7;
+  inline ::google::protobuf::int32 leader_range_count() const;
+  inline void set_leader_range_count(::google::protobuf::int32 value);
+
+  // optional int32 replicated_range_count = 8;
+  inline bool has_replicated_range_count() const;
+  inline void clear_replicated_range_count();
+  static const int kReplicatedRangeCountFieldNumber = 8;
+  inline ::google::protobuf::int32 replicated_range_count() const;
+  inline void set_replicated_range_count(::google::protobuf::int32 value);
+
+  // optional int32 available_range_count = 9;
+  inline bool has_available_range_count() const;
+  inline void clear_available_range_count();
+  static const int kAvailableRangeCountFieldNumber = 9;
+  inline ::google::protobuf::int32 available_range_count() const;
+  inline void set_available_range_count(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.StoreStatus)
  private:
   inline void set_has_desc();
@@ -155,6 +176,12 @@ class StoreStatus : public ::google::protobuf::Message {
   inline void clear_has_updated_at();
   inline void set_has_stats();
   inline void clear_has_stats();
+  inline void set_has_leader_range_count();
+  inline void clear_has_leader_range_count();
+  inline void set_has_replicated_range_count();
+  inline void clear_has_replicated_range_count();
+  inline void set_has_available_range_count();
+  inline void clear_has_available_range_count();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -166,6 +193,9 @@ class StoreStatus : public ::google::protobuf::Message {
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int64 updated_at_;
   ::cockroach::proto::MVCCStats* stats_;
+  ::google::protobuf::int32 leader_range_count_;
+  ::google::protobuf::int32 replicated_range_count_;
+  ::google::protobuf::int32 available_range_count_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fstatus_2eproto();
@@ -279,6 +309,27 @@ class NodeStatus : public ::google::protobuf::Message {
   inline ::cockroach::proto::MVCCStats* release_stats();
   inline void set_allocated_stats(::cockroach::proto::MVCCStats* stats);
 
+  // optional int32 leader_range_count = 7;
+  inline bool has_leader_range_count() const;
+  inline void clear_leader_range_count();
+  static const int kLeaderRangeCountFieldNumber = 7;
+  inline ::google::protobuf::int32 leader_range_count() const;
+  inline void set_leader_range_count(::google::protobuf::int32 value);
+
+  // optional int32 replicated_range_count = 8;
+  inline bool has_replicated_range_count() const;
+  inline void clear_replicated_range_count();
+  static const int kReplicatedRangeCountFieldNumber = 8;
+  inline ::google::protobuf::int32 replicated_range_count() const;
+  inline void set_replicated_range_count(::google::protobuf::int32 value);
+
+  // optional int32 available_range_count = 9;
+  inline bool has_available_range_count() const;
+  inline void clear_available_range_count();
+  static const int kAvailableRangeCountFieldNumber = 9;
+  inline ::google::protobuf::int32 available_range_count() const;
+  inline void set_available_range_count(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.NodeStatus)
  private:
   inline void set_has_desc();
@@ -291,6 +342,12 @@ class NodeStatus : public ::google::protobuf::Message {
   inline void clear_has_updated_at();
   inline void set_has_stats();
   inline void clear_has_stats();
+  inline void set_has_leader_range_count();
+  inline void clear_has_leader_range_count();
+  inline void set_has_replicated_range_count();
+  inline void clear_has_replicated_range_count();
+  inline void set_has_available_range_count();
+  inline void clear_has_available_range_count();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -300,8 +357,11 @@ class NodeStatus : public ::google::protobuf::Message {
   ::google::protobuf::RepeatedField< ::google::protobuf::int32 > store_ids_;
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int64 updated_at_;
-  ::cockroach::proto::MVCCStats* stats_;
   ::google::protobuf::int32 range_count_;
+  ::google::protobuf::int32 leader_range_count_;
+  ::cockroach::proto::MVCCStats* stats_;
+  ::google::protobuf::int32 replicated_range_count_;
+  ::google::protobuf::int32 available_range_count_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fstatus_2eproto();
@@ -494,6 +554,78 @@ inline void StoreStatus::set_allocated_stats(::cockroach::proto::MVCCStats* stat
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.StoreStatus.stats)
 }
 
+// optional int32 leader_range_count = 7;
+inline bool StoreStatus::has_leader_range_count() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void StoreStatus::set_has_leader_range_count() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void StoreStatus::clear_has_leader_range_count() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void StoreStatus::clear_leader_range_count() {
+  leader_range_count_ = 0;
+  clear_has_leader_range_count();
+}
+inline ::google::protobuf::int32 StoreStatus::leader_range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreStatus.leader_range_count)
+  return leader_range_count_;
+}
+inline void StoreStatus::set_leader_range_count(::google::protobuf::int32 value) {
+  set_has_leader_range_count();
+  leader_range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreStatus.leader_range_count)
+}
+
+// optional int32 replicated_range_count = 8;
+inline bool StoreStatus::has_replicated_range_count() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void StoreStatus::set_has_replicated_range_count() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void StoreStatus::clear_has_replicated_range_count() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void StoreStatus::clear_replicated_range_count() {
+  replicated_range_count_ = 0;
+  clear_has_replicated_range_count();
+}
+inline ::google::protobuf::int32 StoreStatus::replicated_range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreStatus.replicated_range_count)
+  return replicated_range_count_;
+}
+inline void StoreStatus::set_replicated_range_count(::google::protobuf::int32 value) {
+  set_has_replicated_range_count();
+  replicated_range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreStatus.replicated_range_count)
+}
+
+// optional int32 available_range_count = 9;
+inline bool StoreStatus::has_available_range_count() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void StoreStatus::set_has_available_range_count() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void StoreStatus::clear_has_available_range_count() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+inline void StoreStatus::clear_available_range_count() {
+  available_range_count_ = 0;
+  clear_has_available_range_count();
+}
+inline ::google::protobuf::int32 StoreStatus::available_range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.StoreStatus.available_range_count)
+  return available_range_count_;
+}
+inline void StoreStatus::set_available_range_count(::google::protobuf::int32 value) {
+  set_has_available_range_count();
+  available_range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.StoreStatus.available_range_count)
+}
+
 // -------------------------------------------------------------------
 
 // NodeStatus
@@ -680,6 +812,78 @@ inline void NodeStatus::set_allocated_stats(::cockroach::proto::MVCCStats* stats
     clear_has_stats();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NodeStatus.stats)
+}
+
+// optional int32 leader_range_count = 7;
+inline bool NodeStatus::has_leader_range_count() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void NodeStatus::set_has_leader_range_count() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void NodeStatus::clear_has_leader_range_count() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void NodeStatus::clear_leader_range_count() {
+  leader_range_count_ = 0;
+  clear_has_leader_range_count();
+}
+inline ::google::protobuf::int32 NodeStatus::leader_range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeStatus.leader_range_count)
+  return leader_range_count_;
+}
+inline void NodeStatus::set_leader_range_count(::google::protobuf::int32 value) {
+  set_has_leader_range_count();
+  leader_range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.NodeStatus.leader_range_count)
+}
+
+// optional int32 replicated_range_count = 8;
+inline bool NodeStatus::has_replicated_range_count() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void NodeStatus::set_has_replicated_range_count() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void NodeStatus::clear_has_replicated_range_count() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void NodeStatus::clear_replicated_range_count() {
+  replicated_range_count_ = 0;
+  clear_has_replicated_range_count();
+}
+inline ::google::protobuf::int32 NodeStatus::replicated_range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeStatus.replicated_range_count)
+  return replicated_range_count_;
+}
+inline void NodeStatus::set_replicated_range_count(::google::protobuf::int32 value) {
+  set_has_replicated_range_count();
+  replicated_range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.NodeStatus.replicated_range_count)
+}
+
+// optional int32 available_range_count = 9;
+inline bool NodeStatus::has_available_range_count() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void NodeStatus::set_has_available_range_count() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void NodeStatus::clear_has_available_range_count() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+inline void NodeStatus::clear_available_range_count() {
+  available_range_count_ = 0;
+  clear_has_available_range_count();
+}
+inline ::google::protobuf::int32 NodeStatus::available_range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NodeStatus.available_range_count)
+  return available_range_count_;
+}
+inline void NodeStatus::set_available_range_count(::google::protobuf::int32 value) {
+  set_has_available_range_count();
+  available_range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.NodeStatus.available_range_count)
 }
 
 

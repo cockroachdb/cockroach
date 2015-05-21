@@ -265,7 +265,8 @@ func TestCorruptedClusterID(t *testing.T) {
 
 // compareNodeStatus ensures that the actual node status for the passed in
 // node is updated correctly. It checks that the Node Descriptor, StoreIDs,
-// RangeCount and StartedAt are exactly correct and that the bytes and counts
+// RangeCount, StartedAt, LeaderRangeCount, ReplicatedRangeCount and
+// AvailableRangeCount are exactly correct and that the bytes and counts
 // for Live, Key and Val are at least the expected value.  And that UpdatedAt
 // has increased.
 // The latest actual stats are returned.
@@ -295,6 +296,15 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 	}
 	if !reflect.DeepEqual(expectedNodeStatus.Desc, nodeStatus.Desc) {
 		t.Errorf("%v: Description does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if expectedNodeStatus.LeaderRangeCount != nodeStatus.LeaderRangeCount {
+		t.Errorf("%v: LeaderRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if expectedNodeStatus.ReplicatedRangeCount != nodeStatus.ReplicatedRangeCount {
+		t.Errorf("%v: ReplicatedRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if expectedNodeStatus.AvailableRangeCount != nodeStatus.AvailableRangeCount {
+		t.Errorf("%v: AvailableRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
 	}
 
 	// There values must >= to the older value.
@@ -360,12 +370,22 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	s.WaitForInit()
+	// Perform a read from the range to ensure that the raft election has
+	// completed.  We do not expect an response.
+	if err := ts.kv.Run(client.Get([]byte("a"))); err != nil {
+		t.Fatal(err)
+	}
+
 	expectedNodeStatus := &proto.NodeStatus{
-		RangeCount: 1,
-		StoreIDs:   []int32{1, 2, 3},
-		StartedAt:  0,
-		UpdatedAt:  0,
-		Desc:       ts.node.Descriptor,
+		RangeCount:           1,
+		StoreIDs:             []int32{1, 2, 3},
+		StartedAt:            0,
+		UpdatedAt:            0,
+		Desc:                 ts.node.Descriptor,
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  1,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -392,11 +412,14 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus = &proto.NodeStatus{
-		RangeCount: 1,
-		StoreIDs:   []int32{1, 2, 3},
-		StartedAt:  oldStats.StartedAt,
-		UpdatedAt:  oldStats.UpdatedAt,
-		Desc:       ts.node.Descriptor,
+		RangeCount:           1,
+		StoreIDs:             []int32{1, 2, 3},
+		StartedAt:            oldStats.StartedAt,
+		UpdatedAt:            oldStats.UpdatedAt,
+		Desc:                 ts.node.Descriptor,
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  1,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -432,11 +455,14 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus = &proto.NodeStatus{
-		RangeCount: 2,
-		StoreIDs:   []int32{1, 2, 3},
-		StartedAt:  oldStats.StartedAt,
-		UpdatedAt:  oldStats.UpdatedAt,
-		Desc:       ts.node.Descriptor,
+		RangeCount:           2,
+		StoreIDs:             []int32{1, 2, 3},
+		StartedAt:            oldStats.StartedAt,
+		UpdatedAt:            oldStats.UpdatedAt,
+		Desc:                 ts.node.Descriptor,
+		LeaderRangeCount:     2,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -461,11 +487,14 @@ func TestNodeStatus(t *testing.T) {
 	}
 
 	expectedNodeStatus = &proto.NodeStatus{
-		RangeCount: 2,
-		StoreIDs:   []int32{1, 2, 3},
-		StartedAt:  oldStats.StartedAt,
-		UpdatedAt:  oldStats.UpdatedAt,
-		Desc:       ts.node.Descriptor,
+		RangeCount:           2,
+		StoreIDs:             []int32{1, 2, 3},
+		StartedAt:            oldStats.StartedAt,
+		UpdatedAt:            oldStats.UpdatedAt,
+		Desc:                 ts.node.Descriptor,
+		LeaderRangeCount:     2,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
