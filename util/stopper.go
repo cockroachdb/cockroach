@@ -19,7 +19,6 @@ package util
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 // Closer is an interface for objects to attach to the stopper to
@@ -51,17 +50,20 @@ type Stopper struct {
 	stopped  chan struct{}  // Closed when stopped completely
 	stop     sync.WaitGroup // Incremented for outstanding workers
 	mu       sync.Mutex     // Protects the fields below
-	draining int32          // 1 when Stop() has been called, updated atomically
-	drain    sync.WaitGroup // Incremented for outstanding tasks
+	drain    *sync.Cond     // Conditional variable to wait for outstanding tasks
+	draining bool           // true when Stop() has been called
+	numTasks int            // number of outstanding tasks
 	closers  []Closer
 }
 
 // NewStopper returns an instance of Stopper.
 func NewStopper() *Stopper {
-	return &Stopper{
+	s := &Stopper{
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
 	}
+	s.drain = sync.NewCond(&s.mu)
+	return s
 }
 
 // RunWorker runs the supplied function as a "worker" to be stopped
@@ -97,36 +99,32 @@ func (s *Stopper) AddCloser(c Closer) {
 // Returns true if the task can be launched or false to indicate the
 // system is currently draining and the task should be refused.
 func (s *Stopper) StartTask() bool {
-	// Avoid locking when we're draining (which would deadlock
-	// as soon as a call to StartTask() came in with Stop()
-	// holding the lock)
-	if atomic.LoadInt32(&s.draining) == 0 {
-		// The lock here is unfortunately necessary, since
-		// just having checked for draining=0 gives no
-		// guarantee that that's still the case now.
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.drain.Add(1)
-		return true
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.draining {
+		return false
 	}
-	return false
+	s.numTasks++
+	return true
 }
 
 // FinishTask removes one from the count of tasks left to drain in the
 // system. This function must be invoked for every call to StartTask().
 func (s *Stopper) FinishTask() {
-	s.drain.Done()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.numTasks--
+	s.drain.Broadcast()
 }
 
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped (workers do this by calling SetStopped()).
 func (s *Stopper) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	atomic.StoreInt32(&s.draining, 1)
-	s.drain.Wait()
+	s.Quiesce()
 	close(s.stopper)
 	s.stop.Wait()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, c := range s.closers {
 		c.Close()
 	}
@@ -162,13 +160,14 @@ func (s *Stopper) SetStopped() {
 	}
 }
 
-// Quiesce moves the stopper to state draining, waits until all tasks
-// complete, then moves back to non-draining state. This is used from
-// unittests.
+// Quiesce moves the stopper to state draining and waits until all
+// tasks complete. This is used from Stop() and unittests.
 func (s *Stopper) Quiesce() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.draining = 1
-	s.drain.Wait()
-	s.draining = 0
+	s.draining = true
+	for s.numTasks > 0 {
+		// Unlock s.mu, wait for the signal, and lock s.mu.
+		s.drain.Wait()
+	}
 }

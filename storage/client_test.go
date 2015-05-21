@@ -157,11 +157,14 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 }
 
 func (m *multiTestContext) Stop() {
-	m.clientStopper.Stop()
-	for _, s := range m.stoppers {
+	stoppers := append([]*util.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
+	// Quiesce all the stoppers so that we can stop all stoppers in unison.
+	for _, s := range stoppers {
+		s.Quiesce()
+	}
+	for _, s := range stoppers {
 		s.Stop()
 	}
-	m.transportStopper.Stop()
 	// Remove the extra engine refcounts.
 	for _, e := range m.engines {
 		e.Close()
