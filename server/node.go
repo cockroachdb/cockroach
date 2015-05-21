@@ -428,7 +428,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					continue
 				}
 				// Walk through all the stores on this node.
-				rangeCount := 0
+				var rangeCount, leaderRangeCount, replicatedRangeCount, availableRangeCount int32
 				stats := &proto.MVCCStats{}
 				accessedStoreIDs := []int32{}
 				// will never error because `return nil` below
@@ -443,7 +443,10 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 						return nil
 					}
 					accessedStoreIDs = append(accessedStoreIDs, int32(store.Ident.StoreID))
-					rangeCount += int(storeStatus.RangeCount)
+					rangeCount += storeStatus.RangeCount
+					leaderRangeCount += storeStatus.LeaderRangeCount
+					replicatedRangeCount += storeStatus.ReplicatedRangeCount
+					availableRangeCount += storeStatus.AvailableRangeCount
 					stats.Add(&storeStatus.Stats)
 					return nil
 				})
@@ -451,12 +454,15 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				// Store the combined stats in the db.
 				now := n.ctx.Clock.Now().WallTime
 				status := &proto.NodeStatus{
-					Desc:       n.Descriptor,
-					StoreIDs:   accessedStoreIDs,
-					UpdatedAt:  now,
-					StartedAt:  n.startedAt,
-					RangeCount: int32(rangeCount),
-					Stats:      *stats,
+					Desc:                 n.Descriptor,
+					StoreIDs:             accessedStoreIDs,
+					UpdatedAt:            now,
+					StartedAt:            n.startedAt,
+					RangeCount:           rangeCount,
+					Stats:                *stats,
+					LeaderRangeCount:     leaderRangeCount,
+					ReplicatedRangeCount: replicatedRangeCount,
+					AvailableRangeCount:  availableRangeCount,
 				}
 				key := engine.NodeStatusKey(int32(n.Descriptor.NodeID))
 				if err := n.ctx.DB.Run(client.PutProto(key, status)); err != nil {

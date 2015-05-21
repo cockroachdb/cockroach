@@ -35,9 +35,9 @@ import (
 
 // compareStoreStatus ensures that the actual store status for the passed in
 // store is updated correctly. It checks that the Desc.StoreID, Desc.Attrs,
-// Desc.Node, Desc.Capacity.Capacity, NodeID and RangeCount are exactly correct
-// and that the bytes and counts for Live, Key and Val are at least the
-// expected value.
+// Desc.Node, Desc.Capacity.Capacity, NodeID, RangeCount, LeaderRangeCount,
+// ReplicatedRangeCount and AvailableRangeCount are exactly correct and that
+// the bytes and counts for Live, Key and Val are at least the expected value.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
 	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
@@ -70,6 +70,15 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 		t.Errorf("%v: actual node ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
 	if expectedStoreStatus.RangeCount != storeStatus.RangeCount {
+		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if expectedStoreStatus.LeaderRangeCount != storeStatus.LeaderRangeCount {
+		t.Errorf("%v: actual LeaderRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if expectedStoreStatus.ReplicatedRangeCount != storeStatus.ReplicatedRangeCount {
+		t.Errorf("%v: actual ReplicatedRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if expectedStoreStatus.AvailableRangeCount != storeStatus.AvailableRangeCount {
 		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
 	}
 
@@ -111,10 +120,22 @@ func TestStoreStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	store.WaitForInit()
+	rng := store.LookupRange([]byte("a"), nil)
+	// Perform a read from the range to ensure that the raft election has
+	// completed.  We do not expect a value to be present.
+	gArgs, gReply := getArgs([]byte("a"), rng.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err != nil {
+		t.Fatal(err)
+	}
+
 	expectedStoreStatus := &proto.StoreStatus{
-		Desc:       *storeDesc,
-		NodeID:     1,
-		RangeCount: 1,
+		Desc:                 *storeDesc,
+		NodeID:               1,
+		RangeCount:           1,
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  1,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -130,7 +151,6 @@ func TestStoreStatus(t *testing.T) {
 	oldstats := compareStoreStatus(t, store, expectedStoreStatus, 0)
 
 	// Write some values left and right of the proposed split key.
-	rng := store.LookupRange([]byte("a"), nil)
 	pArgs, pReply := putArgs([]byte("a"), content, rng.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
@@ -141,9 +161,12 @@ func TestStoreStatus(t *testing.T) {
 	}
 
 	expectedStoreStatus = &proto.StoreStatus{
-		Desc:       oldstats.Desc,
-		NodeID:     1,
-		RangeCount: 1,
+		Desc:                 oldstats.Desc,
+		NodeID:               1,
+		RangeCount:           1,
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  1,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -164,9 +187,12 @@ func TestStoreStatus(t *testing.T) {
 	}
 
 	expectedStoreStatus = &proto.StoreStatus{
-		Desc:       oldstats.Desc,
-		NodeID:     1,
-		RangeCount: 2,
+		Desc:                 oldstats.Desc,
+		NodeID:               1,
+		RangeCount:           2,
+		LeaderRangeCount:     2,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -193,9 +219,12 @@ func TestStoreStatus(t *testing.T) {
 	}
 
 	expectedStoreStatus = &proto.StoreStatus{
-		Desc:       oldstats.Desc,
-		NodeID:     1,
-		RangeCount: 2,
+		Desc:                 oldstats.Desc,
+		NodeID:               1,
+		RangeCount:           2,
+		LeaderRangeCount:     2,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
 		Stats: proto.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,

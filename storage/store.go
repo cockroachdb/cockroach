@@ -1430,7 +1430,56 @@ func (s *Store) WaitForRangeScanCompletion() int64 {
 // updateStoreStatus updates the store's status proto.
 func (s *Store) updateStoreStatus() {
 	now := s.ctx.Clock.Now().WallTime
+	timestamp := proto.Timestamp{WallTime: now}
 	scannerStats := s.scanner.Stats()
+
+	// Get the zone configs.
+	zoneMap, err := s.Gossip().GetInfo(gossip.KeyConfigZone)
+	if err != nil || zoneMap == nil {
+		log.Error("unable to get zone configs")
+		return
+	}
+
+	// Get the leader count and replication count.
+	// TODO(bram): Consider moving this to be part of the range scanner directly.
+	var leaderRangeCount, replicatedRangeCount, availableRangeCount int32
+	s.mu.Lock()
+	for raftID, rng := range s.ranges {
+		zoneConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*proto.ZoneConfig)
+		raftStatus := s.RaftStatus(raftID)
+		if raftStatus == nil {
+			continue
+		}
+		if raftStatus.SoftState.RaftState == raft.StateLeader {
+			leaderRangeCount++
+			// TODO(bram): Compare attributes of the stores so we can track
+			// ranges that have enough replicas but still need to be migrated
+			// onto nodes with the desired attributes.
+			if len(raftStatus.Progress) >= len(zoneConfig.ReplicaAttrs) {
+				replicatedRangeCount++
+			}
+
+			// If the range has the leader lease, then it's available.
+			if _, expired := rng.HasLeaderLease(timestamp); !expired {
+				availableRangeCount++
+			} else {
+				// If there is no leader lease, then as long as more than 50%
+				// of the replicas are current then it is available.
+				current := 0
+				for _, progress := range raftStatus.Progress {
+					if progress.Match == raftStatus.Applied {
+						current++
+					} else {
+						current--
+					}
+				}
+				if current > 0 {
+					availableRangeCount++
+				}
+			}
+		}
+	}
+	s.mu.Unlock()
 
 	desc, err := s.Descriptor()
 	if err != nil {
@@ -1438,12 +1487,15 @@ func (s *Store) updateStoreStatus() {
 		return
 	}
 	status := &proto.StoreStatus{
-		Desc:       *desc,
-		NodeID:     s.Ident.NodeID,
-		UpdatedAt:  now,
-		StartedAt:  s.startedAt,
-		RangeCount: int32(scannerStats.RangeCount),
-		Stats:      proto.MVCCStats(scannerStats.MVCC),
+		Desc:                 *desc,
+		NodeID:               s.Ident.NodeID,
+		UpdatedAt:            now,
+		StartedAt:            s.startedAt,
+		RangeCount:           int32(scannerStats.RangeCount),
+		Stats:                proto.MVCCStats(scannerStats.MVCC),
+		LeaderRangeCount:     leaderRangeCount,
+		ReplicatedRangeCount: replicatedRangeCount,
+		AvailableRangeCount:  availableRangeCount,
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
 	if _, err := s.kvDB.Put(key, status); err != nil {

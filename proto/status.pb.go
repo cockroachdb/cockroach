@@ -20,13 +20,16 @@ var _ = math.Inf
 // StoreStatus contains the stats needed to calculate the current status of a
 // store.
 type StoreStatus struct {
-	Desc             StoreDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	NodeID           NodeID          `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	RangeCount       int32           `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
-	StartedAt        int64           `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
-	UpdatedAt        int64           `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
-	Stats            MVCCStats       `protobuf:"bytes,6,opt,name=stats" json:"stats"`
-	XXX_unrecognized []byte          `json:"-"`
+	Desc                 StoreDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
+	NodeID               NodeID          `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	RangeCount           int32           `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
+	StartedAt            int64           `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
+	UpdatedAt            int64           `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
+	Stats                MVCCStats       `protobuf:"bytes,6,opt,name=stats" json:"stats"`
+	LeaderRangeCount     int32           `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
+	ReplicatedRangeCount int32           `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
+	AvailableRangeCount  int32           `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
+	XXX_unrecognized     []byte          `json:"-"`
 }
 
 func (m *StoreStatus) Reset()         { *m = StoreStatus{} }
@@ -68,16 +71,40 @@ func (m *StoreStatus) GetStats() MVCCStats {
 	return MVCCStats{}
 }
 
+func (m *StoreStatus) GetLeaderRangeCount() int32 {
+	if m != nil {
+		return m.LeaderRangeCount
+	}
+	return 0
+}
+
+func (m *StoreStatus) GetReplicatedRangeCount() int32 {
+	if m != nil {
+		return m.ReplicatedRangeCount
+	}
+	return 0
+}
+
+func (m *StoreStatus) GetAvailableRangeCount() int32 {
+	if m != nil {
+		return m.AvailableRangeCount
+	}
+	return 0
+}
+
 // NodeStatus contains the stats needed to calculate the current status of a
 // node.
 type NodeStatus struct {
-	Desc             NodeDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	StoreIDs         []int32        `protobuf:"varint,2,rep,name=store_ids" json:"store_ids"`
-	RangeCount       int32          `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
-	StartedAt        int64          `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
-	UpdatedAt        int64          `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
-	Stats            MVCCStats      `protobuf:"bytes,6,opt,name=stats" json:"stats"`
-	XXX_unrecognized []byte         `json:"-"`
+	Desc                 NodeDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
+	StoreIDs             []int32        `protobuf:"varint,2,rep,name=store_ids" json:"store_ids"`
+	RangeCount           int32          `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
+	StartedAt            int64          `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
+	UpdatedAt            int64          `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
+	Stats                MVCCStats      `protobuf:"bytes,6,opt,name=stats" json:"stats"`
+	LeaderRangeCount     int32          `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
+	ReplicatedRangeCount int32          `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
+	AvailableRangeCount  int32          `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
+	XXX_unrecognized     []byte         `json:"-"`
 }
 
 func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
@@ -124,6 +151,27 @@ func (m *NodeStatus) GetStats() MVCCStats {
 		return m.Stats
 	}
 	return MVCCStats{}
+}
+
+func (m *NodeStatus) GetLeaderRangeCount() int32 {
+	if m != nil {
+		return m.LeaderRangeCount
+	}
+	return 0
+}
+
+func (m *NodeStatus) GetReplicatedRangeCount() int32 {
+	if m != nil {
+		return m.ReplicatedRangeCount
+	}
+	return 0
+}
+
+func (m *NodeStatus) GetAvailableRangeCount() int32 {
+	if m != nil {
+		return m.AvailableRangeCount
+	}
+	return 0
 }
 
 func init() {
@@ -255,6 +303,51 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaderRangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.LeaderRangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicatedRangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.ReplicatedRangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AvailableRangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.AvailableRangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -407,6 +500,51 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaderRangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.LeaderRangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicatedRangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.ReplicatedRangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AvailableRangeCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.AvailableRangeCount |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -441,6 +579,9 @@ func (m *StoreStatus) Size() (n int) {
 	n += 1 + sovStatus(uint64(m.UpdatedAt))
 	l = m.Stats.Size()
 	n += 1 + l + sovStatus(uint64(l))
+	n += 1 + sovStatus(uint64(m.LeaderRangeCount))
+	n += 1 + sovStatus(uint64(m.ReplicatedRangeCount))
+	n += 1 + sovStatus(uint64(m.AvailableRangeCount))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -462,6 +603,9 @@ func (m *NodeStatus) Size() (n int) {
 	n += 1 + sovStatus(uint64(m.UpdatedAt))
 	l = m.Stats.Size()
 	n += 1 + l + sovStatus(uint64(l))
+	n += 1 + sovStatus(uint64(m.LeaderRangeCount))
+	n += 1 + sovStatus(uint64(m.ReplicatedRangeCount))
+	n += 1 + sovStatus(uint64(m.AvailableRangeCount))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -524,6 +668,15 @@ func (m *StoreStatus) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n2
+	data[i] = 0x38
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.LeaderRangeCount))
+	data[i] = 0x40
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.ReplicatedRangeCount))
+	data[i] = 0x48
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.AvailableRangeCount))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -577,6 +730,15 @@ func (m *NodeStatus) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n4
+	data[i] = 0x38
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.LeaderRangeCount))
+	data[i] = 0x40
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.ReplicatedRangeCount))
+	data[i] = 0x48
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.AvailableRangeCount))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
