@@ -58,50 +58,50 @@ func checkGossipNodes(client *http.Client, node *localcluster.Container) int {
 	return count
 }
 
-func checkGossipPeerings(t *testing.T, l *localcluster.Cluster, attempts int, done chan struct{}) {
-	go func() {
-		defer close(done)
+func checkGossipPeerings(t *testing.T, l *localcluster.Cluster, attempts int) {
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}}
 
-		client := &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			}}
+	log.Infof("waiting for complete gossip network of %d peerings",
+		len(l.Nodes)*len(l.Nodes))
 
-		log.Infof("waiting for complete gossip network of %d peerings",
-			len(l.Nodes)*len(l.Nodes))
-
-		for i := 0; i < attempts; i++ {
-			time.Sleep(1 * time.Second)
-			found := 0
-			for j := 0; j < len(l.Nodes); j++ {
-				found += checkGossipNodes(client, l.Nodes[j])
+	for i := 0; i < attempts; i++ {
+		select {
+		case <-stopper:
+			t.Fatalf("interrupted")
+			return
+		case e := <-l.Events:
+			if log.V(1) {
+				log.Infof("%+v", e)
 			}
-			fmt.Fprintf(os.Stderr, "%d ", found)
-			if found == len(l.Nodes)*len(l.Nodes) {
-				fmt.Printf("... all nodes verified in the cluster\n")
-				return
-			}
+			continue
+		case <-time.After(1 * time.Second):
+			break
 		}
+		found := 0
+		for j := 0; j < len(l.Nodes); j++ {
+			found += checkGossipNodes(client, l.Nodes[j])
+		}
+		fmt.Fprintf(os.Stderr, "%d ", found)
+		if found == len(l.Nodes)*len(l.Nodes) {
+			fmt.Printf("... all nodes verified in the cluster\n")
+			return
+		}
+	}
 
-		fmt.Fprintf(os.Stderr, "\n")
-		t.Errorf("failed to verify all nodes in cluster\n")
-	}()
+	fmt.Fprintf(os.Stderr, "\n")
+	t.Errorf("failed to verify all nodes in cluster\n")
 }
 
 func TestGossipPeerings(t *testing.T) {
-	cluster := localcluster.Create(*numNodes, stopper)
-	if !cluster.Start() {
-		return
-	}
-	defer cluster.Stop()
+	l := localcluster.Create(*numNodes, stopper)
+	l.Events = make(chan localcluster.Event, 10)
+	l.Start()
+	defer l.Stop()
 
-	done := make(chan struct{})
-	checkGossipPeerings(t, cluster, 20, done)
-
-	select {
-	case <-stopper:
-	case <-done:
-	}
+	checkGossipPeerings(t, l, 20)
 }
