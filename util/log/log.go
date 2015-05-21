@@ -55,13 +55,16 @@ func logDepth(ctx context.Context, depth int, sev severity, format string, args 
 		if buf.Bytes()[buf.Len()-1] != '\n' {
 			buf.WriteByte('\n')
 		}
-
 		contextToDict(ctx, machineDict)
 		machineDict["Format"] = format
 		var argsVal []map[string]interface{}
 		for _, arg := range args {
+			var tstr string
+			if t := reflect.TypeOf(arg); t != nil {
+				tstr = t.String()
+			}
 			argsVal = append(argsVal, map[string]interface{}{
-				"Type": reflect.TypeOf(arg).String(),
+				"Type": tstr,
 				"Arg":  arg,
 			})
 		}
