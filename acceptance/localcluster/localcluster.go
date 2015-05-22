@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -40,6 +41,7 @@ const (
 var cockroachImage = flag.String("i", builderImage, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
+var testCertsDir = filepath.Clean(os.ExpandEnv("${PWD}/../resource/test_certs"))
 
 func prettyJSON(v interface{}) string {
 	pretty, err := json.MarshalIndent(v, "", "  ")
@@ -108,6 +110,7 @@ type Cluster struct {
 	Nodes          []*Container
 	Events         chan Event
 	CertsDir       string
+	UseTestCerts   bool
 	monitorStopper chan struct{}
 }
 
@@ -127,9 +130,10 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 	}
 
 	return &Cluster{
-		client:  newDockerClient(),
-		stopper: stopper,
-		Nodes:   make([]*Container, numNodes),
+		client:       newDockerClient(),
+		stopper:      stopper,
+		Nodes:        make([]*Container, numNodes),
+		UseTestCerts: true,
 	}
 }
 
@@ -191,9 +195,10 @@ func (l *Cluster) runDockerSpy() {
 	log.Infof("started %s: %s\n", c.Name, c.NetworkSettings.IPAddress)
 }
 
-// create the volumes container that keeps all of the volumes used by the
-// cluster.
-func (l *Cluster) createVolumes() {
+// create the volumes container that keeps all of the volumes used by
+// the cluster.
+func (l *Cluster) initCluster() {
+	log.Infof("initializing cluster")
 	l.panicOnStop()
 
 	vols := map[string]struct{}{}
@@ -201,9 +206,17 @@ func (l *Cluster) createVolumes() {
 		vols[data(i)] = struct{}{}
 	}
 	create := func() (*Container, error) {
+		var entrypoint []string
+		if *cockroachImage == builderImage {
+			entrypoint = append(entrypoint, "/"+filepath.Base(*cockroachBinary))
+		} else if *cockroachEntry != "" {
+			entrypoint = append(entrypoint, *cockroachEntry)
+		}
 		return createContainer(l.client, dockerclient.ContainerConfig{
-			Image:   *cockroachImage,
-			Volumes: vols,
+			Image:      *cockroachImage,
+			Volumes:    vols,
+			Entrypoint: entrypoint,
+			Cmd:        []string{"init", "--stores=ssd=" + data(0)},
 		})
 	}
 	c, err := create()
@@ -218,19 +231,25 @@ func (l *Cluster) createVolumes() {
 		panic(err)
 	}
 
-	// Create the temporary certs directory in the current working
-	// directory. Boot2docker's handling of binding local directories
-	// into the container is very confusing. If the directory being
-	// bound has a parent directory that exists in the boot2docker VM
-	// then that directory is bound into the container. In particular,
-	// that means that binds of /tmp and /var will be problematic.
-	cwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	l.CertsDir, err = ioutil.TempDir(cwd, ".localcluster.certs.")
-	if err != nil {
-		panic(err)
+	// Use pre-created test-certs when possible: cert creation takes ~5
+	// seconds.
+	if l.UseTestCerts {
+		l.CertsDir = testCertsDir
+	} else {
+		// Create the temporary certs directory in the current working
+		// directory. Boot2docker's handling of binding local directories
+		// into the container is very confusing. If the directory being
+		// bound has a parent directory that exists in the boot2docker VM
+		// then that directory is bound into the container. In particular,
+		// that means that binds of /tmp and /var will be problematic.
+		cwd, err := os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		l.CertsDir, err = ioutil.TempDir(cwd, ".localcluster.certs.")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	binds := []string{l.CertsDir + ":/certs"}
@@ -242,8 +261,8 @@ func (l *Cluster) createVolumes() {
 		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
 	}
 	maybePanic(c.Start(binds, nil, nil))
+	maybePanic(c.Wait())
 	c.Name = "volumes"
-	log.Infof("created volumes")
 	l.vols = c
 }
 
@@ -283,7 +302,7 @@ func (l *Cluster) createCACert() {
 }
 
 func (l *Cluster) createNodeCerts() {
-	log.Infof("creating node certs: ./certs")
+	log.Infof("creating node certs")
 	var nodes []string
 	for i := range l.Nodes {
 		nodes = append(nodes, node(i))
@@ -291,14 +310,6 @@ func (l *Cluster) createNodeCerts() {
 	args := []string{"cert", "--certs=/certs", "create-node"}
 	args = append(args, nodes...)
 	c := l.createRoach(-1, args...)
-	defer c.mustRemove()
-	maybePanic(c.Start(nil, nil, l.vols))
-	maybePanic(c.Wait())
-}
-
-func (l *Cluster) initCluster() {
-	log.Infof("initializing cluster")
-	c := l.createRoach(-1, "init", "--stores=ssd="+data(0))
 	defer c.mustRemove()
 	maybePanic(c.Start(nil, nil, l.vols))
 	maybePanic(c.Wait())
@@ -357,6 +368,14 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
 		log.Errorf("stopping due to unexpected event: %+v", e)
+		r, err := l.client.ContainerLogs(e.Id, &dockerclient.LogOptions{
+			Stdout: true,
+			Stderr: true,
+		})
+		if err == nil {
+			defer r.Close()
+			_, err = io.Copy(os.Stdout, r)
+		}
 		close(l.stopper)
 	}
 	return false
@@ -378,10 +397,11 @@ func (l *Cluster) Start() {
 	defer l.mu.Unlock()
 
 	l.runDockerSpy()
-	l.createVolumes()
-	l.createCACert()
-	l.createNodeCerts()
 	l.initCluster()
+	if l.CertsDir != testCertsDir {
+		l.createCACert()
+		l.createNodeCerts()
+	}
 
 	l.monitorStopper = make(chan struct{})
 	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
@@ -415,7 +435,7 @@ func (l *Cluster) Stop() {
 		maybePanic(l.vols.Kill())
 		l.vols = nil
 	}
-	if l.CertsDir != "" {
+	if l.CertsDir != "" && l.CertsDir != testCertsDir {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}

@@ -13,11 +13,26 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Peter Mattis (peter.mattis@gmail.com)
 
-// Package securitytest embeds the TLS test certificates.
-package securitytest
+// +build acceptance
 
-//go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -ignore README.md -prefix ../../resource ../../resource/test_certs/...
-//go:generate gofmt -s -w embedded.go
-//go:generate goimports -w embedded.go
+package acceptance
+
+import (
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/acceptance/localcluster"
+)
+
+func TestCertGen(t *testing.T) {
+	l := localcluster.Create(2, stopper)
+	l.UseTestCerts = false
+	l.Start()
+	defer l.Stop()
+
+	// Check the gossip peerings which will indicate whether the nodes
+	// can talk to each other with the generated certs.
+	checkGossipPeerings(t, l, 20*time.Second)
+}
