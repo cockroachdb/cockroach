@@ -137,15 +137,17 @@ func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 // an exponential backoff starting at 1ns and ending at the specified
 // duration.
 func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
-	total := time.Duration(0)
+	deadline := time.Now().Add(duration)
 	var lastErr error
-	for wait := time.Duration(1); total < duration; wait *= 2 {
+	for wait := time.Duration(1); time.Now().Before(deadline); wait *= 2 {
 		lastErr = fn()
 		if lastErr == nil {
 			return
 		}
+		if wait > time.Second {
+			wait = time.Second
+		}
 		time.Sleep(wait)
-		total += wait
 	}
 	t.Fatalf("condition failed to evaluate within %s: %s", duration, lastErr)
 }
