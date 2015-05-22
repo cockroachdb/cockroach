@@ -187,7 +187,7 @@ timestamps to diverge from wall clock time, following closely the
 [*Hybrid Logical Clock
 paper.*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)
 
-Transactions are executed in three discrete phases:
+Transactions are executed in discrete phases:
 
 1. Start the transaction by writing a new entry to the system
    transaction table (keys prefixed by *\0tx*) with state “PENDING”.
@@ -262,15 +262,16 @@ runs encounters data that necessitate conflict resolution.
 
 When a transaction restarts, it changes its priority and/or moves its
 timestamp forward depending on data tied to the conflict, and
-begins anew reusing the same tx id. Since the set of keys
-being written changes between restarts, a set of keys written during
-prior attempts at the transaction is maintained by the client as a set of
-bogus intents. As the client replays the transaction from the
-beginning, it removes keys from the set as it writes them again. The remaining
-keys in the set--should the transaction run to completion--refer bogus 
-write intents which must be deleted *before* the transaction commits 
-Many transactions will end up with an empty set implying no bogus write
-intents.
+begins anew reusing the same tx id. The prior run of the transaction might
+have written some write intents, which need to be deleted before the
+transaction commits, so as to not be included as part of the transaction.
+These stale write intent deletions are done during the reexecution of the
+transaction, either implicitly, through writing new intents to 
+the same keys as part of the reexecution of the transaction, or explicitly,
+by cleaning up stale intents that are not part of the reexecution of the
+transaction. Since most transactions will end up writing to the same keys,
+the explicit cleanup run just before committing the transaction is usually
+a NOOP.
 
 ***Transaction abort:***
 
@@ -317,17 +318,17 @@ There are several scenarios in which transactions interact:
   transaction’s commit timestamp to indicate that when/if the
   transaction does commit, it should use a timestamp *at least* as
   high. However, if the write conflict is from an SSI transaction,
-  the reader must compare priorities. If it has the higher priority,
-  it pushes the transaction’s commit timestamp, as with SI (that
+  the reader must compare priorities. If the reader has the higher priority,
+  it pushes the transaction’s commit timestamp (that
   transaction will then notice its timestamp has been pushed, and
-  restart). If it has the lower priority, it retries itself using as
+  restart). If it has the lower or same priority, it retries itself using as
   a new priority `max(new random priority, conflicting txn’s
   priority - 1)`. why max and not min?
 
 - **Writer encounters uncommitted write intent**:
-  If the write intent has been written by a transaction with a lower
-  priority writer aborts the conflicting transaction. if the intent has
-  a higher or equal priority the transaction retries, using as a new 
+  If the other write intent has been written by a transaction with a lower
+  priority, the writer aborts the conflicting transaction. If the write 
+  intent has a higher or equal priority the transaction retries, using as a new 
   priority *max(new random priority, conflicting txn’s priority - 1)*;
   the retry occurs after a short, randomized backoff interval.
 
