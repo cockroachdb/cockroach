@@ -135,7 +135,6 @@ func TestSendRPCOrder(t *testing.T) {
 
 	testCases := []struct {
 		args   proto.Request
-		reply  proto.Response
 		attrs  []string
 		fn     func(rpc.Options, []net.Addr) error
 		leader int32 // 0 for not caching a leader.
@@ -149,7 +148,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// Inconsistent Scan without matching attributes.
 		{
 			args:  &proto.ScanRequest{},
-			reply: &proto.ScanResponse{},
 			attrs: []string{},
 			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 		},
@@ -158,7 +156,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// go stable.
 		{
 			args:  &proto.ScanRequest{},
-			reply: &proto.ScanResponse{},
 			attrs: nodeAttrs[5],
 			// Compare only the first two resulting addresses.
 			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
@@ -168,7 +165,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// a leader.
 		{
 			args:       &proto.ScanRequest{},
-			reply:      &proto.ScanResponse{},
 			attrs:      []string{},
 			fn:         makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 			consistent: true,
@@ -177,7 +173,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// Should go random and not change anything.
 		{
 			args:  &proto.PutRequest{},
-			reply: &proto.PutResponse{},
 			attrs: []string{"nomatch"},
 			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 		},
@@ -186,7 +181,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// go stable.
 		{
 			args:  &proto.PutRequest{},
-			reply: &proto.PutResponse{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first two resulting addresses.
 			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
@@ -197,7 +191,6 @@ func TestSendRPCOrder(t *testing.T) {
 		// (the last and second to last) in that order.
 		{
 			args:  &proto.PutRequest{},
-			reply: &proto.PutResponse{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first three resulting addresses.
 			fn:     makeVerifier(rpc.OrderStable, []int32{2, 5, 4, 0, 0}),
@@ -261,14 +254,13 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		args := tc.args
-		reply := tc.reply
 		args.Header().RaftID = raftID // Not used in this test, but why not.
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if err := ds.sendRPC(&descriptor, args, reply); err != nil {
+		if err := ds.sendRPC(&descriptor, args, args.CreateReply()); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
