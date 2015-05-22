@@ -76,7 +76,9 @@ deployment:
           echo "Deploying ${VERSION}..."
           if [ -n "$DOCKER_EMAIL" ]; then
             ./build/build-docker-deploy.sh && \
-            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh && \
+            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh stop && \
+            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh start && \
+            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh stop && \
             docker tag cockroachdb/cockroach:latest cockroachdb/cockroach:${VERSION} && \
             docker tag cockroachdb/cockroach-dev:latest cockroachdb/cockroach-dev:${VERSION} && \
             # Pushing to the registry just fails sometimes, so for the time
