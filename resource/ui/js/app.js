@@ -244,7 +244,6 @@ var AdminViews;
             }
             LogComponent.controller = controller;
             function view(ctrl) {
-                console.log("Redrawing log component");
                 return m(".restExplorerLog", [
                     m("h3", "Console"),
                     button("Clear", ctrl.clear, function () { return false; }),
@@ -290,12 +289,174 @@ var AdminViews;
         })(Page = Monitor.Page || (Monitor.Page = {}));
     })(Monitor = AdminViews.Monitor || (AdminViews.Monitor = {}));
 })(AdminViews || (AdminViews = {}));
+// source: controllers/monitor.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Models;
+(function (Models) {
+    var Metrics;
+    (function (Metrics) {
+        var Query = (function () {
+            function Query(start, end) {
+                var series = [];
+                for (var _i = 2; _i < arguments.length; _i++) {
+                    series[_i - 2] = arguments[_i];
+                }
+                this.start = start;
+                this.end = end;
+                this.series = series;
+            }
+            Query.prototype.query = function () {
+                var url = "/ts/query";
+                var data = {
+                    start_nanos: this.start.getTime() * 1.0e6,
+                    end_nanos: this.end.getTime() * 1.0e6,
+                    queries: this.series.map(function (r) { return { name: r }; }),
+                };
+                return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
+                    .then(function (d) {
+                    if (!d.results) {
+                        d.results = [];
+                    }
+                    d.results.forEach(function (r) {
+                        if (!r.datapoints) {
+                            r.datapoints = [];
+                        }
+                    });
+                    return d;
+                });
+            };
+            return Query;
+        })();
+        Metrics.Query = Query;
+        function nonJsonErrors(xhr, opts) {
+            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
+        }
+    })(Metrics = Models.Metrics || (Models.Metrics = {}));
+})(Models || (Models = {}));
+// source: components/metrics.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../models/timeseries.ts" />
+var Components;
+(function (Components) {
+    var Metrics;
+    (function (Metrics) {
+        var LineGraph;
+        (function (LineGraph) {
+            var Controller = (function () {
+                function Controller(vm) {
+                    var _this = this;
+                    this.vm = vm;
+                    this.margin = { top: 20, right: 20, bottom: 30, left: 60 };
+                    this.timeScale = d3.time.scale();
+                    this.valScale = d3.scale.linear();
+                    this.timeAxis = d3.svg.axis().scale(this.timeScale).orient("bottom");
+                    this.valAxis = d3.svg.axis().scale(this.valScale).orient("left");
+                    this.line = d3.svg.line()
+                        .x(function (d) { return _this.timeScale(d.timestamp_nanos / 1.0e6); })
+                        .y(function (d) { return _this.valScale(d.value); });
+                    this.color = d3.scale.category10();
+                    this.error = m.prop("");
+                    this.drawGraph = function (element, isInitialized, context) {
+                        if (!isInitialized) {
+                            var data = _this.results().results;
+                            _this.valScale.domain([
+                                d3.min(data, function (d) { return d3.min(d.datapoints, function (dp) { return dp.value; }); }),
+                                d3.max(data, function (d) { return d3.max(d.datapoints, function (dp) { return dp.value; }); })
+                            ]);
+                            _this.timeScale.domain([_this.vm.query.start, _this.vm.query.end]);
+                            var svg = d3.select(element)
+                                .attr("width", _this.vm.width)
+                                .attr("height", _this.vm.height)
+                                .append("g")
+                                .attr("transform", "translate(" + _this.margin.left + "," + _this.margin.top + ")");
+                            svg.append("g")
+                                .attr("class", "x axis")
+                                .attr("transform", "translate(0," + _this.chartHeight + ")")
+                                .call(_this.timeAxis);
+                            svg.append("g")
+                                .attr("class", "y axis")
+                                .call(_this.valAxis);
+                            svg.selectAll(".line")
+                                .data(data)
+                                .enter()
+                                .append("path")
+                                .attr("class", function (d, i) { return "line line" + i; })
+                                .attr("d", function (d) { return _this.line(d.datapoints); })
+                                .style("stroke", function (d) { return _this.color(d.name); });
+                        }
+                    };
+                    this.chartWidth = vm.width - this.margin.left - this.margin.right;
+                    this.chartHeight = vm.height - this.margin.top - this.margin.bottom;
+                    this.timeScale.range([0, this.chartWidth]);
+                    this.valScale.range([this.chartHeight, 0]);
+                    this.results = vm.query.query().then(null, this.error);
+                }
+                return Controller;
+            })();
+            function controller(model) {
+                return new Controller(model);
+            }
+            LineGraph.controller = controller;
+            function view(ctrl) {
+                if (ctrl.error()) {
+                    return m("", "error loading graph:" + ctrl.error());
+                }
+                else if (ctrl.results()) {
+                    return m("svg.graph", { config: ctrl.drawGraph });
+                }
+                else {
+                    return m("", "loading...");
+                }
+            }
+            LineGraph.view = view;
+            function create(width, height, query, key) {
+                var vm = { width: width, height: height, query: query };
+                if (!!key) {
+                    vm.key = key;
+                }
+                return m.component(LineGraph, vm);
+            }
+            LineGraph.create = create;
+        })(LineGraph = Metrics.LineGraph || (Metrics.LineGraph = {}));
+    })(Metrics = Components.Metrics || (Components.Metrics = {}));
+})(Components || (Components = {}));
+// source: controllers/monitor.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../models/timeseries.ts" />
+/// <reference path="../components/metrics.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var Graph;
+    (function (Graph) {
+        var Page;
+        (function (Page) {
+            function controller() { }
+            Page.controller = controller;
+            function view() {
+                var end = new Date();
+                var start = new Date(end.getTime() - (10 * 60 * 1000));
+                return m(".graphPage", [
+                    m("H3", "Graph Demo"),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.Query(start, end, "cr.store.livebytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.Query(start, end, "cr.store.keybytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.Query(start, end, "cr.store.livebytes.1", "cr.store.valbytes.1")),
+                ]);
+            }
+            Page.view = view;
+        })(Page = Graph.Page || (Graph.Page = {}));
+    })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
+})(AdminViews || (AdminViews = {}));
 // source: app.ts
 /// <reference path="typings/mithriljs/mithril.d.ts" />
 /// <reference path="pages/rest_explorer.ts" />
 /// <reference path="pages/monitor.ts" />
+/// <reference path="pages/graph.ts" />
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/rest-explorer", {
     "/rest-explorer": AdminViews.RestExplorer.Page,
     "/monitor": AdminViews.Monitor.Page,
+    "/graph": AdminViews.Graph.Page,
 });

@@ -278,7 +278,6 @@ module AdminViews {
       }
 
       export function view(ctrl:Controller) {
-        console.log("Redrawing log component");
         return m(".restExplorerLog", [
             m("h3", "Console"),
             button("Clear", ctrl.clear, () => false),
