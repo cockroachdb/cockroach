@@ -921,12 +921,20 @@ func (r *Range) maybeGossipFirstRange() error {
 	if !r.IsFirstRange() {
 		return nil
 	}
+
 	ctx := r.context()
+
+	// Gossip the cluster ID from all replicas of the first range.
+	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
+		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
+	}
+
 	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
 		return err
 	}
-	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
-	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
+	log.Infof("gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {

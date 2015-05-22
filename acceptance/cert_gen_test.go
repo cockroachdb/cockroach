@@ -34,5 +34,5 @@ func TestCertGen(t *testing.T) {
 
 	// Check the gossip peerings which will indicate whether the nodes
 	// can talk to each other with the generated certs.
-	checkGossipPeerings(t, l, 20*time.Second)
+	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 }

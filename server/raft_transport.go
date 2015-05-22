@@ -137,6 +137,7 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		log.Errorf("could not get address for node %d: %s", nodeID, err)
+		return
 	}
 	client := rpc.NewClient(addr, nil, t.rpcContext)
 	select {
