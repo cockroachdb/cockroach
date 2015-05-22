@@ -325,7 +325,7 @@ func (l *Cluster) startNode(i int) *Container {
 	return c
 }
 
-func (l *Cluster) processEvent(e dockerclient.EventOrError) bool {
+func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan struct{}) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -352,6 +352,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError) bool {
 	// An event on any other container is unexpected. Die.
 	select {
 	case <-l.stopper:
+	case <-monitorStopper:
 	default:
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
@@ -361,9 +362,9 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError) bool {
 	return false
 }
 
-func (l *Cluster) monitor(ch <-chan dockerclient.EventOrError) {
+func (l *Cluster) monitor(ch <-chan dockerclient.EventOrError, monitorStopper chan struct{}) {
 	for e := range ch {
-		if !l.processEvent(e) {
+		if !l.processEvent(e, monitorStopper) {
 			break
 		}
 	}
@@ -387,7 +388,7 @@ func (l *Cluster) Start() {
 	if err != nil {
 		panic(err)
 	}
-	go l.monitor(ch)
+	go l.monitor(ch, l.monitorStopper)
 
 	for i := range l.Nodes {
 		l.Nodes[i] = l.startNode(i)
