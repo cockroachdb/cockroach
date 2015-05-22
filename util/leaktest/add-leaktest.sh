@@ -9,16 +9,22 @@
 #
 # Usage: add-leaktest.sh pkg/*_test.go
 
-for i in "$@"; do
-    sed -i'~' -e '
-        /^func Test.*(t \*testing.T) {/ {
-            # Skip past the test declaration
-            n
-            # If the next line does not call AfterTest, insert it.
-            /leaktest.AfterTest/! i\
-                defer leaktest.AfterTest(t)
-        }
-    ' $i
-    # goimports will adjust indentation and add any necessary import.
-    goimports -w $i
+# Note that go:generate does not do expansion. So "go:generate add-leakest.sh
+# *_test.go" will call into here with a single argument of "*_test.go"
+
+sed -i'~' -e '
+    /^func Test.*(t \*testing.T) {/ {
+        # Skip past the test declaration
+        n
+        # If the next line does not call AfterTest, insert it.
+        /leaktest.AfterTest/! i\
+            defer leaktest.AfterTest(t)
+    }
+' $@
+
+for i in $@; do
+    if ! cmp -s $i $i~ ; then
+	# goimports will adjust indentation and add any necessary import.
+	goimports -w $i
+    fi
 done
