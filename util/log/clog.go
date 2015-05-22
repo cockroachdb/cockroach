@@ -985,15 +985,23 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 
 	// Write header.
 	file, line := logging.Caller(0)
-	entry := proto.LogEntry{
-		Time: time.Now().UnixNano(),
-		File: file,
-		Line: int32(line),
-		Format: fmt.Sprintf("Running on machine: %s\nBinary: Built with %s %s for %s/%s",
-			host, runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
+	for _, format := range []string{
+		fmt.Sprintf("Running on machine: %s", host),
+		fmt.Sprintf("Binary: Built with %s %s for %s/%s",
+			runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
+	} {
+		entry := proto.LogEntry{
+			Time:   time.Now().UnixNano(),
+			File:   file,
+			Line:   int32(line),
+			Format: format,
+		}
+		n, err := sb.file.Write(encodeLogEntry(&entry))
+		if err != nil {
+			panic(err)
+		}
+		sb.nbytes += uint64(n)
 	}
-	n, err := sb.file.Write(encodeLogEntry(&entry))
-	sb.nbytes += uint64(n)
 	return err
 }
 
