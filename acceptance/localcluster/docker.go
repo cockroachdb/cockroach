@@ -35,6 +35,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
@@ -308,6 +309,7 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 // and unmarshals the result as JSON.
 func (c *Container) GetJSON(port, path string, v interface{}) error {
 	client := &http.Client{
+		Timeout: 200 * time.Millisecond,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,

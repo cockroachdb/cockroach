@@ -21,6 +21,7 @@ package acceptance
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"testing"
@@ -82,5 +83,21 @@ func TestGossipPeerings(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
+	checkGossipPeerings(t, l, 20*time.Second)
+
+	// Restart the first node.
+	log.Infof("restarting node 0")
+	if err := l.Nodes[0].Restart(5); err != nil {
+		t.Fatal(err)
+	}
+	checkGossipPeerings(t, l, 20*time.Second)
+
+	// Restart another node.
+	rand.Seed(util.NewPseudoSeed())
+	pickedNode := rand.Intn(len(l.Nodes)-1) + 1
+	log.Infof("restarting node %d", pickedNode)
+	if err := l.Nodes[pickedNode].Restart(5); err != nil {
+		t.Fatal(err)
+	}
 	checkGossipPeerings(t, l, 20*time.Second)
 }

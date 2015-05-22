@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -304,12 +305,17 @@ func (l *Cluster) initCluster() {
 }
 
 func (l *Cluster) startNode(i int) *Container {
+	gossipNodes := []string{}
+	for i := range l.Nodes {
+		gossipNodes = append(gossipNodes, node(i)+":8080")
+	}
+
 	cmd := []string{
 		"start",
 		"--stores=ssd=" + data(i),
 		"--certs=/certs",
 		"--addr=" + node(i) + ":8080",
-		"--gossip=" + node(0) + ":8080",
+		"--gossip=" + strings.Join(gossipNodes, ","),
 	}
 	c := l.createRoach(i, cmd...)
 	maybePanic(c.Start(nil, l.dns, l.vols))
