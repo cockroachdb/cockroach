@@ -86,7 +86,7 @@ func TestGossipPeerings(t *testing.T) {
 	checkGossipPeerings(t, l, 20*time.Second)
 
 	// Restart the first node.
-	log.Infof("Restarting node 0")
+	log.Infof("restarting node 0")
 	if err := l.Nodes[0].Restart(5); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestGossipPeerings(t *testing.T) {
 	// Restart another node.
 	rand.Seed(util.NewPseudoSeed())
 	pickedNode := rand.Intn(len(l.Nodes)-1) + 1
-	log.Infof("Restarting node %d", pickedNode)
+	log.Infof("restarting node %d", pickedNode)
 	if err := l.Nodes[pickedNode].Restart(5); err != nil {
 		t.Fatal(err)
 	}
