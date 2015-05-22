@@ -11,3 +11,9 @@ For a human-readable version of the certificate, run:
 ```bash
 openssl x509 -in node.crt -text
 ```
+
+To regenerate:
+```bash
+cockroach cert --certs=resource/test_certs create-ca
+cockroach cert --certs=resource/test_certs create-node 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+```

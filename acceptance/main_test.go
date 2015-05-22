@@ -26,7 +26,7 @@ import (
 	"testing"
 )
 
-var numNodes = flag.Int("n", 3, "the number of nodes to start (if not otherwise specified by a test)")
+var numNodes = flag.Int("num", 3, "the number of nodes to start (if not otherwise specified by a test)")
 var stopper = make(chan struct{})
 
 func TestMain(m *testing.M) {
