@@ -217,7 +217,17 @@ func (l *Cluster) createVolumes() {
 		panic(err)
 	}
 
-	l.CertsDir, err = ioutil.TempDir(os.TempDir(), "localcluster.")
+	// Create the temporary certs directory in the current working
+	// directory. Boot2docker's handling of binding local directories
+	// into the container is very confusing. If the directory being
+	// bound has a parent directory that exists in the boot2docker VM
+	// then that directory is bound into the container. In particular,
+	// that means that binds of /tmp and /var will be problematic.
+	cwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	l.CertsDir, err = ioutil.TempDir(cwd, ".localcluster.certs.")
 	if err != nil {
 		panic(err)
 	}
