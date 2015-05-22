@@ -60,7 +60,7 @@ func countRangeReplicas(client *client.DB) (int, error) {
 	return 0, util.Errorf("first range not found")
 }
 
-func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, attempts int) {
+func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.Duration) {
 	// Always talk to node 0.
 	client, err := makeDBClient(cluster, 0)
 	if err != nil {
@@ -74,29 +74,27 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, attempts
 
 	log.Infof("waiting for first range to have %d replicas", wantedReplicas)
 
-	for i := 0; i < attempts; i++ {
+	util.SucceedsWithin(t, d, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
-			return
+			return nil
 		case <-time.After(1 * time.Second):
 			break
 		}
 
 		found, err := countRangeReplicas(client)
 		if err != nil {
-			t.Fatal(err)
-			return
+			return err
 		}
 
 		fmt.Fprintf(os.Stderr, "%d ", found)
 		if found == wantedReplicas {
 			fmt.Printf("... correct number of replicas found\n")
-			return
+			return nil
 		}
-	}
-
-	t.Errorf("failed to replicate first range")
+		return fmt.Errorf("not enough replicas")
+	})
 }
 
 func TestRangeReplication(t *testing.T) {
@@ -104,5 +102,5 @@ func TestRangeReplication(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
-	checkRangeReplication(t, l, 20)
+	checkRangeReplication(t, l, 20*time.Second)
 }
