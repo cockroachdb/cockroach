@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -41,7 +42,7 @@ import (
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
 func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
-	client.DefaultTxnRetryOptions = util.RetryOptions{
+	client.DefaultTxnRetryOptions = retry.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  5 * time.Millisecond,
 		Constant:    2,

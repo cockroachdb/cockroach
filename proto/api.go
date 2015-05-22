@@ -18,7 +18,7 @@
 package proto
 
 import (
-	"log"
+	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -188,18 +188,18 @@ func (rh *ResponseHeader) GoError() error {
 	// match the methods of the specific error type.
 	if rh.Error.Retryable {
 		if r, ok := err.(util.Retryable); !ok || !r.CanRetry() {
-			log.Fatalf("inconsistent error proto; expected %T to be retryable", err)
+			panic(fmt.Sprintf("inconsistent error proto; expected %T to be retryable", err))
 		}
 	}
 	if r, ok := err.(TransactionRestartError); ok {
 		if r.CanRestartTransaction() != rh.Error.TransactionRestart {
-			log.Fatalf("inconsistent error proto; expected %T to have restart mode %v",
-				err, rh.Error.TransactionRestart)
+			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode %v",
+				err, rh.Error.TransactionRestart))
 		}
 	} else {
 		// Error type doesn't implement TransactionRestartError, so expect it to have the default.
 		if rh.Error.TransactionRestart != TransactionRestart_ABORT {
-			log.Fatalf("inconsistent error proto; expected %T to have restart mode ABORT", err)
+			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode ABORT", err))
 		}
 	}
 	return err
@@ -254,7 +254,7 @@ func (br *BatchRequest) Add(args Request) {
 	union := RequestUnion{}
 	if !union.SetValue(args) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
-		log.Fatalf("unable to add %T to batch request", args)
+		panic(fmt.Sprintf("unable to add %T to batch request", args))
 	}
 	if br.Key == nil {
 		br.Key = args.Header().Key
@@ -268,7 +268,7 @@ func (br *BatchResponse) Add(reply Response) {
 	union := ResponseUnion{}
 	if !union.SetValue(reply) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
-		log.Fatalf("unable to add %T to batch response", reply)
+		panic(fmt.Sprintf("unable to add %T to batch response", reply))
 	}
 	br.Responses = append(br.Responses, union)
 }

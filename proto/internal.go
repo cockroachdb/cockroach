@@ -19,8 +19,9 @@
 package proto
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -57,7 +58,7 @@ func (br *InternalBatchRequest) Add(args Request) {
 	union := InternalRequestUnion{}
 	if !union.SetValue(args) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
-		log.Fatalf("unable to add %T to internal batch request", args)
+		panic(fmt.Sprintf("unable to add %T to internal batch request", args))
 	}
 	if br.Key == nil {
 		br.Key = args.Header().Key
@@ -71,7 +72,7 @@ func (br *InternalBatchResponse) Add(reply Response) {
 	union := InternalResponseUnion{}
 	if !union.SetValue(reply) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
-		log.Fatalf("unable to add %T to internal batch response", reply)
+		panic(fmt.Sprintf("unable to add %T to internal batch response", reply))
 	}
 	br.Responses = append(br.Responses, union)
 }

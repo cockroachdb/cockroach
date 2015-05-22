@@ -32,17 +32,3 @@ func Add(ctx context.Context, kvs ...interface{}) context.Context {
 	}
 	return ctx
 }
-
-func contextToDict(ctx context.Context, dict map[string]interface{}) {
-	// TODO(tschottdorf): Could put an LRU cache here if parsing the contexts
-	// turns out to be a lot of work - there will be a few static ones, and
-	// then one per client.
-	if ctx == nil {
-		return
-	}
-	for i := Field(0); i < maxField; i++ {
-		if v := ctx.Value(i); v != nil {
-			dict[i.String()] = v
-		}
-	}
-}

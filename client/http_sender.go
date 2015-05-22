@@ -29,10 +29,11 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/c-snappy"
+	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -62,7 +63,7 @@ type httpSendError struct {
 
 // HTTPRetryOptions sets the retry options for handling retryable
 // HTTP errors and connection I/O errors.
-var HTTPRetryOptions = util.RetryOptions{
+var HTTPRetryOptions = retry.RetryOptions{
 	Backoff:     50 * time.Millisecond,
 	MaxBackoff:  5 * time.Second,
 	Constant:    2,
@@ -105,7 +106,7 @@ func (s *HTTPSender) Send(_ context.Context, call Call) {
 	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
-	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+	if err := retry.RetryWithBackoff(retryOpts, func() (retry.RetryStatus, error) {
 		resp, err := s.post(call)
 		if err != nil {
 			if resp != nil {
@@ -116,10 +117,10 @@ func (s *HTTPSender) Send(_ context.Context, call Call) {
 					// Retry on service unavailable and request timeout.
 					// TODO(spencer): consider respecting the Retry-After header for
 					// backoff / retry duration.
-					return util.RetryContinue, nil
+					return retry.RetryContinue, nil
 				default:
 					// Can't recover from all other errors.
-					return util.RetryBreak, err
+					return retry.RetryBreak, err
 				}
 			}
 			switch t := err.(type) {
@@ -132,14 +133,14 @@ func (s *HTTPSender) Send(_ context.Context, call Call) {
 				// the errors we'll sweep up in this net shouldn't be retried,
 				// but we can't really know for sure which.
 				log.Warningf("failed to send HTTP request or read its response: %s", t)
-				return util.RetryContinue, nil
+				return retry.RetryContinue, nil
 			default:
 				// Can't retry in order to recover from this error. Propagate.
-				return util.RetryBreak, err
+				return retry.RetryBreak, err
 			}
 		}
 		// On successful post, we're done with retry loop.
-		return util.RetryBreak, nil
+		return retry.RetryBreak, nil
 	}); err != nil {
 		call.Reply.Header().SetGoError(err)
 	}

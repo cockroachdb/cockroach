@@ -19,8 +19,8 @@ package client
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"golang.org/x/net/context"
 )
 
@@ -89,7 +89,7 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 	// error condition this loop isn't capable of handling.
 	retryOpts := t.kv.TxnRetryOptions
 	retryOpts.Tag = t.txn.Name
-	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+	err := retry.RetryWithBackoff(retryOpts, func() (retry.RetryStatus, error) {
 		t.haveTxnWrite, t.haveEndTxn = false, false // always reset before [re]starting txn
 		err := retryable(t)
 		if err == nil {
@@ -108,13 +108,13 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
-				return util.RetryReset, nil
+				return retry.RetryReset, nil
 			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
-				return util.RetryContinue, nil
+				return retry.RetryContinue, nil
 			}
 			// By default, fall through and return RetryBreak.
 		}
-		return util.RetryBreak, err
+		return retry.RetryBreak, err
 	})
 	if err != nil && t.haveTxnWrite {
 		if replyErr := t.Run(Call{

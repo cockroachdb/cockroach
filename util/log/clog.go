@@ -22,19 +22,23 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	stdLog "log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -55,8 +59,6 @@ const (
 )
 
 const severityChar = "IWEF"
-
-const colorTermRE = "(ansi|xterm.*color)"
 
 // SeverityName provides a mapping from Severity level to a string.
 var severityName = []string{
@@ -111,6 +113,32 @@ func severityByName(s string) (severity, bool) {
 		}
 	}
 	return 0, false
+}
+
+// colorProfile defines escape sequences which provide color in
+// terminals. Some terminals support 8 colors, some 256, others
+// none at all.
+type colorProfile struct {
+	infoPrefix  []byte
+	warnPrefix  []byte
+	errorPrefix []byte
+	timePrefix  []byte
+}
+
+// For terms with 8-color support.
+var colorProfile8 = &colorProfile{
+	infoPrefix:  []byte("\033[0;36;49"),
+	warnPrefix:  []byte("\033[0;33;49"),
+	errorPrefix: []byte("\033[0;31;49"),
+	timePrefix:  []byte("\033[2;37;49"),
+}
+
+// For terms with 256-color support.
+var colorProfile256 = &colorProfile{
+	infoPrefix:  []byte("\033[38;5;33m"),
+	warnPrefix:  []byte("\033[38;5;214m"),
+	errorPrefix: []byte("\033[38;5;160m"),
+	timePrefix:  []byte("\033[38;5;246m"),
 }
 
 // OutputStats tracks the number of output lines and bytes written.
@@ -340,11 +368,248 @@ func (t *traceLocation) Set(value string) error {
 	return nil
 }
 
+// LogEntryDecoder reads successive encoded log entries from the input
+// buffer. Each entry is preceded by a single varint describing the
+// next entry's length.
+type LogEntryDecoder struct {
+	in io.Reader
+}
+
+func NewLogEntryDecoder(in io.Reader) *LogEntryDecoder {
+	return &LogEntryDecoder{in: in}
+}
+
+func (lr *LogEntryDecoder) Decode(entry *proto.LogEntry) error {
+	// Read the next log entry.
+	szBuf := make([]byte, 4)
+	n, err := lr.in.Read(szBuf)
+	if err != nil {
+		return err
+	}
+	_, sz := encoding.DecodeUint32(szBuf)
+	buf := make([]byte, sz)
+	n, err = lr.in.Read(buf)
+	if err != nil {
+		return err
+	}
+	if err := gogoproto.Unmarshal(buf[:n], entry); err != nil {
+		return err
+	}
+	return nil
+}
+
+type baseLogEntryReader struct {
+	buf    []byte
+	ld     *LogEntryDecoder
+	format func(entry *proto.LogEntry) []byte
+}
+
+func (hr *baseLogEntryReader) Read(p []byte) (int, error) {
+	var n int
+	for {
+		if len(hr.buf) != 0 {
+			copied := copy(p, hr.buf)
+			hr.buf = hr.buf[copied:]
+			n += copied
+			p = p[copied:]
+			if len(p) == 0 {
+				return n, nil
+			}
+		}
+		entry := &proto.LogEntry{}
+		if err := hr.ld.Decode(entry); err != nil {
+			return n, err
+		}
+		hr.buf = hr.format(entry)
+	}
+}
+
+type termLogEntryReader struct {
+	baseLogEntryReader
+}
+
+// NewTermLogEntryReader returns a reader for log files containing
+// encoded entries for use from a terminal. If the --color flag is
+// set, and the terminal supports colors, then log output will be
+// colorized.
+func NewTermLogEntryReader(reader io.Reader) io.Reader {
+	tr := &termLogEntryReader{
+		baseLogEntryReader: baseLogEntryReader{ld: NewLogEntryDecoder(reader)},
+	}
+	colors := logging.shouldColorize()
+	tr.format = func(entry *proto.LogEntry) []byte { return formatLogEntry(entry, colors) }
+	return tr
+}
+
+type jsonLogEntryReader struct {
+	baseLogEntryReader
+}
+
+// NewJSONLogEntryReader returns a reader for log files containing
+// encoded entries in JSON format.
+func NewJSONLogEntryReader(reader io.Reader) io.Reader {
+	jr := &jsonLogEntryReader{
+		baseLogEntryReader: baseLogEntryReader{ld: NewLogEntryDecoder(reader)},
+	}
+	jr.format = func(entry *proto.LogEntry) []byte {
+		data, err := json.MarshalIndent(entry, "", "  ")
+		if err != nil {
+			return []byte(fmt.Sprintf("{\"error\": %q", err))
+		}
+		return data
+	}
+	return jr
+}
+
 // flushSyncWriter is the interface satisfied by logging destinations.
 type flushSyncWriter interface {
 	Flush() error
 	Sync() error
 	io.Writer
+}
+
+// formatHeader formats a log header using the provided file name and
+// line number. Log lines are colorized depending on severity.
+//
+// Log lines have this form:
+// 	Lmmdd hh:mm:ss.uuuuuu threadid file:line] msg...
+// where the fields are defined as follows:
+// 	L                A single character, representing the log level (eg 'I' for INFO)
+// 	mm               The month (zero padded; ie May is '05')
+// 	dd               The day (zero padded)
+// 	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
+// 	threadid         The space-padded thread ID as returned by GetTID()
+// 	file             The file name
+// 	line             The line number
+// 	msg              The user-supplied message
+func formatHeader(s severity, now time.Time, threadID int32, file string, line int32, colors *colorProfile) *buffer {
+	buf := logging.getBuffer()
+	if line < 0 {
+		line = 0 // not a real line number, but acceptable to someDigits
+	}
+	if s > fatalLog {
+		s = infoLog // for safety.
+	}
+
+	tmp := buf.tmp[:len(buf.tmp)]
+	var n int
+	if colors != nil {
+		var prefix []byte
+		switch s {
+		case infoLog:
+			prefix = colors.infoPrefix
+		case warningLog:
+			prefix = colors.warnPrefix
+		case errorLog, fatalLog:
+			prefix = colors.errorPrefix
+		}
+		n += copy(tmp, prefix)
+	}
+	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
+	// It's worth about 3X. Fprintf is hard.
+	_, month, day := now.Date()
+	hour, minute, second := now.Clock()
+	// Lmmdd hh:mm:ss.uuuuuu threadid file:line]
+	tmp[n] = severityChar[s]
+	n++
+	n += buf.twoDigits(n, int(month))
+	n += buf.twoDigits(n, day)
+	if colors != nil {
+		n += copy(tmp[n:], colors.timePrefix) // gray for time, file & line
+	}
+	tmp[n] = ' '
+	n++
+	n += buf.twoDigits(n, hour)
+	tmp[n] = ':'
+	n++
+	n += buf.twoDigits(n, minute)
+	tmp[n] = ':'
+	n++
+	n += buf.twoDigits(n, second)
+	tmp[n] = '.'
+	n++
+	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
+	tmp[n] = ' '
+	n++
+	n += buf.nDigits(7, n, int(threadID), ' ')
+	tmp[n] = ' '
+	n++
+	buf.Write(tmp[:n])
+	buf.WriteString(file)
+	tmp[0] = ':'
+	n = 1 + buf.someDigits(1, int(line))
+	tmp[n] = ']'
+	n++
+	if colors != nil {
+		n += copy(tmp[n:], []byte("\033[0m")) // reset
+	}
+	tmp[n] = ' '
+	n++
+	buf.Write(tmp[:n])
+	return buf
+}
+
+// Some custom tiny helper functions to print the log header efficiently.
+
+const digits = "0123456789"
+
+// twoDigits formats a zero-prefixed two-digit integer at buf.tmp[i].
+// Returns two.
+func (buf *buffer) twoDigits(i, d int) int {
+	buf.tmp[i+1] = digits[d%10]
+	d /= 10
+	buf.tmp[i] = digits[d%10]
+	return 2
+}
+
+// nDigits formats an n-digit integer at buf.tmp[i],
+// padding with pad on the left.
+// It assumes d >= 0. Returns n.
+func (buf *buffer) nDigits(n, i, d int, pad byte) int {
+	j := n - 1
+	for ; j >= 0 && d > 0; j-- {
+		buf.tmp[i+j] = digits[d%10]
+		d /= 10
+	}
+	for ; j >= 0; j-- {
+		buf.tmp[i+j] = pad
+	}
+	return n
+}
+
+// someDigits formats a zero-prefixed variable-width integer at buf.tmp[i].
+func (buf *buffer) someDigits(i, d int) int {
+	// Print into the top, then copy down. We know there's space for at least
+	// a 10-digit number.
+	j := len(buf.tmp)
+	for {
+		j--
+		buf.tmp[j] = digits[d%10]
+		d /= 10
+		if d == 0 {
+			break
+		}
+	}
+	return copy(buf.tmp[i:], buf.tmp[j:])
+}
+
+func formatLogEntry(entry *proto.LogEntry, colors *colorProfile) []byte {
+	buf := formatHeader(severity(entry.Severity), time.Unix(entry.Time/1E9, entry.Time%1E9), entry.ThreadID, entry.File, entry.Line, colors)
+	var args []interface{}
+	for _, arg := range entry.Args {
+		args = append(args, arg.Str)
+	}
+	if len(entry.Format) == 0 {
+		buf.WriteString(fmt.Sprint(args...))
+	} else {
+		buf.WriteString(fmt.Sprintf(entry.Format, args...))
+	}
+	buf.WriteByte('\n')
+	if len(entry.Stacks) > 0 {
+		buf.Write(entry.Stacks)
+	}
+	defer logging.putBuffer(buf)
+	return buf.Bytes()
 }
 
 func init() {
@@ -370,10 +635,11 @@ type loggingT struct {
 	// Boolean flags. Not handled atomically because the flag.Value interface
 	// does not let us avoid the =true, and that shorthand is necessary for
 	// compatibility. TODO: does this matter enough to fix? Seems unlikely.
-	toStderr     bool   // The -logtostderr flag.
-	alsoToStderr bool   // The -alsologtostderr flag.
-	color        string // The -color flag.
-	hasColorTerm *bool  // Set via call to checkForColorTerm
+	toStderr        bool          // The -logtostderr flag.
+	alsoToStderr    bool          // The -alsologtostderr flag.
+	color           string        // The -color flag.
+	hasColorProfile *bool         // Non-nil if the color profile has been determined
+	colorProfile    *colorProfile // Set via call to getTermColorProfile
 
 	// Level flag. Handled atomically.
 	stderrThreshold severity // The -stderrthreshold flag.
@@ -467,28 +733,6 @@ func (l *loggingT) putBuffer(b *buffer) {
 
 var timeNow = time.Now // Stubbed out for testing.
 
-/*
-header formats a log header as defined by the C++ implementation.
-It returns a buffer containing the formatted header and the user's file and line number.
-The depth specifies how many stack frames above lives the source line to be identified in the log message.
-
-Log lines have this form:
-	Lmmdd hh:mm:ss.uuuuuu threadid file:line] msg...
-where the fields are defined as follows:
-	L                A single character, representing the log level (eg 'I' for INFO)
-	mm               The month (zero padded; ie May is '05')
-	dd               The day (zero padded)
-	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
-	threadid         The space-padded thread ID as returned by GetTID()
-	file             The file name
-	line             The line number
-	msg              The user-supplied message
-*/
-func (l *loggingT) header(s severity, now time.Time, depth int) (*buffer, string, int) {
-	file, line := l.Caller(depth + 3) // we know we're 3 levels deep now.
-	return l.formatHeader(s, now, file, line), file, line
-}
-
 // Caller returns the file and line of the Caller or, in case of error,
 // the placeholder ('???', 1).
 func Caller(depth int) (string, int) {
@@ -510,174 +754,51 @@ func (l *loggingT) Caller(depth int) (file string, line int) {
 	return
 }
 
-// formatHeader formats a log header using the provided file name and line number.
-func (l *loggingT) formatHeader(s severity, now time.Time, file string, line int) *buffer {
-	buf := l.getBuffer()
-	if line < 0 {
-		line = 0 // not a real line number, but acceptable to someDigits
-	}
-	if s > fatalLog {
-		s = infoLog // for safety.
-	}
-
-	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
-	// It's worth about 3X. Fprintf is hard.
-	_, month, day := now.Date()
-	hour, minute, second := now.Clock()
-	// Lmmdd hh:mm:ss.uuuuuu threadid file:line]
-	buf.tmp[0] = severityChar[s]
-	buf.twoDigits(1, int(month))
-	buf.twoDigits(3, day)
-	buf.tmp[5] = ' '
-	buf.twoDigits(6, hour)
-	buf.tmp[8] = ':'
-	buf.twoDigits(9, minute)
-	buf.tmp[11] = ':'
-	buf.twoDigits(12, second)
-	buf.tmp[14] = '.'
-	buf.nDigits(6, 15, now.Nanosecond()/1000, '0')
-	buf.tmp[21] = ' '
-	buf.nDigits(7, 22, pid, ' ') // TODO: should be TID
-	buf.tmp[29] = ' '
-	buf.Write(buf.tmp[:30])
-	buf.WriteString(file)
-	buf.tmp[0] = ':'
-	n := buf.someDigits(1, line)
-	buf.tmp[n+1] = ']'
-	buf.tmp[n+2] = ' '
-	buf.Write(buf.tmp[:n+3])
-	return buf
-}
-
-// Some custom tiny helper functions to print the log header efficiently.
-
-const digits = "0123456789"
-
-// twoDigits formats a zero-prefixed two-digit integer at buf.tmp[i].
-func (buf *buffer) twoDigits(i, d int) {
-	buf.tmp[i+1] = digits[d%10]
-	d /= 10
-	buf.tmp[i] = digits[d%10]
-}
-
-// nDigits formats an n-digit integer at buf.tmp[i],
-// padding with pad on the left.
-// It assumes d >= 0.
-func (buf *buffer) nDigits(n, i, d int, pad byte) {
-	j := n - 1
-	for ; j >= 0 && d > 0; j-- {
-		buf.tmp[i+j] = digits[d%10]
-		d /= 10
-	}
-	for ; j >= 0; j-- {
-		buf.tmp[i+j] = pad
-	}
-}
-
-// someDigits formats a zero-prefixed variable-width integer at buf.tmp[i].
-func (buf *buffer) someDigits(i, d int) int {
-	// Print into the top, then copy down. We know there's space for at least
-	// a 10-digit number.
-	j := len(buf.tmp)
-	for {
-		j--
-		buf.tmp[j] = digits[d%10]
-		d /= 10
-		if d == 0 {
-			break
-		}
-	}
-	return copy(buf.tmp[i:], buf.tmp[j:])
-}
-
-// PrintWith an arbitrary log message to be written to the specified
-// facility of the logger via the buffer supplied to the passed function.
-// The map provided to the function is for output to a machine-readable
-// log and should be populated with context Field values.
-func PrintWith(s severity, depth int, f func(buf *bytes.Buffer, machineDict map[string]interface{})) {
-	now := time.Now()
-	buf, file, line := logging.header(s, now, depth)
-	machineDict := map[string]interface{}{
-		"Time": now,
-		"File": file,
-		"Line": line,
-	}
-	f(&buf.Buffer, machineDict)
-
-	// TODO(spencer,tobias): do something with machine readable data.
-	//   Most likely we'll want to write this to a separate file.
-	//
-	// jsonBytes, err := json.Marshal(machineDict)
-	// if err != nil {
-	// 	jsonBytes = []byte(fmt.Sprintf("%%!(BADJSON err=%s)", err))
-	// }
-	// os.Stderr.Write(jsonBytes)
-
-	logging.output(s, buf, file, line, false)
-}
-
-func (l *loggingT) println(s severity, args ...interface{}) {
-	buf, file, line := l.header(s, time.Now(), 0)
-	fmt.Fprintln(buf, args...)
-	l.output(s, buf, file, line, false)
-}
-
 func (l *loggingT) print(s severity, args ...interface{}) {
-	l.printDepth(s, 1, args...)
+	file, line := l.Caller(1)
+	entry := proto.LogEntry{}
+	setLogEntry(nil, "", args, &entry)
+	l.outputLogEntry(s, file, line, false, &entry)
 }
 
-func (l *loggingT) printDepth(s severity, depth int, args ...interface{}) {
-	buf, file, line := l.header(s, time.Now(), depth)
-	fmt.Fprint(buf, args...)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		buf.WriteByte('\n')
-	}
-	l.output(s, buf, file, line, false)
-}
-
-func (l *loggingT) printFormatted(s severity, format string, args ...interface{}) {
-	buf, file, line := l.header(s, time.Now(), 0)
-	fmt.Fprintf(buf, format, args...)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		buf.WriteByte('\n')
-	}
-	l.output(s, buf, file, line, false)
-}
-
-// printWithFileLine behaves like print but uses the provided file and line number.  If
-// alsoLogToStderr is true, the log message always appears on standard error; it
-// will also appear in the log file unless --logtostderr is set.
-func (l *loggingT) printWithFileLine(s severity, file string, line int, alsoToStderr bool, args ...interface{}) {
-	buf := l.formatHeader(s, time.Now(), file, line)
-	fmt.Fprint(buf, args...)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		buf.WriteByte('\n')
-	}
-	l.output(s, buf, file, line, alsoToStderr)
-}
-
-// output writes the data to the log files and releases the buffer.
-func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoToStderr bool) {
+// outputLogEntry marshals a log entry proto into bytes, and writes
+// the data to the log files. If a trace location is set, stack traces
+// are added to the entry before marshaling.
+func (l *loggingT) outputLogEntry(s severity, file string, line int, alsoToStderr bool, entry *proto.LogEntry) {
 	l.mu.Lock()
-	if l.traceLocation.isSet() {
+
+	// Set additional details in log entry.
+	now := time.Now()
+	entry.Severity = int32(s)
+	entry.Time = now.UnixNano()
+	entry.ThreadID = int32(pid) // TODO: should be TID
+	entry.File = file
+	entry.Line = int32(line)
+	// On fatal log, set all stacks.
+	if s == fatalLog {
+		entry.Stacks = stacks(true)
+		logExitFunc = func(error) {} // If we get a write error, we'll still exit.
+	} else if l.traceLocation.isSet() {
 		if l.traceLocation.match(file, line) {
-			buf.Write(stacks(false))
+			entry.Stacks = stacks(false)
 		}
 	}
-	data := buf.Bytes()
 
 	if l.toStderr {
-		_, _ = os.Stderr.Write(l.processForStderr(s, data))
+		_, _ = os.Stderr.Write(l.processForStderr(entry))
 	} else {
 		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
-			_, _ = os.Stderr.Write(l.processForStderr(s, data))
+			_, _ = os.Stderr.Write(l.processForStderr(entry))
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
-				_, _ = os.Stderr.Write(l.processForStderr(s, data)) // Make sure the message appears somewhere.
+				_, _ = os.Stderr.Write(l.processForStderr(entry)) // Make sure the message appears somewhere.
 				l.exit(err)
 			}
 		}
+
+		data := encodeLogEntry(entry)
+
 		switch s {
 		case fatalLog:
 			l.file[fatalLog].Write(data)
@@ -691,95 +812,69 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		case infoLog:
 			l.file[infoLog].Write(data)
 		}
+
+		if stats := severityStats[s]; stats != nil {
+			atomic.AddInt64(&stats.lines, 1)
+			atomic.AddInt64(&stats.bytes, int64(len(data)))
+		}
 	}
+	l.mu.Unlock()
+	// Flush and exit on fatal logging.
 	if s == fatalLog {
 		// If we got here via Exit rather than Fatal, print no stacks.
-		if atomic.LoadUint32(&fatalNoStacks) > 0 {
-			l.mu.Unlock()
-			timeoutFlush(10 * time.Second)
-			osExitFunc(1)
-			return
-		}
-		// Dump all goroutine stacks before exiting.
-		// First, make sure we see the trace for the current goroutine on
-		// standard error. If we're logging only to standard error, print the
-		// full trace; otherwise the active goroutine only.
-		_, _ = os.Stderr.Write(stacks(l.toStderr))
-
-		// Write the stack trace for all goroutines to the files.
-		trace := stacks(true)
-		logExitFunc = func(error) {} // If we get a write error, we'll still exit below.
-		for log := fatalLog; log >= infoLog; log-- {
-			if f := l.file[log]; f != nil { // Can be nil if -logtostderr is set.
-				f.Write(trace)
-			}
-		}
-		l.mu.Unlock()
 		timeoutFlush(10 * time.Second)
-		osExitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
-		return
-	}
-	l.putBuffer(buf)
-	l.mu.Unlock()
-	if stats := severityStats[s]; stats != nil {
-		atomic.AddInt64(&stats.lines, 1)
-		atomic.AddInt64(&stats.bytes, int64(len(data)))
+		if atomic.LoadUint32(&fatalNoStacks) > 0 {
+			osExitFunc(1)
+		} else {
+			osExitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+		}
 	}
 }
 
-// processForStderr colors log lines depending on severity.
-func (l *loggingT) processForStderr(s severity, data []byte) []byte {
-	switch l.color {
-	case "auto":
-		if !l.checkForColorTerm() {
-			return data
-		}
-	case "always":
-		// Colorize no matter what.
-	default:
-		return data
+func encodeLogEntry(entry *proto.LogEntry) []byte {
+	// Marshal log entry.
+	entryData, err := gogoproto.Marshal(entry)
+	if err != nil {
+		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
 	}
-	if len(data) < 5 {
-		return data
+	// Encode the length of the data first, followed by the encoded data.
+	data := encoding.EncodeUint32([]byte(nil), uint32(len(entryData)))
+	return append(data, entryData...)
+}
+
+// processForStderr formats a log entry for output to standard error.
+func (l *loggingT) processForStderr(entry *proto.LogEntry) []byte {
+	return formatLogEntry(entry, l.shouldColorize())
+}
+
+// shouldColorize returns whether output should be colorized.
+func (l *loggingT) shouldColorize() *colorProfile {
+	if l.color == "auto" {
+		return l.getTermColorProfile()
 	}
-	var prefix []byte
-	switch s {
-	case infoLog:
-		prefix = []byte("\033[38;5;33m") // blue
-	case warningLog:
-		prefix = []byte("\033[38;5;214m") // orange
-	case errorLog, fatalLog:
-		prefix = []byte("\033[38;5;160m") // red
-	default:
-		return data
-	}
-	prefix = append(prefix, data[:5]...)
-	idx := bytes.Index(data, []byte("]"))
-	if idx != -1 {
-		prefix = append(prefix, []byte("\033[38;5;246m")...) // gray for time, file & line
-		prefix = append(prefix, data[5:idx+1]...)            // time, file & line
-		prefix = append(prefix, []byte("\033[0m")...)
-		return append(prefix, data[idx+1:]...)
-	}
-	prefix = append(prefix, []byte("\033[0m")...)
-	return append(prefix, data[5:]...)
+	return nil
 }
 
 // checkForColorTerm attempts to verify that stderr is a character
 // device and if so, that the terminal supports color output.
-func (l *loggingT) checkForColorTerm() bool {
-	if l.hasColorTerm == nil {
+func (l *loggingT) getTermColorProfile() *colorProfile {
+	if l.hasColorProfile == nil {
 		var color bool
 		fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
 		if (fi.Mode() & os.ModeCharDevice) != 0 {
 			term := os.Getenv("TERM")
-			if match, _ := regexp.MatchString(colorTermRE, term); match {
+			switch term {
+			case "ansi", "xterm-color":
+				l.colorProfile = colorProfile8
+				color = true
+			case "xterm-256color":
+				l.colorProfile = colorProfile256
 				color = true
 			}
 		}
-		l.hasColorTerm = &color
+		l.hasColorProfile = &color
 	}
-	return *l.hasColorTerm
+	return l.colorProfile
 }
 
 // timeoutFlush calls Flush and returns when it completes or after timeout
@@ -889,12 +984,15 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
 	// Write header.
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Log file created at: %s\n", now.Format("2006/01/02 15:04:05"))
-	fmt.Fprintf(&buf, "Running on machine: %s\n", host)
-	fmt.Fprintf(&buf, "Binary: Built with %s %s for %s/%s\n", runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH)
-	fmt.Fprintf(&buf, "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg\n")
-	n, err := sb.file.Write(buf.Bytes())
+	file, line := logging.Caller(0)
+	entry := proto.LogEntry{
+		Time: time.Now().UnixNano(),
+		File: file,
+		Line: int32(line),
+		Format: fmt.Sprintf("Running on machine: %s\nBinary: Built with %s %s for %s/%s",
+			host, runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
+	}
+	n, err := sb.file.Write(encodeLogEntry(&entry))
 	sb.nbytes += uint64(n)
 	return err
 }
@@ -987,7 +1085,7 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 		text = fmt.Sprintf("bad log format: %s", b)
 	} else {
 		file = string(parts[0])
-		text = string(parts[2][1:]) // skip leading space
+		text = string(parts[2][1 : len(parts[2])-1]) // skip leading space and trailing newline
 		line, err = strconv.Atoi(string(parts[1]))
 		if err != nil {
 			text = fmt.Sprintf("bad line number: %s", b)
@@ -996,7 +1094,10 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	}
 	// printWithFileLine with alsoToStderr=true, so standard log messages
 	// always appear on standard error.
-	logging.printWithFileLine(severity(lb), file, line, true, text)
+	entry := &proto.LogEntry{
+		Format: text,
+	}
+	logging.outputLogEntry(severity(lb), file, line, true, entry)
 	return len(b), nil
 }
 

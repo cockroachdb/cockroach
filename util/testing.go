@@ -23,8 +23,6 @@ import (
 	"net"
 	"os"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Tester is a proxy for e.g. testing.T which does not introduce a dependency
@@ -39,11 +37,11 @@ type Tester interface {
 func tempUnixFile() string {
 	f, err := ioutil.TempFile("", "unix-socket")
 	if err != nil {
-		log.Fatalf("unable to create temp file: %s", err)
+		panic(fmt.Sprintf("unable to create temp file: %s", err))
 	}
 	f.Close()
 	if err := os.Remove(f.Name()); err != nil {
-		log.Fatalf("unable to remove temp file: %s", err)
+		panic(fmt.Sprintf("unable to remove temp file: %s", err))
 	}
 	return f.Name()
 }

@@ -58,6 +58,8 @@ func init() {
 		exterminateCmd,
 		quitCmd,
 
+		logCmd,
+
 		kvCmd,
 		acctCmd,
 		permCmd,

@@ -15,12 +15,14 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package retry
 
 import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestRetry(t *testing.T) {
@@ -97,7 +99,7 @@ func TestRetryReset(t *testing.T) {
 }
 
 func TestRetryStop(t *testing.T) {
-	stopper := NewStopper()
+	stopper := util.NewStopper()
 	// Create a retry loop which will never stop without stopper.
 	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 0, false, stopper}
 	if err := RetryWithBackoff(opts, func() (RetryStatus, error) {

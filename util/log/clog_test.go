@@ -19,9 +19,12 @@ package log
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	stdLog "log"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -72,12 +75,30 @@ func (l *loggingT) newBuffers() [numSeverity]flushSyncWriter {
 
 // contents returns the specified log value as a string.
 func contents(s severity) string {
-	return logging.file[s].(*flushBuffer).String()
+	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
+	hr := NewTermLogEntryReader(buffer)
+	bytes, err := ioutil.ReadAll(hr)
+	if err != nil {
+		panic(err)
+	}
+	return string(bytes)
+}
+
+// jsonContents returns the specified log JSON-encoded.
+func jsonContents(s severity) []byte {
+	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
+	hr := NewJSONLogEntryReader(buffer)
+	bytes, err := ioutil.ReadAll(hr)
+	if err != nil {
+		panic(err)
+	}
+	return bytes
 }
 
 // contains reports whether the string is contained in the log.
 func contains(s severity, str string, t *testing.T) bool {
-	return strings.Contains(contents(s), str)
+	c := contents(s)
+	return strings.Contains(c, str)
 }
 
 // setFlags configures the logging flags and osExitFunc how the test expects
@@ -125,6 +146,28 @@ func TestStandardLog(t *testing.T) {
 	}
 	if !contains(infoLog, "test", t) {
 		t.Error("Info failed")
+	}
+}
+
+// Verify that a log can be fetched in JSON format.
+func TestJSONLogFormat(t *testing.T) {
+	setFlags()
+	defer logging.swap(logging.newBuffers())
+	stdLog.Print("test")
+	json := jsonContents(infoLog)
+	expPat := `{
+  "severity": 0,
+  "time": [\d]+,
+  "thread_id": [\d]+,
+  "file": "clog_test.go",
+  "line": [\d]+,
+  "format": "test",
+  "args": null,
+  "key": "",
+  "stacks": null
+}`
+	if ok, _ := regexp.Match(expPat, json); !ok {
+		t.Errorf("expected json match; got %s", json)
 	}
 }
 
@@ -267,6 +310,40 @@ func TestVmoduleGlob(t *testing.T) {
 	}
 }
 
+func TestListLogFiles(t *testing.T) {
+	setFlags()
+	*logDir = os.TempDir()
+
+	Info("x")    // Be sure we have a file.
+	Warning("x") // Be sure we have a file.
+	info, ok := logging.file[infoLog].(*syncBuffer)
+	if !ok {
+		t.Fatal("info wasn't created")
+	}
+	infoName := path.Base(info.file.Name())
+	warn, ok := logging.file[warningLog].(*syncBuffer)
+	if !ok {
+		t.Fatal("warning wasn't created")
+	}
+	warnName := path.Base(warn.file.Name())
+	results, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundInfo, foundWarn bool
+	for _, r := range results {
+		if r.Name == infoName {
+			foundInfo = true
+		}
+		if r.Name == warnName {
+			foundWarn = true
+		}
+	}
+	if !foundInfo || !foundWarn {
+		t.Errorf("expected to find %s, %s; got %d results", infoName, warnName, len(results))
+	}
+}
+
 func TestRollover(t *testing.T) {
 	setFlags()
 	*logDir = os.TempDir()
@@ -335,6 +412,7 @@ func TestLogBacktraceAt(t *testing.T) {
 		_, file, line, ok := runtime.Caller(0)
 		setTraceLocation(file, line, ok, +2) // Two lines between Caller and Info calls.
 		Info("we want a stack trace here")
+		logging.traceLocation.Set("")
 	}
 	numAppearances := strings.Count(contents(infoLog), infoLine)
 	if numAppearances < 2 {
@@ -346,21 +424,6 @@ func TestLogBacktraceAt(t *testing.T) {
 		// We could be more precise but that would require knowing the details
 		// of the traceback format, which may not be dependable.
 		t.Fatal("got no trace back; log is ", contents(infoLog))
-	}
-}
-
-func TestPrintWith(t *testing.T) {
-	setFlags()
-	defer logging.swap(logging.newBuffers())
-	fn := func(buf *bytes.Buffer, machineDict map[string]interface{}) {
-		_, _ = buf.WriteString("testz")
-		machineDict["foo"] = "bar"
-	}
-	PrintWith(infoLog, 0, fn)
-	res := contents(infoLog)
-	exp := "] testz"
-	if !strings.Contains(res, exp) {
-		t.Fatalf("wanted log line to contain %s, got %s", exp, res)
 	}
 }
 
@@ -407,13 +470,8 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	defer setFlags()
 	defer logging.swap(logging.newBuffers())
-	defer func() {
-	}()
 
-	PrintWith(fatalLog, 0, func(buf *bytes.Buffer, machineDict map[string]interface{}) {
-		buf.WriteString("cinap")
-	})
-
+	Fatalf("cinap")
 	cont := contents(fatalLog)
 	msg := ""
 	if !strings.Contains(cont, "] cinap") {
@@ -432,7 +490,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf, _, _ := logging.header(infoLog, time.Now(), 0)
+		buf := formatHeader(infoLog, time.Now(), 1, "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
 }

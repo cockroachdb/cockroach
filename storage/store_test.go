@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -53,7 +54,7 @@ var testIdent = proto.StoreIdent{
 // of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
 func setTestRetryOptions(s *Store) {
-	s.ctx.RangeRetryOptions = util.RetryOptions{
+	s.ctx.RangeRetryOptions = retry.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  2 * time.Millisecond,
 		Constant:    2,

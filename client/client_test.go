@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -95,7 +96,7 @@ func createTestNotifyClient(addr string) *client.KV {
 func TestKVClientRetryNonTxn(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	s.SetRangeRetryOptions(util.RetryOptions{
+	s.SetRangeRetryOptions(retry.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  5 * time.Millisecond,
 		Constant:    2,

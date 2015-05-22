@@ -20,7 +20,7 @@ package client
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // A systemClock is an implementation of the Clock interface that
@@ -38,7 +38,7 @@ var (
 	// DefaultTxnRetryOptions are the standard retry options used
 	// for transactions.
 	// This is exported for testing purposes only.
-	DefaultTxnRetryOptions = util.RetryOptions{
+	DefaultTxnRetryOptions = retry.RetryOptions{
 		Backoff:     50 * time.Millisecond,
 		MaxBackoff:  5 * time.Second,
 		Constant:    2,
@@ -51,7 +51,7 @@ var (
 type Context struct {
 	User            string
 	UserPriority    int32
-	TxnRetryOptions util.RetryOptions
+	TxnRetryOptions retry.RetryOptions
 	Clock           Clock
 }
 

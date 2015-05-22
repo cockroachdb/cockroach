@@ -15,13 +15,14 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package retry
 
 import (
 	"fmt"
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -64,7 +65,7 @@ type RetryOptions struct {
 	Constant    float64       // Default backoff constant
 	MaxAttempts int           // Maximum number of attempts (0 for infinite)
 	UseV1Info   bool          // Use verbose V(1) level for log messages
-	Stopper     *Stopper      // Optionally end retry loop on stopper signal
+	Stopper     *util.Stopper // Optionally end retry loop on stopper signal
 }
 
 // RetryWithBackoff implements retry with exponential backoff using
@@ -112,7 +113,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 		case <-time.After(wait):
 			// Continue retrying.
 		case <-opts.Stopper.ShouldStop():
-			return Errorf("%s retry loop stopped", opts.Tag)
+			return util.Errorf("%s retry loop stopped", opts.Tag)
 		}
 	}
 	return nil

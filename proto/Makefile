@@ -52,5 +52,7 @@ all:
 	  mv config.pb.go.new config.pb.go
 	sed -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' < data.pb.go > data.pb.go.new && \
 	  mv data.pb.go.new data.pb.go
+	sed -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' < log.pb.go > log.pb.go.new && \
+	  mv log.pb.go.new log.pb.go
 	sed -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' < status.pb.go > status.pb.go.new && \
 	  mv status.pb.go.new status.pb.go

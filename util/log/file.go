@@ -21,9 +21,13 @@ package log
 import (
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +42,9 @@ var logDir *string
 
 // logDirs lists the candidate directories for new log files.
 var logDirs []string
+
+// logFileRE matches log files to avoid exposing non-log files accidentally.
+var logFileRE = regexp.MustCompile(`(INFO|WARNING|ERROR)`)
 
 func createLogDirs() {
 	if *logDir != "" {
@@ -126,4 +133,52 @@ func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 		lastErr = err
 	}
 	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
+}
+
+// A LogFileInfo holds the filename and size of a log file.
+type LogFileInfo struct {
+	Name         string // base name
+	SizeBytes    int64
+	ModTimeNanos int64 // most recent mode time in unix nanos
+}
+
+// ListLogFiles returns a slice of LogFileInfo structs for each log
+// file on the local node, in any of the configured log directories.
+func ListLogFiles() ([]LogFileInfo, error) {
+	var results []LogFileInfo
+	for _, dir := range logDirs {
+		infos, err := ioutil.ReadDir(dir)
+		if err != nil {
+			return results, err
+		}
+		for _, info := range infos {
+			// Only list regular files & ensure that files we locate here match the log file regexp.
+			if info.Mode()&os.ModeType == 0 && logFileRE.MatchString(info.Name()) {
+				results = append(results, LogFileInfo{
+					Name:         info.Name(),
+					SizeBytes:    info.Size(),
+					ModTimeNanos: info.ModTime().UnixNano(),
+				})
+			}
+		}
+	}
+	return results, nil
+}
+
+// GetLogReader returns a reader for the specified filename, taking
+// care to make the filename an absolute path according to the log
+// directory, if necessary.
+func GetLogReader(filename string) (io.ReadCloser, error) {
+	if path.IsAbs(filename) {
+		return os.Open(filename)
+	}
+	var reader io.ReadCloser
+	var err error
+	for _, dir := range logDirs {
+		reader, err = os.Open(path.Join(dir, filename))
+		if err == nil {
+			return reader, err
+		}
+	}
+	return nil, err
 }
