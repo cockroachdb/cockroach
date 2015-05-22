@@ -178,8 +178,8 @@ actual work done by that transaction.
 In the course of coordinating a transaction between one or more
 distributed nodes, the candidate timestamp may be increased, but will
 never be decreased. The core difference between the two isolation levels
-SI and SSI is that the former allows its candidate timestamp to increase
-and the latter does not.
+SI and SSI is that the former allows the transaction's candidate
+timestamp to increase and the latter does not.
 
 Timestamps are a combination of both a physical and a logical component
 to support monotonic increments without degenerate cases causing
@@ -197,7 +197,7 @@ Transactions are executed in discrete phases:
 2. Write an "intent" value for each datum being written as part of the
    transaction. These are normal MVCC values, with the addition of a
    special flag (i.e. “intent”) indicating that the value may be
-   committed later after the transaction itself commits. In addition,
+   committed after the transaction itself commits. In addition,
    the transaction id (unique and chosen at tx start time by client)
    is stored with intent values. The tx id is used to refer to the
    transaction table when there are conflicts and to make
@@ -254,11 +254,12 @@ abort or restart depending on the type of conflict.
 This is the usual (and more efficient) type of behaviour and is used
 except when the transaction was aborted (for instance by another
 transaction).
-In effect, that reduces to two cases, the first being the one outlined
-above: An SSI transaction that finds (upon attempting to commit) that
-its commit timestamp has been pushed. In the second case, a transaction
-actively encounters a conflict, that is, one of its readers or writers
-runs encounters data that necessitate conflict resolution.
+In effect, that reduces to two cases; the first being the one outlined
+above: An SSI transaction that finds upon attempting to commit that
+its commit timestamp has been pushed. The second case involves a transaction
+actively encountering a conflict, that is, one of its readers or writers
+encounter data that necessitate conflict resolution
+(see transaction interactions below).
 
 When a transaction restarts, it changes its priority and/or moves its
 timestamp forward depending on data tied to the conflict, and
@@ -281,7 +282,7 @@ transaction can not reuse its intents; it returns control to the client
 before cleaning them up (other readers and writers would clean up
 dangling intents as they encounter them) but will make an effort to
 clean up after itself. The next attempt (if applicable) then runs as a
-new transaction with a new tx id.
+new transaction with **a new tx id**.
 
 ***Transaction interactions:***
 
@@ -294,7 +295,7 @@ There are several scenarios in which transactions interact:
   be committed with a later timestamp than its candidate; it will
   never commit with an earlier one. **Side note**: if a SI transaction
   reader finds an intent with a newer timestamp which the reader’s own
-  transaction has written, the reader always returns that value.
+  transaction has written, the reader always returns that intent's value.
 
 - **Reader encounters write intent or value with newer timestamp in the
   near future:** In this case, we have to be careful. The newer
