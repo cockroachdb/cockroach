@@ -110,15 +110,7 @@ coverage: build
 
 .PHONY: acceptance
 acceptance:
-# The first `stop` stops and cleans up any containers from previous runs.
-#
-# TODO(pmattis): replace with acceptance/run.sh once we've switched to
-# using build/builder.sh on circleci.
-	(cd $(RUN) && export COCKROACH_IMAGE="$(COCKROACH_IMAGE)" && \
-	  ../build/build-docker-dev.sh && \
-	  ./local-cluster.sh stop && \
-	  ./local-cluster.sh start && \
-	  ./local-cluster.sh stop)
+	@acceptance/run.sh
 
 .PHONY: check
 check:

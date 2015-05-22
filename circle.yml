@@ -39,7 +39,8 @@ test:
     - docker run cockroachdb/cockroach-dev shell "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${CIRCLE_ARTIFACTS}/generate.log"; test ${PIPESTATUS[0]} -eq 0
     - docker run "cockroachdb/cockroach-dev" test TESTTIMEOUT=30s TESTFLAGS='-v --vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/test.log"
     - docker run "cockroachdb/cockroach-dev" testrace RACETIMEOUT=5m TESTFLAGS='-v --vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/testrace.log"
-    - make acceptance
+    # TODO(pmattis): Use "make acceptance" again once we're using cockroachdb/builder on circleci
+    - run/local-cluster.sh stop && run/local-cluster.sh start && run/local-cluster.sh stop
   post:
       # Write the container's log output to artifacts.
     - i=0; for cid in $(docker ps -aq); do i=$((i+1)); docker logs $cid &> "${CIRCLE_ARTIFACTS}/${i}_$(docker inspect -f '{{ .Config.Hostname }}' ${cid})_${cid}.log"; done
