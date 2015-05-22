@@ -324,13 +324,17 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError) bool {
 	defer l.mu.Unlock()
 
 	if e.Error != nil {
-		l.Events <- Event{NodeIndex: -1, Status: EventDie}
+		if l.Events != nil {
+			l.Events <- Event{NodeIndex: -1, Status: EventDie}
+		}
 		return false
 	}
 
 	for i, n := range l.Nodes {
 		if n != nil && n.Id == e.Id {
-			l.Events <- Event{NodeIndex: i, Status: e.Status}
+			if l.Events != nil {
+				l.Events <- Event{NodeIndex: i, Status: e.Status}
+			}
 			return true
 		}
 	}
@@ -372,14 +376,12 @@ func (l *Cluster) Start() {
 	l.createNodeCerts()
 	l.initCluster()
 
-	if l.Events != nil {
-		l.monitorStopper = make(chan struct{})
-		ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
-		if err != nil {
-			panic(err)
-		}
-		go l.monitor(ch)
+	l.monitorStopper = make(chan struct{})
+	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
+	if err != nil {
+		panic(err)
 	}
+	go l.monitor(ch)
 
 	for i := range l.Nodes {
 		l.Nodes[i] = l.startNode(i)

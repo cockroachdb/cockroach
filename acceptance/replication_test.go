@@ -79,11 +79,6 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, attempts
 		case <-stopper:
 			t.Fatalf("interrupted")
 			return
-		case e := <-cluster.Events:
-			if log.V(1) {
-				log.Infof("%+v", e)
-			}
-			continue
 		case <-time.After(1 * time.Second):
 			break
 		}
@@ -106,7 +101,6 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, attempts
 
 func TestRangeReplication(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
-	l.Events = make(chan localcluster.Event, 10)
 	l.Start()
 	defer l.Stop()
 
