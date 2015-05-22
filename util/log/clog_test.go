@@ -412,7 +412,9 @@ func TestLogBacktraceAt(t *testing.T) {
 		_, file, line, ok := runtime.Caller(0)
 		setTraceLocation(file, line, ok, +2) // Two lines between Caller and Info calls.
 		Info("we want a stack trace here")
-		logging.traceLocation.Set("")
+		if err := logging.traceLocation.Set(""); err != nil {
+			t.Fatal(err)
+		}
 	}
 	numAppearances := strings.Count(contents(infoLog), infoLine)
 	if numAppearances < 2 {

@@ -343,8 +343,11 @@ var errTraceSyntax = errors.New("syntax error: expect file.go:234")
 func (t *traceLocation) Set(value string) error {
 	if value == "" {
 		// Unset.
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
 		t.line = 0
 		t.file = ""
+		return nil
 	}
 	fields := strings.Split(value, ":")
 	if len(fields) != 2 {
