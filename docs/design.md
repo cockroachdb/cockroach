@@ -187,17 +187,17 @@ timestamps to diverge from wall clock time, following closely the
 [*Hybrid Logical Clock
 paper.*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)
 
-Transactions are executed in three logical phases:
+Transactions are executed in three discrete phases:
 
 1. Start the transaction by writing a new entry to the system
    transaction table (keys prefixed by *\0tx*) with state “PENDING”.
-   In practice, this is done along with the second phase of the
+   In practice, this is done along with the next phase of the
    transaction.
 
 2. Write an "intent" value for each datum being written as part of the
    transaction. These are normal MVCC values, with the addition of a
    special flag (i.e. “intent”) indicating that the value may be
-   committed later if the transaction itself commits. In addition,
+   committed later after the transaction itself commits. In addition,
    the transaction id (unique and chosen at tx start time by client)
    is stored with intent values. The tx id is used to refer to the
    transaction table when there are conflicts and to make
@@ -234,10 +234,10 @@ Transactions are executed in three logical phases:
    necessitates transaction restart (note: restart is different than
    abort--see below).
 
-   Once the transaction is committed, all written intents are upgraded
-   in parallel by removing the “intent” flag. The transaction is considered fully
-   committed before this step and does not wait for it to return
-   control to the transaction coordinator.
+   After the transaction is committed, all written intents are upgraded
+   in parallel by removing the “intent” flag. The transaction is
+   considered fully committed before this step and does not wait for
+   it to return control to the transaction coordinator.
 
 In the absence of conflicts, this is the end. Nothing else is necessary
 to ensure the correctness of the system.
@@ -261,16 +261,16 @@ actively encounters a conflict, that is, one of its readers or writers
 runs encounters data that necessitate conflict resolution.
 
 When a transaction restarts, it changes its priority and/or moves its
-timestamp forward depending on data tied to the conflict, and the
-transaction begins anew reusing the same tx id. Since the set of keys
-being written change between restarts, a set of keys written during
+timestamp forward depending on data tied to the conflict, and
+begins anew reusing the same tx id. Since the set of keys
+being written changes between restarts, a set of keys written during
 prior attempts at the transaction is maintained by the client as a set of
-dirty keys. As it replays the transaction from the beginning, it 
-removes keys from the dirty set as it writes them again. The remaining
-dirty keys--should the transaction run to completion--are crufty 
-write intents which must be deleted *before* the transaction commit 
-record’s status is set to COMMITTED. Many transactions will end up with
-no dirty keys.
+bogus intents. As the client replays the transaction from the
+beginning, it removes keys from the set as it writes them again. The remaining
+keys in the set--should the transaction run to completion--refer bogus 
+write intents which must be deleted *before* the transaction commits 
+Many transactions will end up with an empty set implying no bogus write
+intents.
 
 ***Transaction abort:***
 
@@ -280,7 +280,7 @@ transaction can not reuse its intents; it returns control to the client
 before cleaning them up (other readers and writers would clean up
 dangling intents as they encounter them) but will make an effort to
 clean up after itself. The next attempt (if applicable) then runs as a
-different transaction with a new tx id.
+new transaction with a new tx id.
 
 ***Transaction interactions:***
 
