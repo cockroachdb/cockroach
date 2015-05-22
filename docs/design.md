@@ -175,9 +175,8 @@ transaction. This means that a transaction without conflicts will
 usually commit with a timestamp that, in absolute time, precedes the
 actual work done by that transaction.
 
-In the course of coordinating the transaction between one or more
-distributed nodes, the candidate timestamp may be increased to accommodate
-a later read timestamp for any of the values being read, but will
+In the course of coordinating a transaction between one or more
+distributed nodes, the candidate timestamp may be increased, but will
 never be decreased. The core difference between the two isolation levels
 SI and SSI is that the former allows its candidate timestamp to increase
 and the latter does not.
@@ -204,7 +203,7 @@ Transactions are executed in three logical phases:
    transaction table when there are conflicts and to make
    tie-breaking decisions on ordering between identical timestamps.
    Each node returns the timestamp used for the write (which is the
-   candidate timestamp in the absence of conflicts); the client
+   original candidate timestamp in the absence of conflicts); the client
    selects the maximum from amongst all writes as the final commit
    timestamp.
 
@@ -235,8 +234,8 @@ Transactions are executed in three logical phases:
    necessitates transaction restart (note: restart is different than
    abort--see below).
 
-   Once committed all written values are upgraded by
-   removing the “intent” flag. The transaction is considered fully
+   Once the transaction is committed, all written intents are upgraded
+   in parallel by removing the “intent” flag. The transaction is considered fully
    committed before this step and does not wait for it to return
    control to the transaction coordinator.
 
@@ -323,7 +322,7 @@ There are several scenarios in which transactions interact:
   transaction will then notice its timestamp has been pushed, and
   restart). If it has the lower priority, it retries itself using as
   a new priority `max(new random priority, conflicting txn’s
-  priority - 1)`. why max?
+  priority - 1)`. why max and not min?
 
 - **Writer encounters uncommitted write intent**:
   If the write intent has been written by a transaction with a lower
