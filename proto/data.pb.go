@@ -172,12 +172,10 @@ func (m *Timestamp) GetLogical() int32 {
 // basic types: a "bag o' bytes" generic byte slice and an incrementable
 // int64, for use with the Increment API call.
 type Value struct {
-	// Bytes is the byte slice value. If this field is set, the integer field
-	// should not be.
+	// Bytes is the byte slice value.
 	Bytes []byte `protobuf:"bytes,1,opt,name=bytes" json:"bytes,omitempty"`
-	// Integer is an integer value type. If this field is set, the bytes field
-	// should not be. Only Integer values may exist at a key when making the
-	// Increment API call.
+	// Integer is an integer value type. Only Integer values may exist at a key
+	// when making the Increment API call.
 	Integer *int64 `protobuf:"varint,2,opt,name=integer" json:"integer,omitempty"`
 	// Checksum is a CRC-32-IEEE checksum of the key + value, in that order.
 	// If this is an integer value, then the value is interpreted as an 8

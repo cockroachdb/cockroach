@@ -46,13 +46,13 @@ message Timestamp {
 // basic types: a "bag o' bytes" generic byte slice and an incrementable
 // int64, for use with the Increment API call.
 message Value {
-  // Bytes is the byte slice value. If this field is set, the integer field
-  // should not be.
-  optional bytes bytes = 1;
-  // Integer is an integer value type. If this field is set, the bytes field
-  // should not be. Only Integer values may exist at a key when making the
-  // Increment API call.
-  optional int64 integer = 2;
+  oneof value {
+    // Bytes is the byte slice value.
+    bytes bytes = 1;
+    // Integer is an integer value type. Only Integer values may exist at a key
+    // when making the Increment API call.
+    int64 integer = 2;
+  }
   // Checksum is a CRC-32-IEEE checksum of the key + value, in that order.
   // If this is an integer value, then the value is interpreted as an 8
   // byte, big-endian encoded value. This value is set by the client on

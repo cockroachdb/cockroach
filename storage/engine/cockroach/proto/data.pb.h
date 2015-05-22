@@ -226,6 +226,12 @@ class Value : public ::google::protobuf::Message {
   static const ::google::protobuf::Descriptor* descriptor();
   static const Value& default_instance();
 
+  enum ValueCase {
+    kBytes = 1,
+    kInteger = 2,
+    VALUE_NOT_SET = 0,
+  };
+
   void Swap(Value* other);
 
   // implements Message ----------------------------------------------
@@ -303,12 +309,11 @@ class Value : public ::google::protobuf::Message {
   inline ::std::string* release_tag();
   inline void set_allocated_tag(::std::string* tag);
 
+  inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.Value)
  private:
   inline void set_has_bytes();
-  inline void clear_has_bytes();
   inline void set_has_integer();
-  inline void clear_has_integer();
   inline void set_has_checksum();
   inline void clear_has_checksum();
   inline void set_has_timestamp();
@@ -316,15 +321,23 @@ class Value : public ::google::protobuf::Message {
   inline void set_has_tag();
   inline void clear_has_tag();
 
+  inline bool has_value();
+  void clear_value();
+  inline void clear_has_value();
+
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::std::string* bytes_;
-  ::google::protobuf::int64 integer_;
   ::cockroach::proto::Timestamp* timestamp_;
   ::std::string* tag_;
   ::google::protobuf::uint32 checksum_;
+  union ValueUnion {
+    ::std::string* bytes_;
+    ::google::protobuf::int64 integer_;
+  } value_;
+  ::google::protobuf::uint32 _oneof_case_[1];
+
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -2024,102 +2037,99 @@ inline void Timestamp::set_logical(::google::protobuf::int32 value) {
 
 // optional bytes bytes = 1;
 inline bool Value::has_bytes() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
+  return value_case() == kBytes;
 }
 inline void Value::set_has_bytes() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Value::clear_has_bytes() {
-  _has_bits_[0] &= ~0x00000001u;
+  _oneof_case_[0] = kBytes;
 }
 inline void Value::clear_bytes() {
-  if (bytes_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    bytes_->clear();
+  if (has_bytes()) {
+    delete value_.bytes_;
+    clear_has_value();
   }
-  clear_has_bytes();
 }
 inline const ::std::string& Value::bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Value.bytes)
-  return *bytes_;
+  if (has_bytes()) {
+    return *value_.bytes_;
+  }
+  return ::google::protobuf::internal::GetEmptyStringAlreadyInited();
 }
 inline void Value::set_bytes(const ::std::string& value) {
-  set_has_bytes();
-  if (bytes_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    bytes_ = new ::std::string;
+  if (!has_bytes()) {
+    clear_value();
+    set_has_bytes();
+    value_.bytes_ = new ::std::string;
   }
-  bytes_->assign(value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.Value.bytes)
+  value_.bytes_->assign(value);
 }
 inline void Value::set_bytes(const char* value) {
-  set_has_bytes();
-  if (bytes_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    bytes_ = new ::std::string;
+  if (!has_bytes()) {
+    clear_value();
+    set_has_bytes();
+    value_.bytes_ = new ::std::string;
   }
-  bytes_->assign(value);
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.Value.bytes)
+  value_.bytes_->assign(value);
 }
 inline void Value::set_bytes(const void* value, size_t size) {
-  set_has_bytes();
-  if (bytes_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    bytes_ = new ::std::string;
+  if (!has_bytes()) {
+    clear_value();
+    set_has_bytes();
+    value_.bytes_ = new ::std::string;
   }
-  bytes_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Value.bytes)
+  value_.bytes_->assign(
+      reinterpret_cast<const char*>(value), size);
 }
 inline ::std::string* Value::mutable_bytes() {
-  set_has_bytes();
-  if (bytes_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    bytes_ = new ::std::string;
+  if (!has_bytes()) {
+    clear_value();
+    set_has_bytes();
+    value_.bytes_ = new ::std::string;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.Value.bytes)
-  return bytes_;
+  return value_.bytes_;
 }
 inline ::std::string* Value::release_bytes() {
-  clear_has_bytes();
-  if (bytes_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = bytes_;
-    bytes_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (has_bytes()) {
+    clear_has_value();
+    ::std::string* temp = value_.bytes_;
+    value_.bytes_ = NULL;
     return temp;
+  } else {
+    return NULL;
   }
 }
 inline void Value::set_allocated_bytes(::std::string* bytes) {
-  if (bytes_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete bytes_;
-  }
+  clear_value();
   if (bytes) {
     set_has_bytes();
-    bytes_ = bytes;
-  } else {
-    clear_has_bytes();
-    bytes_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    value_.bytes_ = bytes;
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Value.bytes)
 }
 
 // optional int64 integer = 2;
 inline bool Value::has_integer() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return value_case() == kInteger;
 }
 inline void Value::set_has_integer() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Value::clear_has_integer() {
-  _has_bits_[0] &= ~0x00000002u;
+  _oneof_case_[0] = kInteger;
 }
 inline void Value::clear_integer() {
-  integer_ = GOOGLE_LONGLONG(0);
-  clear_has_integer();
+  if (has_integer()) {
+    value_.integer_ = GOOGLE_LONGLONG(0);
+    clear_has_value();
+  }
 }
 inline ::google::protobuf::int64 Value::integer() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Value.integer)
-  return integer_;
+  if (has_integer()) {
+    return value_.integer_;
+  }
+  return GOOGLE_LONGLONG(0);
 }
 inline void Value::set_integer(::google::protobuf::int64 value) {
-  set_has_integer();
-  integer_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Value.integer)
+  if (!has_integer()) {
+    clear_value();
+    set_has_integer();
+  }
+  value_.integer_ = value;
 }
 
 // optional fixed32 checksum = 3;
@@ -2263,6 +2273,15 @@ inline void Value::set_allocated_tag(::std::string* tag) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Value.tag)
 }
 
+inline bool Value::has_value() {
+  return value_case() != VALUE_NOT_SET;
+}
+inline void Value::clear_has_value() {
+  _oneof_case_[0] = VALUE_NOT_SET;
+}
+inline Value::ValueCase Value::value_case() const {
+  return Value::ValueCase(_oneof_case_[0]);
+}
 // -------------------------------------------------------------------
 
 // MVCCValue
