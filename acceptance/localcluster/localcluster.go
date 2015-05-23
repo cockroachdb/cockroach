@@ -341,6 +341,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 	defer l.mu.Unlock()
 
 	if e.Error != nil {
+		log.Errorf("monitoring error: %s", e.Error)
 		if l.Events != nil {
 			l.Events <- Event{NodeIndex: -1, Status: EventDie}
 		}
@@ -349,6 +350,9 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 
 	for i, n := range l.Nodes {
 		if n != nil && n.Id == e.Id {
+			if log.V(1) {
+				log.Errorf("node=%d status=%s", i, e.Status)
+			}
 			if l.Events != nil {
 				l.Events <- Event{NodeIndex: i, Status: e.Status}
 			}
