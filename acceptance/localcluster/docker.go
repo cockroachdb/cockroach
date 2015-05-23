@@ -18,8 +18,6 @@
 package localcluster
 
 import (
-	"bufio"
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -30,9 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"time"
@@ -66,32 +62,11 @@ func getTLSConfig() *tls.Config {
 }
 
 // newDockerClient constructs a new docker client using the best available
-// method. On darwin (Mac OS X), first look for the DOCKER_HOST env
-// variable. If not found, run "boot2docker shellinit" and add the exported
-// variables to the environment. If DOCKER_HOST is set, initialize the client
-// using DOCKER_TLS_VERIFY and DOCKER_CERT_PATH. If DOCKER_HOST is not set,
-// look for the unix domain socket in /run/docker.sock and
-// /var/run/docker.sock.
+// method. If DOCKER_HOST is set, initialize the client using DOCKER_TLS_VERIFY
+// and DOCKER_CERT_PATH. If DOCKER_HOST is not set, look for the unix domain
+// socket in /run/docker.sock and /var/run/docker.sock.
 func newDockerClient() dockerclient.Client {
-	if runtime.GOOS == "darwin" && os.Getenv("DOCKER_HOST") == "" {
-		output, err := exec.Command("boot2docker", "shellinit").Output()
-		if err != nil {
-			log.Fatal(err)
-		}
-		exportRE := regexp.MustCompile(`export (\w+)=([^\n]+)`)
-		for s := bufio.NewScanner(bytes.NewReader(output)); s.Scan(); {
-			export := exportRE.FindStringSubmatch(s.Text())
-			if len(export) != 3 {
-				continue
-			}
-			if err := os.Setenv(export[1], export[2]); err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
-	host := os.Getenv("DOCKER_HOST")
-	if host != "" {
+	if host := os.Getenv("DOCKER_HOST"); host != "" {
 		if os.Getenv("DOCKER_TLS_VERIFY") == "" {
 			c, err := dockerclient.NewDockerClient(host, nil)
 			if err != nil {
@@ -122,8 +97,7 @@ func newDockerClient() dockerclient.Client {
 
 // Retrieve the IP address of docker itself.
 func dockerIP() net.IP {
-	host := os.Getenv("DOCKER_HOST")
-	if host != "" {
+	if host := os.Getenv("DOCKER_HOST"); host != "" {
 		u, err := url.Parse(host)
 		if err != nil {
 			panic(err)
