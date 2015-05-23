@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Brad Seiler (cockroach@bradseiler.com)
+// Author: Tobias Schottdorf
 
 package log
 
@@ -33,6 +33,21 @@ func FatalOnPanic() {
 	if r := recover(); r != nil {
 		Fatalf("unexpected panic: %s", r)
 	}
+}
+
+// EnableLogFileOutput turns on logging using the specified directory.
+// For unittesting only.
+func EnableLogFileOutput(dir string) {
+	*logDir = dir
+	logging.toStderr = false
+	logging.alsoToStderr = true
+}
+
+// DisableLogFileOutput turns off logging. For unittesting only.
+func DisableLogFileOutput() {
+	*logDir = ""
+	logging.toStderr = true
+	logging.alsoToStderr = false
 }
 
 // logDepth uses the PrintWith to format the output string and
