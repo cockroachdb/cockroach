@@ -126,7 +126,7 @@ func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 		time.Sleep(wait)
 		total += wait
 	}
-	return fmt.Errorf("condition failed to evaluate true within %s", duration)
+	return ErrorfSkipFrames(1, "condition failed to evaluate true within %s", duration)
 }
 
 // SucceedsWithin fails the test (with t.Fatal) unless the supplied
@@ -147,5 +147,5 @@ func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
 		}
 		time.Sleep(wait)
 	}
-	t.Fatalf("condition failed to evaluate within %s: %s", duration, lastErr)
+	t.Fatal(ErrorfSkipFrames(1, "condition failed to evaluate within %s: %s", duration, lastErr))
 }

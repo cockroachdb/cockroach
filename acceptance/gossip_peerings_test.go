@@ -22,35 +22,23 @@ package acceptance
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func checkGossipNodes(node *localcluster.Container) int {
-	var m map[string]interface{}
-	if err := node.GetJSON("", "/_status/gossip", &m); err != nil {
-		return 0
-	}
-	count := 0
-	infos := m["infos"].(map[string]interface{})
-	for k := range infos {
-		if strings.HasPrefix(k, "node:") {
-			count++
-		}
-	}
-	return count
-}
+type checkGossipFunc func(map[string]interface{}) error
 
-func checkGossipPeerings(t *testing.T, l *localcluster.Cluster, d time.Duration) {
-	expected := len(l.Nodes) * len(l.Nodes)
-	log.Infof("waiting for complete gossip network of %d peerings", expected)
-
+// checkGossip fetches the gossip infoStore from each node and invokes the given
+// function. The test passes if the function returns 0 for every node,
+// retrying for up to the given duration.
+func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
+	f checkGossipFunc) {
 	util.SucceedsWithin(t, d, func() error {
 		select {
 		case <-stopper:
@@ -64,17 +52,53 @@ func checkGossipPeerings(t *testing.T, l *localcluster.Cluster, d time.Duration)
 		case <-time.After(1 * time.Second):
 			break
 		}
-		found := 0
-		for j := 0; j < len(l.Nodes); j++ {
-			found += checkGossipNodes(l.Nodes[j])
+
+		for i, node := range l.Nodes {
+			var m map[string]interface{}
+			if err := node.GetJSON("", "/_status/gossip", &m); err != nil {
+				return err
+			}
+			infos := m["infos"].(map[string]interface{})
+			if err := f(infos); err != nil {
+				return util.Errorf("node %d: %s", i, err)
+			}
 		}
-		fmt.Fprintf(os.Stderr, "%d ", found)
-		if found == expected {
-			fmt.Printf("... all nodes verified in the cluster\n")
-			return nil
-		}
-		return fmt.Errorf("found %d of %d", found, expected)
+
+		return nil
 	})
+}
+
+// hasPeers returns a checkGossipFunc that passes when the given
+// number of peers are connected via gossip.
+func hasPeers(expected int) checkGossipFunc {
+	return func(infos map[string]interface{}) error {
+		count := 0
+		for k := range infos {
+			if strings.HasPrefix(k, "node:") {
+				count++
+			}
+		}
+		if count != expected {
+			return util.Errorf("expected %d peers, found %d", expected, count)
+		}
+		return nil
+	}
+}
+
+// hasSentinel is a checkGossipFunc that passes when the sentinel gossip is present.
+func hasSentinel(infos map[string]interface{}) error {
+	if _, ok := infos[gossip.KeySentinel]; !ok {
+		return util.Errorf("sentinel not found")
+	}
+	return nil
+}
+
+// hasClusterID is a checkGossipFunc that passes when the cluster ID gossip is present.
+func hasClusterID(infos map[string]interface{}) error {
+	if _, ok := infos[gossip.KeyClusterID]; !ok {
+		return util.Errorf("cluster ID not found")
+	}
+	return nil
 }
 
 func TestGossipPeerings(t *testing.T) {
@@ -83,14 +107,14 @@ func TestGossipPeerings(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
-	checkGossipPeerings(t, l, 20*time.Second)
+	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 
 	// Restart the first node.
 	log.Infof("restarting node 0")
 	if err := l.Nodes[0].Restart(5); err != nil {
 		t.Fatal(err)
 	}
-	checkGossipPeerings(t, l, 20*time.Second)
+	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
 
 	// Restart another node.
 	rand.Seed(util.NewPseudoSeed())
@@ -99,5 +123,42 @@ func TestGossipPeerings(t *testing.T) {
 	if err := l.Nodes[pickedNode].Restart(5); err != nil {
 		t.Fatal(err)
 	}
-	checkGossipPeerings(t, l, 20*time.Second)
+	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
+}
+
+// TestGossipRestart verifies that the gossip network can be
+// re-bootstrapped after a time when all nodes were down
+// simultaneously.
+func TestGossipRestart(t *testing.T) {
+	l := localcluster.Create(*numNodes, stopper)
+	l.Start()
+	defer l.Stop()
+
+	log.Infof("waiting for initial gossip connections")
+	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
+	checkGossip(t, l, time.Second, hasClusterID)
+	checkGossip(t, l, time.Second, hasSentinel)
+
+	// The replication of the first range is important: as long as the
+	// first range only exists on one node, that node can trivially
+	// acquire the leader lease. Once the range is replicated, however,
+	// nodes must be able to discover each other over gossip before the
+	// lease can be acquired.
+	log.Infof("waiting for range replication")
+	checkRangeReplication(t, l, 10*time.Second)
+
+	log.Infof("stopping all nodes")
+	for _, node := range l.Nodes {
+		node.Stop(5)
+	}
+
+	log.Infof("restarting all nodes")
+	for _, node := range l.Nodes {
+		node.Restart(5)
+	}
+
+	log.Infof("waiting for gossip to be connected")
+	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
+	checkGossip(t, l, time.Second, hasClusterID)
+	checkGossip(t, l, time.Second, hasSentinel)
 }

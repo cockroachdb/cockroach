@@ -229,6 +229,11 @@ func (c *Container) Restart(timeoutSeconds int) error {
 	return c.Inspect()
 }
 
+// Stop a running container.
+func (c *Container) Stop(timeoutSeconds int) error {
+	return c.client.StopContainer(c.Id, timeoutSeconds)
+}
+
 // Wait waits for a running container to exit.
 func (c *Container) Wait() error {
 	// TODO(pmattis): dockerclient does not support the "wait" method

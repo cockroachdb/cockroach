@@ -535,13 +535,13 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 }
 
 // checkHasConnected checks whether this gossip instance is connected
-// to enough of the gossip network that it has received the sentinel
+// to enough of the gossip network that it has received the cluster ID
 // gossip info. Once connected, the "Connected" channel is closed to
 // signal to any waiters that the gossip instance is ready.
 func (g *Gossip) checkHasConnected() {
-	// Check if we have the sentinel gossip (cluster ID) to start.
+	// Check if we have the cluster ID gossip to start.
 	// If so, then mark ourselves as trivially connected to the gossip network.
-	if !g.hasConnected && g.is.getInfo(KeySentinel) != nil {
+	if !g.hasConnected && g.is.getInfo(KeyClusterID) != nil {
 		g.hasConnected = true
 		close(g.Connected)
 	}

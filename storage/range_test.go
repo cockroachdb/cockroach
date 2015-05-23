@@ -568,7 +568,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor} {
+	for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor, gossip.KeySentinel} {
 		info, err := tc.gossip.GetInfo(key)
 		if err != nil {
 			t.Errorf("missing first range gossip of key %s", key)
@@ -579,6 +579,9 @@ func TestRangeGossipFirstRange(t *testing.T) {
 		}
 		if key == gossip.KeyClusterID && info.(string) == "" {
 			t.Errorf("expected non-empty gossiped cluster ID, got %+v", info)
+		}
+		if key == gossip.KeySentinel && info.(string) == "" {
+			t.Errorf("expected non-empty gossiped sentinel, got %+v", info)
 		}
 	}
 }
