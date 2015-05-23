@@ -116,18 +116,14 @@ func TestRangeDescriptorContains(t *testing.T) {
 		{[]byte("aa"), []byte("bb"), false},
 		{[]byte("b"), []byte("a"), false},
 	}
-	for _, test := range testData {
+	for i, test := range testData {
 		if bytes.Compare(test.start, test.end) == 0 {
 			if desc.ContainsKey(test.start) != test.contains {
-				t.Errorf("expected key %q within range", test.start)
+				t.Errorf("%d: expected key %q within range", i, test.start)
 			}
-			if desc.ContainsKeyRange(test.start, test.end) {
-				t.Errorf("expected false for single key range %q", test.start)
-			}
-		} else {
-			if desc.ContainsKeyRange(test.start, test.end) != test.contains {
-				t.Errorf("expected key range %q-%q within range", test.start, test.end)
-			}
+		}
+		if desc.ContainsKeyRange(test.start, test.end) != test.contains {
+			t.Errorf("%d: expected key %q within range", i, test.start)
 		}
 	}
 }
