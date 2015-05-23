@@ -33,6 +33,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/client/rpc"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
@@ -747,7 +748,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 
 	var kv *client.KV
 	if useRPC {
-		sender, err := client.NewRPCSender(s.ServingAddr(), &s.Ctx.Context)
+		sender, err := rpc.NewSender(s.ServingAddr(), &s.Ctx.Context)
 		if err != nil {
 			b.Fatal(err)
 		}

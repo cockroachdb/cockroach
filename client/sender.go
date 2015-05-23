@@ -45,14 +45,15 @@ func (f KVSenderFunc) Send(ctx context.Context, c Call) {
 	f(ctx, c)
 }
 
-type newSenderFunc func(u *url.URL, ctx *base.Context) (KVSender, error)
+// NewSenderFunc creates a new sender for the registered scheme.
+type NewSenderFunc func(u *url.URL, ctx *base.Context) (KVSender, error)
 
 var sendersMu sync.Mutex
-var senders = map[string]newSenderFunc{}
+var senders = map[string]NewSenderFunc{}
 
 // RegisterSender registers the specified function to be used for
 // creation of a new sender when the specified scheme is encountered.
-func RegisterSender(scheme string, f newSenderFunc) {
+func RegisterSender(scheme string, f NewSenderFunc) {
 	if f == nil {
 		log.Fatalf("unable to register nil function for \"%s\"", scheme)
 	}
