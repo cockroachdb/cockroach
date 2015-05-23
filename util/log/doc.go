@@ -41,7 +41,7 @@
 // should call Flush before exiting to guarantee all log output is written.
 //
 // Log output is encoded using the proto.LogEntry message format. Each
-// log entry is preceded by a varint-encoded length. Use the log command
+// log entry is preceded by a 32-bit encoded length. Use the log command
 // to display logs in human-readable form:
 //
 // % cockroach log <log1> [<log2> ...]

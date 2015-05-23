@@ -194,6 +194,35 @@ func TestMarshalResponse(t *testing.T) {
 	}
 }
 
+// Verify that marshal response protects against returning
+// unguarded slice or array types.
+func TestMarshalResponseSlice(t *testing.T) {
+	// We expect the array to be wrapped in a struct with data key "d".
+	expBody := []byte(`{
+  "d": [
+    1,
+    2,
+    3
+  ]
+}`)
+	// Respond with JSON versions of a slice and an array of integers from 1,2,3.
+	for i, value := range []interface{}{[]int{1, 2, 3}, [3]int{1, 2, 3}} {
+		req, err := http.NewRequest("GET", "http://foo.com", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Add(util.ContentTypeHeader, "application/json")
+		req.Header.Add(util.AcceptHeader, "application/json")
+		body, _, err := util.MarshalResponse(req, value, util.AllEncodings)
+		if err != nil {
+			t.Fatalf("%d: %s", i, err)
+		}
+		if !bytes.Equal(body, expBody) {
+			t.Errorf("%d: expected %q; got %q", i, expBody, body)
+		}
+	}
+}
+
 // TestProtoEncodingError verifies that MarshalResponse and
 // UnmarshalRequest gracefully handles a protocol message type error.
 func TestProtoEncodingError(t *testing.T) {

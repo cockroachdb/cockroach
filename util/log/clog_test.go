@@ -316,12 +316,14 @@ func TestListLogFiles(t *testing.T) {
 
 	Info("x")    // Be sure we have a file.
 	Warning("x") // Be sure we have a file.
-	info, ok := logging.file[infoLog].(*syncBuffer)
+	var info, warn *syncBuffer
+	var ok bool
+	info, ok = logging.file[infoLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
 	infoName := path.Base(info.file.Name())
-	warn, ok := logging.file[warningLog].(*syncBuffer)
+	warn, ok = logging.file[warningLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("warning wasn't created")
 	}
@@ -341,6 +343,48 @@ func TestListLogFiles(t *testing.T) {
 	}
 	if !foundInfo || !foundWarn {
 		t.Errorf("expected to find %s, %s; got %d results", infoName, warnName, len(results))
+	}
+}
+
+func TestGetLogReader(t *testing.T) {
+	setFlags()
+	*logDir = os.TempDir()
+	Warning("x")
+	warn, ok := logging.file[warningLog].(*syncBuffer)
+	if !ok {
+		t.Fatal("warning wasn't created")
+	}
+	warnName := path.Base(warn.file.Name())
+
+	testCases := []struct {
+		filename string
+		allowAbs bool
+		expErr   bool
+	}{
+		// File is not specified (trying to open a directory instead).
+		{*logDir, false, true},
+		{*logDir, true, true},
+		// Absolute filename is specified.
+		{warn.file.Name(), false, true},
+		{warn.file.Name(), true, false},
+		// File not matching log RE.
+		{"cockroach.WARNING", false, true},
+		{"cockroach.WARNING", true, true},
+		{path.Join(*logDir, "cockroach.WARNING"), false, true},
+		{path.Join(*logDir, "cockroach.WARNING"), true, true},
+		// Relative filename is specified.
+		{warnName, true, false},
+		{warnName, false, false},
+	}
+
+	for i, test := range testCases {
+		reader, err := GetLogReader(test.filename, test.allowAbs)
+		if (err != nil) != test.expErr {
+			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, err != nil, err)
+		}
+		if reader != nil {
+			reader.Close()
+		}
 	}
 }
 

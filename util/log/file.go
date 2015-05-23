@@ -31,6 +31,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
@@ -44,7 +46,7 @@ var logDir *string
 var logDirs []string
 
 // logFileRE matches log files to avoid exposing non-log files accidentally.
-var logFileRE = regexp.MustCompile(`(INFO|WARNING|ERROR)`)
+var logFileRE = regexp.MustCompile(`log\.(INFO|WARNING|ERROR)\.`)
 
 func createLogDirs() {
 	if *logDir != "" {
@@ -135,6 +137,26 @@ func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
 }
 
+// verifyLogFileInfo verifies that the file specified by filename is a
+// regular file and filename matches the expected filename pattern.
+// Returns nil on success; otherwise error.
+func verifyLogFileInfo(info os.FileInfo) error {
+	if info.Mode()&os.ModeType != 0 {
+		return util.Errorf("not a regular file")
+	} else if !logFileRE.MatchString(info.Name()) {
+		return util.Errorf("not a log file")
+	}
+	return nil
+}
+
+func verifyLogFile(filename string) error {
+	info, err := os.Stat(filename)
+	if err != nil {
+		return err
+	}
+	return verifyLogFileInfo(info)
+}
+
 // A LogFileInfo holds the filename and size of a log file.
 type LogFileInfo struct {
 	Name         string // base name
@@ -152,8 +174,7 @@ func ListLogFiles() ([]LogFileInfo, error) {
 			return results, err
 		}
 		for _, info := range infos {
-			// Only list regular files & ensure that files we locate here match the log file regexp.
-			if info.Mode()&os.ModeType == 0 && logFileRE.MatchString(info.Name()) {
+			if verifyLogFileInfo(info) == nil {
 				results = append(results, LogFileInfo{
 					Name:         info.Name(),
 					SizeBytes:    info.Size(),
@@ -165,19 +186,37 @@ func ListLogFiles() ([]LogFileInfo, error) {
 	return results, nil
 }
 
-// GetLogReader returns a reader for the specified filename, taking
-// care to make the filename an absolute path according to the log
-// directory, if necessary.
-func GetLogReader(filename string) (io.ReadCloser, error) {
+// GetLogReader returns a reader for the specified filename. Any
+// external requests (say from the admin UI via HTTP) must specify
+// allowAbsolute as false to prevent leakage of non-log
+// files. Absolute filenames are allowed for the case of the cockroach "log"
+// command, which provides human readable output from an arbitrary file,
+// and is intended to be run locally in a terminal.
+func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 	if path.IsAbs(filename) {
-		return os.Open(filename)
+		if !allowAbsolute {
+			return nil, util.Errorf("absolute pathnames are forbidden: %s", filename)
+		}
+		if verifyLogFile(filename) == nil {
+			return os.Open(filename)
+		}
+	}
+	// Verify there are no path separators in the a non-absolute pathname.
+	if path.Base(filename) != filename {
+		return nil, util.Errorf("pathnames must be basenames only: %s", filename)
+	}
+	if !logFileRE.MatchString(filename) {
+		return nil, util.Errorf("filename is not a cockroach log file: %s", filename)
 	}
 	var reader io.ReadCloser
 	var err error
 	for _, dir := range logDirs {
-		reader, err = os.Open(path.Join(dir, filename))
-		if err == nil {
-			return reader, err
+		filename := path.Join(dir, filename)
+		if verifyLogFile(filename) == nil {
+			reader, err = os.Open(filename)
+			if err == nil {
+				return reader, err
+			}
 		}
 	}
 	return nil, err

@@ -372,8 +372,8 @@ func (t *traceLocation) Set(value string) error {
 }
 
 // LogEntryDecoder reads successive encoded log entries from the input
-// buffer. Each entry is preceded by a single varint describing the
-// next entry's length.
+// buffer. Each entry is preceded by a single big-ending uint32
+// describing the next entry's length.
 type LogEntryDecoder struct {
 	in io.Reader
 }
@@ -427,37 +427,25 @@ func (hr *baseLogEntryReader) Read(p []byte) (int, error) {
 	}
 }
 
-type termLogEntryReader struct {
-	baseLogEntryReader
-}
-
 // NewTermLogEntryReader returns a reader for log files containing
 // encoded entries for use from a terminal. If the --color flag is
 // set, and the terminal supports colors, then log output will be
 // colorized.
 func NewTermLogEntryReader(reader io.Reader) io.Reader {
-	tr := &termLogEntryReader{
-		baseLogEntryReader: baseLogEntryReader{ld: NewLogEntryDecoder(reader)},
-	}
+	tr := &baseLogEntryReader{ld: NewLogEntryDecoder(reader)}
 	colors := logging.shouldColorize()
 	tr.format = func(entry *proto.LogEntry) []byte { return formatLogEntry(entry, colors) }
 	return tr
 }
 
-type jsonLogEntryReader struct {
-	baseLogEntryReader
-}
-
 // NewJSONLogEntryReader returns a reader for log files containing
 // encoded entries in JSON format.
 func NewJSONLogEntryReader(reader io.Reader) io.Reader {
-	jr := &jsonLogEntryReader{
-		baseLogEntryReader: baseLogEntryReader{ld: NewLogEntryDecoder(reader)},
-	}
+	jr := &baseLogEntryReader{ld: NewLogEntryDecoder(reader)}
 	jr.format = func(entry *proto.LogEntry) []byte {
 		data, err := json.MarshalIndent(entry, "", "  ")
 		if err != nil {
-			return []byte(fmt.Sprintf("{\"error\": %q", err))
+			return []byte(fmt.Sprintf("{\"error\": %q}", err))
 		}
 		return data
 	}

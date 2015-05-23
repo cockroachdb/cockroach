@@ -305,20 +305,24 @@ func TestPermEmptyKey(t *testing.T) {
 	testCases := []struct {
 		accept, expBody string
 	}{
-		{"application/json", `[
-  "",
-  "key0",
-  "key1"
-]`},
+		{"application/json", `{
+  "d": [
+    "",
+    "key0",
+    "key1"
+  ]
+}`},
 		{"text/yaml", `- ""
 - key0
 - key1
 `},
-		{"application/x-protobuf", `[
-  "",
-  "key0",
-  "key1"
-]`},
+		{"application/x-protobuf", `{
+  "d": [
+    "",
+    "key0",
+    "key1"
+  ]
+}`},
 	}
 
 	for i, test := range testCases {

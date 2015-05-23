@@ -70,7 +70,14 @@ func TestSetLogEntry(t *testing.T) {
 		{nil, "float arg %10.4f", []interface{}{math.Pi}, proto.LogEntry{
 			Format: "float arg %s",
 			Args: []proto.LogEntry_Arg{
-				{Type: "float64", Str: "    3.1416"},
+				{Type: "float64", Str: "    3.1416", Json: []byte("3.141592653589793")},
+			},
+		}},
+		// Try a proto.Key argument.
+		{nil, "Key arg %s", []interface{}{proto.Key("\x00\xff")}, proto.LogEntry{
+			Format: "Key arg %s",
+			Args: []proto.LogEntry_Arg{
+				{Type: "proto.Key", Str: "\"\\x00\\xff\""},
 			},
 		}},
 		// Verify multiple args and set the formatting very particularly for int type.
@@ -78,7 +85,7 @@ func TestSetLogEntry(t *testing.T) {
 			Format: "2 args %s %s",
 			Args: []proto.LogEntry_Arg{
 				{Type: "string", Str: "foo"},
-				{Type: "int", Str: "0000000001"},
+				{Type: "int", Str: "0000000001", Json: []byte("1")},
 			},
 		}},
 		// Set argument to a non-simple type with custom stringer which will yield a JSON value in the Arg.

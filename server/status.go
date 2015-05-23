@@ -191,7 +191,7 @@ func (s *statusServer) handleLocalLogs(w http.ResponseWriter, r *http.Request, _
 func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	log.Flush()
 	file := ps.ByName("file")
-	reader, err := log.GetLogReader(file)
+	reader, err := log.GetLogReader(file, false /* !allowAbsolute */)
 	if reader == nil || err != nil {
 		log.Errorf("unable to open log file %s: %s", file, err)
 		http.NotFound(w, r)

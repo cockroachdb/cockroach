@@ -298,10 +298,14 @@ func TestNodeStatusResponse(t *testing.T) {
 	defer ts.Stop()
 
 	// First fetch all the node statuses.
-	nodeStatuses := []proto.NodeStatus{}
-	if err := json.Unmarshal(body, &nodeStatuses); err != nil {
+	type nsWrapper struct {
+		Data []proto.NodeStatus `json:"d"`
+	}
+	wrapper := nsWrapper{}
+	if err := json.Unmarshal(body, &wrapper); err != nil {
 		t.Fatal(err)
 	}
+	nodeStatuses := wrapper.Data
 
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
@@ -329,10 +333,14 @@ func TestNodeStatusResponse(t *testing.T) {
 func TestStoreStatusResponse(t *testing.T) {
 	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
 	defer ts.Stop()
-	storeStatuses := []proto.StoreStatus{}
-	if err := json.Unmarshal(body, &storeStatuses); err != nil {
+	type ssWrapper struct {
+		Data []proto.StoreStatus `json:"d"`
+	}
+	wrapper := ssWrapper{}
+	if err := json.Unmarshal(body, &wrapper); err != nil {
 		t.Fatal(err)
 	}
+	storeStatuses := wrapper.Data
 
 	if len(storeStatuses) != ts.node.lSender.GetStoreCount() {
 		t.Errorf("too many node statuses returned - expected:%d, actual:%d", ts.node.lSender.GetStoreCount(), len(storeStatuses))
