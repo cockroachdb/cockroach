@@ -109,7 +109,9 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// nasty little hack, but since it's test code, meh.
 	newDesc := *tc.rng.Desc()
 	newDesc.StartKey = proto.Key("a")
-	tc.rng.SetDesc(&newDesc)
+	if err := tc.rng.SetDesc(&newDesc); err != nil {
+		t.Fatal(err)
+	}
 
 	iter := newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
 	defer iter.Close()
@@ -144,7 +146,9 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	newDesc := *tc.rng.Desc()
 	newDesc.StartKey = proto.Key("b")
 	newDesc.EndKey = proto.Key("c")
-	tc.rng.SetDesc(&newDesc)
+	if err := tc.rng.SetDesc(&newDesc); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create two more ranges, one before the test range and one after.
 	preRng := createRange(tc.store, 2, proto.KeyMin, proto.Key("b"))

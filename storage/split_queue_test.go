@@ -93,7 +93,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		copy := *tc.rng.Desc()
 		copy.StartKey = test.start
 		copy.EndKey = test.end
-		tc.rng.SetDesc(&copy)
+		if err := tc.rng.SetDesc(&copy); err != nil {
+			t.Fatal(err)
+		}
 		shouldQ, priority := splitQ.shouldQueue(proto.ZeroTimestamp, tc.rng)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
