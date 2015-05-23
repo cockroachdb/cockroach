@@ -13,17 +13,11 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Brad Seiler (cockroach@bradseiler.com)
+// Author: Tobias Schottdorf
 
 package log
 
-import (
-	"bytes"
-	"fmt"
-	"reflect"
-
-	"golang.org/x/net/context"
-)
+import "golang.org/x/net/context"
 
 func init() {
 	// TODO(tschottdorf) this should go to our logger. Currently this will log
@@ -41,35 +35,27 @@ func FatalOnPanic() {
 	}
 }
 
+// EnableLogFileOutput turns on logging using the specified directory.
+// For unittesting only.
+func EnableLogFileOutput(dir string) {
+	*logDir = dir
+	logging.toStderr = false
+	logging.alsoToStderr = true
+}
+
+// DisableLogFileOutput turns off logging. For unittesting only.
+func DisableLogFileOutput() {
+	*logDir = ""
+	logging.toStderr = true
+	logging.alsoToStderr = false
+}
+
 // logDepth uses the PrintWith to format the output string and
 // formulate the context information into the machine-readable
 // dictionary for separate binary-log output.
 func logDepth(ctx context.Context, depth int, sev severity, format string, args []interface{}) {
 	// TODO(tschottdorf): logging hooks should have their entry point here.
-	PrintWith(sev, depth, func(buf *bytes.Buffer, machineDict map[string]interface{}) {
-		if format == "" {
-			fmt.Fprint(buf, args...)
-		} else {
-			fmt.Fprintf(buf, format, args...)
-		}
-		if buf.Bytes()[buf.Len()-1] != '\n' {
-			buf.WriteByte('\n')
-		}
-		contextToDict(ctx, machineDict)
-		machineDict["Format"] = format
-		var argsVal []map[string]interface{}
-		for _, arg := range args {
-			var tstr string
-			if t := reflect.TypeOf(arg); t != nil {
-				tstr = t.String()
-			}
-			argsVal = append(argsVal, map[string]interface{}{
-				"Type": tstr,
-				"Arg":  arg,
-			})
-		}
-		machineDict["Args"] = argsVal
-	})
+	AddStructured(ctx, sev, depth+1, format, args)
 }
 
 // Infoc logs to the WARNING and INFO logs. It extracts values from the context

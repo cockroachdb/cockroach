@@ -18,9 +18,8 @@
 package util
 
 import (
+	"fmt"
 	"sync"
-
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // subscriptionChannelSize is the buffer size of the Events channel for each
@@ -104,8 +103,8 @@ func (f *Feed) Publish(event interface{}) {
 			// Subscription successfully sent.
 		default:
 			// Subscription buffer was exceeded; this is a panic situation.
-			log.Fatalf("event subscriber had full buffer, %d entries unread.",
-				subscriptionChannelSize)
+			panic(fmt.Sprintf("event subscriber had full buffer, %d entries unread.",
+				subscriptionChannelSize))
 		}
 	}
 }

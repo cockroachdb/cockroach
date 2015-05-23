@@ -99,11 +99,15 @@ func runLsConfigs(ctx *Context, getPrefix, pattern string) {
 		log.Errorf("admin REST request failed: %s", err)
 		return
 	}
-	var prefixes []string
-	if err = json.Unmarshal(b, &prefixes); err != nil {
+	type strWrapper struct {
+		Data []string `json:"d"`
+	}
+	var wrapper strWrapper
+	if err = json.Unmarshal(b, &wrapper); err != nil {
 		log.Errorf("unable to parse admin REST response: %s", err)
 		return
 	}
+	prefixes := wrapper.Data
 	var re *regexp.Regexp
 	if len(pattern) > 0 {
 		if re, err = regexp.Compile(pattern); err != nil {

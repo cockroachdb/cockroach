@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -291,6 +292,64 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 	return ts, body
 }
 
+func TestStatusLocalLog(t *testing.T) {
+	dir, err := ioutil.TempDir("", "local_log_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.EnableLogFileOutput(dir)
+	defer func() {
+		log.DisableLogFileOutput()
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	ts, body := startServerAndGetStatus(t, statusLocalLogKeyPrefix)
+	defer ts.Stop()
+
+	type logsWrapper struct {
+		Data []log.FileInfo `json:"d"`
+	}
+	logs := logsWrapper{}
+	if err := json.Unmarshal(body, &logs); err != nil {
+		t.Fatal(err)
+	}
+	if l := len(logs.Data); l != 3 {
+		t.Fatalf("expected 3 log files; got %d", l)
+	}
+	for i, pat := range []string{`.*log.ERROR.*`, `.*log.INFO.*`, `.*log.WARNING.*`} {
+		if ok, err := regexp.MatchString(pat, logs.Data[i].Name); !ok || err != nil {
+			t.Errorf("expected log file %s to match %q: %s", logs.Data[i].Name, pat, err)
+		}
+	}
+
+	// Log an error which we expect to show up on every log file.
+	log.Errorf("TestStatusLocalLog test message")
+
+	// Fetch a each listed log directly.
+	type logWrapper struct {
+		Data []proto.LogEntry `json:"d"`
+	}
+	// Check each individual log can be fetched and is non-empty.
+	for _, log := range logs.Data {
+		body = getRequest(t, ts, fmt.Sprintf("%s%s", statusLocalLogKeyPrefix, log.Name))
+		logW := logWrapper{}
+		if err := json.Unmarshal(body, &logW); err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for i := len(logW.Data) - 1; i >= 0; i-- {
+			if logW.Data[i].Format == "TestStatusLocalLog test message" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("exected to find test message in %v", logW.Data)
+		}
+	}
+}
+
 // TestNodeStatusResponse verifies that node status returns the expected
 // results.
 func TestNodeStatusResponse(t *testing.T) {
@@ -298,10 +357,14 @@ func TestNodeStatusResponse(t *testing.T) {
 	defer ts.Stop()
 
 	// First fetch all the node statuses.
-	nodeStatuses := []proto.NodeStatus{}
-	if err := json.Unmarshal(body, &nodeStatuses); err != nil {
+	type nsWrapper struct {
+		Data []proto.NodeStatus `json:"d"`
+	}
+	wrapper := nsWrapper{}
+	if err := json.Unmarshal(body, &wrapper); err != nil {
 		t.Fatal(err)
 	}
+	nodeStatuses := wrapper.Data
 
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
@@ -329,10 +392,14 @@ func TestNodeStatusResponse(t *testing.T) {
 func TestStoreStatusResponse(t *testing.T) {
 	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
 	defer ts.Stop()
-	storeStatuses := []proto.StoreStatus{}
-	if err := json.Unmarshal(body, &storeStatuses); err != nil {
+	type ssWrapper struct {
+		Data []proto.StoreStatus `json:"d"`
+	}
+	wrapper := ssWrapper{}
+	if err := json.Unmarshal(body, &wrapper); err != nil {
 		t.Fatal(err)
 	}
+	storeStatuses := wrapper.Data
 
 	if len(storeStatuses) != ts.node.lSender.GetStoreCount() {
 		t.Errorf("too many node statuses returned - expected:%d, actual:%d", ts.node.lSender.GetStoreCount(), len(storeStatuses))

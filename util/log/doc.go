@@ -28,16 +28,23 @@
 //
 //	log.Fatal("Initialization failed", err)
 //
+//  // Log with context.
+//  log.Infoc(context, "client error: %s", err)
+//
 // See the documentation for the V function for an explanation of these examples:
 //
 //	if log.V(2) {
 //		log.Info("Starting transaction...")
 //	}
 //
-//  log.Infoc(context.WithValue(context.Background(), log.Err, err), "client error", log.Detail, "permission denied")
-//
 // Log output is buffered and written periodically using Flush. Programs
 // should call Flush before exiting to guarantee all log output is written.
+//
+// Log output is encoded using the proto.LogEntry message format. Each
+// log entry is preceded by a 32-bit encoded length. Use the log command
+// to display logs in human-readable form:
+//
+// % cockroach log <log1> [<log2> ...]
 //
 // By default, all log statements write to files in a temporary directory.
 // This package provides several flags that modify this behavior.

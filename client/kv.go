@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
@@ -48,7 +49,7 @@ type KV struct {
 	// UserPriority is set non-zero in call arguments, this value is
 	// ignored.
 	UserPriority    int32
-	TxnRetryOptions util.RetryOptions
+	TxnRetryOptions retry.Options
 	Sender          KVSender
 	clock           Clock
 }

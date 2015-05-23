@@ -15,13 +15,14 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package retry
 
 import (
 	"fmt"
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -29,64 +30,64 @@ import (
 // durations. Specified as a percentage of the backoff.
 const retryJitter = 0.15
 
-// RetryStatus is an enum describing the possible statuses of a
+// Status is an enum describing the possible statuses of a
 // backoff / retry worker function.
-type RetryStatus int32
+type Status int32
 
-// RetryMaxAttemptsError indicates max attempts were exceeded.
-type RetryMaxAttemptsError struct {
+// MaxAttemptsError indicates max attempts were exceeded.
+type MaxAttemptsError struct {
 	MaxAttempts int
 }
 
 // Error implements error interface.
-func (re *RetryMaxAttemptsError) Error() string {
+func (re *MaxAttemptsError) Error() string {
 	return fmt.Sprintf("maximum number of attempts exceeded %d", re.MaxAttempts)
 }
 
 const (
-	// RetryBreak indicates the retry loop is finished and should return
+	// Break indicates the retry loop is finished and should return
 	// the result of the retry worker function.
-	RetryBreak RetryStatus = iota
-	// RetryReset indicates that the retry loop should be reset with
+	Break Status = iota
+	// Reset indicates that the retry loop should be reset with
 	// no backoff for an immediate retry.
-	RetryReset
-	// RetryContinue indicates that the retry loop should continue with
+	Reset
+	// Continue indicates that the retry loop should continue with
 	// another iteration of backoff / retry.
-	RetryContinue
+	Continue
 )
 
-// RetryOptions provides control of retry loop logic via the
-// RetryWithBackoffOptions method.
-type RetryOptions struct {
+// Options provides control of retry loop logic via the
+// WithBackoffOptions method.
+type Options struct {
 	Tag         string        // Tag for helpful logging of backoffs
 	Backoff     time.Duration // Default retry backoff interval
 	MaxBackoff  time.Duration // Maximum retry backoff interval
 	Constant    float64       // Default backoff constant
 	MaxAttempts int           // Maximum number of attempts (0 for infinite)
 	UseV1Info   bool          // Use verbose V(1) level for log messages
-	Stopper     *Stopper      // Optionally end retry loop on stopper signal
+	Stopper     *util.Stopper // Optionally end retry loop on stopper signal
 }
 
-// RetryWithBackoff implements retry with exponential backoff using
-// the supplied options as parameters. When fn returns RetryContinue
+// WithBackoff implements retry with exponential backoff using
+// the supplied options as parameters. When fn returns Continue
 // and the number of retry attempts haven't been exhausted, fn is
-// retried. When fn returns RetryBreak, retry ends. As a special case,
-// if fn returns RetryReset, the backoff and retry count are reset to
+// retried. When fn returns Break, retry ends. As a special case,
+// if fn returns Reset, the backoff and retry count are reset to
 // starting values and the next retry occurs immediately. Returns an
 // error if the maximum number of retries is exceeded or if the fn
 // returns an error.
-func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
+func WithBackoff(opts Options, fn func() (Status, error)) error {
 	backoff := opts.Backoff
 	for count := 1; true; count++ {
 		status, err := fn()
-		if status == RetryBreak {
+		if status == Break {
 			return err
 		}
 		if err != nil && (!opts.UseV1Info || log.V(1) == true) {
 			log.Infof("%s failed an iteration: %s", opts.Tag, err)
 		}
 		var wait time.Duration
-		if status == RetryReset {
+		if status == Reset {
 			backoff = opts.Backoff
 			wait = 0
 			count = 0
@@ -95,7 +96,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 			}
 		} else {
 			if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
-				return &RetryMaxAttemptsError{opts.MaxAttempts}
+				return &MaxAttemptsError{opts.MaxAttempts}
 			}
 			if !opts.UseV1Info || log.V(1) == true {
 				log.Infof("%s failed; retrying in %s", opts.Tag, backoff)
@@ -112,7 +113,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 		case <-time.After(wait):
 			// Continue retrying.
 		case <-opts.Stopper.ShouldStop():
-			return Errorf("%s retry loop stopped", opts.Tag)
+			return util.Errorf("%s retry loop stopped", opts.Tag)
 		}
 	}
 	return nil

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // StartTestServer starts a in-memory test server.
@@ -169,7 +170,7 @@ func (ts *TestServer) Stop() {
 }
 
 // SetRangeRetryOptions sets the retry options for stores in TestServer.
-func (ts *TestServer) SetRangeRetryOptions(ro util.RetryOptions) {
+func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 	// will never error because `return nil` below
 	_ = ts.node.lSender.VisitStores(func(s *storage.Store) error {
 		s.SetRangeRetryOptions(ro)

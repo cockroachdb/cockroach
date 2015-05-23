@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 const (
@@ -48,7 +49,7 @@ var (
 
 // clientRetryOptions specifies exponential backoff starting
 // at 1s and ending at 30s with indefinite retries.
-var clientRetryOptions = util.RetryOptions{
+var clientRetryOptions = retry.Options{
 	Backoff:     1 * time.Second,  // first backoff at 1s
 	MaxBackoff:  30 * time.Second, // max backoff is 30s
 	Constant:    2,                // doubles
@@ -91,7 +92,7 @@ type Client struct {
 // and completed one successful heartbeat. The Closed channel is
 // closed if the client fails to connect or if the client's Close()
 // method is invoked.
-func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client {
+func NewClient(addr net.Addr, opts *retry.Options, context *Context) *Client {
 	clientMu.Lock()
 	if !context.DisableCache {
 		if c, ok := clients[addr.String()]; ok {
@@ -117,7 +118,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client
 }
 
 // connect dials the connection in a backoff/retry loop.
-func (c *Client) connect(opts *util.RetryOptions, context *Context) {
+func (c *Client) connect(opts *retry.Options, context *Context) {
 	// Attempt to dial connection.
 	retryOpts := clientRetryOptions
 	if opts != nil {
@@ -126,11 +127,11 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
 	retryOpts.Stopper = context.Stopper
 
-	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)
 		if err != nil {
 			log.Info(err)
-			return util.RetryContinue, nil
+			return retry.Continue, nil
 		}
 
 		c.mu.Lock()
@@ -142,7 +143,7 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		// retry loop. If it fails, don't retry: The node is probably
 		// dead.
 		if err = c.heartbeat(); err != nil {
-			return util.RetryBreak, err
+			return retry.Break, err
 		}
 
 		// Signal client is ready by closing Ready channel.
@@ -152,7 +153,7 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		// Launch periodic heartbeat.
 		go c.startHeartbeat()
 
-		return util.RetryBreak, nil
+		return retry.Break, nil
 	})
 	if err != nil {
 		log.Errorf("client %s failed to connect: %v", c.addr, err)

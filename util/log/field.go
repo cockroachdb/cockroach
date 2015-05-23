@@ -31,5 +31,3 @@ const (
 	Key                   // a proto.Key related to an event.
 	maxField              // internal field bounding the range of allocated fields
 )
-
-type argWrapper interface{}

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -135,6 +136,17 @@ func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed [
 	return Errorf("unsupported content type: %q", contentType)
 }
 
+// jsonWrapper provides a wrapper on any slice data type being
+// marshaled to JSON. This prevents a security vulnerability
+// where a phishing attack can trick a user's browser into
+// requesting a document from Cockroach as an executable script,
+// allowing the contents of the fetched document to be treated
+// as executable javascript. More details here:
+// http://haacked.com/archive/2009/06/25/json-hijacking.aspx/
+type jsonWrapper struct {
+	Data interface{} `json:"d"`
+}
+
 // MarshalResponse examines the request Accept header to determine the
 // client's preferred response encoding. Supported content types
 // include JSON, protobuf, and YAML. If the Accept header is not
@@ -207,6 +219,10 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 	} else {
 		// Always fall back to JSON-encode the config.
 		contentType = JSONContentType
+		switch reflect.ValueOf(value).Kind() {
+		case reflect.Array, reflect.Slice:
+			value = jsonWrapper{Data: value}
+		}
 		if body, err = json.MarshalIndent(value, "", "  "); err != nil {
 			err = Errorf("unable to marshal %+v to json: %s", value, err)
 		}

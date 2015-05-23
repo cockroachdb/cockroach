@@ -161,6 +161,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	case <-stopper.IsStopped():
 		log.Infof("server drained and shutdown completed")
 	}
+	log.Flush()
 }
 
 // A exterminateCmd command shuts down the node server.
@@ -219,11 +220,4 @@ func runQuit(cmd *cobra.Command, args []string) {
 	if err := server.SendQuit(Context); err != nil {
 		log.Error(err)
 	}
-}
-
-var nodeCmds = []*cobra.Command{
-	initCmd,
-	startCmd,
-	exterminateCmd,
-	quitCmd,
 }

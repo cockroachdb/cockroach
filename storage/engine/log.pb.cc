@@ -1,0 +1,1 @@
+cockroach/proto/log.pb.cc

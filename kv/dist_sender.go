@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -55,7 +56,7 @@ const (
 	defaultRangeDescriptorCacheSize = 1 << 20
 )
 
-var defaultRPCRetryOptions = util.RetryOptions{
+var defaultRPCRetryOptions = retry.Options{
 	Backoff:     retryBackoff,
 	MaxBackoff:  maxRetryBackoff,
 	Constant:    2,
@@ -114,7 +115,7 @@ type DistSender struct {
 	// rpcSend is used to send RPC calls and defaults to rpc.Send
 	// outside of tests.
 	rpcSend         rpcSendFn
-	rpcRetryOptions util.RetryOptions
+	rpcRetryOptions retry.Options
 }
 
 var _ client.KVSender = &DistSender{}
@@ -133,7 +134,7 @@ type DistSenderContext struct {
 	// range descriptor cache when dispatching a range lookup request.
 	RangeLookupMaxRanges int32
 	LeaderCacheSize      int32
-	RPCRetryOptions      *util.RetryOptions
+	RPCRetryOptions      *retry.Options
 	// nodeDescriptor, if provided, is used to describe which node the DistSender
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
@@ -529,7 +530,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 	}
 
 	for {
-		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 			reply.Header().Reset()
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key, options)
@@ -538,7 +539,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				// If the request accesses keys beyond the end of this range,
 				// get the descriptor of the adjacent range to address next.
 				if _, ok := call.Reply.(proto.Combinable); !ok {
-					return util.RetryBreak, util.Error("illegal cross-range operation", call)
+					return retry.Break, util.Error("illegal cross-range operation", call)
 				}
 				// If there's no transaction and op spans ranges, possibly
 				// re-run as part of a transaction for consistency. The
@@ -546,7 +547,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				// consistency is not required.
 				if args.Header().Txn == nil &&
 					args.Header().ReadConsistency != proto.INCONSISTENT {
-					return util.RetryBreak, &proto.OpRequiresTxnError{}
+					return retry.Break, &proto.OpRequiresTxnError{}
 				}
 				// This next lookup is likely for free since we've read the
 				// previous descriptor and range lookups use cache
@@ -596,19 +597,19 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 					// Range descriptor might be out of date - evict it.
 					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
 					// On addressing errors, don't backoff; retry immediately.
-					return util.RetryReset, nil
+					return retry.Reset, nil
 				case *proto.NotLeaderError:
 					leader := err.(*proto.NotLeaderError).GetLeader()
 					if leader != nil {
 						ds.updateLeaderCache(proto.RaftID(desc.RaftID), *leader)
 					}
-					return util.RetryReset, nil
+					return retry.Reset, nil
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
-						return util.RetryContinue, nil
+						return retry.Continue, nil
 					}
 				}
-				return util.RetryBreak, err
+				return retry.Break, err
 			}
 
 			// If this request has a bound, such as MaxResults in
@@ -631,7 +632,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				// with the existing response.
 				call.Reply.(proto.Combinable).Combine(reply)
 			}
-			return util.RetryBreak, err
+			return retry.Break, err
 		})
 
 		// "Untruncate" EndKey to original. We do this even on error in

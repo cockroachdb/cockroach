@@ -30,11 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // setTestRetryOptions sets client retry options for speedier testing.
 func setTestRetryOptions() {
-	client.DefaultTxnRetryOptions = util.RetryOptions{
+	client.DefaultTxnRetryOptions = retry.Options{
 		Backoff:    1 * time.Millisecond,
 		MaxBackoff: 10 * time.Millisecond,
 		Constant:   2,
