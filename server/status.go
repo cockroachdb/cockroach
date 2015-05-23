@@ -201,7 +201,7 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 
 	entry := proto.LogEntry{}
 	var entries []proto.LogEntry
-	decoder := log.NewLogEntryDecoder(reader)
+	decoder := log.NewEntryDecoder(reader)
 	for {
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {

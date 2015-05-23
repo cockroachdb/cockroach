@@ -82,9 +82,9 @@ func (s *RPCSender) Send(_ context.Context, call Call) {
 	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
 
-	if err := retry.RetryWithBackoff(retryOpts, func() (retry.RetryStatus, error) {
+	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		if !s.client.IsHealthy() {
-			return retry.RetryContinue, nil
+			return retry.Continue, nil
 		}
 
 		method := call.Args.Method().String()
@@ -99,11 +99,11 @@ func (s *RPCSender) Send(_ context.Context, call Call) {
 			// we'll sweep up in this net shouldn't be retried, but we can't
 			// really know for sure which.
 			log.Warningf("failed to send RPC request %s: %v", method, c.Error)
-			return retry.RetryContinue, nil
+			return retry.Continue, nil
 		}
 
 		// On successful post, we're done with retry loop.
-		return retry.RetryBreak, nil
+		return retry.Break, nil
 	}); err != nil {
 		call.Reply.Header().SetGoError(err)
 	}

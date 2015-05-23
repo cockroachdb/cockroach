@@ -59,7 +59,7 @@ const (
 var (
 	// defaultRangeRetryOptions are default retry options for retrying commands
 	// sent to the store's ranges, for WriteTooOld and WriteIntent errors.
-	defaultRangeRetryOptions = retry.RetryOptions{
+	defaultRangeRetryOptions = retry.Options{
 		Backoff:     50 * time.Millisecond,
 		MaxBackoff:  5 * time.Second,
 		Constant:    2,
@@ -245,7 +245,7 @@ type StoreContext struct {
 
 	// RangeRetryOptions are the retry options for ranges.
 	// TODO(tschottdorf) improve comment once I figure out what this is.
-	RangeRetryOptions retry.RetryOptions
+	RangeRetryOptions retry.Options
 
 	// RaftTickInterval is the resolution of the Raft timer; other raft timeouts
 	// are defined in terms of multiples of this value.
@@ -1132,7 +1132,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	// Backoff and retry loop for handling errors.
 	retryOpts := s.ctx.RangeRetryOptions
 	retryOpts.Tag = fmt.Sprintf("store: %s", args.Method())
-	err := retry.RetryWithBackoff(retryOpts, func() (retry.RetryStatus, error) {
+	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		// Add the command to the range for execution; exit retry loop on success.
 		reply.Reset()
 
@@ -1140,12 +1140,12 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		rng, err := s.GetRange(header.RaftID)
 		if err != nil {
 			reply.Header().SetGoError(err)
-			return retry.RetryBreak, err
+			return retry.Break, err
 		}
 		ctx = log.Add(ctx, log.RaftID, header.RaftID)
 
 		if err = rng.AddCmd(ctx, client.Call{Args: args, Reply: reply}, true); err == nil {
-			return retry.RetryBreak, nil
+			return retry.Break, nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1162,7 +1162,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 					s.stopper.FinishTask()
 				}()
 				reply.Header().Error = nil
-				return retry.RetryBreak, nil
+				return retry.Break, nil
 			}
 			pushType := proto.PUSH_TIMESTAMP
 			if proto.IsWrite(args) {
@@ -1177,12 +1177,12 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			// Update request timestamp and retry immediately.
 			header.Timestamp = t.ExistingTimestamp
 			header.Timestamp.Logical++
-			return retry.RetryReset, nil
+			return retry.Reset, nil
 		case *proto.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
-				return retry.RetryReset, nil
+				return retry.Reset, nil
 			}
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
@@ -1191,15 +1191,15 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 					header.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
-			return retry.RetryContinue, nil
+			return retry.Continue, nil
 		}
-		return retry.RetryBreak, err
+		return retry.Break, err
 	})
 
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
-	if _, ok := err.(*retry.RetryMaxAttemptsError); ok && header.Txn != nil {
+	if _, ok := err.(*retry.MaxAttemptsError); ok && header.Txn != nil {
 		reply.Header().SetGoError(proto.NewTransactionRetryError(header.Txn))
 	}
 
@@ -1548,6 +1548,6 @@ func (s *Store) updateStoreStatus() {
 }
 
 // SetRangeRetryOptions sets the retry options used for this store.
-func (s *Store) SetRangeRetryOptions(ro retry.RetryOptions) {
+func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 	s.ctx.RangeRetryOptions = ro
 }

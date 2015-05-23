@@ -1,0 +1,91 @@
+machine:
+  services:
+    - docker
+
+checkout:
+  post:
+    - git fetch --unshallow 2>/dev/null || true
+    - git fetch --tags
+    # Nasty hack: Because we get a freshly restored repo, timestamps do not
+    # correspond any more to when the file was last changed. To rectify this,
+    # first set everything to a timestamp in the past and then update the
+    # timestamp for all git-tracked files based on their last committed change.
+    - find . -exec touch -t 201401010000 {} \;
+    - for x in $(git ls-tree --full-tree --name-only -r HEAD); do touch -t $(date -d "$(git log -1 --format=%ci "${x}")" +%y%m%d%H%M.%S) "${x}"; done
+
+dependencies:
+  cache_directories:
+    - "~/docker"
+  override:
+    # If there's a base image cached, load it. A click on CircleCI's "Clear
+    # Cache" will make sure we start with a clean slate.
+    - mkdir -p ~/docker
+    - if [[ -e ~/docker/base.tar ]]; then docker load -i ~/docker/base.tar; fi
+    # Pretend we're already bootstrapped, so that `make` doesn't try to get us
+    # started which is impossible without a working Go env.
+    - touch .bootstrap && make '.git/hooks/*'
+    - ./build/build-docker-dev.sh
+    - docker save "cockroachdb/cockroach-devbase" > ~/docker/base.tar
+    - if [[ ! -e ~/docker/dnsmasq.tar ]]; then docker pull "cockroachdb/dnsmasq" && docker save "cockroachdb/dnsmasq" > ~/docker/dnsmasq.tar; else docker load -i ~/docker/dnsmasq.tar; fi
+    # Print the history so that we can investigate potential steps which fatten
+    # the image needlessly.
+    - docker history "cockroachdb/cockroach-dev"
+
+test:
+  override:
+    # Check whether the committer forgot to run `go generate`.
+    # Either `go generate` does not change any files or it does, in which case we print the diff and fail.
+    - docker run cockroachdb/cockroach-dev shell make check | tee "${CIRCLE_ARTIFACTS}/check.log"; test ${PIPESTATUS[0]} -eq 0
+    - docker run cockroachdb/cockroach-dev shell "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${CIRCLE_ARTIFACTS}/generate.log"; test ${PIPESTATUS[0]} -eq 0
+    - docker run "cockroachdb/cockroach-dev" test TESTTIMEOUT=30s TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/test.log"
+    - docker run "cockroachdb/cockroach-dev" testrace RACETIMEOUT=5m TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/testrace.log"
+    # TODO(pmattis): Use "make acceptance" again once we're using cockroachdb/builder on circleci
+    - run/local-cluster.sh stop && run/local-cluster.sh start && run/local-cluster.sh stop
+  post:
+      # Write the container's log output to artifacts.
+    - i=0; for cid in $(docker ps -aq); do i=$((i+1)); docker logs $cid &> "${CIRCLE_ARTIFACTS}/${i}_$(docker inspect -f '{{ .Config.Hostname }}' ${cid})_${cid}.log"; done
+    - mkdir -p ${CIRCLE_TEST_REPORTS}/{go,race}
+    - "[ -f ${CIRCLE_ARTIFACTS}/test.log ] && docker run -i cockroachdb/cockroach-dev shell /go/bin/go2xunit < ${CIRCLE_ARTIFACTS}/test.log > ${CIRCLE_TEST_REPORTS}/go/test.xml"
+    - "[ -f ${CIRCLE_ARTIFACTS}/testrace.log ] && docker run -i cockroachdb/cockroach-dev shell /go/bin/go2xunit < ${CIRCLE_ARTIFACTS}/testrace.log > ${CIRCLE_TEST_REPORTS}/race/testrace.xml"
+    - |
+      find "${CIRCLE_ARTIFACTS}" -name '*.log' -type f -exec \
+        grep -B 5 -A 10 -E '^\-{0,3} *FAIL|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE' {} ';' \
+        > "${CIRCLE_ARTIFACTS}/excerpt.txt"
+    - |
+      if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ] && [ -s "${CIRCLE_ARTIFACTS}/excerpt.txt" ]; then
+        curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
+          "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues" \
+          -d "{ \"title\": \"Test failure in CI build ${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${CIRCLE_ARTIFACTS}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }" &> /dev/null
+        echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
+      else
+        echo "Not posting an issue."
+      fi
+      # Fail the test if there's anything in the excerpt. This will usually
+      # be a data race warning (which does not generally fail `make testrace`
+      # for some reason).
+      test ! -s "${CIRCLE_ARTIFACTS}/excerpt.txt"
+
+
+deployment:
+  docker:
+    branch: master
+    commands:
+      - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resource/deploy_templates/.dockercfg.template" > ~/.dockercfg
+      - |
+          VERSION=$(git describe 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+          echo "Deploying ${VERSION}..."
+          if [ -n "$DOCKER_EMAIL" ]; then
+            ./build/build-docker-deploy.sh && \
+            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh stop && \
+            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh start && \
+            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh stop && \
+            docker tag cockroachdb/cockroach:latest cockroachdb/cockroach:${VERSION} && \
+            docker tag cockroachdb/cockroach-dev:latest cockroachdb/cockroach-dev:${VERSION} && \
+            # Pushing to the registry just fails sometimes, so for the time
+            # being just make this a best-effort action.
+            (docker push cockroachdb/cockroach:latest; \
+            docker push cockroachdb/cockroach:${VERSION}; \
+            docker push cockroachdb/cockroach-dev:latest; \
+            docker push cockroachdb/cockroach-dev:${VERSION}; \
+            true)
+          fi

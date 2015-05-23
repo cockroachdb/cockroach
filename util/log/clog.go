@@ -371,18 +371,20 @@ func (t *traceLocation) Set(value string) error {
 	return nil
 }
 
-// LogEntryDecoder reads successive encoded log entries from the input
+// EntryDecoder reads successive encoded log entries from the input
 // buffer. Each entry is preceded by a single big-ending uint32
 // describing the next entry's length.
-type LogEntryDecoder struct {
+type EntryDecoder struct {
 	in io.Reader
 }
 
-func NewLogEntryDecoder(in io.Reader) *LogEntryDecoder {
-	return &LogEntryDecoder{in: in}
+// NewEntryDecoder creates a new instance of EntryDecoder.
+func NewEntryDecoder(in io.Reader) *EntryDecoder {
+	return &EntryDecoder{in: in}
 }
 
-func (lr *LogEntryDecoder) Decode(entry *proto.LogEntry) error {
+// Decode decodes the next log entry into the provided protobuf message.
+func (lr *EntryDecoder) Decode(entry *proto.LogEntry) error {
 	// Read the next log entry.
 	szBuf := make([]byte, 4)
 	n, err := lr.in.Read(szBuf)
@@ -401,13 +403,14 @@ func (lr *LogEntryDecoder) Decode(entry *proto.LogEntry) error {
 	return nil
 }
 
-type baseLogEntryReader struct {
+type baseEntryReader struct {
 	buf    []byte
-	ld     *LogEntryDecoder
+	ld     *EntryDecoder
 	format func(entry *proto.LogEntry) []byte
 }
 
-func (hr *baseLogEntryReader) Read(p []byte) (int, error) {
+// Read implements the io.Reader interface.
+func (hr *baseEntryReader) Read(p []byte) (int, error) {
 	var n int
 	for {
 		if len(hr.buf) != 0 {
@@ -427,21 +430,21 @@ func (hr *baseLogEntryReader) Read(p []byte) (int, error) {
 	}
 }
 
-// NewTermLogEntryReader returns a reader for log files containing
+// NewTermEntryReader returns a reader for log files containing
 // encoded entries for use from a terminal. If the --color flag is
 // set, and the terminal supports colors, then log output will be
 // colorized.
-func NewTermLogEntryReader(reader io.Reader) io.Reader {
-	tr := &baseLogEntryReader{ld: NewLogEntryDecoder(reader)}
+func NewTermEntryReader(reader io.Reader) io.Reader {
+	tr := &baseEntryReader{ld: NewEntryDecoder(reader)}
 	colors := logging.shouldColorize()
 	tr.format = func(entry *proto.LogEntry) []byte { return formatLogEntry(entry, colors) }
 	return tr
 }
 
-// NewJSONLogEntryReader returns a reader for log files containing
+// NewJSONEntryReader returns a reader for log files containing
 // encoded entries in JSON format.
-func NewJSONLogEntryReader(reader io.Reader) io.Reader {
-	jr := &baseLogEntryReader{ld: NewLogEntryDecoder(reader)}
+func NewJSONEntryReader(reader io.Reader) io.Reader {
+	jr := &baseEntryReader{ld: NewEntryDecoder(reader)}
 	jr.format = func(entry *proto.LogEntry) []byte {
 		data, err := json.MarshalIndent(entry, "", "  ")
 		if err != nil {

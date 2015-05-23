@@ -42,7 +42,7 @@ import (
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
 func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
-	client.DefaultTxnRetryOptions = retry.RetryOptions{
+	client.DefaultTxnRetryOptions = retry.Options{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  5 * time.Millisecond,
 		Constant:    2,

@@ -49,7 +49,7 @@ type KV struct {
 	// UserPriority is set non-zero in call arguments, this value is
 	// ignored.
 	UserPriority    int32
-	TxnRetryOptions retry.RetryOptions
+	TxnRetryOptions retry.Options
 	Sender          KVSender
 	clock           Clock
 }

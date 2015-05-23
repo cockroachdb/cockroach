@@ -54,7 +54,7 @@ var testIdent = proto.StoreIdent{
 // of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
 func setTestRetryOptions(s *Store) {
-	s.ctx.RangeRetryOptions = retry.RetryOptions{
+	s.ctx.RangeRetryOptions = retry.Options{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  2 * time.Millisecond,
 		Constant:    2,

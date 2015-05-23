@@ -96,7 +96,7 @@ func createTestNotifyClient(addr string) *client.KV {
 func TestKVClientRetryNonTxn(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	s.SetRangeRetryOptions(retry.RetryOptions{
+	s.SetRangeRetryOptions(retry.Options{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  5 * time.Millisecond,
 		Constant:    2,

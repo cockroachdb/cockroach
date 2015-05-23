@@ -76,7 +76,7 @@ func (l *loggingT) newBuffers() [numSeverity]flushSyncWriter {
 // contents returns the specified log value as a string.
 func contents(s severity) string {
 	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewTermLogEntryReader(buffer)
+	hr := NewTermEntryReader(buffer)
 	bytes, err := ioutil.ReadAll(hr)
 	if err != nil {
 		panic(err)
@@ -87,7 +87,7 @@ func contents(s severity) string {
 // jsonContents returns the specified log JSON-encoded.
 func jsonContents(s severity) []byte {
 	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewJSONLogEntryReader(buffer)
+	hr := NewJSONEntryReader(buffer)
 	bytes, err := ioutil.ReadAll(hr)
 	if err != nil {
 		panic(err)

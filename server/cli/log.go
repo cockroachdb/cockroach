@@ -49,7 +49,7 @@ func runLog(cmd *cobra.Command, args []string) {
 			log.Error(err)
 			break
 		}
-		if _, err := io.Copy(os.Stdout, log.NewTermLogEntryReader(reader)); err != nil {
+		if _, err := io.Copy(os.Stdout, log.NewTermEntryReader(reader)); err != nil {
 			log.Error(err)
 			break
 		}

@@ -35,7 +35,7 @@ import (
 
 // setTestRetryOptions sets client retry options for speedier testing.
 func setTestRetryOptions() {
-	client.DefaultTxnRetryOptions = retry.RetryOptions{
+	client.DefaultTxnRetryOptions = retry.Options{
 		Backoff:    1 * time.Millisecond,
 		MaxBackoff: 10 * time.Millisecond,
 		Constant:   2,

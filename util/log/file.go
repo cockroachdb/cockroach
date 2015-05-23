@@ -137,10 +137,10 @@ func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
 }
 
-// verifyLogFileInfo verifies that the file specified by filename is a
+// verifyFileInfo verifies that the file specified by filename is a
 // regular file and filename matches the expected filename pattern.
 // Returns nil on success; otherwise error.
-func verifyLogFileInfo(info os.FileInfo) error {
+func verifyFileInfo(info os.FileInfo) error {
 	if info.Mode()&os.ModeType != 0 {
 		return util.Errorf("not a regular file")
 	} else if !logFileRE.MatchString(info.Name()) {
@@ -149,33 +149,33 @@ func verifyLogFileInfo(info os.FileInfo) error {
 	return nil
 }
 
-func verifyLogFile(filename string) error {
+func verifyFile(filename string) error {
 	info, err := os.Stat(filename)
 	if err != nil {
 		return err
 	}
-	return verifyLogFileInfo(info)
+	return verifyFileInfo(info)
 }
 
-// A LogFileInfo holds the filename and size of a log file.
-type LogFileInfo struct {
+// A FileInfo holds the filename and size of a log file.
+type FileInfo struct {
 	Name         string // base name
 	SizeBytes    int64
 	ModTimeNanos int64 // most recent mode time in unix nanos
 }
 
-// ListLogFiles returns a slice of LogFileInfo structs for each log
-// file on the local node, in any of the configured log directories.
-func ListLogFiles() ([]LogFileInfo, error) {
-	var results []LogFileInfo
+// ListLogFiles returns a slice of FileInfo structs for each log file
+// on the local node, in any of the configured log directories.
+func ListLogFiles() ([]FileInfo, error) {
+	var results []FileInfo
 	for _, dir := range logDirs {
 		infos, err := ioutil.ReadDir(dir)
 		if err != nil {
 			return results, err
 		}
 		for _, info := range infos {
-			if verifyLogFileInfo(info) == nil {
-				results = append(results, LogFileInfo{
+			if verifyFileInfo(info) == nil {
+				results = append(results, FileInfo{
 					Name:         info.Name(),
 					SizeBytes:    info.Size(),
 					ModTimeNanos: info.ModTime().UnixNano(),
@@ -197,7 +197,7 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 		if !allowAbsolute {
 			return nil, util.Errorf("absolute pathnames are forbidden: %s", filename)
 		}
-		if verifyLogFile(filename) == nil {
+		if verifyFile(filename) == nil {
 			return os.Open(filename)
 		}
 	}
@@ -211,8 +211,8 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 	var reader io.ReadCloser
 	var err error
 	for _, dir := range logDirs {
-		filename := path.Join(dir, filename)
-		if verifyLogFile(filename) == nil {
+		filename = path.Join(dir, filename)
+		if verifyFile(filename) == nil {
 			reader, err = os.Open(filename)
 			if err == nil {
 				return reader, err

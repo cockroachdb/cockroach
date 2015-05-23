@@ -89,7 +89,7 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 	// error condition this loop isn't capable of handling.
 	retryOpts := t.kv.TxnRetryOptions
 	retryOpts.Tag = t.txn.Name
-	err := retry.RetryWithBackoff(retryOpts, func() (retry.RetryStatus, error) {
+	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		t.haveTxnWrite, t.haveEndTxn = false, false // always reset before [re]starting txn
 		err := retryable(t)
 		if err == nil {
@@ -108,13 +108,13 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
-				return retry.RetryReset, nil
+				return retry.Reset, nil
 			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
-				return retry.RetryContinue, nil
+				return retry.Continue, nil
 			}
-			// By default, fall through and return RetryBreak.
+			// By default, fall through and return Break.
 		}
-		return retry.RetryBreak, err
+		return retry.Break, err
 	})
 	if err != nil && t.haveTxnWrite {
 		if replyErr := t.Run(Call{
