@@ -50,7 +50,6 @@ func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
 			}
 			return fmt.Errorf("event: %+v", e)
 		case <-time.After(1 * time.Second):
-			break
 		}
 
 		for i, node := range l.Nodes {
