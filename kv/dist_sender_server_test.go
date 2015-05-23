@@ -168,3 +168,26 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 		t.Errorf("expected key %q; got %q", keys[0], key)
 	}
 }
+
+// TestStartEqualsEndKeyScan verifies that specifying start==end on scan
+// returns an empty set.
+func TestStartEqualsEndKeyScan(t *testing.T) {
+	s := startServer(t)
+	db := createTestClient(t, s.ServingAddr())
+	db.User = storage.UserRoot
+	defer s.Stop()
+
+	// Write key "a".
+	if err := db.Run(client.Put(proto.Key("a"), []byte("value"))); err != nil {
+		t.Fatal(err)
+	}
+
+	call := client.Scan(proto.Key("a"), proto.Key("a"), 0)
+	sr := call.Reply.(*proto.ScanResponse)
+	if err := db.Run(call); err != nil {
+		t.Fatalf("unexpected error on scan: %s", err)
+	}
+	if l := len(sr.Rows); l != 0 {
+		t.Errorf("expected no rows; got %d", l)
+	}
+}
