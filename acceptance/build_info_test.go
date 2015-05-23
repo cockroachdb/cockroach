@@ -38,7 +38,6 @@ func TestBuildInfo(t *testing.T) {
 			t.Fatalf("interrupted")
 			return nil
 		case <-time.After(200 * time.Millisecond):
-			break
 		}
 		var r struct {
 			BuildInfo map[string]string

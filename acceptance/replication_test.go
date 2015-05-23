@@ -80,7 +80,6 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.D
 			t.Fatalf("interrupted")
 			return nil
 		case <-time.After(1 * time.Second):
-			break
 		}
 
 		found, err := countRangeReplicas(client)
