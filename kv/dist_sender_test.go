@@ -542,6 +542,7 @@ func TestVerifyPermissions(t *testing.T) {
 		&proto.InternalPushTxnRequest{},
 		&proto.InternalRangeLookupRequest{},
 		&proto.InternalResolveIntentRequest{},
+		&proto.InternalResolveIntentRangeRequest{},
 		&proto.InternalMergeRequest{},
 		&proto.InternalTruncateLogRequest{},
 		&proto.InternalLeaderLeaseRequest{},

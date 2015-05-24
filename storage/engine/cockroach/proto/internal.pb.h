@@ -50,6 +50,8 @@ class InternalPushTxnRequest;
 class InternalPushTxnResponse;
 class InternalResolveIntentRequest;
 class InternalResolveIntentResponse;
+class InternalResolveIntentRangeRequest;
+class InternalResolveIntentRangeResponse;
 class InternalMergeRequest;
 class InternalMergeResponse;
 class InternalTruncateLogRequest;
@@ -1121,6 +1123,168 @@ class InternalResolveIntentResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class InternalResolveIntentRangeRequest : public ::google::protobuf::Message {
+ public:
+  InternalResolveIntentRangeRequest();
+  virtual ~InternalResolveIntentRangeRequest();
+
+  InternalResolveIntentRangeRequest(const InternalResolveIntentRangeRequest& from);
+
+  inline InternalResolveIntentRangeRequest& operator=(const InternalResolveIntentRangeRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalResolveIntentRangeRequest& default_instance();
+
+  void Swap(InternalResolveIntentRangeRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalResolveIntentRangeRequest* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalResolveIntentRangeRequest& from);
+  void MergeFrom(const InternalResolveIntentRangeRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.RequestHeader header = 1;
+  inline bool has_header() const;
+  inline void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  inline const ::cockroach::proto::RequestHeader& header() const;
+  inline ::cockroach::proto::RequestHeader* mutable_header();
+  inline ::cockroach::proto::RequestHeader* release_header();
+  inline void set_allocated_header(::cockroach::proto::RequestHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.InternalResolveIntentRangeRequest)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::RequestHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalResolveIntentRangeRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class InternalResolveIntentRangeResponse : public ::google::protobuf::Message {
+ public:
+  InternalResolveIntentRangeResponse();
+  virtual ~InternalResolveIntentRangeResponse();
+
+  InternalResolveIntentRangeResponse(const InternalResolveIntentRangeResponse& from);
+
+  inline InternalResolveIntentRangeResponse& operator=(const InternalResolveIntentRangeResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalResolveIntentRangeResponse& default_instance();
+
+  void Swap(InternalResolveIntentRangeResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalResolveIntentRangeResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalResolveIntentRangeResponse& from);
+  void MergeFrom(const InternalResolveIntentRangeResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.ResponseHeader header = 1;
+  inline bool has_header() const;
+  inline void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  inline const ::cockroach::proto::ResponseHeader& header() const;
+  inline ::cockroach::proto::ResponseHeader* mutable_header();
+  inline ::cockroach::proto::ResponseHeader* release_header();
+  inline void set_allocated_header(::cockroach::proto::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.InternalResolveIntentRangeResponse)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::ResponseHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalResolveIntentRangeResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class InternalMergeRequest : public ::google::protobuf::Message {
  public:
   InternalMergeRequest();
@@ -1676,6 +1840,7 @@ class InternalRequestUnion : public ::google::protobuf::Message {
     kEndTransaction = 9,
     kInternalPushTxn = 30,
     kInternalResolveIntent = 31,
+    kInternalResolveIntentRange = 32,
     VALUE_NOT_SET = 0,
   };
 
@@ -1808,6 +1973,15 @@ class InternalRequestUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::InternalResolveIntentRequest* release_internal_resolve_intent();
   inline void set_allocated_internal_resolve_intent(::cockroach::proto::InternalResolveIntentRequest* internal_resolve_intent);
 
+  // optional .cockroach.proto.InternalResolveIntentRangeRequest internal_resolve_intent_range = 32;
+  inline bool has_internal_resolve_intent_range() const;
+  inline void clear_internal_resolve_intent_range();
+  static const int kInternalResolveIntentRangeFieldNumber = 32;
+  inline const ::cockroach::proto::InternalResolveIntentRangeRequest& internal_resolve_intent_range() const;
+  inline ::cockroach::proto::InternalResolveIntentRangeRequest* mutable_internal_resolve_intent_range();
+  inline ::cockroach::proto::InternalResolveIntentRangeRequest* release_internal_resolve_intent_range();
+  inline void set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeRequest* internal_resolve_intent_range);
+
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRequestUnion)
  private:
@@ -1822,6 +1996,7 @@ class InternalRequestUnion : public ::google::protobuf::Message {
   inline void set_has_end_transaction();
   inline void set_has_internal_push_txn();
   inline void set_has_internal_resolve_intent();
+  inline void set_has_internal_resolve_intent_range();
 
   inline bool has_value();
   void clear_value();
@@ -1843,6 +2018,7 @@ class InternalRequestUnion : public ::google::protobuf::Message {
     ::cockroach::proto::EndTransactionRequest* end_transaction_;
     ::cockroach::proto::InternalPushTxnRequest* internal_push_txn_;
     ::cockroach::proto::InternalResolveIntentRequest* internal_resolve_intent_;
+    ::cockroach::proto::InternalResolveIntentRangeRequest* internal_resolve_intent_range_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -1890,6 +2066,7 @@ class InternalResponseUnion : public ::google::protobuf::Message {
     kEndTransaction = 9,
     kInternalPushTxn = 30,
     kInternalResolveIntent = 31,
+    kInternalResolveIntentRange = 32,
     VALUE_NOT_SET = 0,
   };
 
@@ -2022,6 +2199,15 @@ class InternalResponseUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::InternalResolveIntentResponse* release_internal_resolve_intent();
   inline void set_allocated_internal_resolve_intent(::cockroach::proto::InternalResolveIntentResponse* internal_resolve_intent);
 
+  // optional .cockroach.proto.InternalResolveIntentRangeResponse internal_resolve_intent_range = 32;
+  inline bool has_internal_resolve_intent_range() const;
+  inline void clear_internal_resolve_intent_range();
+  static const int kInternalResolveIntentRangeFieldNumber = 32;
+  inline const ::cockroach::proto::InternalResolveIntentRangeResponse& internal_resolve_intent_range() const;
+  inline ::cockroach::proto::InternalResolveIntentRangeResponse* mutable_internal_resolve_intent_range();
+  inline ::cockroach::proto::InternalResolveIntentRangeResponse* release_internal_resolve_intent_range();
+  inline void set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeResponse* internal_resolve_intent_range);
+
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalResponseUnion)
  private:
@@ -2036,6 +2222,7 @@ class InternalResponseUnion : public ::google::protobuf::Message {
   inline void set_has_end_transaction();
   inline void set_has_internal_push_txn();
   inline void set_has_internal_resolve_intent();
+  inline void set_has_internal_resolve_intent_range();
 
   inline bool has_value();
   void clear_value();
@@ -2057,6 +2244,7 @@ class InternalResponseUnion : public ::google::protobuf::Message {
     ::cockroach::proto::EndTransactionResponse* end_transaction_;
     ::cockroach::proto::InternalPushTxnResponse* internal_push_txn_;
     ::cockroach::proto::InternalResolveIntentResponse* internal_resolve_intent_;
+    ::cockroach::proto::InternalResolveIntentRangeResponse* internal_resolve_intent_range_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -2290,10 +2478,11 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
     kInternalHeartbeatTxn = 10,
     kInternalPushTxn = 11,
     kInternalResolveIntent = 12,
-    kInternalMerge = 13,
-    kInternalTruncateLog = 14,
-    kInternalGc = 15,
-    kInternalLeaderLease = 16,
+    kInternalResolveIntentRange = 13,
+    kInternalMerge = 14,
+    kInternalTruncateLog = 15,
+    kInternalGc = 16,
+    kInternalLeaderLease = 17,
     VALUE_NOT_SET = 0,
   };
 
@@ -2408,37 +2597,46 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
   inline ::cockroach::proto::InternalResolveIntentResponse* release_internal_resolve_intent();
   inline void set_allocated_internal_resolve_intent(::cockroach::proto::InternalResolveIntentResponse* internal_resolve_intent);
 
-  // optional .cockroach.proto.InternalMergeResponse internal_merge = 13;
+  // optional .cockroach.proto.InternalResolveIntentRangeResponse internal_resolve_intent_range = 13;
+  inline bool has_internal_resolve_intent_range() const;
+  inline void clear_internal_resolve_intent_range();
+  static const int kInternalResolveIntentRangeFieldNumber = 13;
+  inline const ::cockroach::proto::InternalResolveIntentRangeResponse& internal_resolve_intent_range() const;
+  inline ::cockroach::proto::InternalResolveIntentRangeResponse* mutable_internal_resolve_intent_range();
+  inline ::cockroach::proto::InternalResolveIntentRangeResponse* release_internal_resolve_intent_range();
+  inline void set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeResponse* internal_resolve_intent_range);
+
+  // optional .cockroach.proto.InternalMergeResponse internal_merge = 14;
   inline bool has_internal_merge() const;
   inline void clear_internal_merge();
-  static const int kInternalMergeFieldNumber = 13;
+  static const int kInternalMergeFieldNumber = 14;
   inline const ::cockroach::proto::InternalMergeResponse& internal_merge() const;
   inline ::cockroach::proto::InternalMergeResponse* mutable_internal_merge();
   inline ::cockroach::proto::InternalMergeResponse* release_internal_merge();
   inline void set_allocated_internal_merge(::cockroach::proto::InternalMergeResponse* internal_merge);
 
-  // optional .cockroach.proto.InternalTruncateLogResponse internal_truncate_log = 14;
+  // optional .cockroach.proto.InternalTruncateLogResponse internal_truncate_log = 15;
   inline bool has_internal_truncate_log() const;
   inline void clear_internal_truncate_log();
-  static const int kInternalTruncateLogFieldNumber = 14;
+  static const int kInternalTruncateLogFieldNumber = 15;
   inline const ::cockroach::proto::InternalTruncateLogResponse& internal_truncate_log() const;
   inline ::cockroach::proto::InternalTruncateLogResponse* mutable_internal_truncate_log();
   inline ::cockroach::proto::InternalTruncateLogResponse* release_internal_truncate_log();
   inline void set_allocated_internal_truncate_log(::cockroach::proto::InternalTruncateLogResponse* internal_truncate_log);
 
-  // optional .cockroach.proto.InternalGCResponse internal_gc = 15;
+  // optional .cockroach.proto.InternalGCResponse internal_gc = 16;
   inline bool has_internal_gc() const;
   inline void clear_internal_gc();
-  static const int kInternalGcFieldNumber = 15;
+  static const int kInternalGcFieldNumber = 16;
   inline const ::cockroach::proto::InternalGCResponse& internal_gc() const;
   inline ::cockroach::proto::InternalGCResponse* mutable_internal_gc();
   inline ::cockroach::proto::InternalGCResponse* release_internal_gc();
   inline void set_allocated_internal_gc(::cockroach::proto::InternalGCResponse* internal_gc);
 
-  // optional .cockroach.proto.InternalLeaderLeaseResponse internal_leader_lease = 16;
+  // optional .cockroach.proto.InternalLeaderLeaseResponse internal_leader_lease = 17;
   inline bool has_internal_leader_lease() const;
   inline void clear_internal_leader_lease();
-  static const int kInternalLeaderLeaseFieldNumber = 16;
+  static const int kInternalLeaderLeaseFieldNumber = 17;
   inline const ::cockroach::proto::InternalLeaderLeaseResponse& internal_leader_lease() const;
   inline ::cockroach::proto::InternalLeaderLeaseResponse* mutable_internal_leader_lease();
   inline ::cockroach::proto::InternalLeaderLeaseResponse* release_internal_leader_lease();
@@ -2456,6 +2654,7 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
   inline void set_has_internal_heartbeat_txn();
   inline void set_has_internal_push_txn();
   inline void set_has_internal_resolve_intent();
+  inline void set_has_internal_resolve_intent_range();
   inline void set_has_internal_merge();
   inline void set_has_internal_truncate_log();
   inline void set_has_internal_gc();
@@ -2479,6 +2678,7 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
     ::cockroach::proto::InternalHeartbeatTxnResponse* internal_heartbeat_txn_;
     ::cockroach::proto::InternalPushTxnResponse* internal_push_txn_;
     ::cockroach::proto::InternalResolveIntentResponse* internal_resolve_intent_;
+    ::cockroach::proto::InternalResolveIntentRangeResponse* internal_resolve_intent_range_;
     ::cockroach::proto::InternalMergeResponse* internal_merge_;
     ::cockroach::proto::InternalTruncateLogResponse* internal_truncate_log_;
     ::cockroach::proto::InternalGCResponse* internal_gc_;
@@ -2533,11 +2733,12 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
     kInternalHeartbeatTxn = 32,
     kInternalPushTxn = 33,
     kInternalResolveIntent = 34,
-    kInternalMergeResponse = 35,
-    kInternalTruncateLog = 36,
-    kInternalGc = 37,
-    kInternalLease = 38,
-    kInternalBatch = 39,
+    kInternalResolveIntentRange = 35,
+    kInternalMergeResponse = 36,
+    kInternalTruncateLog = 37,
+    kInternalGc = 38,
+    kInternalLease = 39,
+    kInternalBatch = 40,
     VALUE_NOT_SET = 0,
   };
 
@@ -2697,46 +2898,55 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::InternalResolveIntentRequest* release_internal_resolve_intent();
   inline void set_allocated_internal_resolve_intent(::cockroach::proto::InternalResolveIntentRequest* internal_resolve_intent);
 
-  // optional .cockroach.proto.InternalMergeRequest internal_merge_response = 35;
+  // optional .cockroach.proto.InternalResolveIntentRangeRequest internal_resolve_intent_range = 35;
+  inline bool has_internal_resolve_intent_range() const;
+  inline void clear_internal_resolve_intent_range();
+  static const int kInternalResolveIntentRangeFieldNumber = 35;
+  inline const ::cockroach::proto::InternalResolveIntentRangeRequest& internal_resolve_intent_range() const;
+  inline ::cockroach::proto::InternalResolveIntentRangeRequest* mutable_internal_resolve_intent_range();
+  inline ::cockroach::proto::InternalResolveIntentRangeRequest* release_internal_resolve_intent_range();
+  inline void set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeRequest* internal_resolve_intent_range);
+
+  // optional .cockroach.proto.InternalMergeRequest internal_merge_response = 36;
   inline bool has_internal_merge_response() const;
   inline void clear_internal_merge_response();
-  static const int kInternalMergeResponseFieldNumber = 35;
+  static const int kInternalMergeResponseFieldNumber = 36;
   inline const ::cockroach::proto::InternalMergeRequest& internal_merge_response() const;
   inline ::cockroach::proto::InternalMergeRequest* mutable_internal_merge_response();
   inline ::cockroach::proto::InternalMergeRequest* release_internal_merge_response();
   inline void set_allocated_internal_merge_response(::cockroach::proto::InternalMergeRequest* internal_merge_response);
 
-  // optional .cockroach.proto.InternalTruncateLogRequest internal_truncate_log = 36;
+  // optional .cockroach.proto.InternalTruncateLogRequest internal_truncate_log = 37;
   inline bool has_internal_truncate_log() const;
   inline void clear_internal_truncate_log();
-  static const int kInternalTruncateLogFieldNumber = 36;
+  static const int kInternalTruncateLogFieldNumber = 37;
   inline const ::cockroach::proto::InternalTruncateLogRequest& internal_truncate_log() const;
   inline ::cockroach::proto::InternalTruncateLogRequest* mutable_internal_truncate_log();
   inline ::cockroach::proto::InternalTruncateLogRequest* release_internal_truncate_log();
   inline void set_allocated_internal_truncate_log(::cockroach::proto::InternalTruncateLogRequest* internal_truncate_log);
 
-  // optional .cockroach.proto.InternalGCRequest internal_gc = 37;
+  // optional .cockroach.proto.InternalGCRequest internal_gc = 38;
   inline bool has_internal_gc() const;
   inline void clear_internal_gc();
-  static const int kInternalGcFieldNumber = 37;
+  static const int kInternalGcFieldNumber = 38;
   inline const ::cockroach::proto::InternalGCRequest& internal_gc() const;
   inline ::cockroach::proto::InternalGCRequest* mutable_internal_gc();
   inline ::cockroach::proto::InternalGCRequest* release_internal_gc();
   inline void set_allocated_internal_gc(::cockroach::proto::InternalGCRequest* internal_gc);
 
-  // optional .cockroach.proto.InternalLeaderLeaseRequest internal_lease = 38;
+  // optional .cockroach.proto.InternalLeaderLeaseRequest internal_lease = 39;
   inline bool has_internal_lease() const;
   inline void clear_internal_lease();
-  static const int kInternalLeaseFieldNumber = 38;
+  static const int kInternalLeaseFieldNumber = 39;
   inline const ::cockroach::proto::InternalLeaderLeaseRequest& internal_lease() const;
   inline ::cockroach::proto::InternalLeaderLeaseRequest* mutable_internal_lease();
   inline ::cockroach::proto::InternalLeaderLeaseRequest* release_internal_lease();
   inline void set_allocated_internal_lease(::cockroach::proto::InternalLeaderLeaseRequest* internal_lease);
 
-  // optional .cockroach.proto.InternalBatchRequest internal_batch = 39;
+  // optional .cockroach.proto.InternalBatchRequest internal_batch = 40;
   inline bool has_internal_batch() const;
   inline void clear_internal_batch();
-  static const int kInternalBatchFieldNumber = 39;
+  static const int kInternalBatchFieldNumber = 40;
   inline const ::cockroach::proto::InternalBatchRequest& internal_batch() const;
   inline ::cockroach::proto::InternalBatchRequest* mutable_internal_batch();
   inline ::cockroach::proto::InternalBatchRequest* release_internal_batch();
@@ -2759,6 +2969,7 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline void set_has_internal_heartbeat_txn();
   inline void set_has_internal_push_txn();
   inline void set_has_internal_resolve_intent();
+  inline void set_has_internal_resolve_intent_range();
   inline void set_has_internal_merge_response();
   inline void set_has_internal_truncate_log();
   inline void set_has_internal_gc();
@@ -2788,6 +2999,7 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
     ::cockroach::proto::InternalHeartbeatTxnRequest* internal_heartbeat_txn_;
     ::cockroach::proto::InternalPushTxnRequest* internal_push_txn_;
     ::cockroach::proto::InternalResolveIntentRequest* internal_resolve_intent_;
+    ::cockroach::proto::InternalResolveIntentRangeRequest* internal_resolve_intent_range_;
     ::cockroach::proto::InternalMergeRequest* internal_merge_response_;
     ::cockroach::proto::InternalTruncateLogRequest* internal_truncate_log_;
     ::cockroach::proto::InternalGCRequest* internal_gc_;
@@ -4416,6 +4628,96 @@ inline void InternalResolveIntentResponse::set_allocated_header(::cockroach::pro
 
 // -------------------------------------------------------------------
 
+// InternalResolveIntentRangeRequest
+
+// optional .cockroach.proto.RequestHeader header = 1;
+inline bool InternalResolveIntentRangeRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalResolveIntentRangeRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalResolveIntentRangeRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalResolveIntentRangeRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::RequestHeader& InternalResolveIntentRangeRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalResolveIntentRangeRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::RequestHeader* InternalResolveIntentRangeRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) header_ = new ::cockroach::proto::RequestHeader;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalResolveIntentRangeRequest.header)
+  return header_;
+}
+inline ::cockroach::proto::RequestHeader* InternalResolveIntentRangeRequest::release_header() {
+  clear_has_header();
+  ::cockroach::proto::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalResolveIntentRangeRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalResolveIntentRangeRequest.header)
+}
+
+// -------------------------------------------------------------------
+
+// InternalResolveIntentRangeResponse
+
+// optional .cockroach.proto.ResponseHeader header = 1;
+inline bool InternalResolveIntentRangeResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalResolveIntentRangeResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalResolveIntentRangeResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalResolveIntentRangeResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::ResponseHeader& InternalResolveIntentRangeResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalResolveIntentRangeResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::ResponseHeader* InternalResolveIntentRangeResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) header_ = new ::cockroach::proto::ResponseHeader;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalResolveIntentRangeResponse.header)
+  return header_;
+}
+inline ::cockroach::proto::ResponseHeader* InternalResolveIntentRangeResponse::release_header() {
+  clear_has_header();
+  ::cockroach::proto::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalResolveIntentRangeResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalResolveIntentRangeResponse.header)
+}
+
+// -------------------------------------------------------------------
+
 // InternalMergeRequest
 
 // optional .cockroach.proto.RequestHeader header = 1;
@@ -5267,6 +5569,49 @@ inline void InternalRequestUnion::set_allocated_internal_resolve_intent(::cockro
   }
 }
 
+// optional .cockroach.proto.InternalResolveIntentRangeRequest internal_resolve_intent_range = 32;
+inline bool InternalRequestUnion::has_internal_resolve_intent_range() const {
+  return value_case() == kInternalResolveIntentRange;
+}
+inline void InternalRequestUnion::set_has_internal_resolve_intent_range() {
+  _oneof_case_[0] = kInternalResolveIntentRange;
+}
+inline void InternalRequestUnion::clear_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    delete value_.internal_resolve_intent_range_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::InternalResolveIntentRangeRequest& InternalRequestUnion::internal_resolve_intent_range() const {
+  return has_internal_resolve_intent_range() ? *value_.internal_resolve_intent_range_
+                      : ::cockroach::proto::InternalResolveIntentRangeRequest::default_instance();
+}
+inline ::cockroach::proto::InternalResolveIntentRangeRequest* InternalRequestUnion::mutable_internal_resolve_intent_range() {
+  if (!has_internal_resolve_intent_range()) {
+    clear_value();
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = new ::cockroach::proto::InternalResolveIntentRangeRequest;
+  }
+  return value_.internal_resolve_intent_range_;
+}
+inline ::cockroach::proto::InternalResolveIntentRangeRequest* InternalRequestUnion::release_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    clear_has_value();
+    ::cockroach::proto::InternalResolveIntentRangeRequest* temp = value_.internal_resolve_intent_range_;
+    value_.internal_resolve_intent_range_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void InternalRequestUnion::set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeRequest* internal_resolve_intent_range) {
+  clear_value();
+  if (internal_resolve_intent_range) {
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = internal_resolve_intent_range;
+  }
+}
+
 inline bool InternalRequestUnion::has_value() {
   return value_case() != VALUE_NOT_SET;
 }
@@ -5750,6 +6095,49 @@ inline void InternalResponseUnion::set_allocated_internal_resolve_intent(::cockr
   if (internal_resolve_intent) {
     set_has_internal_resolve_intent();
     value_.internal_resolve_intent_ = internal_resolve_intent;
+  }
+}
+
+// optional .cockroach.proto.InternalResolveIntentRangeResponse internal_resolve_intent_range = 32;
+inline bool InternalResponseUnion::has_internal_resolve_intent_range() const {
+  return value_case() == kInternalResolveIntentRange;
+}
+inline void InternalResponseUnion::set_has_internal_resolve_intent_range() {
+  _oneof_case_[0] = kInternalResolveIntentRange;
+}
+inline void InternalResponseUnion::clear_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    delete value_.internal_resolve_intent_range_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::InternalResolveIntentRangeResponse& InternalResponseUnion::internal_resolve_intent_range() const {
+  return has_internal_resolve_intent_range() ? *value_.internal_resolve_intent_range_
+                      : ::cockroach::proto::InternalResolveIntentRangeResponse::default_instance();
+}
+inline ::cockroach::proto::InternalResolveIntentRangeResponse* InternalResponseUnion::mutable_internal_resolve_intent_range() {
+  if (!has_internal_resolve_intent_range()) {
+    clear_value();
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = new ::cockroach::proto::InternalResolveIntentRangeResponse;
+  }
+  return value_.internal_resolve_intent_range_;
+}
+inline ::cockroach::proto::InternalResolveIntentRangeResponse* InternalResponseUnion::release_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    clear_has_value();
+    ::cockroach::proto::InternalResolveIntentRangeResponse* temp = value_.internal_resolve_intent_range_;
+    value_.internal_resolve_intent_range_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void InternalResponseUnion::set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeResponse* internal_resolve_intent_range) {
+  clear_value();
+  if (internal_resolve_intent_range) {
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = internal_resolve_intent_range;
   }
 }
 
@@ -6303,7 +6691,50 @@ inline void ReadWriteCmdResponse::set_allocated_internal_resolve_intent(::cockro
   }
 }
 
-// optional .cockroach.proto.InternalMergeResponse internal_merge = 13;
+// optional .cockroach.proto.InternalResolveIntentRangeResponse internal_resolve_intent_range = 13;
+inline bool ReadWriteCmdResponse::has_internal_resolve_intent_range() const {
+  return value_case() == kInternalResolveIntentRange;
+}
+inline void ReadWriteCmdResponse::set_has_internal_resolve_intent_range() {
+  _oneof_case_[0] = kInternalResolveIntentRange;
+}
+inline void ReadWriteCmdResponse::clear_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    delete value_.internal_resolve_intent_range_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::InternalResolveIntentRangeResponse& ReadWriteCmdResponse::internal_resolve_intent_range() const {
+  return has_internal_resolve_intent_range() ? *value_.internal_resolve_intent_range_
+                      : ::cockroach::proto::InternalResolveIntentRangeResponse::default_instance();
+}
+inline ::cockroach::proto::InternalResolveIntentRangeResponse* ReadWriteCmdResponse::mutable_internal_resolve_intent_range() {
+  if (!has_internal_resolve_intent_range()) {
+    clear_value();
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = new ::cockroach::proto::InternalResolveIntentRangeResponse;
+  }
+  return value_.internal_resolve_intent_range_;
+}
+inline ::cockroach::proto::InternalResolveIntentRangeResponse* ReadWriteCmdResponse::release_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    clear_has_value();
+    ::cockroach::proto::InternalResolveIntentRangeResponse* temp = value_.internal_resolve_intent_range_;
+    value_.internal_resolve_intent_range_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void ReadWriteCmdResponse::set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeResponse* internal_resolve_intent_range) {
+  clear_value();
+  if (internal_resolve_intent_range) {
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = internal_resolve_intent_range;
+  }
+}
+
+// optional .cockroach.proto.InternalMergeResponse internal_merge = 14;
 inline bool ReadWriteCmdResponse::has_internal_merge() const {
   return value_case() == kInternalMerge;
 }
@@ -6346,7 +6777,7 @@ inline void ReadWriteCmdResponse::set_allocated_internal_merge(::cockroach::prot
   }
 }
 
-// optional .cockroach.proto.InternalTruncateLogResponse internal_truncate_log = 14;
+// optional .cockroach.proto.InternalTruncateLogResponse internal_truncate_log = 15;
 inline bool ReadWriteCmdResponse::has_internal_truncate_log() const {
   return value_case() == kInternalTruncateLog;
 }
@@ -6389,7 +6820,7 @@ inline void ReadWriteCmdResponse::set_allocated_internal_truncate_log(::cockroac
   }
 }
 
-// optional .cockroach.proto.InternalGCResponse internal_gc = 15;
+// optional .cockroach.proto.InternalGCResponse internal_gc = 16;
 inline bool ReadWriteCmdResponse::has_internal_gc() const {
   return value_case() == kInternalGc;
 }
@@ -6432,7 +6863,7 @@ inline void ReadWriteCmdResponse::set_allocated_internal_gc(::cockroach::proto::
   }
 }
 
-// optional .cockroach.proto.InternalLeaderLeaseResponse internal_leader_lease = 16;
+// optional .cockroach.proto.InternalLeaderLeaseResponse internal_leader_lease = 17;
 inline bool ReadWriteCmdResponse::has_internal_leader_lease() const {
   return value_case() == kInternalLeaderLease;
 }
@@ -7090,7 +7521,50 @@ inline void InternalRaftCommandUnion::set_allocated_internal_resolve_intent(::co
   }
 }
 
-// optional .cockroach.proto.InternalMergeRequest internal_merge_response = 35;
+// optional .cockroach.proto.InternalResolveIntentRangeRequest internal_resolve_intent_range = 35;
+inline bool InternalRaftCommandUnion::has_internal_resolve_intent_range() const {
+  return value_case() == kInternalResolveIntentRange;
+}
+inline void InternalRaftCommandUnion::set_has_internal_resolve_intent_range() {
+  _oneof_case_[0] = kInternalResolveIntentRange;
+}
+inline void InternalRaftCommandUnion::clear_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    delete value_.internal_resolve_intent_range_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::InternalResolveIntentRangeRequest& InternalRaftCommandUnion::internal_resolve_intent_range() const {
+  return has_internal_resolve_intent_range() ? *value_.internal_resolve_intent_range_
+                      : ::cockroach::proto::InternalResolveIntentRangeRequest::default_instance();
+}
+inline ::cockroach::proto::InternalResolveIntentRangeRequest* InternalRaftCommandUnion::mutable_internal_resolve_intent_range() {
+  if (!has_internal_resolve_intent_range()) {
+    clear_value();
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = new ::cockroach::proto::InternalResolveIntentRangeRequest;
+  }
+  return value_.internal_resolve_intent_range_;
+}
+inline ::cockroach::proto::InternalResolveIntentRangeRequest* InternalRaftCommandUnion::release_internal_resolve_intent_range() {
+  if (has_internal_resolve_intent_range()) {
+    clear_has_value();
+    ::cockroach::proto::InternalResolveIntentRangeRequest* temp = value_.internal_resolve_intent_range_;
+    value_.internal_resolve_intent_range_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void InternalRaftCommandUnion::set_allocated_internal_resolve_intent_range(::cockroach::proto::InternalResolveIntentRangeRequest* internal_resolve_intent_range) {
+  clear_value();
+  if (internal_resolve_intent_range) {
+    set_has_internal_resolve_intent_range();
+    value_.internal_resolve_intent_range_ = internal_resolve_intent_range;
+  }
+}
+
+// optional .cockroach.proto.InternalMergeRequest internal_merge_response = 36;
 inline bool InternalRaftCommandUnion::has_internal_merge_response() const {
   return value_case() == kInternalMergeResponse;
 }
@@ -7133,7 +7607,7 @@ inline void InternalRaftCommandUnion::set_allocated_internal_merge_response(::co
   }
 }
 
-// optional .cockroach.proto.InternalTruncateLogRequest internal_truncate_log = 36;
+// optional .cockroach.proto.InternalTruncateLogRequest internal_truncate_log = 37;
 inline bool InternalRaftCommandUnion::has_internal_truncate_log() const {
   return value_case() == kInternalTruncateLog;
 }
@@ -7176,7 +7650,7 @@ inline void InternalRaftCommandUnion::set_allocated_internal_truncate_log(::cock
   }
 }
 
-// optional .cockroach.proto.InternalGCRequest internal_gc = 37;
+// optional .cockroach.proto.InternalGCRequest internal_gc = 38;
 inline bool InternalRaftCommandUnion::has_internal_gc() const {
   return value_case() == kInternalGc;
 }
@@ -7219,7 +7693,7 @@ inline void InternalRaftCommandUnion::set_allocated_internal_gc(::cockroach::pro
   }
 }
 
-// optional .cockroach.proto.InternalLeaderLeaseRequest internal_lease = 38;
+// optional .cockroach.proto.InternalLeaderLeaseRequest internal_lease = 39;
 inline bool InternalRaftCommandUnion::has_internal_lease() const {
   return value_case() == kInternalLease;
 }
@@ -7262,7 +7736,7 @@ inline void InternalRaftCommandUnion::set_allocated_internal_lease(::cockroach::
   }
 }
 
-// optional .cockroach.proto.InternalBatchRequest internal_batch = 39;
+// optional .cockroach.proto.InternalBatchRequest internal_batch = 40;
 inline bool InternalRaftCommandUnion::has_internal_batch() const {
   return value_case() == kInternalBatch;
 }

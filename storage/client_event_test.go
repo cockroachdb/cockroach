@@ -55,7 +55,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		eventStr = fmt.Sprintf("AddRange rid=%d, live=%d",
 			event.Desc.RaftID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
-		if event.Method == proto.InternalResolveIntent {
+		if event.Method == proto.InternalResolveIntent || event.Method == proto.InternalResolveIntentRange {
 			// InternalResolveIntent is a best effort call that seems to make
 			// this test flaky. Ignore them.
 			break

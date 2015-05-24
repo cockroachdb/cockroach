@@ -89,9 +89,10 @@ const (
 	// an error code either indicating the pusher must retry or abort and
 	// restart the transaction.
 	InternalPushTxn
-	// InternalResolveIntent resolves existing write intents for a key or
-	// key range.
+	// InternalResolveIntent resolves existing write intents for a key.
 	InternalResolveIntent
+	// InternalResolveIntentRange resolves existing write intents for a key range.
+	InternalResolveIntentRange
 	// InternalMerge merges a given value into the specified key. Merge is a
 	// high-performance operation provided by underlying data storage for values
 	// which are accumulated over several writes. Because it is not
@@ -111,25 +112,26 @@ const (
 
 // AllMethods is a map from string to method enum.
 var AllMethods = map[string]Method{
-	Contains.String():              Contains,
-	Get.String():                   Get,
-	Put.String():                   Put,
-	ConditionalPut.String():        ConditionalPut,
-	Increment.String():             Increment,
-	Delete.String():                Delete,
-	DeleteRange.String():           DeleteRange,
-	Scan.String():                  Scan,
-	EndTransaction.String():        EndTransaction,
-	Batch.String():                 Batch,
-	AdminSplit.String():            AdminSplit,
-	AdminMerge.String():            AdminMerge,
-	InternalRangeLookup.String():   InternalRangeLookup,
-	InternalHeartbeatTxn.String():  InternalHeartbeatTxn,
-	InternalGC.String():            InternalGC,
-	InternalPushTxn.String():       InternalPushTxn,
-	InternalResolveIntent.String(): InternalResolveIntent,
-	InternalMerge.String():         InternalMerge,
-	InternalTruncateLog.String():   InternalTruncateLog,
-	InternalLeaderLease.String():   InternalLeaderLease,
-	InternalBatch.String():         InternalBatch,
+	Contains.String():                   Contains,
+	Get.String():                        Get,
+	Put.String():                        Put,
+	ConditionalPut.String():             ConditionalPut,
+	Increment.String():                  Increment,
+	Delete.String():                     Delete,
+	DeleteRange.String():                DeleteRange,
+	Scan.String():                       Scan,
+	EndTransaction.String():             EndTransaction,
+	Batch.String():                      Batch,
+	AdminSplit.String():                 AdminSplit,
+	AdminMerge.String():                 AdminMerge,
+	InternalRangeLookup.String():        InternalRangeLookup,
+	InternalHeartbeatTxn.String():       InternalHeartbeatTxn,
+	InternalGC.String():                 InternalGC,
+	InternalPushTxn.String():            InternalPushTxn,
+	InternalResolveIntent.String():      InternalResolveIntent,
+	InternalResolveIntentRange.String(): InternalResolveIntentRange,
+	InternalMerge.String():              InternalMerge,
+	InternalTruncateLog.String():        InternalTruncateLog,
+	InternalLeaderLease.String():        InternalLeaderLease,
+	InternalBatch.String():              InternalBatch,
 }

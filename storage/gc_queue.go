@@ -128,7 +128,6 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 
 	gcArgs := &proto.InternalGCRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       rng.Desc().StartKey,
 			Timestamp: now,
 			RaftID:    rng.Desc().RaftID,
 		},
@@ -209,6 +208,18 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
+
+	// Set start and end keys.
+	switch len(gcArgs.Keys) {
+	case 0:
+		return nil
+	case 1:
+		gcArgs.Key = gcArgs.Keys[0].Key
+		gcArgs.EndKey = gcArgs.Key.Next()
+	default:
+		gcArgs.Key = gcArgs.Keys[0].Key
+		gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key
+	}
 
 	// Wait for any outstanding intent resolves and set oldest extant intent.
 	wg.Wait()

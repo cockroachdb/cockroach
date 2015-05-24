@@ -572,6 +572,7 @@ func (b *Batch) fillResults() error {
 			case *proto.InternalPushTxnResponse:
 			case *proto.InternalRangeLookupResponse:
 			case *proto.InternalResolveIntentResponse:
+			case *proto.InternalResolveIntentRangeResponse:
 				// Nothing to do for these methods as they do not generate any
 				// rows. For the proto.Internal* responses the caller will have hold of
 				// the response object itself.

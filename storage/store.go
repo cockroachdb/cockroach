@@ -105,26 +105,35 @@ func verifyKeyLength(key proto.Key) error {
 	return nil
 }
 
-// verifyKeys verifies key length for start and end. Also verifies
-// that start key is less than KeyMax and end key is less than or
-// equal to KeyMax. If end is non-empty, it must be >= start.
-func verifyKeys(start, end proto.Key) error {
+// verifyKeys verifies keys. If checkEndKey is true, then the end key
+// is verified to be non-nil and greater than start key. If
+// checkEndKey is false, end key is verified to be nil. Additionally,
+// verifies that start key is less than KeyMax and end key is less
+// than or equal to KeyMax.
+func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
 	if !start.Less(engine.KeyMax) {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
-	if len(end) > 0 {
-		if err := verifyKeyLength(end); err != nil {
-			return err
+	if !checkEndKey {
+		if len(end) != 0 {
+			return util.Errorf("end key %q should not be specified for this operation", end)
 		}
-		if engine.KeyMax.Less(end) {
-			return util.Errorf("end key %q must be less than or equal to KeyMax", end)
-		}
-		if end.Less(start) {
-			return util.Errorf("end key cannot sort before start: %q < %q", end, start)
-		}
+		return nil
+	}
+	if end == nil {
+		return util.Errorf("end key must be specified")
+	}
+	if err := verifyKeyLength(end); err != nil {
+		return err
+	}
+	if engine.KeyMax.Less(end) {
+		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
+	}
+	if !start.Less(end) {
+		return util.Errorf("end key %q must be greater than start %q", end, start)
 	}
 	return nil
 }
@@ -1112,7 +1121,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	ctx = log.Add(s.Context(ctx), log.Method, args.Method())
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
-	if err := verifyKeys(header.Key, header.EndKey); err != nil {
+	if err := verifyKeys(header.Key, header.EndKey, proto.IsRangeOp(call.Args)); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
