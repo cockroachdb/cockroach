@@ -25,6 +25,11 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+// A Callable can be converted into a Call.
+type Callable interface {
+	Call() Call
+}
+
 // A Call is a pending database API call.
 type Call struct {
 	Args  proto.Request  // The argument to the command
@@ -36,7 +41,7 @@ type Call struct {
 // resetClientCmdID sets the client command ID if the call is for a
 // read-write method. The client command ID provides idempotency
 // protection in conjunction with the server.
-func (c *Call) resetClientCmdID(clock Clock) {
+func (c Call) resetClientCmdID(clock Clock) {
 	c.Args.Header().CmdID = proto.ClientCmdID{
 		WallTime: clock.Now(),
 		Random:   rand.Int63(),
@@ -44,13 +49,44 @@ func (c *Call) resetClientCmdID(clock Clock) {
 }
 
 // Method returns the method of the database command for the call.
-func (c *Call) Method() proto.Method {
+func (c Call) Method() proto.Method {
 	return c.Args.Method()
 }
 
-// Get returns a Call object initialized to get the value at key.
-func Get(key proto.Key) Call {
+// Call implements Callable
+func (c Call) Call() Call {
+	return c
+}
+
+// GetCall is a type-safe Callable for Get operations.
+type GetCall struct {
+	Args  *proto.GetRequest
+	Reply *proto.GetResponse
+	Post  func() error
+}
+
+var _ Callable = GetCall{}
+
+// Call implements Callable.
+func (c GetCall) Call() Call {
 	return Call{
+		Args:  c.Args,
+		Reply: c.Reply,
+		Post:  c.Post,
+	}
+}
+
+// ValueBytes returns the byte value of the reply, or nil if no result was found.
+func (c GetCall) ValueBytes() []byte {
+	if c.Reply.Value == nil {
+		return nil
+	}
+	return c.Reply.Value.Bytes
+}
+
+// Get returns a Call object initialized to get the value at key.
+func Get(key proto.Key) GetCall {
+	return GetCall{
 		Args: &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
@@ -62,10 +98,10 @@ func Get(key proto.Key) Call {
 
 // GetProto returns a Call object initialized to get the value at key
 // and then to decode it as a protobuf message.
-func GetProto(key proto.Key, msg gogoproto.Message) Call {
+func GetProto(key proto.Key, msg gogoproto.Message) GetCall {
 	c := Get(key)
 	c.Post = func() error {
-		reply := c.Reply.(*proto.GetResponse)
+		reply := c.Reply
 		if reply.Value == nil {
 			return util.Errorf("%s: no value present", key)
 		}

@@ -86,7 +86,7 @@ func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	if err := db.kvDB.Run(call); err != nil {
 		return nil, err
 	}
-	reply := call.Reply.(*proto.GetResponse)
+	reply := call.Reply
 	if reply.Value == nil {
 		// No value present.
 		return nil, nil

@@ -58,7 +58,7 @@ func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 }
 
 type runner interface {
-	Run(calls ...client.Call) error
+	Run(calls ...client.Callable) error
 }
 
 // The following structs and methods provide a mechanism for verifying
@@ -146,7 +146,7 @@ func (c *cmd) String() string {
 // readCmd reads a value from the db and stores it in the env.
 func readCmd(c *cmd, db runner, t *testing.T) error {
 	call := client.Get(c.getKey())
-	r := call.Reply.(*proto.GetResponse)
+	r := call.Reply
 	if err := db.Run(call); err != nil {
 		return err
 	}
