@@ -23,16 +23,15 @@ module AdminViews {
       export module Page {
           export function controller() {}
           export function view() {
-              var end = new Date();
-              var start = new Date(end.getTime() - (10 * 60 * 1000));
+              var windowSize = 10 * 60 * 1000;
               return m(".graphPage", [
                       m("H3", "Graph Demo"),
                       Components.Metrics.LineGraph.create(500, 350, 
-                          new Models.Metrics.Query(start, end, "cr.store.livebytes.1")),
+                          new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
                       Components.Metrics.LineGraph.create(500, 350, 
-                          new Models.Metrics.Query(start, end, "cr.store.keybytes.1")),
+                          new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
                       Components.Metrics.LineGraph.create(500, 350, 
-                          new Models.Metrics.Query(start, end, "cr.store.livebytes.1", "cr.store.valbytes.1")),
+                          new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
               ]);
           }
       }
