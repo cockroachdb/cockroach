@@ -183,11 +183,7 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 	}
 
 	call := client.Scan(proto.Key("a"), proto.Key("a"), 0)
-	sr := call.Reply.(*proto.ScanResponse)
-	if err := db.Run(call); err != nil {
-		t.Fatalf("unexpected error on scan: %s", err)
-	}
-	if l := len(sr.Rows); l != 0 {
-		t.Errorf("expected no rows; got %d", l)
+	if err := db.Run(call); err == nil {
+		t.Fatalf("expected error on scan with startkey == endkey")
 	}
 }
