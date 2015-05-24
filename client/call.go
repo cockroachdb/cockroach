@@ -76,6 +76,14 @@ func (c GetCall) Call() Call {
 	}
 }
 
+// ValueBytes returns the byte value of the reply, or nil if no result was found.
+func (c GetCall) ValueBytes() []byte {
+	if c.Reply.Value == nil {
+		return nil
+	}
+	return c.Reply.Value.Bytes
+}
+
 // Get returns a Call object initialized to get the value at key.
 func Get(key proto.Key) GetCall {
 	return GetCall{
