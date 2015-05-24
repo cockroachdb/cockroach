@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -47,18 +48,18 @@ func newRangeDataIterator(d *proto.RangeDescriptor, e engine.Engine) *rangeDataI
 	// space. We need the original StartKey to find the range metadata, but the
 	// actual data starts at KeyLocalMax.
 	dataStartKey := d.StartKey
-	if d.StartKey.Equal(engine.KeyMin) {
-		dataStartKey = engine.KeyLocalMax
+	if d.StartKey.Equal(proto.KeyMin) {
+		dataStartKey = keys.KeyLocalMax
 	}
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID)))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID+1)))),
+				start: engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID)))),
+				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID+1)))),
 			},
 			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.StartKey))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.EndKey))),
+				start: engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.StartKey))),
+				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.EndKey))),
 			},
 			{
 				start: engine.MVCCEncodeKey(dataStartKey),

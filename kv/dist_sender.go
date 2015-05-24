@@ -27,10 +27,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -317,7 +317,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) (
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.
-		metadataKey = engine.RangeMetaKey(key)
+		metadataKey = keys.RangeMetaKey(key)
 		// desc is the RangeDescriptor for the range which contains
 		// metadataKey.
 		desc *proto.RangeDescriptor
@@ -333,7 +333,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) (
 		}
 		return []proto.RangeDescriptor{*rd}, nil
 	}
-	if bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
+	if bytes.HasPrefix(metadataKey, keys.KeyMeta1Prefix) {
 		// In this case, desc is the cluster's first range.
 		if desc, err = ds.getFirstRangeDescriptor(); err != nil {
 			return nil, err

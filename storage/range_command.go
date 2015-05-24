@@ -28,6 +28,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -198,7 +199,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
 		return
 	}
-	key := engine.TransactionKey(args.Txn.Key, args.Txn.ID)
+	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -308,7 +309,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 // RangeDescriptors are stored as values in the cockroach cluster's key-value
 // store. However, they are always stored using special "Range Metadata keys",
 // which are "ordinary" keys with a special prefix prepended. The Range Metadata
-// Key for an ordinary key can be generated with the `engine.RangeMetaKey(key)`
+// Key for an ordinary key can be generated with the `keys.RangeMetaKey(key)`
 // function. The RangeDescriptor for the range which contains a given key can be
 // retrieved by generating its Range Metadata Key and dispatching it to
 // InternalRangeLookup.
@@ -334,7 +335,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 // nodes can aggressively cache RangeDescriptors which are likely to be desired
 // by their current workload.
 func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) {
-	if err := engine.ValidateRangeMetaKey(args.Key); err != nil {
+	if err := keys.ValidateRangeMetaKey(args.Key); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -352,7 +353,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
-	startKey, endKey := engine.DecodeRangeMetaKey(args.Key)
+	startKey, endKey := keys.DecodeRangeMetaKey(args.Key)
 	kvs, err := engine.MVCCScan(batch, startKey, endKey, rangeCount, args.Timestamp, false, args.Txn)
 	if err != nil {
 		if wiErr, ok := err.(*proto.WriteIntentError); ok && args.IgnoreIntents {
@@ -414,7 +415,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *proto.MVCCStats,
 	args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
-	key := engine.TransactionKey(args.Txn.Key, args.Txn.ID)
+	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, &txn)
@@ -454,7 +455,7 @@ func (r *Range) InternalGC(batch engine.Engine, ms *proto.MVCCStats, args *proto
 	}
 
 	// Store the GC metadata for this range.
-	key := engine.RangeGCMetadataKey(r.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
 	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta)
 	reply.SetGoError(err)
 }
@@ -498,7 +499,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *
 		reply.SetGoError(util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key))
 		return
 	}
-	key := engine.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
+	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -662,8 +663,8 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *proto.MVCCStats, ar
 		reply.SetGoError(err)
 		return
 	}
-	start := engine.RaftLogKey(r.Desc().RaftID, 0)
-	end := engine.RaftLogKey(r.Desc().RaftID, args.Index)
+	start := keys.RaftLogKey(r.Desc().RaftID, 0)
+	end := keys.RaftLogKey(r.Desc().RaftID, args.Index)
 	err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
 		func(kv proto.RawKeyValue) (bool, error) {
 			err := batch.Clear(kv.Key)
@@ -677,7 +678,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *proto.MVCCStats, ar
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	err = engine.MVCCPutProto(batch, ms, engine.RaftTruncatedStateKey(r.Desc().RaftID),
+	err = engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &ts)
 	reply.SetGoError(err)
 }
@@ -748,7 +749,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, engine.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -832,10 +833,10 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
-		desc1Key := engine.RangeDescriptorKey(newDesc.StartKey)
+		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
 		txn.Prepare(updateRangeDescriptorCall(desc1Key, nil, newDesc))
 		// Update existing range descriptor for first half of split.
-		desc2Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
+		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
 		txn.Prepare(updateRangeDescriptorCall(desc2Key, desc, &updatedDesc))
 		// Update range descriptor addressing record(s).
 		calls, err := splitRangeAddressing(newDesc, &updatedDesc)
@@ -888,7 +889,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to fetch GC metadata: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, engine.RangeGCMetadataKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
 		return util.Errorf("unable to copy GC metadata: %s", err)
 	}
 
@@ -897,7 +898,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, engine.RangeLastVerificationTimestampKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
@@ -1000,12 +1001,12 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	}
 	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
-		desc1Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
+		desc1Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
 		txn.Prepare(updateRangeDescriptorCall(desc1Key, desc, &updatedDesc))
 
 		// Remove the range descriptor for the deleted range.
 		// TODO(bdarnell): need a conditional delete?
-		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
+		desc2Key := keys.RangeDescriptorKey(subsumedDesc.StartKey)
 		txn.Prepare(client.Delete(desc2Key))
 
 		calls, err := mergeRangeAddressing(desc, &updatedDesc)
@@ -1133,7 +1134,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
-		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
+		descKey := keys.RangeDescriptorKey(updatedDesc.StartKey)
 
 		txn.Prepare(updateRangeDescriptorCall(descKey, desc, &updatedDesc))
 

@@ -21,8 +21,8 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 // An acctHandler implements the adminHandler interface.
@@ -35,7 +35,7 @@ type acctHandler struct {
 // The accounting config is stored gob-encoded. The specified body must
 // validly parse into an acctConfig struct.
 func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
-	return putConfig(ah.db, engine.KeyConfigAccountingPrefix, &proto.AcctConfig{},
+	return putConfig(ah.db, keys.KeyConfigAccountingPrefix, &proto.AcctConfig{},
 		path, body, r, nil)
 }
 
@@ -48,10 +48,10 @@ func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 // The body result contains JSON-formatted output for a listing of keys
 // and JSON-formatted output for retrieval of an accounting config.
 func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	return getConfig(ah.db, engine.KeyConfigAccountingPrefix, &proto.AcctConfig{}, path, r)
+	return getConfig(ah.db, keys.KeyConfigAccountingPrefix, &proto.AcctConfig{}, path, r)
 }
 
 // Delete removes the accouting config specified by key.
 func (ah *acctHandler) Delete(path string, r *http.Request) error {
-	return deleteConfig(ah.db, engine.KeyConfigAccountingPrefix, path, r)
+	return deleteConfig(ah.db, keys.KeyConfigAccountingPrefix, path, r)
 }

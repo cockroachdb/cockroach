@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -92,13 +93,13 @@ var (
 // keys prefixed with the meta1 or meta2 addressing prefixes. There is a
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key proto.Key) error {
-	maxLength := engine.KeyMaxLength
-	if bytes.HasPrefix(key, engine.KeyLocalRangeKeyPrefix) {
-		key = key[len(engine.KeyLocalRangeKeyPrefix):]
+	maxLength := proto.KeyMaxLength
+	if bytes.HasPrefix(key, keys.KeyLocalRangeKeyPrefix) {
+		key = key[len(keys.KeyLocalRangeKeyPrefix):]
 		_, key = encoding.DecodeBytes(key, nil)
 	}
-	if bytes.HasPrefix(key, engine.KeyMetaPrefix) {
-		key = key[len(engine.KeyMeta1Prefix):]
+	if bytes.HasPrefix(key, keys.KeyMetaPrefix) {
+		key = key[len(keys.KeyMeta1Prefix):]
 	}
 	if len(key) > maxLength {
 		return util.Errorf("maximum key length exceeded for %q", key)
@@ -115,7 +116,7 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
-	if !start.Less(engine.KeyMax) {
+	if !start.Less(proto.KeyMax) {
 		return util.Errorf("start key %q must be less than KeyMax", start)
 	}
 	if !checkEndKey {
@@ -130,7 +131,7 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(end); err != nil {
 		return err
 	}
-	if engine.KeyMax.Less(end) {
+	if proto.KeyMax.Less(end) {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
 	if !start.Less(end) {
@@ -371,7 +372,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		s.stopper.AddCloser(s.engine)
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true,
+		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true,
 			nil, &s.Ident)
 		if err != nil {
 			return err
@@ -391,7 +392,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.feed.startStore()
 
 	// Create ID allocators.
-	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, s.ctx.DB, 2 /* min ID */, raftIDAllocCount, s.stopper)
+	idAlloc, err := NewIDAllocator(keys.KeyRaftIDGenerator, s.ctx.DB, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
@@ -408,8 +409,8 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
 
 	// Iterator over all range-local key-based data.
-	start := engine.RangeDescriptorKey(engine.KeyMin)
-	end := engine.RangeDescriptorKey(engine.KeyMax)
+	start := keys.RangeDescriptorKey(proto.KeyMin)
+	end := keys.RangeDescriptorKey(proto.KeyMax)
 
 	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
 		Transport:              s.ctx.Transport,
@@ -430,8 +431,8 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.feed.beginScanRanges()
 	if err := engine.MVCCIterate(s.engine, start, end, now, false, nil, func(kv proto.KeyValue) (bool, error) {
 		// Only consider range metadata entries; ignore others.
-		_, suffix, _ := engine.DecodeRangeKey(kv.Key)
-		if !suffix.Equal(engine.KeyLocalRangeDescriptorSuffix) {
+		_, suffix, _ := keys.DecodeRangeKey(kv.Key)
+		if !suffix.Equal(keys.KeyLocalRangeDescriptorSuffix) {
 			return false, nil
 		}
 		var desc proto.RangeDescriptor
@@ -570,7 +571,7 @@ func (s *Store) startGossip() error {
 // range and if so, reminds it to gossip the first range descriptor and
 // sentinel gossip.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupRange(engine.KeyMin, nil)
+	rng := s.LookupRange(proto.KeyMin, nil)
 	if rng != nil {
 		return rng.maybeGossipFirstRange()
 	}
@@ -726,12 +727,12 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 	}
 	stopper.AddCloser(s.engine)
 	s.Ident = ident
-	kvs, err := engine.Scan(s.engine, proto.EncodedKey(engine.KeyMin), proto.EncodedKey(engine.KeyMax), 1)
+	kvs, err := engine.Scan(s.engine, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 1)
 	if err != nil {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
 		}
@@ -740,7 +741,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 		}
 		return util.Errorf("store %s is not-empty and has invalid contents (first key: %q)", s.engine, kvs[0].Key)
 	}
-	err = engine.MVCCPutProto(s.engine, nil, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
+	err = engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
 	return err
 }
 
@@ -762,8 +763,8 @@ func (s *Store) GetRange(raftID int64) (*Range, error) {
 func (s *Store) LookupRange(start, end proto.Key) *Range {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	startAddr := engine.KeyAddress(start)
-	endAddr := engine.KeyAddress(end)
+	startAddr := keys.KeyAddress(start)
+	endAddr := keys.KeyAddress(end)
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
 		return startAddr.Less(s.rangesByKey[i].Desc().EndKey)
 	})
@@ -789,8 +790,8 @@ func (s *Store) RaftStatus(raftID int64) *raft.Status {
 func (s *Store) BootstrapRange() error {
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
-		StartKey: engine.KeyMin,
-		EndKey:   engine.KeyMax,
+		StartKey: proto.KeyMin,
+		EndKey:   proto.KeyMax,
 		Replicas: []proto.Replica{
 			{
 				NodeID:  1,
@@ -803,31 +804,31 @@ func (s *Store) BootstrapRange() error {
 	now := s.ctx.Clock.Now()
 
 	// Range descriptor.
-	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
 	// GC Metadata.
 	gcMeta := proto.NewGCMetadata(now.WallTime)
-	if err := engine.MVCCPutProto(batch, ms, engine.RangeGCMetadataKey(desc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeGCMetadataKey(desc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
 		return err
 	}
 	// Verification timestamp.
-	if err := engine.MVCCPutProto(batch, ms, engine.RangeLastVerificationTimestampKey(desc.RaftID), proto.ZeroTimestamp, nil, &now); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeLastVerificationTimestampKey(desc.RaftID), proto.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta2.
-	meta2Key := engine.RangeMetaKey(engine.KeyMax)
+	meta2Key := keys.RangeMetaKey(proto.KeyMax)
 	if err := engine.MVCCPutProto(batch, ms, meta2Key, now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
-	meta1Key := engine.RangeMetaKey(meta2Key)
+	meta1Key := keys.RangeMetaKey(meta2Key)
 	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
 	// Accounting config.
 	acctConfig := &proto.AcctConfig{}
-	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
+	key := keys.MakeKey(keys.KeyConfigAccountingPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, acctConfig); err != nil {
 		return err
 	}
@@ -836,7 +837,7 @@ func (s *Store) BootstrapRange() error {
 		Read:  []string{UserRoot}, // root user
 		Write: []string{UserRoot}, // root user
 	}
-	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
+	key = keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, permConfig); err != nil {
 		return err
 	}
@@ -853,7 +854,7 @@ func (s *Store) BootstrapRange() error {
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
 	}
-	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
+	key = keys.MakeKey(keys.KeyConfigZonePrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
 		return err
 	}
@@ -1461,7 +1462,7 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 		// The scanner hasn't completed a first run yet.
 		return nil, nil
 	}
-	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
+	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
 	r, err := s.kvDB.Get(key)
 	if err != nil {
 		return nil, err
@@ -1550,7 +1551,7 @@ func (s *Store) updateStoreStatus() {
 		ReplicatedRangeCount: replicatedRangeCount,
 		AvailableRangeCount:  availableRangeCount,
 	}
-	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
+	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
 	if _, err := s.kvDB.Put(key, status); err != nil {
 		log.Error(err)
 	}

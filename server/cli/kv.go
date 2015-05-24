@@ -27,8 +27,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 
 	"github.com/spf13/cobra"
@@ -247,7 +247,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		startKey = proto.Key(unquoteArg(args[0], false))
 	} else {
 		// Start with the first key after the system key range.
-		startKey = engine.KeySystemMax
+		startKey = keys.KeySystemMax
 	}
 	if len(args) >= 2 {
 		endKey = proto.Key(unquoteArg(args[1], false))

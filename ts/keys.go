@@ -21,8 +21,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -58,7 +58,7 @@ import (
 // 		slot := (timestamp / keyDuration) // integer division
 var (
 	// keyDataPrefix is the key prefix for time series data keys.
-	keyDataPrefix = proto.MakeKey(engine.KeySystemPrefix, proto.Key("tsd"))
+	keyDataPrefix = proto.MakeKey(keys.KeySystemPrefix, proto.Key("tsd"))
 )
 
 // MakeDataKey creates a time series data key for the given series name, source,

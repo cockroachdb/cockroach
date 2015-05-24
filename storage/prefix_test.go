@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -40,7 +39,7 @@ const (
 
 func buildTestPrefixConfigMap() PrefixConfigMap {
 	configs := []*PrefixConfig{
-		{engine.KeyMin, nil, config1},
+		{proto.KeyMin, nil, config1},
 		{proto.Key("/db1"), nil, config2},
 		{proto.Key("/db1/table"), nil, config3},
 		{proto.Key("/db3"), nil, config4},
@@ -74,12 +73,12 @@ func TestPrefixEndKey(t *testing.T) {
 	testData := []struct {
 		prefix, expEnd proto.Key
 	}{
-		{engine.KeyMin, engine.KeyMax},
+		{proto.KeyMin, proto.KeyMax},
 		{proto.Key("0"), proto.Key("1")},
 		{proto.Key("a"), proto.Key("b")},
 		{proto.Key("db0"), proto.Key("db1")},
 		{proto.Key("\xfe"), proto.Key("\xff")},
-		{engine.KeyMax, engine.KeyMax},
+		{proto.KeyMax, proto.KeyMax},
 		{proto.Key("\xff\xff"), proto.Key("\xff\xff")},
 	}
 
@@ -94,22 +93,22 @@ func TestPrefixEndKey(t *testing.T) {
 func TestPrefixConfigSort(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	keys := []proto.Key{
-		engine.KeyMax,
+		proto.KeyMax,
 		proto.Key("c"),
 		proto.Key("a"),
 		proto.Key("b"),
 		proto.Key("aa"),
 		proto.Key("\xfe"),
-		engine.KeyMin,
+		proto.KeyMin,
 	}
 	expKeys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("a"),
 		proto.Key("aa"),
 		proto.Key("b"),
 		proto.Key("c"),
 		proto.Key("\xfe"),
-		engine.KeyMax,
+		proto.KeyMax,
 	}
 	pcc := PrefixConfigMap{}
 	for _, key := range keys {
@@ -129,7 +128,7 @@ func TestPrefixConfigBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	expPrefixConfigs := []PrefixConfig{
-		{engine.KeyMin, nil, config1},
+		{proto.KeyMin, nil, config1},
 		{proto.Key("/db1"), nil, config2},
 		{proto.Key("/db1/table"), nil, config3},
 		{proto.Key("/db1/tablf"), nil, config2},
@@ -143,7 +142,7 @@ func TestPrefixConfigBuild(t *testing.T) {
 func TestPrefixConfigMapDuplicates(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	configs := []*PrefixConfig{
-		{engine.KeyMin, nil, config1},
+		{proto.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
 		{proto.Key("/db2"), nil, config3},
 	}
@@ -155,7 +154,7 @@ func TestPrefixConfigMapDuplicates(t *testing.T) {
 func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	configs := []*PrefixConfig{
-		{engine.KeyMin, nil, config1},
+		{proto.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
 		{proto.Key("/db2/table1"), nil, config3},
 		{proto.Key("/db2/table2"), nil, config4},
@@ -166,7 +165,7 @@ func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 		log.Fatalf("unexpected error building config map: %v", err)
 	}
 	expPrefixConfigs := []PrefixConfig{
-		{engine.KeyMin, nil, config1},
+		{proto.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
 		{proto.Key("/db2/table1"), nil, config3},
 		{proto.Key("/db2/table2"), nil, config4},
@@ -185,7 +184,7 @@ func TestMatchByPrefix(t *testing.T) {
 		key       proto.Key
 		expConfig interface{}
 	}{
-		{engine.KeyMin, config1},
+		{proto.KeyMin, config1},
 		{proto.Key("\x01"), config1},
 		{proto.Key("/db"), config1},
 		{proto.Key("/db1"), config2},
@@ -215,7 +214,7 @@ func TestMatchesByPrefix(t *testing.T) {
 		key        proto.Key
 		expConfigs []interface{}
 	}{
-		{engine.KeyMin, []interface{}{config1}},
+		{proto.KeyMin, []interface{}{config1}},
 		{proto.Key("\x01"), []interface{}{config1}},
 		{proto.Key("/db"), []interface{}{config1}},
 		{proto.Key("/db1"), []interface{}{config2, config1}},
@@ -252,11 +251,11 @@ func TestSplitRangeByPrefixesError(t *testing.T) {
 	}
 	pcc := buildTestPrefixConfigMap()
 	// Key order is reversed.
-	if _, err := pcc.SplitRangeByPrefixes(engine.KeyMax, engine.KeyMin); err == nil {
+	if _, err := pcc.SplitRangeByPrefixes(proto.KeyMax, proto.KeyMin); err == nil {
 		t.Error("expected error with reversed keys")
 	}
 	// Same start and end keys.
-	if _, err := pcc.SplitRangeByPrefixes(engine.KeyMin, engine.KeyMin); err != nil {
+	if _, err := pcc.SplitRangeByPrefixes(proto.KeyMin, proto.KeyMin); err != nil {
 		t.Error("unexpected error with same start & end keys")
 	}
 }
@@ -271,14 +270,14 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 		expRanges  []*RangeResult
 	}{
 		// The full range.
-		{engine.KeyMin, engine.KeyMax, []*RangeResult{
-			{engine.KeyMin, proto.Key("/db1"), config1},
+		{proto.KeyMin, proto.KeyMax, []*RangeResult{
+			{proto.KeyMin, proto.Key("/db1"), config1},
 			{proto.Key("/db1"), proto.Key("/db1/table"), config2},
 			{proto.Key("/db1/table"), proto.Key("/db1/tablf"), config3},
 			{proto.Key("/db1/tablf"), proto.Key("/db2"), config2},
 			{proto.Key("/db2"), proto.Key("/db3"), config1},
 			{proto.Key("/db3"), proto.Key("/db4"), config4},
-			{proto.Key("/db4"), engine.KeyMax, config1},
+			{proto.Key("/db4"), proto.KeyMax, config1},
 		}},
 		// A subrange containing all databases.
 		{proto.Key("/db"), proto.Key("/dc"), []*RangeResult{
@@ -397,15 +396,15 @@ func TestVisitPrefixes(t *testing.T) {
 		expRanges  [][2]proto.Key
 		expConfigs []interface{}
 	}{
-		{engine.KeyMin, engine.KeyMax,
+		{proto.KeyMin, proto.KeyMax,
 			[][2]proto.Key{
-				{engine.KeyMin, proto.Key("/db1")},
+				{proto.KeyMin, proto.Key("/db1")},
 				{proto.Key("/db1"), proto.Key("/db1/table")},
 				{proto.Key("/db1/table"), proto.Key("/db1/tablf")},
 				{proto.Key("/db1/tablf"), proto.Key("/db2")},
 				{proto.Key("/db2"), proto.Key("/db3")},
 				{proto.Key("/db3"), proto.Key("/db4")},
-				{proto.Key("/db4"), engine.KeyMax},
+				{proto.Key("/db4"), proto.KeyMax},
 			}, []interface{}{config1, config2, config3, config2, config1, config4, config1}},
 		{proto.Key("/db0"), proto.Key("/db1/table/foo"),
 			[][2]proto.Key{

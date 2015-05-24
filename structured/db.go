@@ -23,8 +23,8 @@ import (
 	"encoding/gob"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -55,7 +55,7 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key))
+	k := keys.MakeKey(keys.KeySchemaPrefix, proto.Key(s.Key))
 	// TODO(pmattis): This is an inappropriate use of gob. Replace with
 	// something else.
 	var buf bytes.Buffer
@@ -70,7 +70,7 @@ func (db *structuredDB) DeleteSchema(s *Schema) error {
 	return db.kvDB.Run(client.Call{
 		Args: &proto.DeleteRequest{
 			RequestHeader: proto.RequestHeader{
-				Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
+				Key: keys.MakeKey(keys.KeySchemaPrefix, proto.Key(s.Key)),
 			},
 		},
 		Reply: &proto.DeleteResponse{}})
@@ -81,7 +81,7 @@ func (db *structuredDB) DeleteSchema(s *Schema) error {
 // with the given key cannot be found.
 func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	s := &Schema{}
-	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(key))
+	k := keys.MakeKey(keys.KeySchemaPrefix, proto.Key(key))
 	call := client.Get(k)
 	if err := db.kvDB.Run(call); err != nil {
 		return nil, err

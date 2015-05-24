@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
@@ -49,7 +50,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
-	key := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
+	key := keys.MakeKey(keys.KeyMeta1Prefix, proto.KeyMax)
 	now := s.Clock().Now()
 	txn := proto.NewTransaction("txn", proto.Key("foobar"), 0, proto.SERIALIZABLE, now, 0)
 	if err := engine.MVCCPutProto(s.Engines[0], nil, key, now, txn, &proto.RangeDescriptor{}); err != nil {

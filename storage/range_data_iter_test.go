@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -45,7 +46,7 @@ func prevKey(k proto.Key) proto.Key {
 	return bytes.Join([][]byte{
 		k[0 : length-1],
 		{k[length-1] - 1},
-		bytes.Repeat([]byte{0xff}, engine.KeyMaxLength-length),
+		bytes.Repeat([]byte{0xff}, proto.KeyMaxLength-length),
 	}, nil)
 }
 
@@ -59,18 +60,18 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		key proto.Key
 		ts  proto.Timestamp
 	}{
-		{engine.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{engine.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
-		{engine.RaftHardStateKey(r.Desc().RaftID), ts0},
-		{engine.RaftLogKey(r.Desc().RaftID, 2), ts0},
-		{engine.RaftLogKey(r.Desc().RaftID, 1), ts0},
-		{engine.RangeGCMetadataKey(r.Desc().RaftID), ts0},
-		{engine.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
-		{engine.RangeStatsKey(r.Desc().RaftID), ts0},
-		{engine.RangeDescriptorKey(r.Desc().StartKey), ts},
-		{engine.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
-		{engine.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
-		{engine.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
+		{keys.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{keys.RaftHardStateKey(r.Desc().RaftID), ts0},
+		{keys.RaftLogKey(r.Desc().RaftID, 2), ts0},
+		{keys.RaftLogKey(r.Desc().RaftID, 1), ts0},
+		{keys.RangeGCMetadataKey(r.Desc().RaftID), ts0},
+		{keys.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
+		{keys.RangeStatsKey(r.Desc().RaftID), ts0},
+		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
+		{keys.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
+		{keys.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
+		{keys.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
 		// replace this with something that reliably generates the first valid key in the range.
@@ -162,7 +163,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 
 	// Create range data for all three ranges.
 	preKeys := createRangeData(preRng, t)
-	keys := createRangeData(tc.rng, t)
+	curKeys := createRangeData(tc.rng, t)
 	postKeys := createRangeData(postRng, t)
 
 	iter := newRangeDataIterator(tc.rng.Desc(), tc.rng.rm.Engine())
@@ -172,17 +173,17 @@ func disabledTestRangeDataIterator(t *testing.T) {
 		if err := iter.Error(); err != nil {
 			t.Fatal(err)
 		}
-		if i >= len(keys) {
+		if i >= len(curKeys) {
 			t.Fatal("there are more keys in the iteration than expected")
 		}
-		if key := iter.Key(); !key.Equal(keys[i]) {
+		if key := iter.Key(); !key.Equal(curKeys[i]) {
 			k1, ts1, _ := engine.MVCCDecodeKey(key)
-			k2, ts2, _ := engine.MVCCDecodeKey(keys[i])
+			k2, ts2, _ := engine.MVCCDecodeKey(curKeys[i])
 			t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
 		}
 		i++
 	}
-	if i != len(keys) {
+	if i != len(curKeys) {
 		t.Fatal("there are fewer keys in the iteration than expected")
 	}
 
@@ -209,10 +210,10 @@ func disabledTestRangeDataIterator(t *testing.T) {
 		i = 0
 		for ; iter.Valid(); iter.Next() {
 			k1, ts1, _ := engine.MVCCDecodeKey(iter.Key())
-			if bytes.HasPrefix(k1, engine.KeyConfigAccountingPrefix) ||
-				bytes.HasPrefix(k1, engine.KeyConfigPermissionPrefix) ||
-				bytes.HasPrefix(k1, engine.KeyConfigZonePrefix) ||
-				bytes.HasPrefix(k1, engine.KeyStatusPrefix) {
+			if bytes.HasPrefix(k1, keys.KeyConfigAccountingPrefix) ||
+				bytes.HasPrefix(k1, keys.KeyConfigPermissionPrefix) ||
+				bytes.HasPrefix(k1, keys.KeyConfigZonePrefix) ||
+				bytes.HasPrefix(k1, keys.KeyStatusPrefix) {
 				// Some data is written into the system prefix by Store.BootstrapRange,
 				// but it is not in our expected key list so skip it.
 				// TODO(bdarnell): validate this data instead of skipping it.
@@ -224,7 +225,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 			}
 			i++
 		}
-		if i != len(keys) {
+		if i != len(curKeys) {
 			t.Fatal("there are fewer keys in the iteration than expected")
 		}
 	}

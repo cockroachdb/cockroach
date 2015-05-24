@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/proto"
@@ -67,8 +68,8 @@ var (
 func testRangeDescriptor() *proto.RangeDescriptor {
 	return &proto.RangeDescriptor{
 		RaftID:   1,
-		StartKey: engine.KeyMin,
-		EndKey:   engine.KeyMax,
+		StartKey: proto.KeyMin,
+		EndKey:   proto.KeyMax,
 		Replicas: []proto.Replica{
 			{
 				NodeID:  1,
@@ -201,20 +202,20 @@ func (tc *testContext) Stop() {
 
 // initConfigs creates default configuration entries.
 func initConfigs(e engine.Engine, t testing.TB) {
-	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func newTransaction(name string, baseKey proto.Key, userPriority int32,
 	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
-	return proto.NewTransaction(name, engine.KeyAddress(baseKey), userPriority,
+	return proto.NewTransaction(name, keys.KeyAddress(baseKey), userPriority,
 		isolation, clock.Now(), clock.MaxOffset().Nanoseconds())
 }
 
@@ -256,14 +257,14 @@ func TestRangeContains(t *testing.T) {
 	if !r.ContainsKey(proto.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
-	if !r.ContainsKey(engine.RangeDescriptorKey([]byte("aa"))) {
+	if !r.ContainsKey(keys.RangeDescriptorKey([]byte("aa"))) {
 		t.Errorf("expected range to contain range descriptor key for \"aa\"")
 	}
 	if !r.ContainsKeyRange(proto.Key("aa"), proto.Key("b")) {
 		t.Errorf("expected range to contain key range \"aa\"-\"b\"")
 	}
-	if !r.ContainsKeyRange(engine.RangeDescriptorKey([]byte("aa")),
-		engine.RangeDescriptorKey([]byte("b"))) {
+	if !r.ContainsKeyRange(keys.RangeDescriptorKey([]byte("aa")),
+		keys.RangeDescriptorKey([]byte("b"))) {
 		t.Errorf("expected range to contain key transaction range \"aa\"-\"b\"")
 	}
 }
@@ -460,7 +461,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
-	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.Key("/db1"))
 	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Perm); err != nil {
 		t.Fatal(err)
 	}
@@ -472,9 +473,9 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		}
 		configMap := info.(PrefixConfigMap)
 		expConfigs := []*PrefixConfig{
-			{engine.KeyMin, nil, &testDefaultPermConfig},
+			{proto.KeyMin, nil, &testDefaultPermConfig},
 			{proto.Key("/db1"), nil, &db1Perm},
-			{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+			{proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig},
 		}
 		return reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs)
 	}
@@ -596,9 +597,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 		gossipKey string
 		configs   []*PrefixConfig
 	}{
-		{gossip.KeyConfigAccounting, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultAcctConfig}}},
-		{gossip.KeyConfigPermission, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultPermConfig}}},
-		{gossip.KeyConfigZone, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultZoneConfig}}},
+		{gossip.KeyConfigAccounting, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultAcctConfig}}},
+		{gossip.KeyConfigPermission, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultPermConfig}}},
+		{gossip.KeyConfigZone, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {
 		_, err := tc.gossip.GetInfo(test.gossipKey)
@@ -620,7 +621,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
-	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.Key("/db1"))
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
@@ -642,9 +643,9 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
-		{engine.KeyMin, nil, &testDefaultPermConfig},
+		{proto.KeyMin, nil, &testDefaultPermConfig},
 		{proto.Key("/db1"), nil, db1Perm},
-		{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		{proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -663,7 +664,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
-	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.Key("/db1"))
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
@@ -685,9 +686,9 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
-		{engine.KeyMin, nil, &testDefaultPermConfig},
+		{proto.KeyMin, nil, &testDefaultPermConfig},
 		{proto.Key("/db1"), nil, db1Perm},
-		{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		{proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -1382,7 +1383,7 @@ func TestRangeResponseCacheError(t *testing.T) {
 	}
 
 	// Overwrite repsonse cache entry with garbage for the last op.
-	key := engine.ResponseCacheKey(tc.rng.Desc().RaftID, &args.CmdID)
+	key := keys.ResponseCacheKey(tc.rng.Desc().RaftID, &args.CmdID)
 	err = engine.MVCCPut(tc.engine, nil, key, proto.ZeroTimestamp, proto.Value{Bytes: []byte("\xff")}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1609,7 +1610,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := engine.TransactionKey(test.key, txn.ID)
+		txnKey := keys.TransactionKey(test.key, txn.ID)
 		if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, txnKey, proto.ZeroTimestamp,
 			nil, &existTxn); err != nil {
 			t.Fatal(err)
@@ -2306,7 +2307,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	// Get original meta2 descriptor.
 	rlArgs := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     engine.RangeMetaKey(key),
+			Key:     keys.RangeMetaKey(key),
 			RaftID:  tc.rng.Desc().RaftID,
 			Replica: proto.Replica{StoreID: tc.store.StoreID()},
 		},
@@ -2328,7 +2329,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pArgs, pReply := putArgs(engine.RangeMetaKey(key), data, 1, tc.store.StoreID())
+	pArgs, pReply := putArgs(keys.RangeMetaKey(key), data, 1, tc.store.StoreID())
 	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 
@@ -2338,7 +2339,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	}
 
 	// Now lookup the range; should get old value + write intent error.
-	rlArgs.Key = engine.RangeMetaKey(proto.Key("A"))
+	rlArgs.Key = keys.RangeMetaKey(proto.Key("A"))
 	rlArgs.Timestamp = proto.ZeroTimestamp
 
 	err = tc.rng.AddCmd(tc.rng.context(), client.Call{Args: rlArgs, Reply: rlReply}, true)

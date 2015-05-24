@@ -21,8 +21,8 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -91,24 +91,24 @@ func updateRangeAddressing(desc *proto.RangeDescriptor) ([]client.Call, error) {
 func rangeAddressing(calls []client.Call, desc *proto.RangeDescriptor,
 	action metaAction) ([]client.Call, error) {
 	// 1. handle illegal case of start or end key being meta1.
-	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta1Prefix) ||
-		bytes.HasPrefix(desc.StartKey, engine.KeyMeta1Prefix) {
+	if bytes.HasPrefix(desc.EndKey, keys.KeyMeta1Prefix) ||
+		bytes.HasPrefix(desc.StartKey, keys.KeyMeta1Prefix) {
 		return nil, util.Errorf("meta1 addressing records cannot be split: %+v", desc)
 	}
 	// 2. the case of the range ending with a meta2 prefix. This means
 	// the range is full of meta2. We must update the relevant meta1
 	// entry pointing to the end of this range.
-	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
-		calls = action(calls, engine.RangeMetaKey(desc.EndKey), desc)
+	if bytes.HasPrefix(desc.EndKey, keys.KeyMeta2Prefix) {
+		calls = action(calls, keys.RangeMetaKey(desc.EndKey), desc)
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.
-		calls = action(calls, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc)
+		calls = action(calls, keys.MakeKey(keys.KeyMeta2Prefix, desc.EndKey), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
-		if bytes.Equal(desc.StartKey, engine.KeyMin) ||
-			bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
-			calls = action(calls, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc)
+		if bytes.Equal(desc.StartKey, proto.KeyMin) ||
+			bytes.HasPrefix(desc.StartKey, keys.KeyMeta2Prefix) {
+			calls = action(calls, keys.MakeKey(keys.KeyMeta1Prefix, proto.KeyMax), desc)
 		}
 	}
 	return calls, nil

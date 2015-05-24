@@ -23,8 +23,8 @@ import (
 	"sync"
 
 	"github.com/biogo/store/llrb"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -127,7 +127,7 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		// the correct range. Using the start key would require using
 		// Floor() which is a possibility for our llrb-based OrderedCache
 		// but not possible for RocksDB.
-		rmc.rangeCache.Add(rangeCacheKey(engine.RangeMetaKey(rs[i].EndKey)), &rs[i])
+		rmc.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(rs[i].EndKey)), &rs[i])
 	}
 	if len(rs) == 0 {
 		log.Fatalf("no range descriptors returned for %s", key)
@@ -154,7 +154,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
-		key = engine.RangeMetaKey(key)
+		key = keys.RangeMetaKey(key)
 		if len(key) == 0 {
 			break
 		}
@@ -169,7 +169,7 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	// We want to look up the range descriptor for key. The cache is
 	// indexed using the end-key of the range, but the end-key is
 	// non-inclusive. So we access the cache using key.Next().
-	metaKey := engine.RangeMetaKey(key.Next())
+	metaKey := keys.RangeMetaKey(key.Next())
 	rmc.rangeCacheMu.RLock()
 	defer rmc.rangeCacheMu.RUnlock()
 
@@ -181,7 +181,7 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rd := v.(*proto.RangeDescriptor)
 
 	// Check that key actually belongs to range
-	if !rd.ContainsKey(engine.KeyAddress(key)) {
+	if !rd.ContainsKey(keys.KeyAddress(key)) {
 		return nil, nil
 	}
 	return metaEndKey, rd

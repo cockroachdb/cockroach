@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package engine
+package keys
 
 import (
 	"bytes"
@@ -57,12 +57,12 @@ func TestKeyAddress(t *testing.T) {
 	testCases := []struct {
 		key, expAddress proto.Key
 	}{
-		{proto.Key{}, KeyMin},
+		{proto.Key{}, proto.KeyMin},
 		{proto.Key("123"), proto.Key("123")},
 		{MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
 		{TransactionKey(proto.Key("baz"), proto.Key(util.NewUUID4())), proto.Key("baz")},
-		{TransactionKey(KeyMax, proto.Key(util.NewUUID4())), KeyMax},
+		{TransactionKey(proto.KeyMax, proto.Key(util.NewUUID4())), proto.KeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {
@@ -80,7 +80,7 @@ func TestRangeMetaKey(t *testing.T) {
 	}{
 		{
 			key:    proto.Key{},
-			expKey: KeyMin,
+			expKey: proto.KeyMin,
 		},
 		{
 			key:    MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")),
@@ -92,7 +92,7 @@ func TestRangeMetaKey(t *testing.T) {
 		},
 		{
 			key:    proto.Key("\x00\x00meta1\x00acctfoo"),
-			expKey: KeyMin,
+			expKey: proto.KeyMin,
 		},
 		{
 			key:    proto.Key("foo"),
@@ -108,7 +108,7 @@ func TestRangeMetaKey(t *testing.T) {
 		},
 		{
 			key:    proto.Key("\x00\x00meta1foo"),
-			expKey: KeyMin,
+			expKey: proto.KeyMin,
 		},
 	}
 	for i, test := range testCases {

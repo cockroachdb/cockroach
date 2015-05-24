@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
@@ -50,7 +49,7 @@ func ExampleSetAndGetPerms() {
 		prefix proto.Key
 		yaml   string
 	}{
-		{engine.KeyMin, testPermConfig},
+		{proto.KeyMin, testPermConfig},
 		{proto.Key("db1"), testPermConfig},
 		{proto.Key("db 2"), testPermConfig},
 		{proto.Key("\xfe"), testPermConfig},
@@ -110,7 +109,7 @@ func ExampleLsPerms() {
 	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("db1"),
 		proto.Key("db2"),
 		proto.Key("db3"),
@@ -169,7 +168,7 @@ func ExampleRmPerms() {
 	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("db1"),
 	}
 

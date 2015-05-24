@@ -21,8 +21,8 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -58,7 +58,7 @@ func validateZoneConfig(config gogoproto.Message) error {
 // "body". The specified body must validly parse into a zone config
 // struct.
 func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
-	return putConfig(zh.db, engine.KeyConfigZonePrefix, &proto.ZoneConfig{},
+	return putConfig(zh.db, keys.KeyConfigZonePrefix, &proto.ZoneConfig{},
 		path, body, r, validateZoneConfig)
 }
 
@@ -71,10 +71,10 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 // JSON-formatted output for a listing of keys and JSON-formatted
 // output for retrieval of a zone config.
 func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	return getConfig(zh.db, engine.KeyConfigZonePrefix, &proto.ZoneConfig{}, path, r)
+	return getConfig(zh.db, keys.KeyConfigZonePrefix, &proto.ZoneConfig{}, path, r)
 }
 
 // Delete removes the zone config specified by key.
 func (zh *zoneHandler) Delete(path string, r *http.Request) error {
-	return deleteConfig(zh.db, engine.KeyConfigZonePrefix, path, r)
+	return deleteConfig(zh.db, keys.KeyConfigZonePrefix, path, r)
 }

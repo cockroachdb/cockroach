@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -458,7 +459,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	tooLongKey := proto.Key(strings.Repeat("x", engine.KeyMaxLength+1))
+	tooLongKey := proto.Key(strings.Repeat("x", proto.KeyMaxLength+1))
 
 	// Start with a too-long key on a get.
 	gArgs, gReply := getArgs(tooLongKey, 1, store.StoreID())
@@ -466,17 +467,17 @@ func TestStoreVerifyKeys(t *testing.T) {
 		t.Fatal("expected error for key too long")
 	}
 	// Try a start key == KeyMax.
-	gArgs.Key = engine.KeyMax
+	gArgs.Key = proto.KeyMax
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err == nil {
 		t.Fatal("expected error for start key == KeyMax")
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
-	gArgs.EndKey = engine.KeyMax
+	gArgs.EndKey = proto.KeyMax
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err == nil {
 		t.Fatal("expected error for end key specified on a non-range-based operation")
 	}
 	// Try a scan with too-long EndKey.
-	sArgs, sReply := scanArgs(engine.KeyMin, tooLongKey, 1, store.StoreID())
+	sArgs, sReply := scanArgs(proto.KeyMin, tooLongKey, 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: sArgs, Reply: sReply}); err == nil {
 		t.Fatal("expected error for end key too long")
 	}
@@ -494,23 +495,23 @@ func TestStoreVerifyKeys(t *testing.T) {
 	}
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
-	meta2KeyMax := engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax)
+	meta2KeyMax := keys.MakeKey(keys.KeyMeta2Prefix, proto.KeyMax)
 	pArgs, pReply := putArgs(meta2KeyMax, []byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
 	// Try to put a range descriptor record for a start key which is
 	// maximum length.
-	key := append([]byte{}, engine.KeyMax...)
+	key := append([]byte{}, proto.KeyMax...)
 	key[len(key)-1] = 0x01
-	pArgs, pReply = putArgs(engine.RangeDescriptorKey(key), []byte("value"), 1, store.StoreID())
+	pArgs, pReply = putArgs(keys.RangeDescriptorKey(key), []byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatalf("unexpected error on put to range descriptor for KeyMax value: %s", err)
 	}
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs, pReply = putArgs(engine.TransactionKey(meta2KeyMax, []byte(util.NewUUID4())),
+	pArgs, pReply = putArgs(keys.TransactionKey(meta2KeyMax, []byte(util.NewUUID4())),
 		[]byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", err)
@@ -623,7 +624,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng2 := splitTestRange(store, engine.KeyMin, proto.Key("b"), t)
+	rng2 := splitTestRange(store, proto.KeyMin, proto.Key("b"), t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -669,8 +670,8 @@ func TestStoreRangesByKey(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	r0 := store.LookupRange(engine.KeyMin, nil)
-	r1 := splitTestRange(store, engine.KeyMin, proto.Key("A"), t)
+	r0 := store.LookupRange(proto.KeyMin, nil)
+	r1 := splitTestRange(store, proto.KeyMin, proto.Key("A"), t)
 	r2 := splitTestRange(store, proto.Key("A"), proto.Key("C"), t)
 	r3 := splitTestRange(store, proto.Key("C"), proto.Key("X"), t)
 	r4 := splitTestRange(store, proto.Key("X"), proto.Key("ZZ"), t)
@@ -699,8 +700,8 @@ func TestStoreRangesByKey(t *testing.T) {
 	if r := store.LookupRange(proto.Key("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if store.LookupRange(engine.KeyMax, nil) != nil {
-		t.Errorf("expected engine.KeyMax to not have an associated range")
+	if store.LookupRange(proto.KeyMax, nil) != nil {
+		t.Errorf("expected proto.KeyMax to not have an associated range")
 	}
 }
 
@@ -716,8 +717,8 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Range
 		expMaxBytes int64
 	}{
-		{store.LookupRange(engine.KeyMin, nil), 64 << 20},
-		{splitTestRange(store, engine.KeyMin, proto.Key("a"), t), 1 << 20},
+		{store.LookupRange(proto.KeyMin, nil), 64 << 20},
+		{splitTestRange(store, proto.KeyMin, proto.Key("a"), t), 1 << 20},
 		{splitTestRange(store, proto.Key("a"), proto.Key("aa"), t), 1 << 20},
 		{splitTestRange(store, proto.Key("aa"), proto.Key("b"), t), 64 << 20},
 	}
@@ -732,7 +733,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key("a"))
+	key := keys.MakeKey(keys.KeyConfigZonePrefix, proto.Key("a"))
 	pArgs, pReply := putArgs(key, data, 1, store.StoreID())
 	pArgs.Timestamp = store.ctx.Clock.Now()
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
@@ -788,7 +789,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
 			}
-			txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
+			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn proto.Transaction
 			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn)
 			if !ok || err != nil {
@@ -1045,7 +1046,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Read pushee's txn.
-	txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
+	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn proto.Transaction
 	if ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn); !ok || err != nil {
 		t.Fatalf("not found or err: %s", err)

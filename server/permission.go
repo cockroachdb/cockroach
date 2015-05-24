@@ -21,8 +21,8 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 // A permHandler implements the adminHandler interface.
@@ -35,7 +35,7 @@ type permHandler struct {
 // stored gob-encoded. The specified body must validly parse into a
 // perm config struct.
 func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
-	return putConfig(ph.db, engine.KeyConfigPermissionPrefix, &proto.PermConfig{},
+	return putConfig(ph.db, keys.KeyConfigPermissionPrefix, &proto.PermConfig{},
 		path, body, r, nil)
 }
 
@@ -48,10 +48,10 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 // JSON-formatted output for a listing of keys and JSON-formatted
 // output for retrieval of a perm config.
 func (ph *permHandler) Get(path string, r *http.Request) ([]byte, string, error) {
-	return getConfig(ph.db, engine.KeyConfigPermissionPrefix, &proto.PermConfig{}, path, r)
+	return getConfig(ph.db, keys.KeyConfigPermissionPrefix, &proto.PermConfig{}, path, r)
 }
 
 // Delete removes the perm config specified by key.
 func (ph *permHandler) Delete(path string, r *http.Request) error {
-	return deleteConfig(ph.db, engine.KeyConfigPermissionPrefix, path, r)
+	return deleteConfig(ph.db, keys.KeyConfigPermissionPrefix, path, r)
 }

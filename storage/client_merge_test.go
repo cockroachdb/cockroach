@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -46,7 +47,7 @@ func adminMergeArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.Adm
 }
 
 func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
-	args, reply := adminSplitArgs(engine.KeyMin, []byte("b"), 1, store.StoreID())
+	args, reply := adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		return nil, nil, err
 	}
@@ -74,7 +75,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args, reply := adminMergeArgs(engine.KeyMin, 1, store.StoreID())
+	args, reply := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
 	err = store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
 	if err != nil {
 		t.Fatal(err)
@@ -126,13 +127,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args, reply := adminMergeArgs(engine.KeyMin, 1, store.StoreID())
+	args, reply := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify no intents remains on range descriptor keys.
-	for _, key := range []proto.Key{engine.RangeDescriptorKey(aDesc.StartKey), engine.RangeDescriptorKey(bDesc.StartKey)} {
+	for _, key := range []proto.Key{keys.RangeDescriptorKey(aDesc.StartKey), keys.RangeDescriptorKey(bDesc.StartKey)} {
 		if _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -145,11 +146,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	if !reflect.DeepEqual(rangeA, rangeB) {
 		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
 	}
-	if !bytes.Equal(rangeA.Desc().StartKey, engine.KeyMin) {
-		t.Fatalf("The start key is not equal to KeyMin %q=%q", rangeA.Desc().StartKey, engine.KeyMin)
+	if !bytes.Equal(rangeA.Desc().StartKey, proto.KeyMin) {
+		t.Fatalf("The start key is not equal to KeyMin %q=%q", rangeA.Desc().StartKey, proto.KeyMin)
 	}
-	if !bytes.Equal(rangeA.Desc().EndKey, engine.KeyMax) {
-		t.Fatalf("The end key is not equal to KeyMax %q=%q", rangeA.Desc().EndKey, engine.KeyMax)
+	if !bytes.Equal(rangeA.Desc().EndKey, proto.KeyMax) {
+		t.Fatalf("The end key is not equal to KeyMax %q=%q", rangeA.Desc().EndKey, proto.KeyMax)
 	}
 
 	// Try to get values from after the merge.
@@ -193,7 +194,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Merge last range.
-	args, reply := adminMergeArgs(engine.KeyMin, 1, store.StoreID())
+	args, reply := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatalf("merge of last range should be a noop: %s", err)
 	}
@@ -207,11 +208,11 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split into 3 ranges
-	argsSplit, replySplit := adminSplitArgs(engine.KeyMin, []byte("d"), 1, store.StoreID())
+	argsSplit, replySplit := adminSplitArgs(proto.KeyMin, []byte("d"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: argsSplit, Reply: replySplit}); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
-	argsSplit, replySplit = adminSplitArgs(engine.KeyMin, []byte("b"), 1, store.StoreID())
+	argsSplit, replySplit = adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: argsSplit, Reply: replySplit}); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
@@ -234,7 +235,7 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	// resolve intents.  If intents are left unresolved then the
 	// asynchronous resolution may happen after the call to RemoveRange
 	// below, reviving the range and breaking the test.
-	if err := store.DB().Run(client.Scan(engine.KeyLocalMax, engine.KeySystemMax, 1000)); err != nil {
+	if err := store.DB().Run(client.Scan(keys.KeyLocalMax, keys.KeySystemMax, 1000)); err != nil {
 		t.Fatal(err)
 	}
 

@@ -28,9 +28,9 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -238,7 +238,7 @@ func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 			return err
 		}
 	}
-	key := engine.MakeKey(configPrefix, proto.Key(path[1:]))
+	key := keys.MakeKey(configPrefix, proto.Key(path[1:]))
 	if err := db.Run(client.PutProto(key, config)); err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		// Encode the response.
 		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
-		configkey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
+		configkey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
 		if err = db.Run(client.GetProto(configkey, config)); err != nil {
 			return
 		}
@@ -299,7 +299,7 @@ func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Re
 	if path == "/" {
 		return util.Errorf("the default configuration cannot be deleted")
 	}
-	configKey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
+	configKey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
 	return db.Run(client.Call{
 		Args: &proto.DeleteRequest{
 			RequestHeader: proto.RequestHeader{

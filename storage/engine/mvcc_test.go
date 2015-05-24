@@ -29,6 +29,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -724,7 +725,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, err = MVCCScan(engine, testKey4, KeyMax, 0, makeTS(1, 0), true, nil)
+	kvs, err = MVCCScan(engine, testKey4, proto.KeyMax, 0, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -735,7 +736,7 @@ func TestMVCCScan(t *testing.T) {
 	}
 
 	_, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, txn2)
-	kvs, err = MVCCScan(engine, KeyMin, testKey2, 0, makeTS(1, 0), true, nil)
+	kvs, err = MVCCScan(engine, proto.KeyMin, testKey2, 0, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -838,7 +839,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	defer engine.Close()
 
 	// A scan with consistent=false should fail in a txn.
-	if _, err := MVCCScan(engine, KeyMin, KeyMax, 0, makeTS(1, 0), false, txn1); err == nil {
+	if _, err := MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(1, 0), false, txn1); err == nil {
 		t.Error("expected an error scanning with consistent=false in txn")
 	}
 
@@ -917,7 +918,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if num != 2 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _ := MVCCScan(engine, KeyMin, KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _ := MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -926,28 +927,28 @@ func TestMVCCDeleteRange(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = MVCCDeleteRange(engine, nil, testKey4, KeyMax, 0, makeTS(2, 0), nil)
+	num, err = MVCCDeleteRange(engine, nil, testKey4, proto.KeyMax, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _ = MVCCScan(engine, KeyMin, KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _ = MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = MVCCDeleteRange(engine, nil, KeyMin, testKey2, 0, makeTS(2, 0), nil)
+	num, err = MVCCDeleteRange(engine, nil, proto.KeyMin, testKey2, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _ = MVCCScan(engine, KeyMin, KeyMax, 0, makeTS(2, 0), true, nil)
+	kvs, _ = MVCCScan(engine, proto.KeyMin, proto.KeyMax, 0, makeTS(2, 0), true, nil)
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -1533,7 +1534,7 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
-	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, KeyMin, KeyMax)
+	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, proto.KeyMin, proto.KeyMax)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1924,7 +1925,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after overwrite", ms, &expMS5, t)
 
 	// Write a transaction record which is a system-local key.
-	txnKey := TransactionKey(txn.Key, txn.ID)
+	txnKey := keys.TransactionKey(txn.Key, txn.ID)
 	txnVal := proto.Value{Bytes: []byte("txn-data")}
 	if err := MVCCPut(engine, ms, txnKey, proto.ZeroTimestamp, txnVal, nil); err != nil {
 		t.Fatal(err)
@@ -2023,7 +2024,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i%10 == 0 {
 			// Compute the stats manually.
 			iter := engine.NewIterator()
-			iter.Seek(KeyMin)
+			iter.Seek(proto.KeyMin)
 			expMS, err := MVCCComputeStats(iter, int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
@@ -2084,7 +2085,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 		}
 	}
-	kvsn, err := Scan(engine, MVCCEncodeKey(KeyMin), MVCCEncodeKey(KeyMax), 0)
+	kvsn, err := Scan(engine, MVCCEncodeKey(proto.KeyMin), MVCCEncodeKey(proto.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2114,7 +2115,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		MVCCEncodeKey(proto.Key("b-del")),
 		MVCCEncodeVersionKey(proto.Key("b-del"), ts3),
 	}
-	kvs, err := Scan(engine, MVCCEncodeKey(KeyMin), MVCCEncodeKey(KeyMax), 0)
+	kvs, err := Scan(engine, MVCCEncodeKey(proto.KeyMin), MVCCEncodeKey(proto.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2131,7 +2132,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator()
-	iter.Seek(KeyMin)
+	iter.Seek(proto.KeyMin)
 	expMS, err := MVCCComputeStats(iter, ts3.WallTime)
 	iter.Close()
 	if err != nil {

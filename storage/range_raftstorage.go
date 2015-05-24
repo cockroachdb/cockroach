@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -36,7 +37,7 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftHardStateKey(r.Desc().RaftID),
+	found, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftHardStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -89,8 +90,8 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	}
 
 	err := engine.MVCCIterate(r.rm.Engine(),
-		engine.RaftLogKey(r.Desc().RaftID, lo),
-		engine.RaftLogKey(r.Desc().RaftID, hi),
+		keys.RaftLogKey(r.Desc().RaftID, lo),
+		keys.RaftLogKey(r.Desc().RaftID, hi),
 		proto.ZeroTimestamp, true /* consistent */, nil /* txn */, scanFunc)
 
 	if err != nil {
@@ -137,7 +138,7 @@ func (r *Range) LastIndex() (uint64, error) {
 // and the dummy entries that make up the starting point of an empty log.
 func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
 	ts := proto.RaftTruncatedState{}
-	ok, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftTruncatedStateKey(r.Desc().RaftID),
+	ok, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftTruncatedStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil, &ts)
 	if err != nil {
 		return ts, err
@@ -169,7 +170,7 @@ func (r *Range) FirstIndex() (uint64, error) {
 // loadAppliedIndex retrieves the applied index from the supplied engine.
 func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 	appliedIndex := uint64(0)
-	v, err := engine.MVCCGet(eng, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+	v, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
@@ -183,7 +184,7 @@ func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 // setAppliedIndex persists a new applied index.
 func setAppliedIndex(eng engine.Engine, raftID int64, appliedIndex uint64) error {
 	return engine.MVCCPut(eng, nil, /* stats */
-		engine.RaftAppliedIndexKey(raftID),
+		keys.RaftAppliedIndexKey(raftID),
 		proto.ZeroTimestamp,
 		proto.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
 		nil /* txn */)
@@ -193,7 +194,7 @@ func setAppliedIndex(eng engine.Engine, raftID int64, appliedIndex uint64) error
 func (r *Range) loadLastIndex() (uint64, error) {
 	lastIndex := uint64(0)
 	v, err := engine.MVCCGet(r.rm.Engine(),
-		engine.RaftLastIndexKey(r.Desc().RaftID),
+		keys.RaftLastIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
@@ -215,7 +216,7 @@ func (r *Range) loadLastIndex() (uint64, error) {
 
 // setLastIndex persists a new last index.
 func setLastIndex(eng engine.Engine, raftID int64, lastIndex uint64) error {
-	return engine.MVCCPut(eng, nil, engine.RaftLastIndexKey(raftID),
+	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(raftID),
 		proto.ZeroTimestamp, proto.Value{
 			Bytes: encoding.EncodeUint64(nil, lastIndex),
 		}, nil)
@@ -238,7 +239,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(snap, engine.RangeDescriptorKey(r.Desc().StartKey),
+	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.Desc().StartKey),
 		r.rm.Clock().Now(), false, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
@@ -288,7 +289,7 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 	defer batch.Close()
 
 	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(r.Desc().RaftID, ent.Index),
+		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(r.Desc().RaftID, ent.Index),
 			proto.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
@@ -299,7 +300,7 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(batch, nil,
-			engine.RaftLogKey(r.Desc().RaftID, i), proto.ZeroTimestamp, nil)
+			keys.RaftLogKey(r.Desc().RaftID, i), proto.ZeroTimestamp, nil)
 		if err != nil {
 			return err
 		}
@@ -327,7 +328,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 
 	// First, save the HardState.  The HardState must not be changed
 	// because it may record a previous vote cast by this node.
-	hardStateKey := engine.RaftHardStateKey(r.Desc().RaftID)
+	hardStateKey := keys.RaftHardStateKey(r.Desc().RaftID)
 	hardState, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return nil
@@ -365,7 +366,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 
 	// Read the updated range descriptor.
 	var desc proto.RangeDescriptor
-	if _, err := engine.MVCCGetProto(batch, engine.RangeDescriptorKey(r.Desc().StartKey),
+	if _, err := engine.MVCCGetProto(batch, keys.RangeDescriptorKey(r.Desc().StartKey),
 		r.rm.Clock().Now(), false, nil, &desc); err != nil {
 		return err
 	}
@@ -415,6 +416,6 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftHardStateKey(r.Desc().RaftID),
+	return engine.MVCCPutProto(r.rm.Engine(), nil, keys.RaftHardStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &st)
 }

@@ -25,8 +25,8 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -84,7 +84,7 @@ func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error 
 		return util.Errorf("Expected does not contain a node for %s", key)
 	}
 	actualNode := &proto.RangeTreeNode{}
-	if err := db.Run(client.GetProto(engine.RangeTreeNodeKey(key), actualNode)); err != nil {
+	if err := db.Run(client.GetProto(keys.RangeTreeNodeKey(key), actualNode)); err != nil {
 		return err
 	}
 	if err := nodesEqual(key, expectedNode, *actualNode); err != nil {
@@ -108,7 +108,7 @@ func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error 
 func treesEqual(db *client.KV, expected testRangeTree) error {
 	// Compare the tree roots.
 	actualTree := &proto.RangeTree{}
-	if err := db.Run(client.GetProto(engine.KeyRangeTreeRoot, actualTree)); err != nil {
+	if err := db.Run(client.GetProto(keys.KeyRangeTreeRoot, actualTree)); err != nil {
 		return err
 	}
 	if !reflect.DeepEqual(&expected.Tree, actualTree) {
@@ -139,12 +139,12 @@ func TestSetupRangeTree(t *testing.T) {
 
 	// Check to make sure the range tree is stored correctly.
 	tree := proto.RangeTree{
-		RootKey: engine.KeyMin,
+		RootKey: proto.KeyMin,
 	}
 	nodes := map[string]proto.RangeTreeNode{
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -178,13 +178,13 @@ func TestInsertRight(t *testing.T) {
 	nodes := map[string]proto.RangeTreeNode{
 		string(keyA): {
 			Key:       keyA,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 		},
 	}
@@ -206,19 +206,19 @@ func TestInsertRight(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyA): {
 			Key:       keyA,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 			RightKey:  &keyB,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyB): {
 			Key:       keyB,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -240,25 +240,25 @@ func TestInsertRight(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyA): {
 			Key:       keyA,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 			RightKey:  &keyC,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyC): {
 			Key:       keyC,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyB,
 		},
 		string(keyB): {
 			Key:       keyB,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 		},
 	}
@@ -280,31 +280,31 @@ func TestInsertRight(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyC): {
 			Key:       keyC,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyA,
 			RightKey:  &keyD,
 		},
 		string(keyA): {
 			Key:       keyA,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 			RightKey:  &keyB,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyB): {
 			Key:       keyB,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyD): {
 			Key:       keyD,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -326,37 +326,37 @@ func TestInsertRight(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyC): {
 			Key:       keyC,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyA,
 			RightKey:  &keyE,
 		},
 		string(keyA): {
 			Key:       keyA,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 			RightKey:  &keyB,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyB): {
 			Key:       keyB,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyE): {
 			Key:       keyE,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyD,
 		},
 		string(keyD): {
 			Key:       keyD,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 		},
 	}
@@ -393,13 +393,13 @@ func TestInsertLeft(t *testing.T) {
 	nodes := map[string]proto.RangeTreeNode{
 		string(keyE): {
 			Key:       keyE,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 		},
 	}
@@ -421,19 +421,19 @@ func TestInsertLeft(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyD): {
 			Key:       keyD,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 			RightKey:  &keyE,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyE): {
 			Key:       keyE,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -455,26 +455,26 @@ func TestInsertLeft(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyD): {
 			Key:       keyD,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyC,
 			RightKey:  &keyE,
 		},
 		string(keyC): {
 			Key:       keyC,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 		},
 
 		string(keyE): {
 			Key:       keyE,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -496,31 +496,31 @@ func TestInsertLeft(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyD): {
 			Key:       keyD,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyB,
 			RightKey:  &keyE,
 		},
 		string(keyB): {
 			Key:       keyB,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 			RightKey:  &keyC,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyC): {
 			Key:       keyC,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyE): {
 			Key:       keyE,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -542,37 +542,37 @@ func TestInsertLeft(t *testing.T) {
 	nodes = map[string]proto.RangeTreeNode{
 		string(keyD): {
 			Key:       keyD,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 			LeftKey:   &keyB,
 			RightKey:  &keyE,
 		},
 		string(keyB): {
 			Key:       keyB,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 			LeftKey:   &keyA,
 			RightKey:  &keyC,
 		},
 		string(keyA): {
 			Key:       keyA,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
-			LeftKey:   &engine.KeyMin,
+			LeftKey:   &proto.KeyMin,
 		},
-		string(engine.KeyMin): {
-			Key:       engine.KeyMin,
-			ParentKey: engine.KeyMin,
+		string(proto.KeyMin): {
+			Key:       proto.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     false,
 		},
 		string(keyC): {
 			Key:       keyC,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 		string(keyE): {
 			Key:       keyE,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     true,
 		},
 	}
@@ -599,13 +599,13 @@ func (k Key) Compare(b llrb.Comparable) int {
 func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error {
 	// Retrieve the node form the range tree.
 	rtNode := &proto.RangeTreeNode{}
-	if err := db.Run(client.GetProto(engine.RangeTreeNodeKey(*key), rtNode)); err != nil {
+	if err := db.Run(client.GetProto(keys.RangeTreeNodeKey(*key), rtNode)); err != nil {
 		return err
 	}
 
 	bNode := &proto.RangeTreeNode{
 		Key:       proto.Key(biogoNode.Elem.(Key)),
-		ParentKey: engine.KeyMin,
+		ParentKey: proto.KeyMin,
 		Black:     bool(biogoNode.Color),
 	}
 	if biogoNode.Left != nil {
@@ -636,7 +636,7 @@ func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error
 // contain the same values in the same order.
 func compareBiogoTree(db *client.KV, biogoTree *llrb.Tree) error {
 	rt := &proto.RangeTree{}
-	if err := db.Run(client.GetProto(engine.KeyRangeTreeRoot, rt)); err != nil {
+	if err := db.Run(client.GetProto(keys.KeyRangeTreeRoot, rt)); err != nil {
 		return err
 	}
 	return compareBiogoNode(db, biogoTree.Root, &rt.RootKey)
@@ -655,7 +655,7 @@ func TestRandomSplits(t *testing.T) {
 	t.Logf("using pseudo random number generator with seed %d", seed)
 
 	tree := &llrb.Tree{}
-	tree.Insert(Key(engine.KeyMin))
+	tree.Insert(Key(proto.KeyMin))
 
 	// Test an unsplit tree.
 	if err := compareBiogoTree(db, tree); err != nil {
