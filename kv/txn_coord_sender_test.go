@@ -74,6 +74,17 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 	}
 }
 
+func createDeleteRangeRequest(key, endKey proto.Key, txn *proto.Transaction) *proto.DeleteRangeRequest {
+	return &proto.DeleteRangeRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       key,
+			EndKey:    endKey,
+			Timestamp: txn.Timestamp,
+			Txn:       txn,
+		},
+	}
+}
+
 // TestTxnCoordSenderAddRequest verifies adding a request creates a
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
@@ -202,12 +213,16 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	txn := newTxn(s.KV, s.Clock, proto.Key("a"))
 
 	for _, rng := range ranges {
-		putReq := createPutRequest(rng.start, []byte("value"), txn)
-		// Trick the coordinator into using the EndKey for coordinator
-		// resolve keys interval cache.
-		putReq.EndKey = rng.end
-		if err := s.KV.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
-			t.Fatal(err)
+		if rng.end != nil {
+			delRangeReq := createDeleteRangeRequest(rng.start, rng.end, txn)
+			if err := s.KV.Run(client.Call{Args: delRangeReq, Reply: &proto.DeleteRangeResponse{}}); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			putReq := createPutRequest(rng.start, []byte("value"), txn)
+			if err := s.KV.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 

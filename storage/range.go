@@ -124,15 +124,16 @@ var configDescriptors = [...]*configDescriptor{
 // tsCacheMethods specifies the set of methods which affect the
 // timestamp cache.
 var tsCacheMethods = [...]bool{
-	proto.Contains:              true,
-	proto.Get:                   true,
-	proto.Put:                   true,
-	proto.ConditionalPut:        true,
-	proto.Increment:             true,
-	proto.Scan:                  true,
-	proto.Delete:                true,
-	proto.DeleteRange:           true,
-	proto.InternalResolveIntent: true,
+	proto.Contains:                   true,
+	proto.Get:                        true,
+	proto.Put:                        true,
+	proto.ConditionalPut:             true,
+	proto.Increment:                  true,
+	proto.Scan:                       true,
+	proto.Delete:                     true,
+	proto.DeleteRange:                true,
+	proto.InternalResolveIntent:      true,
+	proto.InternalResolveIntentRange: true,
 }
 
 // usesTimestampCache returns true if the request affects or is

@@ -131,33 +131,41 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		}
 	}
 	for _, o := range tm.keys.GetOverlaps(engine.KeyMin, engine.KeyMax) {
-		call := client.Call{
-			Args: &proto.InternalResolveIntentRequest{
+		// If the op was range based, end key != start key: resolve a range.
+		var call client.Call
+		key := o.Key.Start().(proto.Key)
+		endKey := o.Key.End().(proto.Key)
+		if !key.Next().Equal(endKey) {
+			call.Args = &proto.InternalResolveIntentRangeRequest{
 				RequestHeader: proto.RequestHeader{
 					Timestamp: txn.Timestamp,
-					Key:       o.Key.Start().(proto.Key),
+					Key:       key,
+					EndKey:    endKey,
 					User:      storage.UserRoot,
 					Txn:       txn,
 				},
-			},
-			Reply: &proto.InternalResolveIntentResponse{},
-		}
-		// Set the end key only if it's not equal to Key.Next(). This
-		// saves us from unnecessarily clearing intents as a range.
-		endKey := o.Key.End().(proto.Key)
-		if !call.Args.Header().Key.Next().Equal(endKey) {
-			call.Args.Header().EndKey = endKey
+			}
+			call.Reply = &proto.InternalResolveIntentRangeResponse{}
 		} else {
 			// Check if the key has already been resolved; skip if yes.
 			found := false
 			for _, k := range resolved {
-				if call.Args.Header().Key.Equal(k) {
+				if key.Equal(k) {
 					found = true
 				}
 			}
 			if found {
 				continue
 			}
+			call.Args = &proto.InternalResolveIntentRequest{
+				RequestHeader: proto.RequestHeader{
+					Timestamp: txn.Timestamp,
+					Key:       key,
+					User:      storage.UserRoot,
+					Txn:       txn,
+				},
+			}
+			call.Reply = &proto.InternalResolveIntentResponse{}
 		}
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.

@@ -622,21 +622,26 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *
 	}
 }
 
-// InternalResolveIntent updates the transaction status and heartbeat
-// timestamp after receiving transaction heartbeat messages from
-// coordinator. The range will return the current status for this
-// transaction to the coordinator.
+// InternalResolveIntent resolves a write intent from the specified key
+// according to the status of the transaction which created it.
 func (r *Range) InternalResolveIntent(batch engine.Engine, ms *proto.MVCCStats, args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
 	if args.Txn == nil {
 		reply.SetGoError(util.Errorf("no transaction specified to InternalResolveIntent"))
 		return
 	}
-	if len(args.EndKey) == 0 || bytes.Equal(args.Key, args.EndKey) {
-		reply.SetGoError(engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn))
-	} else {
-		_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, args.Txn)
-		reply.SetGoError(err)
+	reply.SetGoError(engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn))
+}
+
+// InternalResolveIntentRange resolves write intents in the specified
+// key range according to the status of the transaction which created it.
+func (r *Range) InternalResolveIntentRange(batch engine.Engine, ms *proto.MVCCStats,
+	args *proto.InternalResolveIntentRangeRequest, reply *proto.InternalResolveIntentRangeResponse) {
+	if args.Txn == nil {
+		reply.SetGoError(util.Errorf("no transaction specified to InternalResolveIntentRange"))
+		return
 	}
+	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, args.Txn)
+	reply.SetGoError(err)
 }
 
 // InternalMerge is used to merge a value into an existing key. Merge is an

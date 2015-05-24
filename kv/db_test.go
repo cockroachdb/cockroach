@@ -176,6 +176,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{&proto.InternalHeartbeatTxnRequest{}, &proto.InternalHeartbeatTxnResponse{}},
 		{&proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}},
 		{&proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}},
+		{&proto.InternalResolveIntentRangeRequest{}, &proto.InternalResolveIntentRangeResponse{}},
 		{&proto.InternalMergeRequest{}, &proto.InternalMergeResponse{}},
 		{&proto.InternalTruncateLogRequest{}, &proto.InternalTruncateLogResponse{}},
 	}
@@ -183,6 +184,9 @@ func TestKVDBInternalMethods(t *testing.T) {
 	kvClient := createTestClient(t, s.ServingAddr())
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
+		if proto.IsRangeOp(test.args) {
+			test.args.Header().EndKey = test.args.Header().Key.Next()
+		}
 		err := kvClient.Run(client.Call{Args: test.args, Reply: test.reply})
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())

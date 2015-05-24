@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -457,7 +458,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	tooLongKey := engine.MakeKey(engine.KeyMax, []byte{0})
+	tooLongKey := proto.Key(strings.Repeat("x", engine.KeyMaxLength+1))
 
 	// Start with a too-long key on a get.
 	gArgs, gReply := getArgs(tooLongKey, 1, store.StoreID())
@@ -469,6 +470,11 @@ func TestStoreVerifyKeys(t *testing.T) {
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err == nil {
 		t.Fatal("expected error for start key == KeyMax")
 	}
+	// Try a get with an end key specified (get requires only a start key and should fail).
+	gArgs.EndKey = engine.KeyMax
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err == nil {
+		t.Fatal("expected error for end key specified on a non-range-based operation")
+	}
 	// Try a scan with too-long EndKey.
 	sArgs, sReply := scanArgs(engine.KeyMin, tooLongKey, 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: sArgs, Reply: sReply}); err == nil {
@@ -479,6 +485,12 @@ func TestStoreVerifyKeys(t *testing.T) {
 	sArgs.EndKey = []byte("a")
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: sArgs, Reply: sReply}); err == nil {
 		t.Fatal("expected error for end key < start")
+	}
+	// Try a scan with start key == end key.
+	sArgs.Key = []byte("a")
+	sArgs.EndKey = sArgs.Key
+	if err := store.ExecuteCmd(context.Background(), client.Call{Args: sArgs, Reply: sReply}); err == nil {
+		t.Fatal("expected error for start == end key")
 	}
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.

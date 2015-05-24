@@ -161,6 +161,19 @@ message InternalResolveIntentResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InternalResolveIntentRangeRequest is arguments to the
+// InternalResolveIntentRange() method. This clear write intents
+// for a range of keys to resolve intents created by range ops.
+message InternalResolveIntentRangeRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An InternalResolveIntentRangeResponse is the return value from the
+// InternalResolveIntent() method.
+message InternalResolveIntentRangeResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // An InternalMergeRequest contains arguments to the InternalMerge() method. It
 // specifies a key and a value which should be merged into the existing value at
 // that key.
@@ -222,6 +235,7 @@ message InternalRequestUnion {
 
     InternalPushTxnRequest internal_push_txn = 30;
     InternalResolveIntentRequest internal_resolve_intent = 31;
+    InternalResolveIntentRangeRequest internal_resolve_intent_range = 32;
 }
 }
 
@@ -242,6 +256,7 @@ message InternalResponseUnion {
 
     InternalPushTxnResponse internal_push_txn = 30;
     InternalResolveIntentResponse internal_resolve_intent = 31;
+    InternalResolveIntentRangeResponse internal_resolve_intent_range = 32;
   }
 }
 
@@ -277,10 +292,11 @@ message ReadWriteCmdResponse {
     InternalHeartbeatTxnResponse internal_heartbeat_txn = 10;
     InternalPushTxnResponse internal_push_txn = 11;
     InternalResolveIntentResponse internal_resolve_intent = 12;
-    InternalMergeResponse internal_merge = 13;
-    InternalTruncateLogResponse internal_truncate_log = 14;
-    InternalGCResponse internal_gc = 15;
-    InternalLeaderLeaseResponse internal_leader_lease = 16;
+    InternalResolveIntentRangeResponse internal_resolve_intent_range = 13;
+    InternalMergeResponse internal_merge = 14;
+    InternalTruncateLogResponse internal_truncate_log = 15;
+    InternalGCResponse internal_gc = 16;
+    InternalLeaderLeaseResponse internal_leader_lease = 17;
   }
 }
 
@@ -307,11 +323,12 @@ message InternalRaftCommandUnion {
     InternalHeartbeatTxnRequest internal_heartbeat_txn = 32;
     InternalPushTxnRequest internal_push_txn = 33;
     InternalResolveIntentRequest internal_resolve_intent = 34;
-    InternalMergeRequest internal_merge_response = 35;
-    InternalTruncateLogRequest internal_truncate_log = 36;
-    InternalGCRequest internal_gc = 37 [(gogoproto.customname) = "InternalGC"];
-    InternalLeaderLeaseRequest internal_lease = 38;
-    InternalBatchRequest internal_batch = 39;
+    InternalResolveIntentRangeRequest internal_resolve_intent_range = 35;
+    InternalMergeRequest internal_merge_response = 36;
+    InternalTruncateLogRequest internal_truncate_log = 37;
+    InternalGCRequest internal_gc = 38 [(gogoproto.customname) = "InternalGC"];
+    InternalLeaderLeaseRequest internal_lease = 39;
+    InternalBatchRequest internal_batch = 40;
   }
 }
 

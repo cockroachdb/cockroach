@@ -588,6 +588,11 @@ func (n *nodeServer) InternalResolveIntent(args *proto.InternalResolveIntentRequ
 	return n.executeCmd(args, reply)
 }
 
+// InternalResolveIntentRange .
+func (n *nodeServer) InternalResolveIntentRange(args *proto.InternalResolveIntentRangeRequest, reply *proto.InternalResolveIntentRangeResponse) error {
+	return n.executeCmd(args, reply)
+}
+
 // InternalMerge .
 func (n *nodeServer) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
 	return n.executeCmd(args, reply)
