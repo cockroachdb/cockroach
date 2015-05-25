@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -116,9 +117,9 @@ type configDescriptor struct {
 // configDescriptors is an array containing the accounting, permissions
 // and zone configuration descriptors.
 var configDescriptors = [...]*configDescriptor{
-	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
-	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
-	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
+	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
+	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
+	{keys.ConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
 }
 
 // tsCacheMethods specifies the set of methods which affect the
@@ -287,12 +288,12 @@ func (r *Range) SetMaxBytes(maxBytes int64) {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Range) IsFirstRange() bool {
-	return bytes.Equal(r.Desc().StartKey, engine.KeyMin)
+	return bytes.Equal(r.Desc().StartKey, proto.KeyMin)
 }
 
 func loadLeaderLease(eng engine.Engine, raftID int64) (*proto.Lease, error) {
 	lease := &proto.Lease{}
-	if _, err := engine.MVCCGetProto(eng, engine.RaftLeaderLeaseKey(raftID), proto.ZeroTimestamp, true, nil, lease); err != nil {
+	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(raftID), proto.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil
@@ -454,18 +455,18 @@ func (r *Range) GetMVCCStats() proto.MVCCStats {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Range) ContainsKey(key proto.Key) bool {
-	return r.Desc().ContainsKey(engine.KeyAddress(key))
+	return r.Desc().ContainsKey(keys.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
-	return r.Desc().ContainsKeyRange(engine.KeyAddress(start), engine.KeyAddress(end))
+	return r.Desc().ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
 func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
-	key := engine.RangeGCMetadataKey(r.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
 	gcMeta := &proto.GCMetadata{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, gcMeta)
 	if err != nil {
@@ -477,7 +478,7 @@ func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
 func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
-	key := engine.RangeLastVerificationTimestampKey(r.Desc().RaftID)
+	key := keys.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	timestamp := proto.Timestamp{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
@@ -489,7 +490,7 @@ func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
 func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
-	key := engine.RangeLastVerificationTimestampKey(r.Desc().RaftID)
+	key := keys.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
 }
 
@@ -867,7 +868,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 		// Maybe update gossip configs on a put.
 		switch args.(type) {
 		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-			if header.Key.Less(engine.KeySystemMax) {
+			if header.Key.Less(keys.SystemMax) {
 				// We hold the lock already.
 				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
 					return bytes.HasPrefix(header.Key, configPrefix)

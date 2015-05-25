@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -87,7 +88,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := increment(raftID, key2, 5); err != nil {
 			t.Fatal(err)
 		}
-		splitArgs, splitResp := adminSplitArgs(engine.KeyMin, splitKey, raftID, store.StoreID())
+		splitArgs, splitResp := adminSplitArgs(proto.KeyMin, splitKey, raftID, store.StoreID())
 		if err := store.ExecuteCmd(context.Background(), client.Call{Args: splitArgs, Reply: splitResp}); err != nil {
 			t.Fatal(err)
 		}
@@ -210,7 +211,7 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
-	key := engine.RangeDescriptorKey(rng.Desc().StartKey)
+	key := keys.RangeDescriptorKey(rng.Desc().StartKey)
 	desc := proto.RangeDescriptor{}
 	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); !ok || err != nil {
 		t.Fatalf("fetching range descriptor yielded %t, %s", ok, err)
@@ -218,8 +219,8 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
 	util.SucceedsWithin(t, 1*time.Second, func() error {
-		meta2 := engine.RangeMetaKey(engine.KeyMax)
-		meta1 := engine.RangeMetaKey(meta2)
+		meta2 := keys.RangeMetaKey(proto.KeyMax)
+		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []proto.Key{meta2, meta1} {
 			metaDesc := proto.RangeDescriptor{}
 			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {

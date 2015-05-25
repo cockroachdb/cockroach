@@ -26,7 +26,6 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
@@ -53,7 +52,7 @@ func ExampleSetAndGetZone() {
 		prefix proto.Key
 		yaml   string
 	}{
-		{engine.KeyMin, testZoneConfig},
+		{proto.KeyMin, testZoneConfig},
 		{proto.Key("db1"), testZoneConfig},
 		{proto.Key("db 2"), testZoneConfig},
 		{proto.Key("\xfe"), testZoneConfig},
@@ -113,7 +112,7 @@ func ExampleLsZones() {
 	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("db1"),
 		proto.Key("db2"),
 		proto.Key("db3"),
@@ -172,7 +171,7 @@ func ExampleRmZones() {
 	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("db1"),
 	}
 

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -49,7 +50,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Put an empty GC metadata; all that's read from it is last scan nanos.
-	key := engine.RangeGCMetadataKey(tc.rng.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(tc.rng.Desc().RaftID)
 	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &proto.GCMetadata{}); err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +231,7 @@ func TestGCQueueProcess(t *testing.T) {
 		{key8, ts2},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
-	kvs, err := engine.Scan(tc.store.Engine(), engine.MVCCEncodeKey(key1), engine.MVCCEncodeKey(engine.KeyMax), 0)
+	kvs, err := engine.Scan(tc.store.Engine(), engine.MVCCEncodeKey(key1), engine.MVCCEncodeKey(proto.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +311,7 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 		// hierarchical parent's GC policy; in this case, zoneConfig1.
 	}
 	configs := []*PrefixConfig{
-		{engine.KeyMin, nil, &zoneConfig1},
+		{proto.KeyMin, nil, &zoneConfig1},
 		{proto.Key("/db1"), nil, &zoneConfig2},
 	}
 	pcc, err := NewPrefixConfigMap(configs)

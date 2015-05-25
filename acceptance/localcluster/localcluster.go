@@ -192,7 +192,7 @@ func (l *Cluster) runDockerSpy() {
 	maybePanic(c.Inspect())
 	c.Name = "docker-spy"
 	l.dns = c
-	log.Infof("started %s: %s\n", c.Name, c.NetworkSettings.IPAddress)
+	log.Infof("started %s: %s", c.Name, c.NetworkSettings.IPAddress)
 }
 
 // create the volumes container that keeps all of the volumes used by

@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -43,11 +44,11 @@ func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
 func (ms metaSlice) Less(i, j int) bool { return ms[i].key.Less(ms[j].key) }
 
 func meta1Key(key proto.Key) proto.Key {
-	return engine.MakeKey(engine.KeyMeta1Prefix, key)
+	return keys.MakeKey(keys.Meta1Prefix, key)
 }
 
 func meta2Key(key proto.Key) proto.Key {
-	return engine.MakeKey(engine.KeyMeta2Prefix, key)
+	return keys.MakeKey(keys.Meta2Prefix, key)
 }
 
 // TestUpdateRangeAddressing verifies range addressing records are
@@ -67,47 +68,47 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		leftExpNew, rightExpNew []proto.Key
 	}{
 		// Start out with whole range.
-		{false, engine.KeyMin, engine.KeyMax, engine.KeyMin, engine.KeyMax,
-			[]proto.Key{}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
+		{false, proto.KeyMin, proto.KeyMax, proto.KeyMin, proto.KeyMax,
+			[]proto.Key{}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.KeyMax)}},
 		// Split KeyMin-KeyMax at key "a".
-		{true, engine.KeyMin, proto.Key("a"), proto.Key("a"), engine.KeyMax,
-			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}, []proto.Key{meta2Key(engine.KeyMax)}},
+		{true, proto.KeyMin, proto.Key("a"), proto.Key("a"), proto.KeyMax,
+			[]proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}, []proto.Key{meta2Key(proto.KeyMax)}},
 		// Split "a"-KeyMax at key "z".
-		{true, proto.Key("a"), proto.Key("z"), proto.Key("z"), engine.KeyMax,
-			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(engine.KeyMax)}},
+		{true, proto.Key("a"), proto.Key("z"), proto.Key("z"), proto.KeyMax,
+			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(proto.KeyMax)}},
 		// Split "a"-"z" at key "m".
 		{true, proto.Key("a"), proto.Key("m"), proto.Key("m"), proto.Key("z"),
 			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
 		// Split KeyMin-"a" at meta2(m).
-		{true, engine.KeyMin, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		{true, proto.KeyMin, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("m")), proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
 		// Split meta2(m)-"a" at meta2(z).
-		{true, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")), engine.RangeMetaKey(proto.Key("z")), proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		{true, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("z")), keys.RangeMetaKey(proto.Key("z")), proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
 		// Split meta2(m)-meta2(z) at meta2(r).
-		{true, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("z")),
+		{true, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("r")), keys.RangeMetaKey(proto.Key("r")), keys.RangeMetaKey(proto.Key("z")),
 			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
 
 		// Now, merge all of our splits backwards...
 
 		// Merge meta2(m)-meta2(z).
-		{false, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")),
+		{false, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("r")), keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("z")),
 			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
 		// Merge meta2(m)-"a".
-		{false, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")), engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		{false, keys.RangeMetaKey(proto.Key("m")), keys.RangeMetaKey(proto.Key("z")), keys.RangeMetaKey(proto.Key("m")), proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
 		// Merge KeyMin-"a".
-		{false, engine.KeyMin, engine.RangeMetaKey(proto.Key("m")), engine.KeyMin, proto.Key("a"),
-			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		{false, proto.KeyMin, keys.RangeMetaKey(proto.Key("m")), proto.KeyMin, proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.Key("a"))}},
 		// Merge "a"-"z".
 		{false, proto.Key("a"), proto.Key("m"), proto.Key("a"), proto.Key("z"),
 			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
 		// Merge "a"-KeyMax.
-		{false, proto.Key("a"), proto.Key("z"), proto.Key("a"), engine.KeyMax,
-			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(engine.KeyMax)}},
+		{false, proto.Key("a"), proto.Key("z"), proto.Key("a"), proto.KeyMax,
+			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(proto.KeyMax)}},
 		// Merge KeyMin-KeyMax.
-		{false, engine.KeyMin, proto.Key("a"), engine.KeyMin, engine.KeyMax,
-			[]proto.Key{meta2Key(proto.Key("a"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
+		{false, proto.KeyMin, proto.Key("a"), proto.KeyMin, proto.KeyMax,
+			[]proto.Key{meta2Key(proto.Key("a"))}, []proto.Key{meta1Key(proto.KeyMax), meta2Key(proto.KeyMax)}},
 	}
 	expMetas := metaSlice{}
 
@@ -130,7 +131,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, err := engine.MVCCScan(store.Engine(), engine.KeyMetaPrefix, engine.KeyMetaMax, 0, proto.MaxTimestamp, true, nil)
+		kvs, err := engine.MVCCScan(store.Engine(), keys.MetaPrefix, keys.MetaMax, 0, proto.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -204,8 +205,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	left := &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
-	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
+	left := &proto.RangeDescriptor{StartKey: proto.KeyMin, EndKey: meta1Key(proto.Key("a"))}
+	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: proto.KeyMax}
 	if _, err := splitRangeAddressing(left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}

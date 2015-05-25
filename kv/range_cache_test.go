@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/biogo/store/llrb"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -68,13 +68,13 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 func (db *testDescriptorDB) getRangeDescriptor(key proto.Key,
 	options lookupOptions) ([]proto.RangeDescriptor, error) {
 	db.hitCount++
-	metadataKey := engine.RangeMetaKey(key)
+	metadataKey := keys.RangeMetaKey(key)
 
 	var err error
 
 	// Recursively call into cache as the real DB would, terminating recursion
 	// when a meta1key is encountered.
-	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
+	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
 		_, err = db.cache.LookupRangeDescriptor(metadataKey, options)
 	}
 	return db.getDescriptor(key), err
@@ -107,14 +107,14 @@ func newTestDescriptorDB() *testDescriptorDB {
 	db := &testDescriptorDB{}
 	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
-			StartKey: engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMin),
-			EndKey:   engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax),
+			StartKey: keys.MakeKey(keys.Meta2Prefix, proto.KeyMin),
+			EndKey:   keys.MakeKey(keys.Meta2Prefix, proto.KeyMax),
 		},
 	})
 	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
-			StartKey: engine.KeyMetaMax,
-			EndKey:   engine.KeyMax,
+			StartKey: keys.MetaMax,
+			EndKey:   proto.KeyMax,
 		},
 	})
 	return db
@@ -132,7 +132,7 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) {
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}
-	if !r.ContainsKey(engine.KeyAddress(proto.Key(key))) {
+	if !r.ContainsKey(keys.KeyAddress(proto.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 	log.Infof("doLookup: %s %+v", key, r)
@@ -147,7 +147,7 @@ func TestRangeCache(t *testing.T) {
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		db.splitRange(t, proto.Key(string(char)))
 		if i > 0 && i%6 == 0 {
-			db.splitRange(t, engine.RangeMetaKey(proto.Key(string(char))))
+			db.splitRange(t, keys.RangeMetaKey(proto.Key(string(char))))
 		}
 	}
 

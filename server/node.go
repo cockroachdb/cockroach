@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
@@ -76,7 +77,7 @@ type nodeServer Node
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(db *client.DB) (proto.NodeID, error) {
-	r, err := db.Inc(engine.KeyNodeIDGenerator, 1)
+	r, err := db.Inc(keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, util.Errorf("unable to allocate node ID: %s", err)
 	}
@@ -87,7 +88,7 @@ func allocateNodeID(db *client.DB) (proto.NodeID, error) {
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.StoreID, error) {
-	r, err := db.Inc(engine.KeyStoreIDGenerator, inc)
+	r, err := db.Inc(keys.StoreIDGenerator, inc)
 	if err != nil {
 		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
@@ -464,7 +465,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					ReplicatedRangeCount: replicatedRangeCount,
 					AvailableRangeCount:  availableRangeCount,
 				}
-				key := engine.NodeStatusKey(int32(n.Descriptor.NodeID))
+				key := keys.NodeStatusKey(int32(n.Descriptor.NodeID))
 				if err := n.ctx.DB.Run(client.PutProto(key, status)); err != nil {
 					log.Error(err)
 				}

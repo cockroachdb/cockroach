@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -85,7 +85,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 	err := q.db.Run(client.Call{
 		Args: &proto.InternalRangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
-				Key: engine.RangeMetaKey(rng.Desc().StartKey),
+				Key: keys.RangeMetaKey(rng.Desc().StartKey),
 			},
 			MaxRanges: 1,
 		},

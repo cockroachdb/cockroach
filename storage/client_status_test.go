@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -40,7 +41,7 @@ import (
 // at least the expected value.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
-	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
+	storeStatusKey := keys.StoreStatusKey(int32(store.Ident.StoreID))
 	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err != nil {
 		t.Fatalf("%v: failure getting store status: %s", testNumber, err)
@@ -175,7 +176,7 @@ func TestStoreStatus(t *testing.T) {
 	oldstats = compareStoreStatus(t, store, expectedStoreStatus, 1)
 
 	// Split the range.
-	args, reply := adminSplitArgs(engine.KeyMin, splitKey, rng.Desc().RaftID, store.StoreID())
+	args, reply := adminSplitArgs(proto.KeyMin, splitKey, rng.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}

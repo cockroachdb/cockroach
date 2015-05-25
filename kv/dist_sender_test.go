@@ -31,10 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -63,7 +63,7 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 	}
 
 	configMap, err := storage.NewPrefixConfigMap([]*storage.PrefixConfig{
-		{engine.KeyMin, nil, permConfig},
+		{proto.KeyMin, nil, permConfig},
 	})
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
@@ -427,14 +427,14 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		if method == "Node.InternalRangeLookup" {
 			// If the non-broken descriptor has already been returned, that's
 			// an error.
-			if !descStale && bytes.HasPrefix(header.Key, engine.KeyMeta2Prefix) {
+			if !descStale && bytes.HasPrefix(header.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
 					header.Key)
 			}
 
 			r := getReply().(*proto.InternalRangeLookupResponse)
 			// The fresh descriptor is about to be returned.
-			if bytes.HasPrefix(header.Key, engine.KeyMeta2Prefix) &&
+			if bytes.HasPrefix(header.Key, keys.Meta2Prefix) &&
 				newRangeDescriptor.StartKey.Equal(newEndKey) {
 				descStale = false
 			}
@@ -513,7 +513,7 @@ func TestVerifyPermissions(t *testing.T) {
 		Read:  []string{"read2", "readAll", "rw2", "rwAll"},
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
 	configs := []*storage.PrefixConfig{
-		{engine.KeyMin, nil, config1},
+		{proto.KeyMin, nil, config1},
 		{proto.Key("a"), nil, config2},
 	}
 	configMap, err := storage.NewPrefixConfigMap(configs)
@@ -573,33 +573,33 @@ func TestVerifyPermissions(t *testing.T) {
 		hasPermission    bool
 	}{
 		// Test permissions within a single range
-		{readOnlyRequests, "read1", engine.KeyMin, engine.KeyMin, true},
-		{readOnlyRequests, "rw1", engine.KeyMin, engine.KeyMin, true},
-		{readOnlyRequests, "write1", engine.KeyMin, engine.KeyMin, false},
-		{readOnlyRequests, "random", engine.KeyMin, engine.KeyMin, false},
-		{readWriteRequests, "rw1", engine.KeyMin, engine.KeyMin, true},
-		{readWriteRequests, "read1", engine.KeyMin, engine.KeyMin, false},
-		{readWriteRequests, "write1", engine.KeyMin, engine.KeyMin, false},
-		{writeOnlyRequests, "write1", engine.KeyMin, engine.KeyMin, true},
-		{writeOnlyRequests, "rw1", engine.KeyMin, engine.KeyMin, true},
-		{writeOnlyRequests, "read1", engine.KeyMin, engine.KeyMin, false},
-		{writeOnlyRequests, "random", engine.KeyMin, engine.KeyMin, false},
+		{readOnlyRequests, "read1", proto.KeyMin, proto.KeyMin, true},
+		{readOnlyRequests, "rw1", proto.KeyMin, proto.KeyMin, true},
+		{readOnlyRequests, "write1", proto.KeyMin, proto.KeyMin, false},
+		{readOnlyRequests, "random", proto.KeyMin, proto.KeyMin, false},
+		{readWriteRequests, "rw1", proto.KeyMin, proto.KeyMin, true},
+		{readWriteRequests, "read1", proto.KeyMin, proto.KeyMin, false},
+		{readWriteRequests, "write1", proto.KeyMin, proto.KeyMin, false},
+		{writeOnlyRequests, "write1", proto.KeyMin, proto.KeyMin, true},
+		{writeOnlyRequests, "rw1", proto.KeyMin, proto.KeyMin, true},
+		{writeOnlyRequests, "read1", proto.KeyMin, proto.KeyMin, false},
+		{writeOnlyRequests, "random", proto.KeyMin, proto.KeyMin, false},
 		// Test permissions hierarchically.
 		{readOnlyRequests, "read1", proto.Key("a"), proto.Key("a1"), true},
 		{readWriteRequests, "rw1", proto.Key("a"), proto.Key("a1"), true},
 		{writeOnlyRequests, "write1", proto.Key("a"), proto.Key("a1"), true},
 		// Test permissions across both ranges.
-		{readOnlyRequests, "readAll", engine.KeyMin, proto.Key("b"), true},
-		{readOnlyRequests, "read1", engine.KeyMin, proto.Key("b"), true},
-		{readOnlyRequests, "read2", engine.KeyMin, proto.Key("b"), false},
-		{readOnlyRequests, "random", engine.KeyMin, proto.Key("b"), false},
-		{readWriteRequests, "rwAll", engine.KeyMin, proto.Key("b"), true},
-		{readWriteRequests, "rw1", engine.KeyMin, proto.Key("b"), true},
-		{readWriteRequests, "random", engine.KeyMin, proto.Key("b"), false},
-		{writeOnlyRequests, "writeAll", engine.KeyMin, proto.Key("b"), true},
-		{writeOnlyRequests, "write1", engine.KeyMin, proto.Key("b"), true},
-		{writeOnlyRequests, "write2", engine.KeyMin, proto.Key("b"), false},
-		{writeOnlyRequests, "random", engine.KeyMin, proto.Key("b"), false},
+		{readOnlyRequests, "readAll", proto.KeyMin, proto.Key("b"), true},
+		{readOnlyRequests, "read1", proto.KeyMin, proto.Key("b"), true},
+		{readOnlyRequests, "read2", proto.KeyMin, proto.Key("b"), false},
+		{readOnlyRequests, "random", proto.KeyMin, proto.Key("b"), false},
+		{readWriteRequests, "rwAll", proto.KeyMin, proto.Key("b"), true},
+		{readWriteRequests, "rw1", proto.KeyMin, proto.Key("b"), true},
+		{readWriteRequests, "random", proto.KeyMin, proto.Key("b"), false},
+		{writeOnlyRequests, "writeAll", proto.KeyMin, proto.Key("b"), true},
+		{writeOnlyRequests, "write1", proto.KeyMin, proto.Key("b"), true},
+		{writeOnlyRequests, "write2", proto.KeyMin, proto.Key("b"), false},
+		{writeOnlyRequests, "random", proto.KeyMin, proto.Key("b"), false},
 		// Test permissions within and around the boundaries of a range,
 		// representatively using rw methods.
 		{readWriteRequests, "rw2", proto.Key("a"), proto.Key("b"), true},

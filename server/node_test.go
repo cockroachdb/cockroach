@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
@@ -116,8 +117,8 @@ func TestBootstrapCluster(t *testing.T) {
 	if err := localDB.Run(client.Call{
 		Args: &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:    engine.KeyLocalPrefix.PrefixEnd(), // skip local keys
-				EndKey: engine.KeyMax,
+				Key:    keys.LocalPrefix.PrefixEnd(), // skip local keys
+				EndKey: proto.KeyMax,
 				User:   storage.UserRoot,
 			},
 			MaxResults: math.MaxInt64,
@@ -130,8 +131,8 @@ func TestBootstrapCluster(t *testing.T) {
 		keys = append(keys, kv.Key)
 	}
 	var expectedKeys = []proto.Key{
-		engine.MakeKey(proto.Key("\x00\x00meta1"), engine.KeyMax),
-		engine.MakeKey(proto.Key("\x00\x00meta2"), engine.KeyMax),
+		proto.MakeKey(proto.Key("\x00\x00meta1"), proto.KeyMax),
+		proto.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
 		proto.Key("\x00acct"),
 		proto.Key("\x00node-idgen"),
 		proto.Key("\x00perm"),
@@ -251,7 +252,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		NodeID:    1,
 		StoreID:   1,
 	}
-	if err = engine.MVCCPutProto(e, nil, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
+	if err = engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,7 +271,7 @@ func TestCorruptedClusterID(t *testing.T) {
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
 func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.NodeStatus, testNumber int) *proto.NodeStatus {
-	nodeStatusKey := engine.NodeStatusKey(int32(node.Descriptor.NodeID))
+	nodeStatusKey := keys.NodeStatusKey(int32(node.Descriptor.NodeID))
 	request := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: nodeStatusKey,
@@ -432,7 +433,7 @@ func TestNodeStatus(t *testing.T) {
 	rng := s.LookupRange(splitKey, nil)
 	args := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     engine.KeyMin,
+			Key:     proto.KeyMin,
 			RaftID:  rng.Desc().RaftID,
 			Replica: proto.Replica{StoreID: s.Ident.StoreID},
 		},

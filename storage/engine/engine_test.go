@@ -428,7 +428,7 @@ func TestEngineScan1(t *testing.T) {
 		// a special case in engine.scan, that's why we test it here.
 		startKeys := []proto.EncodedKey{proto.EncodedKey("cat"), proto.EncodedKey("")}
 		for _, startKey := range startKeys {
-			keyvals, err := Scan(engine, startKey, proto.EncodedKey(KeyMax), 0)
+			keyvals, err := Scan(engine, startKey, proto.EncodedKey(proto.KeyMax), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -510,25 +510,25 @@ func TestEngineScan2(t *testing.T) {
 			proto.EncodedKey("aaa"),
 			proto.EncodedKey("ab"),
 			proto.EncodedKey("abc"),
-			proto.EncodedKey(KeyMax),
+			proto.EncodedKey(proto.KeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 10, keys[0:5], engine, t)
-		verifyScan(proto.EncodedKey("a"), proto.EncodedKey(KeyMax), 10, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 10, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey("a"), proto.EncodedKey(proto.KeyMax), 10, keys[0:5], engine, t)
 
 		// Scan sub range.
 		verifyScan(proto.EncodedKey("aab"), proto.EncodedKey("abcc"), 10, keys[3:5], engine, t)
 		verifyScan(proto.EncodedKey("aa0"), proto.EncodedKey("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 3, keys[0:3], engine, t)
-		verifyScan(proto.EncodedKey("a0"), proto.EncodedKey(KeyMax), 3, keys[1:4], engine, t)
+		verifyScan(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 3, keys[0:3], engine, t)
+		verifyScan(proto.EncodedKey("a0"), proto.EncodedKey(proto.KeyMax), 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0, keys[0:5], engine, t)
 	}, t)
 }
 
@@ -541,13 +541,13 @@ func TestEngineDeleteRange(t *testing.T) {
 			proto.EncodedKey("aaa"),
 			proto.EncodedKey("ab"),
 			proto.EncodedKey("abc"),
-			proto.EncodedKey(KeyMax),
+			proto.EncodedKey(proto.KeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 10, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 10, keys[0:5], engine, t)
 
 		// Delete a range of keys
 		numDeleted, err := ClearRange(engine, proto.EncodedKey("aa"), proto.EncodedKey("abc"))
@@ -559,7 +559,7 @@ func TestEngineDeleteRange(t *testing.T) {
 			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
 		}
 		// Verify what's left
-		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 10,
+		verifyScan(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 10,
 			[]proto.EncodedKey{proto.EncodedKey("a"), proto.EncodedKey("abc")}, engine, t)
 	}, t)
 }
@@ -599,8 +599,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := Scan(engine, key, proto.EncodedKey(KeyMax), 0)
-		keyvalsSnapshot, error := Scan(snap, key, proto.EncodedKey(KeyMax), 0)
+		keyvals, _ := Scan(engine, key, proto.EncodedKey(proto.KeyMax), 0)
+		keyvalsSnapshot, error := Scan(snap, key, proto.EncodedKey(proto.KeyMax), 0)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -656,8 +656,8 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Scan.
-		keyvals, _ := Scan(engine, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
-		keyvalsSnapshot, err := Scan(snap, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
+		keyvals, _ := Scan(engine, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0)
+		keyvalsSnapshot, err := Scan(snap, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -668,7 +668,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 		// Verify Iterate.
 		index := 0
-		if err := snap.Iterate(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), func(kv proto.RawKeyValue) (bool, error) {
+		if err := snap.Iterate(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
 			if !bytes.Equal(kv.Key, keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 					index, keys[index], vals[index], kv.Key, kv.Value)
@@ -705,11 +705,11 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify ApproximateSize.
-		approx, err := engine.ApproximateSize(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax))
+		approx, err := engine.ApproximateSize(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}
-		approxSnapshot, err := snap.ApproximateSize(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax))
+		approxSnapshot, err := snap.ApproximateSize(proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}

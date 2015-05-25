@@ -35,6 +35,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/keys"
 	. "github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
@@ -401,8 +402,8 @@ func TestSystemKeys(t *testing.T) {
 	// Compute expected system key.
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
-		StartKey: engine.KeyMin,
-		EndKey:   engine.KeyMax,
+		StartKey: proto.KeyMin,
+		EndKey:   proto.KeyMax,
 		Replicas: []proto.Replica{
 			{
 				NodeID:  1,
@@ -416,7 +417,7 @@ func TestSystemKeys(t *testing.T) {
 	}
 
 	// Manipulate the meta1 key.
-	metaKey := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
+	metaKey := keys.MakeKey(keys.Meta1Prefix, proto.KeyMax)
 	encMeta1Key := url.QueryEscape(string(metaKey))
 	url := testContext.RequestScheme() + "://" + s.ServingAddr() + EntryPrefix + encMeta1Key
 	resp := getURL(testContext, url, t)

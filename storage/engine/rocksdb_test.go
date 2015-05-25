@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -86,19 +87,19 @@ func TestRocksDBCompaction(t *testing.T) {
 	// that exactly one of each should be GC'd based on our GC timeouts.
 	kvs := []proto.KeyValue{
 		{
-			Key:   ResponseCacheKey(1, cmdID),
+			Key:   keys.ResponseCacheKey(1, cmdID),
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
 		},
 		{
-			Key:   ResponseCacheKey(2, cmdID),
+			Key:   keys.ResponseCacheKey(2, cmdID),
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		{
-			Key:   TransactionKey(proto.Key("a"), proto.Key(util.NewUUID4())),
+			Key:   keys.TransactionKey(proto.Key("a"), proto.Key(util.NewUUID4())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		{
-			Key:   TransactionKey(proto.Key("b"), proto.Key(util.NewUUID4())),
+			Key:   keys.TransactionKey(proto.Key("b"), proto.Key(util.NewUUID4())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}
@@ -110,7 +111,8 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	actualKVs, err := MVCCScan(rocksdb, KeyMin, KeyMax, 0, proto.ZeroTimestamp, true, nil)
+	actualKVs, err := MVCCScan(rocksdb, proto.KeyMin, proto.KeyMax,
+		0, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}
@@ -231,7 +233,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
-			kvs, err := MVCCScan(rocksdb, startKey, KeyMax, int64(numRows), ts, true, nil)
+			kvs, err := MVCCScan(rocksdb, startKey, proto.KeyMax, int64(numRows), ts, true, nil)
 			if err != nil {
 				b.Fatalf("failed scan: %s", err)
 			}

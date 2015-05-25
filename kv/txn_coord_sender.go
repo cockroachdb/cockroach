@@ -26,9 +26,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -130,7 +130,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 		}
 	}
-	for _, o := range tm.keys.GetOverlaps(engine.KeyMin, engine.KeyMax) {
+	for _, o := range tm.keys.GetOverlaps(proto.KeyMin, proto.KeyMax) {
 		// If the op was range based, end key != start key: resolve a range.
 		var call client.Call
 		key := o.Key.Start().(proto.Key)
@@ -259,7 +259,7 @@ func (tc *TxnCoordSender) Send(_ context.Context, call client.Call) {
 func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 	if header.Txn != nil {
 		if len(header.Txn.ID) == 0 {
-			newTxn := proto.NewTransaction(header.Txn.Name, engine.KeyAddress(header.Key), header.GetUserPriority(),
+			newTxn := proto.NewTransaction(header.Txn.Name, keys.KeyAddress(header.Key), header.GetUserPriority(),
 				header.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 			// Use existing priority as a minimum. This is used on transaction
 			// aborts to ratchet priority when creating successor transaction.

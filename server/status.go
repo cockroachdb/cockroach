@@ -25,9 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -244,7 +244,7 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request,
 
 // handleNodesStatus handles GET requests for all node statuses.
 func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	startKey := engine.KeyStatusNodePrefix
+	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
 	call := client.Scan(startKey, endKey, 0)
@@ -289,7 +289,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	key := engine.NodeStatusKey(int32(id))
+	key := keys.NodeStatusKey(int32(id))
 
 	nodeStatus := &proto.NodeStatus{}
 	call := client.GetProto(key, nodeStatus)
@@ -317,7 +317,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 
 // handleStoresStatus handles GET requests for all store statuses.
 func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	startKey := engine.KeyStatusStorePrefix
+	startKey := keys.StatusStorePrefix
 	endKey := startKey.PrefixEnd()
 
 	call := client.Scan(startKey, endKey, 0)
@@ -362,7 +362,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	key := engine.StoreStatusKey(int32(id))
+	key := keys.StoreStatusKey(int32(id))
 
 	storeStatus := &proto.StoreStatus{}
 	call := client.GetProto(key, storeStatus)

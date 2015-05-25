@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -68,7 +69,7 @@ func NewResponseCache(raftID int64, engine engine.Engine) *ResponseCache {
 // ClearData removes all items stored in the persistent cache. It does not alter
 // the inflight map.
 func (rc *ResponseCache) ClearData() error {
-	p := engine.ResponseCacheKey(rc.raftID, nil) // prefix for all response cache entries with this raft ID
+	p := keys.ResponseCacheKey(rc.raftID, nil) // prefix for all response cache entries with this raft ID
 	end := p.PrefixEnd()
 	_, err := engine.ClearRange(rc.engine, engine.MVCCEncodeKey(p), engine.MVCCEncodeKey(end))
 	return err
@@ -88,7 +89,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Respon
 
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
-	key := engine.ResponseCacheKey(rc.raftID, &cmdID)
+	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 	if ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp, true, nil, &rwResp); ok || err != nil {
 		if err == nil && rwResp.GetValue() != nil {
 			gogoproto.Merge(reply.(gogoproto.Message), rwResp.GetValue().(gogoproto.Message))
@@ -108,7 +109,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 	rc.Lock()
 	defer rc.Unlock()
 
-	prefix := engine.ResponseCacheKey(rc.raftID, nil) // response cache prefix
+	prefix := keys.ResponseCacheKey(rc.raftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
@@ -120,7 +121,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 			return false, util.Errorf("could not decode a response cache key %s: %s",
 				proto.Key(kv.Key), err)
 		}
-		key := engine.ResponseCacheKey(destRaftID, &cmdID)
+		key := keys.ResponseCacheKey(destRaftID, &cmdID)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &proto.MVCCMetadata{}
@@ -141,7 +142,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 // error. The copy is done directly using the engine instead of interpreting
 // values through MVCC for efficiency.
 func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID int64) error {
-	prefix := engine.ResponseCacheKey(originRaftID, nil) // response cache prefix
+	prefix := keys.ResponseCacheKey(originRaftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
@@ -153,7 +154,7 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID int64) error {
 			return false, util.Errorf("could not decode a response cache key %s: %s",
 				proto.Key(kv.Key), err)
 		}
-		key := engine.ResponseCacheKey(rc.raftID, &cmdID)
+		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &proto.MVCCMetadata{}
@@ -177,7 +178,7 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply proto.Respon
 	// Write the response value to the engine.
 	var err error
 	if rc.shouldCacheResponse(reply) {
-		key := engine.ResponseCacheKey(rc.raftID, &cmdID)
+		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 		rwResp := &proto.ReadWriteCmdResponse{}
 		if !rwResp.SetValue(reply) {
 			log.Fatalf("response %T not supported by response cache", reply)
@@ -206,18 +207,18 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	if isValue {
 		return ret, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}
-	if !bytes.HasPrefix(key, engine.KeyLocalRangeIDPrefix) {
-		return ret, util.Errorf("key %s does not have %s prefix", key, engine.KeyLocalRangeIDPrefix)
+	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return ret, util.Errorf("key %s does not have %s prefix", key, keys.LocalRangeIDPrefix)
 	}
 	// Cut the prefix and the Raft ID.
-	b := key[len(engine.KeyLocalRangeIDPrefix):]
+	b := key[len(keys.LocalRangeIDPrefix):]
 	b, _ = encoding.DecodeUvarint(b)
-	if !bytes.HasPrefix(b, engine.KeyLocalResponseCacheSuffix) {
+	if !bytes.HasPrefix(b, keys.LocalResponseCacheSuffix) {
 		return ret, util.Errorf("key %s does not contain the response cache suffix %s",
-			key, engine.KeyLocalResponseCacheSuffix)
+			key, keys.LocalResponseCacheSuffix)
 	}
 	// Cut the response cache suffix.
-	b = b[len(engine.KeyLocalResponseCacheSuffix):]
+	b = b[len(keys.LocalResponseCacheSuffix):]
 	// Now, decode the command ID.
 	b, wt := encoding.DecodeUvarint(b)
 	b, rd := encoding.DecodeUint64(b)

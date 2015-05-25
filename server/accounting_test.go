@@ -26,7 +26,6 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
@@ -46,7 +45,7 @@ func ExampleSetAndGetAccts() {
 		prefix proto.Key
 		yaml   string
 	}{
-		{engine.KeyMin, testAcctConfig},
+		{proto.KeyMin, testAcctConfig},
 		{proto.Key("db1"), testAcctConfig},
 		{proto.Key("db 2"), testAcctConfig},
 		{proto.Key("\xfe"), testAcctConfig},
@@ -86,7 +85,7 @@ func ExampleLsAccts() {
 	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("db1"),
 		proto.Key("db2"),
 		proto.Key("db3"),
@@ -145,7 +144,7 @@ func ExampleRmAccts() {
 	defer util.CleanupDir(testConfigFn)
 
 	keys := []proto.Key{
-		engine.KeyMin,
+		proto.KeyMin,
 		proto.Key("db1"),
 	}
 

@@ -24,7 +24,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -111,7 +110,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
 
-	if len(p) == 0 || !p[0].Prefix.Equal(engine.KeyMin) {
+	if len(p) == 0 || !p[0].Prefix.Equal(proto.KeyMin) {
 		return nil, util.Errorf("no default prefix specified")
 	}
 

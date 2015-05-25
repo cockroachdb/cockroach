@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -39,7 +38,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 	// Set accounting and zone configs.
 	acctMap, err := NewPrefixConfigMap([]*PrefixConfig{
-		{engine.KeyMin, nil, 1},
+		{proto.KeyMin, nil, 1},
 		{proto.Key("/dbA"), nil, 2},
 	})
 	if err != nil {
@@ -50,7 +49,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	zoneMap, err := NewPrefixConfigMap([]*PrefixConfig{
-		{engine.KeyMin, nil, &proto.ZoneConfig{RangeMaxBytes: 64 << 20}},
+		{proto.KeyMin, nil, &proto.ZoneConfig{RangeMaxBytes: 64 << 20}},
 		{proto.Key("/dbB"), nil, &proto.ZoneConfig{RangeMaxBytes: 64 << 20}},
 	})
 	if err != nil {

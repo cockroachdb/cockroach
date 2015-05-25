@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -72,14 +73,14 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer stopper.Stop()
 
 	for _, key := range []proto.Key{
-		engine.KeyMeta1Prefix,
-		engine.MakeKey(engine.KeyMeta1Prefix, []byte("a")),
-		engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax),
-		engine.MakeKey(engine.KeyConfigAccountingPrefix, []byte("a")),
-		engine.MakeKey(engine.KeyConfigPermissionPrefix, []byte("a")),
-		engine.MakeKey(engine.KeyConfigZonePrefix, []byte("a")),
+		keys.Meta1Prefix,
+		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
+		keys.MakeKey(keys.Meta1Prefix, proto.KeyMax),
+		keys.MakeKey(keys.ConfigAccountingPrefix, []byte("a")),
+		keys.MakeKey(keys.ConfigPermissionPrefix, []byte("a")),
+		keys.MakeKey(keys.ConfigZonePrefix, []byte("a")),
 	} {
-		args, reply := adminSplitArgs(engine.KeyMin, key, 1, store.StoreID())
+		args, reply := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
 		err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
 		if err == nil {
 			t.Fatalf("%q: split succeeded unexpectedly", key)
@@ -97,7 +98,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
+	args, reply := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
-	args, reply = adminSplitArgs(engine.KeyMin, []byte("a"), 2, store.StoreID())
+	args, reply = adminSplitArgs(proto.KeyMin, []byte("a"), 2, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
@@ -126,7 +127,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	failureCount := int32(0)
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
-			args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
+			args, reply := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
 			err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
 			if err != nil {
 				if matched, regexpErr := regexp.MatchString(".*outside of bounds of range", err.Error()); !matched || regexpErr != nil {
@@ -187,24 +188,24 @@ func TestStoreRangeSplit(t *testing.T) {
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
 
 	// Split the range.
-	args, reply := adminSplitArgs(engine.KeyMin, splitKey, 1, store.StoreID())
+	args, reply := adminSplitArgs(proto.KeyMin, splitKey, 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify no intents remains on range descriptor keys.
-	for _, key := range []proto.Key{engine.RangeDescriptorKey(engine.KeyMin), engine.RangeDescriptorKey(splitKey)} {
+	for _, key := range []proto.Key{keys.RangeDescriptorKey(proto.KeyMin), keys.RangeDescriptorKey(splitKey)} {
 		if _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	rng := store.LookupRange(engine.KeyMin, nil)
+	rng := store.LookupRange(proto.KeyMin, nil)
 	newRng := store.LookupRange([]byte("m"), nil)
 	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
 	}
-	if !bytes.Equal(newRng.Desc().EndKey, engine.KeyMax) || !bytes.Equal(rng.Desc().StartKey, engine.KeyMin) {
+	if !bytes.Equal(newRng.Desc().EndKey, proto.KeyMax) || !bytes.Equal(rng.Desc().StartKey, proto.KeyMin) {
 		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc().StartKey, newRng.Desc().EndKey)
 	}
 
@@ -278,7 +279,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split the range at the first user key.
-	args, reply := adminSplitArgs(engine.KeyMin, proto.Key("\x01"), 1, store.StoreID())
+	args, reply := adminSplitArgs(proto.KeyMin, proto.Key("\x01"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +374,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer stopper.Stop()
 
 	maxBytes := int64(1 << 16)
-	rng := store.LookupRange(engine.KeyMin, nil)
+	rng := store.LookupRange(proto.KeyMin, nil)
 	fillRange(store, rng.Desc().RaftID, proto.Key("test"), maxBytes, t)
 
 	// Rewrite zone config with range max bytes set to 64K.
@@ -389,7 +390,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: maxBytes,
 	}
-	call := client.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
+	call := client.PutProto(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig)
 	if err := store.DB().Run(call); err != nil {
 		t.Fatal(err)
 	}
@@ -425,14 +426,14 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	var calls []client.Call
 	for _, k := range []string{"db4", "db3"} {
 		call := client.PutProto(
-			engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),
+			keys.MakeKey(keys.ConfigZonePrefix, proto.Key(k)),
 			zoneConfig)
 		calls = append(calls, call)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
 		call := client.PutProto(
-			engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)),
+			keys.MakeKey(keys.ConfigAccountingPrefix, proto.Key(k)),
 			acctConfig)
 		calls = append(calls, call)
 	}
@@ -448,10 +449,10 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 		proto.Key("\x00\x00meta2db3"),
 		proto.Key("\x00\x00meta2db4"),
 		proto.Key("\x00\x00meta2db5"),
-		engine.MakeKey(proto.Key("\x00\x00meta2"), engine.KeyMax),
+		keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
 	}
 	if err := util.IsTrueWithin(func() bool {
-		call := client.Scan(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
+		call := client.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		resp := call.Reply.(*proto.ScanResponse)
 		if err := store.DB().Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)

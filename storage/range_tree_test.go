@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -91,7 +90,7 @@ func TestFlip(t *testing.T) {
 	for i, test := range testCases {
 		node := &proto.RangeTreeNode{
 			Key:       keyNode,
-			ParentKey: engine.KeyMin,
+			ParentKey: proto.KeyMin,
 			Black:     test.nodeBlack,
 			LeftKey:   &keyLeft,
 			RightKey:  &keyRight,
@@ -180,28 +179,28 @@ func TestRotateRight(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRight,
 			},
 			left: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeftLeft,
 				RightKey:  &keyLeftRight,
 			},
 			expectedNode: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyLeftLeft,
 				RightKey:  &keyNode,
 			},
 			expectedLeft: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeftRight,
 				RightKey:  &keyRight,
@@ -212,28 +211,28 @@ func TestRotateRight(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRight,
 			},
 			left: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeftLeft,
 				RightKey:  &keyLeftRight,
 			},
 			expectedNode: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeftLeft,
 				RightKey:  &keyNode,
 			},
 			expectedLeft: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeftRight,
 				RightKey:  &keyRight,
@@ -244,14 +243,14 @@ func TestRotateRight(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRight,
 			},
 			left: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyLeftLeft,
 				RightKey:  &keyLeftRight,
@@ -262,24 +261,24 @@ func TestRotateRight(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyLeft,
 			},
 			left: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 			},
 			expectedNode: &proto.RangeTreeNode{
 				Key:       keyLeft,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				RightKey:  &keyNode,
 			},
 			expectedLeft: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 			},
 			expectedErr: false,
@@ -355,28 +354,28 @@ func TestRotateLeft(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRight,
 			},
 			right: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyRightLeft,
 				RightKey:  &keyRightRight,
 			},
 			expectedNode: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyNode,
 				RightKey:  &keyRightRight,
 			},
 			expectedRight: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRightLeft,
@@ -387,28 +386,28 @@ func TestRotateLeft(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRight,
 			},
 			right: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyRightLeft,
 				RightKey:  &keyRightRight,
 			},
 			expectedNode: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyNode,
 				RightKey:  &keyRightRight,
 			},
 			expectedRight: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRightLeft,
@@ -419,14 +418,14 @@ func TestRotateLeft(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyLeft,
 				RightKey:  &keyRight,
 			},
 			right: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyRightLeft,
 				RightKey:  &keyRightRight,
@@ -437,24 +436,24 @@ func TestRotateLeft(t *testing.T) {
 		{
 			node: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				RightKey:  &keyRight,
 			},
 			right: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 			},
 			expectedNode: &proto.RangeTreeNode{
 				Key:       keyRight,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     true,
 				LeftKey:   &keyNode,
 			},
 			expectedRight: &proto.RangeTreeNode{
 				Key:       keyNode,
-				ParentKey: engine.KeyMin,
+				ParentKey: proto.KeyMin,
 				Black:     false,
 			},
 			expectedErr: false,

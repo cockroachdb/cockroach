@@ -15,7 +15,7 @@
 //
 // Author: Matt Tracy (matt.r.tracy@gmail.com)
 
-package engine
+package keys
 
 import (
 	"encoding/gob"

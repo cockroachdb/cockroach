@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 
 	"github.com/spf13/cobra"
 )
@@ -46,16 +46,16 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	}
 	var startKey proto.Key
 	if len(args) >= 1 {
-		startKey = engine.RangeMetaKey(proto.Key(args[0]))
+		startKey = keys.RangeMetaKey(proto.Key(args[0]))
 	} else {
-		startKey = engine.KeyMeta2Prefix
+		startKey = keys.Meta2Prefix
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	r, err := kvDB.Scan(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
+	r, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), 1000)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		osExit(1)

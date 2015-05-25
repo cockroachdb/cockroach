@@ -24,6 +24,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -38,11 +39,17 @@ const (
 	mvccVersionTimestampSize int64 = 12
 )
 
+var (
+	// MVCCKeyMax is a maximum mvcc-encoded key value which sorts after
+	// all other keys.
+	MVCCKeyMax = MVCCEncodeKey(proto.KeyMax)
+)
+
 // updateStatsForKey returns whether or not the bytes and counts for
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
 func updateStatsForKey(ms *proto.MVCCStats, key proto.Key) (bool, bool) {
-	return ms != nil, key.Less(KeyLocalMax)
+	return ms != nil, key.Less(keys.LocalMax)
 }
 
 // updateStatsForInline updates stat counters for an inline value.
@@ -294,13 +301,13 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the supplied MVCCStats struct.
 func MVCCGetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
-	_, err := MVCCGetProto(engine, RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
+	_, err := MVCCGetProto(engine, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
 	return err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
 func MVCCSetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
-	return MVCCPutProto(engine, nil, RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
+	return MVCCPutProto(engine, nil, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
@@ -1226,20 +1233,20 @@ var illegalSplitKeyRanges = []struct {
 	start, end proto.EncodedKey
 }{
 	{
-		start: MVCCEncodeKey(KeyMin),
-		end:   MVCCEncodeKey(KeyMeta2Prefix),
+		start: MVCCEncodeKey(proto.KeyMin),
+		end:   MVCCEncodeKey(keys.Meta2Prefix),
 	},
 	{
-		start: MVCCEncodeKey(KeyConfigAccountingPrefix),
-		end:   MVCCEncodeKey(KeyConfigAccountingPrefix.PrefixEnd()),
+		start: MVCCEncodeKey(keys.ConfigAccountingPrefix),
+		end:   MVCCEncodeKey(keys.ConfigAccountingPrefix.PrefixEnd()),
 	},
 	{
-		start: MVCCEncodeKey(KeyConfigPermissionPrefix),
-		end:   MVCCEncodeKey(KeyConfigPermissionPrefix.PrefixEnd()),
+		start: MVCCEncodeKey(keys.ConfigPermissionPrefix),
+		end:   MVCCEncodeKey(keys.ConfigPermissionPrefix.PrefixEnd()),
 	},
 	{
-		start: MVCCEncodeKey(KeyConfigZonePrefix),
-		end:   MVCCEncodeKey(KeyConfigZonePrefix.PrefixEnd()),
+		start: MVCCEncodeKey(keys.ConfigZonePrefix),
+		end:   MVCCEncodeKey(keys.ConfigZonePrefix.PrefixEnd()),
 	},
 }
 
@@ -1262,8 +1269,8 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeyRanges.
 func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto.Key, error) {
-	if key.Less(KeyLocalMax) {
-		key = KeyLocalMax
+	if key.Less(keys.LocalMax) {
+		key = keys.LocalMax
 	}
 	encStartKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)

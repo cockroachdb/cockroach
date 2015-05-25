@@ -27,8 +27,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -43,7 +43,7 @@ func makeDBClient(cluster *localcluster.Cluster, node int) (*client.DB, error) {
 }
 
 func countRangeReplicas(client *client.DB) (int, error) {
-	r, err := client.Scan(engine.KeyMeta2Prefix, engine.KeyMeta2Prefix.PrefixEnd(), 10)
+	r, err := client.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 10)
 	if err != nil {
 		return 0, err
 	}
