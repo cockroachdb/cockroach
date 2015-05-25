@@ -4,7 +4,8 @@ by Spencer Kimball from early 2014.
 
 # Overview
 
-Cockroach is a distributed key:value datastore which supports **ACID
+Cockroach is a distributed key:value datastore (SQL and structured
+data layers of cockroach have yet to be defined) which supports **ACID
 transactional semantics** and **versioned values** as first-class
 features. The primary design goal is **global consistency and
 survivability**, hence the name. Cockroach aims to tolerate disk,
@@ -174,11 +175,11 @@ transaction. This means that a transaction without conflicts will
 usually commit with a timestamp that, in absolute time, precedes the
 actual work done by that transaction.
 
-In the course of organizing the transaction between one or more
+In the course of coordinating a transaction between one or more
 distributed nodes, the candidate timestamp may be increased, but will
 never be decreased. The core difference between the two isolation levels
-SI and SSI is that the former allows its commit timestamp to increase
-and the latter does not.
+SI and SSI is that the former allows the transaction's candidate
+timestamp to increase and the latter does not.
 
 Timestamps are a combination of both a physical and a logical component
 to support monotonic increments without degenerate cases causing
@@ -189,19 +190,17 @@ paper.*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)
 Transactions are executed in two phases:
 
 1. Start the transaction by writing a new entry to the system
-   transaction table (keys prefixed by *\0tx*) with state “PENDING”.
-   In practice, this is done along with the first operation in the
-   transaction.
-
-2. Write an "intent" value for each datum being written as part of the
-   transaction. These are normal MVCC values, with the addition of a
-   special flag (i.e. “intent”) indicating that the value may be
-   committed later, if the transaction itself commits. In addition,
+   transaction table (keys prefixed by *\0tx*) with state “PENDING”. In
+   parallel write an "intent" value for each datum being written as part
+   of the transaction. These are normal MVCC values, with the addition of
+   a special flag (i.e. “intent”) indicating that the value may be
+   committed after the transaction itself commits. In addition,
    the transaction id (unique and chosen at tx start time by client)
    is stored with intent values. The tx id is used to refer to the
    transaction table when there are conflicts and to make
    tie-breaking decisions on ordering between identical timestamps.
-   Each node returns the timestamp used for the write; the client
+   Each node returns the timestamp used for the write (which is the
+   original candidate timestamp in the absence of conflicts); the client
    selects the maximum from amongst all writes as the final commit
    timestamp.
 
@@ -218,7 +217,7 @@ Transactions are executed in two phases:
    the cache to the current wall time + ε (ε = 99^th^ percentile
    clock skew).
 
-3. Commit the transaction by updating its entry in the system
+2. Commit the transaction by updating its entry in the system
    transaction table (keys prefixed by *\0tx*). The value of the
    commit entry contains the candidate timestamp (increased as
    necessary to accommodate any latest read timestamps). Note that
@@ -232,10 +231,10 @@ Transactions are executed in two phases:
    necessitates transaction restart (note: restart is different than
    abort--see below).
 
-   Additionally and in parallel, all written values are upgraded by
-   removing the “intent” flag. The transaction is considered fully
-   committed before this step and does not wait for it to return
-   control to the transaction coordinator.
+   After the transaction is committed, all written intents are upgraded
+   in parallel by removing the “intent” flag. The transaction is
+   considered fully committed before this step and does not wait for
+   it to return control to the transaction coordinator.
 
 In the absence of conflicts, this is the end. Nothing else is necessary
 to ensure the correctness of the system.
@@ -252,22 +251,25 @@ abort or restart depending on the type of conflict.
 This is the usual (and more efficient) type of behaviour and is used
 except when the transaction was aborted (for instance by another
 transaction).
-In effect, that reduces to two cases, the first being the one outlined
-above: An SSI transaction that finds (upon attempting to commit) that
-its commit timestamp has been pushed. In the second case, a transaction
-actively encounters a conflict, that is, one of its readers or writers
-runs encounters data that necessitate conflict resolution.
+In effect, that reduces to two cases; the first being the one outlined
+above: An SSI transaction that finds upon attempting to commit that
+its commit timestamp has been pushed. The second case involves a transaction
+actively encountering a conflict, that is, one of its readers or writers
+encounter data that necessitate conflict resolution
+(see transaction interactions below).
 
 When a transaction restarts, it changes its priority and/or moves its
-timestamp forward depending on data tied to the conflict, and the
-transaction begins anew, updating its intents. Since the set of keys
-being written change between restarts, a set of keys written during
-prior attempts at the transaction is maintained by the client. As it
-restarts the transaction from the beginning, it removes keys from this
-set as it writes them again. The remaining keys--should the transaction
-run to completion--are crufty write intents which must be deleted
-*before* the transaction commit record’s status is set to COMMITTED.
-Many transactions will have no keys in this set.
+timestamp forward depending on data tied to the conflict, and
+begins anew reusing the same tx id. The prior run of the transaction might
+have written some write intents, which need to be deleted before the
+transaction commits, so as to not be included as part of the transaction.
+These stale write intent deletions are done during the reexecution of the
+transaction, either implicitly, through writing new intents to 
+the same keys as part of the reexecution of the transaction, or explicitly,
+by cleaning up stale intents that are not part of the reexecution of the
+transaction. Since most transactions will end up writing to the same keys,
+the explicit cleanup run just before committing the transaction is usually
+a NOOP.
 
 ***Transaction abort:***
 
@@ -277,7 +279,9 @@ transaction can not reuse its intents; it returns control to the client
 before cleaning them up (other readers and writers would clean up
 dangling intents as they encounter them) but will make an effort to
 clean up after itself. The next attempt (if applicable) then runs as a
-different transaction.
+new transaction with **a new tx id**.
+
+***Transaction interactions:***
 
 There are several scenarios in which transactions interact:
 
@@ -286,9 +290,9 @@ There are several scenarios in which transactions interact:
   to proceed; after all, it will be reading an older version of the
   value and so does not conflict. Recall that the write intent may
   be committed with a later timestamp than its candidate; it will
-  never commit with an earlier one. **Side note**: if the reader
-  finds an intent with a newer timestamp which the reader’s own
-  transaction has written, the reader always returns that value.
+  never commit with an earlier one. **Side note**: if a SI transaction
+  reader finds an intent with a newer timestamp which the reader’s own
+  transaction has written, the reader always returns that intent's value.
 
 - **Reader encounters write intent or value with newer timestamp in the
   near future:** In this case, we have to be careful. The newer
@@ -312,25 +316,25 @@ There are several scenarios in which transactions interact:
   transaction’s commit timestamp to indicate that when/if the
   transaction does commit, it should use a timestamp *at least* as
   high. However, if the write conflict is from an SSI transaction,
-  the reader must compare priorities. If it has the higher priority,
-  it pushes the transaction’s commit timestamp, as with SI (that
+  the reader must compare priorities. If the reader has the higher priority,
+  it pushes the transaction’s commit timestamp (that
   transaction will then notice its timestamp has been pushed, and
-  restart). If it has the lower priority, it retries itself using as
+  restart). If it has the lower or same priority, it retries itself using as
   a new priority `max(new random priority, conflicting txn’s
   priority - 1)`.
 
-- **Writer encounters uncommitted write intent with lower priority**:
-  writer aborts the conflicting transaction.
+- **Writer encounters uncommitted write intent**:
+  If the other write intent has been written by a transaction with a lower
+  priority, the writer aborts the conflicting transaction. If the write 
+  intent has a higher or equal priority the transaction retries, using as a new 
+  priority *max(new random priority, conflicting txn’s priority - 1)*;
+  the retry occurs after a short, randomized backoff interval.
 
-- **Writer encounters uncommitted write intent with higher priority**:
-  the transaction retries, using as a new priority *max(new random
-  priority, conflicting txn’s priority - 1)*; the retry occurs after
-  a short, randomized backoff interval.
-
-- **Writer encounters committed write intent or newer committed value**:
-  The transaction restarts. On restart, the same priority is reused,
-  but the candidate timestamp is moved forward to the encountered
-  value's timestamp.
+- **Writer encounters newer committed value**:
+  The committed value could also be an unresolved write intent made by a
+  transaction that has already committed. The transaction restarts. On restart,
+  the same priority is reused, but the candidate timestamp is moved forward
+  to the encountered value's timestamp.
 
 **Transaction management**
 
