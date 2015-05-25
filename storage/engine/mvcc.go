@@ -49,7 +49,7 @@ var (
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
 func updateStatsForKey(ms *proto.MVCCStats, key proto.Key) (bool, bool) {
-	return ms != nil, key.Less(keys.KeyLocalMax)
+	return ms != nil, key.Less(keys.LocalMax)
 }
 
 // updateStatsForInline updates stat counters for an inline value.
@@ -1234,19 +1234,19 @@ var illegalSplitKeyRanges = []struct {
 }{
 	{
 		start: MVCCEncodeKey(proto.KeyMin),
-		end:   MVCCEncodeKey(keys.KeyMeta2Prefix),
+		end:   MVCCEncodeKey(keys.Meta2Prefix),
 	},
 	{
-		start: MVCCEncodeKey(keys.KeyConfigAccountingPrefix),
-		end:   MVCCEncodeKey(keys.KeyConfigAccountingPrefix.PrefixEnd()),
+		start: MVCCEncodeKey(keys.ConfigAccountingPrefix),
+		end:   MVCCEncodeKey(keys.ConfigAccountingPrefix.PrefixEnd()),
 	},
 	{
-		start: MVCCEncodeKey(keys.KeyConfigPermissionPrefix),
-		end:   MVCCEncodeKey(keys.KeyConfigPermissionPrefix.PrefixEnd()),
+		start: MVCCEncodeKey(keys.ConfigPermissionPrefix),
+		end:   MVCCEncodeKey(keys.ConfigPermissionPrefix.PrefixEnd()),
 	},
 	{
-		start: MVCCEncodeKey(keys.KeyConfigZonePrefix),
-		end:   MVCCEncodeKey(keys.KeyConfigZonePrefix.PrefixEnd()),
+		start: MVCCEncodeKey(keys.ConfigZonePrefix),
+		end:   MVCCEncodeKey(keys.ConfigZonePrefix.PrefixEnd()),
 	},
 }
 
@@ -1269,8 +1269,8 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeyRanges.
 func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto.Key, error) {
-	if key.Less(keys.KeyLocalMax) {
-		key = keys.KeyLocalMax
+	if key.Less(keys.LocalMax) {
+		key = keys.LocalMax
 	}
 	encStartKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)

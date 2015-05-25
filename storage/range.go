@@ -117,9 +117,9 @@ type configDescriptor struct {
 // configDescriptors is an array containing the accounting, permissions
 // and zone configuration descriptors.
 var configDescriptors = [...]*configDescriptor{
-	{keys.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
-	{keys.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
-	{keys.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
+	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
+	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
+	{keys.ConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
 }
 
 // tsCacheMethods specifies the set of methods which affect the
@@ -868,7 +868,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 		// Maybe update gossip configs on a put.
 		switch args.(type) {
 		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-			if header.Key.Less(keys.KeySystemMax) {
+			if header.Key.Less(keys.SystemMax) {
 				// We hold the lock already.
 				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
 					return bytes.HasPrefix(header.Key, configPrefix)

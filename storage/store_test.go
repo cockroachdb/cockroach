@@ -495,7 +495,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	}
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
-	meta2KeyMax := keys.MakeKey(keys.KeyMeta2Prefix, proto.KeyMax)
+	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, proto.KeyMax)
 	pArgs, pReply := putArgs(meta2KeyMax, []byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
@@ -733,7 +733,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := keys.MakeKey(keys.KeyConfigZonePrefix, proto.Key("a"))
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("a"))
 	pArgs, pReply := putArgs(key, data, 1, store.StoreID())
 	pArgs.Timestamp = store.ctx.Clock.Now()
 	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {

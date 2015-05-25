@@ -43,7 +43,7 @@ func makeDBClient(cluster *localcluster.Cluster, node int) (*client.DB, error) {
 }
 
 func countRangeReplicas(client *client.DB) (int, error) {
-	r, err := client.Scan(keys.KeyMeta2Prefix, keys.KeyMeta2Prefix.PrefixEnd(), 10)
+	r, err := client.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 10)
 	if err != nil {
 		return 0, err
 	}

@@ -244,7 +244,7 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request,
 
 // handleNodesStatus handles GET requests for all node statuses.
 func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	startKey := keys.KeyStatusNodePrefix
+	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
 	call := client.Scan(startKey, endKey, 0)
@@ -317,7 +317,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 
 // handleStoresStatus handles GET requests for all store statuses.
 func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	startKey := keys.KeyStatusStorePrefix
+	startKey := keys.StatusStorePrefix
 	endKey := startKey.PrefixEnd()
 
 	call := client.Scan(startKey, endKey, 0)

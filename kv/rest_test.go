@@ -417,7 +417,7 @@ func TestSystemKeys(t *testing.T) {
 	}
 
 	// Manipulate the meta1 key.
-	metaKey := keys.MakeKey(keys.KeyMeta1Prefix, proto.KeyMax)
+	metaKey := keys.MakeKey(keys.Meta1Prefix, proto.KeyMax)
 	encMeta1Key := url.QueryEscape(string(metaKey))
 	url := testContext.RequestScheme() + "://" + s.ServingAddr() + EntryPrefix + encMeta1Key
 	resp := getURL(testContext, url, t)

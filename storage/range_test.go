@@ -202,13 +202,13 @@ func (tc *testContext) Stop() {
 
 // initConfigs creates default configuration entries.
 func initConfigs(e engine.Engine, t testing.TB) {
-	if err := engine.MVCCPutProto(e, nil, keys.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -461,7 +461,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
-	key := keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
 	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Perm); err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +621,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
-	key := keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
@@ -664,7 +664,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
-	key := keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)

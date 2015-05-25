@@ -74,7 +74,7 @@ func (db *testDescriptorDB) getRangeDescriptor(key proto.Key,
 
 	// Recursively call into cache as the real DB would, terminating recursion
 	// when a meta1key is encountered.
-	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, keys.KeyMeta1Prefix) {
+	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
 		_, err = db.cache.LookupRangeDescriptor(metadataKey, options)
 	}
 	return db.getDescriptor(key), err
@@ -107,13 +107,13 @@ func newTestDescriptorDB() *testDescriptorDB {
 	db := &testDescriptorDB{}
 	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
-			StartKey: keys.MakeKey(keys.KeyMeta2Prefix, proto.KeyMin),
-			EndKey:   keys.MakeKey(keys.KeyMeta2Prefix, proto.KeyMax),
+			StartKey: keys.MakeKey(keys.Meta2Prefix, proto.KeyMin),
+			EndKey:   keys.MakeKey(keys.Meta2Prefix, proto.KeyMax),
 		},
 	})
 	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
-			StartKey: keys.KeyMetaMax,
+			StartKey: keys.MetaMax,
 			EndKey:   proto.KeyMax,
 		},
 	})

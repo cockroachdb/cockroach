@@ -68,10 +68,10 @@ namespace {
 
 // NOTE: these constants must be kept in sync with the values in
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
-// kKeyLocalRangeKeyPrefix are the mvcc-encoded prefixes.
+// kKeyLocalRangePrefix are the mvcc-encoded prefixes.
 const int kKeyLocalRangePrefixSize = 4;
 const rocksdb::Slice kKeyLocalRangeIDPrefix("\x00\xff\x00\xff\x00\xffi", 7);
-const rocksdb::Slice kKeyLocalRangeKeyPrefix("\x00\xff\x00\xff\x00\xffk", 7);
+const rocksdb::Slice kKeyLocalRangePrefix("\x00\xff\x00\xff\x00\xffk", 7);
 const rocksdb::Slice kKeyLocalResponseCacheSuffix("res-", 4);
 const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
 
@@ -216,7 +216,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
   bool IsTransactionRecord(rocksdb::Slice key) const {
     // The transaction key format is:
     //   <prefix>[key]<suffix>[remainder].
-    if (!key.starts_with(kKeyLocalRangeKeyPrefix)) {
+    if (!key.starts_with(kKeyLocalRangePrefix)) {
       return false;
     }
 

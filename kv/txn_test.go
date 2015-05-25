@@ -608,7 +608,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Check that we split 1 times in allotted time.
 		if err := util.IsTrueWithin(func() bool {
 			// Scan the txn records.
-			call := client.Scan(keys.KeyMeta2Prefix, keys.KeyMetaMax, 0)
+			call := client.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 			resp := call.Reply.(*proto.ScanResponse)
 			if err := s.KV.Run(call); err != nil {
 				t.Fatalf("failed to scan meta2 keys: %s", err)

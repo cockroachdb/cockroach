@@ -247,7 +247,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		startKey = proto.Key(unquoteArg(args[0], false))
 	} else {
 		// Start with the first key after the system key range.
-		startKey = keys.KeySystemMax
+		startKey = keys.SystemMax
 	}
 	if len(args) >= 2 {
 		endKey = proto.Key(unquoteArg(args[1], false))

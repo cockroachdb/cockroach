@@ -333,7 +333,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) (
 		}
 		return []proto.RangeDescriptor{*rd}, nil
 	}
-	if bytes.HasPrefix(metadataKey, keys.KeyMeta1Prefix) {
+	if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
 		// In this case, desc is the cluster's first range.
 		if desc, err = ds.getFirstRangeDescriptor(); err != nil {
 			return nil, err

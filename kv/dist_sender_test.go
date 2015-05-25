@@ -427,14 +427,14 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		if method == "Node.InternalRangeLookup" {
 			// If the non-broken descriptor has already been returned, that's
 			// an error.
-			if !descStale && bytes.HasPrefix(header.Key, keys.KeyMeta2Prefix) {
+			if !descStale && bytes.HasPrefix(header.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
 					header.Key)
 			}
 
 			r := getReply().(*proto.InternalRangeLookupResponse)
 			// The fresh descriptor is about to be returned.
-			if bytes.HasPrefix(header.Key, keys.KeyMeta2Prefix) &&
+			if bytes.HasPrefix(header.Key, keys.Meta2Prefix) &&
 				newRangeDescriptor.StartKey.Equal(newEndKey) {
 				descStale = false
 			}

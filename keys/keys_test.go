@@ -35,7 +35,7 @@ func TestKeySorting(t *testing.T) {
 		proto.Key("\x01").Less(proto.Key("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
-	if !KeyLocalPrefix.Less(KeyMetaPrefix) {
+	if !LocalPrefix.Less(MetaPrefix) {
 		t.Fatalf("local key spilling into replicable ranges")
 	}
 	if !bytes.Equal(proto.Key(""), proto.Key(nil)) || !bytes.Equal(proto.Key(""), proto.Key(nil)) {
@@ -59,7 +59,7 @@ func TestKeyAddress(t *testing.T) {
 	}{
 		{proto.Key{}, proto.KeyMin},
 		{proto.Key("123"), proto.Key("123")},
-		{MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
+		{MakeKey(ConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
 		{TransactionKey(proto.Key("baz"), proto.Key(util.NewUUID4())), proto.Key("baz")},
 		{TransactionKey(proto.KeyMax, proto.Key(util.NewUUID4())), proto.KeyMax},
@@ -83,7 +83,7 @@ func TestRangeMetaKey(t *testing.T) {
 			expKey: proto.KeyMin,
 		},
 		{
-			key:    MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")),
+			key:    MakeKey(ConfigAccountingPrefix, proto.Key("foo")),
 			expKey: proto.Key("\x00\x00meta2\x00acctfoo"),
 		},
 		{
@@ -127,11 +127,11 @@ func TestValidateRangeMetaKey(t *testing.T) {
 	}{
 		{proto.KeyMin, false},
 		{proto.Key("\x00"), true},
-		{KeyMeta1Prefix[:len(KeyMeta1Prefix)-1], true},
-		{KeyMeta1Prefix, false},
-		{proto.MakeKey(KeyMeta1Prefix, proto.KeyMax), false},
-		{proto.MakeKey(KeyMeta2Prefix, proto.KeyMax), false},
-		{proto.MakeKey(KeyMeta2Prefix, proto.KeyMax.Next()), true},
+		{Meta1Prefix[:len(Meta1Prefix)-1], true},
+		{Meta1Prefix, false},
+		{proto.MakeKey(Meta1Prefix, proto.KeyMax), false},
+		{proto.MakeKey(Meta2Prefix, proto.KeyMax), false},
+		{proto.MakeKey(Meta2Prefix, proto.KeyMax.Next()), true},
 	}
 	for i, test := range testCases {
 		err := ValidateRangeMetaKey(test.key)

@@ -108,7 +108,7 @@ func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error 
 func treesEqual(db *client.KV, expected testRangeTree) error {
 	// Compare the tree roots.
 	actualTree := &proto.RangeTree{}
-	if err := db.Run(client.GetProto(keys.KeyRangeTreeRoot, actualTree)); err != nil {
+	if err := db.Run(client.GetProto(keys.RangeTreeRoot, actualTree)); err != nil {
 		return err
 	}
 	if !reflect.DeepEqual(&expected.Tree, actualTree) {
@@ -636,7 +636,7 @@ func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error
 // contain the same values in the same order.
 func compareBiogoTree(db *client.KV, biogoTree *llrb.Tree) error {
 	rt := &proto.RangeTree{}
-	if err := db.Run(client.GetProto(keys.KeyRangeTreeRoot, rt)); err != nil {
+	if err := db.Run(client.GetProto(keys.RangeTreeRoot, rt)); err != nil {
 		return err
 	}
 	return compareBiogoNode(db, biogoTree.Root, &rt.RootKey)

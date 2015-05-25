@@ -94,12 +94,12 @@ var (
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key proto.Key) error {
 	maxLength := proto.KeyMaxLength
-	if bytes.HasPrefix(key, keys.KeyLocalRangeKeyPrefix) {
-		key = key[len(keys.KeyLocalRangeKeyPrefix):]
+	if bytes.HasPrefix(key, keys.LocalRangePrefix) {
+		key = key[len(keys.LocalRangePrefix):]
 		_, key = encoding.DecodeBytes(key, nil)
 	}
-	if bytes.HasPrefix(key, keys.KeyMetaPrefix) {
-		key = key[len(keys.KeyMeta1Prefix):]
+	if bytes.HasPrefix(key, keys.MetaPrefix) {
+		key = key[len(keys.Meta1Prefix):]
 	}
 	if len(key) > maxLength {
 		return util.Errorf("maximum key length exceeded for %q", key)
@@ -392,7 +392,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.feed.startStore()
 
 	// Create ID allocators.
-	idAlloc, err := NewIDAllocator(keys.KeyRaftIDGenerator, s.ctx.DB, 2 /* min ID */, raftIDAllocCount, s.stopper)
+	idAlloc, err := NewIDAllocator(keys.RaftIDGenerator, s.ctx.DB, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
@@ -432,7 +432,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	if err := engine.MVCCIterate(s.engine, start, end, now, false, nil, func(kv proto.KeyValue) (bool, error) {
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _ := keys.DecodeRangeKey(kv.Key)
-		if !suffix.Equal(keys.KeyLocalRangeDescriptorSuffix) {
+		if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
 			return false, nil
 		}
 		var desc proto.RangeDescriptor
@@ -828,7 +828,7 @@ func (s *Store) BootstrapRange() error {
 	}
 	// Accounting config.
 	acctConfig := &proto.AcctConfig{}
-	key := keys.MakeKey(keys.KeyConfigAccountingPrefix, proto.KeyMin)
+	key := keys.MakeKey(keys.ConfigAccountingPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, acctConfig); err != nil {
 		return err
 	}
@@ -837,7 +837,7 @@ func (s *Store) BootstrapRange() error {
 		Read:  []string{UserRoot}, // root user
 		Write: []string{UserRoot}, // root user
 	}
-	key = keys.MakeKey(keys.KeyConfigPermissionPrefix, proto.KeyMin)
+	key = keys.MakeKey(keys.ConfigPermissionPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, permConfig); err != nil {
 		return err
 	}
@@ -854,7 +854,7 @@ func (s *Store) BootstrapRange() error {
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
 	}
-	key = keys.MakeKey(keys.KeyConfigZonePrefix, proto.KeyMin)
+	key = keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
 		return err
 	}

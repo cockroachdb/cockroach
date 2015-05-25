@@ -54,7 +54,7 @@ func SetupRangeTree(batch engine.Engine, ms *proto.MVCCStats, timestamp proto.Ti
 		Key:   startKey,
 		Black: true,
 	}
-	if err := engine.MVCCPutProto(batch, ms, keys.KeyRangeTreeRoot, timestamp, nil, tree); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeRoot, timestamp, nil, tree); err != nil {
 		return err
 	}
 	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeNodeKey(startKey), timestamp, nil, node); err != nil {
@@ -66,7 +66,7 @@ func SetupRangeTree(batch engine.Engine, ms *proto.MVCCStats, timestamp proto.Ti
 // flush writes all dirty nodes and the tree to the transaction.
 func (tc *treeContext) flush() error {
 	if tc.dirty {
-		tc.txn.Prepare(client.PutProto(keys.KeyRangeTreeRoot, tc.tree))
+		tc.txn.Prepare(client.PutProto(keys.RangeTreeRoot, tc.tree))
 	}
 	for _, cachedNode := range tc.nodes {
 		if cachedNode.dirty {
@@ -80,7 +80,7 @@ func (tc *treeContext) flush() error {
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
 func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := &proto.RangeTree{}
-	if err := txn.Run(client.GetProto(keys.KeyRangeTreeRoot, tree)); err != nil {
+	if err := txn.Run(client.GetProto(keys.RangeTreeRoot, tree)); err != nil {
 		return nil, err
 	}
 	return &treeContext{

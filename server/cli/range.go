@@ -48,14 +48,14 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	if len(args) >= 1 {
 		startKey = keys.RangeMetaKey(proto.Key(args[0]))
 	} else {
-		startKey = keys.KeyMeta2Prefix
+		startKey = keys.Meta2Prefix
 	}
 
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	r, err := kvDB.Scan(startKey, keys.KeyMeta2Prefix.PrefixEnd(), 1000)
+	r, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), 1000)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		osExit(1)

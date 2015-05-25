@@ -150,7 +150,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	call := client.PutProto(keys.MakeKey(keys.KeyConfigZonePrefix, proto.KeyMin), zoneConfig)
+	call := client.PutProto(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig)
 	if err := s.KV.Run(call); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
-		call := client.Scan(keys.KeyMeta2Prefix, keys.KeyMetaMax, 0)
+		call := client.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		resp := call.Reply.(*proto.ScanResponse)
 		if err := s.KV.Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
@@ -184,7 +184,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	if err := util.IsTrueWithin(func() bool {
-		if _, err := engine.MVCCScan(s.Eng, keys.KeyLocalMax, proto.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
+		if _, err := engine.MVCCScan(s.Eng, keys.LocalMax, proto.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}

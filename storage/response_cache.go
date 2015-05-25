@@ -207,18 +207,18 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	if isValue {
 		return ret, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}
-	if !bytes.HasPrefix(key, keys.KeyLocalRangeIDPrefix) {
-		return ret, util.Errorf("key %s does not have %s prefix", key, keys.KeyLocalRangeIDPrefix)
+	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return ret, util.Errorf("key %s does not have %s prefix", key, keys.LocalRangeIDPrefix)
 	}
 	// Cut the prefix and the Raft ID.
-	b := key[len(keys.KeyLocalRangeIDPrefix):]
+	b := key[len(keys.LocalRangeIDPrefix):]
 	b, _ = encoding.DecodeUvarint(b)
-	if !bytes.HasPrefix(b, keys.KeyLocalResponseCacheSuffix) {
+	if !bytes.HasPrefix(b, keys.LocalResponseCacheSuffix) {
 		return ret, util.Errorf("key %s does not contain the response cache suffix %s",
-			key, keys.KeyLocalResponseCacheSuffix)
+			key, keys.LocalResponseCacheSuffix)
 	}
 	// Cut the response cache suffix.
-	b = b[len(keys.KeyLocalResponseCacheSuffix):]
+	b = b[len(keys.LocalResponseCacheSuffix):]
 	// Now, decode the command ID.
 	b, wt := encoding.DecodeUvarint(b)
 	b, rd := encoding.DecodeUint64(b)

@@ -73,12 +73,12 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer stopper.Stop()
 
 	for _, key := range []proto.Key{
-		keys.KeyMeta1Prefix,
-		keys.MakeKey(keys.KeyMeta1Prefix, []byte("a")),
-		keys.MakeKey(keys.KeyMeta1Prefix, proto.KeyMax),
-		keys.MakeKey(keys.KeyConfigAccountingPrefix, []byte("a")),
-		keys.MakeKey(keys.KeyConfigPermissionPrefix, []byte("a")),
-		keys.MakeKey(keys.KeyConfigZonePrefix, []byte("a")),
+		keys.Meta1Prefix,
+		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
+		keys.MakeKey(keys.Meta1Prefix, proto.KeyMax),
+		keys.MakeKey(keys.ConfigAccountingPrefix, []byte("a")),
+		keys.MakeKey(keys.ConfigPermissionPrefix, []byte("a")),
+		keys.MakeKey(keys.ConfigZonePrefix, []byte("a")),
 	} {
 		args, reply := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
 		err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
@@ -390,7 +390,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: maxBytes,
 	}
-	call := client.PutProto(keys.MakeKey(keys.KeyConfigZonePrefix, proto.KeyMin), zoneConfig)
+	call := client.PutProto(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig)
 	if err := store.DB().Run(call); err != nil {
 		t.Fatal(err)
 	}
@@ -426,14 +426,14 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	var calls []client.Call
 	for _, k := range []string{"db4", "db3"} {
 		call := client.PutProto(
-			keys.MakeKey(keys.KeyConfigZonePrefix, proto.Key(k)),
+			keys.MakeKey(keys.ConfigZonePrefix, proto.Key(k)),
 			zoneConfig)
 		calls = append(calls, call)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
 		call := client.PutProto(
-			keys.MakeKey(keys.KeyConfigAccountingPrefix, proto.Key(k)),
+			keys.MakeKey(keys.ConfigAccountingPrefix, proto.Key(k)),
 			acctConfig)
 		calls = append(calls, call)
 	}
@@ -452,7 +452,7 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 		keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
 	}
 	if err := util.IsTrueWithin(func() bool {
-		call := client.Scan(keys.KeyMeta2Prefix, keys.KeyMetaMax, 0)
+		call := client.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		resp := call.Reply.(*proto.ScanResponse)
 		if err := store.DB().Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)

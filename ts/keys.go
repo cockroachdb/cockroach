@@ -58,7 +58,7 @@ import (
 // 		slot := (timestamp / keyDuration) // integer division
 var (
 	// keyDataPrefix is the key prefix for time series data keys.
-	keyDataPrefix = proto.MakeKey(keys.KeySystemPrefix, proto.Key("tsd"))
+	keyDataPrefix = proto.MakeKey(keys.SystemPrefix, proto.Key("tsd"))
 )
 
 // MakeDataKey creates a time series data key for the given series name, source,

@@ -117,7 +117,7 @@ func TestBootstrapCluster(t *testing.T) {
 	if err := localDB.Run(client.Call{
 		Args: &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:    keys.KeyLocalPrefix.PrefixEnd(), // skip local keys
+				Key:    keys.LocalPrefix.PrefixEnd(), // skip local keys
 				EndKey: proto.KeyMax,
 				User:   storage.UserRoot,
 			},

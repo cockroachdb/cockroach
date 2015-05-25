@@ -46,20 +46,20 @@ type rangeDataIterator struct {
 func newRangeDataIterator(d *proto.RangeDescriptor, e engine.Engine) *rangeDataIterator {
 	// The first range in the keyspace starts at KeyMin, which includes the node-local
 	// space. We need the original StartKey to find the range metadata, but the
-	// actual data starts at KeyLocalMax.
+	// actual data starts at LocalMax.
 	dataStartKey := d.StartKey
 	if d.StartKey.Equal(proto.KeyMin) {
-		dataStartKey = keys.KeyLocalMax
+		dataStartKey = keys.LocalMax
 	}
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
-				start: engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID)))),
-				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID+1)))),
+				start: engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID)))),
+				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID+1)))),
 			},
 			{
-				start: engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.StartKey))),
-				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, d.EndKey))),
+				start: engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangePrefix, encoding.EncodeBytes(nil, d.StartKey))),
+				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangePrefix, encoding.EncodeBytes(nil, d.EndKey))),
 			},
 			{
 				start: engine.MVCCEncodeKey(dataStartKey),

@@ -44,11 +44,11 @@ func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
 func (ms metaSlice) Less(i, j int) bool { return ms[i].key.Less(ms[j].key) }
 
 func meta1Key(key proto.Key) proto.Key {
-	return keys.MakeKey(keys.KeyMeta1Prefix, key)
+	return keys.MakeKey(keys.Meta1Prefix, key)
 }
 
 func meta2Key(key proto.Key) proto.Key {
-	return keys.MakeKey(keys.KeyMeta2Prefix, key)
+	return keys.MakeKey(keys.Meta2Prefix, key)
 }
 
 // TestUpdateRangeAddressing verifies range addressing records are
@@ -131,7 +131,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, err := engine.MVCCScan(store.Engine(), keys.KeyMetaPrefix, keys.KeyMetaMax, 0, proto.MaxTimestamp, true, nil)
+		kvs, err := engine.MVCCScan(store.Engine(), keys.MetaPrefix, keys.MetaMax, 0, proto.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

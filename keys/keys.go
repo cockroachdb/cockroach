@@ -36,90 +36,88 @@ func MakeKey(keys ...proto.Key) proto.Key {
 // MakeStoreKey creates a store-local key based on the metadata key
 // suffix, and optional detail.
 func MakeStoreKey(suffix, detail proto.Key) proto.Key {
-	return MakeKey(KeyLocalStorePrefix, suffix, detail)
+	return MakeKey(LocalStorePrefix, suffix, detail)
 }
 
 // StoreIdentKey returns a store-local key for the store metadata.
 func StoreIdentKey() proto.Key {
-	return MakeStoreKey(KeyLocalStoreIdentSuffix, proto.Key{})
+	return MakeStoreKey(LocalStoreIdentSuffix, proto.Key{})
 }
 
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
 func StoreStatusKey(storeID int32) proto.Key {
-	return MakeKey(KeyStatusStorePrefix,
-		encoding.EncodeUvarint(nil, uint64(storeID)))
+	return MakeKey(StatusStorePrefix, encoding.EncodeUvarint(nil, uint64(storeID)))
 }
 
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
 func NodeStatusKey(nodeID int32) proto.Key {
-	return MakeKey(KeyStatusNodePrefix,
-		encoding.EncodeUvarint(nil, uint64(nodeID)))
+	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
 // Raft ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
 func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
-	if len(suffix) != KeyLocalSuffixLength {
-		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
+	if len(suffix) != LocalSuffixLength {
+		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
-	return MakeKey(KeyLocalRangeIDPrefix,
+	return MakeKey(LocalRangeIDPrefix,
 		encoding.EncodeUvarint(nil, uint64(raftID)), suffix, detail)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
 func RaftLogKey(raftID int64, logIndex uint64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix,
+	return MakeRangeIDKey(raftID, LocalRaftLogSuffix,
 		encoding.EncodeUint64(nil, logIndex))
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
 func RaftLogPrefix(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRaftLogSuffix, proto.Key{})
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
 func RaftHardStateKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftHardStateSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRaftHardStateSuffix, proto.Key{})
 }
 
 // DecodeRaftStateKey extracts the Raft ID from a RaftStateKey.
 func DecodeRaftStateKey(key proto.Key) int64 {
-	if !bytes.HasPrefix(key, KeyLocalRangeIDPrefix) {
-		panic(fmt.Sprintf("key %q does not have %q prefix", key, KeyLocalRangeIDPrefix))
+	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
+		panic(fmt.Sprintf("key %q does not have %q prefix", key, LocalRangeIDPrefix))
 	}
 	// Cut the prefix and the Raft ID.
-	b := key[len(KeyLocalRangeIDPrefix):]
+	b := key[len(LocalRangeIDPrefix):]
 	_, raftID := encoding.DecodeUvarint(b)
 	return int64(raftID)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func RaftTruncatedStateKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftTruncatedStateSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRaftTruncatedStateSuffix, proto.Key{})
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
 func RaftAppliedIndexKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftAppliedIndexSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRaftAppliedIndexSuffix, proto.Key{})
 }
 
 // RaftLeaderLeaseKey returns a system-local key for a raft leader lease.
 func RaftLeaderLeaseKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftLeaderLeaseSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRaftLeaderLeaseSuffix, proto.Key{})
 }
 
 // RaftLastIndexKey returns a system-local key for a raft last index.
 func RaftLastIndexKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftLastIndexSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRaftLastIndexSuffix, proto.Key{})
 }
 
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Raft ID.
 func RangeStatsKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRangeStatsSuffix, nil)
+	return MakeRangeIDKey(raftID, LocalRangeStatsSuffix, nil)
 }
 
 // ResponseCacheKey returns a range-local key by Raft ID for a
@@ -132,71 +130,69 @@ func ResponseCacheKey(raftID int64, cmdID *proto.ClientCmdID) proto.Key {
 		detail = encoding.EncodeUvarint(nil, uint64(cmdID.WallTime))
 		detail = encoding.EncodeUint64(detail, uint64(cmdID.Random))
 	}
-	return MakeRangeIDKey(raftID, KeyLocalResponseCacheSuffix, detail)
+	return MakeRangeIDKey(raftID, LocalResponseCacheSuffix, detail)
 }
 
 // MakeRangeKey creates a range-local key based on the range
 // start key, metadata key suffix, and optional detail (e.g. the
 // transaction ID for a txn record, etc.).
 func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
-	if len(suffix) != KeyLocalSuffixLength {
-		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
+	if len(suffix) != LocalSuffixLength {
+		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
-	return MakeKey(KeyLocalRangeKeyPrefix,
+	return MakeKey(LocalRangePrefix,
 		encoding.EncodeBytes(nil, key), suffix, detail)
 }
 
 // DecodeRangeKey decodes the range key into range start key,
 // suffix and optional detail (may be nil).
 func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
-	if !bytes.HasPrefix(key, KeyLocalRangeKeyPrefix) {
+	if !bytes.HasPrefix(key, LocalRangePrefix) {
 		panic(fmt.Sprintf("key %q does not have %q prefix",
-			key, KeyLocalRangeKeyPrefix))
+			key, LocalRangePrefix))
 	}
 	// Cut the prefix and the Raft ID.
-	b := key[len(KeyLocalRangeKeyPrefix):]
+	b := key[len(LocalRangePrefix):]
 	b, startKey = encoding.DecodeBytes(b, nil)
-	if len(b) < KeyLocalSuffixLength {
+	if len(b) < LocalSuffixLength {
 		panic(fmt.Sprintf("key %q does not have suffix of length %d",
-			key, KeyLocalSuffixLength))
+			key, LocalSuffixLength))
 	}
 	// Cut the response cache suffix.
-	suffix = b[:KeyLocalSuffixLength]
-	detail = b[KeyLocalSuffixLength:]
+	suffix = b[:LocalSuffixLength]
+	detail = b[LocalSuffixLength:]
 	return
 }
 
 // RangeGCMetadataKey returns a range-local key for range garbage
 // collection metadata.
 func RangeGCMetadataKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID,
-		KeyLocalRangeGCMetadataSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRangeGCMetadataSuffix, proto.Key{})
 }
 
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
 func RangeLastVerificationTimestampKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID,
-		KeyLocalRangeLastVerificationTimestampSuffix, proto.Key{})
+	return MakeRangeIDKey(raftID, LocalRangeLastVerificationTimestampSuffix, proto.Key{})
 }
 
 // RangeTreeNodeKey returns a range-local key for the the range's
 // node in the range tree.
 func RangeTreeNodeKey(key proto.Key) proto.Key {
-	return MakeRangeKey(key, KeyLocalRangeTreeNodeSuffix, proto.Key{})
+	return MakeRangeKey(key, LocalRangeTreeNodeSuffix, proto.Key{})
 }
 
 // RangeDescriptorKey returns a range-local key for the descriptor
 // for the range with specified key.
 func RangeDescriptorKey(key proto.Key) proto.Key {
-	return MakeRangeKey(key, KeyLocalRangeDescriptorSuffix, proto.Key{})
+	return MakeRangeKey(key, LocalRangeDescriptorSuffix, proto.Key{})
 }
 
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
 func TransactionKey(key proto.Key, id []byte) proto.Key {
-	return MakeRangeKey(key, KeyLocalTransactionSuffix, proto.Key(id))
+	return MakeRangeKey(key, LocalTransactionSuffix, proto.Key(id))
 }
 
 // KeyAddress returns the address for the key, used to lookup the
@@ -218,16 +214,16 @@ func KeyAddress(k proto.Key) proto.Key {
 		return nil
 	}
 
-	if !bytes.HasPrefix(k, KeyLocalPrefix) {
+	if !bytes.HasPrefix(k, LocalPrefix) {
 		return k
 	}
-	if bytes.HasPrefix(k, KeyLocalRangeKeyPrefix) {
-		k = k[len(KeyLocalRangeKeyPrefix):]
+	if bytes.HasPrefix(k, LocalRangePrefix) {
+		k = k[len(LocalRangePrefix):]
 		_, k = encoding.DecodeBytes(k, nil)
 		return k
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q",
-		k, KeyLocalRangeKeyPrefix)
+		k, LocalRangePrefix)
 	return nil
 }
 
@@ -240,11 +236,11 @@ func RangeMetaKey(key proto.Key) proto.Key {
 		return proto.KeyMin
 	}
 	addr := KeyAddress(key)
-	if !bytes.HasPrefix(addr, KeyMetaPrefix) {
-		return MakeKey(KeyMeta2Prefix, addr)
+	if !bytes.HasPrefix(addr, MetaPrefix) {
+		return MakeKey(Meta2Prefix, addr)
 	}
-	if bytes.HasPrefix(addr, KeyMeta2Prefix) {
-		return MakeKey(KeyMeta1Prefix, addr[len(KeyMeta2Prefix):])
+	if bytes.HasPrefix(addr, Meta2Prefix) {
+		return MakeKey(Meta1Prefix, addr[len(Meta2Prefix):])
 	}
 
 	return proto.KeyMin
@@ -259,19 +255,19 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	if len(key) == 0 {
 		return nil
 	}
-	// Key must be at least as long as KeyMeta1Prefix.
-	if len(key) < len(KeyMeta1Prefix) {
+	// Key must be at least as long as Meta1Prefix.
+	if len(key) < len(Meta1Prefix) {
 		return NewInvalidRangeMetaKeyError("too short", key)
 	}
 
-	prefix, body := key[:len(KeyMeta1Prefix)], key[len(KeyMeta1Prefix):]
+	prefix, body := key[:len(Meta1Prefix)], key[len(Meta1Prefix):]
 
-	// The prefix must be equal to KeyMeta1Prefix or KeyMeta2Prefix
-	if !bytes.HasPrefix(key, KeyMetaPrefix) {
+	// The prefix must be equal to Meta1Prefix or Meta2Prefix
+	if !bytes.HasPrefix(key, MetaPrefix) {
 		return NewInvalidRangeMetaKeyError(
-			fmt.Sprintf("does not have %q prefix", KeyMetaPrefix), key)
+			fmt.Sprintf("does not have %q prefix", MetaPrefix), key)
 	}
-	if lvl := string(prefix[len(KeyMetaPrefix)]); lvl != "1" && lvl != "2" {
+	if lvl := string(prefix[len(MetaPrefix)]); lvl != "1" && lvl != "2" {
 		return NewInvalidRangeMetaKeyError("meta level is not 1 or 2", key)
 	}
 	// Body of the key must sort <= KeyMax. KeyMax might be the body in
@@ -289,9 +285,9 @@ func ValidateRangeMetaKey(key proto.Key) error {
 func DecodeRangeMetaKey(key proto.Key) (proto.Key, proto.Key) {
 	if len(key) == 0 {
 		// Special case KeyMin: find the first entry in meta1.
-		return KeyMeta1Prefix, KeyMeta1Prefix.PrefixEnd()
+		return Meta1Prefix, Meta1Prefix.PrefixEnd()
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	metaPrefix := proto.Key(key[:len(KeyMeta1Prefix)])
+	metaPrefix := proto.Key(key[:len(Meta1Prefix)])
 	return key.Next(), metaPrefix.PrefixEnd()
 }
