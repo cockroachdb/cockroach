@@ -1,4 +1,4 @@
-// source: controllers/monitor.ts
+// source: models/timeseries.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
@@ -7,6 +7,8 @@
  */
 module Models {
     export module Metrics {
+        import promise = _mithril.MithrilPromise;
+
         /**
          * Datapoint is a single datapoint in a query response. This needs to be
          * kept in sync with the TimeSeriesDatapoint protobuffer message on the
@@ -37,37 +39,74 @@ module Models {
             results: QueryResult[];
         }
 
+        /**
+         * Query is a common interface implemented by the query types in * this module.
+         */
+        export interface Query {
+            query:()=>promise<QueryResultSet>;
+        }
 
         /**
-         * Query wraps the information needed to make a single time series query
-         * to the server.
+         * Query dispatches a single time series query to the server.
          */
-        export class Query {
-            private series:string[]
+        function query(start:Date, end:Date, series:string[]):promise<QueryResultSet> {
+            var url = "/ts/query";
+            var data = {
+                start_nanos: start.getTime() * 1.0e6,
+                end_nanos: end.getTime() * 1.0e6,
+                queries: series.map((r) => {return {name: r};}),
+            }
+        
+            return m.request({url:url, method:"POST", extract:nonJsonErrors, data:data})
+                .then((d:QueryResultSet) => {
+                    // Populate missing collection fields with empty arrays.
+                    if (!d.results) {
+                        d.results = [];
+                    }
+                    d.results.forEach((r) => {
+                        if (!r.datapoints) {
+                            r.datapoints = []
+                        }
+                    });
+                    return d;
+                });
+        }
+
+        /** 
+         * StaticQuery is a time series query with a constant start and end
+         * time.
+         */
+        export class StaticQuery {
+            private series:string[];
+            private data:promise<QueryResultSet>;
             constructor(public start:Date, public end:Date, ...series:string[]) {
-                this.series = series
+                this.series = series;
             }
 
-            query():_mithril.MithrilPromise<QueryResultSet> {
-                var url = "/ts/query";
-                var data = {
-                    start_nanos: this.start.getTime() * 1.0e6,
-                    end_nanos: this.end.getTime() * 1.0e6,
-                    queries: this.series.map((r) => {return {name: r};}),
+            query():promise<QueryResultSet> {
+                if (this.data != null) {
+                    return this.data;
                 }
-                return m.request({url:url, method:"POST", extract:nonJsonErrors, data:data})
-                    .then((d:QueryResultSet) => {
-                        // Populate missing collection fields with empty arrays.
-                        if (!d.results) {
-                            d.results = [];
-                        }
-                        d.results.forEach((r) => {
-                            if (!r.datapoints) {
-                                r.datapoints = []
-                            }
-                        });
-                        return d;
-                    });
+                this.data = query(this.start, this.end, this.series);
+                return this.data
+            }
+        }
+
+        /** 
+         * SlidingQuery is a query which monitors a duration of constant size
+         * extending backwards from the current time. The query can be updated,
+         * which will re-run the query starting from the current time.
+         */
+        export class SlidingQuery {
+            private series:string[];
+            constructor(public windowDuration:number, ...series:string[]) {
+                this.series = series;
+            }
+
+            query():promise<QueryResultSet> {
+                var endTime = new Date();
+                var startTime = new Date(endTime.getTime() - this.windowDuration);
+                return query(startTime, endTime, this.series)
             }
         }
 

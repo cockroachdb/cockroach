@@ -289,15 +289,35 @@ var AdminViews;
         })(Page = Monitor.Page || (Monitor.Page = {}));
     })(Monitor = AdminViews.Monitor || (AdminViews.Monitor = {}));
 })(AdminViews || (AdminViews = {}));
-// source: controllers/monitor.ts
+// source: models/timeseries.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Models;
 (function (Models) {
     var Metrics;
     (function (Metrics) {
-        var Query = (function () {
-            function Query(start, end) {
+        function query(start, end, series) {
+            var url = "/ts/query";
+            var data = {
+                start_nanos: start.getTime() * 1.0e6,
+                end_nanos: end.getTime() * 1.0e6,
+                queries: series.map(function (r) { return { name: r }; }),
+            };
+            return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
+                .then(function (d) {
+                if (!d.results) {
+                    d.results = [];
+                }
+                d.results.forEach(function (r) {
+                    if (!r.datapoints) {
+                        r.datapoints = [];
+                    }
+                });
+                return d;
+            });
+        }
+        var StaticQuery = (function () {
+            function StaticQuery(start, end) {
                 var series = [];
                 for (var _i = 2; _i < arguments.length; _i++) {
                     series[_i - 2] = arguments[_i];
@@ -306,29 +326,33 @@ var Models;
                 this.end = end;
                 this.series = series;
             }
-            Query.prototype.query = function () {
-                var url = "/ts/query";
-                var data = {
-                    start_nanos: this.start.getTime() * 1.0e6,
-                    end_nanos: this.end.getTime() * 1.0e6,
-                    queries: this.series.map(function (r) { return { name: r }; }),
-                };
-                return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
-                    .then(function (d) {
-                    if (!d.results) {
-                        d.results = [];
-                    }
-                    d.results.forEach(function (r) {
-                        if (!r.datapoints) {
-                            r.datapoints = [];
-                        }
-                    });
-                    return d;
-                });
+            StaticQuery.prototype.query = function () {
+                if (this.data != null) {
+                    return this.data;
+                }
+                this.data = query(this.start, this.end, this.series);
+                return this.data;
             };
-            return Query;
+            return StaticQuery;
         })();
-        Metrics.Query = Query;
+        Metrics.StaticQuery = StaticQuery;
+        var SlidingQuery = (function () {
+            function SlidingQuery(windowDuration) {
+                var series = [];
+                for (var _i = 1; _i < arguments.length; _i++) {
+                    series[_i - 1] = arguments[_i];
+                }
+                this.windowDuration = windowDuration;
+                this.series = series;
+            }
+            SlidingQuery.prototype.query = function () {
+                var endTime = new Date();
+                var startTime = new Date(endTime.getTime() - this.windowDuration);
+                return query(startTime, endTime, this.series);
+            };
+            return SlidingQuery;
+        })();
+        Metrics.SlidingQuery = SlidingQuery;
         function nonJsonErrors(xhr, opts) {
             return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
         }
@@ -348,51 +372,64 @@ var Components;
                 function Controller(vm) {
                     var _this = this;
                     this.vm = vm;
-                    this.margin = { top: 20, right: 20, bottom: 30, left: 60 };
-                    this.timeScale = d3.time.scale();
-                    this.valScale = d3.scale.linear();
-                    this.timeAxis = d3.svg.axis().scale(this.timeScale).orient("bottom");
-                    this.valAxis = d3.svg.axis().scale(this.valScale).orient("left");
-                    this.line = d3.svg.line()
-                        .x(function (d) { return _this.timeScale(d.timestamp_nanos / 1.0e6); })
-                        .y(function (d) { return _this.valScale(d.value); });
-                    this.color = d3.scale.category10();
-                    this.error = m.prop("");
+                    this.data = m.prop(null);
+                    this.error = m.prop(null);
+                    this.chart = nv.models.lineChart()
+                        .x(function (d) { return new Date(d.timestamp_nanos / 1.0e6); })
+                        .y(function (d) { return d.value; })
+                        .useInteractiveGuideline(true)
+                        .showLegend(true)
+                        .showYAxis(true)
+                        .showXAxis(true)
+                        .xScale(d3.time.scale());
                     this.drawGraph = function (element, isInitialized, context) {
                         if (!isInitialized) {
-                            var data = _this.results().results;
-                            _this.valScale.domain([
-                                d3.min(data, function (d) { return d3.min(d.datapoints, function (dp) { return dp.value; }); }),
-                                d3.max(data, function (d) { return d3.max(d.datapoints, function (dp) { return dp.value; }); })
-                            ]);
-                            _this.timeScale.domain([_this.vm.query.start, _this.vm.query.end]);
-                            var svg = d3.select(element)
-                                .attr("width", _this.vm.width)
-                                .attr("height", _this.vm.height)
-                                .append("g")
-                                .attr("transform", "translate(" + _this.margin.left + "," + _this.margin.top + ")");
-                            svg.append("g")
-                                .attr("class", "x axis")
-                                .attr("transform", "translate(0," + _this.chartHeight + ")")
-                                .call(_this.timeAxis);
-                            svg.append("g")
-                                .attr("class", "y axis")
-                                .call(_this.valAxis);
-                            svg.selectAll(".line")
-                                .data(data)
-                                .enter()
-                                .append("path")
-                                .attr("class", function (d, i) { return "line line" + i; })
-                                .attr("d", function (d) { return _this.line(d.datapoints); })
-                                .style("stroke", function (d) { return _this.color(d.name); });
+                            var interval = setInterval(function () { return _this.queryData(); }, 10000);
+                            context.onunload = function () {
+                                clearInterval(interval);
+                            };
+                            nv.addGraph(_this.chart);
+                        }
+                        if (_this.readData()) {
+                            var formattedData = _this.data().results.map(function (d) {
+                                return {
+                                    values: d.datapoints,
+                                    key: d.name,
+                                    color: Controller.colors(d.name),
+                                    area: true,
+                                    fillOpacity: .1,
+                                };
+                            });
+                            d3.select(element)
+                                .datum(formattedData)
+                                .transition().duration(500)
+                                .call(_this.chart);
                         }
                     };
-                    this.chartWidth = vm.width - this.margin.left - this.margin.right;
-                    this.chartHeight = vm.height - this.margin.top - this.margin.bottom;
-                    this.timeScale.range([0, this.chartWidth]);
-                    this.valScale.range([this.chartHeight, 0]);
-                    this.results = vm.query.query().then(null, this.error);
+                    this.queryData();
+                    this.chart.xAxis
+                        .tickFormat(d3.time.format('%I:%M:%S'))
+                        .showMaxMin(false);
                 }
+                Controller.prototype.queryData = function () {
+                    if (this.activeQuery) {
+                        return;
+                    }
+                    this.error(null);
+                    this.activeQuery = this.vm.query.query().then(null, this.error);
+                };
+                Controller.prototype.readData = function () {
+                    if (this.activeQuery && this.activeQuery()) {
+                        this.data(this.activeQuery());
+                        this.activeQuery = null;
+                        return true;
+                    }
+                    return false;
+                };
+                Controller.prototype.hasData = function () {
+                    return !!this.data() || (this.activeQuery && !!this.activeQuery());
+                };
+                Controller.colors = d3.scale.category10();
                 return Controller;
             })();
             function controller(model) {
@@ -403,8 +440,8 @@ var Components;
                 if (ctrl.error()) {
                     return m("", "error loading graph:" + ctrl.error());
                 }
-                else if (ctrl.results()) {
-                    return m("svg.graph", { config: ctrl.drawGraph });
+                else if (ctrl.hasData()) {
+                    return m(".linegraph", { style: "width:500px;height:300px;" }, m("svg.graph", { config: ctrl.drawGraph }));
                 }
                 else {
                     return m("", "loading...");
@@ -412,8 +449,8 @@ var Components;
             }
             LineGraph.view = view;
             function create(width, height, query, key) {
-                var vm = { width: width, height: height, query: query };
-                if (!!key) {
+                var vm = { width: width, height: height, lastVersion: 0, query: query };
+                if (key) {
                     vm.key = key;
                 }
                 return m.component(LineGraph, vm);
@@ -436,13 +473,12 @@ var AdminViews;
             function controller() { }
             Page.controller = controller;
             function view() {
-                var end = new Date();
-                var start = new Date(end.getTime() - (10 * 60 * 1000));
+                var windowSize = 10 * 60 * 1000;
                 return m(".graphPage", [
                     m("H3", "Graph Demo"),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.Query(start, end, "cr.store.livebytes.1")),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.Query(start, end, "cr.store.keybytes.1")),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.Query(start, end, "cr.store.livebytes.1", "cr.store.valbytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
                 ]);
             }
             Page.view = view;
