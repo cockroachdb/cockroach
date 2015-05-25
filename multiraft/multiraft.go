@@ -232,6 +232,14 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 		}
 		cnt++
 	}
+	if cnt != 0 {
+		s.sendMessage(noGroup,
+			raftpb.Message{
+				From: uint64(s.nodeID),
+				To:   req.Message.From,
+				Type: raftpb.MsgHeartbeatResp,
+			})
+	}
 	if log.V(7) {
 		log.Infof("node %v: received coalesced heartbeat from node %v; "+
 			"fanned out to %d followers in %d overlapping groups",
@@ -1036,7 +1044,6 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		s.maybeSendLeaderEvent(groupID, g, &ready)
 
 		// Send all messages.
-		noMoreHeartbeats := make(map[uint64]struct{})
 		for _, msg := range ready.Messages {
 			switch msg.Type {
 			case raftpb.MsgHeartbeat:
@@ -1046,14 +1053,11 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				}
 				continue
 			case raftpb.MsgHeartbeatResp:
-				if _, ok := noMoreHeartbeats[msg.To]; ok {
-					if log.V(7) {
-						log.Infof("node %v dropped redundant heartbeat response to node %v",
-							s.nodeID, msg.To)
-					}
-					continue
+				if log.V(7) {
+					log.Infof("node %v dropped individual heartbeat response to node %v",
+						s.nodeID, msg.To)
 				}
-				noMoreHeartbeats[msg.To] = struct{}{}
+				continue
 			}
 
 			s.sendMessage(groupID, msg)
