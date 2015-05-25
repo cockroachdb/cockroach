@@ -187,16 +187,13 @@ timestamps to diverge from wall clock time, following closely the
 [*Hybrid Logical Clock
 paper.*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)
 
-Transactions are executed in discrete phases:
+Transactions are executed in two phases:
 
 1. Start the transaction by writing a new entry to the system
-   transaction table (keys prefixed by *\0tx*) with state “PENDING”.
-   In practice, this is done along with the next phase of the
-   transaction.
-
-2. Write an "intent" value for each datum being written as part of the
-   transaction. These are normal MVCC values, with the addition of a
-   special flag (i.e. “intent”) indicating that the value may be
+   transaction table (keys prefixed by *\0tx*) with state “PENDING”. In
+   parallel write an "intent" value for each datum being written as part
+   of the transaction. These are normal MVCC values, with the addition of
+   a special flag (i.e. “intent”) indicating that the value may be
    committed after the transaction itself commits. In addition,
    the transaction id (unique and chosen at tx start time by client)
    is stored with intent values. The tx id is used to refer to the
@@ -220,7 +217,7 @@ Transactions are executed in discrete phases:
    the cache to the current wall time + ε (ε = 99^th^ percentile
    clock skew).
 
-3. Commit the transaction by updating its entry in the system
+2. Commit the transaction by updating its entry in the system
    transaction table (keys prefixed by *\0tx*). The value of the
    commit entry contains the candidate timestamp (increased as
    necessary to accommodate any latest read timestamps). Note that
@@ -324,7 +321,7 @@ There are several scenarios in which transactions interact:
   transaction will then notice its timestamp has been pushed, and
   restart). If it has the lower or same priority, it retries itself using as
   a new priority `max(new random priority, conflicting txn’s
-  priority - 1)`. why max and not min?
+  priority - 1)`.
 
 - **Writer encounters uncommitted write intent**:
   If the other write intent has been written by a transaction with a lower
@@ -333,10 +330,11 @@ There are several scenarios in which transactions interact:
   priority *max(new random priority, conflicting txn’s priority - 1)*;
   the retry occurs after a short, randomized backoff interval.
 
-- **Writer encounters newer committed write intent or committed value**:
-  The transaction restarts. On restart, the same priority is reused,
-  but the candidate timestamp is moved forward to the encountered
-  value's timestamp.
+- **Writer encounters newer committed value**:
+  The committed value could also be an unresolved write intent made by a
+  transaction that has already committed. The transaction restarts. On restart,
+  the same priority is reused, but the candidate timestamp is moved forward
+  to the encountered value's timestamp.
 
 **Transaction management**
 
