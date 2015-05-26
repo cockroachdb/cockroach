@@ -16,10 +16,12 @@
         "./app.ts",
         "./models/node_status.ts",
         "./models/stats.ts",
+        "./models/store_status.ts",
         "./models/timeseries.ts",
         "./components/metrics.ts",
         "./pages/graph.ts",
         "./pages/nodes.ts",
+        "./pages/stores.ts",
         "./pages/monitor.ts",
         "./pages/rest_explorer.ts"
     ]

@@ -14,7 +14,7 @@ module AdminViews {
    */
   export module Nodes {
     export var nodeStatuses: Models.NodeStatus.Nodes = new Models.NodeStatus.Nodes();
-    export class Controller {
+    export class Controller implements _mithril.MithrilController {
       private static _queryEveryMS = 10000;
       private _interval: number;
 
@@ -35,21 +35,20 @@ module AdminViews {
       export function controller() {
         return new Controller();
       }
-      export function view(ctrl: Controller) {
+      export function view() {
         return m("div", [
-          m("h2", "Nodes Status"),
-          m("div", [
-            m("h3", "Nodes"),
-            m("ul", [
-              Object.keys(nodeStatuses.desc()).sort().map(function(nodeId) {
-                var desc = nodeStatuses.desc()[nodeId];
-                return m("li", { key: desc.node_id },
-                  m("a[href=/nodes/" + nodeId + "]",
-                    { config: m.route },
-                    "ID:" + nodeId + " Address:" + desc.address.network + "-" + desc.address.address));
-              }),
-            ]),
-          ])
+          m("h2", "Nodes List"),
+          m("ul", [
+            Object.keys(nodeStatuses.desc()).sort().map(function(nodeId) {
+              var desc = nodeStatuses.desc()[nodeId];
+              return m("li", { key: desc.node_id },
+                m("div", [
+                  m.trust("&nbsp;&bull;&nbsp;"),
+                  m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
+                  " with Address:" + desc.address.network + "-" + desc.address.address
+                ]));
+            }),
+          ]),
         ]);
       }
     }
@@ -61,7 +60,7 @@ module AdminViews {
       export function controller() {
         return new Controller();
       }
-      export function view(ctrl:Controller) {
+      export function view() {
         var nodeId = m.route.param("node_id");
         return m("div", [
           m("h2", "Node Status"),
