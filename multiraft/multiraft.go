@@ -32,11 +32,6 @@ import (
 
 const (
 	noGroup = uint64(0)
-	// TODO(bdarnell): this is currently set high to avoid crashes when
-	// recovering a node. Since we don't send snapshots or chunk Append messages
-	// in such situations yet, the recovering node will receive a large amount of
-	// messages at the same time which can fill up this channel quickly.
-	eventBacklogLimit = 100000
 )
 
 // An ErrGroupDeleted is returned for commands which are pending while their
@@ -66,6 +61,14 @@ type Config struct {
 	ElectionTimeoutTicks   int
 	HeartbeatIntervalTicks int
 	TickInterval           time.Duration
+
+	// EventBufferSize is the capacity (in number of events) of the
+	// MultiRaft.Events channel. In tests, we use 0 to ensure that there
+	// are no deadlocks when the limit is reached; real deployments may
+	// want to set a buffer so that applying a command committed on one
+	// group does not interfere with other groups or cause heartbeats to
+	// be missed.
+	EventBufferSize int
 
 	// If Strict is true, some warnings become fatal panics and additional (possibly expensive)
 	// sanity checks will be done.
@@ -146,7 +149,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper
 		nodeID:    nodeID,
 
 		// Output channel.
-		Events: make(chan interface{}, eventBacklogLimit),
+		Events: make(chan interface{}, config.EventBufferSize),
 
 		// Input channels.
 		reqChan:         make(chan *RaftMessageRequest),
@@ -196,11 +199,7 @@ func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 func (m *MultiRaft) sendEvent(event interface{}) {
 	select {
 	case m.Events <- event:
-		return
-	default:
-		// TODO(bdarnell): how should we handle filling up the Event queue?
-		// Is there any place to apply backpressure?
-		panic("MultiRaft.Events backlog reached limit")
+	case <-m.stopper.ShouldStop():
 	}
 }
 
