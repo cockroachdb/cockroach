@@ -22,6 +22,342 @@
 //		    Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
+// source: models/timeseries.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Models;
+(function (Models) {
+    var Metrics;
+    (function (Metrics) {
+        function query(start, end, series) {
+            var url = "/ts/query";
+            var data = {
+                start_nanos: start.getTime() * 1.0e6,
+                end_nanos: end.getTime() * 1.0e6,
+                queries: series.map(function (r) { return { name: r }; }),
+            };
+            return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
+                .then(function (d) {
+                if (!d.results) {
+                    d.results = [];
+                }
+                d.results.forEach(function (r) {
+                    if (!r.datapoints) {
+                        r.datapoints = [];
+                    }
+                });
+                return d;
+            });
+        }
+        var StaticQuery = (function () {
+            function StaticQuery(start, end) {
+                var series = [];
+                for (var _i = 2; _i < arguments.length; _i++) {
+                    series[_i - 2] = arguments[_i];
+                }
+                this.start = start;
+                this.end = end;
+                this.series = series;
+            }
+            StaticQuery.prototype.query = function () {
+                if (this.data != null) {
+                    return this.data;
+                }
+                this.data = query(this.start, this.end, this.series);
+                return this.data;
+            };
+            return StaticQuery;
+        })();
+        Metrics.StaticQuery = StaticQuery;
+        var SlidingQuery = (function () {
+            function SlidingQuery(windowDuration) {
+                var series = [];
+                for (var _i = 1; _i < arguments.length; _i++) {
+                    series[_i - 1] = arguments[_i];
+                }
+                this.windowDuration = windowDuration;
+                this.series = series;
+            }
+            SlidingQuery.prototype.query = function () {
+                var endTime = new Date();
+                var startTime = new Date(endTime.getTime() - this.windowDuration);
+                return query(startTime, endTime, this.series);
+            };
+            return SlidingQuery;
+        })();
+        Metrics.SlidingQuery = SlidingQuery;
+        function nonJsonErrors(xhr, opts) {
+            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
+        }
+    })(Metrics = Models.Metrics || (Models.Metrics = {}));
+})(Models || (Models = {}));
+// source: components/metrics.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../models/timeseries.ts" />
+var Components;
+(function (Components) {
+    var Metrics;
+    (function (Metrics) {
+        var LineGraph;
+        (function (LineGraph) {
+            var Controller = (function () {
+                function Controller(vm) {
+                    var _this = this;
+                    this.vm = vm;
+                    this.data = m.prop(null);
+                    this.error = m.prop(null);
+                    this.chart = nv.models.lineChart()
+                        .x(function (d) { return new Date(d.timestamp_nanos / 1.0e6); })
+                        .y(function (d) { return d.value; })
+                        .useInteractiveGuideline(true)
+                        .showLegend(true)
+                        .showYAxis(true)
+                        .showXAxis(true)
+                        .xScale(d3.time.scale());
+                    this.drawGraph = function (element, isInitialized, context) {
+                        if (!isInitialized) {
+                            var interval = setInterval(function () { return _this.queryData(); }, 10000);
+                            context.onunload = function () {
+                                clearInterval(interval);
+                            };
+                            nv.addGraph(_this.chart);
+                        }
+                        if (_this.readData()) {
+                            var formattedData = _this.data().results.map(function (d) {
+                                return {
+                                    values: d.datapoints,
+                                    key: d.name,
+                                    color: Controller.colors(d.name),
+                                    area: true,
+                                    fillOpacity: .1,
+                                };
+                            });
+                            d3.select(element)
+                                .datum(formattedData)
+                                .transition().duration(500)
+                                .call(_this.chart);
+                        }
+                    };
+                    this.queryData();
+                    this.chart.xAxis
+                        .tickFormat(d3.time.format('%I:%M:%S'))
+                        .showMaxMin(false);
+                }
+                Controller.prototype.queryData = function () {
+                    if (this.activeQuery) {
+                        return;
+                    }
+                    this.error(null);
+                    this.activeQuery = this.vm.query.query().then(null, this.error);
+                };
+                Controller.prototype.readData = function () {
+                    if (this.activeQuery && this.activeQuery()) {
+                        this.data(this.activeQuery());
+                        this.activeQuery = null;
+                        return true;
+                    }
+                    return false;
+                };
+                Controller.prototype.hasData = function () {
+                    return !!this.data() || (this.activeQuery && !!this.activeQuery());
+                };
+                Controller.colors = d3.scale.category10();
+                return Controller;
+            })();
+            function controller(model) {
+                return new Controller(model);
+            }
+            LineGraph.controller = controller;
+            function view(ctrl) {
+                if (ctrl.error()) {
+                    return m("", "error loading graph:" + ctrl.error());
+                }
+                else if (ctrl.hasData()) {
+                    return m(".linegraph", { style: "width:500px;height:300px;" }, m("svg.graph", { config: ctrl.drawGraph }));
+                }
+                else {
+                    return m("", "loading...");
+                }
+            }
+            LineGraph.view = view;
+            function create(width, height, query, key) {
+                var vm = { width: width, height: height, lastVersion: 0, query: query };
+                if (key) {
+                    vm.key = key;
+                }
+                return m.component(LineGraph, vm);
+            }
+            LineGraph.create = create;
+        })(LineGraph = Metrics.LineGraph || (Metrics.LineGraph = {}));
+    })(Metrics = Components.Metrics || (Components.Metrics = {}));
+})(Components || (Components = {}));
+// source: pages/graph.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../models/timeseries.ts" />
+/// <reference path="../components/metrics.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var Graph;
+    (function (Graph) {
+        var Page;
+        (function (Page) {
+            function controller() { }
+            Page.controller = controller;
+            function view() {
+                var windowSize = 10 * 60 * 1000;
+                return m(".graphPage", [
+                    m("H3", "Graph Demo"),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
+                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
+                ]);
+            }
+            Page.view = view;
+        })(Page = Graph.Page || (Graph.Page = {}));
+    })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
+})(AdminViews || (AdminViews = {}));
+// source: pages/monitor.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var Monitor;
+    (function (Monitor) {
+        var Page;
+        (function (Page) {
+            function controller() { }
+            Page.controller = controller;
+            function view() {
+                return m("h3", "Monitor Placeholder");
+            }
+            Page.view = view;
+        })(Page = Monitor.Page || (Monitor.Page = {}));
+    })(Monitor = AdminViews.Monitor || (AdminViews.Monitor = {}));
+})(AdminViews || (AdminViews = {}));
+// source: models/stats.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// source: models/node_status.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="stats.ts" />
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
+var Models;
+(function (Models) {
+    var NodeStatus;
+    (function (NodeStatus) {
+        var Nodes = (function () {
+            function Nodes() {
+                this._data = m.prop({});
+                this.desc = m.prop({});
+                this.statuses = m.prop({});
+            }
+            Nodes.prototype.Query = function () {
+                var _this = this;
+                var url = "/_status/nodes/";
+                return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                    .then(function (results) {
+                    results.d.forEach(function (status) {
+                        if (_this._data()[status.desc.node_id] == null) {
+                            _this._data()[status.desc.node_id] = [];
+                        }
+                        _this._data()[status.desc.node_id].push(status);
+                        _this.statuses()[status.desc.node_id] = status;
+                    });
+                    _this._pruneOldEntries();
+                    _this._updateDescriptions();
+                    return results;
+                });
+            };
+            Nodes.prototype._updateDescriptions = function () {
+                this.desc({});
+                var nodeId;
+                for (nodeId in this._data()) {
+                    this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
+                }
+            };
+            Nodes.prototype._pruneOldEntries = function () {
+                var nodeId;
+                for (nodeId in this._data()) {
+                    var status = this._data()[nodeId];
+                    if (status.length > Nodes._dataLimit) {
+                        status = status.sclice(status.length - Nodes._dataPrunedSize, status.length - 1);
+                    }
+                }
+            };
+            Nodes._dataLimit = 100000;
+            Nodes._dataPrunedSize = 90000;
+            return Nodes;
+        })();
+        NodeStatus.Nodes = Nodes;
+        function nonJsonErrors(xhr, opts) {
+            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
+        }
+    })(NodeStatus = Models.NodeStatus || (Models.NodeStatus = {}));
+})(Models || (Models = {}));
+// source: pages/nodes.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../models/node_status.ts" />
+var AdminViews;
+(function (AdminViews) {
+    var Nodes;
+    (function (Nodes) {
+        Nodes.nodeStatuses = new Models.NodeStatus.Nodes();
+        var Controller = (function () {
+            function Controller() {
+                Nodes.nodeStatuses.Query();
+                this._interval = setInterval(function () { return Nodes.nodeStatuses.Query(); }, Controller._queryEveryMS);
+            }
+            Controller.prototype.onunload = function () {
+                clearInterval(this._interval);
+            };
+            Controller._queryEveryMS = 10000;
+            return Controller;
+        })();
+        Nodes.Controller = Controller;
+        var NodesPage;
+        (function (NodesPage) {
+            function controller() {
+                return new Controller();
+            }
+            NodesPage.controller = controller;
+            function view() {
+                return m("div", [
+                    m("h2", "Nodes List"),
+                    m("ul", [
+                        Object.keys(Nodes.nodeStatuses.desc()).sort().map(function (nodeId) {
+                            var desc = Nodes.nodeStatuses.desc()[nodeId];
+                            return m("li", { key: desc.node_id }, m("div", [
+                                m.trust("&nbsp;&bull;&nbsp;"),
+                                m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
+                                " with Address:" + desc.address.network + "-" + desc.address.address
+                            ]));
+                        }),
+                    ]),
+                ]);
+            }
+            NodesPage.view = view;
+        })(NodesPage = Nodes.NodesPage || (Nodes.NodesPage = {}));
+        var NodePage;
+        (function (NodePage) {
+            function controller() {
+                return new Controller();
+            }
+            NodePage.controller = controller;
+            function view() {
+                var nodeId = m.route.param("node_id");
+                return m("div", [
+                    m("h2", "Node Status"),
+                    m("div", [
+                        m("h3", "Node: " + nodeId),
+                        m("p", JSON.stringify(Nodes.nodeStatuses.statuses()[nodeId]))
+                    ])
+                ]);
+            }
+            NodePage.view = view;
+        })(NodePage = Nodes.NodePage || (Nodes.NodePage = {}));
+    })(Nodes = AdminViews.Nodes || (AdminViews.Nodes = {}));
+})(AdminViews || (AdminViews = {}));
 // source: pages/rest_explorer.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 var AdminViews;
@@ -272,291 +608,76 @@ var AdminViews;
         })(Page = RestExplorer.Page || (RestExplorer.Page = {}));
     })(RestExplorer = AdminViews.RestExplorer || (AdminViews.RestExplorer = {}));
 })(AdminViews || (AdminViews = {}));
-// source: pages/monitor.ts
+// source: models/store_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-var AdminViews;
-(function (AdminViews) {
-    var Monitor;
-    (function (Monitor) {
-        var Page;
-        (function (Page) {
-            function controller() { }
-            Page.controller = controller;
-            function view() {
-                return m("h3", "Monitor Placeholder");
-            }
-            Page.view = view;
-        })(Page = Monitor.Page || (Monitor.Page = {}));
-    })(Monitor = AdminViews.Monitor || (AdminViews.Monitor = {}));
-})(AdminViews || (AdminViews = {}));
-// source: models/timeseries.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-// Author: Matt Tracy (matt@cockroachlabs.com)
-var Models;
-(function (Models) {
-    var Metrics;
-    (function (Metrics) {
-        function query(start, end, series) {
-            var url = "/ts/query";
-            var data = {
-                start_nanos: start.getTime() * 1.0e6,
-                end_nanos: end.getTime() * 1.0e6,
-                queries: series.map(function (r) { return { name: r }; }),
-            };
-            return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
-                .then(function (d) {
-                if (!d.results) {
-                    d.results = [];
-                }
-                d.results.forEach(function (r) {
-                    if (!r.datapoints) {
-                        r.datapoints = [];
-                    }
-                });
-                return d;
-            });
-        }
-        var StaticQuery = (function () {
-            function StaticQuery(start, end) {
-                var series = [];
-                for (var _i = 2; _i < arguments.length; _i++) {
-                    series[_i - 2] = arguments[_i];
-                }
-                this.start = start;
-                this.end = end;
-                this.series = series;
-            }
-            StaticQuery.prototype.query = function () {
-                if (this.data != null) {
-                    return this.data;
-                }
-                this.data = query(this.start, this.end, this.series);
-                return this.data;
-            };
-            return StaticQuery;
-        })();
-        Metrics.StaticQuery = StaticQuery;
-        var SlidingQuery = (function () {
-            function SlidingQuery(windowDuration) {
-                var series = [];
-                for (var _i = 1; _i < arguments.length; _i++) {
-                    series[_i - 1] = arguments[_i];
-                }
-                this.windowDuration = windowDuration;
-                this.series = series;
-            }
-            SlidingQuery.prototype.query = function () {
-                var endTime = new Date();
-                var startTime = new Date(endTime.getTime() - this.windowDuration);
-                return query(startTime, endTime, this.series);
-            };
-            return SlidingQuery;
-        })();
-        Metrics.SlidingQuery = SlidingQuery;
-        function nonJsonErrors(xhr, opts) {
-            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
-        }
-    })(Metrics = Models.Metrics || (Models.Metrics = {}));
-})(Models || (Models = {}));
-// source: components/metrics.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
-/// <reference path="../models/timeseries.ts" />
-var Components;
-(function (Components) {
-    var Metrics;
-    (function (Metrics) {
-        var LineGraph;
-        (function (LineGraph) {
-            var Controller = (function () {
-                function Controller(vm) {
-                    var _this = this;
-                    this.vm = vm;
-                    this.data = m.prop(null);
-                    this.error = m.prop(null);
-                    this.chart = nv.models.lineChart()
-                        .x(function (d) { return new Date(d.timestamp_nanos / 1.0e6); })
-                        .y(function (d) { return d.value; })
-                        .useInteractiveGuideline(true)
-                        .showLegend(true)
-                        .showYAxis(true)
-                        .showXAxis(true)
-                        .xScale(d3.time.scale());
-                    this.drawGraph = function (element, isInitialized, context) {
-                        if (!isInitialized) {
-                            var interval = setInterval(function () { return _this.queryData(); }, 10000);
-                            context.onunload = function () {
-                                clearInterval(interval);
-                            };
-                            nv.addGraph(_this.chart);
-                        }
-                        if (_this.readData()) {
-                            var formattedData = _this.data().results.map(function (d) {
-                                return {
-                                    values: d.datapoints,
-                                    key: d.name,
-                                    color: Controller.colors(d.name),
-                                    area: true,
-                                    fillOpacity: .1,
-                                };
-                            });
-                            d3.select(element)
-                                .datum(formattedData)
-                                .transition().duration(500)
-                                .call(_this.chart);
-                        }
-                    };
-                    this.queryData();
-                    this.chart.xAxis
-                        .tickFormat(d3.time.format('%I:%M:%S'))
-                        .showMaxMin(false);
-                }
-                Controller.prototype.queryData = function () {
-                    if (this.activeQuery) {
-                        return;
-                    }
-                    this.error(null);
-                    this.activeQuery = this.vm.query.query().then(null, this.error);
-                };
-                Controller.prototype.readData = function () {
-                    if (this.activeQuery && this.activeQuery()) {
-                        this.data(this.activeQuery());
-                        this.activeQuery = null;
-                        return true;
-                    }
-                    return false;
-                };
-                Controller.prototype.hasData = function () {
-                    return !!this.data() || (this.activeQuery && !!this.activeQuery());
-                };
-                Controller.colors = d3.scale.category10();
-                return Controller;
-            })();
-            function controller(model) {
-                return new Controller(model);
-            }
-            LineGraph.controller = controller;
-            function view(ctrl) {
-                if (ctrl.error()) {
-                    return m("", "error loading graph:" + ctrl.error());
-                }
-                else if (ctrl.hasData()) {
-                    return m(".linegraph", { style: "width:500px;height:300px;" }, m("svg.graph", { config: ctrl.drawGraph }));
-                }
-                else {
-                    return m("", "loading...");
-                }
-            }
-            LineGraph.view = view;
-            function create(width, height, query, key) {
-                var vm = { width: width, height: height, lastVersion: 0, query: query };
-                if (key) {
-                    vm.key = key;
-                }
-                return m.component(LineGraph, vm);
-            }
-            LineGraph.create = create;
-        })(LineGraph = Metrics.LineGraph || (Metrics.LineGraph = {}));
-    })(Metrics = Components.Metrics || (Components.Metrics = {}));
-})(Components || (Components = {}));
-// source: pages/graph.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
-/// <reference path="../models/timeseries.ts" />
-/// <reference path="../components/metrics.ts" />
-var AdminViews;
-(function (AdminViews) {
-    var Graph;
-    (function (Graph) {
-        var Page;
-        (function (Page) {
-            function controller() { }
-            Page.controller = controller;
-            function view() {
-                var windowSize = 10 * 60 * 1000;
-                return m(".graphPage", [
-                    m("H3", "Graph Demo"),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
-                ]);
-            }
-            Page.view = view;
-        })(Page = Graph.Page || (Graph.Page = {}));
-    })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
-})(AdminViews || (AdminViews = {}));
-// source: models/stats.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
-// source: models/node_status.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="node_status.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
 var Models;
 (function (Models) {
-    var NodeStatus;
-    (function (NodeStatus) {
-        var Nodes = (function () {
-            function Nodes() {
+    var StoreStatus;
+    (function (StoreStatus) {
+        var Stores = (function () {
+            function Stores() {
                 this._data = m.prop({});
                 this.desc = m.prop({});
                 this.statuses = m.prop({});
             }
-            Nodes.prototype.Query = function () {
+            Stores.prototype.Query = function () {
                 var _this = this;
-                var url = "/_status/nodes/";
+                var url = "/_status/stores/";
                 return m.request({ url: url, method: "GET", extract: nonJsonErrors })
                     .then(function (results) {
                     results.d.forEach(function (status) {
-                        if (_this._data()[status.desc.node_id] == null) {
-                            _this._data()[status.desc.node_id] = [];
+                        if (_this._data()[status.desc.store_id] == null) {
+                            _this._data()[status.desc.store_id] = [];
                         }
-                        _this._data()[status.desc.node_id].push(status);
-                        _this.statuses()[status.desc.node_id] = status;
+                        _this._data()[status.desc.store_id].push(status);
+                        _this.statuses()[status.desc.store_id] = status;
                     });
                     _this._pruneOldEntries();
                     _this._updateDescriptions();
                     return results;
                 });
             };
-            Nodes.prototype._updateDescriptions = function () {
+            Stores.prototype._updateDescriptions = function () {
                 this.desc({});
                 var nodeId;
                 for (nodeId in this._data()) {
                     this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
                 }
             };
-            Nodes.prototype._pruneOldEntries = function () {
+            Stores.prototype._pruneOldEntries = function () {
                 var nodeId;
                 for (nodeId in this._data()) {
                     var status = this._data()[nodeId];
-                    if (status.length > Nodes._dataLimit) {
-                        status = status.sclice(status.length - Nodes._dataPrunedSize, status.length - 1);
+                    if (status.length > Stores._dataLimit) {
+                        status = status.sclice(status.length - Stores._dataPrunedSize, status.length - 1);
                     }
                 }
             };
-            Nodes._dataLimit = 100000;
-            Nodes._dataPrunedSize = 90000;
-            return Nodes;
+            Stores._dataLimit = 100000;
+            Stores._dataPrunedSize = 90000;
+            return Stores;
         })();
-        NodeStatus.Nodes = Nodes;
+        StoreStatus.Stores = Stores;
         function nonJsonErrors(xhr, opts) {
             return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
         }
-    })(NodeStatus = Models.NodeStatus || (Models.NodeStatus = {}));
+    })(StoreStatus = Models.StoreStatus || (Models.StoreStatus = {}));
 })(Models || (Models = {}));
-// source: pages/nodes.ts
+// source: pages/stores.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../models/node_status.ts" />
+/// <reference path="../models/store_status.ts" />
 var AdminViews;
 (function (AdminViews) {
-    var Nodes;
-    (function (Nodes) {
-        Nodes.nodeStatuses = new Models.NodeStatus.Nodes();
+    var Stores;
+    (function (Stores) {
+        Stores.storeStatuses = new Models.StoreStatus.Stores();
         var Controller = (function () {
             function Controller() {
-                Nodes.nodeStatuses.Query();
-                this._interval = setInterval(function () { return Nodes.nodeStatuses.Query(); }, Controller._queryEveryMS);
+                Stores.storeStatuses.Query();
+                this._interval = setInterval(function () { return Stores.storeStatuses.Query(); }, Controller._queryEveryMS);
             }
             Controller.prototype.onunload = function () {
                 clearInterval(this._interval);
@@ -564,62 +685,70 @@ var AdminViews;
             Controller._queryEveryMS = 10000;
             return Controller;
         })();
-        Nodes.Controller = Controller;
-        var NodesPage;
-        (function (NodesPage) {
+        Stores.Controller = Controller;
+        var StoresPage;
+        (function (StoresPage) {
             function controller() {
                 return new Controller();
             }
-            NodesPage.controller = controller;
-            function view(ctrl) {
+            StoresPage.controller = controller;
+            function view() {
                 return m("div", [
-                    m("h2", "Nodes Status"),
-                    m("div", [
-                        m("h3", "Nodes"),
-                        m("ul", [
-                            Object.keys(Nodes.nodeStatuses.desc()).sort().map(function (nodeId) {
-                                var desc = Nodes.nodeStatuses.desc()[nodeId];
-                                return m("li", { key: desc.node_id }, m("a[href=/nodes/" + nodeId + "]", { config: m.route }, "ID:" + nodeId + " Address:" + desc.address.network + "-" + desc.address.address));
-                            }),
-                        ]),
-                    ])
+                    m("h2", "Stores List"),
+                    m("ul", [
+                        Object.keys(Stores.storeStatuses.desc()).sort().map(function (storeId) {
+                            var desc = Stores.storeStatuses.desc()[storeId];
+                            return m("li", { key: desc.store_id }, m("div", [
+                                m.trust("&nbsp;&bull;&nbsp;"),
+                                m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
+                                " on ",
+                                m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
+                                " with Address:" + desc.node.address.network + "-" + desc.node.address.address
+                            ]));
+                        }),
+                    ]),
                 ]);
             }
-            NodesPage.view = view;
-        })(NodesPage = Nodes.NodesPage || (Nodes.NodesPage = {}));
-        var NodePage;
-        (function (NodePage) {
+            StoresPage.view = view;
+        })(StoresPage = Stores.StoresPage || (Stores.StoresPage = {}));
+        var StorePage;
+        (function (StorePage) {
             function controller() {
                 return new Controller();
             }
-            NodePage.controller = controller;
-            function view(ctrl) {
-                var nodeId = m.route.param("node_id");
+            StorePage.controller = controller;
+            function view() {
+                var storeId = m.route.param("store_id");
                 return m("div", [
-                    m("h2", "Node Status"),
+                    m("h2", "Store Status"),
                     m("div", [
-                        m("h3", "Node: " + nodeId),
-                        m("p", JSON.stringify(Nodes.nodeStatuses.statuses()[nodeId]))
+                        m("h3", "Store: " + storeId),
+                        m("p", JSON.stringify(Stores.storeStatuses.statuses()[storeId]))
                     ])
                 ]);
             }
-            NodePage.view = view;
-        })(NodePage = Nodes.NodePage || (Nodes.NodePage = {}));
-    })(Nodes = AdminViews.Nodes || (AdminViews.Nodes = {}));
+            StorePage.view = view;
+        })(StorePage = Stores.StorePage || (Stores.StorePage = {}));
+    })(Stores = AdminViews.Stores || (AdminViews.Stores = {}));
 })(AdminViews || (AdminViews = {}));
 // source: app.ts
 /// <reference path="typings/mithriljs/mithril.d.ts" />
-/// <reference path="pages/rest_explorer.ts" />
-/// <reference path="pages/monitor.ts" />
 /// <reference path="pages/graph.ts" />
+/// <reference path="pages/monitor.ts" />
 /// <reference path="pages/nodes.ts" />
+/// <reference path="pages/rest_explorer.ts" />
+/// <reference path="pages/stores.ts" />
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/rest-explorer", {
-    "/rest-explorer": AdminViews.RestExplorer.Page,
-    "/monitor": AdminViews.Monitor.Page,
     "/graph": AdminViews.Graph.Page,
+    "/monitor": AdminViews.Monitor.Page,
     "/node": AdminViews.Nodes.NodesPage,
     "/nodes": AdminViews.Nodes.NodesPage,
     "/node/:node_id": AdminViews.Nodes.NodePage,
-    "/nodes/:node_id": AdminViews.Nodes.NodePage
+    "/nodes/:node_id": AdminViews.Nodes.NodePage,
+    "/rest-explorer": AdminViews.RestExplorer.Page,
+    "/store": AdminViews.Stores.StorePage,
+    "/stores": AdminViews.Stores.StoresPage,
+    "/store/:store_id": AdminViews.Stores.StorePage,
+    "/stores/:store_id": AdminViews.Stores.StorePage
 });
