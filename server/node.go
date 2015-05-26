@@ -62,6 +62,7 @@ type Node struct {
 	Descriptor proto.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext // Context to use and pass to stores
 	lSender    *kv.LocalSender      // Local KV sender for access to node-local stores
+	feed       NodeEventFeed        // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
 	// ScanCount is the number of times through the store scanning loop locked
@@ -241,6 +242,9 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	if err := n.initStores(engines, stopper); err != nil {
 		return err
 	}
+
+	// Initialize publisher for Node Events.
+	n.feed = NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
 	n.startStoresScanner(stopper)
@@ -504,6 +508,7 @@ func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error 
 	// TODO(tschottdorf) get a hold on the client's ip and add it to the
 	// context before dispatching.
 	n.lSender.Send((*Node)(n).context(), client.Call{Args: args, Reply: reply})
+	n.feed.callComplete(args, reply)
 	return nil
 }
 
