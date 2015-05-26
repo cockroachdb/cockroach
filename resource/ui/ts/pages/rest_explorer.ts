@@ -1,4 +1,4 @@
-// source: controllers/rest_explorer.ts
+// source: pages/rest_explorer.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 
 // Author: Matt Tracy (matt@cockroachlabs.com)
@@ -43,7 +43,7 @@ module AdminViews {
         responseLog().push(data)
         return JSON.stringify(data)
       }
-      
+
       /**
        * scan dispatches a scan request to the server based on the current
        * values of rangeStart and rangeEnd. The request will use the supplied
@@ -58,7 +58,7 @@ module AdminViews {
           method: method,
           url: endpoint,
           extract: logResponse,
-        }); 
+        });
       }
 
       /**
@@ -80,10 +80,10 @@ module AdminViews {
             xhr.setRequestHeader("Content-Type", "text/plain; charset=UTF-8") ;
             return xhr;
           }
-          request.data = singleValue(); 
+          request.data = singleValue();
         }
 
-        return m.request(request); 
+        return m.request(request);
       }
 
       /**
@@ -105,10 +105,10 @@ module AdminViews {
             xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8") ;
             return xhr;
           }
-          request.data = singleCounter(); 
+          request.data = singleCounter();
         }
 
-        return m.request(request); 
+        return m.request(request);
       }
 
       /**
@@ -151,7 +151,7 @@ module AdminViews {
         responsePending = m.prop(false);
         key = Model.singleKey;
         val = Model.singleValue;
-        
+
         // Functions.
         request(method:string) {
           this.responsePending(true);
@@ -192,7 +192,7 @@ module AdminViews {
         responsePending = m.prop(false);
         rangeStart = Model.rangeStart;
         rangeEnd = Model.rangeEnd;
-        
+
         // Functions.
         request(method:string) {
           this.responsePending(true);
@@ -229,7 +229,7 @@ module AdminViews {
         responsePending = m.prop(false);
         key = Model.singleKey;
         val = Model.singleCounter;
-        
+
         // Functions.
         private request(method:string) {
           this.responsePending(true);

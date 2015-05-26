@@ -1,4 +1,4 @@
-// source: controllers/monitor.ts
+// source: pages/monitor.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 
 // Author: Bram Gruneir (bram.gruneir@gmail.com)

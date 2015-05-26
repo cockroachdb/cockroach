@@ -17,7 +17,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Authors: Bram Gruneir (bramgruneir@gmail.com)
+// Authors: Bram Gruneir (bram.gruneir@gmail.com)
 //		    Andrew Bonventre (andybons@gmail.com)
 //		    Matt Tracy (matt@cockroachlabs.com)
 //

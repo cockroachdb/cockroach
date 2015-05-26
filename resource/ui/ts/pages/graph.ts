@@ -1,4 +1,4 @@
-// source: controllers/monitor.ts
+// source: pages/graph.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../models/timeseries.ts" />
@@ -26,11 +26,11 @@ module AdminViews {
               var windowSize = 10 * 60 * 1000;
               return m(".graphPage", [
                       m("H3", "Graph Demo"),
-                      Components.Metrics.LineGraph.create(500, 350, 
+                      Components.Metrics.LineGraph.create(500, 350,
                           new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
-                      Components.Metrics.LineGraph.create(500, 350, 
+                      Components.Metrics.LineGraph.create(500, 350,
                           new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
-                      Components.Metrics.LineGraph.create(500, 350, 
+                      Components.Metrics.LineGraph.create(500, 350,
                           new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
               ]);
           }
