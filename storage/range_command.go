@@ -568,10 +568,11 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *
 	if reply.PusheeTxn.LastHeartbeat == nil {
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
-	// Compute heartbeat expiration (use args.Timestamp instead of node
-	// clock wall time so that all replicas see the same result).
-	expiry := args.Timestamp
+	// Compute heartbeat expiration (all replicas must see the same result).
+	expiry := args.Now             // caller can set this to his wall time.
+	expiry.Forward(args.Timestamp) // if Now is not set, fallback
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
+
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
 		if log.V(1) {
 			log.Infof("pushing expired txn %s", reply.PusheeTxn)

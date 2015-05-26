@@ -310,9 +310,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalGCResponse));
   InternalPushTxnRequest_descriptor_ = file->message_type(6);
-  static const int InternalPushTxnRequest_offsets_[4] = {
+  static const int InternalPushTxnRequest_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalPushTxnRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalPushTxnRequest, pushee_txn_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalPushTxnRequest, now_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalPushTxnRequest, push_type_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalPushTxnRequest, range_lookup_),
   };
@@ -977,167 +978,168 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "\030\002 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000"
     "\"O\n\022InternalGCResponse\0229\n\006header\030\001 \001(\0132\037"
     ".cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037"
-    "\001\"\335\001\n\026InternalPushTxnRequest\0228\n\006header\030\001"
+    "\001\"\214\002\n\026InternalPushTxnRequest\0228\n\006header\030\001"
     " \001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336"
     "\037\000\320\336\037\001\0226\n\npushee_txn\030\002 \001(\0132\034.cockroach.p"
-    "roto.TransactionB\004\310\336\037\000\0225\n\tpush_type\030\003 \001("
-    "\0162\034.cockroach.proto.PushTxnTypeB\004\310\336\037\000\022\032\n"
-    "\014range_lookup\030\004 \001(\010B\004\310\336\037\000\"\206\001\n\027InternalPu"
-    "shTxnResponse\0229\n\006header\030\001 \001(\0132\037.cockroac"
-    "h.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0220\n\npush"
-    "ee_txn\030\002 \001(\0132\034.cockroach.proto.Transacti"
-    "on\"X\n\034InternalResolveIntentRequest\0228\n\006he"
-    "ader\030\001 \001(\0132\036.cockroach.proto.RequestHead"
-    "erB\010\310\336\037\000\320\336\037\001\"Z\n\035InternalResolveIntentRes"
-    "ponse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto."
-    "ResponseHeaderB\010\310\336\037\000\320\336\037\001\"]\n!InternalReso"
-    "lveIntentRangeRequest\0228\n\006header\030\001 \001(\0132\036."
-    "cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\""
-    "_\n\"InternalResolveIntentRangeResponse\0229\n"
-    "\006header\030\001 \001(\0132\037.cockroach.proto.Response"
-    "HeaderB\010\310\336\037\000\320\336\037\001\"}\n\024InternalMergeRequest"
-    "\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Reque"
-    "stHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.cock"
-    "roach.proto.ValueB\004\310\336\037\000\"R\n\025InternalMerge"
-    "Response\0229\n\006header\030\001 \001(\0132\037.cockroach.pro"
-    "to.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"k\n\032InternalT"
-    "runcateLogRequest\0228\n\006header\030\001 \001(\0132\036.cock"
-    "roach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\023\n\005i"
-    "ndex\030\002 \001(\004B\004\310\336\037\000\"X\n\033InternalTruncateLogR"
-    "esponse\0229\n\006header\030\001 \001(\0132\037.cockroach.prot"
-    "o.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\203\001\n\032InternalL"
-    "eaderLeaseRequest\0228\n\006header\030\001 \001(\0132\036.cock"
-    "roach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005l"
-    "ease\030\002 \001(\0132\026.cockroach.proto.LeaseB\004\310\336\037\000"
-    "\"X\n\033InternalLeaderLeaseResponse\0229\n\006heade"
-    "r\030\001 \001(\0132\037.cockroach.proto.ResponseHeader"
-    "B\010\310\336\037\000\320\336\037\001\"\203\006\n\024InternalRequestUnion\0224\n\010c"
-    "ontains\030\001 \001(\0132 .cockroach.proto.Contains"
-    "RequestH\000\022*\n\003get\030\002 \001(\0132\033.cockroach.proto"
-    ".GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.cockroach.p"
-    "roto.PutRequestH\000\022A\n\017conditional_put\030\004 \001"
-    "(\0132&.cockroach.proto.ConditionalPutReque"
-    "stH\000\0226\n\tincrement\030\005 \001(\0132!.cockroach.prot"
-    "o.IncrementRequestH\000\0220\n\006delete\030\006 \001(\0132\036.c"
-    "ockroach.proto.DeleteRequestH\000\022;\n\014delete"
-    "_range\030\007 \001(\0132#.cockroach.proto.DeleteRan"
-    "geRequestH\000\022,\n\004scan\030\010 \001(\0132\034.cockroach.pr"
-    "oto.ScanRequestH\000\022A\n\017end_transaction\030\t \001"
-    "(\0132&.cockroach.proto.EndTransactionReque"
-    "stH\000\022D\n\021internal_push_txn\030\036 \001(\0132\'.cockro"
-    "ach.proto.InternalPushTxnRequestH\000\022P\n\027in"
-    "ternal_resolve_intent\030\037 \001(\0132-.cockroach."
-    "proto.InternalResolveIntentRequestH\000\022[\n\035"
-    "internal_resolve_intent_range\030  \001(\01322.co"
-    "ckroach.proto.InternalResolveIntentRange"
-    "RequestH\000:\004\310\240\037\001B\007\n\005value\"\220\006\n\025InternalRes"
-    "ponseUnion\0225\n\010contains\030\001 \001(\0132!.cockroach"
-    ".proto.ContainsResponseH\000\022+\n\003get\030\002 \001(\0132\034"
-    ".cockroach.proto.GetResponseH\000\022+\n\003put\030\003 "
-    "\001(\0132\034.cockroach.proto.PutResponseH\000\022B\n\017c"
-    "onditional_put\030\004 \001(\0132\'.cockroach.proto.C"
-    "onditionalPutResponseH\000\0227\n\tincrement\030\005 \001"
-    "(\0132\".cockroach.proto.IncrementResponseH\000"
-    "\0221\n\006delete\030\006 \001(\0132\037.cockroach.proto.Delet"
-    "eResponseH\000\022<\n\014delete_range\030\007 \001(\0132$.cock"
-    "roach.proto.DeleteRangeResponseH\000\022-\n\004sca"
-    "n\030\010 \001(\0132\035.cockroach.proto.ScanResponseH\000"
-    "\022B\n\017end_transaction\030\t \001(\0132\'.cockroach.pr"
-    "oto.EndTransactionResponseH\000\022E\n\021internal"
-    "_push_txn\030\036 \001(\0132(.cockroach.proto.Intern"
-    "alPushTxnResponseH\000\022Q\n\027internal_resolve_"
-    "intent\030\037 \001(\0132..cockroach.proto.InternalR"
-    "esolveIntentResponseH\000\022\\\n\035internal_resol"
-    "ve_intent_range\030  \001(\01323.cockroach.proto."
-    "InternalResolveIntentRangeResponseH\000:\004\310\240"
-    "\037\001B\007\n\005value\"\217\001\n\024InternalBatchRequest\0228\n\006"
-    "header\030\001 \001(\0132\036.cockroach.proto.RequestHe"
-    "aderB\010\310\336\037\000\320\336\037\001\022=\n\010requests\030\002 \003(\0132%.cockr"
-    "oach.proto.InternalRequestUnionB\004\310\336\037\000\"\223\001"
-    "\n\025InternalBatchResponse\0229\n\006header\030\001 \001(\0132"
-    "\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336"
-    "\037\001\022\?\n\tresponses\030\002 \003(\0132&.cockroach.proto."
-    "InternalResponseUnionB\004\310\336\037\000\"\351\007\n\024ReadWrit"
-    "eCmdResponse\022+\n\003put\030\001 \001(\0132\034.cockroach.pr"
-    "oto.PutResponseH\000\022B\n\017conditional_put\030\002 \001"
-    "(\0132\'.cockroach.proto.ConditionalPutRespo"
-    "nseH\000\0227\n\tincrement\030\003 \001(\0132\".cockroach.pro"
-    "to.IncrementResponseH\000\0221\n\006delete\030\004 \001(\0132\037"
-    ".cockroach.proto.DeleteResponseH\000\022<\n\014del"
-    "ete_range\030\005 \001(\0132$.cockroach.proto.Delete"
-    "RangeResponseH\000\022B\n\017end_transaction\030\006 \001(\013"
-    "2\'.cockroach.proto.EndTransactionRespons"
-    "eH\000\022O\n\026internal_heartbeat_txn\030\n \001(\0132-.co"
-    "ckroach.proto.InternalHeartbeatTxnRespon"
-    "seH\000\022E\n\021internal_push_txn\030\013 \001(\0132(.cockro"
-    "ach.proto.InternalPushTxnResponseH\000\022Q\n\027i"
-    "nternal_resolve_intent\030\014 \001(\0132..cockroach"
-    ".proto.InternalResolveIntentResponseH\000\022\\"
-    "\n\035internal_resolve_intent_range\030\r \001(\01323."
-    "cockroach.proto.InternalResolveIntentRan"
-    "geResponseH\000\022@\n\016internal_merge\030\016 \001(\0132&.c"
-    "ockroach.proto.InternalMergeResponseH\000\022M"
-    "\n\025internal_truncate_log\030\017 \001(\0132,.cockroac"
-    "h.proto.InternalTruncateLogResponseH\000\022:\n"
-    "\013internal_gc\030\020 \001(\0132#.cockroach.proto.Int"
-    "ernalGCResponseH\000\022M\n\025internal_leader_lea"
-    "se\030\021 \001(\0132,.cockroach.proto.InternalLeade"
-    "rLeaseResponseH\000:\004\310\240\037\001B\007\n\005value\"\300\n\n\030Inte"
-    "rnalRaftCommandUnion\0224\n\010contains\030\001 \001(\0132 "
-    ".cockroach.proto.ContainsRequestH\000\022*\n\003ge"
-    "t\030\002 \001(\0132\033.cockroach.proto.GetRequestH\000\022*"
-    "\n\003put\030\003 \001(\0132\033.cockroach.proto.PutRequest"
-    "H\000\022A\n\017conditional_put\030\004 \001(\0132&.cockroach."
-    "proto.ConditionalPutRequestH\000\0226\n\tincreme"
-    "nt\030\005 \001(\0132!.cockroach.proto.IncrementRequ"
-    "estH\000\0220\n\006delete\030\006 \001(\0132\036.cockroach.proto."
-    "DeleteRequestH\000\022;\n\014delete_range\030\007 \001(\0132#."
-    "cockroach.proto.DeleteRangeRequestH\000\022,\n\004"
-    "scan\030\010 \001(\0132\034.cockroach.proto.ScanRequest"
-    "H\000\022A\n\017end_transaction\030\t \001(\0132&.cockroach."
-    "proto.EndTransactionRequestH\000\022.\n\005batch\030\036"
-    " \001(\0132\035.cockroach.proto.BatchRequestH\000\022L\n"
-    "\025internal_range_lookup\030\037 \001(\0132+.cockroach"
-    ".proto.InternalRangeLookupRequestH\000\022N\n\026i"
-    "nternal_heartbeat_txn\030  \001(\0132,.cockroach."
-    "proto.InternalHeartbeatTxnRequestH\000\022D\n\021i"
-    "nternal_push_txn\030! \001(\0132\'.cockroach.proto"
-    ".InternalPushTxnRequestH\000\022P\n\027internal_re"
-    "solve_intent\030\" \001(\0132-.cockroach.proto.Int"
-    "ernalResolveIntentRequestH\000\022[\n\035internal_"
-    "resolve_intent_range\030# \001(\01322.cockroach.p"
-    "roto.InternalResolveIntentRangeRequestH\000"
-    "\022H\n\027internal_merge_response\030$ \001(\0132%.cock"
-    "roach.proto.InternalMergeRequestH\000\022L\n\025in"
-    "ternal_truncate_log\030% \001(\0132+.cockroach.pr"
-    "oto.InternalTruncateLogRequestH\000\022I\n\013inte"
-    "rnal_gc\030& \001(\0132\".cockroach.proto.Internal"
-    "GCRequestB\016\342\336\037\nInternalGCH\000\022E\n\016internal_"
-    "lease\030\' \001(\0132+.cockroach.proto.InternalLe"
-    "aderLeaseRequestH\000\022\?\n\016internal_batch\030( \001"
-    "(\0132%.cockroach.proto.InternalBatchReques"
-    "tH\000:\004\310\240\037\001B\007\n\005value\"\242\001\n\023InternalRaftComma"
-    "nd\022\037\n\007raft_id\030\001 \001(\003B\016\310\336\037\000\342\336\037\006RaftID\022,\n\016o"
-    "rigin_node_id\030\002 \001(\004B\024\310\336\037\000\342\336\037\014OriginNodeI"
-    "D\022<\n\003cmd\030\003 \001(\0132).cockroach.proto.Interna"
-    "lRaftCommandUnionB\004\310\336\037\000\"D\n\022RaftMessageRe"
-    "quest\022!\n\010group_id\030\001 \001(\004B\017\310\336\037\000\342\336\037\007GroupID"
-    "\022\013\n\003msg\030\002 \001(\014\"\025\n\023RaftMessageResponse\"\236\001\n"
-    "\026InternalTimeSeriesData\022#\n\025start_timesta"
-    "mp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample_duration_"
-    "nanos\030\002 \001(\003B\004\310\336\037\000\022:\n\007samples\030\003 \003(\0132).coc"
-    "kroach.proto.InternalTimeSeriesSample\"r\n"
-    "\030InternalTimeSeriesSample\022\024\n\006offset\030\001 \001("
-    "\005B\004\310\336\037\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001("
-    "\001B\004\310\336\037\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001(\001\"=\n\022Raf"
-    "tTruncatedState\022\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004"
-    "term\030\002 \001(\004B\004\310\336\037\000\"z\n\020RaftSnapshotData\022>\n\002"
-    "KV\030\001 \003(\0132*.cockroach.proto.RaftSnapshotD"
-    "ata.KeyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030"
-    "\001 \001(\014\022\r\n\005value\030\002 \001(\014*G\n\013PushTxnType\022\022\n\016P"
-    "USH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANU"
-    "P_TXN\020\002\032\004\210\243\036\000*%\n\021InternalValueType\022\n\n\006_C"
-    "R_TS\020\001\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 7433);
+    "roto.TransactionB\004\310\336\037\000\022-\n\003now\030\003 \001(\0132\032.co"
+    "ckroach.proto.TimestampB\004\310\336\037\000\0225\n\tpush_ty"
+    "pe\030\004 \001(\0162\034.cockroach.proto.PushTxnTypeB\004"
+    "\310\336\037\000\022\032\n\014range_lookup\030\005 \001(\010B\004\310\336\037\000\"\206\001\n\027Int"
+    "ernalPushTxnResponse\0229\n\006header\030\001 \001(\0132\037.c"
+    "ockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022"
+    "0\n\npushee_txn\030\002 \001(\0132\034.cockroach.proto.Tr"
+    "ansaction\"X\n\034InternalResolveIntentReques"
+    "t\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Requ"
+    "estHeaderB\010\310\336\037\000\320\336\037\001\"Z\n\035InternalResolveIn"
+    "tentResponse\0229\n\006header\030\001 \001(\0132\037.cockroach"
+    ".proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"]\n!Inter"
+    "nalResolveIntentRangeRequest\0228\n\006header\030\001"
+    " \001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336"
+    "\037\000\320\336\037\001\"_\n\"InternalResolveIntentRangeResp"
+    "onse\0229\n\006header\030\001 \001(\0132\037.cockroach.proto.R"
+    "esponseHeaderB\010\310\336\037\000\320\336\037\001\"}\n\024InternalMerge"
+    "Request\0228\n\006header\030\001 \001(\0132\036.cockroach.prot"
+    "o.RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\013"
+    "2\026.cockroach.proto.ValueB\004\310\336\037\000\"R\n\025Intern"
+    "alMergeResponse\0229\n\006header\030\001 \001(\0132\037.cockro"
+    "ach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"k\n\032In"
+    "ternalTruncateLogRequest\0228\n\006header\030\001 \001(\013"
+    "2\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336"
+    "\037\001\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000\"X\n\033InternalTrunc"
+    "ateLogResponse\0229\n\006header\030\001 \001(\0132\037.cockroa"
+    "ch.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\203\001\n\032In"
+    "ternalLeaderLeaseRequest\0228\n\006header\030\001 \001(\013"
+    "2\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336"
+    "\037\001\022+\n\005lease\030\002 \001(\0132\026.cockroach.proto.Leas"
+    "eB\004\310\336\037\000\"X\n\033InternalLeaderLeaseResponse\0229"
+    "\n\006header\030\001 \001(\0132\037.cockroach.proto.Respons"
+    "eHeaderB\010\310\336\037\000\320\336\037\001\"\203\006\n\024InternalRequestUni"
+    "on\0224\n\010contains\030\001 \001(\0132 .cockroach.proto.C"
+    "ontainsRequestH\000\022*\n\003get\030\002 \001(\0132\033.cockroac"
+    "h.proto.GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.cock"
+    "roach.proto.PutRequestH\000\022A\n\017conditional_"
+    "put\030\004 \001(\0132&.cockroach.proto.ConditionalP"
+    "utRequestH\000\0226\n\tincrement\030\005 \001(\0132!.cockroa"
+    "ch.proto.IncrementRequestH\000\0220\n\006delete\030\006 "
+    "\001(\0132\036.cockroach.proto.DeleteRequestH\000\022;\n"
+    "\014delete_range\030\007 \001(\0132#.cockroach.proto.De"
+    "leteRangeRequestH\000\022,\n\004scan\030\010 \001(\0132\034.cockr"
+    "oach.proto.ScanRequestH\000\022A\n\017end_transact"
+    "ion\030\t \001(\0132&.cockroach.proto.EndTransacti"
+    "onRequestH\000\022D\n\021internal_push_txn\030\036 \001(\0132\'"
+    ".cockroach.proto.InternalPushTxnRequestH"
+    "\000\022P\n\027internal_resolve_intent\030\037 \001(\0132-.coc"
+    "kroach.proto.InternalResolveIntentReques"
+    "tH\000\022[\n\035internal_resolve_intent_range\030  \001"
+    "(\01322.cockroach.proto.InternalResolveInte"
+    "ntRangeRequestH\000:\004\310\240\037\001B\007\n\005value\"\220\006\n\025Inte"
+    "rnalResponseUnion\0225\n\010contains\030\001 \001(\0132!.co"
+    "ckroach.proto.ContainsResponseH\000\022+\n\003get\030"
+    "\002 \001(\0132\034.cockroach.proto.GetResponseH\000\022+\n"
+    "\003put\030\003 \001(\0132\034.cockroach.proto.PutResponse"
+    "H\000\022B\n\017conditional_put\030\004 \001(\0132\'.cockroach."
+    "proto.ConditionalPutResponseH\000\0227\n\tincrem"
+    "ent\030\005 \001(\0132\".cockroach.proto.IncrementRes"
+    "ponseH\000\0221\n\006delete\030\006 \001(\0132\037.cockroach.prot"
+    "o.DeleteResponseH\000\022<\n\014delete_range\030\007 \001(\013"
+    "2$.cockroach.proto.DeleteRangeResponseH\000"
+    "\022-\n\004scan\030\010 \001(\0132\035.cockroach.proto.ScanRes"
+    "ponseH\000\022B\n\017end_transaction\030\t \001(\0132\'.cockr"
+    "oach.proto.EndTransactionResponseH\000\022E\n\021i"
+    "nternal_push_txn\030\036 \001(\0132(.cockroach.proto"
+    ".InternalPushTxnResponseH\000\022Q\n\027internal_r"
+    "esolve_intent\030\037 \001(\0132..cockroach.proto.In"
+    "ternalResolveIntentResponseH\000\022\\\n\035interna"
+    "l_resolve_intent_range\030  \001(\01323.cockroach"
+    ".proto.InternalResolveIntentRangeRespons"
+    "eH\000:\004\310\240\037\001B\007\n\005value\"\217\001\n\024InternalBatchRequ"
+    "est\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Re"
+    "questHeaderB\010\310\336\037\000\320\336\037\001\022=\n\010requests\030\002 \003(\0132"
+    "%.cockroach.proto.InternalRequestUnionB\004"
+    "\310\336\037\000\"\223\001\n\025InternalBatchResponse\0229\n\006header"
+    "\030\001 \001(\0132\037.cockroach.proto.ResponseHeaderB"
+    "\010\310\336\037\000\320\336\037\001\022\?\n\tresponses\030\002 \003(\0132&.cockroach"
+    ".proto.InternalResponseUnionB\004\310\336\037\000\"\351\007\n\024R"
+    "eadWriteCmdResponse\022+\n\003put\030\001 \001(\0132\034.cockr"
+    "oach.proto.PutResponseH\000\022B\n\017conditional_"
+    "put\030\002 \001(\0132\'.cockroach.proto.ConditionalP"
+    "utResponseH\000\0227\n\tincrement\030\003 \001(\0132\".cockro"
+    "ach.proto.IncrementResponseH\000\0221\n\006delete\030"
+    "\004 \001(\0132\037.cockroach.proto.DeleteResponseH\000"
+    "\022<\n\014delete_range\030\005 \001(\0132$.cockroach.proto"
+    ".DeleteRangeResponseH\000\022B\n\017end_transactio"
+    "n\030\006 \001(\0132\'.cockroach.proto.EndTransaction"
+    "ResponseH\000\022O\n\026internal_heartbeat_txn\030\n \001"
+    "(\0132-.cockroach.proto.InternalHeartbeatTx"
+    "nResponseH\000\022E\n\021internal_push_txn\030\013 \001(\0132("
+    ".cockroach.proto.InternalPushTxnResponse"
+    "H\000\022Q\n\027internal_resolve_intent\030\014 \001(\0132..co"
+    "ckroach.proto.InternalResolveIntentRespo"
+    "nseH\000\022\\\n\035internal_resolve_intent_range\030\r"
+    " \001(\01323.cockroach.proto.InternalResolveIn"
+    "tentRangeResponseH\000\022@\n\016internal_merge\030\016 "
+    "\001(\0132&.cockroach.proto.InternalMergeRespo"
+    "nseH\000\022M\n\025internal_truncate_log\030\017 \001(\0132,.c"
+    "ockroach.proto.InternalTruncateLogRespon"
+    "seH\000\022:\n\013internal_gc\030\020 \001(\0132#.cockroach.pr"
+    "oto.InternalGCResponseH\000\022M\n\025internal_lea"
+    "der_lease\030\021 \001(\0132,.cockroach.proto.Intern"
+    "alLeaderLeaseResponseH\000:\004\310\240\037\001B\007\n\005value\"\300"
+    "\n\n\030InternalRaftCommandUnion\0224\n\010contains\030"
+    "\001 \001(\0132 .cockroach.proto.ContainsRequestH"
+    "\000\022*\n\003get\030\002 \001(\0132\033.cockroach.proto.GetRequ"
+    "estH\000\022*\n\003put\030\003 \001(\0132\033.cockroach.proto.Put"
+    "RequestH\000\022A\n\017conditional_put\030\004 \001(\0132&.coc"
+    "kroach.proto.ConditionalPutRequestH\000\0226\n\t"
+    "increment\030\005 \001(\0132!.cockroach.proto.Increm"
+    "entRequestH\000\0220\n\006delete\030\006 \001(\0132\036.cockroach"
+    ".proto.DeleteRequestH\000\022;\n\014delete_range\030\007"
+    " \001(\0132#.cockroach.proto.DeleteRangeReques"
+    "tH\000\022,\n\004scan\030\010 \001(\0132\034.cockroach.proto.Scan"
+    "RequestH\000\022A\n\017end_transaction\030\t \001(\0132&.coc"
+    "kroach.proto.EndTransactionRequestH\000\022.\n\005"
+    "batch\030\036 \001(\0132\035.cockroach.proto.BatchReque"
+    "stH\000\022L\n\025internal_range_lookup\030\037 \001(\0132+.co"
+    "ckroach.proto.InternalRangeLookupRequest"
+    "H\000\022N\n\026internal_heartbeat_txn\030  \001(\0132,.coc"
+    "kroach.proto.InternalHeartbeatTxnRequest"
+    "H\000\022D\n\021internal_push_txn\030! \001(\0132\'.cockroac"
+    "h.proto.InternalPushTxnRequestH\000\022P\n\027inte"
+    "rnal_resolve_intent\030\" \001(\0132-.cockroach.pr"
+    "oto.InternalResolveIntentRequestH\000\022[\n\035in"
+    "ternal_resolve_intent_range\030# \001(\01322.cock"
+    "roach.proto.InternalResolveIntentRangeRe"
+    "questH\000\022H\n\027internal_merge_response\030$ \001(\013"
+    "2%.cockroach.proto.InternalMergeRequestH"
+    "\000\022L\n\025internal_truncate_log\030% \001(\0132+.cockr"
+    "oach.proto.InternalTruncateLogRequestH\000\022"
+    "I\n\013internal_gc\030& \001(\0132\".cockroach.proto.I"
+    "nternalGCRequestB\016\342\336\037\nInternalGCH\000\022E\n\016in"
+    "ternal_lease\030\' \001(\0132+.cockroach.proto.Int"
+    "ernalLeaderLeaseRequestH\000\022\?\n\016internal_ba"
+    "tch\030( \001(\0132%.cockroach.proto.InternalBatc"
+    "hRequestH\000:\004\310\240\037\001B\007\n\005value\"\242\001\n\023InternalRa"
+    "ftCommand\022\037\n\007raft_id\030\001 \001(\003B\016\310\336\037\000\342\336\037\006Raft"
+    "ID\022,\n\016origin_node_id\030\002 \001(\004B\024\310\336\037\000\342\336\037\014Orig"
+    "inNodeID\022<\n\003cmd\030\003 \001(\0132).cockroach.proto."
+    "InternalRaftCommandUnionB\004\310\336\037\000\"D\n\022RaftMe"
+    "ssageRequest\022!\n\010group_id\030\001 \001(\004B\017\310\336\037\000\342\336\037\007"
+    "GroupID\022\013\n\003msg\030\002 \001(\014\"\025\n\023RaftMessageRespo"
+    "nse\"\236\001\n\026InternalTimeSeriesData\022#\n\025start_"
+    "timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample_du"
+    "ration_nanos\030\002 \001(\003B\004\310\336\037\000\022:\n\007samples\030\003 \003("
+    "\0132).cockroach.proto.InternalTimeSeriesSa"
+    "mple\"r\n\030InternalTimeSeriesSample\022\024\n\006offs"
+    "et\030\001 \001(\005B\004\310\336\037\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n\003s"
+    "um\030\007 \001(\001B\004\310\336\037\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001(\001"
+    "\"=\n\022RaftTruncatedState\022\023\n\005index\030\001 \001(\004B\004\310"
+    "\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"z\n\020RaftSnapshotD"
+    "ata\022>\n\002KV\030\001 \003(\0132*.cockroach.proto.RaftSn"
+    "apshotData.KeyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022"
+    "\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014*G\n\013PushTxnTy"
+    "pe\022\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n"
+    "\013CLEANUP_TXN\020\002\032\004\210\243\036\000*%\n\021InternalValueTyp"
+    "e\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 7480);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -3107,6 +3109,7 @@ void InternalGCResponse::Swap(InternalGCResponse* other) {
 #ifndef _MSC_VER
 const int InternalPushTxnRequest::kHeaderFieldNumber;
 const int InternalPushTxnRequest::kPusheeTxnFieldNumber;
+const int InternalPushTxnRequest::kNowFieldNumber;
 const int InternalPushTxnRequest::kPushTypeFieldNumber;
 const int InternalPushTxnRequest::kRangeLookupFieldNumber;
 #endif  // !_MSC_VER
@@ -3120,6 +3123,7 @@ InternalPushTxnRequest::InternalPushTxnRequest()
 void InternalPushTxnRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
   pushee_txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
+  now_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
 }
 
 InternalPushTxnRequest::InternalPushTxnRequest(const InternalPushTxnRequest& from)
@@ -3133,6 +3137,7 @@ void InternalPushTxnRequest::SharedCtor() {
   _cached_size_ = 0;
   header_ = NULL;
   pushee_txn_ = NULL;
+  now_ = NULL;
   push_type_ = 0;
   range_lookup_ = false;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -3147,6 +3152,7 @@ void InternalPushTxnRequest::SharedDtor() {
   if (this != default_instance_) {
     delete header_;
     delete pushee_txn_;
+    delete now_;
   }
 }
 
@@ -3182,13 +3188,16 @@ void InternalPushTxnRequest::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 31) {
     ZR_(push_type_, range_lookup_);
     if (has_header()) {
       if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
     }
     if (has_pushee_txn()) {
       if (pushee_txn_ != NULL) pushee_txn_->::cockroach::proto::Transaction::Clear();
+    }
+    if (has_now()) {
+      if (now_ != NULL) now_->::cockroach::proto::Timestamp::Clear();
     }
   }
 
@@ -3230,13 +3239,26 @@ bool InternalPushTxnRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_push_type;
+        if (input->ExpectTag(26)) goto parse_now;
         break;
       }
 
-      // optional .cockroach.proto.PushTxnType push_type = 3;
+      // optional .cockroach.proto.Timestamp now = 3;
       case 3: {
-        if (tag == 24) {
+        if (tag == 26) {
+         parse_now:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_now()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(32)) goto parse_push_type;
+        break;
+      }
+
+      // optional .cockroach.proto.PushTxnType push_type = 4;
+      case 4: {
+        if (tag == 32) {
          parse_push_type:
           int value;
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
@@ -3245,18 +3267,18 @@ bool InternalPushTxnRequest::MergePartialFromCodedStream(
           if (::cockroach::proto::PushTxnType_IsValid(value)) {
             set_push_type(static_cast< ::cockroach::proto::PushTxnType >(value));
           } else {
-            mutable_unknown_fields()->AddVarint(3, value);
+            mutable_unknown_fields()->AddVarint(4, value);
           }
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(32)) goto parse_range_lookup;
+        if (input->ExpectTag(40)) goto parse_range_lookup;
         break;
       }
 
-      // optional bool range_lookup = 4;
-      case 4: {
-        if (tag == 32) {
+      // optional bool range_lookup = 5;
+      case 5: {
+        if (tag == 40) {
          parse_range_lookup:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
@@ -3306,15 +3328,21 @@ void InternalPushTxnRequest::SerializeWithCachedSizes(
       2, this->pushee_txn(), output);
   }
 
-  // optional .cockroach.proto.PushTxnType push_type = 3;
-  if (has_push_type()) {
-    ::google::protobuf::internal::WireFormatLite::WriteEnum(
-      3, this->push_type(), output);
+  // optional .cockroach.proto.Timestamp now = 3;
+  if (has_now()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, this->now(), output);
   }
 
-  // optional bool range_lookup = 4;
+  // optional .cockroach.proto.PushTxnType push_type = 4;
+  if (has_push_type()) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      4, this->push_type(), output);
+  }
+
+  // optional bool range_lookup = 5;
   if (has_range_lookup()) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->range_lookup(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->range_lookup(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -3341,15 +3369,22 @@ void InternalPushTxnRequest::SerializeWithCachedSizes(
         2, this->pushee_txn(), target);
   }
 
-  // optional .cockroach.proto.PushTxnType push_type = 3;
-  if (has_push_type()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
-      3, this->push_type(), target);
+  // optional .cockroach.proto.Timestamp now = 3;
+  if (has_now()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, this->now(), target);
   }
 
-  // optional bool range_lookup = 4;
+  // optional .cockroach.proto.PushTxnType push_type = 4;
+  if (has_push_type()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
+      4, this->push_type(), target);
+  }
+
+  // optional bool range_lookup = 5;
   if (has_range_lookup()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(4, this->range_lookup(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(5, this->range_lookup(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -3378,13 +3413,20 @@ int InternalPushTxnRequest::ByteSize() const {
           this->pushee_txn());
     }
 
-    // optional .cockroach.proto.PushTxnType push_type = 3;
+    // optional .cockroach.proto.Timestamp now = 3;
+    if (has_now()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->now());
+    }
+
+    // optional .cockroach.proto.PushTxnType push_type = 4;
     if (has_push_type()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->push_type());
     }
 
-    // optional bool range_lookup = 4;
+    // optional bool range_lookup = 5;
     if (has_range_lookup()) {
       total_size += 1 + 1;
     }
@@ -3422,6 +3464,9 @@ void InternalPushTxnRequest::MergeFrom(const InternalPushTxnRequest& from) {
     if (from.has_pushee_txn()) {
       mutable_pushee_txn()->::cockroach::proto::Transaction::MergeFrom(from.pushee_txn());
     }
+    if (from.has_now()) {
+      mutable_now()->::cockroach::proto::Timestamp::MergeFrom(from.now());
+    }
     if (from.has_push_type()) {
       set_push_type(from.push_type());
     }
@@ -3453,6 +3498,7 @@ void InternalPushTxnRequest::Swap(InternalPushTxnRequest* other) {
   if (other != this) {
     std::swap(header_, other->header_);
     std::swap(pushee_txn_, other->pushee_txn_);
+    std::swap(now_, other->now_);
     std::swap(push_type_, other->push_type_);
     std::swap(range_lookup_, other->range_lookup_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);

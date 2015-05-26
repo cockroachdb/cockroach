@@ -1243,7 +1243,13 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				UserPriority: args.Header().UserPriority,
 				Txn:          args.Header().Txn,
 			},
-			PusheeTxn:   intent.Txn,
+			PusheeTxn: intent.Txn,
+			// The timestamp is used by InternalPushTxn for figuring out
+			// whether the transaction is abandoned. If we used the argument's
+			// timestamp here, we would run into busy loops because that
+			// timestamp usually stays fixed among retries, so it will never
+			// realize that a transaction has timed out. See #877.
+			Now:         s.Clock().Now(),
 			PushType:    pushType,
 			RangeLookup: args.Method() == proto.InternalRangeLookup,
 		}

@@ -121,17 +121,23 @@ enum PushTxnType {
 message InternalPushTxnRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // Now optionally holds the timestamp used to compare the last heartbeat
+  // of the pushee against. In its absence, the request header's timestamp
+  // is used, but in some situations that timestamp will not advance with
+  // the node clock across retries and hence cannot detect abandoned
+  // transactions.
+  optional Timestamp now = 3 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
   // timestamp forward. Writers set this to ABORT_TXN to request that
   // the PushTxn be aborted if possible. This is done in the event of
   // a writer conflicting with PusheeTxn. Inconsistent readers set
   // this to CLEANUP_TXN to determine whether dangling intents
   // may be resolved.
-  optional PushTxnType push_type = 3 [(gogoproto.nullable) = false];
+  optional PushTxnType push_type = 4 [(gogoproto.nullable) = false];
   // Range lookup indicates whether we're pushing a txn because of an
   // intent encountered while servicing an internal range lookup
   // request. See notes in InternalLookupRangeRequest.
-  optional bool range_lookup = 4 [(gogoproto.nullable) = false];
+  optional bool range_lookup = 5 [(gogoproto.nullable) = false];
 }
 
 // An InternalPushTxnResponse is the return value from the
