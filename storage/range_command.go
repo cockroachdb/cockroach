@@ -568,9 +568,13 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *
 	if reply.PusheeTxn.LastHeartbeat == nil {
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
+	if args.Now.Equal(proto.ZeroTimestamp) {
+		reply.SetGoError(util.Error("the field Now must be provided"))
+		return
+	}
 	// Compute heartbeat expiration (all replicas must see the same result).
-	expiry := args.Now             // caller can set this to his wall time.
-	expiry.Forward(args.Timestamp) // if Now is not set, fallback
+	expiry := args.Now
+	expiry.Forward(args.Timestamp) // if Timestamp is ahead, use that
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
 
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {

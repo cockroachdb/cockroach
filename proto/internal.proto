@@ -121,11 +121,10 @@ enum PushTxnType {
 message InternalPushTxnRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
-  // Now optionally holds the timestamp used to compare the last heartbeat
-  // of the pushee against. In its absence, the request header's timestamp
-  // is used, but in some situations that timestamp will not advance with
-  // the node clock across retries and hence cannot detect abandoned
-  // transactions.
+  // Now holds the timestamp used to compare the last heartbeat of the pushee
+  // against. This is necessary since the request header's timestamp does not
+  // necessarily advance with the node clock across retries and hence cannot
+  // detect abandoned transactions.
   optional Timestamp now = 3 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
   // timestamp forward. Writers set this to ABORT_TXN to request that
