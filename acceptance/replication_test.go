@@ -33,15 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// makeDBClient creates a DB client for node 'i'.
-// It uses the cluster certs dir.
-func makeDBClient(cluster *localcluster.Cluster, node int) (*client.DB, error) {
-	// We always run these tests with certs.
-	return client.Open("https://root@" +
-		cluster.Nodes[node].Addr("").String() +
-		"?certs=" + cluster.CertsDir)
-}
-
 func countRangeReplicas(client *client.DB) (int, error) {
 	r, err := client.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 10)
 	if err != nil {
