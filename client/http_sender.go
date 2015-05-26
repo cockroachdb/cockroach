@@ -68,6 +68,7 @@ var HTTPRetryOptions = retry.Options{
 	MaxBackoff:  5 * time.Second,
 	Constant:    2,
 	MaxAttempts: 0, // retry indefinitely
+	UseV1Info:   true,
 }
 
 // HTTPSender is an implementation of KVSender which exposes the
