@@ -52,12 +52,14 @@ type Config struct {
 	// a blank slate.
 	StateMachine StateMachine
 
-	// A new election is called if the ElectionTimeout elapses with no contact from the leader.
-	// The actual ElectionTimeout is chosen randomly from the range [ElectionTimeoutMin,
-	// ElectionTimeoutMax) to minimize the chances of several servers trying to become leaders
-	// simultaneously. The Raft paper suggests a range of 150-300ms for local networks;
-	// geographically distributed installations should use higher values to account for the
-	// increased round trip time.
+	// A new election is called if the election timeout elapses with no
+	// contact from the leader.  The actual timeout is chosen randomly
+	// from the range [ElectionTimeoutTicks*TickInterval,
+	// ElectionTimeoutTicks*TickInterval*2) to minimize the chances of
+	// several servers trying to become leaders simultaneously. The Raft
+	// paper suggests a range of 150-300ms for local networks;
+	// geographically distributed installations should use higher values
+	// to account for the increased round trip time.
 	ElectionTimeoutTicks   int
 	HeartbeatIntervalTicks int
 	TickInterval           time.Duration
@@ -69,10 +71,6 @@ type Config struct {
 	// group does not interfere with other groups or cause heartbeats to
 	// be missed.
 	EventBufferSize int
-
-	// If Strict is true, some warnings become fatal panics and additional (possibly expensive)
-	// sanity checks will be done.
-	Strict bool
 
 	EntryFormatter raft.EntryFormatter
 }
@@ -183,16 +181,6 @@ func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 		return nil
 	case <-ms.stopper.ShouldStop():
 		return ErrStopped
-	}
-}
-
-// strictErrorLog panics in strict mode and logs an error otherwise. Arguments are printf-style
-// and will be passed directly to either log.Errorf or log.Fatalf.
-func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
-	if m.Strict {
-		log.Fatalf(format, args...)
-	} else {
-		log.Errorf(format, args...)
 	}
 }
 
