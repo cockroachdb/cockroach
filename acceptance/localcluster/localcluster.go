@@ -333,7 +333,7 @@ func (l *Cluster) startNode(i int) *Container {
 	maybePanic(c.Start(nil, l.dns, l.vols))
 	maybePanic(c.Inspect())
 	c.Name = node(i)
-	log.Infof("started %s: %s", c.Name, c.Addr(""))
+	log.Infof("started %s: https://%s", c.Name, c.Addr(""))
 	return c
 }
 
