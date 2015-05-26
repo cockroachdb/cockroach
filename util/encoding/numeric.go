@@ -18,7 +18,7 @@
 // http://sqlite.org/src4/doc/trunk/www/key_encoding.wiki
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
-// Author: Peter Mattis (petermattis@gmail.com)
+// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package encoding
 

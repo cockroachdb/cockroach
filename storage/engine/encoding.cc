@@ -14,7 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Peter Mattis (petermattis@gmail.com)
+// Author: Peter Mattis (peter@cockroachlabs.com)
 
 #include "rocksdb/slice.h"
 

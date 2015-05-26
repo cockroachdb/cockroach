@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Peter Mattis (peter.mattis@gmail.com)
+// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package localcluster
 
