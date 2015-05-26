@@ -184,7 +184,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 	kvClient := createTestClient(t, s.ServingAddr())
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
-		if proto.IsRangeOp(test.args) {
+		if proto.IsRange(test.args) {
 			test.args.Header().EndKey = test.args.Header().Key.Next()
 		}
 		err := kvClient.Run(client.Call{Args: test.args, Reply: test.reply})

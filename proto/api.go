@@ -38,7 +38,7 @@ const (
 	isRead
 	isWrite
 	isTxnWrite
-	isRangeOp
+	isRange
 )
 
 // IsAdmin returns true if the request requires admin permissions.
@@ -68,10 +68,10 @@ func IsTransactionWrite(args Request) bool {
 	return (args.flags() & isTxnWrite) != 0
 }
 
-// IsRangeOp returns true if the operation is range-based and must include
+// IsRange returns true if the operation is range-based and must include
 // a start and an end key.
-func IsRangeOp(args Request) bool {
-	return (args.flags() & isRangeOp) != 0
+func IsRange(args Request) bool {
+	return (args.flags() & isRange) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -448,18 +448,18 @@ func (*PutRequest) flags() int                        { return isWrite | isTxnWr
 func (*ConditionalPutRequest) flags() int             { return isRead | isWrite | isTxnWrite }
 func (*IncrementRequest) flags() int                  { return isRead | isWrite | isTxnWrite }
 func (*DeleteRequest) flags() int                     { return isWrite | isTxnWrite }
-func (*DeleteRangeRequest) flags() int                { return isWrite | isTxnWrite | isRangeOp }
-func (*ScanRequest) flags() int                       { return isRead | isRangeOp }
+func (*DeleteRangeRequest) flags() int                { return isWrite | isTxnWrite | isRange }
+func (*ScanRequest) flags() int                       { return isRead | isRange }
 func (*EndTransactionRequest) flags() int             { return isWrite }
 func (*BatchRequest) flags() int                      { return isWrite }
 func (*AdminSplitRequest) flags() int                 { return isAdmin }
 func (*AdminMergeRequest) flags() int                 { return isAdmin }
 func (*InternalHeartbeatTxnRequest) flags() int       { return isWrite }
-func (*InternalGCRequest) flags() int                 { return isWrite | isRangeOp }
+func (*InternalGCRequest) flags() int                 { return isWrite | isRange }
 func (*InternalPushTxnRequest) flags() int            { return isWrite }
 func (*InternalRangeLookupRequest) flags() int        { return isRead }
 func (*InternalResolveIntentRequest) flags() int      { return isWrite }
-func (*InternalResolveIntentRangeRequest) flags() int { return isWrite | isRangeOp }
+func (*InternalResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*InternalMergeRequest) flags() int              { return isWrite }
 func (*InternalTruncateLogRequest) flags() int        { return isWrite }
 func (*InternalLeaderLeaseRequest) flags() int        { return isWrite }

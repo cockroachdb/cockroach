@@ -1123,7 +1123,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	ctx = log.Add(s.Context(ctx), log.Method, args.Method())
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
-	if err := verifyKeys(header.Key, header.EndKey, proto.IsRangeOp(call.Args)); err != nil {
+	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(call.Args)); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
