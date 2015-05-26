@@ -232,7 +232,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 		}
 		cnt++
 	}
-	if cnt != 0 {
+	if cnt > 0 {
 		s.sendMessage(noGroup,
 			raftpb.Message{
 				From: uint64(s.nodeID),
@@ -1047,13 +1047,13 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		for _, msg := range ready.Messages {
 			switch msg.Type {
 			case raftpb.MsgHeartbeat:
-				if log.V(7) {
+				if log.V(8) {
 					log.Infof("node %v dropped individual heartbeat to node %v",
 						s.nodeID, msg.To)
 				}
 				continue
 			case raftpb.MsgHeartbeatResp:
-				if log.V(7) {
+				if log.V(8) {
 					log.Infof("node %v dropped individual heartbeat response to node %v",
 						s.nodeID, msg.To)
 				}
