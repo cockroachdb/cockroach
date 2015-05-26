@@ -43,6 +43,7 @@ var (
 		MaxBackoff:  5 * time.Second,
 		Constant:    2,
 		MaxAttempts: 0, // retry indefinitely
+		UseV1Info:   true,
 	}
 	DefaultClock = systemClock{}
 )

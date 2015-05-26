@@ -109,7 +109,9 @@ func (kv *KV) Run(calls ...Call) (err error) {
 		kv.Sender.Send(context.TODO(), c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
-			log.Infof("failed %s: %s", c.Method(), err)
+			if log.V(1) {
+				log.Infof("failed %s: %s", c.Method(), err)
+			}
 		} else if c.Post != nil {
 			err = c.Post()
 		}
