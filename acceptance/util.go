@@ -15,6 +15,9 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
+// This file intentionally does not require the "acceptance" build tag in order
+// to silence a warning from the emacs flycheck package.
+
 package acceptance
 
 import (
