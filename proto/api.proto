@@ -319,7 +319,9 @@ message ResponseUnion {
 // range-locality), as a single update.
 //
 // The RequestHeader should contain the Key of the first request
-// in the batch.
+// in the batch. It also contains the transaction itself; individual
+// calls must not have transactions specified. The same applies to
+// the User and UserPriority fields.
 message BatchRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
