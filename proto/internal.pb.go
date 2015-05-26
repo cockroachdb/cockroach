@@ -252,11 +252,10 @@ func (*InternalGCResponse) ProtoMessage()    {}
 type InternalPushTxnRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	PusheeTxn     Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
-	// Now optionally holds the timestamp used to compare the last heartbeat
-	// of the pushee against. In its absence, the request header's timestamp
-	// is used, but in some situations that timestamp will not advance with
-	// the node clock across retries and hence cannot detect abandoned
-	// transactions.
+	// Now holds the timestamp used to compare the last heartbeat of the pushee
+	// against. This is necessary since the request header's timestamp does not
+	// necessarily advance with the node clock across retries and hence cannot
+	// detect abandoned transactions.
 	Now Timestamp `protobuf:"bytes,3,opt,name=now" json:"now"`
 	// Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
 	// timestamp forward. Writers set this to ABORT_TXN to request that
