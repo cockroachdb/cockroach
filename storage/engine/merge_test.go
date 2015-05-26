@@ -14,7 +14,7 @@
 // for names of contributors.
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-// Author: Peter Mattis (peter.mattis@gmail.com)
+// Author: Peter Mattis (peter@cockroachlabs.com)
 
 package engine
 
