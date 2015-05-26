@@ -31,7 +31,11 @@ import (
 )
 
 const (
-	noGroup           = uint64(0)
+	noGroup = uint64(0)
+	// TODO(bdarnell): this is currently set high to avoid crashes when
+	// recovering a node. Since we don't send snapshots or chunk Append messages
+	// in such situations yet, the recovering node will receive a large amount of
+	// messages at the same time which can fill up this channel quickly.
 	eventBacklogLimit = 100000
 )
 
