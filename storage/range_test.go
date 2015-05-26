@@ -809,6 +809,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 			Replica:   proto.Replica{StoreID: storeID},
 			Txn:       pusher,
 		},
+		Now:       pusher.Timestamp,
 		PusheeTxn: *pushee,
 		PushType:  pushType,
 	}
@@ -1766,9 +1767,9 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		pushType    proto.PushTxnType
 		expSuccess  bool
 	}{
-		{nil, 0, proto.PUSH_TIMESTAMP, false},
-		{nil, 0, proto.ABORT_TXN, false},
-		{nil, 0, proto.CLEANUP_TXN, false},
+		{nil, 1, proto.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
+		{nil, 1, proto.ABORT_TXN, false},
+		{nil, 1, proto.CLEANUP_TXN, false},
 		{nil, ns, proto.PUSH_TIMESTAMP, false},
 		{nil, ns, proto.ABORT_TXN, false},
 		{nil, ns, proto.CLEANUP_TXN, false},
@@ -1807,7 +1808,10 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		// Now, attempt to push the transaction with clock set to "currentTime".
 		tc.manualClock.Set(test.currentTime)
 		args, reply := pushTxnArgs(pusher, pushee, test.pushType, 1, tc.store.StoreID())
-		args.Timestamp = tc.clock.Now()
+		// Avoid logical ticks here, they make the borderline cases hard to
+		// test.
+		args.Timestamp = proto.Timestamp{WallTime: test.currentTime}
+		args.Now = args.Timestamp
 		args.Timestamp.Logical = 0
 
 		err := tc.rng.AddCmd(tc.rng.context(), client.Call{Args: args, Reply: reply}, true)

@@ -267,6 +267,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 			UserPriority: gogoproto.Int32(proto.MaxPriority),
 			Txn:          nil,
 		},
+		Now:       now,
 		PusheeTxn: *meta.Txn,
 		PushType:  proto.ABORT_TXN,
 	}
