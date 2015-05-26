@@ -50,7 +50,7 @@ const (
 	GCResponseCacheExpiration = 1 * time.Hour
 	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
 	raftIDAllocCount                = 10
-	defaultRaftTickInterval         = 10 * time.Millisecond
+	defaultRaftTickInterval         = 100 * time.Millisecond
 	defaultHeartbeatIntervalTicks   = 3
 	defaultRaftElectionTimeoutTicks = 15
 	// ttlCapacityGossip is time-to-live for capacity-related info.
