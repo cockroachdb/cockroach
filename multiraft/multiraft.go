@@ -30,7 +30,14 @@ import (
 	"golang.org/x/net/context"
 )
 
-const noGroup = uint64(0)
+const (
+	noGroup = uint64(0)
+	// TODO(bdarnell): this is currently set high to avoid crashes when
+	// recovering a node. Since we don't send snapshots or chunk Append messages
+	// in such situations yet, the recovering node will receive a large amount of
+	// messages at the same time which can fill up this channel quickly.
+	eventBacklogLimit = 100000
+)
 
 // An ErrGroupDeleted is returned for commands which are pending while their
 // group is deleted.
@@ -139,7 +146,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper
 		nodeID:    nodeID,
 
 		// Output channel.
-		Events: make(chan interface{}, 1000),
+		Events: make(chan interface{}, eventBacklogLimit),
 
 		// Input channels.
 		reqChan:         make(chan *RaftMessageRequest),
