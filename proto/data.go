@@ -417,7 +417,7 @@ func (t *Transaction) Equal(s *Transaction) bool {
 	if (t == nil && s != nil) || (t != nil && s == nil) {
 		return false
 	}
-	return bytes.Equal(t.ID, s.ID)
+	return TxnIDEqual(t.ID, s.ID)
 }
 
 // MakePriority generates a random priority value, biased by the

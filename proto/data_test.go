@@ -349,6 +349,22 @@ func TestValueChecksumWithInteger(t *testing.T) {
 	}
 }
 
+func TestTxnEqual(t *testing.T) {
+	tc := []struct {
+		txn1, txn2 *Transaction
+		eq         bool
+	}{
+		{nil, nil, true},
+		{&Transaction{}, nil, false},
+		{&Transaction{ID: []byte("A")}, &Transaction{ID: []byte("B")}, false},
+	}
+	for i, c := range tc {
+		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
+			t.Errorf("%d: wanted %t", i, c.eq)
+		}
+	}
+}
+
 func TestTxnIDEqual(t *testing.T) {
 	txn1, txn2 := util.NewUUID4(), util.NewUUID4()
 	txn1Copy := append([]byte(nil), txn1...)
