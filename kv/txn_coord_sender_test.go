@@ -561,3 +561,50 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		}
 	}
 }
+
+// TestTxnCoordSenderBatchTransaction tests that it is not possible to send
+// one-off transactional calls within a batch (the batch must contain the
+// transaction for all contained calls instead).
+func TestTxnCoordSenderBatchTransaction(t *testing.T) {
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+	clock := hlc.NewClock(hlc.UnixNano)
+	var called bool
+	ts := NewTxnCoordSender(newTestSender(func(call client.Call) {
+		called = true
+		return
+	}), clock, false, stopper)
+
+	testCases := []struct{ batch, arg, ok bool }{
+		{false, false, true},
+		{true, false, true},
+		{true, true, false},
+		{false, true, false},
+	}
+
+	txn1 := &proto.Transaction{ID: []byte("txn1")}
+	txn2 := &proto.Transaction{ID: []byte("txn2")}
+
+	for i, tc := range testCases {
+		bArgs := &proto.InternalBatchRequest{}
+		bReply := &proto.InternalBatchResponse{}
+
+		pushArgs := &proto.InternalPushTxnRequest{}
+		if tc.arg {
+			pushArgs.RequestHeader = proto.RequestHeader{
+				Txn: txn1,
+			}
+		}
+		bArgs.Add(pushArgs)
+		if tc.batch {
+			bArgs.Txn = txn2
+		}
+		called = false
+		ts.Send(context.Background(), client.Call{Args: bArgs, Reply: bReply})
+		if !tc.ok && bReply.GoError() == nil {
+			t.Fatalf("%d: expected error", i)
+		} else if tc.ok != called {
+			t.Fatalf("%d: wanted call: %t, got call: %t", i, tc.ok, called)
+		}
+	}
+}

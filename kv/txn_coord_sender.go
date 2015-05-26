@@ -353,8 +353,6 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		txnOpts := &client.TransactionOptions{
 			Name: "auto-wrap",
 		}
-		// Must not call Close() on this KV - that would call
-		// tc.Close().
 		tmpKV := client.NewKV(nil, tc)
 		tmpKV.User = call.Args.Header().User
 		tmpKV.UserPriority = call.Args.Header().GetUserPriority()
@@ -407,20 +405,26 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batch
 	// TODO(spencer): send calls in parallel.
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
-		// Initialize args header values where appropriate.
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
 		call := client.Call{Args: args}
-		if args.Header().User == "" {
-			args.Header().User = batchArgs.User
+		// Disallow transaction, user and priority on individual calls, unless
+		// equal.
+		if args.Header().User != "" && args.Header().User != batchArgs.User {
+			batchReply.Header().SetGoError(util.Error("cannot have individual user on call in batch"))
+			return
 		}
-		if args.Header().UserPriority == nil {
-			args.Header().UserPriority = batchArgs.UserPriority
+		args.Header().User = batchArgs.User
+		if args.Header().UserPriority != nil && args.Header().GetUserPriority() != batchArgs.GetUserPriority() {
+			batchReply.Header().SetGoError(util.Error("cannot have individual user priority on call in batch"))
+			return
 		}
-		// Only update the individual calls' Txn from the batch if there isn't
-		// one already.
-		if args.Header().Txn == nil {
-			args.Header().Txn = batchArgs.Txn
+		args.Header().UserPriority = batchArgs.UserPriority
+		if txn := args.Header().Txn; txn != nil && !txn.Equal(batchArgs.Txn) {
+			batchReply.Header().SetGoError(util.Error("cannot have individual transactional call in batch"))
+			return
 		}
+		// Propagate batch Txn to each call.
+		args.Header().Txn = batchArgs.Txn
 
 		// Create a reply from the method type and add to batch response.
 		if i >= len(batchReply.Responses) {

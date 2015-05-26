@@ -1232,16 +1232,28 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
-	bArgs := &proto.InternalBatchRequest{}
+	bArgs := &proto.InternalBatchRequest{
+		RequestHeader: proto.RequestHeader{
+			Txn:          args.Header().Txn,
+			User:         args.Header().User,
+			UserPriority: args.Header().UserPriority,
+		},
+	}
 	bReply := &proto.InternalBatchResponse{}
 	for _, intent := range wiErr.Intents {
 		pushArgs := &proto.InternalPushTxnRequest{
 			RequestHeader: proto.RequestHeader{
-				Timestamp:    args.Header().Timestamp,
-				Key:          intent.Txn.Key,
+				Timestamp: args.Header().Timestamp,
+				Key:       intent.Txn.Key,
+				// TODO(tschottdorf):
+				// The following fields should not be supplied here, but store
+				// tests (for example TestStoreResolveWriteIntent) which do not
+				// go through TxnCoordSender rely on them being specified on
+				// the individual calls (and TxnCoordSender is in charge of
+				// filling them in here later).
+				Txn:          args.Header().Txn,
 				User:         args.Header().User,
 				UserPriority: args.Header().UserPriority,
-				Txn:          args.Header().Txn,
 			},
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by InternalPushTxn for figuring out

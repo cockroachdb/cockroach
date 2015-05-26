@@ -408,6 +408,18 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 	}
 }
 
+// Equal tests two transactions for equality. They are equal if they are
+// either simultaneously nil or their IDs match.
+func (t *Transaction) Equal(s *Transaction) bool {
+	if t == nil && s == nil {
+		return true
+	}
+	if (t == nil && s != nil) || (t != nil && s == nil) {
+		return false
+	}
+	return TxnIDEqual(t.ID, s.ID)
+}
+
 // MakePriority generates a random priority value, biased by the
 // specified userPriority. If userPriority=100, the resulting
 // priority is 100x more likely to be probabilistically greater

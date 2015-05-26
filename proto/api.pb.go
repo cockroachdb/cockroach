@@ -809,7 +809,9 @@ func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
 // range-locality), as a single update.
 //
 // The RequestHeader should contain the Key of the first request
-// in the batch.
+// in the batch. It also contains the transaction itself; individual
+// calls must not have transactions specified. The same applies to
+// the User and UserPriority fields.
 type BatchRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Requests         []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
