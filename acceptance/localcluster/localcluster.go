@@ -41,6 +41,7 @@ const (
 var cockroachImage = flag.String("i", builderImage, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
+var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var testCertsDir = filepath.Clean(os.ExpandEnv("${PWD}/../resource/test_certs"))
 
 func prettyJSON(v interface{}) string {
@@ -422,6 +423,13 @@ func (l *Cluster) Start() {
 
 // Stop stops the clusters. It is safe to stop the cluster multiple times.
 func (l *Cluster) Stop() {
+	if *waitOnStop {
+		log.Infof("waiting for interrupt")
+		select {
+		case <-l.stopper:
+		}
+	}
+
 	log.Infof("stopping")
 
 	l.mu.Lock()
