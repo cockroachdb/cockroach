@@ -17,21 +17,34 @@ module AdminViews {
    */
   export module Graph {
       /**
-       * A small demonstration of a chart, which displays three graphs
-       * displaying data for store 1 over the last ten minutes.
+       * A small demonstration of a chart, which displays a two charts
+       * displaying the same data set as retrieved by a QueryManager.
        */
       export module Page {
-          export function controller() {}
-          export function view() {
+          interface Controller extends _mithril.MithrilController {
+              manager:Models.Metrics.QueryManager;
+          }
+
+          export function controller():Controller {
+              var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, "cr.node.calls.success.1");
+              var manager = new Models.Metrics.QueryManager(query);
+              manager.refresh();
+             
+              // Refresh interval on a regular basis.
+              var interval = setInterval(() => manager.refresh(), 10000);
+              return {
+                  manager: manager, 
+                  // Clear interval when page is unloaded.
+                  onunload: () => clearInterval(interval),
+              }
+          }
+
+          export function view(ctrl:Controller) {
               var windowSize = 10 * 60 * 1000;
               return m(".graphPage", [
                       m("H3", "Graph Demo"),
-                      Components.Metrics.LineGraph.create(500, 350,
-                          new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
-                      Components.Metrics.LineGraph.create(500, 350,
-                          new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
-                      Components.Metrics.LineGraph.create(500, 350,
-                          new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
+                      Components.Metrics.LineGraph.create(ctrl.manager),
+                      Components.Metrics.LineGraph.create(ctrl.manager),
               ]);
           }
       }
