@@ -19,6 +19,7 @@ package status
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -41,7 +42,10 @@ type StoreStatusMonitor struct {
 // for passing event feed data to these subset structures for accumulation.
 type NodeStatusMonitor struct {
 	sync.RWMutex
-	stores map[proto.StoreID]*StoreStatusMonitor
+	stores     map[proto.StoreID]*StoreStatusMonitor
+	nodeID     proto.NodeID
+	callCount  int64
+	callErrors int64
 }
 
 // NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
@@ -92,8 +96,13 @@ func (nsm *NodeStatusMonitor) VisitStoreMonitors(visitor func(*StoreStatusMonito
 // supplied Subscription. The goroutine will continue running until the
 // Subscription's Events feed is closed.
 func (nsm *NodeStatusMonitor) StartMonitorFeed(feed *util.Feed) {
-	sub := feed.Subscribe()
-	go storage.ProcessStoreEvents(nsm, sub)
+	go storage.ProcessStoreEvents(nsm, feed.Subscribe())
+	go ProcessNodeEvents(nsm, feed.Subscribe())
+}
+
+// SetNodeID sets the NodeID for the node being monitored.
+func (nsm *NodeStatusMonitor) SetNodeID(id proto.NodeID) {
+	nsm.nodeID = id
 }
 
 // OnAddRange receives AddRangeEvents retrieved from an storage event
@@ -150,6 +159,18 @@ func (nsm *NodeStatusMonitor) OnBeginScanRanges(event *storage.BeginScanRangesEv
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnEndScanRanges(event *storage.EndScanRangesEvent) {
 	nsm.GetStoreMonitor(event.StoreID).endScanRanges(event)
+}
+
+// OnCallSuccess receives CallSuccessEvents from a node event subscription. This
+// method is part of the implementation of NodeEventListener.
+func (nsm *NodeStatusMonitor) OnCallSuccess(event *CallSuccessEvent) {
+	atomic.AddInt64(&nsm.callCount, 1)
+}
+
+// OnCallError receives CallErrorEvents from a node event subscription. This
+// method is part of the implementation of NodeEventListener.
+func (nsm *NodeStatusMonitor) OnCallError(event *CallErrorEvent) {
+	atomic.AddInt64(&nsm.callErrors, 1)
 }
 
 // rangeDataAccumulator maintains a set of accumulated stats for a set of

@@ -15,7 +15,7 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package server
+package status_test
 
 import (
 	"fmt"
@@ -25,6 +25,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -82,39 +84,39 @@ func TestNodeEventFeed(t *testing.T) {
 	// event.
 	testCases := []struct {
 		name      string
-		publishTo func(NodeEventFeed)
+		publishTo func(status.NodeEventFeed)
 		expected  interface{}
 	}{
 		{
 			name: "Get",
-			publishTo: func(nef NodeEventFeed) {
+			publishTo: func(nef status.NodeEventFeed) {
 				call := client.Get(proto.Key("abc"))
-				nef.callComplete(call.Args, call.Reply)
+				nef.CallComplete(call.Args, call.Reply)
 			},
-			expected: &CallSuccessEvent{
+			expected: &status.CallSuccessEvent{
 				NodeID: proto.NodeID(1),
 				Method: proto.Get,
 			},
 		},
 		{
 			name: "Put",
-			publishTo: func(nef NodeEventFeed) {
+			publishTo: func(nef status.NodeEventFeed) {
 				call := client.Put(proto.Key("abc"), []byte("def"))
-				nef.callComplete(call.Args, call.Reply)
+				nef.CallComplete(call.Args, call.Reply)
 			},
-			expected: &CallSuccessEvent{
+			expected: &status.CallSuccessEvent{
 				NodeID: proto.NodeID(1),
 				Method: proto.Put,
 			},
 		},
 		{
 			name: "Get Error",
-			publishTo: func(nef NodeEventFeed) {
+			publishTo: func(nef status.NodeEventFeed) {
 				call := client.Get(proto.Key("abc"))
 				call.Reply.Header().SetGoError(util.Errorf("error"))
-				nef.callComplete(call.Args, call.Reply)
+				nef.CallComplete(call.Args, call.Reply)
 			},
-			expected: &CallErrorEvent{
+			expected: &status.CallErrorEvent{
 				NodeID: proto.NodeID(1),
 				Method: proto.Get,
 			},
@@ -144,7 +146,7 @@ func TestNodeEventFeed(t *testing.T) {
 
 	// Run test cases directly through a feed.
 	stopper, feed, consumers := startConsumerSet(3)
-	nodefeed := NewNodeEventFeed(proto.NodeID(1), feed)
+	nodefeed := status.NewNodeEventFeed(proto.NodeID(1), feed)
 	for _, tc := range testCases {
 		tc.publishTo(nodefeed)
 	}
@@ -169,14 +171,14 @@ func (ner *nodeEventReader) recordEvent(event interface{}) {
 	var nid proto.NodeID
 	eventStr := ""
 	switch event := event.(type) {
-	case *CallSuccessEvent:
+	case *status.CallSuccessEvent:
 		if event.Method == proto.InternalResolveIntent {
 			// Ignore this best-effort method.
 			break
 		}
 		nid = event.NodeID
 		eventStr = event.Method.String()
-	case *CallErrorEvent:
+	case *status.CallErrorEvent:
 		nid = event.NodeID
 		eventStr = "failed " + event.Method.String()
 	}
@@ -210,10 +212,10 @@ func (ner *nodeEventReader) eventFeedString() string {
 // TestServerNodeEventFeed verifies that a test server emits Node-specific
 // events.
 func TestServerNodeEventFeed(t *testing.T) {
-	s := StartTestServer(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	feed := s.node.ctx.EventFeed
+	feed := s.EventFeed()
 
 	// Start reading events from the feed before starting the stores.
 	readStopper := util.NewStopper()
