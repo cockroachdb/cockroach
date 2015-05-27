@@ -369,6 +369,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *NodeStatus) Unmarshal(data []byte) error {
@@ -566,6 +567,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *StoreStatus) Size() (n int) {

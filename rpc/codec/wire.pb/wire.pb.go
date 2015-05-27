@@ -307,6 +307,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *ResponseHeader) Unmarshal(data []byte) error {
@@ -439,6 +440,7 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *RequestHeader) Size() (n int) {

@@ -21,7 +21,6 @@ package acceptance
 
 import (
 	"encoding"
-	"flag"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -31,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 
 type testVal int64
 

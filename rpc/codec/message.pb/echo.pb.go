@@ -113,6 +113,7 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *EchoResponse) Unmarshal(data []byte) error {
@@ -177,6 +178,7 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *EchoRequest) Size() (n int) {

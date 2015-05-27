@@ -642,6 +642,7 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *RangeNotFoundError) Unmarshal(data []byte) error {
@@ -699,6 +700,7 @@ func (m *RangeNotFoundError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *RangeKeyMismatchError) Unmarshal(data []byte) error {
@@ -816,6 +818,7 @@ func (m *RangeKeyMismatchError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
@@ -906,6 +909,7 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *TransactionAbortedError) Unmarshal(data []byte) error {
@@ -972,6 +976,7 @@ func (m *TransactionAbortedError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *TransactionPushError) Unmarshal(data []byte) error {
@@ -1065,6 +1070,7 @@ func (m *TransactionPushError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *TransactionRetryError) Unmarshal(data []byte) error {
@@ -1131,6 +1137,7 @@ func (m *TransactionRetryError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *TransactionStatusError) Unmarshal(data []byte) error {
@@ -1219,6 +1226,7 @@ func (m *TransactionStatusError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *WriteIntentError) Unmarshal(data []byte) error {
@@ -1303,6 +1311,7 @@ func (m *WriteIntentError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *WriteIntentError_Intent) Unmarshal(data []byte) error {
@@ -1393,6 +1402,7 @@ func (m *WriteIntentError_Intent) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *WriteTooOldError) Unmarshal(data []byte) error {
@@ -1483,6 +1493,7 @@ func (m *WriteTooOldError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *OpRequiresTxnError) Unmarshal(data []byte) error {
@@ -1524,6 +1535,7 @@ func (m *OpRequiresTxnError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *ConditionFailedError) Unmarshal(data []byte) error {
@@ -1593,6 +1605,7 @@ func (m *ConditionFailedError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *LeaseRejectedError) Unmarshal(data []byte) error {
@@ -1683,6 +1696,7 @@ func (m *LeaseRejectedError) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *ErrorDetail) Unmarshal(data []byte) error {
@@ -2076,6 +2090,7 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *Error) Unmarshal(data []byte) error {
@@ -2199,6 +2214,7 @@ func (m *Error) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (this *ErrorDetail) GetValue() interface{} {

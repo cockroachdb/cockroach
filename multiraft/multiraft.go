@@ -350,7 +350,8 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 					Type:    changeType,
 					NodeID:  uint64(nodeID),
 					Context: encodeCommand(commandID, payload),
-				}); err != nil {
+				},
+			); err != nil {
 				log.Errorf("node %v: error proposing membership change to node %v: %s", m.nodeID,
 					groupID, err)
 			}

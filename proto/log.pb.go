@@ -450,6 +450,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *LogEntry_Arg) Unmarshal(data []byte) error {
@@ -558,6 +559,7 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *LogEntry) Size() (n int) {
