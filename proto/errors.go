@@ -50,6 +50,12 @@ func (e *LeaseRejectedError) Error() string {
 	return fmt.Sprintf("cannot replace lease %s with %s", e.Existing, e.Requested)
 }
 
+// CanRetry indicates that this error can not be retried; it should never
+// make it back to the client anyways.
+func (e *LeaseRejectedError) CanRetry() bool {
+	return false
+}
+
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
 func NewRangeNotFoundError(raftID int64) *RangeNotFoundError {
 	return &RangeNotFoundError{
