@@ -23,9 +23,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/util"
-
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var versionCmd = &cobra.Command{
@@ -43,6 +44,9 @@ Output build version information.
 		fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
 		fmt.Fprintf(w, "Build Deps:\n\t%s\n",
 			strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
+		if err := w.Flush(); err != nil {
+			log.Fatal(err)
+		}
 	},
 }
 
