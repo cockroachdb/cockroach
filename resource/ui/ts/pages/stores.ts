@@ -68,7 +68,7 @@ module AdminViews {
           m("h2", "Store Status"),
           m("div", [
             m("h3", "Store: " + storeId),
-            m("p", JSON.stringify(storeStatuses.statuses()[storeId]))
+            storeStatuses.Details(storeId)
           ])
         ]);
       }

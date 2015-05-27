@@ -66,7 +66,7 @@ module AdminViews {
           m("h2", "Node Status"),
           m("div", [
             m("h3", "Node: " + nodeId),
-            m("p", JSON.stringify(nodeStatuses.statuses()[nodeId]))
+            nodeStatuses.Details(nodeId)
           ])
         ]);
       }

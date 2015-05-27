@@ -1,5 +1,6 @@
 // source: models/store_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="node_status.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
@@ -60,11 +61,16 @@ module Models {
                 return m.request({ url: url, method: "GET", extract: nonJsonErrors })
                     .then((results: StoreStatusResponseSet) => {
                         results.d.forEach((status) => {
-                            if (this._data()[status.desc.store_id] == null) {
-                                this._data()[status.desc.store_id] = [];
+                            var storeId = status.desc.store_id;
+                            if (this._data()[storeId] == null) {
+                                this._data()[storeId] = [];
                             }
-                            this._data()[status.desc.store_id].push(status);
-                            this.statuses()[status.desc.store_id] = status;
+                            var statusList = this._data()[storeId];
+                            if ((statusList.length == 0) ||
+                                (statusList[statusList.length - 1].updated_at < status.updated_at)) {
+                                this._data()[storeId].push(status);
+                                this.statuses()[storeId] = status;
+                            }
                         });
                         this._pruneOldEntries();
                         this._updateDescriptions();
@@ -88,6 +94,53 @@ module Models {
                         status = status.sclice(status.length - Stores._dataPrunedSize, status.length - 1)
                     }
                 }
+            }
+
+            // TODO(Bram): Move to utility class.
+            private _availability(storeId:string):string {
+                var store = this.statuses()[storeId];
+                if (store.leader_range_count == 0) {
+                    return "100%";
+                }
+                return (store.available_range_count / store.leader_range_count * 100).toString() + "%";
+            }
+
+            // TODO(Bram): Move to utility class.
+            private _replicated(storeId: string): string {
+                var store = this.statuses()[storeId];
+                if (store.leader_range_count == 0) {
+                    return "100%";
+                }
+                return (store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
+            }
+
+            // TODO(Bram): Move to utility class.
+            private static _datetimeFormater = d3.time.format("%Y-%m-%d %H:%M:%S")
+            private static _formatDate(nanos: number): string {
+                var datetime = new Date(nanos / 1.0e6);
+                return Stores._datetimeFormater(datetime);
+            }
+
+            public Details(storeId:string):_mithril.MithrilVirtualElement {
+                var store = this.statuses()[storeId];
+                if (store == null) {
+                    return m("div", "No data present yet.")
+                }
+                return m("div",[
+                    m("table", [
+                      m("tr", [m("td", "Node Id:"), m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))]),
+                      m("tr", [m("td", "Node Network:"), m("td", store.desc.node.address.network)]),
+                      m("tr", [m("td", "Node Address:"), m("td", store.desc.node.address.address)]),
+                      m("tr", [m("td", "Started at:"), m("td", Stores._formatDate(store.started_at))]),
+                      m("tr", [m("td", "Updated at:"), m("td", Stores._formatDate(store.updated_at))]),
+                      m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
+                      m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
+                      m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
+                      m("tr", [m("td", "Availablility:"), m("td", this._availability(storeId))]),
+                      m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
+                      m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(storeId))])
+                    ])
+                ]);
             }
         }
 

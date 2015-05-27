@@ -282,11 +282,16 @@ var Models;
                 return m.request({ url: url, method: "GET", extract: nonJsonErrors })
                     .then(function (results) {
                     results.d.forEach(function (status) {
-                        if (_this._data()[status.desc.node_id] == null) {
-                            _this._data()[status.desc.node_id] = [];
+                        var nodeId = status.desc.node_id;
+                        if (_this._data()[nodeId] == null) {
+                            _this._data()[nodeId] = [];
                         }
-                        _this._data()[status.desc.node_id].push(status);
-                        _this.statuses()[status.desc.node_id] = status;
+                        var statusList = _this._data()[nodeId];
+                        if ((statusList.length == 0) ||
+                            (statusList[statusList.length - 1].updated_at < status.updated_at)) {
+                            _this._data()[nodeId].push(status);
+                            _this.statuses()[nodeId] = status;
+                        }
                     });
                     _this._pruneOldEntries();
                     _this._updateDescriptions();
@@ -309,8 +314,54 @@ var Models;
                     }
                 }
             };
+            Nodes.prototype._availability = function (nodeId) {
+                var node = this.statuses()[nodeId];
+                if (node.leader_range_count == 0) {
+                    return "100%";
+                }
+                return (node.available_range_count / node.leader_range_count * 100).toString() + "%";
+            };
+            Nodes.prototype._replicated = function (nodeId) {
+                var node = this.statuses()[nodeId];
+                if (node.leader_range_count == 0) {
+                    return "100%";
+                }
+                return (node.replicated_range_count / node.leader_range_count * 100).toString() + "%";
+            };
+            Nodes._formatDate = function (nanos) {
+                var datetime = new Date(nanos / 1.0e6);
+                return Nodes._datetimeFormater(datetime);
+            };
+            Nodes.prototype.Details = function (nodeId) {
+                var node = this.statuses()[nodeId];
+                if (node == null) {
+                    return m("div", "No data present yet.");
+                }
+                return m("div", [
+                    m("table", [
+                        m("tr", [m("td", "Stores (" + node.store_ids.length + "):"),
+                            m("td", [node.store_ids.map(function (storeId) {
+                                    return m("div", [
+                                        m("a[href=/stores/" + storeId + "]", { config: m.route }, storeId),
+                                        " "]);
+                                })])
+                        ]),
+                        m("tr", [m("td", "Network:"), m("td", node.desc.address.network)]),
+                        m("tr", [m("td", "Address:"), m("td", node.desc.address.address)]),
+                        m("tr", [m("td", "Started at:"), m("td", Nodes._formatDate(node.started_at))]),
+                        m("tr", [m("td", "Updated at:"), m("td", Nodes._formatDate(node.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", node.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", node.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", node.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", this._availability(nodeId))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", node.leader_range_count - node.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(nodeId))])
+                    ])
+                ]);
+            };
             Nodes._dataLimit = 100000;
             Nodes._dataPrunedSize = 90000;
+            Nodes._datetimeFormater = d3.time.format("%Y-%m-%d %H:%M:%S");
             return Nodes;
         })();
         NodeStatus.Nodes = Nodes;
@@ -374,7 +425,7 @@ var AdminViews;
                     m("h2", "Node Status"),
                     m("div", [
                         m("h3", "Node: " + nodeId),
-                        m("p", JSON.stringify(Nodes.nodeStatuses.statuses()[nodeId]))
+                        Nodes.nodeStatuses.Details(nodeId)
                     ])
                 ]);
             }
@@ -634,6 +685,7 @@ var AdminViews;
 })(AdminViews || (AdminViews = {}));
 // source: models/store_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="node_status.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
@@ -653,11 +705,16 @@ var Models;
                 return m.request({ url: url, method: "GET", extract: nonJsonErrors })
                     .then(function (results) {
                     results.d.forEach(function (status) {
-                        if (_this._data()[status.desc.store_id] == null) {
-                            _this._data()[status.desc.store_id] = [];
+                        var storeId = status.desc.store_id;
+                        if (_this._data()[storeId] == null) {
+                            _this._data()[storeId] = [];
                         }
-                        _this._data()[status.desc.store_id].push(status);
-                        _this.statuses()[status.desc.store_id] = status;
+                        var statusList = _this._data()[storeId];
+                        if ((statusList.length == 0) ||
+                            (statusList[statusList.length - 1].updated_at < status.updated_at)) {
+                            _this._data()[storeId].push(status);
+                            _this.statuses()[storeId] = status;
+                        }
                     });
                     _this._pruneOldEntries();
                     _this._updateDescriptions();
@@ -680,8 +737,48 @@ var Models;
                     }
                 }
             };
+            Stores.prototype._availability = function (storeId) {
+                var store = this.statuses()[storeId];
+                if (store.leader_range_count == 0) {
+                    return "100%";
+                }
+                return (store.available_range_count / store.leader_range_count * 100).toString() + "%";
+            };
+            Stores.prototype._replicated = function (storeId) {
+                var store = this.statuses()[storeId];
+                if (store.leader_range_count == 0) {
+                    return "100%";
+                }
+                return (store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
+            };
+            Stores._formatDate = function (nanos) {
+                var datetime = new Date(nanos / 1.0e6);
+                return Stores._datetimeFormater(datetime);
+            };
+            Stores.prototype.Details = function (storeId) {
+                var store = this.statuses()[storeId];
+                if (store == null) {
+                    return m("div", "No data present yet.");
+                }
+                return m("div", [
+                    m("table", [
+                        m("tr", [m("td", "Node Id:"), m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))]),
+                        m("tr", [m("td", "Node Network:"), m("td", store.desc.node.address.network)]),
+                        m("tr", [m("td", "Node Address:"), m("td", store.desc.node.address.address)]),
+                        m("tr", [m("td", "Started at:"), m("td", Stores._formatDate(store.started_at))]),
+                        m("tr", [m("td", "Updated at:"), m("td", Stores._formatDate(store.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", this._availability(storeId))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(storeId))])
+                    ])
+                ]);
+            };
             Stores._dataLimit = 100000;
             Stores._dataPrunedSize = 90000;
+            Stores._datetimeFormater = d3.time.format("%Y-%m-%d %H:%M:%S");
             return Stores;
         })();
         StoreStatus.Stores = Stores;
@@ -747,7 +844,7 @@ var AdminViews;
                     m("h2", "Store Status"),
                     m("div", [
                         m("h3", "Store: " + storeId),
-                        m("p", JSON.stringify(Stores.storeStatuses.statuses()[storeId]))
+                        Stores.storeStatuses.Details(storeId)
                     ])
                 ]);
             }
