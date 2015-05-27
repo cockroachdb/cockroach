@@ -7,8 +7,6 @@
  */
 module Models {
     export module Stats {
-        /**
-         */
         export interface MVCCStats {
             live_bytes: number;
             key_bytes: number;
