@@ -118,8 +118,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper
 	if nodeID == 0 {
 		return nil, util.Error("Invalid RaftNodeID")
 	}
-	err := config.validate()
-	if err != nil {
+	if err := config.validate(); err != nil {
 		return nil, err
 	}
 
@@ -157,8 +156,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper
 		callbackChan:    make(chan func()),
 	}
 
-	err = m.Transport.Listen(nodeID, (*multiraftServer)(m))
-	if err != nil {
+	if err := m.Transport.Listen(nodeID, (*multiraftServer)(m)); err != nil {
 		return nil, err
 	}
 
@@ -325,9 +323,8 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
-			err := m.multiNode.Propose(context.Background(), uint64(groupID),
-				encodeCommand(commandID, command))
-			if err != nil {
+			if err := m.multiNode.Propose(context.Background(), uint64(groupID),
+				encodeCommand(commandID, command)); err != nil {
 				log.Errorf("node %v: error proposing command to group %v: %s", m.nodeID, groupID, err)
 			}
 		},
@@ -348,13 +345,12 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
-			err := m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
+			if err := m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
 				raftpb.ConfChange{
 					Type:    changeType,
 					NodeID:  uint64(nodeID),
 					Context: encodeCommand(commandID, payload),
-				})
-			if err != nil {
+				}); err != nil {
 				log.Errorf("node %v: error proposing membership change to node %v: %s", m.nodeID,
 					groupID, err)
 			}
@@ -866,8 +862,7 @@ func (s *state) processCommittedEntry(groupID uint64, g *group, entry raftpb.Ent
 
 	case raftpb.EntryConfChange:
 		cc := raftpb.ConfChange{}
-		err := cc.Unmarshal(entry.Data)
-		if err != nil {
+		if err := cc.Unmarshal(entry.Data); err != nil {
 			log.Fatalf("invalid ConfChange data: %s", err)
 		}
 		var payload []byte
@@ -1051,16 +1046,14 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					log.Infof("node %v dropped individual heartbeat to node %v",
 						s.nodeID, msg.To)
 				}
-				continue
 			case raftpb.MsgHeartbeatResp:
 				if log.V(8) {
 					log.Infof("node %v dropped individual heartbeat response to node %v",
 						s.nodeID, msg.To)
 				}
-				continue
+			default:
+				s.sendMessage(groupID, msg)
 			}
-
-			s.sendMessage(groupID, msg)
 		}
 	}
 }
