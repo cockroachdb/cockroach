@@ -375,9 +375,15 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 		return r.newNotLeaderError()
 	} else if !held || expired {
 		// Otherwise, if not held by this replica or expired, request renewal.
-		if err := r.requestLeaderLease(timestamp); err != nil {
-			return err
+		err := r.requestLeaderLease(timestamp)
+		// Getting a LeaseRejectedError back means someone else got there
+		// first.
+		if _, ok := err.(*proto.LeaseRejectedError); ok {
+			if held, expired := r.HasLeaderLease(timestamp); !held && !expired {
+				return r.newNotLeaderError()
+			}
 		}
+		return err
 	}
 	return nil
 }
