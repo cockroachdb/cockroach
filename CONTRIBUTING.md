@@ -74,3 +74,5 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 + If you do not have write access to the repository and your pull request requires a manual merge, you may be asked to rebase again,
   `git fetch origin; git rebase -i origin/master` and update the PR again. Otherwise, you are free to merge your branch into origin/master directly or rebase first as you deem appropriate.
 
++ If you get a test failure in CircleCI, check the Test Failure tab to see why the test failed. When the failure is logged in `excerpt.txt`, you can find the file from the Artifacts tab and see log messages. (You need to sign in to see the Artifacts tab.)
+
