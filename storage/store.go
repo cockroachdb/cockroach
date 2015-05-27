@@ -1142,7 +1142,9 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	// Backoff and retry loop for handling errors.
 	retryOpts := s.ctx.RangeRetryOptions
 	retryOpts.Tag = fmt.Sprintf("store: %s", args.Method())
+	attempts := 0
 	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+		attempts++
 		// Add the command to the range for execution; exit retry loop on success.
 		reply.Reset()
 
@@ -1164,7 +1166,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		// intent independently, so we can't do it in Range.executeCmd.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
 			// If inconsistent, return results and resolve asynchronously.
-			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
+			if header.ReadConsistency == proto.INCONSISTENT &&
+				attempts == 1 && s.stopper.StartTask() {
 				go func() {
 					if err := s.resolveWriteIntentError(ctx, wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
 						log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
