@@ -23,6 +23,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
+#include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
 #include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
@@ -42,6 +43,25 @@ class TimeSeriesQueryRequest_Query;
 class TimeSeriesQueryResponse;
 class TimeSeriesQueryResponse_Result;
 
+enum TimeSeriesQueryAggregator {
+  AVG = 1,
+  AVG_RATE = 2
+};
+bool TimeSeriesQueryAggregator_IsValid(int value);
+const TimeSeriesQueryAggregator TimeSeriesQueryAggregator_MIN = AVG;
+const TimeSeriesQueryAggregator TimeSeriesQueryAggregator_MAX = AVG_RATE;
+const int TimeSeriesQueryAggregator_ARRAYSIZE = TimeSeriesQueryAggregator_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* TimeSeriesQueryAggregator_descriptor();
+inline const ::std::string& TimeSeriesQueryAggregator_Name(TimeSeriesQueryAggregator value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    TimeSeriesQueryAggregator_descriptor(), value);
+}
+inline bool TimeSeriesQueryAggregator_Parse(
+    const ::std::string& name, TimeSeriesQueryAggregator* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<TimeSeriesQueryAggregator>(
+    TimeSeriesQueryAggregator_descriptor(), name, value);
+}
 // ===================================================================
 
 class TimeSeriesDatapoint : public ::google::protobuf::Message {
@@ -310,16 +330,26 @@ class TimeSeriesQueryRequest_Query : public ::google::protobuf::Message {
   inline ::std::string* release_name();
   inline void set_allocated_name(::std::string* name);
 
+  // optional .cockroach.proto.TimeSeriesQueryAggregator aggregator = 2 [default = AVG];
+  inline bool has_aggregator() const;
+  inline void clear_aggregator();
+  static const int kAggregatorFieldNumber = 2;
+  inline ::cockroach::proto::TimeSeriesQueryAggregator aggregator() const;
+  inline void set_aggregator(::cockroach::proto::TimeSeriesQueryAggregator value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.TimeSeriesQueryRequest.Query)
  private:
   inline void set_has_name();
   inline void clear_has_name();
+  inline void set_has_aggregator();
+  inline void clear_has_aggregator();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::std::string* name_;
+  int aggregator_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ftimeseries_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ftimeseries_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ftimeseries_2eproto();
@@ -514,10 +544,17 @@ class TimeSeriesQueryResponse_Result : public ::google::protobuf::Message {
   inline const ::google::protobuf::RepeatedPtrField< ::std::string>& sources() const;
   inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_sources();
 
-  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+  // optional .cockroach.proto.TimeSeriesQueryAggregator aggregator = 3 [default = AVG];
+  inline bool has_aggregator() const;
+  inline void clear_aggregator();
+  static const int kAggregatorFieldNumber = 3;
+  inline ::cockroach::proto::TimeSeriesQueryAggregator aggregator() const;
+  inline void set_aggregator(::cockroach::proto::TimeSeriesQueryAggregator value);
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 4;
   inline int datapoints_size() const;
   inline void clear_datapoints();
-  static const int kDatapointsFieldNumber = 3;
+  static const int kDatapointsFieldNumber = 4;
   inline const ::cockroach::proto::TimeSeriesDatapoint& datapoints(int index) const;
   inline ::cockroach::proto::TimeSeriesDatapoint* mutable_datapoints(int index);
   inline ::cockroach::proto::TimeSeriesDatapoint* add_datapoints();
@@ -530,6 +567,8 @@ class TimeSeriesQueryResponse_Result : public ::google::protobuf::Message {
  private:
   inline void set_has_name();
   inline void clear_has_name();
+  inline void set_has_aggregator();
+  inline void clear_has_aggregator();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -538,6 +577,7 @@ class TimeSeriesQueryResponse_Result : public ::google::protobuf::Message {
   ::std::string* name_;
   ::google::protobuf::RepeatedPtrField< ::std::string> sources_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint > datapoints_;
+  int aggregator_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ftimeseries_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ftimeseries_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ftimeseries_2eproto();
@@ -950,6 +990,31 @@ inline void TimeSeriesQueryRequest_Query::set_allocated_name(::std::string* name
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TimeSeriesQueryRequest.Query.name)
 }
 
+// optional .cockroach.proto.TimeSeriesQueryAggregator aggregator = 2 [default = AVG];
+inline bool TimeSeriesQueryRequest_Query::has_aggregator() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void TimeSeriesQueryRequest_Query::set_has_aggregator() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void TimeSeriesQueryRequest_Query::clear_has_aggregator() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void TimeSeriesQueryRequest_Query::clear_aggregator() {
+  aggregator_ = 1;
+  clear_has_aggregator();
+}
+inline ::cockroach::proto::TimeSeriesQueryAggregator TimeSeriesQueryRequest_Query::aggregator() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesQueryRequest.Query.aggregator)
+  return static_cast< ::cockroach::proto::TimeSeriesQueryAggregator >(aggregator_);
+}
+inline void TimeSeriesQueryRequest_Query::set_aggregator(::cockroach::proto::TimeSeriesQueryAggregator value) {
+  assert(::cockroach::proto::TimeSeriesQueryAggregator_IsValid(value));
+  set_has_aggregator();
+  aggregator_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesQueryRequest.Query.aggregator)
+}
+
 // -------------------------------------------------------------------
 
 // TimeSeriesQueryRequest
@@ -1166,7 +1231,32 @@ TimeSeriesQueryResponse_Result::mutable_sources() {
   return &sources_;
 }
 
-// repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+// optional .cockroach.proto.TimeSeriesQueryAggregator aggregator = 3 [default = AVG];
+inline bool TimeSeriesQueryResponse_Result::has_aggregator() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void TimeSeriesQueryResponse_Result::set_has_aggregator() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void TimeSeriesQueryResponse_Result::clear_has_aggregator() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void TimeSeriesQueryResponse_Result::clear_aggregator() {
+  aggregator_ = 1;
+  clear_has_aggregator();
+}
+inline ::cockroach::proto::TimeSeriesQueryAggregator TimeSeriesQueryResponse_Result::aggregator() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesQueryResponse.Result.aggregator)
+  return static_cast< ::cockroach::proto::TimeSeriesQueryAggregator >(aggregator_);
+}
+inline void TimeSeriesQueryResponse_Result::set_aggregator(::cockroach::proto::TimeSeriesQueryAggregator value) {
+  assert(::cockroach::proto::TimeSeriesQueryAggregator_IsValid(value));
+  set_has_aggregator();
+  aggregator_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesQueryResponse.Result.aggregator)
+}
+
+// repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 4;
 inline int TimeSeriesQueryResponse_Result::datapoints_size() const {
   return datapoints_.size();
 }
@@ -1240,6 +1330,11 @@ TimeSeriesQueryResponse::mutable_results() {
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::cockroach::proto::TimeSeriesQueryAggregator> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::TimeSeriesQueryAggregator>() {
+  return ::cockroach::proto::TimeSeriesQueryAggregator_descriptor();
+}
 
 }  // namespace google
 }  // namespace protobuf
