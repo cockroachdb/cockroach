@@ -428,6 +428,7 @@ func (m *Attributes) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *Replica) Unmarshal(data []byte) error {
@@ -524,6 +525,7 @@ func (m *Replica) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *RangeDescriptor) Unmarshal(data []byte) error {
@@ -654,6 +656,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *GCPolicy) Unmarshal(data []byte) error {
@@ -711,6 +714,7 @@ func (m *GCPolicy) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *AcctConfig) Unmarshal(data []byte) error {
@@ -775,6 +779,7 @@ func (m *AcctConfig) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *PermConfig) Unmarshal(data []byte) error {
@@ -861,6 +866,7 @@ func (m *PermConfig) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *ZoneConfig) Unmarshal(data []byte) error {
@@ -985,6 +991,7 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *RangeTree) Unmarshal(data []byte) error {
@@ -1051,6 +1058,7 @@ func (m *RangeTree) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *RangeTreeNode) Unmarshal(data []byte) error {
@@ -1210,6 +1218,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *Addr) Unmarshal(data []byte) error {
@@ -1296,6 +1305,7 @@ func (m *Addr) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *StoreCapacity) Unmarshal(data []byte) error {
@@ -1383,6 +1393,7 @@ func (m *StoreCapacity) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *NodeDescriptor) Unmarshal(data []byte) error {
@@ -1488,6 +1499,7 @@ func (m *NodeDescriptor) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *StoreDescriptor) Unmarshal(data []byte) error {
@@ -1617,6 +1629,7 @@ func (m *StoreDescriptor) Unmarshal(data []byte) error {
 			index += skippy
 		}
 	}
+
 	return nil
 }
 func (m *Attributes) Size() (n int) {
