@@ -135,7 +135,7 @@ message InternalPushTxnRequest {
   optional PushTxnType push_type = 4 [(gogoproto.nullable) = false];
   // Range lookup indicates whether we're pushing a txn because of an
   // intent encountered while servicing an internal range lookup
-  // request. See notes in InternalLookupRangeRequest.
+  // request. See notes in InternalRangeLookupRequest.
   optional bool range_lookup = 5 [(gogoproto.nullable) = false];
 }
 

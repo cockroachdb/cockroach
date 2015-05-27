@@ -936,9 +936,9 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	}
 	// Replace the end key of the original range with the start key of
 	// the new range.
-	copy := *origRng.Desc()
-	copy.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
-	if err := origRng.SetDesc(&copy); err != nil {
+	copyDesc := *origRng.Desc()
+	copyDesc.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
+	if err := origRng.SetDesc(&copyDesc); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -1060,8 +1060,8 @@ func (s *Store) RemoveRange(rng *Range) error {
 }
 
 // ProcessRangeDescriptorUpdate is called whenever a range's
-// descriptor is updated. Currently, it adds a range to the rangesByS
-// slice if it has not yet been added.
+// descriptor is updated. Currently, it makes the range available
+// for lookups by key idempotently.
 func (s *Store) ProcessRangeDescriptorUpdate(rng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1473,7 +1473,7 @@ func raftEntryFormatter(data []byte) string {
 }
 
 // GetStatus fetches the latest store status from the stored value on the cluster.
-// Returns nil if the scanner has not yet run.  The scanner runs once every
+// Returns nil if the scanner has not yet run. The scanner runs once every
 // ctx.ScanInterval.
 func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 	if s.scanner.Count() == 0 {
