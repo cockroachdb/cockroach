@@ -238,6 +238,7 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	transport := cluster.transport.(*localInterceptableTransport)
 	done := make(chan struct{})
 	firstPhase := make(chan struct{})
+	secondPhase := make(chan struct{})
 	go func() {
 		// Create group, elect leader, then send ticks as we want them.
 		cluster.createGroup(1, 0, 3)
@@ -278,6 +279,11 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		if el := cluster.waitForElection(3); el.NodeID != 4 {
 			t.Fatalf("wrong leader elected, wanted node 4 but got event %v", el)
 		}
+		// Same on #3, but mostly to clean out the events channel; this node
+		// will be leader later and we want a clean slate.
+		if el := cluster.waitForElection(2); el.NodeID != 4 {
+			t.Fatalf("wrong leader elected, wanted node 4 but got event %v", el)
+		}
 		// Requests to #2, #3 without responses.
 		cluster.tickers[0].Tick()
 		// Requests to #1, #2 with and #4, #5 without responses.
@@ -286,6 +292,16 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		cluster.tickers[3].Tick()
 		// Requests to #3, #4 without responses.
 		cluster.tickers[4].Tick()
+		<-secondPhase
+		// Create the third group
+		cluster.createGroup(3, 0, 3)
+		// The node at index 2 (NodeID 3) will be leader for both group 1 and 3
+		cluster.triggerElection(2, 3)
+		if el := cluster.waitForElection(2); el.NodeID != 3 {
+			t.Fatalf("wrong leader elected, wanted node 3 but got event %v", el)
+		}
+		// Requests to #1, #2 with and #4, #5 without responses.
+		cluster.tickers[2].Tick()
 		close(done)
 	}()
 
@@ -324,6 +340,23 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	if !reflect.DeepEqual(actCnt, expCntSecondPhase) {
 		t.Errorf("phase 2: expected and actual heartbeat counts differ:\n%v\n%v",
 			expCntSecondPhase, actCnt)
+	}
+	close(secondPhase)
+	expCntThirdPhase := heartbeatCountMap{
+		1: {reqOut: 0, reqIn: 1, respOut: 1, respIn: 0},
+		2: {reqOut: 0, reqIn: 1, respOut: 1, respIn: 0},
+		3: {reqOut: 4, reqIn: 0, respOut: 0, respIn: 2},
+		4: {reqOut: 0, reqIn: 1, respOut: 0, respIn: 0},
+		5: {reqOut: 0, reqIn: 1, respOut: 0, respIn: 0},
+	}
+	actCnt = countHeartbeats(transport.Events,
+		func(req *RaftMessageRequest, cnt heartbeatCountMap) bool {
+			return cnt.Sum() >= expCntThirdPhase.Sum()
+		})
+
+	if !reflect.DeepEqual(actCnt, expCntThirdPhase) {
+		t.Errorf("phase 3: expected and actual heartbeat counts differ:\n%v\n%v",
+			expCntThirdPhase, actCnt)
 	}
 	// Keep processing without inspection and shutdown cluster.
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
