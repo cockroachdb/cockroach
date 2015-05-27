@@ -619,7 +619,7 @@ A really good reference on tuning Linux installations with RocksDB is
 The default approximate size of a range is 64M (2\^26 B). In order to
 support 1P (2\^50 B) of logical data, metadata is needed for roughly
 2\^(50 - 26) = 2\^24 ranges. A reasonable upper bound on range metadata
-size is roughly 256 bytes (*3 \* 12 bytes for the triplicated node
+size is roughly 256 bytes (3\*12 bytes for the triplicated node
 locations and 220 bytes for the range key itself*). 2\^24 ranges \* 2\^8
 B would require roughly 4G (2\^32 B) to store--too much to duplicate
 between machines. Our conclusion is that range metadata must be
