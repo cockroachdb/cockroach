@@ -27,7 +27,7 @@ import (
 // A leaderCache is a cache used to keep track of the leader
 // replica of Raft consensus groups.
 type leaderCache struct {
-	mu    sync.RWMutex
+	mu    sync.Mutex
 	cache *cache.UnorderedCache
 }
 
