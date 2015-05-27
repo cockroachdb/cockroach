@@ -382,6 +382,11 @@ func TestRangeHasLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
+	err := tc.rng.redirectOnOrAcquireLeaderLease(tc.clock.Now())
+	if lErr, ok := err.(*proto.NotLeaderError); !ok || lErr == nil {
+		t.Fatalf("wanted NotLeaderError, got %s", err)
+	}
+
 	// Advance clock past expiration and verify that another has
 	// leader lease will not be true.
 	tc.manualClock.Increment(21) // 21ns pass
