@@ -69,7 +69,6 @@ func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *tes
 			ElectionTimeoutTicks:   2,
 			HeartbeatIntervalTicks: 1,
 			TickInterval:           time.Hour, // not in use
-			Strict:                 true,
 		}
 		mr, err := NewMultiRaft(proto.RaftNodeID(i+1), config, stopper)
 		if err != nil {
