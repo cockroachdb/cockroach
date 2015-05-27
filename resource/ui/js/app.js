@@ -29,6 +29,11 @@ var Models;
 (function (Models) {
     var Metrics;
     (function (Metrics) {
+        (function (QueryAggregator) {
+            QueryAggregator[QueryAggregator["AVG"] = 1] = "AVG";
+            QueryAggregator[QueryAggregator["AVG_RATE"] = 2] = "AVG_RATE";
+        })(Metrics.QueryAggregator || (Metrics.QueryAggregator = {}));
+        var QueryAggregator = Metrics.QueryAggregator;
         function query(start, end, series) {
             var url = "/ts/query";
             var data = {
@@ -49,43 +54,68 @@ var Models;
                 return d;
             });
         }
-        var StaticQuery = (function () {
-            function StaticQuery(start, end) {
-                var series = [];
-                for (var _i = 2; _i < arguments.length; _i++) {
-                    series[_i - 2] = arguments[_i];
-                }
-                this.start = start;
-                this.end = end;
-                this.series = series;
-            }
-            StaticQuery.prototype.query = function () {
-                if (this.data != null) {
-                    return this.data;
-                }
-                this.data = query(this.start, this.end, this.series);
-                return this.data;
-            };
-            return StaticQuery;
-        })();
-        Metrics.StaticQuery = StaticQuery;
-        var SlidingQuery = (function () {
-            function SlidingQuery(windowDuration) {
+        var RecentQuery = (function () {
+            function RecentQuery(windowDuration) {
                 var series = [];
                 for (var _i = 1; _i < arguments.length; _i++) {
                     series[_i - 1] = arguments[_i];
                 }
                 this.windowDuration = windowDuration;
-                this.series = series;
+                this._series = series;
             }
-            SlidingQuery.prototype.query = function () {
+            RecentQuery.prototype.query = function () {
                 var endTime = new Date();
                 var startTime = new Date(endTime.getTime() - this.windowDuration);
-                return query(startTime, endTime, this.series);
+                return query(startTime, endTime, this._series);
             };
-            return SlidingQuery;
+            return RecentQuery;
         })();
-        Metrics.SlidingQuery = SlidingQuery;
+        Metrics.RecentQuery = RecentQuery;
+        var QueryManager = (function () {
+            function QueryManager(_query) {
+                this._query = _query;
+                this._result = null;
+                this._error = null;
+                this._resultEpoch = 0;
+                this._outstanding = null;
+            }
+            QueryManager.prototype.processOutstanding = function () {
+                if (this._outstanding) {
+                    var completed = (this._outstanding.error() != null || this._outstanding.result() != null);
+                    if (completed) {
+                        this._result = this._outstanding.result();
+                        this._error = this._outstanding.error();
+                        this._outstanding = null;
+                        this._resultEpoch++;
+                    }
+                }
+            };
+            QueryManager.prototype.result = function () {
+                this.processOutstanding();
+                return this._result;
+            };
+            QueryManager.prototype.epoch = function () {
+                this.processOutstanding();
+                return this._resultEpoch;
+            };
+            QueryManager.prototype.error = function () {
+                this.processOutstanding();
+                return this._error;
+            };
+            QueryManager.prototype.refresh = function () {
+                this.result();
+                if (!this._outstanding) {
+                    this._outstanding = {
+                        result: this._query.query(),
+                        error: m.prop(null),
+                    };
+                    this._outstanding.result.then(null, this._outstanding.error);
+                }
+                return this._outstanding.result;
+            };
+            return QueryManager;
+        })();
+        Metrics.QueryManager = QueryManager;
         function nonJsonErrors(xhr, opts) {
             return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
         }
@@ -105,8 +135,6 @@ var Components;
                 function Controller(vm) {
                     var _this = this;
                     this.vm = vm;
-                    this.data = m.prop(null);
-                    this.error = m.prop(null);
                     this.chart = nv.models.lineChart()
                         .x(function (d) { return new Date(d.timestamp_nanos / 1.0e6); })
                         .y(function (d) { return d.value; })
@@ -117,50 +145,41 @@ var Components;
                         .xScale(d3.time.scale());
                     this.drawGraph = function (element, isInitialized, context) {
                         if (!isInitialized) {
-                            var interval = setInterval(function () { return _this.queryData(); }, 10000);
-                            context.onunload = function () {
-                                clearInterval(interval);
-                            };
                             nv.addGraph(_this.chart);
                         }
-                        if (_this.readData()) {
-                            var formattedData = _this.data().results.map(function (d) {
-                                return {
-                                    values: d.datapoints,
-                                    key: d.name,
-                                    color: Controller.colors(d.name),
-                                    area: true,
-                                    fillOpacity: .1,
-                                };
-                            });
+                        if (_this.shouldRenderData()) {
+                            var formattedData = [];
+                            if (_this.vm.query.result()) {
+                                formattedData = _this.vm.query.result().results.map(function (d) {
+                                    return {
+                                        values: d.datapoints,
+                                        key: d.name,
+                                        color: Controller.colors(d.name),
+                                        area: true,
+                                        fillOpacity: .1,
+                                    };
+                                });
+                            }
                             d3.select(element)
                                 .datum(formattedData)
                                 .transition().duration(500)
                                 .call(_this.chart);
                         }
                     };
-                    this.queryData();
                     this.chart.xAxis
                         .tickFormat(d3.time.format('%I:%M:%S'))
                         .showMaxMin(false);
                 }
-                Controller.prototype.queryData = function () {
-                    if (this.activeQuery) {
-                        return;
-                    }
-                    this.error(null);
-                    this.activeQuery = this.vm.query.query().then(null, this.error);
-                };
-                Controller.prototype.readData = function () {
-                    if (this.activeQuery && this.activeQuery()) {
-                        this.data(this.activeQuery());
-                        this.activeQuery = null;
+                Controller.prototype.shouldRenderData = function () {
+                    var epoch = this.vm.query.epoch();
+                    if (epoch > this.vm.lastEpoch) {
+                        this.vm.lastEpoch = epoch;
                         return true;
                     }
                     return false;
                 };
                 Controller.prototype.hasData = function () {
-                    return !!this.data() || (this.activeQuery && !!this.activeQuery());
+                    return this.vm.query.epoch() > 0;
                 };
                 Controller.colors = d3.scale.category10();
                 return Controller;
@@ -170,10 +189,7 @@ var Components;
             }
             LineGraph.controller = controller;
             function view(ctrl) {
-                if (ctrl.error()) {
-                    return m("", "error loading graph:" + ctrl.error());
-                }
-                else if (ctrl.hasData()) {
+                if (ctrl.hasData()) {
                     return m(".linegraph", { style: "width:500px;height:300px;" }, m("svg.graph", { config: ctrl.drawGraph }));
                 }
                 else {
@@ -181,8 +197,8 @@ var Components;
                 }
             }
             LineGraph.view = view;
-            function create(width, height, query, key) {
-                var vm = { width: width, height: height, lastVersion: 0, query: query };
+            function create(query, key) {
+                var vm = { lastEpoch: 0, query: query };
                 if (key) {
                     vm.key = key;
                 }
@@ -203,15 +219,23 @@ var AdminViews;
     (function (Graph) {
         var Page;
         (function (Page) {
-            function controller() { }
+            function controller() {
+                var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, "cr.node.calls.success.1");
+                var manager = new Models.Metrics.QueryManager(query);
+                manager.refresh();
+                var interval = setInterval(function () { return manager.refresh(); }, 10000);
+                return {
+                    manager: manager,
+                    onunload: function () { return clearInterval(interval); },
+                };
+            }
             Page.controller = controller;
-            function view() {
+            function view(ctrl) {
                 var windowSize = 10 * 60 * 1000;
                 return m(".graphPage", [
                     m("H3", "Graph Demo"),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1")),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.keybytes.1")),
-                    Components.Metrics.LineGraph.create(500, 350, new Models.Metrics.SlidingQuery(windowSize, "cr.store.livebytes.1", "cr.store.valbytes.1")),
+                    Components.Metrics.LineGraph.create(ctrl.manager),
+                    Components.Metrics.LineGraph.create(ctrl.manager),
                 ]);
             }
             Page.view = view;

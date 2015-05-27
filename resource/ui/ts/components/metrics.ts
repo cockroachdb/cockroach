@@ -29,9 +29,8 @@ module Components {
              * display options.
              */
             interface ViewModel {
-                width:number;
-                height:number;
-                query:Models.Metrics.Query;
+                query:Models.Metrics.QueryManager;
+                lastEpoch:number;
                 key?:number;
             }
 
@@ -40,14 +39,6 @@ module Components {
              * LineGraph.
              */
             class Controller {
-                // activeQuery is the promised results of a currently active
-                // query.
-                activeQuery:_mithril.MithrilPromise<Models.Metrics.QueryResultSet>;
-                // data contains the current data set rendered to the graph.
-                data = m.prop(<Models.Metrics.QueryResultSet> null);
-                // error returns any error which occurred during the previous query.
-                error = m.prop(<Error> null);
-
                 // nvd3 chart.
                 chart = nv.models.lineChart()
                     .x((d) => new Date(d.timestamp_nanos/1.0e6))
@@ -62,32 +53,19 @@ module Components {
                 static colors = d3.scale.category10();
 
                 constructor(public vm:ViewModel) {
-                    // Query for initial result set.
-                    this.queryData();
-
                     // Set xAxis ticks to properly format.
                     this.chart.xAxis
                         .tickFormat(d3.time.format('%I:%M:%S'))
                         .showMaxMin(false);
                 }
 
-                queryData() {
-                    if (this.activeQuery) {
-                        return;
-                    }
-                    this.error(null);
-                    this.activeQuery = this.vm.query.query().then(null, this.error)
-                }
-
                 /**
-                 * readData reads the results of a completed active query.
+                 * shouldRenderData returns true if there is new data to render.
                  */
-                readData():boolean {
-                    // If there is an outstanding query and it has completed,
-                    // move the data into our internal property.
-                    if (this.activeQuery && this.activeQuery()) {
-                        this.data(this.activeQuery());
-                        this.activeQuery = null;
+                shouldRenderData():boolean {
+                    var epoch = this.vm.query.epoch()
+                    if (epoch > this.vm.lastEpoch) {
+                        this.vm.lastEpoch = epoch
                         return true;
                     }
                     return false;
@@ -97,7 +75,7 @@ module Components {
                  * hasData returns true if graph data is available to render.
                  */
                 hasData():boolean {
-                    return !!this.data() || (this.activeQuery && !!this.activeQuery()); 
+                    return this.vm.query.epoch() > 0
                 }
 
                 /** 
@@ -107,23 +85,26 @@ module Components {
                  */
                 drawGraph = (element:Element, isInitialized:boolean, context:any) => {
                     if (!isInitialized) {
-                        var interval = setInterval(() => this.queryData(), 10000);
-                        context.onunload = () => {
-                            clearInterval(interval);
-                        }
                         nv.addGraph(this.chart);
                     } 
 
-                    if (this.readData()) {
-                        var formattedData = this.data().results.map((d) => {
-                            return {
-                                values: d.datapoints,
-                                key: d.name,
-                                color: Controller.colors(d.name),
-                                area:true,
-                                fillOpacity:.1,
-                            };
-                        });
+                    if (this.shouldRenderData()) {
+                        var formattedData = []
+                        // The result() property will be empty if an error
+                        // occured. For now, we will just display the "No Data"
+                        // message until we decided on the proper way to display
+                        // error messages.
+                        if (this.vm.query.result()) {
+                            formattedData = this.vm.query.result().results.map((d) => {
+                                return {
+                                    values: d.datapoints,
+                                    key: d.name,
+                                    color: Controller.colors(d.name),
+                                    area:true,
+                                    fillOpacity:.1,
+                                };
+                            });
+                        }
                         d3.select(element)
                             .datum(formattedData)
                         .transition().duration(500)
@@ -137,9 +118,7 @@ module Components {
             }
 
             export function view(ctrl:Controller) {
-                if (ctrl.error()) {
-                    return m("", "error loading graph:" + ctrl.error());
-                } else if (ctrl.hasData()) {
+                if (ctrl.hasData()) {
                     return m(".linegraph", 
                             {style:"width:500px;height:300px;"},
                             m("svg.graph", {config: ctrl.drawGraph})
@@ -155,8 +134,8 @@ module Components {
              *
              * @param key The key param is used by mithril to track objects in lists which can be rearranged.
              */
-            export function create(width:number, height:number, query:Models.Metrics.Query, key?:number){
-                var vm:ViewModel = {width:width, height:height, lastVersion:0, query:query}
+            export function create(query:Models.Metrics.QueryManager, key?:number){
+                var vm:ViewModel = {lastEpoch:0, query:query}
                 if (key) {
                     vm.key = key;
                 }

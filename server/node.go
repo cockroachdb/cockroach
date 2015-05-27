@@ -243,6 +243,10 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 		return err
 	}
 
+	// Pass NodeID to status monitor - this value is initialized in initStores,
+	// but the StatusMonitor must be active before initStores.
+	n.status.SetNodeID(n.Descriptor.NodeID)
+
 	// Initialize publisher for Node Events.
 	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
 
