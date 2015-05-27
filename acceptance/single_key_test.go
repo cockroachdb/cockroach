@@ -124,12 +124,20 @@ func TestSingleKey(t *testing.T) {
 
 	// Verify that none of the workers encountered an error.
 	var results []result
-	for i := 0; i < *numNodes; i++ {
-		r := <-resultCh
-		if r.err != nil {
-			t.Fatalf("%d: %v", i, r.err)
+	for len(results) < *numNodes {
+		select {
+		case <-stopper:
+			t.Fatalf("interrupted")
+		case r := <-resultCh:
+			if r.err != nil {
+				t.Fatal(r.err)
+			}
+			results = append(results, r)
+		case <-time.After(1 * time.Second):
+			// Periodically print out progress so that we know the test is still
+			// running.
+			log.Infof("%d", atomic.LoadInt64(&expected))
 		}
-		results = append(results, r)
 	}
 
 	// Verify the resulting value stored at the key is what we expect.
