@@ -24,8 +24,10 @@ import (
 	"os"
 	"os/signal"
 	"testing"
+	"time"
 )
 
+var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numNodes = flag.Int("num", 3, "the number of nodes to start (if not otherwise specified by a test)")
 var stopper = make(chan struct{})
 
