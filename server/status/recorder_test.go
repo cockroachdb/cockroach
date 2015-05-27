@@ -76,6 +76,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 	monitor := NewNodeStatusMonitor()
 	manual := hlc.NewManualClock(100)
 	recorder := NewNodeStatusRecorder(monitor, hlc.NewClock(manual.UnixNano))
+	recorder.SetNodeID(proto.NodeID(1))
 
 	// Add some data to the monitor by simulating incoming events.
 	monitor.OnBeginScanRanges(&storage.BeginScanRangesEvent{
@@ -110,6 +111,31 @@ func TestNodeStatusRecorder(t *testing.T) {
 		Desc:    desc1,
 		Delta:   stats,
 	})
+	// Node Events.
+	monitor.OnCallSuccess(&CallSuccessEvent{
+		NodeID: proto.NodeID(1),
+		Method: proto.Get,
+	})
+	monitor.OnCallSuccess(&CallSuccessEvent{
+		NodeID: proto.NodeID(1),
+		Method: proto.Put,
+	})
+	monitor.OnCallError(&CallErrorEvent{
+		NodeID: proto.NodeID(1),
+		Method: proto.Scan,
+	})
+
+	generateNodeData := func(nodeId int, name string, time, val int64) proto.TimeSeriesData {
+		return proto.TimeSeriesData{
+			Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, proto.StoreID(nodeId)),
+			Datapoints: []*proto.TimeSeriesDatapoint{
+				{
+					TimestampNanos: time,
+					Value:          float64(val),
+				},
+			},
+		}
+	}
 
 	generateStoreData := func(storeId int, name string, time, val int64) proto.TimeSeriesData {
 		return proto.TimeSeriesData{
@@ -154,6 +180,10 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(2, "gcbytesage", 100, 10),
 		generateStoreData(2, "lastupdatenanos", 100, 1*1e9),
 		generateStoreData(2, "ranges", 100, 1),
+
+		// Node stats.
+		generateNodeData(1, "calls.success", 100, 2),
+		generateNodeData(1, "calls.error", 100, 1),
 	}
 
 	actual := recorder.GetTimeSeriesData()

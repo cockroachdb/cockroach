@@ -55,9 +55,11 @@ func TestNodeStatusMonitor(t *testing.T) {
 	storeStopper := util.NewStopper()
 	feed := &util.Feed{}
 	monitor := NewNodeStatusMonitor()
-	sub := feed.Subscribe()
+	storeSub := feed.Subscribe()
+	nodeSub := feed.Subscribe()
 	monitorStopper.RunWorker(func() {
-		storage.ProcessStoreEvents(monitor, sub)
+		storage.ProcessStoreEvents(monitor, storeSub)
+		ProcessNodeEvents(monitor, nodeSub)
 	})
 
 	for i := 0; i < 3; i++ {
@@ -127,6 +129,18 @@ func TestNodeStatusMonitor(t *testing.T) {
 				Stats:   stats,
 				Delta:   stats,
 			},
+			&CallSuccessEvent{
+				NodeID: proto.NodeID(1),
+				Method: proto.Get,
+			},
+			&CallSuccessEvent{
+				NodeID: proto.NodeID(1),
+				Method: proto.Put,
+			},
+			&CallErrorEvent{
+				NodeID: proto.NodeID(1),
+				Method: proto.Scan,
+			},
 		}
 		storeStopper.RunWorker(func() {
 			for _, event := range eventList {
@@ -163,5 +177,12 @@ func TestNodeStatusMonitor(t *testing.T) {
 		if a, e := store.rangeCount, int64(2); a != e {
 			t.Errorf("monitored range count for store %d did not match expectation: %d != %d", id, a, e)
 		}
+	}
+
+	if a, e := monitor.callCount, int64(6); a != e {
+		t.Errorf("monitored stats for node recorded wrong number of ops %d, expected %d", a, e)
+	}
+	if a, e := monitor.callErrors, int64(3); a != e {
+		t.Errorf("monitored stats for node recorded wrong number of errors %d, expected %d", a, e)
 	}
 }

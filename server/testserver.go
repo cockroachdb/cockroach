@@ -109,6 +109,14 @@ func (ts *TestServer) TsDB() *ts.DB {
 	return nil
 }
 
+// EventFeed returns the event feed that the server uses to publish events.
+func (ts *TestServer) EventFeed() *util.Feed {
+	if ts != nil {
+		return ts.node.ctx.EventFeed
+	}
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of

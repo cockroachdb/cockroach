@@ -19,6 +19,7 @@ package status
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -37,6 +38,9 @@ const (
 	// anticipation of an initially simple query system where only key suffixes
 	// can be wildcarded.
 	storeTimeSeriesNameFmt = "cr.store.%s.%d"
+	// nodeTimeSeriesFmt is the current format for cockroach's node-specific time
+	// series keys.
+	nodeTimeSeriesNameFmt = "cr.node.%s.%d"
 )
 
 // NodeStatusRecorder is used to periodically persist the status of a node as a
@@ -55,10 +59,32 @@ func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeSt
 	}
 }
 
+// recordInt records a single int64 value from the NodeStatusMonitor as a
+// proto.TimeSeriesData object.
+func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
+	data int64) proto.TimeSeriesData {
+	return proto.TimeSeriesData{
+		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.nodeID),
+		Datapoints: []*proto.TimeSeriesDatapoint{
+			{
+				TimestampNanos: timestampNanos,
+				Value:          float64(data),
+			},
+		},
+	}
+}
+
 // GetTimeSeriesData returns a slice of interesting TimeSeriesData from the
 // encapsulated NodeStatusMonitor.
 func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 	data := make([]proto.TimeSeriesData, 0, nsr.lastDataCount)
+	// Record node stats.
+	if nsr.nodeID > 0 {
+		now := nsr.clock.PhysicalNow()
+		data = append(data, nsr.recordInt(now, "calls.success", atomic.LoadInt64(&nsr.callCount)))
+		data = append(data, nsr.recordInt(now, "calls.error", atomic.LoadInt64(&nsr.callErrors)))
+	}
+	// Record per store stats.
 	nsr.VisitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		now := nsr.clock.PhysicalNow()
 		ssr := storeStatusRecorder{ssm, now}

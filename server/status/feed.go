@@ -15,7 +15,7 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package server
+package status
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
@@ -50,9 +50,9 @@ func NewNodeEventFeed(id proto.NodeID, feed *util.Feed) NodeEventFeed {
 	}
 }
 
-// callComplete is called by a node whenever it completes a request. This will
+// CallComplete is called by a node whenever it completes a request. This will
 // publish an appropriate event to the feed based on the results of the call.
-func (nef NodeEventFeed) callComplete(args proto.Request, reply proto.Response) {
+func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
 	if nef.f == nil {
 		return
 	}
@@ -72,7 +72,7 @@ func (nef NodeEventFeed) callComplete(args proto.Request, reply proto.Response) 
 // NodeEventListener is an interface that can be implemented by objects which
 // listen for events published by nodes.
 type NodeEventListener interface {
-	OnCallComplete(event *CallSuccessEvent)
+	OnCallSuccess(event *CallSuccessEvent)
 	OnCallError(event *CallErrorEvent)
 }
 
@@ -84,7 +84,7 @@ func ProcessNodeEvents(l NodeEventListener, sub *util.Subscription) {
 		// TODO(tamird): https://github.com/barakmich/go-nyet/issues/7
 		switch specificEvent := event.(type) {
 		case *CallSuccessEvent:
-			l.OnCallComplete(specificEvent)
+			l.OnCallSuccess(specificEvent)
 		case *CallErrorEvent:
 			l.OnCallError(specificEvent)
 		}
