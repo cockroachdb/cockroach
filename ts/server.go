@@ -84,7 +84,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 		Results: make([]*proto.TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
 	}
 	for _, q := range request.Queries {
-		datapoints, sources, err := s.db.Query(q.Name, Resolution10s, request.StartNanos, request.EndNanos)
+		datapoints, sources, err := s.db.Query(q, Resolution10s, request.StartNanos, request.EndNanos)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -93,6 +93,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 			Name:       q.Name,
 			Sources:    sources,
 			Datapoints: datapoints,
+			Aggregator: q.Aggregator,
 		})
 	}
 

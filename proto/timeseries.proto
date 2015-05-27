@@ -46,6 +46,22 @@ message TimeSeriesData {
   repeated TimeSeriesDatapoint datapoints = 3;
 }
 
+// TimeSeriesQueryAggregator describes a set of aggregation functions which are
+// applied to data points before returning them as part of a query. 
+//
+// Cockroach does not store data points at full fidelity, instead "downsampling"
+// data points into fixed-length sample periods. The value returned for each
+// sample period is equivalent to applying the supplied aggregator function to
+// the original data points that fell within the sample period.
+enum TimeSeriesQueryAggregator {
+  // AVG returns the average value of points within the sample period.
+  AVG = 1;
+  // AVG_RATE returns the rate of change of the average over the sample period's
+  // duration.  This is computed via linear regression with the previous sample
+  // period's average value.
+  AVG_RATE = 2;
+}
+
 // TimeSeriesQueryRequest is the standard incoming time series query request
 // accepted from cockroach clients.
 message TimeSeriesQueryRequest {
@@ -61,6 +77,8 @@ message TimeSeriesQueryRequest {
     message Query {
         // The name of the time series to query.
         optional string name = 1 [(gogoproto.nullable) = false];
+        // The aggregation function to apply to points in the result.
+        optional TimeSeriesQueryAggregator aggregator = 2 [default = AVG];
     }
 
     // A set of Queries for this request. A request must have at least one
@@ -78,8 +96,10 @@ message TimeSeriesQueryResponse {
         optional string name = 1 [(gogoproto.nullable) = false];
         // A list of sources from which the data was aggregated.
         repeated string sources = 2 [(gogoproto.nullable) = false];
+        // The aggregation function applied to points in the result.
+        optional TimeSeriesQueryAggregator aggregator = 3 [default = AVG];
         // Datapoints describing the queried data.
-        repeated TimeSeriesDatapoint datapoints = 3;
+        repeated TimeSeriesDatapoint datapoints = 4;
     }
 
     // A set of Results; there will be one result for each Query in the matching

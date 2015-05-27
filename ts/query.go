@@ -186,6 +186,20 @@ func (ii *interpolatingIterator) avg() float64 {
 	return prevAvg + (nextAvg-prevAvg)*(off-prevOff)/(nextOff-prevOff)
 }
 
+// dAvg returns the derivative (rate of change) of the average value at the
+// current offset for this iterator.
+func (ii *interpolatingIterator) dAvg() float64 {
+	if !ii.isValid() || !ii.prevReal.valid {
+		return 0
+	}
+
+	nextAvg := ii.nextReal.sample().Average()
+	nextOff := float64(ii.nextReal.offset)
+	prevAvg := ii.prevReal.sample().Average()
+	prevOff := float64(ii.prevReal.offset)
+	return (nextAvg - prevAvg) / (nextOff - prevOff)
+}
+
 // newIterator returns an interpolating iterator for the given dataSpan. The
 // iterator is initialized to offset 0.
 func (ds *dataSpan) newIterator() interpolatingIterator {
@@ -348,12 +362,21 @@ func (is unionIterator) timestamp() int64 {
 	return is[0].nextReal.timestampForOffset(is[0].offset)
 }
 
-// sumAvg returns the sum of the averages of all iterators in the set. This is
-// the value returned for each datapoint in a query result.
-func (is unionIterator) sumAvg() float64 {
+// avg returns the sum of the averages of all iterators in the set.
+func (is unionIterator) avg() float64 {
 	var sum float64
 	for i := range is {
 		sum += is[i].avg()
+	}
+	return sum
+}
+
+// dAvg returns the sum of the derivatives for the averages of all iterators in
+// the set.
+func (is unionIterator) dAvg() float64 {
+	var sum float64
+	for i := range is {
+		sum += is[i].dAvg()
 	}
 	return sum
 }
@@ -373,16 +396,16 @@ func (is unionIterator) sumAvg() float64 {
 // returned datapoint will represent the sum of datapoints from all sources at
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
-func (db *DB) Query(name string, r Resolution, startNanos, endNanos int64) (
-	[]*proto.TimeSeriesDatapoint, []string, error) {
+func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
+	startNanos, endNanos int64) ([]*proto.TimeSeriesDatapoint, []string, error) {
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
 	// Based on the supplied timestamps and resolution, construct start and end
 	// keys for a scan that will return every key with data relevant to the
 	// query.
-	startKey := MakeDataKey(name, "" /* source */, r, startNanos)
-	endKey := MakeDataKey(name, "" /* source */, r, endNanos).PrefixEnd()
+	startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
+	endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
 	scan := client.Scan(startKey, endKey, 0)
 	if err := db.kv.Run(scan); err != nil {
 		return nil, nil, err
@@ -423,11 +446,19 @@ func (db *DB) Query(name string, r Resolution, startNanos, endNanos int64) (
 
 	// Iterate through all values in the iteratorSet, adding a datapoint to
 	// the response for each value.
+	var valueFn func() float64
+	switch query.GetAggregator() {
+	case proto.TimeSeriesQueryAggregator_AVG:
+		valueFn = iters.avg
+	case proto.TimeSeriesQueryAggregator_AVG_RATE:
+		valueFn = iters.dAvg
+	}
+
 	iters.init()
 	for iters.isValid() && iters.timestamp() <= endNanos {
 		responseData = append(responseData, &proto.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
-			Value:          iters.sumAvg(),
+			Value:          valueFn(),
 		})
 		iters.advance()
 	}

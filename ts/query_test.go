@@ -156,7 +156,45 @@ func TestSumAvgInterpolation(t *testing.T) {
 	}
 	iters.init()
 	for iters.isValid() {
-		actual = append(actual, iters.sumAvg())
+		actual = append(actual, iters.avg())
+		offsets = append(offsets, iters[0].offset)
+		iters.advance()
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("summed values: %v, expected values: %v", actual, expected)
+	}
+}
+
+func TestSumRateInterpolation(t *testing.T) {
+	dataSpan1 := &dataSpan{
+		startNanos:  30,
+		sampleNanos: 10,
+	}
+	dataSpan2 := &dataSpan{
+		startNanos:  30,
+		sampleNanos: 10,
+	}
+	for _, data := range testSeries1 {
+		if err := dataSpan1.addData(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, data := range testSeries2 {
+		if err := dataSpan2.addData(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expected := []float64{0.8, 3.8, 5.5, 17.5, 2.5, 8, 4}
+	actual := make([]float64, 0, len(expected))
+	offsets := make([]int32, 0, len(expected))
+	iters := unionIterator{
+		dataSpan1.newIterator(),
+		dataSpan2.newIterator(),
+	}
+	iters.init()
+	for iters.isValid() {
+		actual = append(actual, iters.dAvg())
 		offsets = append(offsets, iters[0].offset)
 		iters.advance()
 	}
@@ -167,10 +205,14 @@ func TestSumAvgInterpolation(t *testing.T) {
 
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
-func (tm *testModel) assertQuery(name string, r Resolution, start, end int64,
-	expectedDatapointCount int, expectedSourceCount int) {
+func (tm *testModel) assertQuery(name string, agg *proto.TimeSeriesQueryAggregator,
+	r Resolution, start, end int64, expectedDatapointCount int, expectedSourceCount int) {
 	// Query the actual server.
-	actualDatapoints, actualSources, err := tm.DB.Query(name, r, start, end)
+	q := proto.TimeSeriesQueryRequest_Query{
+		Name:       name,
+		Aggregator: agg,
+	}
+	actualDatapoints, actualSources, err := tm.DB.Query(q, r, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -224,9 +266,16 @@ func (tm *testModel) assertQuery(name string, r Resolution, start, end int64,
 	}
 	iters.init()
 	for iters.isValid() {
+		var value float64
+		switch q.GetAggregator() {
+		case proto.TimeSeriesQueryAggregator_AVG:
+			value = iters.avg()
+		case proto.TimeSeriesQueryAggregator_AVG_RATE:
+			value = iters.dAvg()
+		}
 		expectedDatapoints = append(expectedDatapoints, &proto.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
-			Value:          iters.sumAvg(),
+			Value:          value,
 		})
 		iters.advance()
 	}
@@ -264,7 +313,7 @@ func TestQuery(t *testing.T) {
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.metric", resolution1ns, 0, 60, 7, 1)
+	tm.assertQuery("test.metric", nil, resolution1ns, 0, 60, 7, 1)
 
 	// Verify across multiple sources
 	tm.storeTimeSeriesData(resolution1ns, []proto.TimeSeriesData{
@@ -292,6 +341,10 @@ func TestQuery(t *testing.T) {
 
 	tm.assertKeyCount(11)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.multimetric", resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("nodata", resolution1ns, 0, 90, 0, 0)
+	tm.assertQuery("test.multimetric", nil, resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", proto.TimeSeriesQueryAggregator_AVG.Enum(),
+		resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", proto.TimeSeriesQueryAggregator_AVG_RATE.Enum(),
+		resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("nodata", nil, resolution1ns, 0, 90, 0, 0)
 }
