@@ -265,6 +265,9 @@ func TestServerNodeEventFeed(t *testing.T) {
 		proto.NodeID(1): {
 			"InternalRangeLookup",
 			"InternalRangeLookup",
+			"InternalRangeLookup",
+			"InternalRangeLookup",
+			"Put",
 			"Put",
 			"Put",
 			"EndTransaction",
