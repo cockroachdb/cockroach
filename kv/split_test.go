@@ -193,3 +193,40 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		t.Error("failed to verify no dangling intents within 500ms")
 	}
 }
+
+// TestRangeSplitsWithSameKeyTwice check that second range split
+// on the same splitKey should not cause infinite retry loop.
+func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
+	s := createTestDB(t)
+	defer s.Stop()
+
+	splitKey := proto.Key("aa")
+	log.Infof("starting split at key %q...", splitKey)
+	req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}, SplitKey: splitKey}
+	resp := &proto.AdminSplitResponse{}
+	if err := s.KV.Run(client.Call{Args: req, Reply: resp}); err != nil {
+		t.Fatal(err)
+	}
+	log.Infof("split at key %q first time complete", splitKey)
+	ch := make(chan struct{})
+	go func() error {
+		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}, SplitKey: splitKey}
+		resp := &proto.AdminSplitResponse{}
+		// should return error other than infinite loop
+		err := s.KV.Run(client.Call{Args: req, Reply: resp})
+		if err == nil {
+			errString := []byte("range split on same splitKey should failed on second time")
+			t.Error(errString)
+			return util.Error(errString)
+		} else {
+			close(ch)
+			return err
+		}
+	}()
+
+	select {
+	case <-ch:
+	case <-time.After(500 * time.Millisecond):
+		t.Error("range split on same splitKey is not returned in 500ms")
+	}
+}
