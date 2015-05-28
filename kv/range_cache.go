@@ -140,9 +140,26 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 // for the given key. It is intended that this method be called from a
 // consumer of rangeDescriptorCache if the returned range descriptor is
 // discovered to be stale.
-func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
+// seenDesc should always be passed in and is used as the basis of a
+// compare-and-evict (as pointers); if it is nil, eviction is unconditional
+// but a warning will be logged.
+func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key, seenDesc *proto.RangeDescriptor) {
+	if seenDesc == nil {
+		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally",
+			key)
+	}
 	for {
 		k, rd := rmc.getCachedRangeDescriptor(key)
+		// Note that we're doing a "Compare-and-erase": If seenDesc is not nil,
+		// we want to clean the cache only if it equals the cached range
+		// descriptor as a pointer. If not, then likely some other caller
+		// already evicted previously, and we can save work by not doing it
+		// again (which would prompt another expensive lookup).
+		if seenDesc != nil && seenDesc != rd {
+			return
+		}
+		// Make sure that potential further runs of the loop always happen.
+		seenDesc = nil
 		if k != nil {
 			rmc.rangeCacheMu.Lock()
 			rmc.rangeCache.Del(k)
@@ -155,7 +172,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
 		key = keys.RangeMetaKey(key)
-		if len(key) == 0 {
+		if bytes.Equal(key, proto.KeyMin) {
 			break
 		}
 	}
