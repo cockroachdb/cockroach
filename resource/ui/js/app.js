@@ -298,6 +298,64 @@ var AdminViews;
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
+var Models;
+(function (Models) {
+    var Stats;
+    (function (Stats) {
+        var kibi = 1024;
+        var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+        function FormatBytes(bytes) {
+            if (Math.abs(bytes) < kibi) {
+                return bytes + ' B';
+            }
+            var u = -1;
+            do {
+                bytes /= kibi;
+                ++u;
+            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
+            return bytes.toFixed(1) + ' ' + units[u];
+        }
+        Stats.FormatBytes = FormatBytes;
+        var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
+        var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
+        var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
+        var tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
+        var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
+        var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
+        function CreateStatsTable(stats) {
+            return m("div", [
+                m("h3", "Statistics"),
+                m("table", { style: tableStyle }, [
+                    m("tr", [
+                        m("th", { style: thStyle }, ""),
+                        m("th", { style: thStyle }, "Key"),
+                        m("th", { style: thStyle }, "Value"),
+                        m("th", { style: thStyle }, "Live"),
+                        m("th", { style: thStyle }, "Intent"),
+                        m("th", { style: thStyle }, "System")
+                    ]),
+                    m("tr", [
+                        m("td", { style: tdStyleOddFirst }, "Count"),
+                        m("td", { style: tdStyleOdd }, stats.key_count),
+                        m("td", { style: tdStyleOdd }, stats.val_count),
+                        m("td", { style: tdStyleOdd }, stats.live_count),
+                        m("td", { style: tdStyleOdd }, stats.intent_count),
+                        m("td", { style: tdStyleOdd }, stats.sys_count)
+                    ]),
+                    m("tr", [
+                        m("td", { style: tdStyleEvenFirst }, "Size"),
+                        m("td", { style: tdStyleEven }, FormatBytes(stats.key_bytes)),
+                        m("td", { style: tdStyleEven }, FormatBytes(stats.val_bytes)),
+                        m("td", { style: tdStyleEven }, FormatBytes(stats.live_bytes)),
+                        m("td", { style: tdStyleEven }, FormatBytes(stats.intent_bytes)),
+                        m("td", { style: tdStyleEven }, FormatBytes(stats.sys_bytes))
+                    ])
+                ])
+            ]);
+        }
+        Stats.CreateStatsTable = CreateStatsTable;
+    })(Stats = Models.Stats || (Models.Stats = {}));
+})(Models || (Models = {}));
 // source: models/node_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="stats.ts" />
@@ -336,33 +394,29 @@ var Models;
             };
             Nodes.prototype._updateDescriptions = function () {
                 this.desc({});
-                var nodeId;
-                for (nodeId in this._data()) {
+                for (var nodeId in this._data()) {
                     this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
                 }
             };
             Nodes.prototype._pruneOldEntries = function () {
-                var nodeId;
-                for (nodeId in this._data()) {
+                for (var nodeId in this._data()) {
                     var status = this._data()[nodeId];
                     if (status.length > Nodes._dataLimit) {
-                        status = status.sclice(status.length - Nodes._dataPrunedSize, status.length - 1);
+                        status = status.slice(status.length - Nodes._dataPrunedSize, status.length - 1);
                     }
                 }
             };
-            Nodes.prototype._availability = function (nodeId) {
-                var node = this.statuses()[nodeId];
-                if (node.leader_range_count == 0) {
+            Nodes._availability = function (status) {
+                if (status.leader_range_count == 0) {
                     return "100%";
                 }
-                return (node.available_range_count / node.leader_range_count * 100).toString() + "%";
+                return (status.available_range_count / status.leader_range_count * 100).toString() + "%";
             };
-            Nodes.prototype._replicated = function (nodeId) {
-                var node = this.statuses()[nodeId];
-                if (node.leader_range_count == 0) {
+            Nodes._replicated = function (status) {
+                if (status.leader_range_count == 0) {
                     return "100%";
                 }
-                return (node.replicated_range_count / node.leader_range_count * 100).toString() + "%";
+                return (status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
             };
             Nodes._formatDate = function (nanos) {
                 var datetime = new Date(nanos / 1.0e6);
@@ -389,10 +443,66 @@ var Models;
                         m("tr", [m("td", "Ranges:"), m("td", node.range_count)]),
                         m("tr", [m("td", "Leader Ranges:"), m("td", node.leader_range_count)]),
                         m("tr", [m("td", "Available Ranges:"), m("td", node.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", this._availability(nodeId))]),
+                        m("tr", [m("td", "Availablility:"), m("td", Nodes._availability(node))]),
                         m("tr", [m("td", "Under-Replicated Ranges:"), m("td", node.leader_range_count - node.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(nodeId))])
-                    ])
+                        m("tr", [m("td", "Fully Replicated:"), m("td", Nodes._replicated(node))])
+                    ]),
+                    Models.Stats.CreateStatsTable(node.stats)
+                ]);
+            };
+            Nodes.prototype.AllDetails = function () {
+                var status = {
+                    range_count: 0,
+                    updated_at: 0,
+                    leader_range_count: 0,
+                    replicated_range_count: 0,
+                    available_range_count: 0,
+                    stats: {
+                        live_bytes: 0,
+                        key_bytes: 0,
+                        val_bytes: 0,
+                        intent_bytes: 0,
+                        live_count: 0,
+                        key_count: 0,
+                        val_count: 0,
+                        intent_count: 0,
+                        sys_bytes: 0,
+                        sys_count: 0
+                    }
+                };
+                for (var nodeId in this.statuses()) {
+                    var nodeStatus = this.statuses()[nodeId];
+                    status.range_count += nodeStatus.range_count;
+                    status.leader_range_count += nodeStatus.leader_range_count;
+                    status.replicated_range_count += nodeStatus.replicated_range_count;
+                    status.available_range_count += nodeStatus.available_range_count;
+                    if (nodeStatus.updated_at > status.updated_at) {
+                        status.updated_at = nodeStatus.updated_at;
+                    }
+                    status.stats.live_bytes += nodeStatus.stats.live_bytes;
+                    status.stats.key_bytes += nodeStatus.stats.key_bytes;
+                    status.stats.val_bytes += nodeStatus.stats.val_bytes;
+                    status.stats.intent_bytes += nodeStatus.stats.intent_bytes;
+                    status.stats.live_count += nodeStatus.stats.live_count;
+                    status.stats.key_count += nodeStatus.stats.key_count;
+                    status.stats.val_count += nodeStatus.stats.val_count;
+                    status.stats.intent_count += nodeStatus.stats.intent_count;
+                    status.stats.sys_bytes += nodeStatus.stats.sys_bytes;
+                    status.stats.sys_count += nodeStatus.stats.sys_count;
+                }
+                ;
+                return m("div", [
+                    m("h2", "Details"),
+                    m("table", [
+                        m("tr", [m("td", "Updated at:"), m("td", Nodes._formatDate(status.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", Nodes._availability(status))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", Nodes._replicated(status))])
+                    ]),
+                    Models.Stats.CreateStatsTable(status.stats)
                 ]);
             };
             Nodes._dataLimit = 100000;
@@ -409,16 +519,51 @@ var Models;
 // source: pages/nodes.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/node_status.ts" />
+/// <reference path="../models/timeseries.ts" />
+/// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
     var Nodes;
     (function (Nodes) {
         Nodes.nodeStatuses = new Models.NodeStatus.Nodes();
+        Nodes.queryManagers = {};
         var Controller = (function () {
-            function Controller() {
-                Nodes.nodeStatuses.Query();
-                this._interval = setInterval(function () { return Nodes.nodeStatuses.Query(); }, Controller._queryEveryMS);
+            function Controller(nodeId) {
+                var _this = this;
+                this._refreshFunctions = [{
+                        f: Nodes.nodeStatuses.Query,
+                        o: Nodes.nodeStatuses
+                    }];
+                if (nodeId != null) {
+                    this._nodeId = nodeId;
+                    if (Nodes.queryManagers[nodeId] == null) {
+                        Nodes.queryManagers[nodeId] = {};
+                    }
+                    this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.success");
+                    this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.error");
+                }
+                else {
+                    this._nodeId = null;
+                }
+                this._refresh();
+                this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
             }
+            Controller.prototype._refresh = function () {
+                for (var i = 0; i < this._refreshFunctions.length; i++) {
+                    this._refreshFunctions[i].f.call(this._refreshFunctions[i].o);
+                }
+            };
+            Controller._queryManagerBuilder = function (nodeId, agg, source) {
+                var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, agg, "cr.node." + source + "." + nodeId);
+                return new Models.Metrics.QueryManager(query);
+            };
+            Controller.prototype._addChart = function (agg, source) {
+                var name = agg + ":" + source;
+                if (Nodes.queryManagers[this._nodeId][name] == null) {
+                    Nodes.queryManagers[this._nodeId][name] = Controller._queryManagerBuilder(this._nodeId, agg, source);
+                }
+                this._refreshFunctions.push({ f: Nodes.queryManagers[this._nodeId][name].refresh, o: Nodes.queryManagers[this._nodeId][name] });
+            };
             Controller.prototype.onunload = function () {
                 clearInterval(this._interval);
             };
@@ -432,7 +577,7 @@ var AdminViews;
                 return new Controller();
             }
             NodesPage.controller = controller;
-            function view() {
+            function view(ctrl) {
                 return m("div", [
                     m("h2", "Nodes List"),
                     m("ul", [
@@ -445,6 +590,7 @@ var AdminViews;
                             ]));
                         }),
                     ]),
+                    Nodes.nodeStatuses.AllDetails()
                 ]);
             }
             NodesPage.view = view;
@@ -452,16 +598,29 @@ var AdminViews;
         var NodePage;
         (function (NodePage) {
             function controller() {
-                return new Controller();
+                var nodeId = m.route.param("node_id");
+                return new Nodes.Controller(nodeId);
             }
             NodePage.controller = controller;
-            function view() {
+            function view(ctrl) {
                 var nodeId = m.route.param("node_id");
                 return m("div", [
                     m("h2", "Node Status"),
                     m("div", [
                         m("h3", "Node: " + nodeId),
                         Nodes.nodeStatuses.Details(nodeId)
+                    ]),
+                    m("table", [
+                        m("tr", [
+                            m("td", [
+                                m("h4", "Successful Calls Rate"),
+                                Components.Metrics.LineGraph.create(Nodes.queryManagers[nodeId]["2:calls.success"])
+                            ]),
+                            m("td", [
+                                m("h4", "Error Calls Rate"),
+                                Components.Metrics.LineGraph.create(Nodes.queryManagers[nodeId]["2:calls.error"])
+                            ])
+                        ])
                     ])
                 ]);
             }
@@ -759,29 +918,25 @@ var Models;
             };
             Stores.prototype._updateDescriptions = function () {
                 this.desc({});
-                var nodeId;
-                for (nodeId in this._data()) {
-                    this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
+                for (var storeId in this._data()) {
+                    this.desc()[storeId] = this._data()[storeId][this._data()[storeId].length - 1].desc;
                 }
             };
             Stores.prototype._pruneOldEntries = function () {
-                var nodeId;
-                for (nodeId in this._data()) {
-                    var status = this._data()[nodeId];
+                for (var storeId in this._data()) {
+                    var status = this._data()[storeId];
                     if (status.length > Stores._dataLimit) {
-                        status = status.sclice(status.length - Stores._dataPrunedSize, status.length - 1);
+                        status = status.slice(status.length - Stores._dataPrunedSize, status.length - 1);
                     }
                 }
             };
-            Stores.prototype._availability = function (storeId) {
-                var store = this.statuses()[storeId];
+            Stores._availability = function (store) {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
                 return (store.available_range_count / store.leader_range_count * 100).toString() + "%";
             };
-            Stores.prototype._replicated = function (storeId) {
-                var store = this.statuses()[storeId];
+            Stores._replicated = function (store) {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
@@ -806,10 +961,66 @@ var Models;
                         m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
                         m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
                         m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", this._availability(storeId))]),
+                        m("tr", [m("td", "Availablility:"), m("td", Stores._availability(store))]),
                         m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(storeId))])
-                    ])
+                        m("tr", [m("td", "Fully Replicated:"), m("td", Stores._replicated(store))])
+                    ]),
+                    Models.Stats.CreateStatsTable(store.stats)
+                ]);
+            };
+            Stores.prototype.AllDetails = function () {
+                var status = {
+                    range_count: 0,
+                    updated_at: 0,
+                    leader_range_count: 0,
+                    replicated_range_count: 0,
+                    available_range_count: 0,
+                    stats: {
+                        live_bytes: 0,
+                        key_bytes: 0,
+                        val_bytes: 0,
+                        intent_bytes: 0,
+                        live_count: 0,
+                        key_count: 0,
+                        val_count: 0,
+                        intent_count: 0,
+                        sys_bytes: 0,
+                        sys_count: 0
+                    }
+                };
+                for (var storeId in this.statuses()) {
+                    var storeStatus = this.statuses()[storeId];
+                    status.range_count += storeStatus.range_count;
+                    status.leader_range_count += storeStatus.leader_range_count;
+                    status.replicated_range_count += storeStatus.replicated_range_count;
+                    status.available_range_count += storeStatus.available_range_count;
+                    if (storeStatus.updated_at > status.updated_at) {
+                        status.updated_at = storeStatus.updated_at;
+                    }
+                    status.stats.live_bytes += storeStatus.stats.live_bytes;
+                    status.stats.key_bytes += storeStatus.stats.key_bytes;
+                    status.stats.val_bytes += storeStatus.stats.val_bytes;
+                    status.stats.intent_bytes += storeStatus.stats.intent_bytes;
+                    status.stats.live_count += storeStatus.stats.live_count;
+                    status.stats.key_count += storeStatus.stats.key_count;
+                    status.stats.val_count += storeStatus.stats.val_count;
+                    status.stats.intent_count += storeStatus.stats.intent_count;
+                    status.stats.sys_bytes += storeStatus.stats.sys_bytes;
+                    status.stats.sys_count += storeStatus.stats.sys_count;
+                }
+                ;
+                return m("div", [
+                    m("h2", "Details"),
+                    m("table", [
+                        m("tr", [m("td", "Updated at:"), m("td", Stores._formatDate(status.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", Stores._availability(status))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", Stores._replicated(status))])
+                    ]),
+                    Models.Stats.CreateStatsTable(status.stats)
                 ]);
             };
             Stores._dataLimit = 100000;
@@ -831,11 +1042,47 @@ var AdminViews;
     var Stores;
     (function (Stores) {
         Stores.storeStatuses = new Models.StoreStatus.Stores();
+        Stores.queryManagers = {};
         var Controller = (function () {
-            function Controller() {
-                Stores.storeStatuses.Query();
-                this._interval = setInterval(function () { return Stores.storeStatuses.Query(); }, Controller._queryEveryMS);
+            function Controller(storeId) {
+                var _this = this;
+                this._refreshFunctions = [{
+                        f: Stores.storeStatuses.Query,
+                        o: Stores.storeStatuses
+                    }];
+                if (storeId != null) {
+                    this._storeId = storeId;
+                    if (Stores.queryManagers[storeId] == null) {
+                        Stores.queryManagers[storeId] = {};
+                    }
+                    this._addChart(Models.Metrics.QueryAggregator.AVG, "keycount");
+                    this._addChart(Models.Metrics.QueryAggregator.AVG, "valcount");
+                    this._addChart(Models.Metrics.QueryAggregator.AVG, "livecount");
+                    this._addChart(Models.Metrics.QueryAggregator.AVG, "intentcount");
+                    this._addChart(Models.Metrics.QueryAggregator.AVG, "ranges");
+                }
+                else {
+                    this._storeId = null;
+                }
+                this._refresh();
+                this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
             }
+            Controller.prototype._refresh = function () {
+                for (var i = 0; i < this._refreshFunctions.length; i++) {
+                    this._refreshFunctions[i].f.call(this._refreshFunctions[i].o);
+                }
+            };
+            Controller._queryManagerBuilder = function (storeId, agg, source) {
+                var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, agg, "cr.store." + source + "." + storeId);
+                return new Models.Metrics.QueryManager(query);
+            };
+            Controller.prototype._addChart = function (agg, source) {
+                var name = agg + ":" + source;
+                if (Stores.queryManagers[this._storeId][name] == null) {
+                    Stores.queryManagers[this._storeId][name] = Controller._queryManagerBuilder(this._storeId, agg, source);
+                }
+                this._refreshFunctions.push({ f: Stores.queryManagers[this._storeId][name].refresh, o: Stores.queryManagers[this._storeId][name] });
+            };
             Controller.prototype.onunload = function () {
                 clearInterval(this._interval);
             };
@@ -849,7 +1096,7 @@ var AdminViews;
                 return new Controller();
             }
             StoresPage.controller = controller;
-            function view() {
+            function view(crtl) {
                 return m("div", [
                     m("h2", "Stores List"),
                     m("ul", [
@@ -863,6 +1110,7 @@ var AdminViews;
                                 " with Address:" + desc.node.address.network + "-" + desc.node.address.address
                             ]));
                         }),
+                        Stores.storeStatuses.AllDetails()
                     ]),
                 ]);
             }
@@ -871,16 +1119,46 @@ var AdminViews;
         var StorePage;
         (function (StorePage) {
             function controller() {
-                return new Controller();
+                var storeId = m.route.param("store_id");
+                return new Stores.Controller(storeId);
             }
             StorePage.controller = controller;
-            function view() {
+            function view(crtl) {
                 var storeId = m.route.param("store_id");
                 return m("div", [
                     m("h2", "Store Status"),
                     m("div", [
                         m("h3", "Store: " + storeId),
                         Stores.storeStatuses.Details(storeId)
+                    ]),
+                    m("table", [
+                        m("tr", [
+                            m("td", [
+                                m("h4", "Key Count"),
+                                Components.Metrics.LineGraph.create(Stores.queryManagers[storeId]["1:keycount"])
+                            ]),
+                            m("td", [
+                                m("h4", "Value Count"),
+                                Components.Metrics.LineGraph.create(Stores.queryManagers[storeId]["1:valcount"])
+                            ])
+                        ]),
+                        m("tr", [
+                            m("td", [
+                                m("h4", "Live Count"),
+                                Components.Metrics.LineGraph.create(Stores.queryManagers[storeId]["1:livecount"])
+                            ]),
+                            m("td", [
+                                m("h4", "Intent Count"),
+                                Components.Metrics.LineGraph.create(Stores.queryManagers[storeId]["1:intentcount"])
+                            ])
+                        ]),
+                        m("tr", [
+                            m("td", [
+                                m("h4", "Range Count"),
+                                Components.Metrics.LineGraph.create(Stores.queryManagers[storeId]["1:ranges"])
+                            ]),
+                            m("td")
+                        ])
                     ])
                 ]);
             }
