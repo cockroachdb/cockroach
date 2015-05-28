@@ -99,7 +99,7 @@ module Models {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
-                return (store.available_range_count / store.leader_range_count * 100).toString() + "%";
+                return Math.floor(store.available_range_count / store.leader_range_count * 100).toString() + "%";
             }
 
             // TODO(Bram): Move to utility class.
@@ -107,7 +107,7 @@ module Models {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
-                return (store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
+                return Math.floor(store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
             }
 
             // TODO(Bram): Move to utility class.

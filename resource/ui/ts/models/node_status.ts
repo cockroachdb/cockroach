@@ -97,7 +97,7 @@ module Models {
                 if (status.leader_range_count == 0) {
                     return "100%";
                 }
-                return (status.available_range_count / status.leader_range_count * 100).toString() + "%";
+                return Math.floor(status.available_range_count / status.leader_range_count * 100).toString() + "%";
             }
 
             // TODO(Bram): Move to utility class.
@@ -105,7 +105,7 @@ module Models {
                 if (status.leader_range_count == 0) {
                     return "100%";
                 }
-                return (status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
+                return Math.floor(status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
             }
 
             // TODO(Bram): Move to utility class.
