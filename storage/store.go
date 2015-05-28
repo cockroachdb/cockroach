@@ -956,7 +956,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 // on the same store.
 func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error {
 	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
-		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
+		return util.Errorf("the new end key is less than the current one: %+v <= %+v",
 			updatedEndKey, subsumingRng.Desc().EndKey)
 	}
 
