@@ -583,7 +583,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			// It amounts to the same situations though.
 			if rpcErr != nil {
 				ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
-				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, nil)
+				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 			}
 
 			if err != nil {
