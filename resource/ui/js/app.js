@@ -302,17 +302,17 @@ var Models;
 (function (Models) {
     var Stats;
     (function (Stats) {
+        var kibi = 1024;
+        var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
         function FormatBytes(bytes) {
-            var thresh = 1024;
-            if (Math.abs(bytes) < thresh) {
+            if (Math.abs(bytes) < kibi) {
                 return bytes + ' B';
             }
-            var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
             var u = -1;
             do {
-                bytes /= thresh;
+                bytes /= kibi;
                 ++u;
-            } while (Math.abs(bytes) >= thresh && u < units.length - 1);
+            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
             return bytes.toFixed(1) + ' ' + units[u];
         }
         Stats.FormatBytes = FormatBytes;
@@ -394,17 +394,15 @@ var Models;
             };
             Nodes.prototype._updateDescriptions = function () {
                 this.desc({});
-                var nodeId;
-                for (nodeId in this._data()) {
+                for (var nodeId in this._data()) {
                     this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
                 }
             };
             Nodes.prototype._pruneOldEntries = function () {
-                var nodeId;
-                for (nodeId in this._data()) {
+                for (var nodeId in this._data()) {
                     var status = this._data()[nodeId];
                     if (status.length > Nodes._dataLimit) {
-                        status = status.sclice(status.length - Nodes._dataPrunedSize, status.length - 1);
+                        status = status.slice(status.length - Nodes._dataPrunedSize, status.length - 1);
                     }
                 }
             };
@@ -472,8 +470,7 @@ var Models;
                         sys_count: 0
                     }
                 };
-                var nodeId;
-                for (nodeId in this.statuses()) {
+                for (var nodeId in this.statuses()) {
                     var nodeStatus = this.statuses()[nodeId];
                     status.range_count += nodeStatus.range_count;
                     status.leader_range_count += nodeStatus.leader_range_count;
@@ -921,17 +918,15 @@ var Models;
             };
             Stores.prototype._updateDescriptions = function () {
                 this.desc({});
-                var nodeId;
-                for (nodeId in this._data()) {
-                    this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
+                for (var storeId in this._data()) {
+                    this.desc()[storeId] = this._data()[storeId][this._data()[storeId].length - 1].desc;
                 }
             };
             Stores.prototype._pruneOldEntries = function () {
-                var nodeId;
-                for (nodeId in this._data()) {
-                    var status = this._data()[nodeId];
+                for (var storeId in this._data()) {
+                    var status = this._data()[storeId];
                     if (status.length > Stores._dataLimit) {
-                        status = status.sclice(status.length - Stores._dataPrunedSize, status.length - 1);
+                        status = status.slice(status.length - Stores._dataPrunedSize, status.length - 1);
                     }
                 }
             };
@@ -993,8 +988,7 @@ var Models;
                         sys_count: 0
                     }
                 };
-                var storeId;
-                for (storeId in this.statuses()) {
+                for (var storeId in this.statuses()) {
                     var storeStatus = this.statuses()[storeId];
                     status.range_count += storeStatus.range_count;
                     status.leader_range_count += storeStatus.leader_range_count;

@@ -78,18 +78,16 @@ module Models {
 
             private _updateDescriptions(): void {
                 this.desc(<NodeDescriptionMap> {});
-                var nodeId: string;
-                for (nodeId in this._data()) {
+                for (var nodeId in this._data()) {
                     this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
                 }
             }
 
             private _pruneOldEntries(): void {
-                var nodeId: string;
-                for (nodeId in this._data()) {
-                    var status = this._data()[nodeId];
+                for (var nodeId in this._data()) {
+                    var status = <NodeStatus[]>this._data()[nodeId];
                     if (status.length > Nodes._dataLimit) {
-                        status = status.sclice(status.length - Nodes._dataPrunedSize,status.length - 1)
+                        status = status.slice(status.length - Nodes._dataPrunedSize,status.length - 1)
                     }
                 }
             }
@@ -169,8 +167,7 @@ module Models {
                     }
                 };
 
-                var nodeId: string;
-                for (nodeId in this.statuses()) {
+                for (var nodeId in this.statuses()) {
                     var nodeStatus = this.statuses()[nodeId];
                     status.range_count += nodeStatus.range_count;
                     status.leader_range_count += nodeStatus.leader_range_count;

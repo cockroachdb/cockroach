@@ -80,18 +80,16 @@ module Models {
 
             private _updateDescriptions(): void {
                 this.desc(<StoreDescriptionMap> {});
-                var nodeId: string;
-                for (nodeId in this._data()) {
-                    this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
+                for (var storeId in this._data()) {
+                    this.desc()[storeId] = this._data()[storeId][this._data()[storeId].length - 1].desc;
                 }
             }
 
             private _pruneOldEntries(): void {
-                var nodeId: string;
-                for (nodeId in this._data()) {
-                    var status = this._data()[nodeId];
+                for (var storeId in this._data()) {
+                    var status = <StoreStatus[]>this._data()[storeId];
                     if (status.length > Stores._dataLimit) {
-                        status = status.sclice(status.length - Stores._dataPrunedSize, status.length - 1)
+                        status = status.slice(status.length - Stores._dataPrunedSize, status.length - 1)
                     }
                 }
             }
@@ -143,6 +141,10 @@ module Models {
             }
 
             public AllDetails(): _mithril.MithrilVirtualElement {
+
+                // TODO(Bram): This is all really ugly here. Refactor it and the
+                // equivalent in node_status.ts into one place that contains
+                // a better way to sum these stats.
                 var status = <StoreStatus>{
                     range_count: 0,
                     updated_at: 0,
@@ -163,8 +165,7 @@ module Models {
                     }
                 };
 
-                var storeId: string;
-                for (storeId in this.statuses()) {
+                for (var storeId in this.statuses()) {
                     var storeStatus = this.statuses()[storeId];
                     status.range_count += storeStatus.range_count;
                     status.leader_range_count += storeStatus.leader_range_count;
