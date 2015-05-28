@@ -34,21 +34,17 @@ import (
 )
 
 func countRangeReplicas(client *client.DB) (int, error) {
-	r, err := client.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 10)
+	rng, err := client.Get(keys.RangeDescriptorKey(proto.KeyMin))
 	if err != nil {
 		return 0, err
 	}
 
-	for _, row := range r.Rows {
-		desc := &proto.RangeDescriptor{}
-		if err := row.ValueProto(desc); err != nil {
-			return 0, err
-		}
-		if string(desc.StartKey) == "" {
-			return len(desc.Replicas), nil
-		}
+	desc := &proto.RangeDescriptor{}
+	if err := rng.Rows[0].ValueProto(desc); err != nil {
+		return 0, err
 	}
-	return 0, util.Errorf("first range not found")
+
+	return len(desc.Replicas), nil
 }
 
 func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.Duration) {
