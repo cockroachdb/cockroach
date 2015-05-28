@@ -97,8 +97,7 @@ module Models {
             }
 
             // TODO(Bram): Move to utility class.
-            private _availability(storeId:string):string {
-                var store = this.statuses()[storeId];
+            private static _availability(store: StoreStatus):string {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
@@ -106,8 +105,7 @@ module Models {
             }
 
             // TODO(Bram): Move to utility class.
-            private _replicated(storeId: string): string {
-                var store = this.statuses()[storeId];
+            private static _replicated(store: StoreStatus): string {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
@@ -136,11 +134,69 @@ module Models {
                       m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
                       m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
                       m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
-                      m("tr", [m("td", "Availablility:"), m("td", this._availability(storeId))]),
+                      m("tr", [m("td", "Availablility:"), m("td", Stores._availability(store))]),
                       m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
-                      m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(storeId))])
+                      m("tr", [m("td", "Fully Replicated:"), m("td", Stores._replicated(store))])
                     ]),
                     Stats.CreateStatsTable(store.stats)
+                ]);
+            }
+
+            public AllDetails(): _mithril.MithrilVirtualElement {
+                var status = <StoreStatus>{
+                    range_count: 0,
+                    updated_at: 0,
+                    leader_range_count: 0,
+                    replicated_range_count: 0,
+                    available_range_count: 0,
+                    stats: <Models.Stats.MVCCStats>{
+                        live_bytes: 0,
+                        key_bytes: 0,
+                        val_bytes: 0,
+                        intent_bytes: 0,
+                        live_count: 0,
+                        key_count: 0,
+                        val_count: 0,
+                        intent_count: 0,
+                        sys_bytes: 0,
+                        sys_count: 0
+                    }
+                };
+
+                var storeId: string;
+                for (storeId in this.statuses()) {
+                    var storeStatus = this.statuses()[storeId];
+                    status.range_count += storeStatus.range_count;
+                    status.leader_range_count += storeStatus.leader_range_count;
+                    status.replicated_range_count += storeStatus.replicated_range_count;
+                    status.available_range_count += storeStatus.available_range_count;
+                    if (storeStatus.updated_at > status.updated_at) {
+                        status.updated_at = storeStatus.updated_at;
+                    }
+                    status.stats.live_bytes += storeStatus.stats.live_bytes;
+                    status.stats.key_bytes += storeStatus.stats.key_bytes;
+                    status.stats.val_bytes += storeStatus.stats.val_bytes;
+                    status.stats.intent_bytes += storeStatus.stats.intent_bytes;
+                    status.stats.live_count += storeStatus.stats.live_count;
+                    status.stats.key_count += storeStatus.stats.key_count;
+                    status.stats.val_count += storeStatus.stats.val_count;
+                    status.stats.intent_count += storeStatus.stats.intent_count;
+                    status.stats.sys_bytes += storeStatus.stats.sys_bytes;
+                    status.stats.sys_count += storeStatus.stats.sys_count;
+                };
+
+                return m("div", [
+                    m("h2", "Details"),
+                    m("table", [
+                        m("tr", [m("td", "Updated at:"), m("td", Stores._formatDate(status.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", Stores._availability(status))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", Stores._replicated(status))])
+                    ]),
+                    Stats.CreateStatsTable(status.stats)
                 ]);
             }
         }

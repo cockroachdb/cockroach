@@ -67,9 +67,7 @@ module AdminViews {
           if (queryManagers[nodeId] == null) {
             queryManagers[nodeId] = {};
           }
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "calls.success");
           this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.success");
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "calls.error");
           this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.error");
         } else {
           this._nodeId = null;
@@ -105,6 +103,7 @@ module AdminViews {
                 ]));
             }),
           ]),
+          nodeStatuses.AllDetails()
         ]);
       }
     }
@@ -128,18 +127,8 @@ module AdminViews {
           m("table", [
             m("tr", [
               m("td", [
-                m("h4", "Successful Calls"),
-                Components.Metrics.LineGraph.create(Nodes.queryManagers[nodeId]["1:calls.success"])
-              ]),
-              m("td", [
                 m("h4", "Successful Calls Rate"),
                 Components.Metrics.LineGraph.create(Nodes.queryManagers[nodeId]["2:calls.success"])
-              ])
-            ]),
-            m("tr", [
-              m("td", [
-                m("h4", "Error Calls"),
-                Components.Metrics.LineGraph.create(Nodes.queryManagers[nodeId]["1:calls.error"])
               ]),
               m("td", [
                 m("h4", "Error Calls Rate"),

@@ -111,6 +111,7 @@ module AdminViews {
                   " with Address:" + desc.node.address.network + "-" + desc.node.address.address
                 ]));
             }),
+            storeStatuses.AllDetails()
           ]),
         ]);
       }
