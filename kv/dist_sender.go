@@ -323,7 +323,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) (
 		desc *proto.RangeDescriptor
 		err  error
 	)
-	if len(metadataKey) == 0 {
+	if bytes.Equal(metadataKey, proto.KeyMin) {
 		// In this case, the requested key is stored in the cluster's first
 		// range. Return the first range, which is always gossiped and not
 		// queried from the datastore.
