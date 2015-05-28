@@ -43,14 +43,12 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type rangeDescriptorDB interface {
-	// getRangeDescriptor retrieves a descriptor for the range
-	// containing the given key from storage. This function returns a
-	// sorted slice of RangeDescriptors for a set of consecutive ranges,
-	// the first which must contain the requested key. The additional
-	// RangeDescriptors are returned with the intent of pre-caching
-	// subsequent ranges which are likely to be requested soon by the
+	// getRangeDescriptors returns a sorted slice of RangeDescriptors for a set
+	// of consecutive ranges, the first of which must contain the requested key.
+	// The additional RangeDescriptors are returned with the intent of pre-
+	// caching subsequent ranges which are likely to be requested soon by the
 	// current workload.
-	getRangeDescriptor(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
+	getRangeDescriptors(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -116,7 +114,7 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		log.Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
 	}
 
-	rs, err := rmc.db.getRangeDescriptor(key, options)
+	rs, err := rmc.db.getRangeDescriptors(key, options)
 	if err != nil {
 		return nil, err
 	}

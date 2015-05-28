@@ -268,7 +268,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 type mockRangeDescriptorDB func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 
-func (mdb mockRangeDescriptorDB) getRangeDescriptor(k proto.Key, lo lookupOptions) ([]proto.RangeDescriptor, error) {
+func (mdb mockRangeDescriptorDB) getRangeDescriptors(k proto.Key, lo lookupOptions) ([]proto.RangeDescriptor, error) {
 	return mdb(k, lo)
 }
 

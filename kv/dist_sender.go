@@ -306,14 +306,12 @@ func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) 
 	return &info, nil
 }
 
-// getRangeDescriptor retrieves the descriptor for the range
-// containing the given key from storage. This function returns a
-// sorted slice of RangeDescriptors for a set of consecutive ranges,
-// the first which must contain the requested key.  The additional
-// RangeDescriptors are returned with the intent of pre-caching
-// subsequent ranges which are likely to be requested soon by the
-// current workload.
-func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
+// getRangeDescriptors returns a sorted slice of RangeDescriptors for a set of
+// consecutive ranges, the first of which must contain the requested key. The
+// additional RangeDescriptors are returned with the intent of pre-caching
+// subsequent ranges which are likely to be requested soon by the current
+// workload.
+func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.
@@ -340,7 +338,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key, options lookupOptions) (
 		}
 	} else {
 		// Look up desc from the cache, which will recursively call into
-		// ds.getRangeDescriptor if it is not cached.
+		// ds.getRangeDescriptors if it is not cached.
 		desc, err = ds.rangeCache.LookupRangeDescriptor(metadataKey, options)
 		if err != nil {
 			return nil, err
