@@ -266,7 +266,7 @@ type InternalPushTxnRequest struct {
 	PushType PushTxnType `protobuf:"varint,4,opt,name=push_type,enum=cockroach.proto.PushTxnType" json:"push_type"`
 	// Range lookup indicates whether we're pushing a txn because of an
 	// intent encountered while servicing an internal range lookup
-	// request. See notes in InternalLookupRangeRequest.
+	// request. See notes in InternalRangeLookupRequest.
 	RangeLookup      bool   `protobuf:"varint,5,opt,name=range_lookup" json:"range_lookup"`
 	XXX_unrecognized []byte `json:"-"`
 }
