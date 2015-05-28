@@ -140,9 +140,21 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 // for the given key. It is intended that this method be called from a
 // consumer of rangeDescriptorCache if the returned range descriptor is
 // discovered to be stale.
-func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
+// seenDesc, if passed in, is used as the basis of a compare-and-evict (as
+// pointers); if it is nil, eviction is unconditional.
+func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key, seenDesc *proto.RangeDescriptor) {
 	for {
 		k, rd := rmc.getCachedRangeDescriptor(key)
+		// Note that we're doing a "Compare-and-erase": If seenDesc is not nil,
+		// we want to clean the cache only if it equals the cached range
+		// descriptor as a pointer. If not, then likely some other caller
+		// already evicted previously, and we can save work by not doing it
+		// again (which would prompt another expensive lookup).
+		if seenDesc != nil && seenDesc != rd {
+			return
+		}
+		// Make sure that potential further runs of the loop always happen.
+		seenDesc = nil
 		if k != nil {
 			rmc.rangeCacheMu.Lock()
 			rmc.rangeCache.Del(k)

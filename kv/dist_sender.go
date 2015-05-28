@@ -583,7 +583,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			// It amounts to the same situations though.
 			if rpcErr != nil {
 				ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
-				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
+				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, nil)
 			}
 
 			if err != nil {
@@ -595,7 +595,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				switch err.(type) {
 				case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 					// Range descriptor might be out of date - evict it.
-					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
+					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 					// On addressing errors, don't backoff; retry immediately.
 					return retry.Reset, nil
 				case *proto.NotLeaderError:
