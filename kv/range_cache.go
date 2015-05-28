@@ -82,12 +82,16 @@ func newRangeDescriptorCache(db rangeDescriptorDB, size int) *rangeDescriptorCac
 }
 
 func (rmc *rangeDescriptorCache) String() string {
+	rmc.rangeCacheMu.RLock()
+	defer rmc.rangeCacheMu.RUnlock()
+	return rmc.stringLocked()
+}
+
+func (rmc *rangeDescriptorCache) stringLocked() string {
 	var buf bytes.Buffer
-	rmc.rangeCacheMu.Lock()
 	rmc.rangeCache.Do(func(k, v interface{}) {
 		fmt.Fprintf(&buf, "key=%s desc=%+v\n", proto.Key(k.(rangeCacheKey)), v)
 	})
-	rmc.rangeCacheMu.Unlock()
 	return buf.String()
 }
 
@@ -161,7 +165,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 
 	for !bytes.Equal(descKey, proto.KeyMin) {
 		if log.V(1) {
-			log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", descKey, cachedDesc, rmc)
+			log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", descKey, cachedDesc, rmc.stringLocked())
 		}
 		rmc.rangeCache.Del(rngKey)
 
