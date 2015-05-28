@@ -34,12 +34,17 @@ var Models;
             QueryAggregator[QueryAggregator["AVG_RATE"] = 2] = "AVG_RATE";
         })(Metrics.QueryAggregator || (Metrics.QueryAggregator = {}));
         var QueryAggregator = Metrics.QueryAggregator;
-        function query(start, end, series) {
+        function query(start, end, agg, series) {
             var url = "/ts/query";
             var data = {
                 start_nanos: start.getTime() * 1.0e6,
                 end_nanos: end.getTime() * 1.0e6,
-                queries: series.map(function (r) { return { name: r }; }),
+                queries: series.map(function (r) {
+                    return {
+                        name: r,
+                        aggregator: agg,
+                    };
+                }),
             };
             return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
                 .then(function (d) {
@@ -55,18 +60,19 @@ var Models;
             });
         }
         var RecentQuery = (function () {
-            function RecentQuery(windowDuration) {
+            function RecentQuery(windowDuration, _agg) {
                 var series = [];
-                for (var _i = 1; _i < arguments.length; _i++) {
-                    series[_i - 1] = arguments[_i];
+                for (var _i = 2; _i < arguments.length; _i++) {
+                    series[_i - 2] = arguments[_i];
                 }
                 this.windowDuration = windowDuration;
+                this._agg = _agg;
                 this._series = series;
             }
             RecentQuery.prototype.query = function () {
                 var endTime = new Date();
                 var startTime = new Date(endTime.getTime() - this.windowDuration);
-                return query(startTime, endTime, this._series);
+                return query(startTime, endTime, this._agg, this._series);
             };
             return RecentQuery;
         })();
@@ -89,6 +95,9 @@ var Models;
                         this._resultEpoch++;
                     }
                 }
+            };
+            QueryManager.prototype.setQuery = function (q) {
+                this._query = q;
             };
             QueryManager.prototype.result = function () {
                 this.processOutstanding();
@@ -219,23 +228,50 @@ var AdminViews;
     (function (Graph) {
         var Page;
         (function (Page) {
-            function controller() {
-                var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, "cr.node.calls.success.1");
-                var manager = new Models.Metrics.QueryManager(query);
-                manager.refresh();
-                var interval = setInterval(function () { return manager.refresh(); }, 10000);
-                return {
-                    manager: manager,
-                    onunload: function () { return clearInterval(interval); },
+            var Controller = (function () {
+                function Controller() {
+                    var _this = this;
+                    this.sumquery = new Models.Metrics.RecentQuery(10 * 60 * 1000, Models.Metrics.QueryAggregator.AVG, "cr.node.calls.success.1");
+                    this.ratequery = new Models.Metrics.RecentQuery(10 * 60 * 1000, Models.Metrics.QueryAggregator.AVG_RATE, "cr.node.calls.success.1");
+                    this.toggleGraph = function () {
+                        _this.showRates = !_this.showRates;
+                        if (_this.showRates) {
+                            _this.manager.setQuery(_this.ratequery);
+                        }
+                        else {
+                            _this.manager.setQuery(_this.sumquery);
+                        }
+                        _this.manager.refresh();
+                    };
+                    this.manager = new Models.Metrics.QueryManager(this.sumquery);
+                    this.manager.refresh();
+                    this.interval = setInterval(function () { return _this.manager.refresh(); }, 10000);
+                }
+                Controller.prototype.onunload = function () {
+                    clearInterval(this.interval);
                 };
+                return Controller;
+            })();
+            function controller() {
+                return new Controller();
             }
             Page.controller = controller;
             function view(ctrl) {
-                var windowSize = 10 * 60 * 1000;
+                var buttonText;
+                if (ctrl.showRates) {
+                    buttonText = "Show Totals";
+                }
+                else {
+                    buttonText = "Show Rates";
+                }
                 return m(".graphPage", [
                     m("H3", "Graph Demo"),
                     Components.Metrics.LineGraph.create(ctrl.manager),
                     Components.Metrics.LineGraph.create(ctrl.manager),
+                    m("", m("input[type=button]", {
+                        value: buttonText,
+                        onclick: ctrl.toggleGraph,
+                    })),
                 ]);
             }
             Page.view = view;
