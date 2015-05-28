@@ -2413,6 +2413,35 @@ func TestInternalRangeLookupFirstRange(t *testing.T) {
 	}
 }
 
+// TestInternalLookupMeta1KeyMax tests that InternalRangeLookup works
+// correctly with the "\x00\x00meta1\xff\xff" (Meta1Prefix KeyMax)
+// which is the last key in Meta1Prefix range.
+// This is the edge case in DecodeRangeMetaKey.
+func TestInternalRangeLookupMeta1KeyMax(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	reply := proto.InternalRangeLookupResponse{}
+	if err := tc.store.ExecuteCmd(context.Background(), client.Call{
+		Args: &proto.InternalRangeLookupRequest{
+			RequestHeader: proto.RequestHeader{
+				RaftID: 1,
+				Key:    proto.MakeKey(keys.Meta1Prefix, proto.KeyMax),
+			},
+			MaxRanges: 1,
+		},
+		Reply: &reply,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expected := []proto.RangeDescriptor{*tc.rng.Desc()}
+	if !reflect.DeepEqual(reply.Ranges, expected) {
+		t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)
+	}
+}
+
 // benchmarkEvents is designed to determine the impact of sending events on the
 // performance of write commands. This benchmark can be run with or without
 // events, and with or without a consumer reading the events.

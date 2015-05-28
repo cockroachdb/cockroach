@@ -289,5 +289,11 @@ func DecodeRangeMetaKey(key proto.Key) (proto.Key, proto.Key) {
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
 	metaPrefix := proto.Key(key[:len(Meta1Prefix)])
+	// Edge case for "\x00\x00meta1\xff\xff", which cannot return
+	// key.Next() as which itself is the last key in Meta1Prefix range.
+	meta1KeyMax := proto.MakeKey(Meta1Prefix, proto.KeyMax)
+	if key.Equal(meta1KeyMax) {
+		return key, metaPrefix.PrefixEnd()
+	}
 	return key.Next(), metaPrefix.PrefixEnd()
 }
