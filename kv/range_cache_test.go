@@ -65,7 +65,7 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 	return response
 }
 
-func (db *testDescriptorDB) getRangeDescriptor(key proto.Key,
+func (db *testDescriptorDB) getRangeDescriptors(key proto.Key,
 	options lookupOptions) ([]proto.RangeDescriptor, error) {
 	db.hitCount++
 	metadataKey := keys.RangeMetaKey(key)

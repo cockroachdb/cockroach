@@ -43,14 +43,12 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type rangeDescriptorDB interface {
-	// getRangeDescriptor retrieves a descriptor for the range
-	// containing the given key from storage. This function returns a
-	// sorted slice of RangeDescriptors for a set of consecutive ranges,
-	// the first which must contain the requested key. The additional
-	// RangeDescriptors are returned with the intent of pre-caching
-	// subsequent ranges which are likely to be requested soon by the
+	// getRangeDescriptors returns a sorted slice of RangeDescriptors for a set
+	// of consecutive ranges, the first of which must contain the requested key.
+	// The additional RangeDescriptors are returned with the intent of pre-
+	// caching subsequent ranges which are likely to be requested soon by the
 	// current workload.
-	getRangeDescriptor(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
+	getRangeDescriptors(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -84,12 +82,16 @@ func newRangeDescriptorCache(db rangeDescriptorDB, size int) *rangeDescriptorCac
 }
 
 func (rmc *rangeDescriptorCache) String() string {
+	rmc.rangeCacheMu.RLock()
+	defer rmc.rangeCacheMu.RUnlock()
+	return rmc.stringLocked()
+}
+
+func (rmc *rangeDescriptorCache) stringLocked() string {
 	var buf bytes.Buffer
-	rmc.rangeCacheMu.Lock()
 	rmc.rangeCache.Do(func(k, v interface{}) {
 		fmt.Fprintf(&buf, "key=%s desc=%+v\n", proto.Key(k.(rangeCacheKey)), v)
 	})
-	rmc.rangeCacheMu.Unlock()
 	return buf.String()
 }
 
@@ -108,18 +110,23 @@ func (rmc *rangeDescriptorCache) String() string {
 // the key's data, or an error if any occurred.
 func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	options lookupOptions) (*proto.RangeDescriptor, error) {
-	_, r := rmc.getCachedRangeDescriptor(key)
-	if r != nil {
+	if _, r := rmc.getCachedRangeDescriptor(key); r != nil {
 		return r, nil
 	}
+
 	if log.V(1) {
-		log.Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
+		log.Infof("lookup range descriptor: key=%s\n%s", key, rmc)
 	}
 
-	rs, err := rmc.db.getRangeDescriptor(key, options)
+	rs, err := rmc.db.getRangeDescriptors(key, options)
 	if err != nil {
 		return nil, err
 	}
+	// TODO(tamird): there is a race here; multiple readers may experience cache
+	// misses and concurrently attempt to refresh the cache, duplicating work.
+	// Locking over the getRangeDescriptors call is even worse though, because
+	// that blocks the cache completely for the duration of a slow query to the
+	// cluster.
 	rmc.rangeCacheMu.Lock()
 	for i := range rs {
 		// Note: we append the end key of each range to meta[12] records
@@ -152,7 +159,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 	defer rmc.rangeCacheMu.Unlock()
 
 	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey)
-	// Note that we're doing a "Compare-and-erase": If seenDesc is not nil,
+	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
 	// already evicted previously, and we can save work by not doing it
@@ -163,7 +170,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 
 	for !bytes.Equal(descKey, proto.KeyMin) {
 		if log.V(1) {
-			log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", descKey, cachedDesc, rmc)
+			log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", descKey, cachedDesc, rmc.stringLocked())
 		}
 		rmc.rangeCache.Del(rngKey)
 
