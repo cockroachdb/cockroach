@@ -410,13 +410,13 @@ var Models;
                 if (status.leader_range_count == 0) {
                     return "100%";
                 }
-                return (status.available_range_count / status.leader_range_count * 100).toString() + "%";
+                return Math.floor(status.available_range_count / status.leader_range_count * 100).toString() + "%";
             };
             Nodes._replicated = function (status) {
                 if (status.leader_range_count == 0) {
                     return "100%";
                 }
-                return (status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
+                return Math.floor(status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
             };
             Nodes._formatDate = function (nanos) {
                 var datetime = new Date(nanos / 1.0e6);
@@ -934,13 +934,13 @@ var Models;
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
-                return (store.available_range_count / store.leader_range_count * 100).toString() + "%";
+                return Math.floor(store.available_range_count / store.leader_range_count * 100).toString() + "%";
             };
             Stores._replicated = function (store) {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
-                return (store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
+                return Math.floor(store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
             };
             Stores._formatDate = function (nanos) {
                 var datetime = new Date(nanos / 1.0e6);
