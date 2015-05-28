@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -u
+
 # Verify that Docker is installed.
 DOCKER="docker"
 if [[ ! $(type -P "$DOCKER") ]]; then
