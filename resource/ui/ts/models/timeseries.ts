@@ -60,12 +60,15 @@ module Models {
         /**
          * Query dispatches a single time series query to the server.
          */
-        function query(start:Date, end:Date, series:string[]):promise<QueryResultSet> {
+        function query(start:Date, end:Date, agg:QueryAggregator, series:string[]):promise<QueryResultSet> {
             var url = "/ts/query";
             var data = {
                 start_nanos: start.getTime() * 1.0e6,
                 end_nanos: end.getTime() * 1.0e6,
-                queries: series.map((r) => {return {name: r};}),
+                queries: series.map((r) => {return {
+                    name: r,
+                    aggregator: agg,
+                };}),
             }
         
             return m.request({url:url, method:"POST", extract:nonJsonErrors, data:data})
@@ -90,14 +93,14 @@ module Models {
          */
         export class RecentQuery {
             private _series:string[];
-            constructor(public windowDuration:number, ...series:string[]) {
+            constructor(public windowDuration:number, private _agg:QueryAggregator, ...series:string[]) {
                 this._series = series;
             }
 
             query():promise<QueryResultSet> {
                 var endTime = new Date();
                 var startTime = new Date(endTime.getTime() - this.windowDuration);
-                return query(startTime, endTime, this._series);
+                return query(startTime, endTime, this._agg, this._series);
             }
         }
 
@@ -136,6 +139,13 @@ module Models {
                         this._resultEpoch++;
                     }
                 }
+            }
+
+            /**
+             * setQuery changes the query underlying this manager.
+             */
+            setQuery(q:Query){
+                this._query = q;
             }
 
             /**
