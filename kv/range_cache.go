@@ -143,52 +143,58 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 // seenDesc should always be passed in and is used as the basis of a
 // compare-and-evict (as pointers); if it is nil, eviction is unconditional
 // but a warning will be logged.
-func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key, seenDesc *proto.RangeDescriptor) {
+func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, seenDesc *proto.RangeDescriptor) {
 	if seenDesc == nil {
-		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally",
-			key)
+		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
 	}
-	for {
-		k, rd := rmc.getCachedRangeDescriptor(key)
-		// Note that we're doing a "Compare-and-erase": If seenDesc is not nil,
-		// we want to clean the cache only if it equals the cached range
-		// descriptor as a pointer. If not, then likely some other caller
-		// already evicted previously, and we can save work by not doing it
-		// again (which would prompt another expensive lookup).
-		if seenDesc != nil && seenDesc != rd {
-			return
+
+	rmc.rangeCacheMu.Lock()
+	defer rmc.rangeCacheMu.Unlock()
+
+	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey)
+	// Note that we're doing a "Compare-and-erase": If seenDesc is not nil,
+	// we want to clean the cache only if it equals the cached range
+	// descriptor as a pointer. If not, then likely some other caller
+	// already evicted previously, and we can save work by not doing it
+	// again (which would prompt another expensive lookup).
+	if seenDesc != nil && seenDesc != cachedDesc {
+		return
+	}
+
+	for !bytes.Equal(descKey, proto.KeyMin) {
+		if log.V(1) {
+			log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", descKey, cachedDesc, rmc)
 		}
-		// Make sure that potential further runs of the loop always happen.
-		seenDesc = nil
-		if k != nil {
-			rmc.rangeCacheMu.Lock()
-			rmc.rangeCache.Del(k)
-			rmc.rangeCacheMu.Unlock()
-			if log.V(1) {
-				log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", key, rd, rmc)
-			}
-		}
+		rmc.rangeCache.Del(rngKey)
+
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
-		key = keys.RangeMetaKey(key)
-		if bytes.Equal(key, proto.KeyMin) {
-			break
-		}
+		descKey = keys.RangeMetaKey(descKey)
+		rngKey, cachedDesc = rmc.getCachedRangeDescriptorLocked(descKey)
 	}
 }
 
-// getCachedRangeDescriptor is a helper function to retrieve the
-// descriptor of the range which contains the given key, if present in
-// the cache.
+// getCachedRangeDescriptor is a helper function to retrieve the descriptor of
+// the range which contains the given key, if present in the cache. It
+// acquires a read lock on rmc.rangeCacheMu before delegating to
+// getCachedRangeDescriptorLocked.
 func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
+	rangeCacheKey, *proto.RangeDescriptor) {
+	rmc.rangeCacheMu.RLock()
+	defer rmc.rangeCacheMu.RUnlock()
+	return rmc.getCachedRangeDescriptorLocked(key)
+}
+
+// getCachedRangeDescriptorLocked is a helper function to retrieve the
+// descriptor of the range which contains the given key, if present in the
+// cache. It is assumed that the caller holds a read lock on rmc.rangeCacheMu.
+func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	// We want to look up the range descriptor for key. The cache is
 	// indexed using the end-key of the range, but the end-key is
 	// non-inclusive. So we access the cache using key.Next().
 	metaKey := keys.RangeMetaKey(key.Next())
-	rmc.rangeCacheMu.RLock()
-	defer rmc.rangeCacheMu.RUnlock()
 
 	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
