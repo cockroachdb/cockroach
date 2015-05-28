@@ -122,6 +122,11 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	if err != nil {
 		return nil, err
 	}
+	// TODO(tamird): there is a race here; multiple readers may experience cache
+	// misses and concurrently attempt to refresh the cache, duplicating work.
+	// Locking over the getRangeDescriptors call is even worse though, because
+	// that blocks the cache completely for the duration of a slow query to the
+	// cluster.
 	rmc.rangeCacheMu.Lock()
 	for i := range rs {
 		// Note: we append the end key of each range to meta[12] records
