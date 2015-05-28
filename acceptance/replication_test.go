@@ -75,7 +75,7 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.D
 		}
 
 		fmt.Fprintf(os.Stderr, "%d ", found)
-		if found == wantedReplicas {
+		if found >= wantedReplicas {
 			fmt.Printf("... correct number of replicas found\n")
 			return nil
 		}
