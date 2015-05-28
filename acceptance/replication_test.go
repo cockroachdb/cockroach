@@ -21,7 +21,6 @@ package acceptance
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -69,17 +68,16 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.D
 		case <-time.After(1 * time.Second):
 		}
 
-		found, err := countRangeReplicas(client)
+		foundReplicas, err := countRangeReplicas(client)
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "%d ", found)
-		if found >= wantedReplicas {
-			fmt.Printf("... correct number of replicas found\n")
+		log.Infof("found %d replicas", foundReplicas)
+		if foundReplicas >= wantedReplicas {
 			return nil
 		}
-		return fmt.Errorf("not enough replicas")
+		return fmt.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
 	})
 }
 
