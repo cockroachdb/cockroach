@@ -150,7 +150,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 	defer rmc.rangeCacheMu.Unlock()
 
 	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey)
-	// Note that we're doing a "Compare-and-erase": If seenDesc is not nil,
+	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
 	// already evicted previously, and we can save work by not doing it

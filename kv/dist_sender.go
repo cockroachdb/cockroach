@@ -313,7 +313,7 @@ func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) 
 // workload.
 func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
 	var (
-		// metadataKey is sent to InternalRangeLookup to find the
+		// metadataKey is sent to internalRangeLookup to find the
 		// RangeDescriptor which contains key.
 		metadataKey = keys.RangeMetaKey(key)
 		// desc is the RangeDescriptor for the range which contains
