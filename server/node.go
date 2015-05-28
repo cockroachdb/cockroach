@@ -432,7 +432,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		// Pick the smalled of the two intervals.
 		var minScanInterval time.Duration
-		if n.ctx.ScanInterval <= n.ctx.ScanMaxIdleTime {
+		if n.ctx.ScanInterval <= n.ctx.ScanMaxIdleTime || n.ctx.ScanMaxIdleTime == 0 {
 			minScanInterval = n.ctx.ScanInterval
 		} else {
 			minScanInterval = n.ctx.ScanMaxIdleTime
