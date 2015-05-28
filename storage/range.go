@@ -181,7 +181,7 @@ type rangeManager interface {
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
 	RemoveRange(rng *Range) error
 	SplitRange(origRng, newRng *Range) error
-	ProcessRangeDescriptorUpdate(rng *Range) error
+	processRangeDescriptorUpdate(rng *Range) error
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -222,7 +222,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	// Do not call SetDesc to avoid calling ProcessRangeDescriptorUpdate().
+	// Do not call SetDesc to avoid calling processRangeDescriptorUpdate().
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 
 	lastIndex, err := r.loadLastIndex()
@@ -431,7 +431,7 @@ func (r *Range) Desc() *proto.RangeDescriptor {
 }
 
 // SetDesc atomically sets the range's descriptor. This method calls
-// ProcessRangeDescriptorUpdate() to make the range manager handle the
+// processRangeDescriptorUpdate() to make the range manager handle the
 // descriptor update. Note that ProcessRangeDescriptorUpdate()
 // acquires the metaLock.
 //
@@ -444,7 +444,7 @@ func (r *Range) SetDesc(desc *proto.RangeDescriptor) error {
 		// r.rm is null in some tests.
 		return nil
 	}
-	return r.rm.ProcessRangeDescriptorUpdate(r)
+	return r.rm.processRangeDescriptorUpdate(r)
 }
 
 // GetReplica returns the replica for this range from the range descriptor.

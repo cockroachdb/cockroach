@@ -523,7 +523,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 
 	// If this is an InternalPushTxn, set ignoreIntents option as
 	// necessary. This prevents a potential infinite loop; see the
-	// comments in proto.InternalLookupRangeRequest.
+	// comments in proto.InternalRangeLookupRequest.
 	options := lookupOptions{}
 	if pushArgs, ok := args.(*proto.InternalPushTxnRequest); ok {
 		options.ignoreIntents = pushArgs.RangeLookup
@@ -535,9 +535,9 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key, options)
 
+			// If the request accesses keys beyond the end of this range,
+			// get the descriptor of the adjacent range to address next.
 			if err == nil && desc.EndKey.Less(endKey) {
-				// If the request accesses keys beyond the end of this range,
-				// get the descriptor of the adjacent range to address next.
 				if _, ok := call.Reply.(proto.Combinable); !ok {
 					return retry.Break, util.Error("illegal cross-range operation", call)
 				}
