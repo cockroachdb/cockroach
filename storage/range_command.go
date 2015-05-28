@@ -828,8 +828,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	updatedDesc := *desc
 	updatedDesc.EndKey = splitKey
 
-	log.Infof("initiating a split of range %d %s-%s at key %s", desc.RaftID,
-		proto.Key(desc.StartKey), proto.Key(desc.EndKey), splitKey)
+	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
 	txnOpts := &client.TransactionOptions{
 		Name: fmt.Sprintf("split range %d at %s", desc.RaftID, splitKey),
@@ -885,8 +884,9 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
 	if !bytes.Equal(r.Desc().StartKey, split.UpdatedDesc.StartKey) ||
 		!bytes.Equal(r.Desc().EndKey, split.NewDesc.EndKey) {
-		return util.Errorf("range does not match splits: %s-%s + %s-%s != %s-%s", split.UpdatedDesc.StartKey,
-			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc().StartKey, r.Desc().EndKey)
+		return util.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
+			split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey,
+			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
 	}
 
 	// Copy the GC metadata.
@@ -997,9 +997,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	updatedDesc := *desc
 	updatedDesc.EndKey = subsumedDesc.EndKey
 
-	log.Infof("initiating a merge of range %d %s-%s into range %d %s-%s",
-		subsumedDesc.RaftID, proto.Key(subsumedDesc.StartKey), proto.Key(subsumedDesc.EndKey),
-		desc.RaftID, desc.StartKey, desc.EndKey)
+	log.Infof("initiating a merge of %s into %s", subsumedRng, r)
 
 	txnOpts := &client.TransactionOptions{
 		Name: fmt.Sprintf("merge range %d into %d", subsumedDesc.RaftID, desc.RaftID),

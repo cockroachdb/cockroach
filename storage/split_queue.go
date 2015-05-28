@@ -87,10 +87,10 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 	// First handle case of splitting due to accounting and zone config maps.
 	splitKeys := computeSplitKeys(sq.gossip, rng)
 	if len(splitKeys) > 0 {
-		log.Infof("splitting range %q-%q at keys %v", rng.Desc().StartKey, rng.Desc().EndKey, splitKeys)
+		log.Infof("splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
 			if _, err := sq.db.AdminSplit(splitKey, splitKey); err != nil {
-				return util.Errorf("unable to split at key %q: %s", splitKey, err)
+				return util.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
 			}
 		}
 		return nil
@@ -101,6 +101,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 		return err
 	}
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
+		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
 		if err = rng.AddCmd(rng.context(),
 			client.Call{
 				Args: &proto.AdminSplitRequest{
@@ -135,7 +136,7 @@ func computeSplitKeys(g *gossip.Gossip, rng *Range) []proto.Key {
 		configMap := info.(PrefixConfigMap)
 		splits, err := configMap.SplitRangeByPrefixes(rng.Desc().StartKey, rng.Desc().EndKey)
 		if err != nil {
-			log.Errorf("unable to split range %q-%q by prefix map %s", rng.Desc().StartKey, rng.Desc().EndKey, configMap)
+			log.Errorf("unable to split %s by prefix map %s", rng, configMap)
 			continue
 		}
 		// Gather new splits.
