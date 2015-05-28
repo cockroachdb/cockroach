@@ -17,7 +17,7 @@ declare module _mithril {
 		mount<T extends MithrilController>(rootElement: Node): T;
 
 		component<T extends MithrilController, Targ>(component: ParameterizedMithrilComponent<T, Targ>, x?:Targ): MithrilComponent<T>
-		
+
 		trust(html: string): string;
 
 		render(rootElement: Element|HTMLDocument): void;
@@ -30,8 +30,8 @@ declare module _mithril {
 		}
 
 		route: {
-			<T extends MithrilController>(rootElement: HTMLDocument, defaultRoute: string, routes: MithrilRoutes<T>): void;
-			<T extends MithrilController>(rootElement: Element, defaultRoute: string, routes: MithrilRoutes<T>): void;
+			(rootElement: HTMLDocument, defaultRoute: string, routes: MithrilRoutes): void;
+			(rootElement: Element, defaultRoute: string, routes: MithrilRoutes): void;
 
 			(element: Element, isInitialized: boolean, context: Object, vdom: Object): void;
 			(path: string, params?: any, shouldReplaceHistory?: boolean): void;
@@ -122,8 +122,8 @@ declare module _mithril {
 		toJSON(): T;
 	}
 
-	interface MithrilRoutes<T extends MithrilController> {
-		[key: string]: MithrilComponent<T>;
+	interface MithrilRoutes {
+		[key: string]: MithrilComponent<any>;
 	}
 
 

@@ -144,7 +144,8 @@ module Models {
                         m("tr", [m("td", "Availablility:"), m("td", this._availability(nodeId))]),
                         m("tr", [m("td", "Under-Replicated Ranges:"), m("td", node.leader_range_count - node.replicated_range_count)]),
                         m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(nodeId))])
-                    ])
+                    ]),
+                    Stats.CreateStatsTable(node.stats)
                 ]);
             }
         }

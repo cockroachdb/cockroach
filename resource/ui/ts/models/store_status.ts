@@ -139,7 +139,8 @@ module Models {
                       m("tr", [m("td", "Availablility:"), m("td", this._availability(storeId))]),
                       m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
                       m("tr", [m("td", "Fully Replicated:"), m("td", this._replicated(storeId))])
-                    ])
+                    ]),
+                    Stats.CreateStatsTable(store.stats)
                 ]);
             }
         }
