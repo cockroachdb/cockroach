@@ -630,7 +630,7 @@ we use two levels of indirection. All of the range metadata sorts first
 in our key-value map. We accomplish this by prefixing range metadata
 with two null characters (*\0\0*). The *meta1* or *meta2* suffixes are
 additionally appended to distinguish between the first level and second
-level of **`r`**a***ng***e metadata. In order to do a lookup for *key1*,
+level of range metadata. In order to do a lookup for *key1*,
 we first locate the range information for the lower bound of
 `\0\0meta1<key1>`, and then use that range to locate the lower bound
 of `\0\0meta2<key1>`. The range specified there will indicate the
@@ -649,13 +649,10 @@ result in having to back the iterator up, an option which is both less
 efficient and not available in all cases.
 
 The following example shows the directory structure for a map with
-three ranges worth of data. The key/values in red show range
-metadata. The key/values in black show actual data. Ellipses
-indicate additional key/value pairs to fill out entire range of
-data. Except for the fact that splitting ranges requires updates
-to the range metadata with knowledge of the metadata layout, the
-range metadata itself requires no special treatment or
-bootstrapping.
+three ranges worth of data. Ellipses indicate additional key/value pairs to
+fill an entire range of data. Except for the fact that splitting ranges
+requires updates to the range metadata with knowledge of the metadata layout,
+the range metadata itself requires no special treatment or bootstrapping.
 
 **Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
   `dcrama3:8000`)
