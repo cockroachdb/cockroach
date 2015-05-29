@@ -1050,8 +1050,8 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	}
 
 	if !r.Desc().EndKey.Less(merge.UpdatedDesc.EndKey) {
-		return util.Errorf("range end key is not less than the post merge end key: %s < %s",
-			r.Desc().EndKey, merge.UpdatedDesc.StartKey)
+		return util.Errorf("range end key is not less than the post merge end key: %s >= %s",
+			r.Desc().EndKey, merge.UpdatedDesc.EndKey)
 	}
 
 	if merge.SubsumedRaftID <= 0 {
