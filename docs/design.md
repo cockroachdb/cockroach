@@ -342,12 +342,11 @@ Transactions are managed by the client proxy (or gateway in SQL Azure
 parlance). Unlike in Spanner, writes are not buffered but are sent
 directly to all implicated ranges. This allows the transaction to abort
 quickly if it encounters a write conflict. The client proxy keeps track
-of all written keys in order to post-process write intents upon completion.
-If a transaction is completed successfully, all intents are upgraded to
-committed. In the event a transaction is aborted, all written intents
-are deleted.
+of all written keys in order to resolve write intents asynchronously upon
+transaction completion. If a transaction commits successfully, all intents
+are upgraded to committed. In the event a transaction is aborted, all written
+intents are deleted. The client proxy doesn’t guarantee it will resolve intents.
 
-The client proxy doesn’t guarantee it will post-process intents.
 In the event the client proxy restarts before the pending transaction is
 committed, the dangling transaction would continue to live in the
 transaction table until aborted by another transaction. Transactions
@@ -355,9 +354,9 @@ heartbeat the transaction table every five seconds by default.
 Transactions encountered by readers or writers with dangling intents
 which haven’t been heartbeat within the required interval are aborted.
 In the event the proxy restarts after a transaction commits but before
-the post processing is complete, the dangling intents are upgraded
+the resolution is complete, the dangling intents are upgraded
 when encountered by future readers and writers and the system does
-not depend on their timely post-processing for correctness.
+not depend on their timely resolution for correctness.
 
 An exploration of retries with contention and abort times with abandoned
 transaction is
@@ -411,12 +410,18 @@ is choosing a timestamp guaranteed to be greater than the latest
 timestamp of any committed transaction (in absolute time). No system can
 claim consistency and fail to read already-committed data.
 
-Accomplishing this for transactions (or just single operations)
-accessing a single node is easy. The transaction supplies 0 for
-timestamp, indicating that the node should use its current time (time
-for a node is kept using a hybrid clock which combines wall time and a
-logical time). This guarantees data already committed to that node have
-earlier timestamps.
+Time for a node is maintained by a hybrid logical clock (HLC) which combines
+wall time and a logical time. The HLC time >= wall time and is affected by
+transaction write requests from other nodes. Each transaction write request
+from another node comes along with a timestamp. The timestamp is not only used
+to version the data being written, but also updates the logical time on the
+node. This is useful in guaranteeing that all data written to a node is at a
+timestamp < HLC time 
+
+Accomplishing consistency for transactions (or just single operations)
+accessing a single node is easy. The transaction uses the HLC time as the
+timestamp which is guaranteed to be at a greater timestamp than all the
+timestamped data on the node.
 
 For multiple nodes, the timestamp of the node coordinating the
 transaction `t` is used. In addition, a maximum timestamp `t+ε` is
@@ -427,27 +432,24 @@ cause the transaction to abort and retry with the conflicting timestamp
 t<sub>c</sub>, where t<sub>c</sub> \> t. The maximum timestamp `t+ε` remains
 the same.
 
-We apply another optimization to avoid further restarts caused
+We apply another optimization to reduce the restarts caused
 by uncertainty. Upon restarting, the transaction not only takes
 into account t<sub>c<sub>, but the timestamp of the node at the time
-of the uncertain read t<>node<>. The larger of those two timestamps:
-max(t<sub>c<sub>, t<sub>node<sub>) (more likely the latter) is used
-to bump up the read timestamp. The use of t<sub>node<sub> guarantees that the
-time spent retrying because of reading recently committed data has an
-upper bound of `ε`.
-
-Additionally, the conflicting node is marked as “certain”. This means that
-for future reads to that node within the transaction, we can set
-`MaxTimestamp = Read Timestamp`. Correctness follows from the fact that we
-know that at the time of the read, there exists no version of any key on
-that node with a higher timestamp that was updated in the past in absolute
-time. A higher timestamp is indicative that the update happened in the future
-in absolute time, and the transaction will move forward reading an older
-version of the data (at the transactions timestamp). (This seems wrong; it only
-guarantees that a transaction coordinated from this node cannot have a greater
-timestamp. You can still have transactions coordinated from other nodes with
-greater timestamps picked in the absolute past time that committed data to this
-node.)
+of the uncertain read t<sub>node<sub>. The larger of those two timestamps
+(more likely the latter): max(t<sub>c<sub>, t<sub>node<sub>) is used
+to bump up the read timestamp. Additionally, the conflicting node is
+marked as “certain”. This means that for future reads to that node 
+within the transaction, we can set `MaxTimestamp = Read Timestamp`.
+Correctness follows from the fact that we know that at the time of the read,
+there exists no version of any key on that node with a higher timestamp than
+t<sub>node<sub>. Upon a restart caused by the node, if the transaction were to 
+encounter a key with a higher timestamp it would imply that the value
+is written in the future in absolute time, and the transaction can move
+forward reading an older version of the data (at the transactions timestamp).
+This limits the time uncertainty restarts attributed to a node to <= 1. The
+tradeoff is that we might pick a timestamp larger than the optimal one
+(> highest conflicting timestamp), resulting in the possibility of a few
+more conflicts.
 
 We expect retries will be rare, but this assumption may need to be
 revisited if retries become problematic. Note that this problem does not
