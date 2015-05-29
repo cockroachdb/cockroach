@@ -303,6 +303,8 @@ func (m *multiTestContext) replicateRange(raftID int64, sourceStoreIndex int, de
 	})
 }
 
+// unreplicateRange removes a replica of the range in the source store
+// from the dest store.
 func (m *multiTestContext) unreplicateRange(raftID int64, source, dest int) {
 	rng, err := m.stores[source].GetRange(raftID)
 	if err != nil {
