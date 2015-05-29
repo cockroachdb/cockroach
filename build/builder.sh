@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eu
 
 image="cockroachdb/builder"
 
@@ -29,32 +29,32 @@ dockerVers=$(docker version | grep 'Server version:' | awk '{print $NF}')
 rm=""
 
 case "${dockerVers}" in
-    0.*|1.[012345]*)
+  0.*|1.[012345]*)
     # Removing volume containers fails on older versions of docker with
     # the error:
     #
     #   Failed to destroy btrfs snapshot: operation not permitted
     ;;
-    *)
-	rm="--rm"
-	;;
+  *)
+    rm="--rm"
+    ;;
 esac
 
 tty=""
 if test -t 0; then
-    tty="--tty"
+  tty="--tty"
 fi
 
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
 docker run -i ${tty} ${rm} \
-       --volume="${gopath0}/src:/go/src" \
-       --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
-       --volume="${gopath0}/pkg:/go/pkg" \
-       --volume="${gopath0}/pkg/linux_amd64_netgo:/usr/src/go/pkg/linux_amd64_netgo" \
-       --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
-       --volume="${gopath0}/bin/linux_amd64:/go/bin" \
-       --workdir="/go/src/github.com/cockroachdb/cockroach" \
-       --env="CACHE=/go/pkg/cache" \
-       "${image}" "$@"
+  --volume="${gopath0}/src:/go/src" \
+  --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
+  --volume="${gopath0}/pkg:/go/pkg" \
+  --volume="${gopath0}/pkg/linux_amd64_netgo:/usr/src/go/pkg/linux_amd64_netgo" \
+  --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
+  --volume="${gopath0}/bin/linux_amd64:/go/bin" \
+  --workdir="/go/src/github.com/cockroachdb/cockroach" \
+  --env="CACHE=/go/pkg/cache" \
+  "${image}" "$@"
