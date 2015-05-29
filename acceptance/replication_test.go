@@ -48,10 +48,7 @@ func countRangeReplicas(client *client.DB) (int, error) {
 
 func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.Duration) {
 	// Always talk to node 0.
-	client, err := makeDBClient(cluster, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := makeDBClient(t, cluster, 0)
 
 	wantedReplicas := 3
 	if len(cluster.Nodes) < 3 {

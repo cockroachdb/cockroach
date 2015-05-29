@@ -37,12 +37,9 @@ func TestPut(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
+	c := makeDBClient(t, l, 0)
+	setDefaultRangeMaxBytes(t, c, *rangeMaxBytes)
 	checkRangeReplication(t, l, 20*time.Second)
-
-	c, err := makeDBClient(l, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	r, _ := util.NewPseudoRand()
 	value := util.RandBytes(r, 8192)
