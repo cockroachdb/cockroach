@@ -130,7 +130,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			args, reply := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
 			err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
 			if err != nil {
-				if matched, regexpErr := regexp.MatchString(".*outside of bounds of range", err.Error()); !matched || regexpErr != nil {
+				if matched, regexpErr := regexp.MatchString("range is already split at key", err.Error()); !matched || regexpErr != nil {
 					t.Errorf("error %s didn't match regex %v", err, regexpErr)
 				} else {
 					atomic.AddInt32(&failureCount, 1)

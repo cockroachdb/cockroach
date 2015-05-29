@@ -802,7 +802,13 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			return
 		}
 	}
-
+	// First verify this condition so that it will not return
+	// proto.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
+	// otherwise it will cause infinite retry loop.
+	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
+		reply.SetGoError(util.Errorf("range is already split at key %s", splitKey))
+		return
+	}
 	// Verify some properties of split key.
 	if !r.ContainsKey(splitKey) {
 		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, desc))
@@ -810,10 +816,6 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	}
 	if !engine.IsValidSplitKey(splitKey) {
 		reply.SetGoError(util.Errorf("cannot split range at key %s", splitKey))
-		return
-	}
-	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
-		reply.SetGoError(util.Errorf("range has already been split by key %s", splitKey))
 		return
 	}
 
