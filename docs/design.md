@@ -137,13 +137,13 @@ minimum expiration.
 Versioned values are supported via modifications to RocksDB to record
 commit timestamps and GC expirations per key.
 
-Each range also maintains a small (i.e. latest 10s of read timestamps),
+Each range maintains a small (i.e. latest 10s of read timestamps),
 *in-memory* cache from key to the latest timestamp at which the
-key(s) were read. This *latest-read-cache* is updated everytime a key
+key was read. This *latest-read-cache* is updated everytime a key
 is read. The cache’s entries are evicted oldest timestamp first, updating
-low water mark as appropriate. If a new range replica leader is elected,
-it sets the low water mark for the cache to the current wall time + ε
-(ε = 99^th^ percentile clock skew).
+the low water mark of the cache appropriately. If a new range replica leader
+is elected, it sets the low water mark for the cache to the current
+wall time + ε (ε = 99^th^ percentile clock skew).
 
 # Lock-Free Distributed Transactions
 
@@ -195,7 +195,7 @@ paper.(HLC)*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)
 A HLC is a combination of both a physical and a logical component
 to support monotonic increments without degenerate cases causing
 HLC time to diverge dramatically from wall clock time. Cockroach
-picks a Timestamp for a transactions using HLC time. The timestamp
+picks a Timestamp for a transaction using HLC time. The timestamp
 at a node referred in this design is the HLC time at that node. 
  
 Transactions are executed in two phases:
