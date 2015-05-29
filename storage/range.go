@@ -933,7 +933,8 @@ func (r *Range) maybeGossipFirstRange() error {
 	ctx := r.context()
 
 	// Gossip the cluster ID from all replicas of the first range.
-	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	log.Infof("gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
+		r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
@@ -945,6 +946,7 @@ func (r *Range) maybeGossipFirstRange() error {
 	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
+	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
