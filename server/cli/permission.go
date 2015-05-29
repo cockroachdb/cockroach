@@ -26,7 +26,7 @@ import (
 // A getPermsCmd command displays the perm config for the specified
 // prefix.
 var getPermsCmd = &cobra.Command{
-	Use:   "get-perms [options] <key-prefix>",
+	Use:   "get [options] <key-prefix>",
 	Short: "fetches and displays the permission config",
 	Long: `
 Fetches and displays the permission configuration for <key-prefix>. The key
@@ -47,7 +47,7 @@ func runGetPerms(cmd *cobra.Command, args []string) {
 
 // A lsPermsCmd command displays a list of perm configs by prefix.
 var lsPermsCmd = &cobra.Command{
-	Use:   "ls-perms [options] [key-regexp]",
+	Use:   "ls [options] [key-regexp]",
 	Short: "list all permisison configs by key prefix",
 	Long: `
 List permission configs. If a regular expression is given, the results of
@@ -77,7 +77,7 @@ func runLsPerms(cmd *cobra.Command, args []string) {
 
 // A rmPermsCmd command removes a perm config by prefix.
 var rmPermsCmd = &cobra.Command{
-	Use:   "rm-perms [options] <key-prefix>",
+	Use:   "rm [options] <key-prefix>",
 	Short: "remove a permission config by key prefix",
 	Long: `
 Remove an existing permission config by key prefix. No action is taken if no
@@ -102,7 +102,7 @@ func runRmPerms(cmd *cobra.Command, args []string) {
 // A setPermsCmd command creates a new or updates an existing perm
 // config.
 var setPermsCmd = &cobra.Command{
-	Use:   "set-perm [options] <key-prefix> <perm-config-file>",
+	Use:   "set [options] <key-prefix> <perm-config-file>",
 	Short: "create or update permission config for key prefix",
 	Long: `
 Create or update a perm config for the specified key prefix (first
@@ -160,7 +160,7 @@ var permCmds = []*cobra.Command{
 }
 
 var permCmd = &cobra.Command{
-	Use:   "permission",
+	Use:   "perm",
 	Short: "get, set, list and remove permissions",
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Usage()

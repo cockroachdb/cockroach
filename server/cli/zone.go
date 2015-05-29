@@ -27,7 +27,7 @@ import (
 // A getZoneCmd command displays the zone config for the specified
 // prefix.
 var getZoneCmd = &cobra.Command{
-	Use:   "get-zone [options] <key-prefix>",
+	Use:   "get [options] <key-prefix>",
 	Short: "fetches and displays the zone config",
 	Long: `
 Fetches and displays the zone configuration for <key-prefix>. The key
@@ -48,7 +48,7 @@ func runGetZone(cmd *cobra.Command, args []string) {
 
 // A lsZonesCmd command displays a list of zone configs by prefix.
 var lsZonesCmd = &cobra.Command{
-	Use:   "ls-zones [options] [key-regexp]",
+	Use:   "ls [options] [key-regexp]",
 	Short: "list all zone configs by key prefix",
 	Long: `
 List zone configs. If a regular expression is given, the results of
@@ -77,7 +77,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 
 // A rmZoneCmd command removes a zone config by prefix.
 var rmZoneCmd = &cobra.Command{
-	Use:   "rm-zone [options] <key-prefix>",
+	Use:   "rm [options] <key-prefix>",
 	Short: "remove a zone config by key prefix",
 	Long: `
 Remove an existing zone config by key prefix. No action is taken if no
@@ -102,7 +102,7 @@ func runRmZone(cmd *cobra.Command, args []string) {
 // A setZoneCmd command creates a new or updates an existing zone
 // config.
 var setZoneCmd = &cobra.Command{
-	Use:   "set-zone [options] <key-prefix> <zone-config-file>",
+	Use:   "set [options] <key-prefix> <zone-config-file>",
 	Short: "create or update zone config for key prefix",
 	Long: `
 Create or update a zone config for the specified key prefix (first

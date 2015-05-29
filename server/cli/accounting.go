@@ -146,7 +146,7 @@ var acctCmds = []*cobra.Command{
 }
 
 var acctCmd = &cobra.Command{
-	Use:   "accounting",
+	Use:   "acct",
 	Short: "get, set, list and remove accounting configuration",
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Usage()
