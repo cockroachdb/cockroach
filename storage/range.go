@@ -196,7 +196,7 @@ type Range struct {
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
 	// Held while a split, merge, or replica change is underway.
-	metaLock sync.Mutex
+	metaLock sync.Mutex // TODO(bdarnell): Revisit the metaLock.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -432,12 +432,7 @@ func (r *Range) Desc() *proto.RangeDescriptor {
 
 // SetDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the range manager handle the
-// descriptor update. Note that processRangeDescriptorUpdate()
-// acquires the metaLock.
-//
-// This method should be called in the context of having metaLock held,
-// as is the case for merging, splitting and updating the replica set.
-// TODO(bdarnell): Revisit the metaLock.
+// descriptor update.
 func (r *Range) SetDesc(desc *proto.RangeDescriptor) error {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 	if r.rm == nil {
