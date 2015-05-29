@@ -954,7 +954,7 @@ SMSs, etc.
 
 Executable messages are *outgoing-only*, and are instances of
 PutRequest,IncrementRequest, DeleteRequest, DeleteRangeRequest
-orAccountingRequest. Rather than being delivered to a key’s inbox, are
+or AccountingRequest. Rather than being delivered to a key’s inbox, are
 executed when encountered. These are primarily useful when updates that
 are nominally part of a transaction can tolerate asynchronous execution
 (e.g. eventual consistency), and are otherwise too busy or numerous to
