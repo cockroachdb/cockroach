@@ -196,7 +196,7 @@ type Range struct {
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
 	// Held while a split, merge, or replica change is underway.
-	metaLock sync.Mutex
+	metaLock sync.Mutex // TODO(bdarnell): Revisit the metaLock.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -222,7 +222,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	// Do not call SetDesc to avoid calling processRangeDescriptorUpdate().
+	// Do not call setDesc to avoid calling processRangeDescriptorUpdate().
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 
 	lastIndex, err := r.loadLastIndex()
@@ -430,15 +430,10 @@ func (r *Range) Desc() *proto.RangeDescriptor {
 	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
 }
 
-// SetDesc atomically sets the range's descriptor. This method calls
+// setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the range manager handle the
-// descriptor update. Note that processRangeDescriptorUpdate()
-// acquires the metaLock.
-//
-// This method should be called in the context of having metaLock held,
-// as is the case for merging, splitting and updating the replica set.
-// TODO(bdarnell): Revisit the metaLock.
-func (r *Range) SetDesc(desc *proto.RangeDescriptor) error {
+// descriptor update.
+func (r *Range) setDesc(desc *proto.RangeDescriptor) error {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 	if r.rm == nil {
 		// r.rm is null in some tests.

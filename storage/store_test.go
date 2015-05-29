@@ -259,7 +259,7 @@ func TestRangeSliceSort(t *testing.T) {
 	var rs RangeSlice
 	for i := 4; i >= 0; i-- {
 		r := &Range{}
-		if err := r.SetDesc(&proto.RangeDescriptor{StartKey: proto.Key(fmt.Sprintf("foo%d", i))}); err != nil {
+		if err := r.setDesc(&proto.RangeDescriptor{StartKey: proto.Key(fmt.Sprintf("foo%d", i))}); err != nil {
 			t.Fatal(err)
 		}
 		rs = append(rs, r)

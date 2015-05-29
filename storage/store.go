@@ -428,6 +428,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
+	s.mu.Lock()
 	s.feed.beginScanRanges()
 	if err := engine.MVCCIterate(s.engine, start, end, now, false, nil, func(kv proto.KeyValue) (bool, error) {
 		// Only consider range metadata entries; ignore others.
@@ -443,9 +444,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		if err != nil {
 			return false, err
 		}
-		s.mu.Lock()
 		err = s.addRangeInternal(rng, false /* don't sort on each addition */)
-		s.mu.Unlock()
 		if err != nil {
 			return false, err
 		}
@@ -466,6 +465,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
+	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
 	if err = s.multiraft.Start(); err != nil {
@@ -938,7 +938,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	// the new range.
 	copyDesc := *origRng.Desc()
 	copyDesc.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
-	if err := origRng.SetDesc(&copyDesc); err != nil {
+	if err := origRng.setDesc(&copyDesc); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -980,7 +980,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	// Update the end key of the subsuming range.
 	copy := *subsumingRng.Desc()
 	copy.EndKey = updatedEndKey
-	if err := subsumingRng.SetDesc(&copy); err != nil {
+	if err := subsumingRng.setDesc(&copy); err != nil {
 		return err
 	}
 
