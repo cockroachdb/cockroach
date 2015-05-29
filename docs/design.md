@@ -137,6 +137,14 @@ minimum expiration.
 Versioned values are supported via modifications to RocksDB to record
 commit timestamps and GC expirations per key.
 
+Each range also maintains a small (i.e. latest 10s of read timestamps),
+*in-memory* cache from key to the latest timestamp at which the
+key(s) were read. This *latest-read-cache* is updated everytime a key
+is read. The cache’s entries are evicted oldest timestamp first, updating
+low water mark as appropriate. If a new range replica leader is elected,
+it sets the low water mark for the cache to the current wall time + ε
+(ε = 99^th^ percentile clock skew).
+
 # Lock-Free Distributed Transactions
 
 Cockroach provides distributed transactions without locks. Cockroach
@@ -181,12 +189,15 @@ never be decreased. The core difference between the two isolation levels
 SI and SSI is that the former allows the transaction's candidate
 timestamp to increase and the latter does not.
 
-Timestamps are a combination of both a physical and a logical component
+Each cockroach node maintains a hybrid logical clock (HLC) as discussed
+in the [*Hybrid Logical Clock
+paper.(HLC)*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf) 
+A HLC is a combination of both a physical and a logical component
 to support monotonic increments without degenerate cases causing
-timestamps to diverge from wall clock time, following closely the
-[*Hybrid Logical Clock
-paper.*](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)
-
+HLC time to diverge dramatically from wall clock time. Cockroach
+picks a Timestamp for a transactions using HLC time. The timestamp
+at a node referred in this design is the HLC time at that node. 
+ 
 Transactions are executed in two phases:
 
 1. Start the transaction by writing a new entry to the system
@@ -200,22 +211,9 @@ Transactions are executed in two phases:
    transaction table when there are conflicts and to make
    tie-breaking decisions on ordering between identical timestamps.
    Each node returns the timestamp used for the write (which is the
-   original candidate timestamp in the absence of conflicts); the client
-   selects the maximum from amongst all writes as the final commit
-   timestamp.
-
-   Each range maintains a small (i.e. latest 10s of read timestamps),
-   *in-memory* cache from key to the latest timestamp at which the
-   key(s) were read. This *latest-read-cache* is consulted on each
-   write. If the write’s candidate timestamp is earlier than the low
-   water mark on the cache itself (i.e. its last evicted timestamp)
-   or if the key being written has a read timestamp later than the
-   write’s candidate timestamp, this later timestamp value is
-   returned with the write. The cache’s entries are evicted oldest
-   timestamp first, updating low water mark as appropriate. If a new
-   range replica leader is elected, it sets the low water mark for
-   the cache to the current wall time + ε (ε = 99^th^ percentile
-   clock skew).
+   original candidate timestamp in the absence of read/write conflicts);
+   the client selects the maximum from amongst all write timestamps as the
+   final commit timestamp.
 
 2. Commit the transaction by updating its entry in the system
    transaction table (keys prefixed by *\0tx*). The value of the
@@ -336,6 +334,13 @@ There are several scenarios in which transactions interact:
   the same priority is reused, but the candidate timestamp is moved forward
   to the encountered value's timestamp.
 
+- **Writer encounters newer read key**:
+  The *latest-read-cache* is consulted on each write at a node. If the write’s
+  candidate timestamp is earlier than the low water mark on the cache itself
+  (i.e. its last evicted timestamp) or if the key being written has a read
+  timestamp later than the write’s candidate timestamp, this later timestamp
+  value is returned with the write forcing the transaction to restart.
+
 **Transaction management**
 
 Transactions are managed by the client proxy (or gateway in SQL Azure
@@ -410,20 +415,18 @@ is choosing a timestamp guaranteed to be greater than the latest
 timestamp of any committed transaction (in absolute time). No system can
 claim consistency and fail to read already-committed data.
 
-Time for a node is maintained by a hybrid logical clock (HLC) which combines
-wall time and a logical time. The HLC time >= wall time and is affected by
-transaction write requests from other nodes. Each transaction write request
-from another node comes along with a timestamp. The timestamp is not only used
-to version the data being written, but also updates the logical time on the
-node. This is useful in guaranteeing that all data written to a node is at a
-timestamp < HLC time 
+Time for a node is maintained by a hybrid logical clock (HLC).
+The HLC time >= wall time and is potentially updated by each write at that node.
+The write's timestamp is not only used to version the data being written,
+but also potentially updates the logical time on the node. This is useful in
+guaranteeing that all data written to a node is at a timestamp < HLC time.
 
 Accomplishing consistency for transactions (or just single operations)
 accessing a single node is easy. The transaction uses the HLC time as the
 timestamp which is guaranteed to be at a greater timestamp than all the
 timestamped data on the node.
 
-For multiple nodes, the timestamp of the node coordinating the
+For multiple nodes, the HLC time of the node coordinating the
 transaction `t` is used. In addition, a maximum timestamp `t+ε` is
 supplied to provide an upper bound on timestamps for already-committed
 data (`ε` is the maximum clock skew). As the transaction progresses, any
@@ -434,7 +437,7 @@ the same.
 
 We apply another optimization to reduce the restarts caused
 by uncertainty. Upon restarting, the transaction not only takes
-into account t<sub>c<sub>, but the timestamp of the node at the time
+into account t<sub>c<sub>, but the HLC time of the node at the time
 of the uncertain read t<sub>node<sub>. The larger of those two timestamps
 (more likely the latter): max(t<sub>c<sub>, t<sub>node<sub>) is used
 to bump up the read timestamp. Additionally, the conflicting node is
