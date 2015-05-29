@@ -806,7 +806,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	// proto.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
 	// otherwise it will cause infinite retry loop.
 	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
-		reply.SetGoError(util.Errorf("range has already been split by key %s", splitKey))
+		reply.SetGoError(util.Errorf("range is already split at key %s", splitKey))
 		return
 	}
 	// Verify some properties of split key.

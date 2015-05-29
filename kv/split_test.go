@@ -208,25 +208,21 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Infof("split at key %q first time complete", splitKey)
-	ch := make(chan struct{})
-	go func() error {
+	ch := make(chan error)
+	go func() {
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
 		// should return error other than infinite loop
 		err := s.KV.Run(client.Call{Args: req, Reply: resp})
-		if err == nil {
-			errString := []byte("range split on same splitKey should failed on second time")
-			t.Error(errString)
-			return util.Error(errString)
-		} else {
-			close(ch)
-			return err
-		}
+		ch <- err
 	}()
 
 	select {
-	case <-ch:
+	case err := <-ch:
+		if err == nil {
+			t.Error("range split on same splitKey should fail")
+		}
 	case <-time.After(500 * time.Millisecond):
-		t.Error("range split on same splitKey is not returned in 500ms")
+		t.Error("range split on same splitKey timed out")
 	}
 }
