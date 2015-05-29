@@ -94,7 +94,7 @@ func TestStoreEventFeed(t *testing.T) {
 			},
 		},
 	}
-	if err := rng1.SetDesc(desc1); err != nil {
+	if err := rng1.setDesc(desc1); err != nil {
 		t.Fatal(err)
 	}
 	rng2 := &Range{
@@ -107,7 +107,7 @@ func TestStoreEventFeed(t *testing.T) {
 			},
 		},
 	}
-	if err := rng2.SetDesc(desc2); err != nil {
+	if err := rng2.setDesc(desc2); err != nil {
 		t.Fatal(err)
 	}
 	diffStats := &proto.MVCCStats{

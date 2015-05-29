@@ -938,7 +938,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	// the new range.
 	copyDesc := *origRng.Desc()
 	copyDesc.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
-	if err := origRng.SetDesc(&copyDesc); err != nil {
+	if err := origRng.setDesc(&copyDesc); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -980,7 +980,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	// Update the end key of the subsuming range.
 	copy := *subsumingRng.Desc()
 	copy.EndKey = updatedEndKey
-	if err := subsumingRng.SetDesc(&copy); err != nil {
+	if err := subsumingRng.setDesc(&copy); err != nil {
 		return err
 	}
 

@@ -110,7 +110,7 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// nasty little hack, but since it's test code, meh.
 	newDesc := *tc.rng.Desc()
 	newDesc.StartKey = proto.Key("a")
-	if err := tc.rng.SetDesc(&newDesc); err != nil {
+	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,7 +147,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 	newDesc := *tc.rng.Desc()
 	newDesc.StartKey = proto.Key("b")
 	newDesc.EndKey = proto.Key("c")
-	if err := tc.rng.SetDesc(&newDesc); err != nil {
+	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
 

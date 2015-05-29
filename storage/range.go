@@ -222,7 +222,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	// Do not call SetDesc to avoid calling processRangeDescriptorUpdate().
+	// Do not call setDesc to avoid calling processRangeDescriptorUpdate().
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 
 	lastIndex, err := r.loadLastIndex()
@@ -430,10 +430,10 @@ func (r *Range) Desc() *proto.RangeDescriptor {
 	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
 }
 
-// SetDesc atomically sets the range's descriptor. This method calls
+// setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the range manager handle the
 // descriptor update.
-func (r *Range) SetDesc(desc *proto.RangeDescriptor) error {
+func (r *Range) setDesc(desc *proto.RangeDescriptor) error {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 	if r.rm == nil {
 		// r.rm is null in some tests.

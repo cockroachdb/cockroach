@@ -1089,7 +1089,7 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
 	copy := *r.Desc()
 	copy.Replicas = change.UpdatedReplicas
-	return r.SetDesc(&copy)
+	return r.setDesc(&copy)
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed

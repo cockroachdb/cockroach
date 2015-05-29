@@ -97,11 +97,11 @@ func TestQueuePriorityQueue(t *testing.T) {
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r1 := &Range{}
-	if err := r1.SetDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r1.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	r2 := &Range{}
-	if err := r2.SetDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+	if err := r2.setDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
 		t.Fatal(err)
 	}
 	shouldAddMap := map[*Range]bool{
@@ -183,11 +183,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r1 := &Range{}
-	if err := r1.SetDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r1.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	r2 := &Range{}
-	if err := r2.SetDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+	if err := r2.setDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
@@ -230,7 +230,7 @@ func TestBaseQueueProcess(t *testing.T) {
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r := &Range{}
-	if err := r.SetDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
