@@ -420,6 +420,10 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		ElectionTimeoutTicks:   s.ctx.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.ctx.RaftHeartbeatIntervalTicks,
 		EntryFormatter:         raftEntryFormatter,
+		// TODO(bdarnell): Multiraft deadlocks if the Events channel is
+		// unbuffered. Temporarily give it some breathing room until the underlying
+		// deadlock is fixed. See #1185, #1193.
+		EventBufferSize: 1000,
 	}, s.stopper); err != nil {
 		return err
 	}
