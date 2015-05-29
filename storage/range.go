@@ -432,7 +432,7 @@ func (r *Range) Desc() *proto.RangeDescriptor {
 
 // SetDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the range manager handle the
-// descriptor update. Note that ProcessRangeDescriptorUpdate()
+// descriptor update. Note that processRangeDescriptorUpdate()
 // acquires the metaLock.
 //
 // This method should be called in the context of having metaLock held,
