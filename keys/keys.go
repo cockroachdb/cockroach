@@ -247,12 +247,10 @@ func RangeMetaKey(key proto.Key) proto.Key {
 }
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
-// key. It must have an appropriate metadata range prefix, and the original key
-// value must be less than KeyMax. As a special case, KeyMin is considered a
-// valid Range Metadata Key.
+// key.
 func ValidateRangeMetaKey(key proto.Key) error {
 	// KeyMin is a valid key.
-	if len(key) == 0 {
+	if key.Equal(proto.KeyMin) {
 		return nil
 	}
 	// Key must be at least as long as Meta1Prefix.
@@ -260,34 +258,37 @@ func ValidateRangeMetaKey(key proto.Key) error {
 		return NewInvalidRangeMetaKeyError("too short", key)
 	}
 
-	prefix, body := key[:len(Meta1Prefix)], key[len(Meta1Prefix):]
+	prefix, body := proto.Key(key[:len(Meta1Prefix)]), proto.Key(key[len(Meta1Prefix):])
 
-	// The prefix must be equal to Meta1Prefix or Meta2Prefix
-	if !bytes.HasPrefix(key, MetaPrefix) {
-		return NewInvalidRangeMetaKeyError(
-			fmt.Sprintf("does not have %q prefix", MetaPrefix), key)
-	}
-	if lvl := string(prefix[len(MetaPrefix)]); lvl != "1" && lvl != "2" {
-		return NewInvalidRangeMetaKeyError("meta level is not 1 or 2", key)
-	}
-	// Body of the key must sort <= KeyMax. KeyMax might be the body in
-	// the event of doing a lookup of the key "\x00\x00meta1\xff\xff" in
-	// order to resolve an intent during a split.
-	if proto.KeyMax.Less(body) {
-		return NewInvalidRangeMetaKeyError("body of range lookup is > KeyMax", key)
+	if prefix.Equal(Meta2Prefix) {
+		if body.Less(proto.KeyMax) {
+			return nil
+		}
+		return NewInvalidRangeMetaKeyError("body of meta2 range lookup is >= KeyMax", key)
 	}
 
-	return nil
+	if prefix.Equal(Meta1Prefix) {
+		if proto.KeyMax.Less(body) {
+			return NewInvalidRangeMetaKeyError("body of meta1 range lookup is > KeyMax", key)
+		}
+		return nil
+	}
+	return NewInvalidRangeMetaKeyError("not a meta key", key)
 }
 
-// DecodeRangeMetaKey returns the bounds within which the desired meta
-// record can be found. The given key must be a valid RangeMetaKey.
-func DecodeRangeMetaKey(key proto.Key) (proto.Key, proto.Key) {
-	if len(key) == 0 {
+// MetaScanBounds returns the start and end keys of the range within which the
+// desired meta record can be found by means of an engine scan. The given key
+// must be a valid RangeMetaKey as defined by ValidateRangeMetaKey.
+func MetaScanBounds(key proto.Key) (proto.Key, proto.Key) {
+	if key.Equal(proto.KeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
 		return Meta1Prefix, Meta1Prefix.PrefixEnd()
 	}
+	if key.Equal(Meta1KeyMax) {
+		// Special case Meta1KeyMax: this is the last key in Meta1, we don't want
+		// to start at Next().
+		return key, Meta1Prefix.PrefixEnd()
+	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	metaPrefix := proto.Key(key[:len(Meta1Prefix)])
-	return key.Next(), metaPrefix.PrefixEnd()
+	return key.Next(), proto.Key(key[:len(Meta1Prefix)]).PrefixEnd()
 }

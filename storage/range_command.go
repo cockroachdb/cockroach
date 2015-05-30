@@ -353,7 +353,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
-	startKey, endKey := keys.DecodeRangeMetaKey(args.Key)
+	startKey, endKey := keys.MetaScanBounds(args.Key)
 	kvs, err := engine.MVCCScan(batch, startKey, endKey, rangeCount, args.Timestamp, false, args.Txn)
 	if err != nil {
 		if wiErr, ok := err.(*proto.WriteIntentError); ok && args.IgnoreIntents {
