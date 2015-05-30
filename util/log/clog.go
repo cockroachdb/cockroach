@@ -630,6 +630,7 @@ type loggingT struct {
 	// does not let us avoid the =true, and that shorthand is necessary for
 	// compatibility. TODO: does this matter enough to fix? Seems unlikely.
 	toStderr        bool          // The -logtostderr flag.
+	json            bool          // The -logjson flag.
 	alsoToStderr    bool          // The -alsologtostderr flag.
 	color           string        // The -color flag.
 	hasColorProfile *bool         // Non-nil if the color profile has been determined
@@ -778,11 +779,24 @@ func (l *loggingT) outputLogEntry(s severity, file string, line int, alsoToStder
 		}
 	}
 
+	var data []byte
+	if l.json {
+		data = encodeLogEntryJSON(entry)
+	}
+
 	if l.toStderr {
-		_, _ = os.Stderr.Write(l.processForStderr(entry))
+		if !l.json {
+			_, _ = os.Stderr.Write(l.processForStderr(entry))
+		} else {
+			_, _ = os.Stderr.Write(data)
+		}
 	} else {
 		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
-			_, _ = os.Stderr.Write(l.processForStderr(entry))
+			if !l.json {
+				_, _ = os.Stderr.Write(l.processForStderr(entry))
+			} else {
+				_, _ = os.Stderr.Write(data)
+			}
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
@@ -791,7 +805,9 @@ func (l *loggingT) outputLogEntry(s severity, file string, line int, alsoToStder
 			}
 		}
 
-		data := encodeLogEntry(entry)
+		if data == nil {
+			data = encodeLogEntryProto(entry)
+		}
 
 		switch s {
 		case fatalLog:
@@ -825,7 +841,7 @@ func (l *loggingT) outputLogEntry(s severity, file string, line int, alsoToStder
 	}
 }
 
-func encodeLogEntry(entry *proto.LogEntry) []byte {
+func encodeLogEntryProto(entry *proto.LogEntry) []byte {
 	// Marshal log entry.
 	entryData, err := gogoproto.Marshal(entry)
 	if err != nil {
@@ -834,6 +850,15 @@ func encodeLogEntry(entry *proto.LogEntry) []byte {
 	// Encode the length of the data first, followed by the encoded data.
 	data := encoding.EncodeUint32([]byte(nil), uint32(len(entryData)))
 	return append(data, entryData...)
+}
+
+func encodeLogEntryJSON(entry *proto.LogEntry) []byte {
+	// Marshal log entry.
+	entryData, err := json.Marshal(entry)
+	if err != nil {
+		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
+	}
+	return append(entryData, '\n')
 }
 
 // processForStderr formats a log entry for output to standard error.
@@ -990,7 +1015,13 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 			Line:   int32(line),
 			Format: format,
 		}
-		n, err := sb.file.Write(encodeLogEntry(&entry))
+		var n int
+		var err error
+		if !logging.json {
+			n, err = sb.file.Write(encodeLogEntryProto(&entry))
+		} else {
+			n, err = sb.file.Write(encodeLogEntryJSON(&entry))
+		}
 		if err != nil {
 			panic(err)
 		}
