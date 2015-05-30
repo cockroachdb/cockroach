@@ -25,6 +25,9 @@ type Ticker interface {
 	// the channel has this type for compatibility with time.Ticker but other implementations
 	// may not return real times.
 	Chan() <-chan time.Time
+
+	// Close stops the ticker and releases its resources.
+	Close()
 }
 
 type realTicker struct {
@@ -37,6 +40,10 @@ func newTicker(interval time.Duration) Ticker {
 
 func (t *realTicker) Chan() <-chan time.Time {
 	return t.C
+}
+
+func (t *realTicker) Close() {
+	t.Ticker.Stop()
 }
 
 // manualTicker is a fake implementation of the Ticker interface.  With this ticker
@@ -57,3 +64,5 @@ func (m *manualTicker) Chan() <-chan time.Time {
 func (m *manualTicker) Tick() {
 	m.ch <- time.Time{}
 }
+
+func (m *manualTicker) Close() { /* do nothing */ }

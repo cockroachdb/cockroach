@@ -538,6 +538,7 @@ func (s *Store) startGossip() error {
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(clusterIDGossipInterval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
@@ -557,6 +558,7 @@ func (s *Store) startGossip() error {
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:

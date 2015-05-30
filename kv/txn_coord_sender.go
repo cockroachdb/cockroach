@@ -519,6 +519,7 @@ func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction, resolved []proto.Ke
 func (tc *TxnCoordSender) heartbeat(txnMeta *txnMetadata) {
 	tc.stopper.RunWorker(func() {
 		ticker := time.NewTicker(tc.heartbeatInterval)
+		defer ticker.Stop()
 		request := &proto.InternalHeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:  txnMeta.txn.Key,

@@ -72,6 +72,7 @@ type poller struct {
 func (p *poller) start() {
 	p.stopper.RunWorker(func() {
 		ticker := time.NewTicker(p.frequency)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
