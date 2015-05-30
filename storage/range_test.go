@@ -2384,32 +2384,37 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	}
 }
 
-// TestInternalLookupFirstRange tests that InternalRangeLookup works correctly
-// with the first range (StartKey==KeyMin). Normally we look up this range
-// in gossip instead of executing the RPC, but InternalRangeLookup is still
-// used when up-to-date information is required.
-func TestInternalRangeLookupFirstRange(t *testing.T) {
+func TestInternalRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-
-	reply := proto.InternalRangeLookupResponse{}
-	if err := tc.store.ExecuteCmd(context.Background(), client.Call{
-		Args: &proto.InternalRangeLookupRequest{
-			RequestHeader: proto.RequestHeader{
-				RaftID: 1,
-				Key:    proto.Key{},
+	for _, key := range []proto.Key{
+		// Test with the first range (StartKey==KeyMin). Normally we look up this
+		// range in gossip instead of executing the RPC, but InternalRangeLookup
+		// is still used when up-to-date information is required.
+		proto.KeyMin,
+		// Test with the last key in a meta prefix. This is an edge case in the
+		// implementation.
+		proto.MakeKey(keys.Meta1Prefix, proto.KeyMax),
+	} {
+		reply := proto.InternalRangeLookupResponse{}
+		if err := tc.store.ExecuteCmd(context.Background(), client.Call{
+			Args: &proto.InternalRangeLookupRequest{
+				RequestHeader: proto.RequestHeader{
+					RaftID: 1,
+					Key:    key,
+				},
+				MaxRanges: 1,
 			},
-			MaxRanges: 1,
-		},
-		Reply: &reply,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	expected := []proto.RangeDescriptor{*tc.rng.Desc()}
-	if !reflect.DeepEqual(reply.Ranges, expected) {
-		t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)
+			Reply: &reply,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		expected := []proto.RangeDescriptor{*tc.rng.Desc()}
+		if !reflect.DeepEqual(reply.Ranges, expected) {
+			t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)
+		}
 	}
 }
 
