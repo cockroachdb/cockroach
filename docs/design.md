@@ -264,7 +264,7 @@ begins anew reusing the same tx id. The prior run of the transaction might
 have written some write intents, which need to be deleted before the
 transaction commits, so as to not be included as part of the transaction.
 These stale write intent deletions are done during the reexecution of the
-transaction, either implicitly, through writing new intents to 
+transaction, either implicitly, through writing new intents to
 the same keys as part of the reexecution of the transaction, or explicitly,
 by cleaning up stale intents that are not part of the reexecution of the
 transaction. Since most transactions will end up writing to the same keys,
@@ -325,8 +325,8 @@ There are several scenarios in which transactions interact:
 
 - **Writer encounters uncommitted write intent**:
   If the other write intent has been written by a transaction with a lower
-  priority, the writer aborts the conflicting transaction. If the write 
-  intent has a higher or equal priority the transaction retries, using as a new 
+  priority, the writer aborts the conflicting transaction. If the write
+  intent has a higher or equal priority the transaction retries, using as a new
   priority *max(new random priority, conflicting txn’s priority - 1)*;
   the retry occurs after a short, randomized backoff interval.
 
@@ -625,21 +625,23 @@ B would require roughly 4G (2\^32 B) to store--too much to duplicate
 between machines. Our conclusion is that range metadata must be
 distributed for large installations.
 
-To distribute the range metadata and keep key lookups relatively fast,
-we use two levels of indirection. All of the range metadata sorts first
-in our key-value map. We accomplish this by prefixing range metadata
-with two null characters (*\0\0*). The *meta1* or *meta2* suffixes are
-additionally appended to distinguish between the first level and second
-level of range metadata. In order to do a lookup for *key1*,
-we first locate the range information for the lower bound of
-`\0\0meta1<key1>`, and then use that range to locate the lower bound
-of `\0\0meta2<key1>`. The range specified there will indicate the
-range location of `<key1>` (refer to examples below). Using two levels
-of indirection, **our map can address approximately 2\^62 B of data, or
-roughly 4E** (*each metadata range addresses 2\^(26-8) = 2\^18 ranges;
-with two levels of indirection, we can address 2\^(18 + 18) = 2\^36
-ranges; each range addresses 2\^26 B; total is 2\^(36+26) B = 2\^62 B =
-4E*).
+To keep key lookups relatively fast in the presence of distributed metadata,
+we store all the top-level metadata in a single range (the first range). These
+top-level metadata keys are known as *meta1* keys, and are prefixed such that
+they sort to the beginning of the key space. Given the metadata size of 256
+bytes given above, a single 64M range would support 64M/256B = 2\^18 ranges,
+which gives a total storage of 64M \* 2\^18 = 16.7T. To support the 1P quoted
+above, we need two levels of indirection, where the first level addresses the
+second, and the second addresses user data. With two levels of indirection, we
+can address 2\^(18 + 18) = 2\^36 ranges; each range addresses 2\^26 B, and
+altogether we address 2\^(36+26) B = 2\^62 B = 4E of user data.
+
+For a given user-addressable `key1`, the associated *meta1* record is found
+at the successor key to `key1` in the *meta1* space. Since the *meta1* space
+is sparse, the successor key is defined as the next key which is present. The
+*meta1* record identifies the range containing the *meta2* record, which is
+found using the same process. The *meta2* record identifies the range
+containing `key1`, which is again found the same way (see examples below).
 
 Note: we append the end key of each range to meta[12] records because
 the RocksDB iterator only supports a Seek() interface which acts as a
