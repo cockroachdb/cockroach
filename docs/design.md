@@ -977,7 +977,7 @@ periodically (configurable), and delivers those messages to the target
 key’s inbox. The dispatcher is also woken up whenever a new message is
 added to the outbox. A separate executor also polls the range’s
 *executable message outbox* periodically as well (again, configurable),
-and executes those commands. The exeecutor, too, is woken up whenever a
+and executes those commands. The executor, too, is woken up whenever a
 new message is added to the outbox.
 
 Formats follow in the table below. Notice that inbox messages for a
