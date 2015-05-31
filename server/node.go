@@ -404,6 +404,7 @@ func (n *Node) connectGossip() {
 func (n *Node) startGossip(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		ticker := time.NewTicker(gossipInterval)
+		defer ticker.Stop()
 		n.gossipCapacities() // one-off run before going to sleep
 		for {
 			select {

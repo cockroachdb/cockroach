@@ -124,6 +124,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper
 
 	if config.Ticker == nil {
 		config.Ticker = newTicker(config.TickInterval)
+		stopper.AddCloser(config.Ticker)
 	}
 
 	if config.EntryFormatter != nil {
