@@ -198,6 +198,7 @@ or watch a presentation:
 * [Venue: Yelp!](http://www.youtube.com/watch?v=MEAuFgsmND0&feature=youtu.be), Presented by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014).
 * [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), Presented by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014).
 * [Venue: The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), Presented by [Tobias Schottdorf](https://github.com/tschottdorf) on (03/04/2015).
+* [Venue: CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), Presented by [Spencer Kimball](https://github.com/spencerkimball) on (27/05/2015).
 
 
 Cockroach is a distributed key/value datastore which supports ACID
