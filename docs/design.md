@@ -143,7 +143,7 @@ key was read. This *read timestamp cache* is updated everytime a key
 is read. The cache’s entries are evicted oldest timestamp first, updating
 the low water mark of the cache appropriately. If a new range replica leader
 is elected, it sets the low water mark for the cache to the current
-wall time + ε (ε = 99^th percentile clock skew).
+wall time + ε (ε = 99th percentile clock skew).
 
 # Lock-Free Distributed Transactions
 
