@@ -74,7 +74,6 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 			{
 				NodeID:  1,
 				StoreID: 1,
-				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			},
 		},
 	}

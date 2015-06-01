@@ -348,7 +348,7 @@ func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) 
 	return ds.internalRangeLookup(metadataKey, options, desc)
 }
 
-func (ds *DistSender) optimizeReplicaOrder(replicas proto.ReplicaSlice) rpc.OrderingPolicy {
+func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPolicy {
 	// Unless we know better, send the RPCs randomly.
 	order := rpc.OrderingPolicy(rpc.OrderRandom)
 	nodeDesc := ds.getNodeDescriptor()
@@ -401,7 +401,8 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	}
 
 	// Copy and rearrange the replicas suitably, then return the desired order.
-	replicas := append(proto.ReplicaSlice(nil), desc.Replicas...)
+	replicas := newReplicaSlice(ds.gossip, desc)
+
 	// Rearrange the replicas so that those replicas with long common
 	// prefix of attributes end up first. If there's no prefix, this is a
 	// no-op.
@@ -413,7 +414,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
 			i, _ := replicas.FindReplica(leader.StoreID)
 			if i >= 0 {
-				proto.ReplicaSlice(replicas).MoveToFront(i)
+				replicas.MoveToFront(i)
 				order = rpc.OrderStable
 			}
 		}
@@ -423,15 +424,10 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range replicas {
-		addr, err := ds.gossip.GetNodeIDAddress(replicas[i].NodeID)
-		if err != nil {
-			if log.V(1) {
-				log.Infof("node %d address is not gossiped: %v", replicas[i].NodeID, err)
-			}
-			continue
-		}
+		nd := &replicas[i].NodeDesc
+		addr := util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address)
 		addrs = append(addrs, addr)
-		replicaMap[addr.String()] = &replicas[i]
+		replicaMap[addr.String()] = &replicas[i].Replica
 	}
 	if len(addrs) == 0 {
 		return noNodeAddrsAvailError{}

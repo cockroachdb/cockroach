@@ -189,19 +189,41 @@ func (g *Gossip) GetNodeIDAddress(nodeID proto.NodeID) (net.Addr, error) {
 	return g.getNodeIDAddressLocked(nodeID)
 }
 
-// getNodeIDAddressLocked looks up the address of the node by ID. The
-// mutex is assumed held by the caller. This method is called by
-// externally via GetNodeIDAddress or internally when looking up a
-// "distant" node address to connect directly to.
-func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
+// GetNodeDescriptor looks up the descriptor of the node by ID.
+func (g *Gossip) GetNodeDescriptor(nodeID proto.NodeID) (proto.NodeDescriptor, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	nd, err := g.getNodeDescriptorLocked(nodeID)
+	if err != nil {
+		return proto.NodeDescriptor{}, err
+	}
+	return *nd, err
+}
+
+// getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
+// is assumed held by the caller. This method is called externally via
+// GetNodeDescriptor and internally by getNodeIDAddressLocked.
+func (g *Gossip) getNodeDescriptorLocked(nodeID proto.NodeID) (*proto.NodeDescriptor, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
 		if nd, ok := i.Val.(*proto.NodeDescriptor); ok {
-			return util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address), nil
+			return nd, nil
 		}
 		return nil, util.Errorf("error in node descriptor gossip: %+v", i.Val)
 	}
-	return nil, util.Errorf("unable to lookup address for node: %d", nodeID)
+	return nil, util.Errorf("unable to lookup descriptor for node: %d", nodeID)
+}
+
+// getNodeIDAddressLocked looks up the address of the node by ID. The mutex is
+// assumed held by the caller. This method is called externally via
+// GetNodeIDAddress or internally when looking up a "distant" node address to
+// connect directly to.
+func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
+	nd, err := g.getNodeDescriptorLocked(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address), nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info

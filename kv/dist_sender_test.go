@@ -47,7 +47,6 @@ var testRangeDescriptor = proto.RangeDescriptor{
 		{
 			NodeID:  1,
 			StoreID: 1,
-			Attrs:   proto.Attributes{Attrs: []string{"test"}},
 		},
 	},
 }
@@ -96,9 +95,6 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	g := makeTestGossip(t)
-	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 1}); err != nil {
-		t.Fatal(err)
-	}
 	raftID := int64(99)
 
 	nodeAttrs := map[int32][]string{
@@ -233,10 +229,9 @@ func TestSendRPCOrder(t *testing.T) {
 					Network: addr.Network(),
 					Address: addr.String(),
 				},
-			}
-			// First (= local) node needs to get its attributes during sendRPC.
-			if i == 1 {
-				nd.Attrs = proto.Attributes{Attrs: tc.attrs}
+				Attrs: proto.Attributes{
+					Attrs: nodeAttrs[i],
+				},
 			}
 			if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 				t.Fatal(err)
@@ -245,9 +240,22 @@ func TestSendRPCOrder(t *testing.T) {
 			descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
 				NodeID:  proto.NodeID(i),
 				StoreID: proto.StoreID(i),
-				Attrs:   proto.Attributes{Attrs: nodeAttrs[i]},
 			})
 		}
+
+		{
+			// The local node needs to get its attributes during sendRPC.
+			nd := &proto.NodeDescriptor{
+				NodeID: 6,
+				Attrs: proto.Attributes{
+					Attrs: tc.attrs,
+				},
+			}
+			if err := g.SetNodeDescriptor(nd); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		ds.leaderCache.Update(proto.RaftID(raftID), proto.Replica{})
 		if tc.leader > 0 {
 			ds.leaderCache.Update(proto.RaftID(raftID), descriptor.Replicas[tc.leader-1])

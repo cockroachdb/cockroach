@@ -185,9 +185,9 @@ func ExampleSplitMergeRanges() {
 	// range split c c
 	// range ls
 	// ""-"c" [1]
-	// 	0: node-id=1 store-id=1 attrs=[]
+	// 	0: node-id=1 store-id=1
 	// "c"-"\xff\xff" [2]
-	// 	0: node-id=1 store-id=1 attrs=[]
+	// 	0: node-id=1 store-id=1
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
@@ -196,7 +196,7 @@ func ExampleSplitMergeRanges() {
 	// range merge b
 	// range ls
 	// ""-"\xff\xff" [1]
-	// 	0: node-id=1 store-id=1 attrs=[]
+	// 	0: node-id=1 store-id=1
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"

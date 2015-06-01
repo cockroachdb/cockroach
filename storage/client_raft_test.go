@@ -206,7 +206,6 @@ func TestReplicateRange(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-			Attrs:   proto.Attributes{},
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +270,6 @@ func TestRestoreReplicas(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-			Attrs:   proto.Attributes{},
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +359,6 @@ func TestFailedReplicaChange(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-			Attrs:   proto.Attributes{},
 		})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("did not get expected error: %s", err)
@@ -381,7 +378,6 @@ func TestFailedReplicaChange(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-			Attrs:   proto.Attributes{},
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -448,7 +444,6 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
-			Attrs:   proto.Attributes{},
 		}); err != nil {
 		t.Fatal(err)
 	}

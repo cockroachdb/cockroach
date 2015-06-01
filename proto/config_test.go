@@ -19,7 +19,6 @@ package proto
 
 import (
 	"bytes"
-	"reflect"
 	"testing"
 )
 
@@ -148,86 +147,5 @@ func TestPermConfig(t *testing.T) {
 	}
 	if p.CanWrite("bar") {
 		t.Errorf("unexpected read access for user \"bar\"")
-	}
-}
-
-func verifyOrdering(attrs []string, replicas ReplicaSlice, prefixLen int) bool {
-	prevMatchIndex := len(attrs)
-	for i, replica := range replicas {
-		matchIndex := -1
-
-		for j, attr := range attrs {
-			if j >= len(replica.Attrs.Attrs) || replica.Attrs.Attrs[j] != attr {
-				break
-			}
-			matchIndex = j
-		}
-		if matchIndex != -1 && matchIndex > prevMatchIndex {
-			return false
-		}
-		if i == 0 && matchIndex+1 != prefixLen {
-			return false
-		}
-		prevMatchIndex = matchIndex
-	}
-	return true
-}
-
-func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
-	replicaAttrs := [][]string{
-		{"us-west-1a", "gpu"},
-		{"us-east-1a", "pdu1", "gpu"},
-		{"us-east-1a", "pdu1", "fio"},
-		{"breaker", "us-east-1a", "pdu1", "fio"},
-		{""},
-		{"us-west-1a", "pdu1", "fio"},
-		{"us-west-1a", "pdu1", "fio", "aux"},
-	}
-	attrs := [][]string{
-		{"us-carl"},
-		{"us-west-1a", "pdu1", "fio"},
-		{"us-west-1a"},
-		{"", "pdu1", "fio"},
-	}
-
-	for i, attr := range attrs {
-		rs := ReplicaSlice{}
-		for _, c := range replicaAttrs {
-			rs = append(rs, Replica{Attrs: Attributes{Attrs: c}})
-		}
-		prefixLen := rs.SortByCommonAttributePrefix(attr)
-		if !verifyOrdering(attr, rs, prefixLen) {
-			t.Errorf("%d: attributes not ordered by %s or prefix length %d incorrect:\n%v", i, attr, prefixLen, rs)
-		}
-	}
-
-}
-
-func getStores(rs ReplicaSlice) (r []StoreID) {
-	for i := range rs {
-		r = append(r, rs[i].StoreID)
-	}
-	return
-}
-
-func TestReplicaSetMoveToFront(t *testing.T) {
-	rs := ReplicaSlice(nil)
-	for i := 0; i < 5; i++ {
-		rs = append(rs, Replica{StoreID: StoreID(i + 1)})
-	}
-	rs.MoveToFront(0)
-	exp := []StoreID{1, 2, 3, 4, 5}
-	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
-		t.Errorf("expected order %s, got %s", exp, stores)
-	}
-	rs.MoveToFront(2)
-	exp = []StoreID{3, 1, 2, 4, 5}
-	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
-		t.Errorf("expected order %s, got %s", exp, stores)
-	}
-	rs.MoveToFront(4)
-	exp = []StoreID{5, 3, 1, 2, 4}
-	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
-		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 }

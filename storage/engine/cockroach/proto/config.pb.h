@@ -204,23 +204,12 @@ class Replica : public ::google::protobuf::Message {
   inline ::google::protobuf::int32 store_id() const;
   inline void set_store_id(::google::protobuf::int32 value);
 
-  // optional .cockroach.proto.Attributes attrs = 3;
-  inline bool has_attrs() const;
-  inline void clear_attrs();
-  static const int kAttrsFieldNumber = 3;
-  inline const ::cockroach::proto::Attributes& attrs() const;
-  inline ::cockroach::proto::Attributes* mutable_attrs();
-  inline ::cockroach::proto::Attributes* release_attrs();
-  inline void set_allocated_attrs(::cockroach::proto::Attributes* attrs);
-
   // @@protoc_insertion_point(class_scope:cockroach.proto.Replica)
  private:
   inline void set_has_node_id();
   inline void clear_has_node_id();
   inline void set_has_store_id();
   inline void clear_has_store_id();
-  inline void set_has_attrs();
-  inline void clear_has_attrs();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -228,7 +217,6 @@ class Replica : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
-  ::cockroach::proto::Attributes* attrs_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
@@ -1488,47 +1476,6 @@ inline void Replica::set_store_id(::google::protobuf::int32 value) {
   set_has_store_id();
   store_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.Replica.store_id)
-}
-
-// optional .cockroach.proto.Attributes attrs = 3;
-inline bool Replica::has_attrs() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Replica::set_has_attrs() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void Replica::clear_has_attrs() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void Replica::clear_attrs() {
-  if (attrs_ != NULL) attrs_->::cockroach::proto::Attributes::Clear();
-  clear_has_attrs();
-}
-inline const ::cockroach::proto::Attributes& Replica::attrs() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Replica.attrs)
-  return attrs_ != NULL ? *attrs_ : *default_instance_->attrs_;
-}
-inline ::cockroach::proto::Attributes* Replica::mutable_attrs() {
-  set_has_attrs();
-  if (attrs_ == NULL) attrs_ = new ::cockroach::proto::Attributes;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.Replica.attrs)
-  return attrs_;
-}
-inline ::cockroach::proto::Attributes* Replica::release_attrs() {
-  clear_has_attrs();
-  ::cockroach::proto::Attributes* temp = attrs_;
-  attrs_ = NULL;
-  return temp;
-}
-inline void Replica::set_allocated_attrs(::cockroach::proto::Attributes* attrs) {
-  delete attrs_;
-  attrs_ = attrs;
-  if (attrs) {
-    set_has_attrs();
-  } else {
-    clear_has_attrs();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Replica.attrs)
 }
 
 // -------------------------------------------------------------------
