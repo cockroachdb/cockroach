@@ -140,8 +140,8 @@ func parseFormatWithArgs(format string, args []interface{}) (string, []proto.Log
 		buf = append(buf, "%s"...)
 		// New format string always gets %s, though we use the actual
 		// format to generate the string here for the log argument.
-		if idx > len(args) {
-			fmt.Fprintf(os.Stderr, "insufficient parameters specified for format string %s", format)
+		if idx >= len(args) {
+			fmt.Fprintf(os.Stderr, "ERROR: insufficient parameters specified for format string %s", format)
 			return string(append(buf, format[i:]...)), logArgs
 		}
 		logArgs = append(logArgs, makeLogArg(format[start:i], args[idx]))

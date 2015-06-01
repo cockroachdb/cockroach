@@ -61,6 +61,7 @@ var defaultRPCRetryOptions = retry.Options{
 	MaxBackoff:  maxRetryBackoff,
 	Constant:    2,
 	MaxAttempts: 0, // retry indefinitely
+	UseV1Info:   true,
 }
 
 // A firstRangeMissingError indicates that the first range has not yet
@@ -274,7 +275,7 @@ type lookupOptions struct {
 // is no error inspection and retry logic here; this is not an issue since the
 // lookup performs a single inconsistent read only.
 func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
-	info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+	desc *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
@@ -285,7 +286,8 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 		IgnoreIntents: options.ignoreIntents,
 	}
 	reply := &proto.InternalRangeLookupResponse{}
-	if err := ds.sendRPC(info, args, reply); err != nil {
+	replicas := newReplicaSlice(ds.gossip, desc)
+	if err := ds.sendRPC(desc.RaftID, replicas, args, reply); err != nil {
 		return nil, err
 	}
 	if reply.Error != nil {
@@ -394,14 +396,11 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
+func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice,
 	args proto.Request, reply proto.Response) error {
 	if len(desc.Replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", args.Method())
 	}
-
-	// Copy and rearrange the replicas suitably, then return the desired order.
-	replicas := newReplicaSlice(ds.gossip, desc)
 
 	// Rearrange the replicas so that those replicas with long common
 	// prefix of attributes end up first. If there's no prefix, this is a
@@ -410,7 +409,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front and send requests in order.
-	if args.Header().ReadConsistency != proto.INCONSISTENT || proto.IsWrite(args) {
+	if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) {
 		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
 			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
@@ -435,7 +434,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.Header().RaftID = desc.RaftID
+	args.Header().RaftID = raftID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
@@ -469,6 +468,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	getReply := func() interface{} {
 		return args.CreateReply()
 	}
+
 	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
 	if err == nil {
@@ -552,8 +552,10 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 
 			// If we're still error-free so far, try to send the call.
 			var rpcErr error
+			var replicas replicaSlice
 			if err == nil {
-				rpcErr = ds.sendRPC(desc, args, reply)
+				replicas = newReplicaSlice(ds.gossip, desc)
+				rpcErr = ds.sendRPC(desc.RaftID, replicas, args, reply)
 				err = rpcErr
 			}
 
@@ -580,9 +582,11 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			}
 
 			if err != nil {
-				log.Warningf("failed to invoke %s: %s", call.Method(), err)
+				if log.V(1) {
+					log.Warningf("failed to invoke %s: %s", call.Method(), err)
+				}
 
-				// If retriable, allow retry. For range not found or range
+				// If retryable, allow retry. For range not found or range
 				// key mismatch errors, we don't backoff on the retry,
 				// but reset the backoff loop so we can retry immediately.
 				switch err.(type) {
@@ -594,6 +598,11 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				case *proto.NotLeaderError:
 					leader := err.(*proto.NotLeaderError).GetLeader()
 					if leader != nil {
+						// First, verify that leader is a known replica; if not,
+						// we've got a stale replica; evict cache and store leader.
+						if i := replicas.FindReplica(leader.StoreID); i == -1 {
+							ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+						}
 						ds.updateLeaderCache(proto.RaftID(desc.RaftID), *leader)
 					}
 					return retry.Reset, nil

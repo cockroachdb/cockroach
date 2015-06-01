@@ -431,13 +431,14 @@ func (n *Node) gossipCapacities() {
 // ctx.ScanInterval and store the status in the db.
 func (n *Node) startStoresScanner(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
-		// Pick the smalled of the two intervals.
+		// Pick the smaller of the two intervals.
 		var minScanInterval time.Duration
 		if n.ctx.ScanInterval <= n.ctx.ScanMaxIdleTime || n.ctx.ScanMaxIdleTime == 0 {
 			minScanInterval = n.ctx.ScanInterval
 		} else {
 			minScanInterval = n.ctx.ScanMaxIdleTime
 		}
+
 		// TODO(bram): The number of stores is small. The node status should be
 		// updated whenever a store status is updated.
 		for interval := time.Duration(0); true; interval = minScanInterval {

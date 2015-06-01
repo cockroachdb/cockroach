@@ -56,12 +56,12 @@ var testIdent = proto.StoreIdent{
 // of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
 func setTestRetryOptions(s *Store) {
-	s.ctx.RangeRetryOptions = retry.Options{
+	s.SetRangeRetryOptions(retry.Options{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  2 * time.Millisecond,
 		Constant:    2,
 		MaxAttempts: 2,
-	}
+	})
 }
 
 // testSender is an implementation of the client.KVSender interface

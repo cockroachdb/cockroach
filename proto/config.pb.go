@@ -45,9 +45,8 @@ type Replica struct {
 	XXX_unrecognized []byte  `json:"-"`
 }
 
-func (m *Replica) Reset()         { *m = Replica{} }
-func (m *Replica) String() string { return proto1.CompactTextString(m) }
-func (*Replica) ProtoMessage()    {}
+func (m *Replica) Reset()      { *m = Replica{} }
+func (*Replica) ProtoMessage() {}
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,

@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
@@ -514,8 +515,12 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
-	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s orig=%s max=%s}",
-		t.Name, util.UUID(t.ID), t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+	if len(t.Name) > 0 {
+		return fmt.Sprintf("%q id=%s key=%s pri=%d iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
+			t.Name, util.UUID(t.ID).Short(), t.Key, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+	}
+	return fmt.Sprintf("id=%s key=%s pri=%d iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
+		util.UUID(t.ID).Short(), t.Key, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
 
 // IsInline returns true if the value is inlined in the metadata.
@@ -601,5 +606,7 @@ var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
 	nodeID, storeID := DecodeRaftNodeID(RaftNodeID(l.RaftNodeID))
-	return fmt.Sprintf("%s-%s @%d:%d", l.Start, l.Expiration, nodeID, storeID)
+	t := time.Unix(l.Start.WallTime/1E9, 0)
+	tStr := t.Format("15:04:05.000")
+	return fmt.Sprintf("replica %d:%d %s +%.3fs", nodeID, storeID, tStr, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
 }

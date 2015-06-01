@@ -779,7 +779,9 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
-		log.Errorf("error executing raft command %s: %s", args.Method(), err)
+		if log.V(1) {
+			log.Errorf("error executing raft command %s: %s", args.Method(), err)
+		}
 	}
 	return err
 }

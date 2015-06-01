@@ -57,3 +57,11 @@ func (u UUID) String() string {
 	b := []byte(u)
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
+
+func (u UUID) Short() string {
+	if u == nil || len(u) != UUIDSize {
+		return ""
+	}
+	b := []byte(u)
+	return fmt.Sprintf("%08x", b[:4])
+}
