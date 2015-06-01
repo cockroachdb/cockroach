@@ -191,7 +191,7 @@ See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTR
 
 ## Design
 
-For full design details, see the [original design doc](https://docs.google.com/document/d/11k2EmhLGSbViBvi6_zFEiKzuXxYF49ZuuDJLe6O8gBU/edit?usp=sharing).
+This is an overview. For an in depth discussion of the design, see the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
 For a quick design overview, see the [Cockroach tech talk slides](https://docs.google.com/presentation/d/1e3TOxImRg6_nyMZspXvzb2u43D6gnS5422vAIN7J1n8/edit?usp=sharing)
 or watch a presentation:
