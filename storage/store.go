@@ -1588,6 +1588,7 @@ func (s *Store) updateStoreStatus() {
 }
 
 // SetRangeRetryOptions sets the retry options used for this store.
+// For unittests only.
 func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 	s.ctx.RangeRetryOptions = &ro
 }

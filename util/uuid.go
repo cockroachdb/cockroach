@@ -51,7 +51,7 @@ func NewUUID4() UUID {
 // String formats as hex xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,
 // or "" if u is invalid.
 func (u UUID) String() string {
-	if u == nil || len(u) != UUIDSize {
+	if len(u) != UUIDSize {
 		return ""
 	}
 	b := []byte(u)
@@ -59,7 +59,7 @@ func (u UUID) String() string {
 }
 
 func (u UUID) Short() string {
-	if u == nil || len(u) != UUIDSize {
+	if len(u) != UUIDSize {
 		return ""
 	}
 	b := []byte(u)
