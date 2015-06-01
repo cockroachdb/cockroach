@@ -156,7 +156,12 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 // FindReplica returns the replica which matches the specified store
 // ID. If no replica matches, (-1, nil) is returned.
 func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *Replica) {
-	return ReplicaSlice(r.Replicas).FindReplica(storeID)
+	for i := range r.Replicas {
+		if r.Replicas[i].StoreID == storeID {
+			return i, &r.Replicas[i]
+		}
+	}
+	return -1, nil
 }
 
 // CanRead does a linear search for user to verify read permission.
@@ -177,67 +182,6 @@ func (p *PermConfig) CanWrite(user string) bool {
 		}
 	}
 	return false
-}
-
-// A ReplicaSlice is a slice of Replicas.
-type ReplicaSlice []Replica
-
-// Swap interchanges the replicas stored at the given indices.
-func (rs ReplicaSlice) Swap(i, j int) {
-	rs[i], rs[j] = rs[j], rs[i]
-}
-
-// FindReplica returns the replica which matches the specified store
-// ID. If no replica matches, (-1, nil) is returned.
-func (rs ReplicaSlice) FindReplica(storeID StoreID) (int, *Replica) {
-	for i := range rs {
-		if rs[i].StoreID == storeID {
-			return i, &rs[i]
-		}
-	}
-	return -1, nil
-}
-
-// SortByCommonAttributePrefix rearranges the ReplicaSlice by comparing the
-// attributes to the given reference attributes. The basis for the comparison
-// is that of the common prefix of replica attributes (i.e. the number of equal
-// attributes, starting at the first), with a longer prefix sorting first.
-func (rs ReplicaSlice) SortByCommonAttributePrefix(attrs []string) int {
-	if len(rs) < 2 {
-		return 0
-	}
-	topIndex := len(rs) - 1
-	for bucket := 0; bucket < len(attrs); bucket++ {
-		firstNotOrdered := 0
-		for i := 0; i <= topIndex; i++ {
-			if bucket < len(rs[i].Attrs.Attrs) && rs[i].Attrs.Attrs[bucket] == attrs[bucket] {
-				// Move replica which matches this attribute to an earlier
-				// place in the array, just behind the last matching replica.
-				// This packs all matching replicas together.
-				rs.Swap(firstNotOrdered, i)
-				firstNotOrdered++
-			}
-		}
-		if firstNotOrdered == 0 {
-			return bucket
-		}
-		topIndex = firstNotOrdered - 1
-	}
-	return len(attrs)
-}
-
-// MoveToFront moves the replica at the given index to the front
-// of the slice, keeping the order of the remaining elements stable.
-// The function will panic when invoked with an invalid index.
-func (rs ReplicaSlice) MoveToFront(i int) {
-	l := len(rs) - 1
-	if i > l {
-		panic("out of bound index")
-	}
-	front := rs[i]
-	// Move the first i-1 elements to the right
-	copy(rs[1:i+1], rs[0:i])
-	rs[0] = front
 }
 
 // FractionUsed computes the fraction of storage capacity that is in use.

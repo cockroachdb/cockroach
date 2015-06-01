@@ -244,7 +244,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		proto.StoreID(1): {
 			"StartStore",
 			"BeginScanRanges",
-			"AddRange rid=1, live=348",
+			"AddRange rid=1, live=344",
 			"EndScanRanges",
 			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",

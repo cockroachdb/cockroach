@@ -219,7 +219,6 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 		{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
-			Attrs:   multiDisksConfig.ReplicaAttrs[0],
 		},
 	}
 	result2, err := s.allocator().AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false)
@@ -262,7 +261,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
-			Attrs:   multiDCConfig.ReplicaAttrs[1],
 		},
 	}, false)
 	if err == nil {
@@ -279,7 +277,6 @@ func TestAllocatorExistingReplica(t *testing.T) {
 		{
 			NodeID:  2,
 			StoreID: 2,
-			Attrs:   multiDisksConfig.ReplicaAttrs[0],
 		},
 	}, false)
 	if err != nil {

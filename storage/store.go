@@ -802,7 +802,6 @@ func (s *Store) BootstrapRange() error {
 			{
 				NodeID:  1,
 				StoreID: 1,
-				Attrs:   s.Attrs(),
 			},
 		},
 	}

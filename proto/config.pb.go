@@ -40,23 +40,14 @@ func (m *Attributes) GetAttrs() []string {
 // device) and associated attributes. Replicas are stored in Range
 // lookup records (meta1, meta2).
 type Replica struct {
-	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,customtype=StoreID" json:"store_id"`
-	// Combination of node & store attributes.
-	Attrs            Attributes `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
-	XXX_unrecognized []byte     `json:"-"`
+	NodeID           NodeID  `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	StoreID          StoreID `protobuf:"varint,2,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *Replica) Reset()         { *m = Replica{} }
 func (m *Replica) String() string { return proto1.CompactTextString(m) }
 func (*Replica) ProtoMessage()    {}
-
-func (m *Replica) GetAttrs() Attributes {
-	if m != nil {
-		return m.Attrs
-	}
-	return Attributes{}
-}
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
@@ -480,30 +471,6 @@ func (m *Replica) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Attrs.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -1652,8 +1619,6 @@ func (m *Replica) Size() (n int) {
 	_ = l
 	n += 1 + sovConfig(uint64(m.NodeID))
 	n += 1 + sovConfig(uint64(m.StoreID))
-	l = m.Attrs.Size()
-	n += 1 + l + sovConfig(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1901,14 +1866,6 @@ func (m *Replica) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.StoreID))
-	data[i] = 0x1a
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
-	n1, err := m.Attrs.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1936,19 +1893,19 @@ func (m *RangeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.StartKey.Size()))
-	n2, err := m.StartKey.MarshalTo(data[i:])
+	n1, err := m.StartKey.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.EndKey.Size()))
+	n2, err := m.EndKey.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
-	data[i] = 0x1a
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.EndKey.Size()))
-	n3, err := m.EndKey.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
 	if len(m.Replicas) > 0 {
 		for _, msg := range m.Replicas {
 			data[i] = 0x22
@@ -2104,11 +2061,11 @@ func (m *ZoneConfig) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x22
 		i++
 		i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
-		n4, err := m.GC.MarshalTo(data[i:])
+		n3, err := m.GC.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n3
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -2134,11 +2091,11 @@ func (m *RangeTree) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.RootKey.Size()))
-	n5, err := m.RootKey.MarshalTo(data[i:])
+	n4, err := m.RootKey.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n4
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -2163,11 +2120,11 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Key.Size()))
-	n6, err := m.Key.MarshalTo(data[i:])
+	n5, err := m.Key.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n5
 	data[i] = 0x10
 	i++
 	if m.Black {
@@ -2179,30 +2136,30 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x1a
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.ParentKey.Size()))
-	n7, err := m.ParentKey.MarshalTo(data[i:])
+	n6, err := m.ParentKey.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n6
 	if m.LeftKey != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintConfig(data, i, uint64(m.LeftKey.Size()))
-		n8, err := m.LeftKey.MarshalTo(data[i:])
+		n7, err := m.LeftKey.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n7
 	}
 	if m.RightKey != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintConfig(data, i, uint64(m.RightKey.Size()))
-		n9, err := m.RightKey.MarshalTo(data[i:])
+		n8, err := m.RightKey.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n8
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -2290,19 +2247,19 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Address.Size()))
-	n10, err := m.Address.MarshalTo(data[i:])
+	n9, err := m.Address.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n9
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
+	n10, err := m.Attrs.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n10
-	data[i] = 0x1a
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
-	n11, err := m.Attrs.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n11
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -2330,27 +2287,27 @@ func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
-	n12, err := m.Attrs.MarshalTo(data[i:])
+	n11, err := m.Attrs.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Node.Size()))
+	n12, err := m.Node.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n12
-	data[i] = 0x1a
+	data[i] = 0x22
 	i++
-	i = encodeVarintConfig(data, i, uint64(m.Node.Size()))
-	n13, err := m.Node.MarshalTo(data[i:])
+	i = encodeVarintConfig(data, i, uint64(m.Capacity.Size()))
+	n13, err := m.Capacity.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n13
-	data[i] = 0x22
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.Capacity.Size()))
-	n14, err := m.Capacity.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n14
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

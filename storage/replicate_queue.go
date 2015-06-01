@@ -111,7 +111,6 @@ func (rq *replicateQueue) process(now proto.Timestamp, rng *Range) error {
 	replica := proto.Replica{
 		NodeID:  newReplica.Node.NodeID,
 		StoreID: newReplica.StoreID,
-		Attrs:   newReplica.Attrs,
 	}
 	if err = rng.ChangeReplicas(proto.ADD_REPLICA, replica); err != nil {
 		return err

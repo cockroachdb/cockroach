@@ -70,8 +70,8 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		}
 		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RaftID)
 		for i, replica := range desc.Replicas {
-			fmt.Printf("\t%d: node-id=%d store-id=%d attrs=%v\n",
-				i, replica.NodeID, replica.StoreID, replica.Attrs.Attrs)
+			fmt.Printf("\t%d: node-id=%d store-id=%d\n",
+				i, replica.NodeID, replica.StoreID)
 		}
 	}
 }
