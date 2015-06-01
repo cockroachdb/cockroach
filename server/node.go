@@ -20,6 +20,7 @@ package server
 import (
 	"container/list"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -46,6 +47,9 @@ const (
 	gossipGroupLimit = 100
 	// gossipInterval is the interval for gossiping storage-related info.
 	gossipInterval = 1 * time.Minute
+	// runtimeStatsInterval is the interval for logging runtime stats such
+	// as number of goroutines and memory allocated.
+	runtimeStatsInterval = 10 * time.Second
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -253,6 +257,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	n.startedAt = n.ctx.Clock.Now().WallTime
 	n.startStoresScanner(stopper)
 	n.startGossip(stopper)
+	n.startRuntimeStats(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
@@ -516,6 +521,32 @@ func (n *Node) waitForScanCompletion() int64 {
 		n.completedScan.Wait()
 	}
 	return n.scanCount
+}
+
+// startLogStats periodically outputs runtime statistics to the log files.
+func (n *Node) startRuntimeStats(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(runtimeStatsInterval)
+		defer ticker.Stop()
+		var cgoCall int64
+		ms := runtime.MemStats{}
+		mb := 10E-6
+		for {
+			select {
+			case <-stopper.ShouldStop():
+				return
+			case <-ticker.C:
+				runtime.ReadMemStats(&ms)
+				newCGOCall := runtime.NumCgoCall() - cgoCall
+				cgoRate := newCGOCall / (int64(runtimeStatsInterval) / int64(time.Second))
+				activeMB := float64(ms.Alloc) * mb
+				totalMB := float64(ms.TotalAlloc) * mb
+				log.Infof("runtime stats: %d goroutines, %.2fmb active, %.2fmb total, %d cgo/second",
+					runtime.NumGoroutine(), activeMB, totalMB, cgoRate)
+				cgoCall += newCGOCall
+			}
+		}
+	})
 }
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
