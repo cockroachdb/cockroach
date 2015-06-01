@@ -93,7 +93,7 @@ func (r *RocksDB) Open() error {
 		C.DBOptions{
 			cache_size:      C.int64_t(r.cacheSize),
 			allow_os_buffer: C.bool(true),
-			logging_enabled: C.bool(log.V(1)),
+			logging_enabled: C.bool(log.V(3)),
 		})
 	err := statusToError(status)
 	if err != nil {

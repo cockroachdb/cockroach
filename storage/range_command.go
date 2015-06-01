@@ -92,7 +92,7 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 		return util.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if log.V(1) {
+	if log.V(2) {
 		log.Infof("executed %s command %+v: %+v", args.Method(), args, reply)
 	}
 

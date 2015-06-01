@@ -162,6 +162,9 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 		case <-t.rpcContext.Stopper.ShouldStop():
 			return
 		case <-time.After(raftIdleTimeout):
+			if log.V(1) {
+				log.Infof("closing Raft transport to %d due to inactivity", nodeID)
+			}
 			return
 		case <-client.Closed:
 			log.Warningf("raft client for node %d closed", nodeID)

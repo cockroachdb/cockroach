@@ -140,7 +140,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 		r.offsets[addr] = offset
 	}
 
-	if log.V(1) {
+	if log.V(2) {
 		log.Infof("update offset: %s %v", addr, r.offsets[addr])
 	}
 }
