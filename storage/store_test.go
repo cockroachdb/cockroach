@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -186,7 +187,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	expectedAttrs := []string{"test"}
+	eng := engine.NewInMem(proto.Attributes{Attrs: expectedAttrs}, 1<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	stopper := util.NewStopper()
 	stopper.AddCloser(ctx.Transport)
@@ -219,8 +221,13 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
 	// 1st range should be available.
-	if _, err := store.GetRange(1); err != nil {
+	if rng, err := store.GetRange(1); err != nil {
 		t.Errorf("failure fetching 1st range: %s", err)
+	} else {
+		attrs := rng.Desc().Replicas[0].GetAttrs().Attrs
+		if !reflect.DeepEqual(expectedAttrs, attrs) {
+			t.Errorf("expected %v, but found %v", expectedAttrs, attrs)
+		}
 	}
 }
 
