@@ -191,6 +191,13 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 			return
 		}
 		client.Go(raftMessageName, protoReq, protoResp, done)
+
+		// TODO(tschottdorf): work around #1176 by wasting just a little
+		// bit of time before moving to the next request.
+		select {
+		case <-done:
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
 
