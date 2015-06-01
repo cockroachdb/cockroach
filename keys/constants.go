@@ -135,6 +135,9 @@ var (
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
 	Meta1KeyMax = MakeKey(Meta1Prefix, proto.KeyMax)
+	// Meta2KeyMax is the end of the range of the second level of key addressing.
+	// The value is a RangeDescriptor struct.
+	Meta2KeyMax = MakeKey(Meta2Prefix, proto.KeyMax)
 
 	// MetaMax is the end of the range of addressing keys.
 	MetaMax = MakeKey(SystemPrefix, proto.Key("\x01"))
