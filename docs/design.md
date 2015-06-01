@@ -643,6 +643,10 @@ is sparse, the successor key is defined as the next key which is present. The
 found using the same process. The *meta2* record identifies the range
 containing `key1`, which is again found the same way (see examples below).
 
+Concretely, metadata keys are prefixed by `\0\0meta{1,2}`; the two null
+characters provide for the desired sorting behaviour. Thus, `key1`'s
+*meta1* record will reside at the successor key to `\0\0\meta1<key1>`.
+
 Note: we append the end key of each range to meta[12] records because
 the RocksDB iterator only supports a Seek() interface which acts as a
 Ceil(). Using the start key of the range would cause Seek() to find the
