@@ -1847,34 +1847,39 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 		pusherPriority, pusheePriority int32
 		pusherTS, pusheeTS             proto.Timestamp
 		pushType                       proto.PushTxnType
+		id                             byte // each byte of pusher's id; pushee has 'q'
 		expSuccess                     bool
 	}{
 		// Pusher has higher priority succeeds.
-		{2, 1, ts1, ts1, proto.ABORT_TXN, true},
+		{2, 1, ts1, ts1, proto.ABORT_TXN, 0, true},
 		// Pusher has lower priority fails.
-		{1, 2, ts1, ts1, proto.ABORT_TXN, false},
-		{1, 2, ts1, ts1, proto.PUSH_TIMESTAMP, false},
+		{1, 2, ts1, ts1, proto.ABORT_TXN, 0, false},
+		{1, 2, ts1, ts1, proto.PUSH_TIMESTAMP, 0, false},
 		// Pusher has lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, proto.ABORT_TXN, false},
+		{1, 2, ts1, ts2, proto.ABORT_TXN, 0, false},
 		// Pusher has lower priority, but older txn timestamp allows success if !abort.
-		{1, 2, ts1, ts2, proto.PUSH_TIMESTAMP, true},
-		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, proto.ABORT_TXN, true},
-		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, proto.ABORT_TXN, false},
-		{1, 1, ts1, ts1, proto.PUSH_TIMESTAMP, false},
-		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, proto.ABORT_TXN, false},
-		{1, 1, ts2, ts1, proto.PUSH_TIMESTAMP, false},
+		{1, 2, ts1, ts2, proto.PUSH_TIMESTAMP, 0, true},
+		// With same priorities, larger ID succeeds
+		{1, 1, ts1, ts2, proto.ABORT_TXN, 'z', true},
+		// With same priorities, same ID fails (must not happen in practice).
+		{1, 1, ts1, ts1, proto.ABORT_TXN, 'q', false},
+		{1, 1, ts1, ts1, proto.PUSH_TIMESTAMP, 'q', false},
+		// With same priorities, smaller ID fails.
+		{1, 1, ts2, ts1, proto.ABORT_TXN, 'a', false},
+		{1, 1, ts2, ts1, proto.PUSH_TIMESTAMP, 'a', false},
 		// When confirming, priority never wins.
-		{2, 1, ts1, ts1, proto.CLEANUP_TXN, false},
-		{1, 2, ts1, ts1, proto.CLEANUP_TXN, false},
+		{2, 1, ts1, ts1, proto.CLEANUP_TXN, 0, false},
+		{1, 2, ts1, ts1, proto.CLEANUP_TXN, 0, false},
 	}
 
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
+		for j := 0; j < len(pushee.ID); i++ {
+			pushee.ID[i] = 'q'
+			pusher.ID[i] = test.id
+		}
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
 		pusher.Timestamp = test.pusherTS
