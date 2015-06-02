@@ -592,11 +592,11 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
 		(reply.PusheeTxn.Priority == priority && args.Txn != nil &&
-			args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
-		// Pusher wins based on priority; if priorities are equal, order
-		// by lower txn timestamp.
+			bytes.Compare(args.Txn.ID, reply.PusheeTxn.ID) > 0) {
+		// Pusher wins based on priority; if priorities are equal, allow push
+		// if ID is larger.
 		if log.V(1) {
-			log.Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
+			log.Infof("pushing intent from txn with lower priority %d vs %d", reply.PusheeTxn.Priority, priority)
 		}
 		pusherWins = true
 	}
