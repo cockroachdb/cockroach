@@ -178,7 +178,7 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 		for i := range scan.Rows {
 			accts[string(scan.Rows[i].Key)] = true
 			if err := existAcct.decode(scan.Rows[i].ValueBytes()); err != nil {
-				log.Fatal("error decoding existing account %s: %s", scan.Rows[i].Key, err)
+				log.Fatalf("error decoding existing account %s: %s", scan.Rows[i].Key, err)
 			}
 			totalCash += existAcct.Balance
 		}
