@@ -23,6 +23,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -101,11 +102,11 @@ func (bank *Bank) sumAllAccounts() int64 {
 
 // continuouslyTransferMoney() keeps moving random amounts between
 // random accounts.
-func (bank *Bank) continuousMoneyTransfer(cash int64) {
+func (bank *Bank) continuouslyTransferMoney(cash int64) {
 	for {
 		from := bank.makeAccountID(rand.Intn(bank.numAccounts))
 		to := bank.makeAccountID(rand.Intn(bank.numAccounts))
-		// Continue when from == to
+		// Continue when from == to.
 		if bytes.Equal(from, to) {
 			continue
 		}
@@ -159,22 +160,29 @@ func (bank *Bank) continuousMoneyTransfer(cash int64) {
 	}
 }
 
-// Initialize all the bank accounts with cash.
-// When multiple instances of the bank app are running,
-// only one gets to initialize the bank.
-func (bank *Bank) initBankAccounts(cash int64) {
+// Initialize all the bank accounts with cash. When multiple instances
+// of the bank app are running, only one gets to initialize the
+// bank. Returns the total cash in the existing bank accounts plus
+// any new accounts.
+func (bank *Bank) initBankAccounts(cash int64) int64 {
+	var totalCash int64
 	if err := bank.db.Tx(func(tx *client.Tx) error {
-		// Check if the accounts have been initialized by another instance
-		if scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts)); err != nil {
+		// Check if the accounts have been initialized by another instance.
+		scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		if err != nil {
 			return err
-		} else if len(scan.Rows) == bank.numAccounts {
-			log.Warning("accounts have already been initialized")
-			return nil
-		} else if len(scan.Rows) > 0 {
-			// TODO(vivek): recover from this error
-			return fmt.Errorf("%d of %d accounts of the database are initialized", len(scan.Rows), bank.numAccounts)
 		}
-		// Let's initialize all the accounts
+		// Determine existing accounts.
+		existAcct := &Account{}
+		accts := map[string]bool{}
+		for i := range scan.Rows {
+			accts[string(scan.Rows[i].Key)] = true
+			if err := existAcct.decode(scan.Rows[i].ValueBytes()); err != nil {
+				log.Fatal("error decoding existing account %s: %s", scan.Rows[i].Key, err)
+			}
+			totalCash += existAcct.Balance
+		}
+		// Let's initialize all the accounts.
 		batch := &client.Batch{}
 		account := Account{Balance: cash}
 		value, err := account.encode()
@@ -182,34 +190,55 @@ func (bank *Bank) initBankAccounts(cash int64) {
 			return err
 		}
 		for i := 0; i < bank.numAccounts; i++ {
-			batch.Put(bank.makeAccountID(i), value)
+			id := bank.makeAccountID(i)
+			if !accts[string(id)] {
+				batch.Put(id, value)
+				totalCash += cash
+			}
 		}
 		return tx.Run(batch)
 	}); err != nil {
 		log.Fatal(err)
 	}
 	log.Info("done initializing all accounts")
+	return totalCash
 }
 
-func (bank *Bank) periodicallyCheckBalances(initCash int64) {
+func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
+	var lastNumTransfers int32
+	lastNow := time.Now()
 	for {
 		// Sleep for a bit to allow money transfers to happen in the background.
 		time.Sleep(time.Second)
-		fmt.Printf("%d transfers were executed.\n\n", bank.numTransfers)
+		now := time.Now()
+		elapsed := now.Sub(lastNow)
+		numTransfers := atomic.LoadInt32(&bank.numTransfers)
+		fmt.Printf("%d transfers were executed at %.1f/second.\n", (numTransfers - lastNumTransfers),
+			float64(numTransfers-lastNumTransfers)/elapsed.Seconds())
+		lastNumTransfers = numTransfers
+		lastNow = now
 		// Check that all the money is accounted for.
-		totalAmount := bank.sumAllAccounts()
-		if totalAmount != int64(bank.numAccounts)*initCash {
-			log.Fatalf("\nTotal cash in the bank = %d.\n", totalAmount)
+		totalCash := bank.sumAllAccounts()
+		if totalCash != expTotalCash {
+			log.Fatalf("\nTotal cash in the bank $%d; expected $%d.\n", totalCash, expTotalCash)
 		}
-		fmt.Printf("\nThe bank is in good order\n\n")
+		fmt.Printf("The bank is in good order.\n")
 	}
 }
 
 func main() {
 	fmt.Printf("A simple program that keeps moving money between bank accounts.\n\n")
 	flag.Parse()
+	if *numAccounts < 2 {
+		fmt.Fprintf(os.Stderr, "At least two accounts are required to transfer money.\n")
+		os.Exit(1)
+	}
+	if *numParallelTransfers < 1 {
+		fmt.Fprintf(os.Stderr, "At least one transfer routine must be active.\n")
+		os.Exit(1)
+	}
 	if !*useTransaction {
-		fmt.Printf("Use of a transaction has been disabled.\n")
+		fmt.Printf("Use of transactions has been disabled.\n")
 	}
 	// Initialize the bank.
 	var bank Bank
@@ -222,7 +251,7 @@ func main() {
 		defer serv.Stop()
 		*dbName = "https://root@" + serv.ServingAddr() + "?certs=test_certs"
 	}
-	// Create a database handle
+	// Create a database handle.
 	db, err := client.Open(*dbName)
 	if err != nil {
 		log.Fatal(err)
@@ -230,13 +259,13 @@ func main() {
 	bank.db = db
 	// Initialize all the bank accounts.
 	const initCash = 1000
-	bank.initBankAccounts(initCash)
+	totalCash := bank.initBankAccounts(initCash)
 
 	// Start all the money transfer routines.
 	for i := 0; i < *numParallelTransfers; i++ {
 		// Keep transferring upto 10% of initCash between accounts.
-		go bank.continuousMoneyTransfer(initCash / 10)
+		go bank.continuouslyTransferMoney(initCash / 10)
 	}
 
-	bank.periodicallyCheckBalances(initCash)
+	bank.periodicallyCheckBalances(totalCash)
 }
