@@ -27,4 +27,5 @@ for i in $@; do
 	# goimports will adjust indentation and add any necessary import.
 	goimports -w $i
     fi
+    rm -f $i~
 done
