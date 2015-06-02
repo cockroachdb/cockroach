@@ -51,7 +51,7 @@ import (
 // being sent.
 type notifyingSender struct {
 	waiter  *sync.WaitGroup
-	wrapped client.KVSender
+	wrapped client.Sender
 }
 
 func (ss *notifyingSender) reset(waiter *sync.WaitGroup) {
@@ -73,7 +73,7 @@ func (ss *notifyingSender) Send(ctx context.Context, call client.Call) {
 
 func (ss *notifyingSender) Close() {}
 
-func newNotifyingSender(wrapped client.KVSender) *notifyingSender {
+func newNotifyingSender(wrapped client.Sender) *notifyingSender {
 	return &notifyingSender{
 		wrapped: wrapped,
 	}

@@ -53,7 +53,7 @@ func (ts *txnSender) Send(ctx context.Context, call Call) {
 // A Txn instance is not thread safe.
 type Txn struct {
 	kv           KV
-	wrapped      KVSender
+	wrapped      Sender
 	txn          proto.Transaction
 	txnSender    txnSender
 	prepared     []Call

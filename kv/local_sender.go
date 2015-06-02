@@ -35,7 +35,7 @@ type LocalSender struct {
 	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
 }
 
-var _ client.KVSender = &LocalSender{}
+var _ client.Sender = &LocalSender{}
 
 // NewLocalSender returns a local-only sender which directly accesses
 // a collection of stores.
@@ -114,7 +114,7 @@ func (ls *LocalSender) GetStoreIDs() []proto.StoreID {
 	return storeIDs
 }
 
-// Send implements the client.KVSender interface. The store is looked
+// Send implements the client.Sender interface. The store is looked
 // up from the store map if specified by header.Replica; otherwise,
 // the command is being executed locally, and the replica is
 // determined via lookup through each store's LookupRange method.

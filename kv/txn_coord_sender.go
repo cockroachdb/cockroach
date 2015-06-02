@@ -123,7 +123,7 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // transaction has covered, clears the keys cache and closes the
 // metadata heartbeat. Any keys listed in the resolved slice have
 // already been resolved and do not receive resolve intent commands.
-func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender, stopper *util.Stopper) {
+func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.Sender, stopper *util.Stopper) {
 	close(tm.txnEnd) // stop heartbeat
 	if tm.keys.Len() > 0 {
 		if log.V(2) {
@@ -185,8 +185,8 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 	tm.keys.Clear()
 }
 
-// A TxnCoordSender is an implementation of client.KVSender which
-// wraps a lower-level KVSender (either a LocalSender or a DistSender)
+// A TxnCoordSender is an implementation of client.Sender which
+// wraps a lower-level Sender (either a LocalSender or a DistSender)
 // to which it sends commands. It acts as a man-in-the-middle,
 // coordinating transaction state for clients.  After a transaction is
 // started, the TxnCoordSender starts asynchronously sending heartbeat
@@ -195,7 +195,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 // transaction. When the transaction is committed or aborted, it
 // clears accumulated write intents for the transaction.
 type TxnCoordSender struct {
-	wrapped           client.KVSender
+	wrapped           client.Sender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
@@ -209,7 +209,7 @@ type TxnCoordSender struct {
 // distributed DB instance. A TxnCoordSender should be closed when no
 // longer in use via Close(), which also closes the wrapped sender
 // supplied here.
-func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable bool, stopper *util.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, stopper *util.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
@@ -222,7 +222,7 @@ func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable b
 	return tc
 }
 
-// Send implements the client.KVSender interface. If the call is part
+// Send implements the client.Sender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
 func (tc *TxnCoordSender) Send(_ context.Context, call client.Call) {

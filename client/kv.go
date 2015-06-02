@@ -50,7 +50,7 @@ type KV struct {
 	// ignored.
 	UserPriority    int32
 	TxnRetryOptions retry.Options
-	Sender          KVSender
+	Sender          Sender
 	clock           Clock
 }
 
@@ -60,7 +60,7 @@ type KV struct {
 // formulate client command IDs, which provide idempotency on API
 // calls and defaults to the system clock.
 // implementation.
-func NewKV(ctx *Context, sender KVSender) *KV {
+func NewKV(ctx *Context, sender Sender) *KV {
 	if ctx == nil {
 		ctx = NewContext()
 	}

@@ -28,25 +28,25 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 )
 
-// KVSender is an interface for sending a request to a Key-Value
+// Sender is an interface for sending a request to a Key-Value
 // database backend.
-type KVSender interface {
+type Sender interface {
 	// Send invokes the Call.Method with Call.Args and sets the result
 	// in Call.Reply.
 	Send(context.Context, Call)
 }
 
-// KVSenderFunc is an adapter to allow the use of ordinary functions
-// as KVSenders.
-type KVSenderFunc func(context.Context, Call)
+// SenderFunc is an adapter to allow the use of ordinary functions
+// as Senders.
+type SenderFunc func(context.Context, Call)
 
 // Send calls f(c).
-func (f KVSenderFunc) Send(ctx context.Context, c Call) {
+func (f SenderFunc) Send(ctx context.Context, c Call) {
 	f(ctx, c)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.
-type NewSenderFunc func(u *url.URL, ctx *base.Context) (KVSender, error)
+type NewSenderFunc func(u *url.URL, ctx *base.Context) (Sender, error)
 
 var sendersMu sync.Mutex
 var senders = map[string]NewSenderFunc{}
@@ -65,7 +65,7 @@ func RegisterSender(scheme string, f NewSenderFunc) {
 	senders[scheme] = f
 }
 
-func newSender(u *url.URL, ctx *base.Context) (KVSender, error) {
+func newSender(u *url.URL, ctx *base.Context) (Sender, error) {
 	sendersMu.Lock()
 	defer sendersMu.Unlock()
 	f := senders[u.Scheme]

@@ -90,11 +90,11 @@ func createArgsAndReply(method string) (proto.Request, proto.Response) {
 // A DBServer provides an HTTP server endpoint serving the key-value API.
 // It accepts either JSON or serialized protobuf content types.
 type DBServer struct {
-	sender client.KVSender
+	sender client.Sender
 }
 
 // NewDBServer allocates and returns a new DBServer.
-func NewDBServer(sender client.KVSender) *DBServer {
+func NewDBServer(sender client.Sender) *DBServer {
 	return &DBServer{sender: sender}
 }
 
