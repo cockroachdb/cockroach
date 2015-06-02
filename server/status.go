@@ -284,15 +284,8 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	}
 	key := keys.NodeStatusKey(int32(id))
 
-	gr, err := s.db.Get(key)
-	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	nodeStatus := &proto.NodeStatus{}
-	if err := gr.Rows[0].ValueProto(nodeStatus); err != nil {
+	if err := s.db.GetProto(key, nodeStatus); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -351,15 +344,8 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	}
 	key := keys.StoreStatusKey(int32(id))
 
-	gr, err := s.db.Get(key)
-	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	storeStatus := &proto.StoreStatus{}
-	if err := gr.Rows[0].ValueProto(storeStatus); err != nil {
+	if err := s.db.GetProto(key, storeStatus); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return

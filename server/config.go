@@ -270,11 +270,7 @@ func getConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		configkey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-		var gr client.Result
-		if gr, err = db.Get(configkey); err != nil {
-			return
-		}
-		if err = gr.Rows[0].ValueProto(config); err != nil {
+		if err = db.GetProto(configkey, config); err != nil {
 			return
 		}
 		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)

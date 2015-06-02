@@ -33,16 +33,10 @@ import (
 )
 
 func countRangeReplicas(client *client.DB) (int, error) {
-	rng, err := client.Get(keys.RangeDescriptorKey(proto.KeyMin))
-	if err != nil {
-		return 0, err
-	}
-
 	desc := &proto.RangeDescriptor{}
-	if err := rng.Rows[0].ValueProto(desc); err != nil {
+	if err := client.GetProto(keys.RangeDescriptorKey(proto.KeyMin), desc); err != nil {
 		return 0, err
 	}
-
 	return len(desc.Replicas), nil
 }
 
