@@ -97,13 +97,16 @@ func parseFormatWithArgs(format string, args []interface{}) (string, []proto.Log
 		if i > lasti {
 			buf = append(buf, format[lasti:i]...)
 		}
+
 		if i >= end {
 			break
 		}
+
 		start := i
 
 		// Process one verb.
 		i++
+
 	F:
 		for ; i < end; i++ {
 			switch format[i] {
@@ -132,9 +135,9 @@ func parseFormatWithArgs(format string, args []interface{}) (string, []proto.Log
 		}
 		c, w := utf8.DecodeRuneInString(format[i:])
 		i += w
-		// Add percent directly to format buf.
+		// Escape and add percent directly to format buf.
 		if c == '%' {
-			buf = append(buf, '%')
+			buf = append(buf, '%', '%')
 			continue
 		}
 		buf = append(buf, "%s"...)
