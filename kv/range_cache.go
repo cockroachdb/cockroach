@@ -115,6 +115,8 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	}
 
 	if log.V(1) {
+		log.Infof("lookup range descriptor: key=%s", key)
+	} else if log.V(2) {
 		log.Infof("lookup range descriptor: key=%s\n%s", key, rmc)
 	}
 
@@ -169,8 +171,11 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 	}
 
 	for !bytes.Equal(descKey, proto.KeyMin) {
+		if log.V(2) {
+			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rmc.stringLocked())
+		}
 		if log.V(1) {
-			log.Infof("evict cached descriptor: key=%s desc=%+v\n%s", descKey, cachedDesc, rmc.stringLocked())
+			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc)
 		}
 		rmc.rangeCache.Del(rngKey)
 

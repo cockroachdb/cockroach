@@ -78,13 +78,17 @@ type Options struct {
 // returns an error.
 func WithBackoff(opts Options, fn func() (Status, error)) error {
 	backoff := opts.Backoff
+	tag := opts.Tag
+	if tag == "" {
+		tag = "invocation"
+	}
 	for count := 1; true; count++ {
 		status, err := fn()
 		if status == Break {
 			return err
 		}
 		if err != nil && (!opts.UseV1Info || log.V(1) == true) {
-			log.Infof("%s failed an iteration: %s", opts.Tag, err)
+			log.InfoDepth(1, tag, " failed an iteration: ", err)
 		}
 		var wait time.Duration
 		if status == Reset {
@@ -92,14 +96,14 @@ func WithBackoff(opts Options, fn func() (Status, error)) error {
 			wait = 0
 			count = 0
 			if !opts.UseV1Info || log.V(1) == true {
-				log.Infof("%s failed; retrying immediately", opts.Tag)
+				log.InfoDepth(1, tag, " failed; retrying immediately")
 			}
 		} else {
 			if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
 				return &MaxAttemptsError{opts.MaxAttempts}
 			}
 			if !opts.UseV1Info || log.V(1) == true {
-				log.Infof("%s failed; retrying in %s", opts.Tag, backoff)
+				log.InfoDepth(1, tag, " failed; retrying in ", backoff)
 			}
 			wait = backoff + time.Duration(rand.Float64()*float64(backoff.Nanoseconds())*retryJitter)
 			// Increase backoff for next iteration.
@@ -113,7 +117,7 @@ func WithBackoff(opts Options, fn func() (Status, error)) error {
 		case <-time.After(wait):
 			// Continue retrying.
 		case <-opts.Stopper.ShouldStop():
-			return util.Errorf("%s retry loop stopped", opts.Tag)
+			return util.Errorf("%s retry loop stopped", tag)
 		}
 	}
 	return nil

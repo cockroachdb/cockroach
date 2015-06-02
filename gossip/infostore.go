@@ -80,9 +80,9 @@ func monotonicUnixNano() int64 {
 func (is *infoStore) String() string {
 	buf := bytes.Buffer{}
 	if count := is.infoCount(); count > 0 {
-		buf.WriteString(fmt.Sprintf("infostore contains %d info(s): ", count))
+		buf.WriteString(fmt.Sprintf("infostore with %d info(s): ", count))
 	} else {
-		return "infostore is empty"
+		return "infostore (empty)"
 	}
 
 	prepend := ""

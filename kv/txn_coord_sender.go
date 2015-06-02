@@ -126,7 +126,7 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender, stopper *util.Stopper) {
 	close(tm.txnEnd) // stop heartbeat
 	if tm.keys.Len() > 0 {
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 		}
 	}
@@ -171,7 +171,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		// effort. We simply fire and forget, each in its own goroutine.
 		if stopper.StartTask() {
 			go func() {
-				if log.V(1) {
+				if log.V(2) {
 					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
 				}
 				sender.Send(context.TODO(), call)

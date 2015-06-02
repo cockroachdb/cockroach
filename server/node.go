@@ -216,10 +216,10 @@ func (n *Node) initNodeID(id proto.NodeID) {
 			log.Fatal("new node allocated illegal ID 0")
 		}
 
-		log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
+	log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}

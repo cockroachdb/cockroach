@@ -221,7 +221,9 @@ func (c *Client) Close() {
 // connection on error. Heartbeats are sent in an infinite loop until
 // an error is encountered.
 func (c *Client) startHeartbeat() {
-	log.Infof("client %s starting heartbeat", c.Addr())
+	if log.V(2) {
+		log.Infof("client %s starting heartbeat", c.Addr())
+	}
 	// On heartbeat failure, remove this client from cache. A new
 	// client to this address will be created on the next call to
 	// NewClient().
@@ -246,7 +248,7 @@ func (c *Client) heartbeat() error {
 	select {
 	case <-call.Done:
 		receiveTime := c.clock.PhysicalNow()
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		}
 		if call.Error == nil {
@@ -281,10 +283,8 @@ func (c *Client) heartbeat() error {
 		c.offset.Reset()
 		c.mu.Unlock()
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
+		return util.Errorf("client timeout")
 	case <-c.Closed:
 		return util.Errorf("client is closed")
 	}
-
-	<-call.Done
-	return call.Error
 }
