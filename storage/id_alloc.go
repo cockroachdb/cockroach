@@ -33,18 +33,18 @@ import (
 // causes allocation of the next block of IDs.
 const allocationTrigger = 0
 
-// IDAllocationRetryOpts sets the retry options for handling RaftID
+// idAllocationRetryOpts sets the retry options for handling RaftID
 // allocation errors.
-var IDAllocationRetryOpts = retry.Options{
+var idAllocationRetryOpts = retry.Options{
 	Backoff:     50 * time.Millisecond,
 	MaxBackoff:  5 * time.Second,
 	Constant:    2,
 	MaxAttempts: 0,
 }
 
-// An IDAllocator is used to increment a key in allocation blocks
+// An idAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
-type IDAllocator struct {
+type idAllocator struct {
 	idKey     atomic.Value
 	db        *client.DB
 	minID     int64      // Minimum ID to return
@@ -54,20 +54,20 @@ type IDAllocator struct {
 	stopper   *util.Stopper
 }
 
-// NewIDAllocator creates a new ID allocator which increments the
+// newIDAllocator creates a new ID allocator which increments the
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64,
-	stopper *util.Stopper) (*IDAllocator, error) {
+func newIDAllocator(idKey proto.Key, db *client.DB, minID int64, blockSize int64,
+	stopper *util.Stopper) (*idAllocator, error) {
 	if minID <= allocationTrigger {
 		return nil, util.Errorf("minID must be > %d", allocationTrigger)
 	}
 	if blockSize < 1 {
 		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
-	ia := &IDAllocator{
-		db:        db.NewDB(),
+	ia := &idAllocator{
+		db:        db,
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
@@ -79,7 +79,7 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 }
 
 // Allocate allocates a new ID from the global KV DB.
-func (ia *IDAllocator) Allocate() (int64, error) {
+func (ia *idAllocator) Allocate() (int64, error) {
 	for {
 		id := <-ia.ids
 		if id == allocationTrigger {
@@ -103,9 +103,9 @@ func (ia *IDAllocator) Allocate() (int64, error) {
 // sends all IDs on the ids channel. Midway through the block, a
 // special allocationTrigger ID is inserted which causes allocation
 // to occur before IDs run out to hide Increment latency.
-func (ia *IDAllocator) allocateBlock(incr int64) {
+func (ia *idAllocator) allocateBlock(incr int64) {
 	var newValue int64
-	retryOpts := IDAllocationRetryOpts
+	retryOpts := idAllocationRetryOpts
 	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		idKey := ia.idKey.Load().(proto.Key)
 		r, err := ia.db.Inc(idKey, incr)

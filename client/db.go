@@ -184,7 +184,7 @@ func Open(addr string) (*DB, error) {
 // Get retrieves one or more keys. Each requested key will have a corresponding
 // row in the returned Result.
 //
-//   r := db.Get("a", "b", "c")
+//   r, err := db.Get("a", "b", "c")
 //   // string(r.Rows[0].Key) == "a"
 //   // string(r.Rows[1].Key) == "b"
 //   // string(r.Rows[2].Key) == "c"
@@ -193,6 +193,19 @@ func Open(addr string) (*DB, error) {
 // encoding.BinaryMarshaler.
 func (db *DB) Get(keys ...interface{}) (Result, error) {
 	return runOne(db, db.B.Get(keys...))
+}
+
+// GetProto retrieves a single key/value and decodes the resulting value as a
+// proto message.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
+	r, err := db.Get(key)
+	if err != nil {
+		return err
+	}
+	return r.Rows[0].ValueProto(msg)
 }
 
 // Put sets the value for a key.
@@ -352,7 +365,7 @@ func (tx *Tx) SetSnapshotIsolation() {
 // Get retrieves one or more keys. Each requested key will have a corresponding
 // row in the returned Result.
 //
-//   r := db.Get("a", "b", "c")
+//   r, err := db.Get("a", "b", "c")
 //   // string(r.Rows[0].Key) == "a"
 //   // string(r.Rows[1].Key) == "b"
 //   // string(r.Rows[2].Key) == "c"
@@ -616,7 +629,7 @@ func (b *Batch) InternalAddCall(call Call) {
 // Get retrieves one or more keys. A new result will be appended to the batch
 // and each requested key will have a corresponding row in the Result.
 //
-//   r := db.Get("a", "b", "c")
+//   r, err := db.Get("a", "b", "c")
 //   // string(r.Rows[0].Key) == "a"
 //   // string(r.Rows[1].Key) == "b"
 //   // string(r.Rows[2].Key) == "c"

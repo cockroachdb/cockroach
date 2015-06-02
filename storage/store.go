@@ -221,7 +221,7 @@ type Store struct {
 	kvDB           *client.DB
 	engine         engine.Engine   // The underlying key-value store
 	_allocator     *allocator      // Makes allocation decisions
-	raftIDAlloc    *IDAllocator    // Raft ID allocator
+	raftIDAlloc    *idAllocator    // Raft ID allocator
 	gcQueue        *gcQueue        // Garbage collection queue
 	_splitQueue    *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
@@ -321,6 +321,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 
 	s := &Store{
 		ctx:          ctx,
+		kvDB:         ctx.DB.NewDB(),
 		engine:       eng,
 		_allocator:   newAllocator(ctx.Gossip),
 		ranges:       map[int64]*Range{},
@@ -332,10 +333,10 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeIterator(s),
 		s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
-	s._splitQueue = newSplitQueue(s.ctx.DB, s.ctx.Gossip)
+	s._splitQueue = newSplitQueue(s.kvDB, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s.rangeGCQueue = newRangeGCQueue(s.ctx.DB)
+	s.rangeGCQueue = newRangeGCQueue(s.kvDB)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue(), s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
 
 	return s
@@ -365,7 +366,6 @@ func (s *Store) IsStarted() bool {
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *util.Stopper) error {
 	s.stopper = stopper
-	s.kvDB = s.ctx.DB.NewDB()
 
 	if s.Ident.NodeID == 0 {
 		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
@@ -396,7 +396,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.feed.startStore()
 
 	// Create ID allocators.
-	idAlloc, err := NewIDAllocator(keys.RaftIDGenerator, s.ctx.DB, 2 /* min ID */, raftIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, s.kvDB, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}

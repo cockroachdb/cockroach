@@ -156,11 +156,13 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *util.
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	stopper.AddCloser(ctx.Transport)
+	sender := &testSender{}
+	ctx.DB = client.NewKV(nil, sender)
 	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
+	sender.store = store
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
-	store.ctx.DB = client.NewKV(nil, &testSender{store: store})
 	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}

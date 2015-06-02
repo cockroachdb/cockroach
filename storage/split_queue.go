@@ -44,9 +44,9 @@ type splitQueue struct {
 }
 
 // newSplitQueue returns a new instance of splitQueue.
-func newSplitQueue(db *client.KV, gossip *gossip.Gossip) *splitQueue {
+func newSplitQueue(db *client.DB, gossip *gossip.Gossip) *splitQueue {
 	sq := &splitQueue{
-		db:     db.NewDB(),
+		db:     db,
 		gossip: gossip,
 	}
 	sq.baseQueue = newBaseQueue("split", sq, splitQueueMaxSize)

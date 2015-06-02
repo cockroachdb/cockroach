@@ -78,13 +78,13 @@ func nodesEqual(key proto.Key, expected, actual proto.RangeTreeNode) error {
 // treeNodesEqual compares the expectedTree from the provided key to the actual
 // nodes retrieved from the db.  It recursively calls itself on both left and
 // right children if they exist.
-func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error {
+func treeNodesEqual(db *client.DB, expected testRangeTree, key proto.Key) error {
 	expectedNode, ok := expected.Nodes[string(key)]
 	if !ok {
 		return util.Errorf("Expected does not contain a node for %s", key)
 	}
 	actualNode := &proto.RangeTreeNode{}
-	if err := db.Run(client.GetProto(keys.RangeTreeNodeKey(key), actualNode)); err != nil {
+	if err := db.GetProto(keys.RangeTreeNodeKey(key), actualNode); err != nil {
 		return err
 	}
 	if err := nodesEqual(key, expectedNode, *actualNode); err != nil {
@@ -105,10 +105,10 @@ func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error 
 
 // treesEqual compares the expectedTree and expectedNodes to the actual range
 // tree stored in the db.
-func treesEqual(db *client.KV, expected testRangeTree) error {
+func treesEqual(db *client.DB, expected testRangeTree) error {
 	// Compare the tree roots.
 	actualTree := &proto.RangeTree{}
-	if err := db.Run(client.GetProto(keys.RangeTreeRoot, actualTree)); err != nil {
+	if err := db.GetProto(keys.RangeTreeRoot, actualTree); err != nil {
 		return err
 	}
 	if !reflect.DeepEqual(&expected.Tree, actualTree) {
@@ -119,15 +119,9 @@ func treesEqual(db *client.KV, expected testRangeTree) error {
 }
 
 // splitRange splits whichever range contains the key on that key.
-func splitRange(db *client.KV, key proto.Key) error {
-	req := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: key,
-		},
-		SplitKey: key,
-	}
-	resp := &proto.AdminSplitResponse{}
-	return db.Run(client.Call{Args: req, Reply: resp})
+func splitRange(db *client.DB, key proto.Key) error {
+	_, err := db.AdminSplit(key, key)
+	return err
 }
 
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range
@@ -152,7 +146,8 @@ func TestSetupRangeTree(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := treesEqual(store.DB(), expectedTree); err != nil {
+	db := store.DB().NewDB()
+	if err := treesEqual(db, expectedTree); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -163,7 +158,7 @@ func TestInsertRight(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	db := store.DB()
+	db := store.DB().NewDB()
 
 	keyA := proto.Key("a")
 	keyB := proto.Key("b")
@@ -378,7 +373,7 @@ func TestInsertLeft(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	db := store.DB()
+	db := store.DB().NewDB()
 
 	keyE := proto.Key("e")
 	keyD := proto.Key("d")
@@ -596,10 +591,10 @@ func (k Key) Compare(b llrb.Comparable) int {
 // compareBiogoNode compares a biogo node and a range tree node to determine if both
 // contain the same values in the same order.  It recursively calls itself on
 // both children if they exist.
-func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error {
+func compareBiogoNode(db *client.DB, biogoNode *llrb.Node, key *proto.Key) error {
 	// Retrieve the node form the range tree.
 	rtNode := &proto.RangeTreeNode{}
-	if err := db.Run(client.GetProto(keys.RangeTreeNodeKey(*key), rtNode)); err != nil {
+	if err := db.GetProto(keys.RangeTreeNodeKey(*key), rtNode); err != nil {
 		return err
 	}
 
@@ -634,9 +629,9 @@ func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error
 
 // compareBiogoTree walks both a biogo tree and the range tree to determine if both
 // contain the same values in the same order.
-func compareBiogoTree(db *client.KV, biogoTree *llrb.Tree) error {
+func compareBiogoTree(db *client.DB, biogoTree *llrb.Tree) error {
 	rt := &proto.RangeTree{}
-	if err := db.Run(client.GetProto(keys.RangeTreeRoot, rt)); err != nil {
+	if err := db.GetProto(keys.RangeTreeRoot, rt); err != nil {
 		return err
 	}
 	return compareBiogoNode(db, biogoTree.Root, &rt.RootKey)
@@ -650,7 +645,7 @@ func TestRandomSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	db := store.DB()
+	db := store.DB().NewDB()
 	rng, seed := util.NewPseudoRand()
 	t.Logf("using pseudo random number generator with seed %d", seed)
 

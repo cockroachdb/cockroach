@@ -40,11 +40,11 @@ const (
 // ranges that have been rebalanced away from this store.
 type rangeGCQueue struct {
 	*baseQueue
-	db *client.KV
+	db *client.DB
 }
 
 // newRangeGCQueue returns a new instance of rangeGCQueue.
-func newRangeGCQueue(db *client.KV) *rangeGCQueue {
+func newRangeGCQueue(db *client.DB) *rangeGCQueue {
 	q := &rangeGCQueue{
 		db: db,
 	}
@@ -82,7 +82,8 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 	// considering one of the metadata ranges: we must not do an inconsistent
 	// lookup in our own copy of the range.
 	reply := proto.InternalRangeLookupResponse{}
-	err := q.db.Run(client.Call{
+	b := &client.Batch{}
+	b.InternalAddCall(client.Call{
 		Args: &proto.InternalRangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: keys.RangeMetaKey(rng.Desc().StartKey),
@@ -91,7 +92,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 		},
 		Reply: &reply,
 	})
-	if err != nil {
+	if err := q.db.Run(b); err != nil {
 		return err
 	}
 
