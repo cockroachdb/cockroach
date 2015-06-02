@@ -163,7 +163,8 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 // Initialize all the bank accounts with cash.  When multiple
 // instances of the bank app are running, only one gets to initialize
 // the bank.
-func (bank *Bank) initBankAccounts(cash int64) {
+func (bank *Bank) initBankAccounts(cash int64) int64 {
+	var initCash int64
 	if err := bank.db.Tx(func(tx *client.Tx) error {
 		// Check if the accounts have been initialized by another instance.
 		scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
@@ -171,9 +172,14 @@ func (bank *Bank) initBankAccounts(cash int64) {
 			return err
 		}
 		// Determine existing accounts.
+		existAcct := &Account{}
 		accts := map[string]struct{}{}
 		for i := range scan.Rows {
 			accts[string(scan.Rows[i].Key)] = struct{}{}
+			if err := existAcct.decode(scan.Rows[i].ValueBytes()); err != nil {
+				log.Fatal("error decoding existing account %s: %s", scan.Rows[i].Key, err)
+			}
+			initCash += existAcct.Balance
 		}
 		// Let's initialize all the accounts.
 		batch := &client.Batch{}
@@ -186,6 +192,7 @@ func (bank *Bank) initBankAccounts(cash int64) {
 			id := bank.makeAccountID(i)
 			if _, ok := accts[string(id)]; !ok {
 				batch.Put(id, value)
+				initCash += cash
 			}
 		}
 		return tx.Run(batch)
@@ -193,20 +200,26 @@ func (bank *Bank) initBankAccounts(cash int64) {
 		log.Fatal(err)
 	}
 	log.Info("done initializing all accounts")
+	return initCash
 }
 
 func (bank *Bank) periodicallyCheckBalances(initCash int64) {
 	var lastNumTransfers int32
+	lastNow := time.Now()
 	for {
 		// Sleep for a bit to allow money transfers to happen in the background.
 		time.Sleep(time.Second)
+		now := time.Now()
+		elapsed := now.Sub(lastNow)
 		numTransfers := atomic.LoadInt32(&bank.numTransfers)
-		fmt.Printf("%d transfers were executed at %d/second.\n", bank.numTransfers, numTransfers-lastNumTransfers)
+		fmt.Printf("%d transfers were executed at %.1f/second.\n", bank.numTransfers,
+			float64(numTransfers-lastNumTransfers)/(float64(elapsed.Nanoseconds())/1E9))
 		lastNumTransfers = numTransfers
+		lastNow = now
 		// Check that all the money is accounted for.
 		totalAmount := bank.sumAllAccounts()
-		if totalAmount != int64(bank.numAccounts)*initCash {
-			log.Fatalf("\nTotal cash in the bank = %d.\n", totalAmount)
+		if totalAmount != initCash {
+			log.Fatalf("\nTotal cash in the bank $%d; expected $%d.\n", totalAmount, initCash)
 		}
 		fmt.Printf("The bank is in good order.\n")
 	}
@@ -244,8 +257,7 @@ func main() {
 	}
 	bank.db = db
 	// Initialize all the bank accounts.
-	const initCash = 1000
-	bank.initBankAccounts(initCash)
+	initCash := bank.initBankAccounts(1000)
 
 	// Start all the money transfer routines.
 	for i := 0; i < *numParallelTransfers; i++ {
