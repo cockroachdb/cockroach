@@ -28,13 +28,13 @@ import (
 
 // DB provides Cockroach's Time Series API.
 type DB struct {
-	kv *client.KV
+	db *client.DB
 }
 
 // NewDB creates a new DB instance.
-func NewDB(kv *client.KV) *DB {
+func NewDB(db *client.DB) *DB {
 	return &DB{
-		kv: kv,
+		db: db,
 	}
 }
 
@@ -133,14 +133,19 @@ func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 	// InternalMergeRequest, probably because it cannot be part of a
 	// transaction. Look into batching this.
 	for _, kv := range kvs {
-		if err := db.kv.Run(client.Call{
+		// Note, this looks like a batch, but isn't a batch because we only add a
+		// single request to it.
+		b := &client.Batch{}
+		b.InternalAddCall(client.Call{
 			Args: &proto.InternalMergeRequest{
 				RequestHeader: proto.RequestHeader{
 					Key: kv.Key,
 				},
 				Value: kv.Value,
 			},
-			Reply: &proto.InternalMergeResponse{}}); err != nil {
+			Reply: &proto.InternalMergeResponse{},
+		})
+		if err := db.db.Run(b); err != nil {
 			return err
 		}
 	}

@@ -21,7 +21,6 @@ import (
 	"container/heap"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -406,22 +405,23 @@ func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
 	// query.
 	startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
 	endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-	scan := client.Scan(startKey, endKey, 0)
-	if err := db.kv.Run(scan); err != nil {
+	sr, err := db.db.Scan(startKey, endKey, 0)
+	if err != nil {
 		return nil, nil, err
 	}
-	scanResponse := scan.Reply.(*proto.ScanResponse)
 
 	// Construct a new dataSpan for each distinct source encountered in the
 	// query. Each dataspan will contain all data queried from the same source.
 	sourceSpans := make(map[string]*dataSpan)
-	for _, row := range scanResponse.Rows {
-		_, source, _, _ := DecodeDataKey(row.Key)
-		data, err := proto.InternalTimeSeriesDataFromValue(&row.Value)
-		if err != nil {
+	for _, row := range sr.Rows {
+		// TODO(pmattis): We're not checking that value tag is _CR_TS. There isn't
+		// a good way to get that info currently.
+		data := &proto.InternalTimeSeriesData{}
+		if err := row.ValueProto(data); err != nil {
 			return nil, nil, err
 		}
 
+		_, source, _, _ := DecodeDataKey(row.Key)
 		if _, ok := sourceSpans[source]; !ok {
 			sourceSpans[source] = &dataSpan{
 				startNanos:  startNanos,
