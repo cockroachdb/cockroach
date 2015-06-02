@@ -35,7 +35,7 @@ func (i *replicaInfo) attrs() []string {
 	return i.NodeDesc.GetAttrs().Attrs
 }
 
-// A replicaSlice is a slice of Replicas.
+// A replicaSlice is a slice of replicaInfo.
 type replicaSlice []replicaInfo
 
 // newReplicaSlice creates a replicaSlice from the replicas listed in the range
@@ -64,15 +64,15 @@ func (rs replicaSlice) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 
-// FindReplica returns the replica which matches the specified store
-// ID. If no replica matches, (-1, nil) is returned.
-func (rs replicaSlice) FindReplica(storeID proto.StoreID) (int, *proto.Replica) {
+// FindReplica returns the index of the replica which matches the specified store
+// ID. If no replica matches, -1 is returned.
+func (rs replicaSlice) FindReplica(storeID proto.StoreID) int {
 	for i := range rs {
 		if rs[i].StoreID == storeID {
-			return i, &rs[i].Replica
+			return i
 		}
 	}
-	return -1, nil
+	return -1
 }
 
 // SortByCommonAttributePrefix rearranges the replicaSlice by comparing the
