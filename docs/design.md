@@ -213,6 +213,8 @@ from another node is not only used to version the operation, but also updates
 the HLC on the node. This is useful in guaranteeing that all data read/written
 on a node is at a timestamp < next HLC time.
 
+**Transaction execution flow**
+
 Transactions are executed in two phases:
 
 1. Start the transaction by writing a new entry to the system
@@ -448,9 +450,9 @@ can only happen on a time interval of length `ε`.
 
 We apply another optimization to reduce the restarts caused
 by uncertainty. Upon restarting, the transaction not only takes
-into account t<sub>c<sub>, but the timestamp of the node at the time
-of the uncertain read t<sub>node<sub>. The larger of those two timestamps
-t<sub>c<sub> and t<sub>node<sub> (likely equal to the latter) is used
+into account t<sub>c</sub>, but the timestamp of the node at the time
+of the uncertain read t<sub>node</sub>. The larger of those two timestamps
+t<sub>c</sub> and t<sub>node</sub> (likely equal to the latter) is used
 to increase the read timestamp. Additionally, the conflicting node is
 marked as “certain”. Then, for future reads to that node within the
 transaction, we set `MaxTimestamp = Read Timestamp`, preventing further
@@ -458,7 +460,7 @@ uncertainty restarts.
 
 Correctness follows from the fact that we know that at the time of the read,
 there exists no version of any key on that node with a higher timestamp than
-t<sub>node<sub>. Upon a restart caused by the node, if the transaction
+t<sub>node</sub>. Upon a restart caused by the node, if the transaction
 encounters a key with a higher timestamp, it knows that in absolute time,
 the value was written after t<sub>node</sub> was obtained, i.e. after the
 uncertain read. Hence the transaction can move forward reading an older version
