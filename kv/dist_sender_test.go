@@ -268,7 +268,8 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if err := ds.sendRPC(&descriptor, args, args.CreateReply()); err != nil {
+		replicas := newReplicaSlice(ds.gossip, &descriptor)
+		if err := ds.sendRPC(descriptor.RaftID, replicas, args, args.CreateReply()); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}

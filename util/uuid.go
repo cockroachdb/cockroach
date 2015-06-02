@@ -51,9 +51,18 @@ func NewUUID4() UUID {
 // String formats as hex xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,
 // or "" if u is invalid.
 func (u UUID) String() string {
-	if u == nil || len(u) != UUIDSize {
+	if len(u) != UUIDSize {
 		return ""
 	}
 	b := []byte(u)
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
+// Short formats the UUID using only the first four bytes for brevity.
+func (u UUID) Short() string {
+	if len(u) != UUIDSize {
+		return ""
+	}
+	b := []byte(u)
+	return fmt.Sprintf("%08x", b[:4])
 }

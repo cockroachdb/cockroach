@@ -65,6 +65,7 @@ var (
 		MaxBackoff:  5 * time.Second,
 		Constant:    2,
 		MaxAttempts: 0, // retry indefinitely
+		UseV1Info:   true,
 	}
 
 	// TestStoreContext has some fields initialized with values relevant
@@ -253,9 +254,9 @@ type StoreContext struct {
 	Gossip    *gossip.Gossip
 	Transport multiraft.Transport
 
-	// RangeRetryOptions are the retry options for ranges.
-	// TODO(tschottdorf) improve comment once I figure out what this is.
-	RangeRetryOptions retry.Options
+	// RangeRetryOptions are the retry options when retryable errors are
+	// encountered sending commands to ranges.
+	RangeRetryOptions *retry.Options
 
 	// RaftTickInterval is the resolution of the Raft timer; other raft timeouts
 	// are defined in terms of multiples of this value.
@@ -295,6 +296,9 @@ func (sc *StoreContext) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
 func (sc *StoreContext) setDefaults() {
+	if sc.RangeRetryOptions == nil {
+		sc.RangeRetryOptions = &defaultRangeRetryOptions
+	}
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = defaultRaftTickInterval
 	}
@@ -1145,7 +1149,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	}
 
 	// Backoff and retry loop for handling errors.
-	retryOpts := s.ctx.RangeRetryOptions
+	retryOpts := *s.ctx.RangeRetryOptions
 	retryOpts.Tag = fmt.Sprintf("store: %s", args.Method())
 	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		// Add the command to the range for execution; exit retry loop on success.
@@ -1232,11 +1236,12 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	pushType proto.PushTxnType, wait bool) error {
 	// TODO set key upstream.
 	ctx = log.Add(ctx, log.Key, args.Header().Key)
-	if log.V(1) {
+	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
+	now := s.Clock().Now()
 	bArgs := &proto.InternalBatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Txn:          args.Header().Txn,
@@ -1266,7 +1271,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// timestamp here, we would run into busy loops because that
 			// timestamp usually stays fixed among retries, so it will never
 			// realize that a transaction has timed out. See #877.
-			Now:         s.Clock().Now(),
+			Now:         now,
 			PushType:    pushType,
 			RangeLookup: args.Method() == proto.InternalRangeLookup,
 		}
@@ -1278,7 +1283,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Run all pushes in parallel.
 	if pushErr := s.kvDB.Run(b); pushErr != nil {
 		if log.V(1) {
-			log.Infoc(ctx, "push for write intent %s failed: %s", wiErr, pushErr)
+			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}
 
 		// For write/write conflicts within a transaction, propagate the
@@ -1313,6 +1318,9 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		// Add resolve command with wait=false to add to Raft but not wait for completion.
 		waitForResolve := wait && i == len(wiErr.Intents)-1
 		if resolveErr := rng.AddCmd(ctx, client.Call{Args: resolveArgs, Reply: resolveReply}, waitForResolve); resolveErr != nil {
+			if log.V(1) {
+				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, resolveErr)
+			}
 			return resolveErr
 		}
 	}
@@ -1581,6 +1589,7 @@ func (s *Store) updateStoreStatus() {
 }
 
 // SetRangeRetryOptions sets the retry options used for this store.
+// For unittests only.
 func (s *Store) SetRangeRetryOptions(ro retry.Options) {
-	s.ctx.RangeRetryOptions = ro
+	s.ctx.RangeRetryOptions = &ro
 }

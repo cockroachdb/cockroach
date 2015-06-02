@@ -252,7 +252,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 
 // String returns a string representation of the range.
 func (r *Range) String() string {
-	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
+	return fmt.Sprintf("range=%d [%s - %s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
@@ -779,7 +779,9 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
-		log.Errorf("error executing raft command %s: %s", args.Method(), err)
+		if log.V(1) {
+			log.Errorf("error executing raft command %s: %s", args.Method(), err)
+		}
 	}
 	return err
 }

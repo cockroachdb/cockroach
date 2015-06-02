@@ -391,7 +391,7 @@ func TestTransactionString(t *testing.T) {
 		Name:          "name",
 		Key:           Key("foo"),
 		ID:            id,
-		Priority:      10,
+		Priority:      957356782,
 		Isolation:     SERIALIZABLE,
 		Status:        COMMITTED,
 		Epoch:         2,
@@ -400,8 +400,8 @@ func TestTransactionString(t *testing.T) {
 		OrigTimestamp: makeTS(30, 31),
 		MaxTimestamp:  makeTS(40, 41),
 	}
-	expStr := `"name" {id=d7aa0f5e-e42d-46d8-bdf7-16e4f9be5ebe pri=10, iso=SERIALIZABLE, stat=COMMITTED, ` +
-		`epo=2, ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41}`
+	expStr := `"name" id=d7aa0f5e key="foo" pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
+		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
