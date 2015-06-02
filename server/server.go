@@ -137,7 +137,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		EventFeed:       &util.Feed{},
 	}
 	s.node = NewNode(nCtx)
-	s.admin = newAdminServer(s.kv, s.stopper)
+	s.admin = newAdminServer(s.kv.NewDB(), s.stopper)
 	s.status = newStatusServer(s.kv, s.gossip)
 	s.structuredDB = structured.NewDB(s.kv)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)

@@ -27,7 +27,7 @@ import (
 
 // An acctHandler implements the adminHandler interface.
 type acctHandler struct {
-	db *client.KV // Key-value database client
+	db *client.DB // Key-value database client
 }
 
 // Put writes an accounting config for the specified key prefix (which is

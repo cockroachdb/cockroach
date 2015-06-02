@@ -67,7 +67,7 @@ type actionHandler interface {
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	db      *client.KV    // Key-value database client
+	db      *client.DB    // Key-value database client
 	stopper *util.Stopper // Used to shutdown the server
 	acct    *acctHandler
 	perm    *permHandler
@@ -76,7 +76,7 @@ type adminServer struct {
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db *client.KV, stopper *util.Stopper) *adminServer {
+func newAdminServer(db *client.DB, stopper *util.Stopper) *adminServer {
 	return &adminServer{
 		db:      db,
 		stopper: stopper,

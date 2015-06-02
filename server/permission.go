@@ -27,7 +27,7 @@ import (
 
 // A permHandler implements the adminHandler interface.
 type permHandler struct {
-	db *client.KV // Key-value database client
+	db *client.DB // Key-value database client
 }
 
 // Put writes a perm config for the specified key prefix (which is treated as

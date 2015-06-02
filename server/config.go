@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -224,7 +223,7 @@ func RunSetZone(ctx *Context, keyPrefix, configFileName string) {
 // config is stored proto-encoded. The specified body must validly
 // parse into a config struct and must pass a given validation check (if
 // validate is not nil).
-func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
+func putConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 	path string, body []byte, r *http.Request,
 	validate func(gogoproto.Message) error) error {
 	if len(path) == 0 {
@@ -239,10 +238,8 @@ func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		}
 	}
 	key := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-	if err := db.Run(client.PutProto(key, config)); err != nil {
-		return err
-	}
-	return nil
+	_, err := db.Put(key, config)
+	return err
 }
 
 // getConfig retrieves the configuration for the specified key. If the
@@ -253,36 +250,31 @@ func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 // configs if "key" is equal to "". The body result contains a listing
 // of keys and retrieval of a config. The output format is determined
 // by the request header.
-func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
+func getConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 	path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all configs if the key is empty.
 	if len(path) == 0 {
-		sr := &proto.ScanResponse{}
-		if err = db.Run(client.Call{
-			Args: &proto.ScanRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:    configPrefix,
-					EndKey: configPrefix.PrefixEnd(),
-					User:   storage.UserRoot,
-				},
-				MaxResults: maxGetResults,
-			},
-			Reply: sr}); err != nil {
+		var sr client.Result
+		if sr, err = db.Scan(configPrefix, configPrefix.PrefixEnd(), maxGetResults); err != nil {
 			return
 		}
 		if len(sr.Rows) == maxGetResults {
 			log.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
 		}
 		var prefixes []string
-		for _, kv := range sr.Rows {
-			trimmed := bytes.TrimPrefix(kv.Key, configPrefix)
+		for _, row := range sr.Rows {
+			trimmed := bytes.TrimPrefix(row.Key, configPrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// Encode the response.
 		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		configkey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-		if err = db.Run(client.GetProto(configkey, config)); err != nil {
+		var gr client.Result
+		if gr, err = db.Get(configkey); err != nil {
+			return
+		}
+		if err = gr.Rows[0].ValueProto(config); err != nil {
 			return
 		}
 		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)
@@ -292,7 +284,7 @@ func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 }
 
 // deleteConfig removes the config specified by key.
-func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Request) error {
+func deleteConfig(db *client.DB, configPrefix proto.Key, path string, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for config Delete")
 	}
@@ -300,12 +292,6 @@ func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Re
 		return util.Errorf("the default configuration cannot be deleted")
 	}
 	configKey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-	return db.Run(client.Call{
-		Args: &proto.DeleteRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:  configKey,
-				User: storage.UserRoot,
-			},
-		},
-		Reply: &proto.DeleteResponse{}})
+	_, err := db.Del(configKey)
+	return err
 }
