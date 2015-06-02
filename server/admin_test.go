@@ -39,11 +39,11 @@ import (
 // Cockroach KV client address is set to the address of the test server.
 func startAdminServer() (string, *util.Stopper) {
 	stopper := util.NewStopper()
-	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
+	kv, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
 	if err != nil {
 		log.Fatal(err)
 	}
-	admin := newAdminServer(db, stopper)
+	admin := newAdminServer(kv.NewDB(), stopper)
 	mux := http.NewServeMux()
 	admin.registerHandlers(mux)
 	httpServer := httptest.NewTLSServer(mux)

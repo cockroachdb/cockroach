@@ -34,7 +34,7 @@ const (
 
 // A zoneHandler implements the adminHandler interface.
 type zoneHandler struct {
-	db *client.KV // Key-value database client
+	db *client.DB // Key-value database client
 }
 
 // validateZoneConfig returns an error if a given zone config is invalid.
