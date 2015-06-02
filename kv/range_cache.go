@@ -175,7 +175,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rmc.stringLocked())
 		}
 		if log.V(1) {
-			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc)
+			log.Infof("evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 		}
 		rmc.rangeCache.Del(rngKey)
 

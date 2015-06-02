@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -26,30 +25,30 @@ import (
 
 func TestLeaderCache(t *testing.T) {
 	lc := newLeaderCache(3)
-	if r := lc.Lookup(12); r != nil {
+	if r := lc.Lookup(12); r.StoreID != 0 {
 		t.Fatalf("lookup of missing key returned replica: %v", r)
 	}
 	replica := proto.Replica{StoreID: 1}
 	lc.Update(5, replica)
-	if r := lc.Lookup(5); !reflect.DeepEqual(&replica, r) {
+	if r := lc.Lookup(5); r.StoreID != 1 {
 		t.Errorf("expected %v, got %v", replica, r)
 	}
 	newReplica := proto.Replica{StoreID: 7}
 	lc.Update(5, newReplica)
 	r := lc.Lookup(5)
-	if !reflect.DeepEqual(&newReplica, r) {
+	if r.StoreID != 7 {
 		t.Errorf("expected %v, got %v", newReplica, r)
 	}
 	lc.Update(5, proto.Replica{})
 	r = lc.Lookup(5)
-	if r != nil {
+	if r.StoreID != 0 {
 		t.Fatalf("evicted leader returned: %v", r)
 	}
 
 	for i := 10; i < 20; i++ {
 		lc.Update(proto.RaftID(i), replica)
 	}
-	if lc.Lookup(16) != nil || lc.Lookup(17) == nil {
+	if lc.Lookup(16).StoreID != 0 || lc.Lookup(17).StoreID == 0 {
 		t.Errorf("unexpected policy used in cache")
 	}
 }

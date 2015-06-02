@@ -130,10 +130,11 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	testCases := []struct {
-		args   proto.Request
-		attrs  []string
-		fn     func(rpc.Options, []net.Addr) error
-		leader int32 // 0 for not caching a leader.
+		args       proto.Request
+		attrs      []string
+		order      rpc.OrderingPolicy
+		expReplica []int32
+		leader     int32 // 0 for not caching a leader.
 		// Naming is somewhat off, as eventually consistent reads usually
 		// do not have to go to the leader when a node has a read lease.
 		// Would really want CONSENSUS here, but that is not implemented.
@@ -143,9 +144,10 @@ func TestSendRPCOrder(t *testing.T) {
 	}{
 		// Inconsistent Scan without matching attributes.
 		{
-			args:  &proto.ScanRequest{},
-			attrs: []string{},
-			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+			args:       &proto.ScanRequest{},
+			attrs:      []string{},
+			order:      rpc.OrderRandom,
+			expReplica: []int32{1, 2, 3, 4, 5},
 		},
 		// Inconsistent Scan with matching attributes.
 		// Should move the two nodes matching the attributes to the front and
@@ -153,8 +155,9 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:  &proto.ScanRequest{},
 			attrs: nodeAttrs[5],
+			order: rpc.OrderStable,
 			// Compare only the first two resulting addresses.
-			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
+			expReplica: []int32{5, 4, 0, 0, 0},
 		},
 
 		// Scan without matching attributes that requires but does not find
@@ -162,15 +165,17 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:       &proto.ScanRequest{},
 			attrs:      []string{},
-			fn:         makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+			order:      rpc.OrderRandom,
+			expReplica: []int32{1, 2, 3, 4, 5},
 			consistent: true,
 		},
 		// Put without matching attributes that requires but does not find leader.
 		// Should go random and not change anything.
 		{
-			args:  &proto.PutRequest{},
-			attrs: []string{"nomatch"},
-			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+			args:       &proto.PutRequest{},
+			attrs:      []string{"nomatch"},
+			order:      rpc.OrderRandom,
+			expReplica: []int32{1, 2, 3, 4, 5},
 		},
 		// Put with matching attributes but no leader.
 		// Should move the two nodes matching the attributes to the front and
@@ -179,19 +184,48 @@ func TestSendRPCOrder(t *testing.T) {
 			args:  &proto.PutRequest{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first two resulting addresses.
-			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
+			order:      rpc.OrderStable,
+			expReplica: []int32{5, 4, 0, 0, 0},
 		},
-
 		// Put with matching attributes that finds the leader (node 3).
 		// Should address the leader and the two nodes matching the attributes
 		// (the last and second to last) in that order.
 		{
 			args:  &proto.PutRequest{},
 			attrs: append(nodeAttrs[5], "irrelevant"),
-			// Compare only the first three resulting addresses.
-			fn:     makeVerifier(rpc.OrderStable, []int32{2, 5, 4, 0, 0}),
-			leader: 2,
+			// Compare only the first resulting addresses as we have a leader
+			// and that means we're only trying to send there.
+			order:      rpc.OrderStable,
+			expReplica: []int32{2},
+			leader:     2,
 		},
+		// Put without matching attributes that finds the leader (node 3).
+		// Same outcome, but now the ordering is determined by the fact that
+		// the leader is known, not by the attribute prefix.
+		{
+			args:  &proto.PutRequest{},
+			attrs: []string{},
+			// Compare only the first resulting addresses as we have a leader
+			// and that means we're only trying to send there.
+			order:      rpc.OrderStable,
+			expReplica: []int32{2},
+			leader:     2,
+		},
+
+		// Inconsistent Get without matching attributes but leader (node 3). Should just
+		// go random as the leader does not matter.
+		{
+			args:       &proto.GetRequest{},
+			attrs:      []string{},
+			order:      rpc.OrderRandom,
+			expReplica: []int32{1, 2, 3, 4, 5},
+			leader:     2,
+		},
+	}
+
+	descriptor := proto.RangeDescriptor{
+		RaftID:   raftID,
+		Replicas: nil,
 	}
 
 	// Stub to be changed in each test case.
@@ -208,18 +242,16 @@ func TestSendRPCOrder(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(proto.Key, lookupOptions) ([]proto.RangeDescriptor, error) {
+			return []proto.RangeDescriptor{descriptor}, nil
+		}),
 	}
 
 	ds := NewDistSender(ctx, g)
 
 	for n, tc := range testCases {
-		verifyCall = tc.fn
-		// We don't need to do all of it for each test case, but we need the
-		// replica slice so might as well do it all.
-		descriptor := proto.RangeDescriptor{
-			RaftID:   raftID,
-			Replicas: nil,
-		}
+		verifyCall = makeVerifier(tc.order, tc.expReplica)
+		descriptor.Replicas = nil // could do this once above, but more convenient here
 		for i := int32(1); i <= 5; i++ {
 			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 			addrToNode[addr.String()] = i
@@ -236,7 +268,6 @@ func TestSendRPCOrder(t *testing.T) {
 			if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 				t.Fatal(err)
 			}
-
 			descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
 				NodeID:  proto.NodeID(i),
 				StoreID: proto.StoreID(i),
@@ -268,8 +299,9 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		replicas := newReplicaSlice(ds.gossip, &descriptor)
-		if err := ds.sendRPC(descriptor.RaftID, replicas, args, args.CreateReply()); err != nil {
+		call := client.Call{Args: args, Reply: args.CreateReply()}
+		ds.Send(context.Background(), call)
+		if err := call.Reply.Header().GoError(); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -295,7 +327,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		if first {
 			reply := getReply()
 			reply.(proto.Response).Header().SetGoError(
-				&proto.NotLeaderError{Leader: &leader})
+				&proto.NotLeaderError{Leader: &leader, Replica: &proto.Replica{}})
 			first = false
 			return []interface{}{reply}, nil
 		}
@@ -318,13 +350,9 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	if first {
 		t.Errorf("The command did not retry")
 	}
-	if cur := ds.leaderCache.Lookup(1); !reflect.DeepEqual(cur, &leader) {
+	if cur := ds.leaderCache.Lookup(1); cur.StoreID != leader.StoreID {
 		t.Errorf("leader cache was not updated: expected %v, got %v",
 			&leader, cur)
-	}
-	ds.updateLeaderCache(1, leader)
-	if ds.leaderCache.Lookup(1) != nil {
-		t.Errorf("update with same replica did not evict the cache")
 	}
 }
 
