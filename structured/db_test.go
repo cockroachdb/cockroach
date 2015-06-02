@@ -35,11 +35,11 @@ func TestPutGetDeleteSchema(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := server.BootstrapCluster("test-cluster", []engine.Engine{e}, stopper)
+	localKV, err := server.BootstrapCluster("test-cluster", []engine.Engine{e}, stopper)
 	if err != nil {
 		t.Fatalf("unable to boostrap cluster: %v", err)
 	}
-	db := structured.NewDB(localDB)
+	db := structured.NewDB(localKV.NewDB())
 	if err := db.PutSchema(s); err != nil {
 		t.Fatalf("could not register schema: %v", err)
 	}

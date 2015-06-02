@@ -140,7 +140,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(db, s.stopper)
 	s.status = newStatusServer(db, s.gossip)
-	s.structuredDB = structured.NewDB(s.kv)
+	s.structuredDB = structured.NewDB(db)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 	s.tsDB = ts.NewDB(s.kv)
 	s.tsServer = ts.NewServer(s.tsDB)

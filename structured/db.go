@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // A DB interface provides methods to access a datastore
@@ -40,12 +39,12 @@ type DB interface {
 // Cockroach kv client API.
 type structuredDB struct {
 	// kvDB is a client to the monolithic key-value map.
-	kvDB *client.KV
+	kvDB *client.DB
 }
 
 // NewDB returns a key-value datastore client which connects to the
 // Cockroach cluster via the supplied gossip instance.
-func NewDB(kvDB *client.KV) DB {
+func NewDB(kvDB *client.DB) DB {
 	return &structuredDB{kvDB: kvDB}
 }
 
@@ -62,41 +61,33 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 	if err := gob.NewEncoder(&buf).Encode(s); err != nil {
 		return err
 	}
-	return db.kvDB.Run(client.Put(k, buf.Bytes()))
+	_, err := db.kvDB.Put(k, buf.Bytes())
+	return err
 }
 
 // DeleteSchema removes s from the kv store.
 func (db *structuredDB) DeleteSchema(s *Schema) error {
-	return db.kvDB.Run(client.Call{
-		Args: &proto.DeleteRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: keys.MakeKey(keys.SchemaPrefix, proto.Key(s.Key)),
-			},
-		},
-		Reply: &proto.DeleteResponse{}})
+	_, err := db.kvDB.Del(keys.MakeKey(keys.SchemaPrefix, proto.Key(s.Key)))
+	return err
 }
 
 // GetSchema returns the Schema with the given key, or nil if
 // one does not exist. A nil error is returned when a schema
 // with the given key cannot be found.
 func (db *structuredDB) GetSchema(key string) (*Schema, error) {
-	s := &Schema{}
 	k := keys.MakeKey(keys.SchemaPrefix, proto.Key(key))
-	call := client.Get(k)
-	if err := db.kvDB.Run(call); err != nil {
+	gr, err := db.kvDB.Get(k)
+	if err != nil {
 		return nil, err
 	}
-	reply := call.Reply.(*proto.GetResponse)
-	if reply.Value == nil {
+	if !gr.Rows[0].Exists() {
 		// No value present.
 		return nil, nil
 	}
-	if reply.Value.Integer != nil {
-		return nil, util.Errorf("%s: unexpected integer value: %+v", k, reply.Value)
-	}
 	// TODO(pmattis): This is an inappropriate use of gob. Replace with
 	// something else.
-	if err := gob.NewDecoder(bytes.NewBuffer(reply.Value.Bytes)).Decode(s); err != nil {
+	s := &Schema{}
+	if err := gob.NewDecoder(bytes.NewBuffer(gr.Rows[0].ValueBytes())).Decode(s); err != nil {
 		return nil, err
 	}
 	return s, nil
