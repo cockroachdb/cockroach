@@ -21,14 +21,41 @@
 package acceptance
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 // makeDBClient creates a DB client for node 'i' using the cluster certs dir.
-func makeDBClient(cluster *localcluster.Cluster, node int) (*client.DB, error) {
+func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) *client.DB {
 	// We always run these tests with certs.
-	return client.Open("https://root@" +
+	c, err := client.Open("https://root@" +
 		cluster.Nodes[node].Addr("").String() +
 		"?certs=" + cluster.CertsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// setDefaultRangeMaxBytes sets the range-max-bytes value for the default zone.
+func setDefaultRangeMaxBytes(t *testing.T, c *client.DB, maxBytes int64) {
+	res, err := c.Get(keys.ConfigZonePrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zone := &proto.ZoneConfig{}
+	if err := res.Rows[0].ValueProto(zone); err != nil {
+		t.Fatal(err)
+	}
+	if zone.RangeMaxBytes == maxBytes {
+		return
+	}
+	zone.RangeMaxBytes = maxBytes
+	if _, err := c.Put(keys.ConfigZonePrefix, zone); err != nil {
+		t.Fatal(err)
+	}
 }

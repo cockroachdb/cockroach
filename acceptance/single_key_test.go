@@ -62,10 +62,7 @@ func TestSingleKey(t *testing.T) {
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	c, err := makeDBClient(l, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := makeDBClient(t, l, 0)
 	if _, err := c.Put(key, testVal(0)); err != nil {
 		t.Fatal(err)
 	}
@@ -84,12 +81,8 @@ func TestSingleKey(t *testing.T) {
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < *numNodes; i++ {
-		go func(i int) {
-			c, err := makeDBClient(l, i)
-			if err != nil {
-				resultCh <- result{err: err}
-				return
-			}
+		c := makeDBClient(t, l, i)
+		go func() {
 			var r result
 			for time.Now().Before(deadline) {
 				start := time.Now()
@@ -116,7 +109,7 @@ func TestSingleKey(t *testing.T) {
 				}
 			}
 			resultCh <- r
-		}(i)
+		}()
 	}
 
 	// Verify that none of the workers encountered an error.
