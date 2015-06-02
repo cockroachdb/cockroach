@@ -1223,7 +1223,12 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 //   - \x00acct < SplitKey < \x00accu
 //   - \x00perm < SplitKey < \x00pern
 //   - \x00zone < SplitKey < \x00zonf
+// And split key equal to Meta2KeyMax (\x00\x00meta2\xff\xff) is
+// considered invalid.
 func IsValidSplitKey(key proto.Key) bool {
+	if key.Equal(keys.Meta2KeyMax) {
+		return false
+	}
 	return isValidEncodedSplitKey(MVCCEncodeKey(key))
 }
 
