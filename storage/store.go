@@ -1494,12 +1494,8 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 		return nil, nil
 	}
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
-	r, err := s.kvDB.Get(key)
-	if err != nil {
-		return nil, err
-	}
 	status := &proto.StoreStatus{}
-	if err := r.Rows[0].ValueProto(status); err != nil {
+	if err := s.kvDB.GetProto(key, status); err != nil {
 		return nil, err
 	}
 	return status, nil

@@ -50,12 +50,8 @@ func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user strin
 
 // setDefaultRangeMaxBytes sets the range-max-bytes value for the default zone.
 func setDefaultRangeMaxBytes(t *testing.T, c *client.DB, maxBytes int64) {
-	res, err := c.Get(keys.ConfigZonePrefix)
-	if err != nil {
-		t.Fatal(err)
-	}
 	zone := &proto.ZoneConfig{}
-	if err := res.Rows[0].ValueProto(zone); err != nil {
+	if err := c.GetProto(keys.ConfigZonePrefix, zone); err != nil {
 		t.Fatal(err)
 	}
 	if zone.RangeMaxBytes == maxBytes {
