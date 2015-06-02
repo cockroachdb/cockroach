@@ -51,7 +51,7 @@ const (
 	// runtimeStatsInterval is the interval for logging runtime stats such
 	// as number of goroutines and memory allocated.
 	runtimeStatsInterval = 15 * time.Second
-	mb                   = 10e-6
+	mb                   = 1 << 20
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -532,6 +532,8 @@ func (n *Node) startRuntimeStats(stopper *util.Stopper) {
 		ticker := time.NewTicker(runtimeStatsInterval)
 		defer ticker.Stop()
 		var cgoCall, uTime, sTime int64
+		var pauseNS uint64
+		var numGC uint32
 		ms := runtime.MemStats{}
 		for {
 			tStart := time.Now()
@@ -541,12 +543,14 @@ func (n *Node) startRuntimeStats(stopper *util.Stopper) {
 			case <-ticker.C:
 				dur := float64(time.Since(tStart))
 				runtime.ReadMemStats(&ms)
-				newCGOCall := runtime.NumCgoCall() - cgoCall
-				cgoRate := float64(newCGOCall*int64(time.Second)) / dur
-				activeMB := float64(ms.Alloc) * mb
-				activeHeapMB := float64(ms.HeapAlloc) * mb
+				curCgoCall := runtime.NumCgoCall()
+				cgoRate := float64((curCgoCall-cgoCall)*int64(time.Second)) / dur
 
-				totalMB := float64(ms.TotalAlloc) * mb
+				activeMB := float64(ms.Alloc) / mb
+
+				dPauseNS := ms.PauseTotalNs - pauseNS
+				dNumGC := ms.NumGC - numGC
+
 				ru := syscall.Rusage{}
 				if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
 					log.Errorf("Getrusage failed: %v", err)
@@ -555,11 +559,13 @@ func (n *Node) startRuntimeStats(stopper *util.Stopper) {
 				newStime := ru.Stime.Nano()
 				uPerc := float64(newUtime-uTime) / dur
 				sPerc := float64(newStime-sTime) / dur
-				uTime = newUtime
-				sTime = newStime
-				log.Infof("runtime stats: %d goroutines, %.2fmb/%.2fmb/%.2fmb active/heap/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time",
-					runtime.NumGoroutine(), activeMB, activeHeapMB, totalMB, cgoRate, uPerc, sPerc)
-				cgoCall += newCGOCall
+
+				log.Infof("runtime stats: %d goroutines, %.2fMB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+					runtime.NumGoroutine(), activeMB, cgoRate, uPerc, sPerc, float64(dPauseNS)/dur, dNumGC)
+
+				uTime, sTime = newUtime, newStime
+				cgoCall = curCgoCall
+				pauseNS, numGC = ms.PauseTotalNs, ms.NumGC
 			}
 		}
 	})
