@@ -190,7 +190,7 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 }
 
 // TestSplitByMeta2KeyMax check range splitting at key Meta2KeyMax should
-// failed as Meta2KeyMax is not an invalid split key.
+// fail as Meta2KeyMax is not a valid split key.
 func TestSplitByMeta2KeyMax(t *testing.T) {
 	s := startServer(t)
 	db := createTestClient(t, s.ServingAddr())
@@ -215,7 +215,7 @@ func TestSplitByMeta2KeyMax(t *testing.T) {
 
 	select {
 	case <-ch:
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		t.Error("range split on Meta2KeyMax timed out")
 	}
 }

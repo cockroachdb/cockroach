@@ -1478,6 +1478,7 @@ func TestValidSplitKeys(t *testing.T) {
 		{proto.Key("\x00\x00meta2"), true},
 		{proto.Key("\x00\x00meta2\x00"), true},
 		{proto.Key("\x00\x00meta2\xff"), true},
+		{proto.Key("\x00\x00meta2\xff\xff"), false},
 		{proto.Key("\x00\x00meta3"), true},
 		{proto.Key("\x00\x01"), true},
 		{proto.Key("\x00accs\xff"), true},
