@@ -29,5 +29,5 @@ func init() {
 	// pf.Var(&logging.stderrThreshold, "log-threshold", "logs at or above this threshold go to stderr")
 	flag.Var(&logging.vmodule, "vmodule", "comma-separated list of file=N settings for file-filtered logging")
 	flag.Var(&logging.traceLocation, "log-backtrace-at", "when logging hits line file:N, emit a stack trace")
-	logDir = flag.String("log-dir", "", "if non-empty, write log files in this directory") // in clog_file.go
+	flag.StringVar(logDir, "log-dir", "", "if non-empty, write log files in this directory") // in util/log/file.go
 }

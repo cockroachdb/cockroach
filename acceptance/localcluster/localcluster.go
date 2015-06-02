@@ -42,7 +42,9 @@ var cockroachImage = flag.String("i", builderImage, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
+var logDirectory = flag.String("l", "", "the directory to store log files, relative to where the test source")
 var testCertsDir = filepath.Clean(os.ExpandEnv("${PWD}/../resource/test_certs"))
+var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 
 func prettyJSON(v interface{}) string {
 	pretty, err := json.MarshalIndent(v, "", "  ")
@@ -113,6 +115,7 @@ type Cluster struct {
 	CertsDir       string
 	UseTestCerts   bool
 	monitorStopper chan struct{}
+	LogDir         string
 }
 
 // Create creates a new local cockroach cluster. The stopper is used to
@@ -243,17 +246,17 @@ func (l *Cluster) initCluster() {
 		// bound has a parent directory that exists in the boot2docker VM
 		// then that directory is bound into the container. In particular,
 		// that means that binds of /tmp and /var will be problematic.
-		cwd, err := os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		l.CertsDir, err = ioutil.TempDir(cwd, ".localcluster.certs.")
+		l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
 		if err != nil {
 			panic(err)
 		}
 	}
 
 	binds := []string{l.CertsDir + ":/certs"}
+	if logDirectory != nil && len(*logDirectory) > 0 {
+		l.LogDir = filepath.Join(pwd, *logDirectory)
+		binds = append(binds, l.LogDir+":/logs")
+	}
 	if *cockroachImage == builderImage {
 		path, err := filepath.Abs(*cockroachBinary)
 		if err != nil {
@@ -261,6 +264,7 @@ func (l *Cluster) initCluster() {
 		}
 		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
 	}
+
 	maybePanic(c.Start(binds, nil, nil))
 	maybePanic(c.Wait())
 	c.containerInfo.Name = "volumes"
@@ -329,6 +333,21 @@ func (l *Cluster) startNode(i int) *Container {
 		"--addr=" + node(i) + ":8080",
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
+	}
+	if logDirectory != nil && len(*logDirectory) > 0 {
+		dockerDir := "/logs/" + node(i)
+		localDir := l.LogDir + "/" + node(i)
+		if !exists(localDir) {
+			if err := os.Mkdir(localDir, 0777); err != nil {
+				log.Fatal(err)
+			}
+		}
+		log.Infof("Logs for node %s are located at %s.", node(i), localDir)
+		cmd = append(
+			cmd,
+			"--log-dir="+dockerDir,
+			"--logtostderr=false",
+			"--alsologtostderr=true")
 	}
 	c := l.createRoach(i, cmd...)
 	maybePanic(c.Start(nil, l.dns, l.vols))
