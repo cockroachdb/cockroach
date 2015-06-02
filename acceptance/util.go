@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // makeDBClient creates a DB client for node 'i' using the cluster certs dir.
@@ -65,16 +63,8 @@ func setDefaultRangeMaxBytes(t *testing.T, c *client.DB, maxBytes int64) {
 
 // getPermConfig fetches the permissions config for 'prefix'.
 func getPermConfig(client *client.DB, prefix string) (*proto.PermConfig, error) {
-	r, err := client.Get(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)))
-	if err != nil {
-		return nil, err
-	}
-	if len(r.Rows) == 0 {
-		return nil, util.Errorf("no permissions config for prefix %q", prefix)
-	}
 	config := &proto.PermConfig{}
-	msg := r.Rows[0].Value.([]byte)
-	if err := gogoproto.Unmarshal(msg, config); err != nil {
+	if err := client.GetProto(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config); err != nil {
 		return nil, err
 	}
 
@@ -83,13 +73,6 @@ func getPermConfig(client *client.DB, prefix string) (*proto.PermConfig, error) 
 
 // putPermConfig writes the permissions config for 'prefix'.
 func putPermConfig(client *client.DB, prefix string, config *proto.PermConfig) error {
-	msg, err := gogoproto.Marshal(config)
-	if err != nil {
-		return err
-	}
-	r, err := client.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), msg)
-	if err != nil {
-		return err
-	}
-	return r.Err
+	_, err := client.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config)
+	return err
 }
