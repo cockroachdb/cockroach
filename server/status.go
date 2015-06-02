@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -87,13 +86,13 @@ const (
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	db     *client.KV
+	db     *client.DB
 	gossip *gossip.Gossip
 	router *httprouter.Router
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db *client.KV, gossip *gossip.Gossip) *statusServer {
+func newStatusServer(db *client.DB, gossip *gossip.Gossip) *statusServer {
 	server := &statusServer{
 		db:     db,
 		gossip: gossip,
@@ -247,23 +246,17 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	call := client.Scan(startKey, endKey, 0)
-	resp := call.Reply.(*proto.ScanResponse)
-	if err := s.db.Run(call); err != nil {
+	sr, err := s.db.Scan(startKey, endKey, 0)
+	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if resp.Error != nil {
-		log.Error(resp.Error)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	nodeStatuses := []proto.NodeStatus{}
-	for _, row := range resp.Rows {
+	for _, row := range sr.Rows {
 		nodeStatus := &proto.NodeStatus{}
-		if err := gogoproto.Unmarshal(row.Value.GetBytes(), nodeStatus); err != nil {
+		if err := row.ValueProto(nodeStatus); err != nil {
 			log.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -291,16 +284,16 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	}
 	key := keys.NodeStatusKey(int32(id))
 
-	nodeStatus := &proto.NodeStatus{}
-	call := client.GetProto(key, nodeStatus)
-	resp := call.Reply.(*proto.GetResponse)
-	if err := s.db.Run(call); err != nil {
+	gr, err := s.db.Get(key)
+	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if resp.Error != nil {
-		log.Error(resp.Error)
+
+	nodeStatus := &proto.NodeStatus{}
+	if err := gr.Rows[0].ValueProto(nodeStatus); err != nil {
+		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -320,23 +313,17 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	startKey := keys.StatusStorePrefix
 	endKey := startKey.PrefixEnd()
 
-	call := client.Scan(startKey, endKey, 0)
-	resp := call.Reply.(*proto.ScanResponse)
-	if err := s.db.Run(call); err != nil {
+	sr, err := s.db.Scan(startKey, endKey, 0)
+	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if resp.Error != nil {
-		log.Error(resp.Error)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	storeStatuses := []proto.StoreStatus{}
-	for _, row := range resp.Rows {
+	for _, row := range sr.Rows {
 		storeStatus := &proto.StoreStatus{}
-		if err := gogoproto.Unmarshal(row.Value.GetBytes(), storeStatus); err != nil {
+		if err := row.ValueProto(storeStatus); err != nil {
 			log.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -364,16 +351,16 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	}
 	key := keys.StoreStatusKey(int32(id))
 
-	storeStatus := &proto.StoreStatus{}
-	call := client.GetProto(key, storeStatus)
-	resp := call.Reply.(*proto.GetResponse)
-	if err := s.db.Run(call); err != nil {
+	gr, err := s.db.Get(key)
+	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if resp.Error != nil {
-		log.Error(resp.Error)
+
+	storeStatus := &proto.StoreStatus{}
+	if err := gr.Rows[0].ValueProto(storeStatus); err != nil {
+		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

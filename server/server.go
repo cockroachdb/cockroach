@@ -136,9 +136,10 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
 		EventFeed:       &util.Feed{},
 	}
+	db := s.kv.NewDB()
 	s.node = NewNode(nCtx)
-	s.admin = newAdminServer(s.kv.NewDB(), s.stopper)
-	s.status = newStatusServer(s.kv, s.gossip)
+	s.admin = newAdminServer(db, s.stopper)
+	s.status = newStatusServer(db, s.gossip)
 	s.structuredDB = structured.NewDB(s.kv)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 	s.tsDB = ts.NewDB(s.kv)
