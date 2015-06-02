@@ -191,9 +191,9 @@ func (l *Cluster) runDockerSpy() {
 	}
 	maybePanic(c.Start([]string{"/var/run/docker.sock:/var/run/docker.sock"}, nil, nil))
 	maybePanic(c.Inspect())
-	c.Name = "docker-spy"
+	c.containerInfo.Name = "docker-spy"
 	l.dns = c
-	log.Infof("started %s: %s", c.Name, c.NetworkSettings.IPAddress)
+	log.Infof("started %s: %s", c.containerInfo.Name, c.containerInfo.NetworkSettings.IPAddress)
 }
 
 // create the volumes container that keeps all of the volumes used by
@@ -263,7 +263,7 @@ func (l *Cluster) initCluster() {
 	}
 	maybePanic(c.Start(binds, nil, nil))
 	maybePanic(c.Wait())
-	c.Name = "volumes"
+	c.containerInfo.Name = "volumes"
 	l.vols = c
 }
 
@@ -333,8 +333,8 @@ func (l *Cluster) startNode(i int) *Container {
 	c := l.createRoach(i, cmd...)
 	maybePanic(c.Start(nil, l.dns, l.vols))
 	maybePanic(c.Inspect())
-	c.Name = node(i)
-	log.Infof("started %s: https://%s", c.Name, c.Addr(""))
+	c.containerInfo.Name = node(i)
+	log.Infof("started %s: https://%s", c.containerInfo.Name, c.Addr(""))
 	return c
 }
 
@@ -351,7 +351,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 	}
 
 	for i, n := range l.Nodes {
-		if n != nil && n.Id == e.Id {
+		if n != nil && n.ID == e.Id {
 			if log.V(1) {
 				log.Errorf("node=%d status=%s", i, e.Status)
 			}
