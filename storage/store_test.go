@@ -64,7 +64,7 @@ func setTestRetryOptions(s *Store) {
 	})
 }
 
-// testSender is an implementation of the client.KVSender interface
+// testSender is an implementation of the client.Sender interface
 // which passes all requests through to a single store.
 type testSender struct {
 	store *Store

@@ -119,7 +119,7 @@ type DistSender struct {
 	rpcRetryOptions retry.Options
 }
 
-var _ client.KVSender = &DistSender{}
+var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
@@ -146,7 +146,7 @@ type DistSenderContext struct {
 	rangeDescriptorDB rangeDescriptorDB
 }
 
-// NewDistSender returns a client.KVSender instance which connects to the
+// NewDistSender returns a client.Sender instance which connects to the
 // Cockroach cluster via the supplied gossip instance. Supplying a
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
@@ -480,7 +480,7 @@ func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice,
 	return err
 }
 
-// Send implements the client.KVSender interface. It verifies
+// Send implements the client.Sender interface. It verifies
 // permissions and looks up the appropriate range based on the
 // supplied key and sends the RPC according to the specified options.
 //

@@ -468,7 +468,7 @@ type testSender struct {
 	handler func(call client.Call)
 }
 
-var _ client.KVSender = &testSender{}
+var _ client.Sender = &testSender{}
 
 func newTestSender(handler func(client.Call)) *testSender {
 	return &testSender{

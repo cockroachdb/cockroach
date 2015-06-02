@@ -47,7 +47,7 @@ const (
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context) (KVSender, error) {
+	f := func(u *url.URL, ctx *base.Context) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "https")
 		return NewHTTPSender(u.Host, ctx)
 	}
@@ -71,7 +71,7 @@ var HTTPRetryOptions = retry.Options{
 	UseV1Info:   true,
 }
 
-// HTTPSender is an implementation of KVSender which exposes the
+// HTTPSender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
 // this client to other nodes.

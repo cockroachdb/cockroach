@@ -33,7 +33,7 @@ import (
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context) (client.KVSender, error) {
+	f := func(u *url.URL, ctx *base.Context) (client.Sender, error) {
 		ctx.Insecure = (u.Scheme != "rpcs")
 		return NewSender(u.Host, ctx)
 	}
@@ -41,7 +41,7 @@ func init() {
 	client.RegisterSender("rpcs", f)
 }
 
-// Sender is an implementation of KVSender which exposes the
+// Sender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via RPC to a Cockroach node. Overly-busy nodes will redirect this
 // client to other nodes.
