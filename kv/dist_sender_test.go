@@ -730,3 +730,20 @@ func TestSendRPCRetry(t *testing.T) {
 		t.Fatalf("expected 1 row; got %d", l)
 	}
 }
+
+// TestGetNodeDescriptor checks that the Node descriptor automatically gets
+// looked up from Gossip.
+func TestGetNodeDescriptor(t *testing.T) {
+	g := makeTestGossip(t)
+	ds := NewDistSender(&DistSenderContext{}, g)
+	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 5}); err != nil {
+		t.Fatal(err)
+	}
+	util.SucceedsWithin(t, time.Second, func() error {
+		desc := ds.getNodeDescriptor()
+		if desc != nil && desc.NodeID == 5 {
+			return nil
+		}
+		return util.Errorf("wanted NodeID 5, got %v", desc)
+	})
+}

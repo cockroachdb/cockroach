@@ -21,7 +21,9 @@ import (
 	"bytes"
 	"net"
 	"reflect"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/context"
 
@@ -99,7 +101,7 @@ type DistSender struct {
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
 	// which tries to obtain the value from the Gossip network if the
 	// descriptor is unknown.
-	nodeDescriptor *proto.NodeDescriptor
+	nodeDescriptor unsafe.Pointer
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -162,7 +164,9 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		clock:  clock,
 		gossip: gossip,
 	}
-	ds.nodeDescriptor = ctx.nodeDescriptor
+	if ctx.nodeDescriptor != nil {
+		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(ctx.nodeDescriptor))
+	}
 	rcSize := ctx.RangeDescriptorCacheSize
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
@@ -375,18 +379,19 @@ func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPo
 // until after the node has joined the gossip network and been allowed to initialize
 // its stores.
 func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
-	if ds.nodeDescriptor != nil {
-		return ds.nodeDescriptor
+	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
+		return (*proto.NodeDescriptor)(desc)
 	}
+
 	ownNodeID := ds.gossip.GetNodeID()
-	if nodeDesc, err := ds.gossip.GetInfo(
-		gossip.MakeNodeIDKey(ownNodeID)); err == nil && ownNodeID > 0 {
-		ds.nodeDescriptor = nodeDesc.(*proto.NodeDescriptor)
-	} else {
-		log.Infof("unable to determine this node's attributes for replica " +
-			"selection; node is most likely bootstrapping")
+
+	if nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(ownNodeID)); ownNodeID > 0 && err == nil {
+		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc.(*proto.NodeDescriptor)))
+		return nodeDesc.(*proto.NodeDescriptor)
 	}
-	return ds.nodeDescriptor
+	log.Infof("unable to determine this node's attributes for replica " +
+		"selection; node is most likely bootstrapping")
+	return nil
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied proto.Replica
