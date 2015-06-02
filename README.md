@@ -8,7 +8,8 @@
 **Table of Contents**
 
 - [Status](#status)
-- [Running Cockroach](#running-cockroach)
+- [Running Cockroach Locally](#running-cockroach-locally)
+- [Deploying Cockroach in production](#deploying-cockroach-in-production)
 - [Get in touch](#get-in-touch)
 - [Contributing](#contributing)
 - [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
@@ -35,7 +36,7 @@ See our
 [Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) and
 [Issues](https://github.com/cockroachdb/cockroach/issues)
 
-## Running Cockroach
+## Running Cockroach Locally
 
 Getting started is most convenient using a recent version (>1.2) of [Docker](http://docs.docker.com/installation/).
 
@@ -179,6 +180,13 @@ docker run -p 8080:8080 -h roachnode --volumes-from=$(docker ps -q -n 1) \
 ```
 
 Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.
+
+
+## Deploying Cockroach in production
+
+To run a cockroach cluster on various cloud platforms using [docker machine](http://docs.docker.com/machine/),
+see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod)
+
 
 ## Get in touch
 
