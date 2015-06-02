@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/client/rpc"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -83,11 +83,13 @@ func newNotifyingSender(wrapped client.Sender) *notifyingSender {
 // an HTTP sender to the server at addr.
 // It contains a waitgroup to allow waiting.
 func createTestNotifyClient(addr string) *client.KV {
-	sender, err := client.NewHTTPSender(addr, testutils.NewTestBaseContext())
+	db, err := client.Open("https://root@" + addr + "?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return client.NewKV(nil, newNotifyingSender(sender))
+	kvClient := db.InternalKV()
+	kvClient.Sender = newNotifyingSender(kvClient.Sender)
+	return kvClient
 }
 
 // TestKVClientRetryNonTxn verifies that non-transactional client will
@@ -453,12 +455,12 @@ func ExampleKV_Run1() {
 	defer serv.Stop()
 
 	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
+	db, err := client.Open("https://root@" + serv.ServingAddr() +
+		"?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	kvClient := client.NewKV(nil, sender)
-	kvClient.User = storage.UserRoot
+	kvClient := db.InternalKV()
 
 	key := proto.Key("a")
 	value := []byte{1, 2, 3, 4}
@@ -496,12 +498,12 @@ func ExampleKV_RunMultiple() {
 	defer serv.Stop()
 
 	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
+	db, err := client.Open("https://root@" + serv.ServingAddr() +
+		"?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	kvClient := client.NewKV(nil, sender)
-	kvClient.User = storage.UserRoot
+	kvClient := db.InternalKV()
 
 	// Insert test data.
 	batchSize := 12
@@ -563,12 +565,12 @@ func ExampleKV_RunTransaction() {
 	defer serv.Stop()
 
 	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
+	db, err := client.Open("https://root@" + serv.ServingAddr() +
+		"?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	kvClient := client.NewKV(nil, sender)
-	kvClient.User = storage.UserRoot
+	kvClient := db.InternalKV()
 
 	// Create test data.
 	numKVPairs := 10
@@ -755,11 +757,11 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 		kv = client.NewKV(nil, sender)
 	} else {
 		// The test context contains the security settings.
-		sender, err := client.NewHTTPSender(s.ServingAddr(), &s.Ctx.Context)
+		db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=" + s.Ctx.Certs)
 		if err != nil {
-			b.Fatal(err)
+			log.Fatal(err)
 		}
-		kv = client.NewKV(nil, sender)
+		kv = db.InternalKV()
 	}
 	kv.User = storage.UserRoot
 
