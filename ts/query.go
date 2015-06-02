@@ -414,8 +414,6 @@ func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
 	// query. Each dataspan will contain all data queried from the same source.
 	sourceSpans := make(map[string]*dataSpan)
 	for _, row := range sr.Rows {
-		// TODO(pmattis): We're not checking that value tag is _CR_TS. There isn't
-		// a good way to get that info currently.
 		data := &proto.InternalTimeSeriesData{}
 		if err := row.ValueProto(data); err != nil {
 			return nil, nil, err
