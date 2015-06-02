@@ -164,7 +164,7 @@ type rangeManager interface {
 	RaftNodeID() proto.RaftNodeID
 	Clock() *hlc.Clock
 	Engine() engine.Engine
-	DB() *client.KV
+	DB() *client.DB
 	allocator() *allocator
 	Gossip() *gossip.Gossip
 	splitQueue() *splitQueue

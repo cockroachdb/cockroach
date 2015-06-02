@@ -59,7 +59,7 @@ type Server struct {
 	clock          *hlc.Clock
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
-	kv             *client.KV
+	db             *client.DB
 	kvDB           *kv.DBServer
 	kvREST         *kv.RESTServer
 	node           *Node
@@ -110,8 +110,13 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.stopper)
-	s.kv = client.NewKV(nil, sender)
-	s.kv.User = storage.UserRoot
+
+	{
+		// TODO(pmattis): Directly initialize client.DB.
+		kv := client.NewKV(nil, sender)
+		kv.User = storage.UserRoot
+		s.db = kv.NewDB()
+	}
 
 	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)
 	if err != nil {
@@ -125,24 +130,23 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 			return nil, err
 		}
 	}
-	s.kvREST = kv.NewRESTServer(s.kv)
+	s.kvREST = kv.NewRESTServer(s.db)
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Clock:           s.clock,
-		DB:              s.kv,
+		DB:              s.db,
 		Gossip:          s.gossip,
 		Transport:       s.raftTransport,
 		ScanInterval:    s.ctx.ScanInterval,
 		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
 		EventFeed:       &util.Feed{},
 	}
-	db := s.kv.NewDB()
 	s.node = NewNode(nCtx)
-	s.admin = newAdminServer(db, s.stopper)
-	s.status = newStatusServer(db, s.gossip)
-	s.structuredDB = structured.NewDB(db)
+	s.admin = newAdminServer(s.db, s.stopper)
+	s.status = newStatusServer(s.db, s.gossip)
+	s.structuredDB = structured.NewDB(s.db)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
-	s.tsDB = ts.NewDB(db)
+	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 	s.stopper.AddCloser(nCtx.EventFeed)
 

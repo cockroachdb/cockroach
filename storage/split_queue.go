@@ -89,7 +89,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 	if len(splitKeys) > 0 {
 		log.Infof("splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
-			if _, err := sq.db.AdminSplit(splitKey, splitKey); err != nil {
+			if err := sq.db.AdminSplit(splitKey, splitKey); err != nil {
 				return util.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
 			}
 		}

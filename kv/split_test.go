@@ -47,7 +47,7 @@ func setTestRetryOptions() {
 // transactions, each which writes up to 10 times to random keys with
 // random values. If not nil, txnChannel is written to every time a
 // new transaction starts.
-func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
+func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
 	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
 	for j := 0; ; j++ {
@@ -60,7 +60,7 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.RunTransaction(txnOpts, func(txn *client.Txn) error {
+			err := db.InternalKV().RunTransaction(txnOpts, func(txn *client.Txn) error {
 				if first && txnChannel != nil {
 					txnChannel <- struct{}{}
 				} else if !first && retries != nil {
@@ -106,7 +106,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		go startTestWriter(s.KV, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
+		go startTestWriter(s.DB, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
 	}
 
 	// Execute the consecutive splits.
@@ -116,9 +116,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof("starting split at key %q...", splitKey)
-		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
-		resp := &proto.AdminSplitResponse{}
-		if err := s.KV.Run(client.Call{Args: req, Reply: resp}); err != nil {
+		if err := s.DB.AdminSplit(splitKey, splitKey); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
@@ -150,8 +148,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	call := client.PutProto(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig)
-	if err := s.KV.Run(call); err != nil {
+	if _, err := s.DB.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -159,17 +156,16 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go startTestWriter(s.KV, int64(0), 1<<15, &wg, nil, nil, done, t)
+	go startTestWriter(s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
 
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
-		call := client.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-		resp := call.Reply.(*proto.ScanResponse)
-		if err := s.KV.Run(call); err != nil {
+		sr, err := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		if err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
-		return len(resp.Rows) >= 5
+		return len(sr.Rows) >= 5
 	}, 6*time.Second); err != nil {
 		t.Errorf("failed to split 5 times: %s", err)
 	}
@@ -202,19 +198,14 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 	splitKey := proto.Key("aa")
 	log.Infof("starting split at key %q...", splitKey)
-	req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}, SplitKey: splitKey}
-	resp := &proto.AdminSplitResponse{}
-	if err := s.KV.Run(client.Call{Args: req, Reply: resp}); err != nil {
+	if err := s.DB.AdminSplit("a", splitKey); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof("split at key %q first time complete", splitKey)
 	ch := make(chan error)
 	go func() {
-		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: proto.Key("a")}, SplitKey: splitKey}
-		resp := &proto.AdminSplitResponse{}
 		// should return error other than infinite loop
-		err := s.KV.Run(client.Call{Args: req, Reply: resp})
-		ch <- err
+		ch <- s.DB.AdminSplit("a", splitKey)
 	}()
 
 	select {

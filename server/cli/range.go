@@ -104,7 +104,7 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	if _, err := kvDB.AdminSplit(key, splitKey); err != nil {
+	if err := kvDB.AdminSplit(key, splitKey); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		osExit(1)
 	}
@@ -130,7 +130,7 @@ func runMergeRange(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	if _, err := kvDB.AdminMerge(args[0]); err != nil {
+	if err := kvDB.AdminMerge(args[0]); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		osExit(1)
 	}

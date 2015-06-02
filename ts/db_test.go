@@ -66,7 +66,7 @@ func newTestModel(t *testing.T) *testModel {
 // time series DB.
 func (tm *testModel) Start() {
 	tm.LocalTestCluster.Start(tm.t)
-	tm.DB = NewDB(tm.KV.NewDB())
+	tm.DB = NewDB(tm.LocalTestCluster.DB)
 }
 
 // getActualData returns the actual value of all time series keys in the

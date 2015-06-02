@@ -157,70 +157,34 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	// Add some data in a transaction
-	err := mtc.db.RunTransaction(nil, func(txn *client.Txn) error {
-		return txn.Run(
-			client.Put(proto.Key("a"), []byte("asdf")),
-			client.Put(proto.Key("c"), []byte("jkl;")),
-		)
+	err := mtc.db.Tx(func(tx *client.Tx) error {
+		b := tx.B.Put("a", "asdf")
+		b.Put("c", "jkl;")
+		return tx.Commit(b)
 	})
 	if err != nil {
-		t.Fatalf("error putting data to db: %s", err.Error())
+		t.Fatalf("error putting data to db: %s", err)
 	}
 
 	// AdminSplit in between the two ranges.
-	err = mtc.db.Run(
-		client.Call{
-			Args: &proto.AdminSplitRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: proto.Key("b"),
-				},
-				SplitKey: proto.Key("b"),
-			},
-			Reply: &proto.AdminSplitResponse{},
-		},
-	)
-	if err != nil {
-		t.Fatalf("error splitting initial: %s", err.Error())
+	if err := mtc.db.AdminSplit("b", "b"); err != nil {
+		t.Fatalf("error splitting initial: %s", err)
 	}
 
 	// AdminSplit an empty range at the end of the second range.
-	err = mtc.db.Run(
-		client.Call{
-			Args: &proto.AdminSplitRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: proto.Key("z"),
-				},
-				SplitKey: proto.Key("z"),
-			},
-			Reply: &proto.AdminSplitResponse{},
-		},
-	)
-	if err != nil {
-		t.Fatalf("error splitting second range: %s", err.Error())
+	if err := mtc.db.AdminSplit("z", "z"); err != nil {
+		t.Fatalf("error splitting second range: %s", err)
 	}
 
 	// AdminMerge the empty range back into the second range.
-	err = mtc.db.Run(
-		client.Call{
-			Args: &proto.AdminMergeRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: proto.Key("c"),
-				},
-			},
-			Reply: &proto.AdminMergeResponse{},
-		},
-	)
-	if err != nil {
-		t.Fatalf("error merging final range: %s", err.Error())
+	if err := mtc.db.AdminMerge("c"); err != nil {
+		t.Fatalf("error merging final range: %s", err)
 	}
 
 	// Add an additional put through the system and wait for all
 	// replicas to receive it.
-	err = mtc.db.Run(
-		client.Increment(proto.Key("aa"), 5),
-	)
-	if err != nil {
-		t.Fatalf("error putting data to db: %s", err.Error())
+	if _, err := mtc.db.Inc("aa", 5); err != nil {
+		t.Fatalf("error putting data to db: %s", err)
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
 		for _, eng := range mtc.engines {

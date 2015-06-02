@@ -20,7 +20,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"net"
 	"reflect"
 	"testing"
@@ -73,9 +72,10 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer, stopper)
 	}
 	ctx.Gossip = g
-	ctx.DB = client.NewKV(nil,
+	kv := client.NewKV(nil,
 		kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g))
-	ctx.DB.User = storage.UserRoot
+	kv.User = storage.UserRoot
+	ctx.DB = kv.NewDB()
 	// TODO(bdarnell): arrange to have the transport closed.
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	ctx.EventFeed = &util.Feed{}
@@ -113,17 +113,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	sr := &proto.ScanResponse{}
-	if err := localDB.Run(client.Call{
-		Args: &proto.ScanRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:    keys.LocalPrefix.PrefixEnd(), // skip local keys
-				EndKey: proto.KeyMax,
-				User:   storage.UserRoot,
-			},
-			MaxResults: math.MaxInt64,
-		},
-		Reply: sr}); err != nil {
+	sr, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), proto.KeyMax, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
 	var keys []proto.Key
@@ -367,7 +358,7 @@ func TestNodeStatus(t *testing.T) {
 	s.WaitForInit()
 	// Perform a read from the range to ensure that the raft election has
 	// completed.  We do not expect an response.
-	if err := ts.kv.Run(client.Get([]byte("a"))); err != nil {
+	if _, err := ts.db.Get("a"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -398,10 +389,10 @@ func TestNodeStatus(t *testing.T) {
 	oldStats := compareStoreStatus(t, ts.node, expectedNodeStatus, 0)
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.kv.Run(client.Put([]byte("a"), content)); err != nil {
+	if _, err := ts.db.Put("a", content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.kv.Run(client.Put([]byte("c"), content)); err != nil {
+	if _, err := ts.db.Put("c", content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -473,10 +464,10 @@ func TestNodeStatus(t *testing.T) {
 	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 2)
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.kv.Run(client.Put([]byte("aa"), content)); err != nil {
+	if _, err := ts.db.Put("aa", content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.kv.Run(client.Put([]byte("cc"), content)); err != nil {
+	if _, err := ts.db.Put("cc", content); err != nil {
 		t.Fatal(err)
 	}
 

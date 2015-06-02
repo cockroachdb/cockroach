@@ -181,6 +181,11 @@ func Open(addr string) (*DB, error) {
 	return &DB{kv: kv}, nil
 }
 
+// InternalKV returns the internal KV. It is intended for internal use only.
+func (db *DB) InternalKV() *KV {
+	return db.kv
+}
+
 // Get retrieves one or more keys. Each requested key will have a corresponding
 // row in the returned Result.
 //
@@ -286,8 +291,9 @@ func (db *DB) DelRange(begin, end interface{}) (Result, error) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) AdminMerge(key interface{}) (Result, error) {
-	return runOne(db, (&Batch{}).adminMerge(key))
+func (db *DB) AdminMerge(key interface{}) error {
+	_, err := runOne(db, (&Batch{}).adminMerge(key))
+	return err
 }
 
 // AdminSplit splits the range containing key. If splitKey is non-nil it
@@ -296,8 +302,9 @@ func (db *DB) AdminMerge(key interface{}) (Result, error) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) AdminSplit(key, splitKey interface{}) (Result, error) {
-	return runOne(db, (&Batch{}).adminSplit(key, splitKey))
+func (db *DB) AdminSplit(key, splitKey interface{}) error {
+	_, err := runOne(db, (&Batch{}).adminSplit(key, splitKey))
+	return err
 }
 
 // Run executes the operations queued up within a batch. Before executing any

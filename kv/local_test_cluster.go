@@ -102,7 +102,7 @@ type LocalTestCluster struct {
 	Gossip  *gossip.Gossip
 	Eng     engine.Engine
 	Store   *storage.Store
-	KV      *client.KV
+	DB      *client.DB
 	lSender *retryableLocalSender
 	Stopper *util.Stopper
 }
@@ -121,13 +121,14 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())
 	sender := NewTxnCoordSender(ltc.lSender, ltc.Clock, false, ltc.Stopper)
-	ltc.KV = client.NewKV(nil, sender)
-	ltc.KV.User = storage.UserRoot
+	kv := client.NewKV(nil, sender)
+	kv.User = storage.UserRoot
+	ltc.DB = kv.NewDB()
 	transport := multiraft.NewLocalRPCTransport()
 	ltc.Stopper.AddCloser(transport)
 	ctx := storage.TestStoreContext
 	ctx.Clock = ltc.Clock
-	ctx.DB = ltc.KV
+	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, &proto.NodeDescriptor{NodeID: 1})
