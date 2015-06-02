@@ -622,7 +622,7 @@ func checkConcurrency(name string, isolations []proto.IsolationType, txns []stri
 	s := createTestDB(t)
 	defer s.Stop()
 	setCorrectnessRetryOptions(s.lSender)
-	verifier.run(isolations, s.KV, t)
+	verifier.run(isolations, s.DB.InternalKV(), t)
 }
 
 // The following tests for concurrency anomalies include documentation

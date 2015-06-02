@@ -390,8 +390,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: maxBytes,
 	}
-	call := client.PutProto(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig)
-	if err := store.DB().Run(call); err != nil {
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
+	if _, err := store.DB().Put(key, zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -423,21 +423,15 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	zoneConfig := &proto.ZoneConfig{}
 
 	// Write zone configs for db3 & db4.
-	var calls []client.Call
+	b := &client.Batch{}
 	for _, k := range []string{"db4", "db3"} {
-		call := client.PutProto(
-			keys.MakeKey(keys.ConfigZonePrefix, proto.Key(k)),
-			zoneConfig)
-		calls = append(calls, call)
+		b.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.Key(k)), zoneConfig)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
-		call := client.PutProto(
-			keys.MakeKey(keys.ConfigAccountingPrefix, proto.Key(k)),
-			acctConfig)
-		calls = append(calls, call)
+		b.Put(keys.MakeKey(keys.ConfigAccountingPrefix, proto.Key(k)), acctConfig)
 	}
-	if err := store.DB().Run(calls...); err != nil {
+	if err := store.DB().Run(b); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof("wrote updated configs")
@@ -452,13 +446,12 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 		keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
 	}
 	if err := util.IsTrueWithin(func() bool {
-		call := client.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-		resp := call.Reply.(*proto.ScanResponse)
-		if err := store.DB().Run(call); err != nil {
+		sr, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		if err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		var keys []proto.Key
-		for _, r := range resp.Rows {
+		for _, r := range sr.Rows {
 			keys = append(keys, r.Key)
 		}
 		return reflect.DeepEqual(keys, expKeys)

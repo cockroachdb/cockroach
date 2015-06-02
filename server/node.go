@@ -108,15 +108,15 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.Stor
 //
 // Returns a KV client for unittest purposes. Caller should close the returned
 // client.
-func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.KV, error) {
+func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.DB, error) {
 	ctx := storage.StoreContext{}
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
-	localDB.User = storage.UserRoot
-	ctx.DB = localDB
+	localKV := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
+	localKV.User = storage.UserRoot
+	ctx.DB = localKV.NewDB()
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	for i, eng := range engines {
 		sIdent := proto.StoreIdent{
@@ -153,19 +153,18 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 		lSender.AddStore(s)
 
 		// Initialize node and store ids.  Only initialize the node once.
-		kvDB := localDB.NewDB()
 		if i == 0 {
-			if nodeID, err := allocateNodeID(kvDB); nodeID != sIdent.NodeID || err != nil {
+			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
 				return nil, util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
-		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, kvDB); storeID != sIdent.StoreID || err != nil {
+		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
 			return nil, util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
 	}
-	return localDB, nil
+	return ctx.DB, nil
 }
 
 // NewNode returns a new instance of Node.
@@ -214,7 +213,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.ctx.DB.NewDB())
+		id, err = allocateNodeID(n.ctx.DB)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -355,7 +354,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB.NewDB())
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -492,7 +491,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					AvailableRangeCount:  availableRangeCount,
 				}
 				key := keys.NodeStatusKey(int32(n.Descriptor.NodeID))
-				if err := n.ctx.DB.Run(client.PutProto(key, status)); err != nil {
+				if _, err := n.ctx.DB.Put(key, status); err != nil {
 					log.Error(err)
 				}
 				// Increment iteration count.

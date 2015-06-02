@@ -25,10 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -225,12 +224,11 @@ func TestServerNodeEventFeed(t *testing.T) {
 		ner.readEvents(sub)
 	})
 
-	sender, err := client.NewHTTPSender(s.ServingAddr(), testutils.NewTestBaseContext())
+	db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	kv := client.NewKV(nil, sender)
-	kv.User = storage.UserRoot
+	kv := db.InternalKV()
 
 	// Add some data in a transaction
 	err = kv.RunTransaction(nil, func(txn *client.Txn) error {

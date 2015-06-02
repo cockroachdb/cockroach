@@ -120,8 +120,7 @@ func treesEqual(db *client.DB, expected testRangeTree) error {
 
 // splitRange splits whichever range contains the key on that key.
 func splitRange(db *client.DB, key proto.Key) error {
-	_, err := db.AdminSplit(key, key)
-	return err
+	return db.AdminSplit(key, key)
 }
 
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range
@@ -146,8 +145,7 @@ func TestSetupRangeTree(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	db := store.DB().NewDB()
-	if err := treesEqual(db, expectedTree); err != nil {
+	if err := treesEqual(store.DB(), expectedTree); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -158,7 +156,7 @@ func TestInsertRight(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	db := store.DB().NewDB()
+	db := store.DB()
 
 	keyA := proto.Key("a")
 	keyB := proto.Key("b")
@@ -373,7 +371,7 @@ func TestInsertLeft(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	db := store.DB().NewDB()
+	db := store.DB()
 
 	keyE := proto.Key("e")
 	keyD := proto.Key("d")
@@ -645,7 +643,7 @@ func TestRandomSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	db := store.DB().NewDB()
+	db := store.DB()
 	rng, seed := util.NewPseudoRand()
 	t.Logf("using pseudo random number generator with seed %d", seed)
 

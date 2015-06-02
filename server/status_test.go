@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -46,11 +45,11 @@ import (
 // Cockroach KV client address is set to the address of the test server.
 func startStatusServer() (*httptest.Server, *util.Stopper) {
 	stopper := util.NewStopper()
-	kv, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
+	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
 	if err != nil {
 		log.Fatal(err)
 	}
-	status := newStatusServer(kv.NewDB(), nil)
+	status := newStatusServer(db, nil)
 	httpServer := httptest.NewTLSServer(status.router)
 	stopper.AddCloser(httpServer)
 	return httpServer, stopper
@@ -450,20 +449,16 @@ func TestMetricsRecording(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		now := tsrv.Clock().PhysicalNow()
 		key := ts.MakeDataKey("cr.store.livebytes.1", "", ts.Resolution10s, now)
-		call := client.Get(key)
-		if err := tsrv.kv.Run(call); err != nil {
+		gr, err := tsrv.db.Get(key)
+		if err != nil {
 			return err
-		}
-		resp, ok := call.Reply.(*proto.GetResponse)
-		if !ok {
-			return util.Error("response was not a GetResponse")
-		}
-		if resp.Value == nil {
+		} else if !gr.Rows[0].Exists() {
 			return util.Errorf("key %s had nil value", key)
 		}
 
 		// The value should be an internal time series.
-		if _, err := proto.InternalTimeSeriesDataFromValue(resp.Value); err != nil {
+		data := &proto.InternalTimeSeriesData{}
+		if err := gr.Rows[0].ValueProto(data); err != nil {
 			return err
 		}
 		return nil

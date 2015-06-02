@@ -218,7 +218,7 @@ func (si *storeRangeIterator) Reset() {
 type Store struct {
 	Ident          proto.StoreIdent
 	ctx            StoreContext
-	kvDB           *client.DB
+	db             *client.DB
 	engine         engine.Engine   // The underlying key-value store
 	_allocator     *allocator      // Makes allocation decisions
 	raftIDAlloc    *idAllocator    // Raft ID allocator
@@ -250,7 +250,7 @@ var _ multiraft.Storage = &Store{}
 // a store; the rest will have sane defaults set if omitted.
 type StoreContext struct {
 	Clock     *hlc.Clock
-	DB        *client.KV
+	DB        *client.DB
 	Gossip    *gossip.Gossip
 	Transport multiraft.Transport
 
@@ -321,7 +321,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 
 	s := &Store{
 		ctx:          ctx,
-		kvDB:         ctx.DB.NewDB(),
+		db:           ctx.DB,
 		engine:       eng,
 		_allocator:   newAllocator(ctx.Gossip),
 		ranges:       map[int64]*Range{},
@@ -333,10 +333,10 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeIterator(s),
 		s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
-	s._splitQueue = newSplitQueue(s.kvDB, s.ctx.Gossip)
+	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s.rangeGCQueue = newRangeGCQueue(s.kvDB)
+	s.rangeGCQueue = newRangeGCQueue(s.db)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue(), s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
 
 	return s
@@ -396,7 +396,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.feed.startStore()
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, s.kvDB, 2 /* min ID */, raftIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
@@ -902,7 +902,7 @@ func (s *Store) Clock() *hlc.Clock { return s.ctx.Clock }
 func (s *Store) Engine() engine.Engine { return s.engine }
 
 // DB accessor.
-func (s *Store) DB() *client.KV { return s.ctx.DB }
+func (s *Store) DB() *client.DB { return s.ctx.DB }
 
 // Allocator accessor.
 func (s *Store) allocator() *allocator { return s._allocator }
@@ -1281,7 +1281,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	b.InternalAddCall(client.Call{Args: bArgs, Reply: bReply})
 
 	// Run all pushes in parallel.
-	if pushErr := s.kvDB.Run(b); pushErr != nil {
+	if pushErr := s.db.Run(b); pushErr != nil {
 		if log.V(1) {
 			log.Infoc(ctx, "on %s: %s", args.Method(), pushErr)
 		}
@@ -1495,7 +1495,7 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 	}
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
 	status := &proto.StoreStatus{}
-	if err := s.kvDB.GetProto(key, status); err != nil {
+	if err := s.db.GetProto(key, status); err != nil {
 		return nil, err
 	}
 	return status, nil
@@ -1579,7 +1579,7 @@ func (s *Store) updateStoreStatus() {
 		AvailableRangeCount:  availableRangeCount,
 	}
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
-	if _, err := s.kvDB.Put(key, status); err != nil {
+	if _, err := s.db.Put(key, status); err != nil {
 		log.Error(err)
 	}
 }

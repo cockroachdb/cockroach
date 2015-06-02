@@ -127,7 +127,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := store.DB().Run(calls...); err != nil {
+		if err := store.DB().InternalKV().Run(calls...); err != nil {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.

@@ -69,11 +69,11 @@ const (
 // an underlying key-value store.
 type RESTServer struct {
 	router *httprouter.Router
-	db     *client.KV // Key-value database client
+	db     *client.DB // Key-value database client
 }
 
 // NewRESTServer allocates and returns a new server.
-func NewRESTServer(db *client.KV) *RESTServer {
+func NewRESTServer(db *client.DB) *RESTServer {
 	server := &RESTServer{
 		router: httprouter.New(),
 		db:     db,
@@ -171,14 +171,14 @@ func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request, _
 			scanReq.MaxResults = limit
 		}
 		results = &proto.ScanResponse{}
-		err = s.db.Run(client.Call{Args: scanReq, Reply: results})
+		err = s.db.InternalKV().Run(client.Call{Args: scanReq, Reply: results})
 	} else if r.Method == methodDelete {
 		deleteReq := &proto.DeleteRangeRequest{RequestHeader: reqHeader}
 		if limit > 0 {
 			deleteReq.MaxEntriesToDelete = limit
 		}
 		results = &proto.DeleteRangeResponse{}
-		err = s.db.Run(client.Call{Args: deleteReq, Reply: results})
+		err = s.db.InternalKV().Run(client.Call{Args: deleteReq, Reply: results})
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -208,7 +208,7 @@ func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request,
 	}
 
 	ir := &proto.IncrementResponse{}
-	if err := s.db.Run(client.Call{
+	if err := s.db.InternalKV().Run(client.Call{
 		Args: &proto.IncrementRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:  key,
@@ -233,7 +233,7 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, ps 
 	}
 	defer r.Body.Close()
 	pr := &proto.PutResponse{}
-	if err := s.db.Run(client.Call{
+	if err := s.db.InternalKV().Run(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:  key,
@@ -252,7 +252,7 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, ps 
 func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := proto.Key(ps.ByName("key"))
 	gr := &proto.GetResponse{}
-	if err := s.db.Run(client.Call{
+	if err := s.db.InternalKV().Run(client.Call{
 		Args: &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:  key,
@@ -274,7 +274,7 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, ps 
 func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := proto.Key(ps.ByName("key"))
 	cr := &proto.ContainsResponse{}
-	if err := s.db.Run(client.Call{
+	if err := s.db.InternalKV().Run(client.Call{
 		Args: &proto.ContainsRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:  key,
@@ -295,7 +295,7 @@ func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, ps
 func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := proto.Key(ps.ByName("key"))
 	dr := &proto.DeleteResponse{}
-	if err := s.db.Run(client.Call{
+	if err := s.db.InternalKV().Run(client.Call{
 		Args: &proto.DeleteRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:  key,
