@@ -398,7 +398,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice,
 	args proto.Request, reply proto.Response) error {
-	if len(desc.Replicas) == 0 {
+	if len(replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", args.Method())
 	}
 
@@ -410,7 +410,7 @@ func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice,
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front and send requests in order.
 	if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) {
-		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
+		if leader := ds.leaderCache.Lookup(proto.RaftID(raftID)); leader != nil {
 			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 				order = rpc.OrderStable

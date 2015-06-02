@@ -1241,6 +1241,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
+	now := s.Clock().Now()
 	bArgs := &proto.InternalBatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Txn:          args.Header().Txn,
@@ -1270,7 +1271,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			// timestamp here, we would run into busy loops because that
 			// timestamp usually stays fixed among retries, so it will never
 			// realize that a transaction has timed out. See #877.
-			Now:         s.Clock().Now(),
+			Now:         now,
 			PushType:    pushType,
 			RangeLookup: args.Method() == proto.InternalRangeLookup,
 		}

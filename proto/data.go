@@ -515,12 +515,14 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
+	// Compute priority as a floating point number from 0-100 for readability.
+	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
 	if len(t.Name) > 0 {
-		return fmt.Sprintf("%q id=%s key=%s pri=%d iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-			t.Name, util.UUID(t.ID).Short(), t.Key, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		return fmt.Sprintf("%q id=%s key=%s pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
+			t.Name, util.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 	}
-	return fmt.Sprintf("id=%s key=%s pri=%d iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		util.UUID(t.ID).Short(), t.Key, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+	return fmt.Sprintf("id=%s key=%s pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
+		util.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
 
 // IsInline returns true if the value is inlined in the metadata.
