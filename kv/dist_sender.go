@@ -562,12 +562,6 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				}
 
 				rpcErr = ds.sendRPC(desc.RaftID, replicas, order, args, reply)
-				err = rpcErr
-			}
-
-			// If the RPC went through fine, an error (if any) is in the reply.
-			if err == nil {
-				err = reply.Header().GoError()
 			}
 
 			// For an RPC error to occur, we've must've been unable to contact
@@ -587,6 +581,8 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 				}
 			}
+
+			err = util.FirstError(err, rpcErr, reply.Header().GoError())
 
 			if err != nil {
 				if log.V(1) {
