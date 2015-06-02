@@ -41,15 +41,15 @@ func TestPut(t *testing.T) {
 	setDefaultRangeMaxBytes(t, c, *rangeMaxBytes)
 	checkRangeReplication(t, l, 20*time.Second)
 
-	r, _ := util.NewPseudoRand()
-	value := util.RandBytes(r, 8192)
-
 	errs := make(chan error, *numNodes)
 	start := time.Now()
 	deadline := start.Add(*duration)
 	var count int64
 	for i := 0; i < *numNodes; i++ {
 		go func() {
+			r, _ := util.NewPseudoRand()
+			value := util.RandBytes(r, 8192)
+
 			for time.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)
 				v := value[:r.Intn(len(value))]
