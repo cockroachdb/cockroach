@@ -412,8 +412,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	// it to the front and send requests in order.
 	if args.Header().ReadConsistency != proto.INCONSISTENT || proto.IsWrite(args) {
 		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
-			i, _ := replicas.FindReplica(leader.StoreID)
-			if i >= 0 {
+			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 				order = rpc.OrderStable
 			}
