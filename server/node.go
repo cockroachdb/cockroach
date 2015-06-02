@@ -22,6 +22,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/context"
@@ -49,7 +50,8 @@ const (
 	gossipInterval = 1 * time.Minute
 	// runtimeStatsInterval is the interval for logging runtime stats such
 	// as number of goroutines and memory allocated.
-	runtimeStatsInterval = 10 * time.Second
+	runtimeStatsInterval = 15 * time.Second
+	mb                   = 10e-6
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -523,26 +525,40 @@ func (n *Node) waitForScanCompletion() int64 {
 	return n.scanCount
 }
 
-// startLogStats periodically outputs runtime statistics to the log files.
+// startRuntimeStats periodically outputs runtime statistics to the log files.
+// TODO(mtracy|bram) store these runtime stats into time series.
 func (n *Node) startRuntimeStats(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		ticker := time.NewTicker(runtimeStatsInterval)
 		defer ticker.Stop()
-		var cgoCall int64
+		var cgoCall, uTime, sTime int64
 		ms := runtime.MemStats{}
-		mb := 10E-6
 		for {
+			tStart := time.Now()
 			select {
 			case <-stopper.ShouldStop():
 				return
 			case <-ticker.C:
+				dur := float64(time.Since(tStart))
 				runtime.ReadMemStats(&ms)
 				newCGOCall := runtime.NumCgoCall() - cgoCall
-				cgoRate := newCGOCall / (int64(runtimeStatsInterval) / int64(time.Second))
+				cgoRate := float64(newCGOCall*int64(time.Second)) / dur
 				activeMB := float64(ms.Alloc) * mb
+				activeHeapMB := float64(ms.HeapAlloc) * mb
+
 				totalMB := float64(ms.TotalAlloc) * mb
-				log.Infof("runtime stats: %d goroutines, %.2fmb active, %.2fmb total, %d cgo/second",
-					runtime.NumGoroutine(), activeMB, totalMB, cgoRate)
+				ru := syscall.Rusage{}
+				if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+					log.Errorf("Getrusage failed: %v", err)
+				}
+				newUtime := ru.Utime.Nano()
+				newStime := ru.Stime.Nano()
+				uPerc := float64(newUtime-uTime) / dur
+				sPerc := float64(newStime-sTime) / dur
+				uTime = newUtime
+				sTime = newStime
+				log.Infof("runtime stats: %d goroutines, %.2fmb/%.2fmb/%.2fmb active/heap/total, %.2fcgo/sec, %.2f/%.2f (u/s)perc",
+					runtime.NumGoroutine(), activeMB, activeHeapMB, totalMB, cgoRate, uPerc, sPerc)
 				cgoCall += newCGOCall
 			}
 		}

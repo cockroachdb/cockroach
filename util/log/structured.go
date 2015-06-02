@@ -83,6 +83,7 @@ func setLogEntry(ctx context.Context, format string, args []interface{}, entry *
 
 // parseFormatWithArgs parses the format string, matching each
 // format specifier with an argument from the args array.
+// TODO(spencerkimball): support '%%' for a literal percent sign.
 func parseFormatWithArgs(format string, args []interface{}) (string, []proto.LogEntry_Arg) {
 	// Process format string.
 	var logArgs []proto.LogEntry_Arg
