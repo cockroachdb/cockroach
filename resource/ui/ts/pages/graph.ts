@@ -4,7 +4,7 @@
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 /**
@@ -26,7 +26,7 @@ module AdminViews {
               showRates:boolean;
               interval:number;
 
-              sumquery = new Models.Metrics.RecentQuery(10 * 60 * 1000, 
+              sumquery = new Models.Metrics.RecentQuery(10 * 60 * 1000,
                     Models.Metrics.QueryAggregator.AVG, "cr.node.calls.success.1");
               ratequery = new Models.Metrics.RecentQuery(10 * 60 * 1000,
                   Models.Metrics.QueryAggregator.AVG_RATE, "cr.node.calls.success.1");
@@ -67,7 +67,7 @@ module AdminViews {
                       m("H3", "Graph Demo"),
                       Components.Metrics.LineGraph.create(ctrl.manager),
                       Components.Metrics.LineGraph.create(ctrl.manager),
-                      m("", 
+                      m("",
                           m("input[type=button]", {
                               value: buttonText,
                               onclick: ctrl.toggleGraph,

@@ -16,7 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package storage
 
