@@ -1,6 +1,6 @@
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 /**
  * Models contains data models pulled from cockroach.

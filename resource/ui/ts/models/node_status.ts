@@ -1,7 +1,7 @@
 // source: models/node_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="stats.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 module Models {
     export module NodeStatus {

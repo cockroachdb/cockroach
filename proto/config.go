@@ -14,7 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package proto
 

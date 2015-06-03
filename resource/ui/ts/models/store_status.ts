@@ -3,7 +3,7 @@
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="node_status.ts" />
 /// <reference path="stats.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 module Models {
     export module StoreStatus {

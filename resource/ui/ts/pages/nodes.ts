@@ -4,7 +4,7 @@
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 /**
  * AdminViews is the primary module for Cockroaches administrative web

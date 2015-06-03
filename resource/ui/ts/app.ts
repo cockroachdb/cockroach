@@ -8,7 +8,7 @@
 /// <reference path="pages/stores.ts" />
 
 // Author: Andrew Bonventre (andybons@gmail.com)
-// Author: Bram Gruneir (bramgruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/rest-explorer", {

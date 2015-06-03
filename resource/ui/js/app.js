@@ -17,7 +17,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Authors: Bram Gruneir (bram.gruneir@gmail.com)
+// Authors: Bram Gruneir (bram+code@cockroachlabs.com)
 //		    Andrew Bonventre (andybons@gmail.com)
 //		    Matt Tracy (matt@cockroachlabs.com)
 //
@@ -297,7 +297,7 @@ var AdminViews;
 })(AdminViews || (AdminViews = {}));
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
     var Stats;
@@ -359,7 +359,7 @@ var Models;
 // source: models/node_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="stats.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
     var NodeStatus;
@@ -883,7 +883,7 @@ var AdminViews;
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="node_status.ts" />
 /// <reference path="stats.ts" />
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
     var StoreStatus;

@@ -2,7 +2,7 @@
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/store_status.ts" />
 
-// Author: Bram Gruneir (bram.gruneir@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 /**
  * AdminViews is the primary module for Cockroaches administrative web
