@@ -81,7 +81,7 @@ var splitRangeCmd = &cobra.Command{
 	Use:   "split [options] <key>",
 	Short: "splits a range",
 	Long: `
-Splits the range containing at <key>.
+Splits the range containing <key> at <key>.
 `,
 	Run: runSplitRange,
 }
