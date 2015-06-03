@@ -228,32 +228,22 @@ func TestServerNodeEventFeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kv := db.InternalKV()
 
 	// Add some data in a transaction
-	err = kv.RunTransaction(nil, func(txn *client.Txn) error {
-		return txn.Run(
-			client.Put(proto.Key("a"), []byte("asdf")),
-			client.Put(proto.Key("c"), []byte("jkl;")),
-		)
+	err = db.Tx(func(tx *client.Tx) error {
+		return tx.Commit(tx.B.Put("a", "asdf").Put("c", "jkl;"))
 	})
 	if err != nil {
-		t.Fatalf("error putting data to db: %s", err.Error())
+		t.Fatalf("error putting data to db: %s", err)
 	}
 
 	// Get some data, discarding the result.
-	err = kv.Run(
-		client.Get(proto.Key("a")),
-	)
-	if err != nil {
-		t.Fatalf("error putting data to db: %s", err.Error())
+	if _, err := db.Get("a"); err != nil {
+		t.Fatalf("error getting data from db: %s", err)
 	}
 
 	// Scan, which should fail.
-	err = kv.Run(
-		client.Scan(proto.Key("b"), proto.Key("a"), 0),
-	)
-	if err == nil {
+	if _, err = db.Scan("b", "a", 0); err == nil {
 		t.Fatal("expected scan to fail.")
 	}
 
