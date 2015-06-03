@@ -21,7 +21,9 @@ import (
 	"bytes"
 	"net"
 	"reflect"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/context"
 
@@ -99,7 +101,7 @@ type DistSender struct {
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
 	// which tries to obtain the value from the Gossip network if the
 	// descriptor is unknown.
-	nodeDescriptor *proto.NodeDescriptor
+	nodeDescriptor unsafe.Pointer
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -162,7 +164,9 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		clock:  clock,
 		gossip: gossip,
 	}
-	ds.nodeDescriptor = ctx.nodeDescriptor
+	if ctx.nodeDescriptor != nil {
+		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(ctx.nodeDescriptor))
+	}
 	rcSize := ctx.RangeDescriptorCacheSize
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
@@ -287,7 +291,7 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	}
 	reply := &proto.InternalRangeLookupResponse{}
 	replicas := newReplicaSlice(ds.gossip, desc)
-	if err := ds.sendRPC(desc.RaftID, replicas, args, reply); err != nil {
+	if err := ds.sendRPC(desc.RaftID, replicas, rpc.OrderRandom, args, reply); err != nil {
 		return nil, err
 	}
 	if reply.Error != nil {
@@ -375,18 +379,19 @@ func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPo
 // until after the node has joined the gossip network and been allowed to initialize
 // its stores.
 func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
-	if ds.nodeDescriptor != nil {
-		return ds.nodeDescriptor
+	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
+		return (*proto.NodeDescriptor)(desc)
 	}
+
 	ownNodeID := ds.gossip.GetNodeID()
-	if nodeDesc, err := ds.gossip.GetInfo(
-		gossip.MakeNodeIDKey(ownNodeID)); err == nil && ownNodeID > 0 {
-		ds.nodeDescriptor = nodeDesc.(*proto.NodeDescriptor)
-	} else {
-		log.Infof("unable to determine this node's attributes for replica " +
-			"selection; node is most likely bootstrapping")
+
+	if nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(ownNodeID)); ownNodeID > 0 && err == nil {
+		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc.(*proto.NodeDescriptor)))
+		return nodeDesc.(*proto.NodeDescriptor)
 	}
-	return ds.nodeDescriptor
+	log.Infof("unable to determine this node's attributes for replica " +
+		"selection; node is most likely bootstrapping")
+	return nil
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied proto.Replica
@@ -396,26 +401,10 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice,
+func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request, reply proto.Response) error {
 	if len(replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", args.Method())
-	}
-
-	// Rearrange the replicas so that those replicas with long common
-	// prefix of attributes end up first. If there's no prefix, this is a
-	// no-op.
-	order := ds.optimizeReplicaOrder(replicas)
-
-	// If this request needs to go to a leader and we know who that is, move
-	// it to the front and send requests in order.
-	if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) {
-		if leader := ds.leaderCache.Lookup(proto.RaftID(raftID)); leader != nil {
-			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
-				replicas.MoveToFront(i)
-				order = rpc.OrderStable
-			}
-		}
 	}
 
 	// Build a slice of replica addresses (if gossiped).
@@ -527,6 +516,10 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			reply.Header().Reset()
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key, options)
+			var leader proto.Replica
+			if err == nil {
+				leader = ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
+			}
 
 			// If the request accesses keys beyond the end of this range,
 			// get the descriptor of the adjacent range to address next.
@@ -555,31 +548,51 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			var replicas replicaSlice
 			if err == nil {
 				replicas = newReplicaSlice(ds.gossip, desc)
-				rpcErr = ds.sendRPC(desc.RaftID, replicas, args, reply)
-				err = rpcErr
-			}
 
-			// If the RPC went through fine, an error (if any) is in the reply.
-			if err == nil {
-				err = reply.Header().GoError()
+				// Rearrange the replicas so that those replicas with long common
+				// prefix of attributes end up first. If there's no prefix, this is a
+				// no-op.
+				order := ds.optimizeReplicaOrder(replicas)
+
+				// Don't mess with replicas - we need the full list below for
+				// cache expiration considerations, but we may not want to send
+				// to all of them now.
+				useReplicas := replicas
+
+				// If this request needs to go to a leader and we know who that is, move
+				// it to the front and make it our single replica to send to.
+				// This allows us to special-case this when an RPC error comes back.
+				if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
+					leader.StoreID > 0 {
+					if i := replicas.FindReplica(leader.StoreID); i >= 0 {
+						replicas.MoveToFront(i)
+						useReplicas = replicas[:1]
+						order = rpc.OrderStable
+					}
+				}
+
+				rpcErr = ds.sendRPC(desc.RaftID, useReplicas, order, args, reply)
 			}
 
 			// For an RPC error to occur, we've must've been unable to contact
-			// any replicas. In this case, likely all nodes are down; this
-			// should really only happen if either the replica set is dead or
+			// any replicas. In this case, either
+			// - we sent only to a leader or
+			// - all nodes are down.
+			// The second case only happens if either the replica set is dead or
 			// we have an old descriptor which does not have a list of current
 			// nodes; we hope it's the latter.
-			// TODO(tschottdorf): individual rpc calls always return an
-			// rpcError, which is always retriable. Thus, rpc.Send will always
-			// return retriable errors if everything is unreachable. That seems
-			// awkward; rpcError should probably not be retriable (rpc.Send
-			// will still succeed if it manages to talk to *anyone*), and
-			// then we can clear the cache here only for retriable errors.
-			// It amounts to the same situations though.
+			// In the first case, we update the leader cache only.
 			if rpcErr != nil {
-				ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
-				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+				if len(replicas) == 1 && replicas[0].StoreID == leader.StoreID {
+					log.Warningf("RPC error to leader %d; expiring cache", leader.StoreID)
+					ds.updateLeaderCache(proto.RaftID(desc.RaftID), proto.Replica{})
+				} else {
+					log.Warningf("RPC error; expiring cached descriptor")
+					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+				}
 			}
+
+			err = util.FirstError(err, rpcErr, reply.Header().GoError())
 
 			if err != nil {
 				if log.V(1) {
@@ -589,22 +602,25 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				// If retryable, allow retry. For range not found or range
 				// key mismatch errors, we don't backoff on the retry,
 				// but reset the backoff loop so we can retry immediately.
-				switch err.(type) {
+				switch tErr := err.(type) {
 				case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 					// Range descriptor might be out of date - evict it.
 					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 					// On addressing errors, don't backoff; retry immediately.
 					return retry.Reset, nil
 				case *proto.NotLeaderError:
-					leader := err.(*proto.NotLeaderError).GetLeader()
-					if leader != nil {
-						// First, verify that leader is a known replica; if not,
-						// we've got a stale replica; evict cache and store leader.
-						if i := replicas.FindReplica(leader.StoreID); i == -1 {
+					newLeader := tErr.GetLeader()
+					// Verify that leader is a known replica; if not,
+					// we've got a stale replica; evict cache.
+					// Next, cache the new leader.
+					if newLeader != nil {
+						if i := replicas.FindReplica(newLeader.StoreID); i == -1 {
 							ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 						}
-						ds.updateLeaderCache(proto.RaftID(desc.RaftID), *leader)
+					} else {
+						newLeader = &proto.Replica{}
 					}
+					ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
 					return retry.Reset, nil
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
@@ -665,24 +681,11 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 
 // updateLeaderCache updates the cached leader for the given Raft group,
 // evicting any previous value in the process.
-// The new leader is cached only if it isn't equal to the newly evicted value.
 func (ds *DistSender) updateLeaderCache(rid proto.RaftID, leader proto.Replica) {
-	// Slight overhead here since we want to make sure that when the new
-	// proposed leader equals the old, we only evict so that the next call
-	// picks a random replica, avoiding getting stuck in a loop.
 	oldLeader := ds.leaderCache.Lookup(rid)
-	ds.leaderCache.Update(rid, proto.Replica{})
-	if oldLeader != nil {
+	if leader.StoreID != oldLeader.StoreID {
 		if log.V(1) {
-			log.Infof("raft %d: evicted cached leader %d", rid, oldLeader.StoreID)
-		}
-	}
-	if leader.StoreID == 0 {
-		return
-	}
-	if oldLeader == nil || leader.StoreID != oldLeader.StoreID {
-		if log.V(1) {
-			log.Infof("raft %d: new cached leader %d", rid, leader.StoreID)
+			log.Infof("raft %d: new cached leader store %d (old: %d)", rid, leader.StoreID, oldLeader.StoreID)
 		}
 		ds.leaderCache.Update(rid, leader)
 	}

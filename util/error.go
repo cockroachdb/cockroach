@@ -65,3 +65,14 @@ func ErrorSkipFrames(skip int, a ...interface{}) error {
 	}
 	return fmt.Errorf("%s", fmt.Sprint(a...))
 }
+
+// FirstError returns the first of its arguments which is not nil (or nil if
+// they all are).
+func FirstError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
