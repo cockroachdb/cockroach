@@ -549,6 +549,11 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 				// no-op.
 				order := ds.optimizeReplicaOrder(replicas)
 
+				// Don't mess with replicas - we need the full list below for
+				// cache expiration considerations, but we may not want to send
+				// to all of them now.
+				useReplicas := replicas
+
 				// If this request needs to go to a leader and we know who that is, move
 				// it to the front and make it our single replica to send to.
 				// This allows us to special-case this when an RPC error comes back.
@@ -556,12 +561,12 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 					leader.StoreID > 0 {
 					if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 						replicas.MoveToFront(i)
-						replicas = replicas[:1]
+						useReplicas = replicas[:1]
 						order = rpc.OrderStable
 					}
 				}
 
-				rpcErr = ds.sendRPC(desc.RaftID, replicas, order, args, reply)
+				rpcErr = ds.sendRPC(desc.RaftID, useReplicas, order, args, reply)
 			}
 
 			// For an RPC error to occur, we've must've been unable to contact
