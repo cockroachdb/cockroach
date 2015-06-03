@@ -6,6 +6,16 @@
 .#*
 *.test
 
+# Log Files
+*.ERROR
+*.ERROR.*
+*.INFO
+*.INFO.*
+*.WARNING
+*.WARNING.*
+*.FATAL
+*.FATAL.*
+
 # Folders
 _obj
 _test
