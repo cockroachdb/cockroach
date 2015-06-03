@@ -20,6 +20,9 @@ package client_test
 import (
 	"fmt"
 	"log"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -248,7 +251,7 @@ func ExampleDB_Insecure() {
 }
 
 func TestOpenArgs(t *testing.T) {
-	s := server.StartTestServer(nil)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 
 	testCases := []struct {
@@ -268,4 +271,18 @@ func TestOpenArgs(t *testing.T) {
 			t.Errorf("Open(%q): expected no errors; got %v", test.addr, err)
 		}
 	}
+}
+
+func TestDebugName(t *testing.T) {
+	s, db := setup()
+	defer s.Stop()
+
+	_, file, _, _ := runtime.Caller(0)
+	base := filepath.Base(file)
+	_ = db.Tx(func(tx *client.Tx) error {
+		if !strings.HasPrefix(tx.DebugName(), base+":") {
+			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", tx.DebugName(), base)
+		}
+		return nil
+	})
 }
