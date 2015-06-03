@@ -636,10 +636,12 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 
 	// If this is a bounded request, we will change its bound as we receive
 	// replies. This undoes that when we return.
-	if args, ok := args.(proto.Bounded); ok && args.GetBound() > 0 {
+	boundedArgs, _ := args.(proto.Bounded)
+
+	if boundedArgs != nil {
 		defer func(n int64) {
-			args.SetBound(n)
-		}(args.GetBound())
+			boundedArgs.SetBound(n)
+		}(boundedArgs.GetBound())
 	}
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
@@ -697,17 +699,17 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 
 		// If this request has a bound, such as MaxResults in
 		// ScanRequest, check whether enough rows have been retrieved.
-		var prevBound int64
-		if args, ok := args.(proto.Bounded); ok && args.GetBound() > 0 {
-			prevBound = args.GetBound()
-			if cReply, ok := curReply.(proto.Countable); ok {
-				if nextBound := prevBound - cReply.Count(); nextBound > 0 {
-					// Update bound for the next round.
-					// We've deferred restoring the original bound earlier.
-					args.SetBound(nextBound)
-				} else {
-					// Set flag to break the loop.
-					descNext = nil
+		if boundedArgs != nil {
+			if prevBound := boundedArgs.GetBound(); prevBound > 0 {
+				if cReply, ok := curReply.(proto.Countable); ok {
+					if nextBound := prevBound - cReply.Count(); nextBound > 0 {
+						// Update bound for the next round.
+						// We've deferred restoring the original bound earlier.
+						boundedArgs.SetBound(nextBound)
+					} else {
+						// Set flag to break the loop.
+						descNext = nil
+					}
 				}
 			}
 		}
