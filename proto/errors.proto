@@ -23,6 +23,8 @@ import "cockroach/proto/config.proto";
 import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
+option (gogoproto.goproto_stringer_all) = false;
+
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;

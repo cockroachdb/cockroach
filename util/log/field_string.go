@@ -9,7 +9,7 @@ const _Field_name = "NodeIDStoreIDRaftIDMethodClientKeymaxField"
 var _Field_index = [...]uint8{0, 6, 13, 19, 25, 31, 34, 42}
 
 func (i Field) String() string {
-	if i < 0 || i+1 >= Field(len(_Field_index)) {
+	if i < 0 || i >= Field(len(_Field_index)-1) {
 		return fmt.Sprintf("Field(%d)", i)
 	}
 	return _Field_name[_Field_index[i]:_Field_index[i+1]]
