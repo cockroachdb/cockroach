@@ -167,12 +167,12 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	}
 
 	// AdminSplit in between the two ranges.
-	if err := mtc.db.AdminSplit("b", "b"); err != nil {
+	if err := mtc.db.AdminSplit("b"); err != nil {
 		t.Fatalf("error splitting initial: %s", err)
 	}
 
 	// AdminSplit an empty range at the end of the second range.
-	if err := mtc.db.AdminSplit("z", "z"); err != nil {
+	if err := mtc.db.AdminSplit("z"); err != nil {
 		t.Fatalf("error splitting second range: %s", err)
 	}
 

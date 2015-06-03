@@ -116,7 +116,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof("starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(splitKey, splitKey); err != nil {
+		if err := s.DB.AdminSplit(splitKey); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
@@ -198,14 +198,14 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 	splitKey := proto.Key("aa")
 	log.Infof("starting split at key %q...", splitKey)
-	if err := s.DB.AdminSplit("a", splitKey); err != nil {
+	if err := s.DB.AdminSplit(splitKey); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof("split at key %q first time complete", splitKey)
 	ch := make(chan error)
 	go func() {
 		// should return error other than infinite loop
-		ch <- s.DB.AdminSplit("a", splitKey)
+		ch <- s.DB.AdminSplit(splitKey)
 	}()
 
 	select {
