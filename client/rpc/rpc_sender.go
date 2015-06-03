@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -33,20 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-// retryOptions sets the retry options for handling retryable errors and
-// connection I/O errors.
-var retryOptions = retry.Options{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-	UseV1Info:   true,
-}
-
 func init() {
-	f := func(u *url.URL, ctx *base.Context) (client.Sender, error) {
+	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options) (client.Sender, error) {
 		ctx.Insecure = (u.Scheme != "rpcs")
-		return NewSender(u.Host, ctx)
+		return newSender(u.Host, ctx, retryOpts)
 	}
 	client.RegisterSender("rpc", f)
 	client.RegisterSender("rpcs", f)
@@ -60,11 +49,12 @@ func init() {
 // TODO(pmattis): This class is insufficiently tested and not intended
 // for use outside of benchmarking.
 type Sender struct {
-	client *roachrpc.Client
+	client    *roachrpc.Client
+	retryOpts retry.Options
 }
 
-// NewSender returns a new instance of RPCSender.
-func NewSender(server string, context *base.Context) (*Sender, error) {
+// newSender returns a new instance of Sender.
+func newSender(server string, context *base.Context, retryOpts retry.Options) (*Sender, error) {
 	addr, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
 		return nil, err
@@ -78,8 +68,11 @@ func NewSender(server string, context *base.Context) (*Sender, error) {
 		return nil, err
 	}
 	ctx := roachrpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
-	client := roachrpc.NewClient(addr, &retryOptions, ctx)
-	return &Sender{client: client}, nil
+	client := roachrpc.NewClient(addr, &retryOpts, ctx)
+	return &Sender{
+		client:    client,
+		retryOpts: retryOpts,
+	}, nil
 }
 
 // Send sends call to Cockroach via an RPC request. Errors which are retryable
@@ -89,7 +82,7 @@ func NewSender(server string, context *base.Context) (*Sender, error) {
 // through and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached response.
 func (s *Sender) Send(_ context.Context, call client.Call) {
-	retryOpts := retryOptions
+	retryOpts := s.retryOpts
 	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
 
 	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {

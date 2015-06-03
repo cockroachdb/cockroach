@@ -155,6 +155,8 @@ func SenderOpt(sender Sender) Option {
 	}
 }
 
+// TODO(pmattis): Allow setting the sender/txn retry options.
+
 // Open creates a new database handle to the cockroach cluster specified by
 // addr. The cluster is identified by a URL with the format:
 //

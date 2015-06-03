@@ -25,7 +25,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -47,9 +46,9 @@ const (
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context) (Sender, error) {
+	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "https")
-		return newHTTPSender(u.Host, ctx)
+		return newHTTPSender(u.Host, ctx, retryOpts)
 	}
 	RegisterSender("http", f)
 	RegisterSender("https", f)
@@ -61,31 +60,23 @@ type httpSendError struct {
 	error
 }
 
-// httpRetryOptions sets the retry options for handling retryable
-// HTTP errors and connection I/O errors.
-var httpRetryOptions = retry.Options{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-	UseV1Info:   true,
-}
-
 // httpSender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
 // this client to other nodes.
 type httpSender struct {
-	server  string        // The host:port address of the Cockroach gateway node
-	client  *http.Client  // The HTTP client
-	context *base.Context // The base context: needed for client setup.
+	server    string        // The host:port address of the Cockroach gateway node
+	client    *http.Client  // The HTTP client
+	context   *base.Context // The base context: needed for client setup.
+	retryOpts retry.Options
 }
 
 // newHTTPSender returns a new instance of httpSender.
-func newHTTPSender(server string, ctx *base.Context) (*httpSender, error) {
+func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*httpSender, error) {
 	sender := &httpSender{
-		server:  server,
-		context: ctx,
+		server:    server,
+		context:   ctx,
+		retryOpts: retryOpts,
 	}
 	var err error
 	sender.client, err = ctx.GetHTTPClient()
@@ -104,7 +95,7 @@ func newHTTPSender(server string, ctx *base.Context) (*httpSender, error) {
 // through with the same client command ID and be given the cached
 // response.
 func (s *httpSender) Send(_ context.Context, call Call) {
-	retryOpts := httpRetryOptions
+	retryOpts := s.retryOpts
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
 	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
