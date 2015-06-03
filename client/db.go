@@ -22,6 +22,8 @@ import (
 	"encoding"
 	"fmt"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -374,8 +376,14 @@ func (db *DB) Run(b *Batch) error {
 //
 // TODO(pmattis): Allow transaction options to be specified.
 func (db *DB) Tx(retryable func(tx *Tx) error) error {
+	_, file, line, ok := runtime.Caller(1)
+
 	return db.kv.RunTransaction(nil, func(txn *Txn) error {
 		tx := &Tx{txn: txn}
+		if ok {
+			// TODO(pmattis): include the parent directory?
+			tx.txn.txn.Name = fmt.Sprintf("%s:%d", filepath.Base(file), line)
+		}
 		return retryable(tx)
 	})
 }
@@ -391,6 +399,23 @@ type Tx struct {
 	//   })
 	B   batcher
 	txn *Txn
+}
+
+// SetDebugName sets the debug name associated with the transaction which will
+// appear in log files and the web UI. Each transaction starts out with an
+// automatically assigned debug name composed of the file and line number where
+// the transaction was created.
+func (tx *Tx) SetDebugName(name string) {
+	if _, file, line, ok := runtime.Caller(1); ok {
+		tx.txn.txn.Name = fmt.Sprintf("%s:%d: %s", filepath.Base(file), line, name)
+	} else {
+		tx.txn.txn.Name = name
+	}
+}
+
+// DebugName returns the debug name associated with the transaction.
+func (tx *Tx) DebugName() string {
+	return tx.txn.txn.Name
 }
 
 // SetSnapshotIsolation sets the transaction's isolation type to
