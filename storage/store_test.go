@@ -310,11 +310,11 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Create a new range (id=2).
 	rng2 := createRange(store, 2, proto.Key("a"), proto.Key("b"))
-	if err := store.AddRange(rng2); err != nil {
+	if err := store.AddRangeTest(rng2); err != nil {
 		t.Fatal(err)
 	}
 	// Try to add the same range twice
-	err = store.AddRange(rng2)
+	err = store.AddRangeTest(rng2)
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
@@ -327,12 +327,12 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createRange(store, 1, proto.Key("a"), proto.Key("b"))
-	if err := store.AddRange(rng2Dup); err != nil {
+	if err := store.AddRangeTest(rng2Dup); err != nil {
 		t.Fatal(err)
 	}
 	// Add another range with different key range and then test lookup.
 	rng3 := createRange(store, 3, proto.Key("c"), proto.Key("d"))
-	if err := store.AddRange(rng3); err != nil {
+	if err := store.AddRangeTest(rng3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -378,7 +378,7 @@ func TestStoreRangeIterator(t *testing.T) {
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
 		rng := createRange(store, int64(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
-		if err := store.AddRange(rng); err != nil {
+		if err := store.AddRangeTest(rng); err != nil {
 			t.Fatal(err)
 		}
 	}

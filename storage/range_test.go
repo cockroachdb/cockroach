@@ -87,7 +87,7 @@ const (
 	// other metadata. Most tests should use this mode because it more
 	// closely resembles the real world.
 	bootstrapRangeWithMetadata bootstrapMode = iota
-	// Create a range with NewRange and Store.AddRange. The store's data
+	// Create a range with NewRange and Store.AddRangeTest. The store's data
 	// will be persisted but metadata will not. This mode is provided
 	// for backwards compatibility for tests that expect the store to
 	// initially be empty.
@@ -185,7 +185,7 @@ func (tc *testContext) Start(t testing.TB) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := tc.store.AddRange(rng); err != nil {
+			if err := tc.store.AddRangeTest(rng); err != nil {
 				t.Fatal(err)
 			}
 		}

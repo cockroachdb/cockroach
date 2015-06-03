@@ -173,7 +173,6 @@ type rangeManager interface {
 	Context(context.Context) context.Context
 
 	// Range manipulation methods.
-	AddRange(rng *Range) error
 	LookupRange(start, end proto.Key) *Range
 	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
