@@ -49,7 +49,7 @@ const (
 func init() {
 	f := func(u *url.URL, ctx *base.Context) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "https")
-		return NewHTTPSender(u.Host, ctx)
+		return newHTTPSender(u.Host, ctx)
 	}
 	RegisterSender("http", f)
 	RegisterSender("https", f)
@@ -71,19 +71,19 @@ var HTTPRetryOptions = retry.Options{
 	UseV1Info:   true,
 }
 
-// HTTPSender is an implementation of Sender which exposes the
+// httpSender is an implementation of Sender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
 // this client to other nodes.
-type HTTPSender struct {
+type httpSender struct {
 	server  string        // The host:port address of the Cockroach gateway node
 	client  *http.Client  // The HTTP client
 	context *base.Context // The base context: needed for client setup.
 }
 
-// NewHTTPSender returns a new instance of HTTPSender.
-func NewHTTPSender(server string, ctx *base.Context) (*HTTPSender, error) {
-	sender := &HTTPSender{
+// newHTTPSender returns a new instance of httpSender.
+func newHTTPSender(server string, ctx *base.Context) (*httpSender, error) {
+	sender := &httpSender{
 		server:  server,
 		context: ctx,
 	}
@@ -103,7 +103,7 @@ func NewHTTPSender(server string, ctx *base.Context) (*HTTPSender, error) {
 // and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached
 // response.
-func (s *HTTPSender) Send(_ context.Context, call Call) {
+func (s *httpSender) Send(_ context.Context, call Call) {
 	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
@@ -153,7 +153,7 @@ func (s *HTTPSender) Send(_ context.Context, call Call) {
 // type is set to application/x-protobuf.
 //
 // On success, the response body is unmarshalled into call.Reply.
-func (s *HTTPSender) post(call Call) (*http.Response, error) {
+func (s *httpSender) post(call Call) (*http.Response, error) {
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(call.Args)
 	if err != nil {

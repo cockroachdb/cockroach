@@ -75,7 +75,7 @@ func TestHTTPSenderSend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender, err := NewHTTPSender(addr, testutils.NewTestBaseContext())
+	sender, err := newHTTPSender(addr, testutils.NewTestBaseContext())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			w.Write(body)
 		}))
 
-		sender, err := NewHTTPSender(addr, testutils.NewTestBaseContext())
+		sender, err := newHTTPSender(addr, testutils.NewTestBaseContext())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +191,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		}))
 
 		s = server
-		sender, err := NewHTTPSender(addr, testutils.NewTestBaseContext())
+		sender, err := newHTTPSender(addr, testutils.NewTestBaseContext())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -26,21 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 )
 
 func createTestClient(t *testing.T, addr string) *client.KV {
-	httpSender, err := client.NewHTTPSender(addr, testutils.NewTestBaseContext())
+	db, err := client.Open("https://root@" + addr + "?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	context := client.NewContext()
-	context.User = storage.UserRoot
-	return client.NewKV(context, httpSender)
+	return db.InternalKV()
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
