@@ -35,9 +35,8 @@ const (
 	sslScheme       = "https"
 )
 
-// Context is embedded by client.Context and server.Context.
-// A base context is not meant to be used directly, but embedding
-// contexts should call ctx.InitDefaults().
+// Context is embedded by server.Context. A base context is not meant to be
+// used directly, but embedding contexts should call ctx.InitDefaults().
 type Context struct {
 	// Insecure specifies whether to use SSL or not.
 	// This is really not recommended.

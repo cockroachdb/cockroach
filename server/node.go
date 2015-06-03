@@ -114,9 +114,11 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localKV := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
-	localKV.User = storage.UserRoot
-	ctx.DB = localKV.NewDB()
+	sender := kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper)
+	var err error
+	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+		return nil, err
+	}
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	for i, eng := range engines {
 		sIdent := proto.StoreIdent{

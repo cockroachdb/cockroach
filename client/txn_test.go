@@ -78,7 +78,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	}
 
 	var testIdx int
-	kv := NewKV(nil, newTestSender(func(call Call) {
+	kv := newKV(newTestSender(func(call Call) {
 		test := testCases[testIdx]
 		if !test.expRequestTS.Equal(call.Args.Header().Txn.Timestamp) {
 			t.Errorf("%d: expected ts %s got %s", testIdx, test.expRequestTS, call.Args.Header().Txn.Timestamp)
@@ -94,7 +94,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
-	kv := NewKV(nil, newTestSender(func(call Call) {
+	kv := newKV(newTestSender(func(call Call) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}))

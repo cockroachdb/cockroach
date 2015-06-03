@@ -19,6 +19,7 @@
 package kv
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -353,11 +354,16 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		txnOpts := &client.TransactionOptions{
 			Name: "auto-wrap",
 		}
-		tmpKV := client.NewKV(nil, tc)
-		tmpKV.User = call.Args.Header().User
-		tmpKV.UserPriority = call.Args.Header().GetUserPriority()
+		tmpDB, err := client.Open(
+			fmt.Sprintf("//%s?priority=%d",
+				call.Args.Header().User, call.Args.Header().GetUserPriority()),
+			client.SenderOpt(tc))
+		if err != nil {
+			log.Warning(err)
+			return
+		}
 		call.Reply.Reset()
-		if err := tmpKV.RunTransaction(txnOpts, func(txn *client.Txn) error {
+		if err := tmpDB.InternalKV().RunTransaction(txnOpts, func(txn *client.Txn) error {
 			return txn.Run(call)
 		}); err != nil {
 			log.Warning(err)

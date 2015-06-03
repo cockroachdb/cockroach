@@ -72,10 +72,10 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer, stopper)
 	}
 	ctx.Gossip = g
-	kv := client.NewKV(nil,
-		kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g))
-	kv.User = storage.UserRoot
-	ctx.DB = kv.NewDB()
+	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g)
+	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+		t.Fatal(err)
+	}
 	// TODO(bdarnell): arrange to have the transport closed.
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	ctx.EventFeed = &util.Feed{}
