@@ -22,11 +22,23 @@ import (
 	"log"
 	"net/url"
 	"sync"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
+
+// defaultRetryOptions sets the retry options for handling retryable errors and
+// connection I/O errors.
+var defaultRetryOptions = retry.Options{
+	Backoff:     50 * time.Millisecond,
+	MaxBackoff:  5 * time.Second,
+	Constant:    2,
+	MaxAttempts: 0, // retry indefinitely
+	UseV1Info:   true,
+}
 
 // Sender is an interface for sending a request to a Key-Value
 // database backend.
@@ -40,13 +52,13 @@ type Sender interface {
 // as Senders.
 type SenderFunc func(context.Context, Call)
 
-// Send calls f(c).
+// Send calls f(ctx, c).
 func (f SenderFunc) Send(ctx context.Context, c Call) {
 	f(ctx, c)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.
-type NewSenderFunc func(u *url.URL, ctx *base.Context) (Sender, error)
+type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options) (Sender, error)
 
 var sendersMu sync.Mutex
 var senders = map[string]NewSenderFunc{}
@@ -72,12 +84,12 @@ func newSender(u *url.URL, ctx *base.Context) (Sender, error) {
 	if f == nil {
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
-	return f(u, ctx)
+	return f(u, ctx, defaultRetryOptions)
 }
 
 func init() {
 	// Register a sender for the empty scheme which return a nil sender.
-	RegisterSender("", func(u *url.URL, ctx *base.Context) (Sender, error) {
+	RegisterSender("", func(*url.URL, *base.Context, retry.Options) (Sender, error) {
 		return nil, nil
 	})
 }
