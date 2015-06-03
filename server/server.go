@@ -110,12 +110,8 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.stopper)
-
-	{
-		// TODO(pmattis): Directly initialize client.DB.
-		kv := client.NewKV(nil, sender)
-		kv.User = storage.UserRoot
-		s.db = kv.NewDB()
+	if s.db, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+		return nil, err
 	}
 
 	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)

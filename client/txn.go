@@ -18,10 +18,25 @@
 package client
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"golang.org/x/net/context"
+)
+
+var (
+	// DefaultTxnRetryOptions are the standard retry options used
+	// for transactions.
+	// This is exported for testing purposes only.
+	DefaultTxnRetryOptions = retry.Options{
+		Backoff:     50 * time.Millisecond,
+		MaxBackoff:  5 * time.Second,
+		Constant:    2,
+		MaxAttempts: 0, // retry indefinitely
+		UseV1Info:   true,
+	}
 )
 
 type txnSender struct {

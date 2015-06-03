@@ -54,31 +54,18 @@ type KV struct {
 	clock           Clock
 }
 
-// NewKV creates a new instance of KV using the specified sender. To
+// newKV creates a new instance of KV using the specified sender. To
 // create a transactional client, the KV struct should be manually
 // initialized in order to utilize a txnSender. Clock is used to
 // formulate client command IDs, which provide idempotency on API
 // calls and defaults to the system clock.
 // implementation.
-func NewKV(ctx *Context, sender Sender) *KV {
-	if ctx == nil {
-		ctx = NewContext()
-	}
+func newKV(sender Sender) *KV {
 	return &KV{
 		Sender:          sender,
-		User:            ctx.User,
-		UserPriority:    ctx.UserPriority,
-		TxnRetryOptions: ctx.TxnRetryOptions,
-		clock:           ctx.Clock,
+		TxnRetryOptions: DefaultTxnRetryOptions,
+		clock:           systemClock{},
 	}
-}
-
-// NewDB returns a new database handle using KV for the underlying
-// communication.
-//
-// TODO(pmattis): Remove once we plumb usage of DB everywhere.
-func (kv *KV) NewDB() *DB {
-	return &DB{kv: kv}
 }
 
 // Run runs the specified calls synchronously in a single batch and

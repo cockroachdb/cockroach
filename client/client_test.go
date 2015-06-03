@@ -33,7 +33,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/client/rpc"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -748,22 +747,18 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 		b.Fatal(err)
 	}
 
-	var kv *client.KV
+	var scheme string
 	if useRPC {
-		sender, err := rpc.NewSender(s.ServingAddr(), &s.Ctx.Context)
-		if err != nil {
-			b.Fatal(err)
-		}
-		kv = client.NewKV(nil, sender)
+		scheme = "rpcs"
 	} else {
-		// The test context contains the security settings.
-		db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=" + s.Ctx.Certs)
-		if err != nil {
-			log.Fatal(err)
-		}
-		kv = db.InternalKV()
+		scheme = "https"
 	}
-	kv.User = storage.UserRoot
+
+	db, err := client.Open(scheme + "://root@" + s.ServingAddr() + "?certs=" + s.Ctx.Certs)
+	if err != nil {
+		b.Fatal(err)
+	}
+	kv := db.InternalKV()
 
 	if exists {
 		return s, kv

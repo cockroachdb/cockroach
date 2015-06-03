@@ -121,9 +121,10 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())
 	sender := NewTxnCoordSender(ltc.lSender, ltc.Clock, false, ltc.Stopper)
-	kv := client.NewKV(nil, sender)
-	kv.User = storage.UserRoot
-	ltc.DB = kv.NewDB()
+	var err error
+	if ltc.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+		t.Fatal(err)
+	}
 	transport := multiraft.NewLocalRPCTransport()
 	ltc.Stopper.AddCloser(transport)
 	ctx := storage.TestStoreContext

@@ -210,10 +210,12 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			txnClock.SetMaxOffset(maxOffset)
 
 			sender := NewTxnCoordSender(s.lSender, txnClock, false, s.Stopper)
-			txnDB := client.NewKV(nil, sender)
-			txnDB.User = storage.UserRoot
+			txnDB, err := client.Open("//root@", client.SenderOpt(sender))
+			if err != nil {
+				t.Fatal(err)
+			}
 
-			if err := txnDB.RunTransaction(txnOpts, func(txn *client.Txn) error {
+			if err := txnDB.InternalKV().RunTransaction(txnOpts, func(txn *client.Txn) error {
 				// Read within the transaction.
 				gr := proto.GetResponse{}
 				if err := txn.Run(client.Call{

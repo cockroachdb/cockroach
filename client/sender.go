@@ -74,3 +74,10 @@ func newSender(u *url.URL, ctx *base.Context) (Sender, error) {
 	}
 	return f(u, ctx)
 }
+
+func init() {
+	// Register a sender for the empty scheme which return a nil sender.
+	RegisterSender("", func(u *url.URL, ctx *base.Context) (Sender, error) {
+		return nil, nil
+	})
+}

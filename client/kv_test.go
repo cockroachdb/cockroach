@@ -28,7 +28,7 @@ import (
 
 func TestKVCallError(t *testing.T) {
 	count := 0
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		count++
 	}))
 
@@ -44,7 +44,7 @@ func TestKVCallError(t *testing.T) {
 // calls is a noop.
 func TestKVTransactionEmptyFlush(t *testing.T) {
 	count := 0
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		count++
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
@@ -61,7 +61,7 @@ func TestKVTransactionEmptyFlush(t *testing.T) {
 // on call.
 func TestKVClientCommandID(t *testing.T) {
 	count := 0
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		count++
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")
@@ -80,7 +80,7 @@ func TestKVClientCommandID(t *testing.T) {
 func TestKVTransactionPrepareAndFlush(t *testing.T) {
 	for i := 1; i < 3; i++ {
 		var calls []proto.Method
-		client := NewKV(nil, newTestSender(func(call Call) {
+		client := newKV(newTestSender(func(call Call) {
 			calls = append(calls, call.Method())
 			if call.Args.Header().CmdID.WallTime == 0 {
 				t.Errorf("expected batch client command ID to be initialized: %v", call.Args.Header().CmdID)
@@ -110,7 +110,7 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 // Also verifies that User and UserPriority are propagated to the
 // transactional client.
 func TestKVTransactionConfig(t *testing.T) {
-	client := NewKV(nil, newTestSender(func(call Call) {}))
+	client := newKV(newTestSender(func(call Call) {}))
 	client.User = "foo"
 	client.UserPriority = 101
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
@@ -131,7 +131,7 @@ func TestKVTransactionConfig(t *testing.T) {
 // operations were performed.
 func TestKVCommitReadOnlyTransaction(t *testing.T) {
 	var calls []proto.Method
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
@@ -149,7 +149,7 @@ func TestKVCommitReadOnlyTransaction(t *testing.T) {
 // upon successful invocation of the retryable func.
 func TestKVCommitMutatingTransaction(t *testing.T) {
 	var calls []proto.Method
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
 			t.Errorf("expected commit to be true; got %t", et.Commit)
@@ -171,7 +171,7 @@ func TestKVCommitMutatingTransaction(t *testing.T) {
 // ended a second time at completion of retryable func.
 func TestKVCommitTransactionOnce(t *testing.T) {
 	count := 0
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		count++
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
@@ -193,7 +193,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 // TestKVAbortReadOnlyTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
 func TestKVAbortReadOnlyTransaction(t *testing.T) {
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
@@ -209,7 +209,7 @@ func TestKVAbortReadOnlyTransaction(t *testing.T) {
 // upon failed invocation of the retryable func.
 func TestKVAbortMutatingTransaction(t *testing.T) {
 	var calls []proto.Method
-	client := NewKV(nil, newTestSender(func(call Call) {
+	client := newKV(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
 			t.Errorf("expected commit to be false; got %t", et.Commit)
@@ -233,9 +233,6 @@ func TestKVAbortMutatingTransaction(t *testing.T) {
 // TestKVRunTransactionRetryOnErrors verifies that the transaction
 // is retried on the correct errors.
 func TestKVRunTransactionRetryOnErrors(t *testing.T) {
-	ctx := NewContext()
-	ctx.TxnRetryOptions.Backoff = 1 * time.Millisecond
-
 	testCases := []struct {
 		err   error
 		retry bool // Expect retry?
@@ -252,7 +249,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 
 	for i, test := range testCases {
 		count := 0
-		client := NewKV(ctx, newTestSender(func(call Call) {
+		client := newKV(newTestSender(func(call Call) {
 			if _, ok := call.Args.(*proto.PutRequest); ok {
 				count++
 				if count == 1 {
@@ -260,6 +257,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 				}
 			}
 		}))
+		client.TxnRetryOptions.Backoff = 1 * time.Millisecond
 		err := client.RunTransaction(nil, func(txn *Txn) error {
 			reply := &proto.PutResponse{}
 			return client.Run(Call{Args: testPutReq, Reply: reply})

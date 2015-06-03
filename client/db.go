@@ -30,6 +30,15 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+// A systemClock is an implementation of the Clock interface that
+// returns the node's wall time.
+type systemClock struct{}
+
+// Now implements the Clock interface, returning the node's wall time.
+func (systemClock) Now() int64 {
+	return time.Now().UnixNano()
+}
+
 // KeyValue represents a single key/value pair and corresponding timestamp.
 type KeyValue struct {
 	Key       []byte
@@ -133,13 +142,23 @@ type DB struct {
 	//
 	//   err := db.Run(db.B.Put("a", "1").Put("b", "2"))
 	B  batcher
-	kv *KV
+	kv KV
+}
+
+// Option is the signature for a function which applies an option to a DB.
+type Option func(*DB)
+
+// SenderOpt sets the sender for a DB.
+func SenderOpt(sender Sender) Option {
+	return func(db *DB) {
+		db.kv.Sender = sender
+	}
 }
 
 // Open creates a new database handle to the cockroach cluster specified by
 // addr. The cluster is identified by a URL with the format:
 //
-//   <sender>://[<user>@]<host>:<port>[?certs=<dir>]
+//   [<sender>:]//[<user>@]<host>:<port>[?certs=<dir>,priority=<val>]
 //
 // The URL scheme (<sender>) specifies which transport to use for talking to
 // the cockroach cluster. Currently allowable values are: http, https, rpc,
@@ -148,14 +167,18 @@ type DB struct {
 // efficient than http. The decision between the encrypted (https, rpcs) and
 // unencrypted senders (http, rpc) depends on the settings of the cluster. A
 // given cluster supports either encrypted or unencrypted traffic, but not
-// both.
+// both. The <sender> can be left unspecified in the URL and set by passing
+// client.SenderOpt.
 //
 // If not specified, the <user> field defaults to "root".
 //
-// The certs parameter can be used to override the default directory
-// to use for client certificates. In tests, the directory
-// "test_certs" uses the embedded test certificates.
-func Open(addr string) (*DB, error) {
+// The certs parameter can be used to override the default directory to use for
+// client certificates. In tests, the directory "test_certs" uses the embedded
+// test certificates.
+//
+// The priority parameter can be used to override the default priority for
+// operations.
+func Open(addr string, opts ...Option) (*DB, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -176,14 +199,29 @@ func Open(addr string) (*DB, error) {
 		return nil, err
 	}
 
-	kv := NewKV(nil, sender)
-	kv.User = u.User.Username()
-	return &DB{kv: kv}, nil
+	db := &DB{}
+	db.kv.Sender = sender
+	db.kv.User = u.User.Username()
+	db.kv.TxnRetryOptions = DefaultTxnRetryOptions
+	db.kv.clock = systemClock{}
+
+	if priority := q["priority"]; len(priority) > 0 {
+		p, err := strconv.Atoi(priority[0])
+		if err != nil {
+			return nil, err
+		}
+		db.kv.UserPriority = int32(p)
+	}
+
+	for _, opt := range opts {
+		opt(db)
+	}
+	return db, nil
 }
 
 // InternalKV returns the internal KV. It is intended for internal use only.
 func (db *DB) InternalKV() *KV {
-	return db.kv
+	return &db.kv
 }
 
 // Get retrieves one or more keys. Each requested key will have a corresponding
