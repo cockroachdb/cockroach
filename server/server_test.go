@@ -403,7 +403,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				proto.Key("r"), proto.Key("w"), proto.Key("y")}},
 	}
 
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		s := StartTestServer(t)
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
@@ -438,9 +438,9 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				}
 				rows := scan.Reply.(*proto.ScanResponse).Rows
 				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
-					t.Fatalf("expected %d rows, but got %d", maxResults, len(rows))
+					t.Fatalf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
 				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
-					t.Fatalf("expected %d rows, but got %d", maxResults-1, len(rows))
+					t.Fatalf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
 				}
 			}
 		}

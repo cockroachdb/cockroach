@@ -79,7 +79,10 @@ message RequestHeader {
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
   optional bytes key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
-  // End key is empty if request spans only a single key.
+  // The end key is empty if the request spans only a single key. Otherwise,
+  // it must order strictly after Key. In such a case, the header indicates
+  // that the operation takes place on the key range from Key to EndKey,
+  // including Key and excluding EndKey.
   optional bytes end_key = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // User is the originating user. Used to lookup priority when
   // scheduling queued operations at target node.
