@@ -162,7 +162,10 @@ type RequestHeader struct {
 	// The key for request. If the request operates on a range, this
 	// represents the starting key for the range.
 	Key Key `protobuf:"bytes,3,opt,name=key,customtype=Key" json:"key"`
-	// End key is empty if request spans only a single key.
+	// The end key is empty if the request spans only a single key. Otherwise,
+	// it must order strictly after Key. In such a case, the header indicates
+	// that the operation takes place on the key range from Key to EndKey,
+	// including Key and excluding EndKey.
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,customtype=Key" json:"end_key"`
 	// User is the originating user. Used to lookup priority when
 	// scheduling queued operations at target node.
