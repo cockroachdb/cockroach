@@ -92,7 +92,7 @@ func TestHTTPSenderSend(t *testing.T) {
 // TestHTTPSenderRetryResponseCodes verifies that send is retried
 // on some HTTP response codes but not on others.
 func TestHTTPSenderRetryResponseCodes(t *testing.T) {
-	HTTPRetryOptions.Backoff = 1 * time.Millisecond
+	httpRetryOptions.Backoff = 1 * time.Millisecond
 
 	testCases := []struct {
 		code  int
@@ -158,7 +158,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 // TestHTTPSenderRetryHTTPSendError verifies that send is retried
 // on all errors sending HTTP requests.
 func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
-	HTTPRetryOptions.Backoff = 1 * time.Millisecond
+	httpRetryOptions.Backoff = 1 * time.Millisecond
 
 	testCases := []func(*httptest.Server, http.ResponseWriter){
 		// Send back an unparseable response but a success code on first try.

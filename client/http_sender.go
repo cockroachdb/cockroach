@@ -61,9 +61,9 @@ type httpSendError struct {
 	error
 }
 
-// HTTPRetryOptions sets the retry options for handling retryable
+// httpRetryOptions sets the retry options for handling retryable
 // HTTP errors and connection I/O errors.
-var HTTPRetryOptions = retry.Options{
+var httpRetryOptions = retry.Options{
 	Backoff:     50 * time.Millisecond,
 	MaxBackoff:  5 * time.Second,
 	Constant:    2,
@@ -104,7 +104,7 @@ func newHTTPSender(server string, ctx *base.Context) (*httpSender, error) {
 // through with the same client command ID and be given the cached
 // response.
 func (s *httpSender) Send(_ context.Context, call Call) {
-	retryOpts := HTTPRetryOptions
+	retryOpts := httpRetryOptions
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
 	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -31,6 +32,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
+
+// retryOptions sets the retry options for handling retryable errors and
+// connection I/O errors.
+var retryOptions = retry.Options{
+	Backoff:     50 * time.Millisecond,
+	MaxBackoff:  5 * time.Second,
+	Constant:    2,
+	MaxAttempts: 0, // retry indefinitely
+	UseV1Info:   true,
+}
 
 func init() {
 	f := func(u *url.URL, ctx *base.Context) (client.Sender, error) {
@@ -67,20 +78,18 @@ func NewSender(server string, context *base.Context) (*Sender, error) {
 		return nil, err
 	}
 	ctx := roachrpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
-	client := roachrpc.NewClient(addr, &client.HTTPRetryOptions, ctx)
+	client := roachrpc.NewClient(addr, &retryOptions, ctx)
 	return &Sender{client: client}, nil
 }
 
-// Send sends call to Cockroach via an HTTP post. HTTP response codes
-// which are retryable are retried with backoff in a loop using the
-// default retry options. Other errors sending HTTP request are
-// retried indefinitely using the same client command ID to avoid
-// reporting failure when in fact the command may have gone through
-// and been executed successfully. We retry here to eventually get
-// through with the same client command ID and be given the cached
-// response.
+// Send sends call to Cockroach via an RPC request. Errors which are retryable
+// are retried with backoff in a loop using the default retry options. Other
+// errors sending the request are retried indefinitely using the same client
+// command ID to avoid reporting failure when in fact the command may have gone
+// through and been executed successfully. We retry here to eventually get
+// through with the same client command ID and be given the cached response.
 func (s *Sender) Send(_ context.Context, call client.Call) {
-	retryOpts := client.HTTPRetryOptions
+	retryOpts := retryOptions
 	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
 
 	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
