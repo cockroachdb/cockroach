@@ -503,21 +503,22 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 		}
 	}
 
-	rpcErr := ds.sendRPC(desc.RaftID, replicas, order, args, reply)
-
-	// For an RPC error to occur, we must've been unable to contact any
-	// replicas. In this case, likely all nodes are down (or not getting back
-	// to us within a reasonable amount of time).
-	// We may simply not be trying to talk to the up-to-date replicas, so
-	// clearing the descriptor here should be a good idea.
-	// TODO(tschottdorf): If a replica group goes dead, this will cause clients
-	// to put high read pressure on the first range, so there should be some
-	// rate limiting here.
-	if rpcErr != nil {
+	err := ds.sendRPC(desc.RaftID, replicas, order, args, reply)
+	if err != nil {
+		// For an RPC error to occur, we must've been unable to contact any
+		// replicas. In this case, likely all nodes are down (or not getting back
+		// to us within a reasonable amount of time).
+		// We may simply not be trying to talk to the up-to-date replicas, so
+		// clearing the descriptor here should be a good idea.
+		// TODO(tschottdorf): If a replica group goes dead, this will cause clients
+		// to put high read pressure on the first range, so there should be some
+		// rate limiting here.
 		ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+	} else {
+		err = reply.Header().GoError()
 	}
 
-	if err := util.FirstError(rpcErr, reply.Header().GoError()); err != nil {
+	if err != nil {
 		if log.V(1) {
 			log.Warningf("failed to invoke %s: %s", call.Method(), err)
 		}
@@ -548,8 +549,8 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 			}
 			ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
 			return retry.Reset, nil
-		default:
-			if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
+		case util.Retryable:
+			if tErr.CanRetry() {
 				return retry.Continue, nil
 			}
 		}
