@@ -75,17 +75,17 @@ func (bank *Bank) makeAccountID(id int) []byte {
 func (bank *Bank) sumAllAccounts() int64 {
 	var result int64
 	err := bank.db.Tx(func(tx *client.Tx) error {
-		scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		rows, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
 			return err
 		}
-		if len(scan.Rows) != bank.numAccounts {
-			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(scan.Rows), bank.numAccounts)
+		if len(rows) != bank.numAccounts {
+			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(rows), bank.numAccounts)
 		}
 		// Sum up the balances.
 		for i := 0; i < bank.numAccounts; i++ {
 			account := &Account{}
-			err := account.decode(scan.Rows[i].ValueBytes())
+			err := account.decode(rows[i].ValueBytes())
 			if err != nil {
 				return err
 			}
@@ -114,7 +114,7 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 		// transferMoney transfers exchangeAmount between the two accounts
 		transferMoney := func(runner client.Runner) error {
 			batchRead := &client.Batch{}
-			batchRead.Get(from, to)
+			batchRead.Get(from).Get(to)
 			if err := runner.Run(batchRead); err != nil {
 				return err
 			}
@@ -130,7 +130,7 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 			}
 			// Read to value.
 			toAccount := &Account{}
-			errRead := toAccount.decode(batchRead.Results[0].Rows[1].ValueBytes())
+			errRead := toAccount.decode(batchRead.Results[1].Rows[0].ValueBytes())
 			if errRead != nil {
 				return errRead
 			}
@@ -168,17 +168,17 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 	var totalCash int64
 	if err := bank.db.Tx(func(tx *client.Tx) error {
 		// Check if the accounts have been initialized by another instance.
-		scan, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		rows, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
 			return err
 		}
 		// Determine existing accounts.
 		existAcct := &Account{}
 		accts := map[string]bool{}
-		for i := range scan.Rows {
-			accts[string(scan.Rows[i].Key)] = true
-			if err := existAcct.decode(scan.Rows[i].ValueBytes()); err != nil {
-				log.Fatalf("error decoding existing account %s: %s", scan.Rows[i].Key, err)
+		for i := range rows {
+			accts[string(rows[i].Key)] = true
+			if err := existAcct.decode(rows[i].ValueBytes()); err != nil {
+				log.Fatalf("error decoding existing account %s: %s", rows[i].Key, err)
 			}
 			totalCash += existAcct.Balance
 		}

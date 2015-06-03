@@ -92,7 +92,7 @@ func TestSingleKey(t *testing.T) {
 						return err
 					}
 					var v testVal
-					if err := v.UnmarshalBinary(r.Rows[0].ValueBytes()); err != nil {
+					if err := v.UnmarshalBinary(r.ValueBytes()); err != nil {
 						return err
 					}
 					return tx.Commit(tx.B.Put(key, v+1))
@@ -136,7 +136,7 @@ func TestSingleKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	var v testVal
-	if err := v.UnmarshalBinary(r.Rows[0].ValueBytes()); err != nil {
+	if err := v.UnmarshalBinary(r.ValueBytes()); err != nil {
 		t.Fatal(err)
 	}
 	if expected != int64(v) {

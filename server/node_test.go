@@ -113,12 +113,12 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	sr, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), proto.KeyMax, 0)
+	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), proto.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var keys []proto.Key
-	for _, kv := range sr.Rows {
+	for _, kv := range rows {
 		keys = append(keys, kv.Key)
 	}
 	var expectedKeys = []proto.Key{

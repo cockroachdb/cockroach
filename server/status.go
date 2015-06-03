@@ -246,7 +246,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	sr, err := s.db.Scan(startKey, endKey, 0)
+	rows, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -254,7 +254,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	}
 
 	nodeStatuses := []proto.NodeStatus{}
-	for _, row := range sr.Rows {
+	for _, row := range rows {
 		nodeStatus := &proto.NodeStatus{}
 		if err := row.ValueProto(nodeStatus); err != nil {
 			log.Error(err)
@@ -306,7 +306,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	startKey := keys.StatusStorePrefix
 	endKey := startKey.PrefixEnd()
 
-	sr, err := s.db.Scan(startKey, endKey, 0)
+	rows, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -314,7 +314,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	}
 
 	storeStatuses := []proto.StoreStatus{}
-	for _, row := range sr.Rows {
+	for _, row := range rows {
 		storeStatus := &proto.StoreStatus{}
 		if err := row.ValueProto(storeStatus); err != nil {
 			log.Error(err)

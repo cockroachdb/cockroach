@@ -254,15 +254,15 @@ func getConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 	path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all configs if the key is empty.
 	if len(path) == 0 {
-		var sr client.Result
-		if sr, err = db.Scan(configPrefix, configPrefix.PrefixEnd(), maxGetResults); err != nil {
+		var rows []client.KeyValue
+		if rows, err = db.Scan(configPrefix, configPrefix.PrefixEnd(), maxGetResults); err != nil {
 			return
 		}
-		if len(sr.Rows) == maxGetResults {
+		if len(rows) == maxGetResults {
 			log.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
 		}
 		var prefixes []string
-		for _, row := range sr.Rows {
+		for _, row := range rows {
 			trimmed := bytes.TrimPrefix(row.Key, configPrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}

@@ -91,15 +91,15 @@ func runGet(cmd *cobra.Command, args []string) {
 		osExit(1)
 		return
 	}
-	if !r.Rows[0].Exists() {
+	if !r.Exists() {
 		fmt.Fprintf(osStderr, "%s not found\n", key)
 		osExit(1)
 		return
 	}
-	if i, ok := r.Rows[0].Value.(*int64); ok {
+	if i, ok := r.Value.(*int64); ok {
 		fmt.Printf("%d\n", *i)
 	} else {
-		fmt.Printf("%s\n", r.Rows[0].Value)
+		fmt.Printf("%s\n", r.Value)
 	}
 }
 
@@ -177,7 +177,7 @@ func runInc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
 		osExit(1)
 	} else {
-		fmt.Printf("%d\n", r.Rows[0].ValueInt())
+		fmt.Printf("%d\n", r.ValueInt())
 	}
 }
 
@@ -260,13 +260,13 @@ func runScan(cmd *cobra.Command, args []string) {
 		return
 	}
 	// TODO(pmattis): Add a flag for the number of results to scan.
-	r, err := kvDB.Scan(startKey, endKey, 1000)
+	rows, err := kvDB.Scan(startKey, endKey, 1000)
 	if err != nil {
 		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
 		osExit(1)
 		return
 	}
-	for _, row := range r.Rows {
+	for _, row := range rows {
 		if bytes.HasPrefix(row.Key, []byte{0}) {
 			// TODO(pmattis): Pretty-print system keys.
 			fmt.Printf("%s\n", row.Key)

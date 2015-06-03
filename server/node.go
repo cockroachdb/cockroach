@@ -88,7 +88,7 @@ func allocateNodeID(db *client.DB) (proto.NodeID, error) {
 	if err != nil {
 		return 0, util.Errorf("unable to allocate node ID: %s", err)
 	}
-	return proto.NodeID(r.Rows[0].ValueInt()), nil
+	return proto.NodeID(r.ValueInt()), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
@@ -99,7 +99,7 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.Stor
 	if err != nil {
 		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
-	return proto.StoreID(r.Rows[0].ValueInt() - inc + 1), nil
+	return proto.StoreID(r.ValueInt() - inc + 1), nil
 }
 
 // BootstrapCluster bootstraps a multiple stores using the provided engines and

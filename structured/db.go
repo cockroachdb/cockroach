@@ -80,14 +80,14 @@ func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !gr.Rows[0].Exists() {
+	if !gr.Exists() {
 		// No value present.
 		return nil, nil
 	}
 	// TODO(pmattis): This is an inappropriate use of gob. Replace with
 	// something else.
 	s := &Schema{}
-	if err := gob.NewDecoder(bytes.NewBuffer(gr.Rows[0].ValueBytes())).Decode(s); err != nil {
+	if err := gob.NewDecoder(bytes.NewBuffer(gr.ValueBytes())).Decode(s); err != nil {
 		return nil, err
 	}
 	return s, nil

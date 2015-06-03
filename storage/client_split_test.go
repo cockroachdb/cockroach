@@ -446,12 +446,12 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 		keys.MakeKey(proto.Key("\x00\x00meta2"), proto.KeyMax),
 	}
 	if err := util.IsTrueWithin(func() bool {
-		sr, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		var keys []proto.Key
-		for _, r := range sr.Rows {
+		for _, r := range rows {
 			keys = append(keys, r.Key)
 		}
 		return reflect.DeepEqual(keys, expKeys)
