@@ -69,9 +69,8 @@ type NotLeaderError struct {
 	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *NotLeaderError) Reset()         { *m = NotLeaderError{} }
-func (m *NotLeaderError) String() string { return proto1.CompactTextString(m) }
-func (*NotLeaderError) ProtoMessage()    {}
+func (m *NotLeaderError) Reset()      { *m = NotLeaderError{} }
+func (*NotLeaderError) ProtoMessage() {}
 
 func (m *NotLeaderError) GetReplica() *Replica {
 	if m != nil {
@@ -94,9 +93,8 @@ type RangeNotFoundError struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *RangeNotFoundError) Reset()         { *m = RangeNotFoundError{} }
-func (m *RangeNotFoundError) String() string { return proto1.CompactTextString(m) }
-func (*RangeNotFoundError) ProtoMessage()    {}
+func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
+func (*RangeNotFoundError) ProtoMessage() {}
 
 func (m *RangeNotFoundError) GetRaftID() int64 {
 	if m != nil {
@@ -114,9 +112,8 @@ type RangeKeyMismatchError struct {
 	XXX_unrecognized []byte           `json:"-"`
 }
 
-func (m *RangeKeyMismatchError) Reset()         { *m = RangeKeyMismatchError{} }
-func (m *RangeKeyMismatchError) String() string { return proto1.CompactTextString(m) }
-func (*RangeKeyMismatchError) ProtoMessage()    {}
+func (m *RangeKeyMismatchError) Reset()      { *m = RangeKeyMismatchError{} }
+func (*RangeKeyMismatchError) ProtoMessage() {}
 
 func (m *RangeKeyMismatchError) GetRange() *RangeDescriptor {
 	if m != nil {
@@ -135,9 +132,8 @@ type ReadWithinUncertaintyIntervalError struct {
 	XXX_unrecognized  []byte    `json:"-"`
 }
 
-func (m *ReadWithinUncertaintyIntervalError) Reset()         { *m = ReadWithinUncertaintyIntervalError{} }
-func (m *ReadWithinUncertaintyIntervalError) String() string { return proto1.CompactTextString(m) }
-func (*ReadWithinUncertaintyIntervalError) ProtoMessage()    {}
+func (m *ReadWithinUncertaintyIntervalError) Reset()      { *m = ReadWithinUncertaintyIntervalError{} }
+func (*ReadWithinUncertaintyIntervalError) ProtoMessage() {}
 
 func (m *ReadWithinUncertaintyIntervalError) GetTimestamp() Timestamp {
 	if m != nil {
@@ -160,9 +156,8 @@ type TransactionAbortedError struct {
 	XXX_unrecognized []byte      `json:"-"`
 }
 
-func (m *TransactionAbortedError) Reset()         { *m = TransactionAbortedError{} }
-func (m *TransactionAbortedError) String() string { return proto1.CompactTextString(m) }
-func (*TransactionAbortedError) ProtoMessage()    {}
+func (m *TransactionAbortedError) Reset()      { *m = TransactionAbortedError{} }
+func (*TransactionAbortedError) ProtoMessage() {}
 
 func (m *TransactionAbortedError) GetTxn() Transaction {
 	if m != nil {
@@ -182,9 +177,8 @@ type TransactionPushError struct {
 	XXX_unrecognized []byte       `json:"-"`
 }
 
-func (m *TransactionPushError) Reset()         { *m = TransactionPushError{} }
-func (m *TransactionPushError) String() string { return proto1.CompactTextString(m) }
-func (*TransactionPushError) ProtoMessage()    {}
+func (m *TransactionPushError) Reset()      { *m = TransactionPushError{} }
+func (*TransactionPushError) ProtoMessage() {}
 
 func (m *TransactionPushError) GetTxn() *Transaction {
 	if m != nil {
@@ -208,9 +202,8 @@ type TransactionRetryError struct {
 	XXX_unrecognized []byte      `json:"-"`
 }
 
-func (m *TransactionRetryError) Reset()         { *m = TransactionRetryError{} }
-func (m *TransactionRetryError) String() string { return proto1.CompactTextString(m) }
-func (*TransactionRetryError) ProtoMessage()    {}
+func (m *TransactionRetryError) Reset()      { *m = TransactionRetryError{} }
+func (*TransactionRetryError) ProtoMessage() {}
 
 func (m *TransactionRetryError) GetTxn() Transaction {
 	if m != nil {
@@ -231,9 +224,8 @@ type TransactionStatusError struct {
 	XXX_unrecognized []byte      `json:"-"`
 }
 
-func (m *TransactionStatusError) Reset()         { *m = TransactionStatusError{} }
-func (m *TransactionStatusError) String() string { return proto1.CompactTextString(m) }
-func (*TransactionStatusError) ProtoMessage()    {}
+func (m *TransactionStatusError) Reset()      { *m = TransactionStatusError{} }
+func (*TransactionStatusError) ProtoMessage() {}
 
 func (m *TransactionStatusError) GetTxn() Transaction {
 	if m != nil {
@@ -263,9 +255,8 @@ type WriteIntentError struct {
 	XXX_unrecognized []byte                    `json:"-"`
 }
 
-func (m *WriteIntentError) Reset()         { *m = WriteIntentError{} }
-func (m *WriteIntentError) String() string { return proto1.CompactTextString(m) }
-func (*WriteIntentError) ProtoMessage()    {}
+func (m *WriteIntentError) Reset()      { *m = WriteIntentError{} }
+func (*WriteIntentError) ProtoMessage() {}
 
 func (m *WriteIntentError) GetIntents() []WriteIntentError_Intent {
 	if m != nil {
@@ -287,9 +278,8 @@ type WriteIntentError_Intent struct {
 	XXX_unrecognized []byte      `json:"-"`
 }
 
-func (m *WriteIntentError_Intent) Reset()         { *m = WriteIntentError_Intent{} }
-func (m *WriteIntentError_Intent) String() string { return proto1.CompactTextString(m) }
-func (*WriteIntentError_Intent) ProtoMessage()    {}
+func (m *WriteIntentError_Intent) Reset()      { *m = WriteIntentError_Intent{} }
+func (*WriteIntentError_Intent) ProtoMessage() {}
 
 func (m *WriteIntentError_Intent) GetTxn() Transaction {
 	if m != nil {
@@ -307,9 +297,8 @@ type WriteTooOldError struct {
 	XXX_unrecognized  []byte    `json:"-"`
 }
 
-func (m *WriteTooOldError) Reset()         { *m = WriteTooOldError{} }
-func (m *WriteTooOldError) String() string { return proto1.CompactTextString(m) }
-func (*WriteTooOldError) ProtoMessage()    {}
+func (m *WriteTooOldError) Reset()      { *m = WriteTooOldError{} }
+func (*WriteTooOldError) ProtoMessage() {}
 
 func (m *WriteTooOldError) GetTimestamp() Timestamp {
 	if m != nil {
@@ -333,9 +322,8 @@ type OpRequiresTxnError struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *OpRequiresTxnError) Reset()         { *m = OpRequiresTxnError{} }
-func (m *OpRequiresTxnError) String() string { return proto1.CompactTextString(m) }
-func (*OpRequiresTxnError) ProtoMessage()    {}
+func (m *OpRequiresTxnError) Reset()      { *m = OpRequiresTxnError{} }
+func (*OpRequiresTxnError) ProtoMessage() {}
 
 // A ConditionFailedError indicates that the expected value
 // of a ConditionalPutRequest was not found, either
@@ -346,9 +334,8 @@ type ConditionFailedError struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *ConditionFailedError) Reset()         { *m = ConditionFailedError{} }
-func (m *ConditionFailedError) String() string { return proto1.CompactTextString(m) }
-func (*ConditionFailedError) ProtoMessage()    {}
+func (m *ConditionFailedError) Reset()      { *m = ConditionFailedError{} }
+func (*ConditionFailedError) ProtoMessage() {}
 
 func (m *ConditionFailedError) GetActualValue() *Value {
 	if m != nil {
@@ -365,9 +352,8 @@ type LeaseRejectedError struct {
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *LeaseRejectedError) Reset()         { *m = LeaseRejectedError{} }
-func (m *LeaseRejectedError) String() string { return proto1.CompactTextString(m) }
-func (*LeaseRejectedError) ProtoMessage()    {}
+func (m *LeaseRejectedError) Reset()      { *m = LeaseRejectedError{} }
+func (*LeaseRejectedError) ProtoMessage() {}
 
 func (m *LeaseRejectedError) GetRequested() Lease {
 	if m != nil {
@@ -401,9 +387,8 @@ type ErrorDetail struct {
 	XXX_unrecognized              []byte                              `json:"-"`
 }
 
-func (m *ErrorDetail) Reset()         { *m = ErrorDetail{} }
-func (m *ErrorDetail) String() string { return proto1.CompactTextString(m) }
-func (*ErrorDetail) ProtoMessage()    {}
+func (m *ErrorDetail) Reset()      { *m = ErrorDetail{} }
+func (*ErrorDetail) ProtoMessage() {}
 
 func (m *ErrorDetail) GetNotLeader() *NotLeaderError {
 	if m != nil {
@@ -513,9 +498,8 @@ type Error struct {
 	XXX_unrecognized []byte       `json:"-"`
 }
 
-func (m *Error) Reset()         { *m = Error{} }
-func (m *Error) String() string { return proto1.CompactTextString(m) }
-func (*Error) ProtoMessage()    {}
+func (m *Error) Reset()      { *m = Error{} }
+func (*Error) ProtoMessage() {}
 
 func (m *Error) GetMessage() string {
 	if m != nil {
