@@ -393,8 +393,8 @@ func NewIntervalCache(config Config) *IntervalCache {
 
 // NewKey creates a new interval key defined by start and end values.
 func (ic *IntervalCache) NewKey(start, end interval.Comparable) *IntervalKey {
-	if start.Compare(end) > 0 {
-		panic(fmt.Sprintf("start key greater than end key %s > %s", start, end))
+	if start.Compare(end) >= 0 {
+		panic(fmt.Sprintf("start key greater than or equal to end key %s >= %s", start, end))
 	}
 	return &IntervalKey{id: uintptr(atomic.AddInt64(&intervalAlloc, 1)), start: start, end: end}
 }
