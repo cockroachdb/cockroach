@@ -628,9 +628,9 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 	// required, set the timestamp using the local clock.
 	if args.Header().ReadConsistency == proto.INCONSISTENT && args.Header().Timestamp.Equal(proto.ZeroTimestamp) {
 		// Make sure that after the call, args hasn't changed.
-		defer func() {
-			args.Header().Timestamp = proto.ZeroTimestamp
-		}()
+		defer func(timestamp proto.Timestamp) {
+			args.Header().Timestamp = timestamp
+		}(args.Header().Timestamp)
 		args.Header().Timestamp = ds.clock.Now()
 	}
 
