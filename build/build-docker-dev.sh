@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname $0)/.."
 
 # Verify docker installation.
-./build/verify-docker.sh
+source ./build/init-docker.sh
 
 cp -p GLOCKFILE build/devbase
 # Creating this here helps to not break the cache during deployment runs.

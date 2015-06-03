@@ -8,7 +8,7 @@
 
 cd "$(dirname $0)"
 
-source ../build/verify-docker.sh
+source ../build/init-docker.sh
 
 # Image names.
 DNSMASQ_IMAGE="cockroachdb/dnsmasq"
