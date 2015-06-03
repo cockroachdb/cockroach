@@ -120,7 +120,7 @@ func treesEqual(db *client.DB, expected testRangeTree) error {
 
 // splitRange splits whichever range contains the key on that key.
 func splitRange(db *client.DB, key proto.Key) error {
-	return db.AdminSplit(key, key)
+	return db.AdminSplit(key)
 }
 
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range

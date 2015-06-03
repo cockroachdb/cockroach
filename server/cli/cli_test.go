@@ -167,7 +167,7 @@ func ExampleSplitMergeRanges() {
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
-	c.Run("range split c c")
+	c.Run("range split c")
 	c.Run("range ls")
 	c.Run("kv scan")
 	c.Run("range merge b")
@@ -182,7 +182,7 @@ func ExampleSplitMergeRanges() {
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
-	// range split c c
+	// range split c
 	// range ls
 	// ""-"c" [1]
 	// 	0: node-id=1 store-id=1

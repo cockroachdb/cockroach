@@ -334,14 +334,12 @@ func (db *DB) AdminMerge(key interface{}) error {
 	return err
 }
 
-// AdminSplit splits the range containing key. If splitKey is non-nil it
-// specifies the key to split the range at, otherwise an appropriate key is
-// chosen automatically.
+// AdminSplit splits the range at splitkey.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) AdminSplit(key, splitKey interface{}) error {
-	_, err := runOne(db, (&Batch{}).adminSplit(key, splitKey))
+func (db *DB) AdminSplit(splitKey interface{}) error {
+	_, err := runOne(db, (&Batch{}).adminSplit(splitKey))
 	return err
 }
 
@@ -858,8 +856,8 @@ func (b *Batch) adminMerge(key interface{}) *Batch {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(key, splitKey interface{}) *Batch {
-	k, err := marshalKey(key)
+func (b *Batch) adminSplit(splitKey interface{}) *Batch {
+	k, err := marshalKey(splitKey)
 	if err != nil {
 		b.initResult(0, 0, err)
 		return b
@@ -869,14 +867,7 @@ func (b *Batch) adminSplit(key, splitKey interface{}) *Batch {
 			Key: proto.Key(k),
 		},
 	}
-	if splitKey != nil {
-		ak, err := marshalKey(splitKey)
-		if err != nil {
-			b.initResult(0, 0, err)
-			return b
-		}
-		req.SplitKey = proto.Key(ak)
-	}
+	req.SplitKey = proto.Key(k)
 	resp := &proto.AdminSplitResponse{}
 	b.calls = append(b.calls, Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)

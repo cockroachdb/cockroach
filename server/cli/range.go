@@ -78,33 +78,26 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 
 // A splitRangeCmd command splits a range.
 var splitRangeCmd = &cobra.Command{
-	Use:   "split [options] <key> [<split-key>]",
+	Use:   "split [options] <key>",
 	Short: "splits a range",
 	Long: `
-Splits the range containing <key>. If <split-key> is not specified a
-key to split the range approximately in half will be automatically
-chosen.
+Splits the range containing <key> at <key>.
 `,
 	Run: runSplitRange,
 }
 
 func runSplitRange(cmd *cobra.Command, args []string) {
-	if len(args) == 0 || len(args) > 2 {
+	if len(args) != 1 {
 		cmd.Usage()
 		return
 	}
 
 	key := proto.Key(args[0])
-	var splitKey proto.Key
-	if len(args) >= 2 {
-		splitKey = proto.Key(args[1])
-	}
-
 	kvDB := makeDBClient()
 	if kvDB == nil {
 		return
 	}
-	if err := kvDB.AdminSplit(key, splitKey); err != nil {
+	if err := kvDB.AdminSplit(key); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		osExit(1)
 	}
