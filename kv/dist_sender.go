@@ -685,15 +685,14 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 		if finalReply != curReply {
 			// This was the second or later call in a multi-range request.
 			// Combine the new response with the existing one.
-			_, ok := finalReply.(proto.Combinable)
-			if !ok {
+			if cFinalReply, ok := finalReply.(proto.Combinable); ok {
+				cFinalReply.Combine(curReply)
+			} else {
 				// This should never apply in practice, as we'll only end up here
 				// for range-spanning requests.
-				call.Reply.Header().SetGoError(
-					util.Errorf("multi-range request with non-combinable response type"))
+				call.Reply.Header().SetGoError(util.Errorf("multi-range request with non-combinable response type"))
 				return
 			}
-			finalReply.(proto.Combinable).Combine(curReply)
 		}
 
 		// If this request has a bound, such as MaxResults in
