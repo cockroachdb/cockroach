@@ -21,12 +21,10 @@ package proto
 type Method int
 
 const (
-	// Contains determines whether the KV map contains the specified key.
-	Contains Method = iota
 	// Get fetches the value for a key from the KV map, respecting a
 	// possibly historical timestamp. If the timestamp is 0, returns
 	// the most recent value.
-	Get
+	Get Method = iota
 	// Put sets the value for a key at the specified timestamp. If the
 	// timestamp is 0, the value is set with the current time as timestamp.
 	Put
@@ -112,7 +110,6 @@ const (
 
 // AllMethods is a map from string to method enum.
 var AllMethods = map[string]Method{
-	Contains.String():                   Contains,
 	Get.String():                        Get,
 	Put.String():                        Put,
 	ConditionalPut.String():             ConditionalPut,

@@ -125,7 +125,6 @@ var configDescriptors = [...]*configDescriptor{
 // tsCacheMethods specifies the set of methods which affect the
 // timestamp cache.
 var tsCacheMethods = [...]bool{
-	proto.Contains:                   true,
 	proto.Get:                        true,
 	proto.Put:                        true,
 	proto.ConditionalPut:             true,
