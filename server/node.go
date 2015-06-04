@@ -493,7 +493,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					AvailableRangeCount:  availableRangeCount,
 				}
 				key := keys.NodeStatusKey(int32(n.Descriptor.NodeID))
-				if _, err := n.ctx.DB.Put(key, status); err != nil {
+				if err := n.ctx.DB.Put(key, status); err != nil {
 					log.Error(err)
 				}
 				// Increment iteration count.

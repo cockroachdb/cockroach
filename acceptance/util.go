@@ -56,7 +56,7 @@ func setDefaultRangeMaxBytes(t *testing.T, c *client.DB, maxBytes int64) {
 		return
 	}
 	zone.RangeMaxBytes = maxBytes
-	if _, err := c.Put(keys.ConfigZonePrefix, zone); err != nil {
+	if err := c.Put(keys.ConfigZonePrefix, zone); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -73,6 +73,5 @@ func getPermConfig(client *client.DB, prefix string) (*proto.PermConfig, error) 
 
 // putPermConfig writes the permissions config for 'prefix'.
 func putPermConfig(client *client.DB, prefix string, config *proto.PermConfig) error {
-	_, err := client.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config)
-	return err
+	return client.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config)
 }

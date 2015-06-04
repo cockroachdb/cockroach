@@ -238,8 +238,7 @@ func putConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 		}
 	}
 	key := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-	_, err := db.Put(key, config)
-	return err
+	return db.Put(key, config)
 }
 
 // getConfig retrieves the configuration for the specified key. If the
@@ -288,6 +287,5 @@ func deleteConfig(db *client.DB, configPrefix proto.Key, path string, r *http.Re
 		return util.Errorf("the default configuration cannot be deleted")
 	}
 	configKey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-	_, err := db.Del(configKey)
-	return err
+	return db.Del(configKey)
 }

@@ -56,7 +56,7 @@ func ExampleDB_Put() {
 	s, db := setup()
 	defer s.Stop()
 
-	if _, err := db.Put("aa", "1"); err != nil {
+	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
 	result, err := db.Get("aa")
@@ -73,10 +73,10 @@ func ExampleDB_CPut() {
 	s, db := setup()
 	defer s.Stop()
 
-	if _, err := db.Put("aa", "1"); err != nil {
+	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
-	if _, err := db.CPut("aa", "2", "1"); err != nil {
+	if err := db.CPut("aa", "2", "1"); err != nil {
 		panic(err)
 	}
 	result, err := db.Get("aa")
@@ -85,7 +85,7 @@ func ExampleDB_CPut() {
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
-	if _, err = db.CPut("aa", "3", "1"); err == nil {
+	if err = db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
 	result, err = db.Get("aa")
@@ -94,7 +94,7 @@ func ExampleDB_CPut() {
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
-	if _, err = db.CPut("bb", "4", "1"); err == nil {
+	if err = db.CPut("bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
 	result, err = db.Get("bb")
@@ -102,7 +102,7 @@ func ExampleDB_CPut() {
 		panic(err)
 	}
 	fmt.Printf("bb=%s\n", result.ValueBytes())
-	if _, err = db.CPut("bb", "4", nil); err != nil {
+	if err = db.CPut("bb", "4", nil); err != nil {
 		panic(err)
 	}
 	result, err = db.Get("bb")
@@ -182,7 +182,7 @@ func ExampleDB_Del() {
 	if err := db.Run(db.B.Put("aa", "1").Put("ab", "2").Put("ac", "3")); err != nil {
 		panic(err)
 	}
-	if _, err := db.Del("ab"); err != nil {
+	if err := db.Del("ab"); err != nil {
 		panic(err)
 	}
 	rows, err := db.Scan("a", "b", 100)
@@ -239,7 +239,7 @@ func ExampleDB_Insecure() {
 		log.Fatal(err)
 	}
 
-	if _, err := db.Put("aa", "1"); err != nil {
+	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
 	result, err := db.Get("aa")

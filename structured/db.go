@@ -61,14 +61,12 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 	if err := gob.NewEncoder(&buf).Encode(s); err != nil {
 		return err
 	}
-	_, err := db.kvDB.Put(k, buf.Bytes())
-	return err
+	return db.kvDB.Put(k, buf.Bytes())
 }
 
 // DeleteSchema removes s from the kv store.
 func (db *structuredDB) DeleteSchema(s *Schema) error {
-	_, err := db.kvDB.Del(keys.MakeKey(keys.SchemaPrefix, proto.Key(s.Key)))
-	return err
+	return db.kvDB.Del(keys.MakeKey(keys.SchemaPrefix, proto.Key(s.Key)))
 }
 
 // GetSchema returns the Schema with the given key, or nil if

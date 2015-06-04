@@ -253,12 +253,13 @@ func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
 	return r.ValueProto(msg)
 }
 
-// Put sets the value for a key, returning the set key/value or an error.
+// Put sets the value for a key.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (db *DB) Put(key, value interface{}) (KeyValue, error) {
-	return runOneRow(db, db.B.Put(key, value))
+func (db *DB) Put(key, value interface{}) error {
+	_, err := runOneResult(db, db.B.Put(key, value))
+	return err
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -267,8 +268,9 @@ func (db *DB) Put(key, value interface{}) (KeyValue, error) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (db *DB) CPut(key, value, expValue interface{}) (KeyValue, error) {
-	return runOneRow(db, db.B.CPut(key, value, expValue))
+func (db *DB) CPut(key, value, expValue interface{}) error {
+	_, err := runOneResult(db, db.B.CPut(key, value, expValue))
+	return err
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -294,13 +296,11 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 
 // Del deletes one or more keys.
 //
-// Each key will have a corresponding entry in the returned []KeyValue.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Del(keys ...interface{}) ([]KeyValue, error) {
-	r, err := runOneResult(db, db.B.Del(keys...))
-	return r.Rows, err
+func (db *DB) Del(keys ...interface{}) error {
+	_, err := runOneResult(db, db.B.Del(keys...))
+	return err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -432,25 +432,24 @@ func (tx *Tx) Get(key interface{}) (KeyValue, error) {
 	return runOneRow(tx, tx.B.Get(key))
 }
 
-// Put sets the value for a key, returning the set key/value or an error.
+// Put sets the value for a key
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) Put(key, value interface{}) (KeyValue, error) {
-	return runOneRow(tx, tx.B.Put(key, value))
+func (tx *Tx) Put(key, value interface{}) error {
+	_, err := runOneResult(tx, tx.B.Put(key, value))
+	return err
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue.
 //
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) CPut(key, value, expValue interface{}) (KeyValue, error) {
-	return runOneRow(tx, tx.B.CPut(key, value, expValue))
+func (tx *Tx) CPut(key, value, expValue interface{}) error {
+	_, err := runOneResult(tx, tx.B.CPut(key, value, expValue))
+	return err
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -479,13 +478,11 @@ func (tx *Tx) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 
 // Del deletes one or more keys.
 //
-// Each key will have a corresponding entry in the returned []KeyValue.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Del(keys ...interface{}) ([]KeyValue, error) {
-	r, err := runOneResult(tx, tx.B.Del(keys...))
-	return r.Rows, err
+func (tx *Tx) Del(keys ...interface{}) error {
+	_, err := runOneResult(tx, tx.B.Del(keys...))
+	return err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).

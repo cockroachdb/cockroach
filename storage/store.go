@@ -1579,7 +1579,7 @@ func (s *Store) updateStoreStatus() {
 		AvailableRangeCount:  availableRangeCount,
 	}
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
-	if _, err := s.db.Put(key, status); err != nil {
+	if err := s.db.Put(key, status); err != nil {
 		log.Error(err)
 	}
 }

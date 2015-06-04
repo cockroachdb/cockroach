@@ -148,7 +148,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	if _, err := s.DB.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig); err != nil {
+	if err := s.DB.Put(keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 

@@ -63,7 +63,7 @@ func TestSingleKey(t *testing.T) {
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
 	c := makeDBClient(t, l, 0)
-	if _, err := c.Put(key, testVal(0)); err != nil {
+	if err := c.Put(key, testVal(0)); err != nil {
 		t.Fatal(err)
 	}
 
