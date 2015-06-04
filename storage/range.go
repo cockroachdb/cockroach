@@ -638,7 +638,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	cmdKey := r.beginCmd(header, false)
 
 	// This replica must have leader lease to process a write.
-	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
 		reply.Header().SetGoError(err)
 		return err
