@@ -117,6 +117,13 @@ func (s *Stopper) FinishTask() {
 	s.drain.Broadcast()
 }
 
+// NumTasks returns the number of active tasks.
+func (s *Stopper) NumTasks() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.numTasks
+}
+
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped (workers do this by calling SetStopped()).
 func (s *Stopper) Stop() {
