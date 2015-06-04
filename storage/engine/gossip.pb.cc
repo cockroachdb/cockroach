@@ -1,1 +1,0 @@
-cockroach/proto/gossip.pb.cc
