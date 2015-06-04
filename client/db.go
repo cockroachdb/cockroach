@@ -438,6 +438,19 @@ func (tx *Tx) Get(key interface{}) (KeyValue, error) {
 	return runOneRow(tx, tx.B.Get(key))
 }
 
+// GetProto retrieves the value for a key and decodes the result as a proto
+// message.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (tx *Tx) GetProto(key interface{}, msg gogoproto.Message) error {
+	r, err := tx.Get(key)
+	if err != nil {
+		return err
+	}
+	return r.ValueProto(msg)
+}
+
 // Put sets the value for a key
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an

@@ -30,7 +30,7 @@ func createTreeContext(rootKey *proto.Key, nodes []*proto.RangeTreeNode) *treeCo
 		RootKey: *rootKey,
 	}
 	tc := &treeContext{
-		txn:   nil,
+		tx:    nil,
 		tree:  root,
 		dirty: false,
 		nodes: map[string]cachedNode{},
