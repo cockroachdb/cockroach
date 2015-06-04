@@ -54,8 +54,6 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	}
 
 	switch args.(type) {
-	case *proto.ContainsRequest:
-		r.Contains(batch, args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
 	case *proto.GetRequest:
 		r.Get(batch, args.(*proto.GetRequest), reply.(*proto.GetResponse))
 	case *proto.PutRequest:
@@ -126,18 +124,6 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 
 	// Return the error (if any) set in the reply.
 	return reply.Header().GoError()
-}
-
-// Contains verifies the existence of a key in the key value store.
-func (r *Range) Contains(batch engine.Engine, args *proto.ContainsRequest, reply *proto.ContainsResponse) {
-	val, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
-	if err != nil {
-		reply.SetGoError(err)
-		return
-	}
-	if val != nil {
-		reply.Exists = true
-	}
 }
 
 // Get returns the value for a specified key.

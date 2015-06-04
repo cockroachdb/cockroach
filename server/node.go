@@ -585,11 +585,6 @@ func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error 
 
 // TODO(spencer): fill in method comments below.
 
-// Contains .
-func (n *nodeServer) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
-	return n.executeCmd(args, reply)
-}
-
 // Get .
 func (n *nodeServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
 	return n.executeCmd(args, reply)

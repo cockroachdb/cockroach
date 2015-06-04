@@ -90,7 +90,7 @@ func NewRESTServer(db *client.DB) *RESTServer {
 	server.router.PUT(EntryPattern, server.handlePutAction)
 	server.router.POST(EntryPattern, server.handlePutAction)
 	server.router.DELETE(EntryPattern, server.handleDeleteAction)
-	server.router.HEAD(EntryPattern, server.handleHeadAction)
+	server.router.HEAD(EntryPattern, server.handleGetAction)
 
 	server.router.GET(RangePrefix, server.handleRangeAction)
 	server.router.DELETE(RangePrefix, server.handleRangeAction)
@@ -101,7 +101,7 @@ func NewRESTServer(db *client.DB) *RESTServer {
 	server.router.POST(CounterPrefix, server.handleEmptyKey)
 	server.router.DELETE(CounterPrefix, server.handleEmptyKey)
 
-	server.router.HEAD(CounterPattern, server.handleHeadAction)
+	server.router.HEAD(CounterPattern, server.handleGetAction)
 	server.router.GET(CounterPattern, server.handleCounterAction)
 	server.router.POST(CounterPattern, server.handleCounterAction)
 	server.router.DELETE(CounterPattern, server.handleDeleteAction)
@@ -248,7 +248,7 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, ps 
 	writeJSON(w, http.StatusOK, pr)
 }
 
-// handlePutAction deals with all key get requests.
+// handleGetAction deals with all key get requests.
 func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := proto.Key(ps.ByName("key"))
 	gr := &proto.GetResponse{}
@@ -270,28 +270,7 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, ps 
 	writeJSON(w, status, gr)
 }
 
-// handlePutAction deals with all key head requests.
-func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	key := proto.Key(ps.ByName("key"))
-	cr := &proto.ContainsResponse{}
-	if err := s.db.InternalKV().Run(client.Call{
-		Args: &proto.ContainsRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:  key,
-				User: storage.UserRoot,
-			},
-		}, Reply: cr}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	status := http.StatusOK
-	if !cr.Exists {
-		status = http.StatusNotFound
-	}
-	writeJSON(w, status, cr)
-}
-
-// handlePutAction deals with all key delete requests.
+// handleDeleteAction deals with all key delete requests.
 func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := proto.Key(ps.ByName("key"))
 	dr := &proto.DeleteResponse{}

@@ -134,17 +134,6 @@ message ResponseHeader {
   optional Transaction txn = 3;
 }
 
-// A ContainsRequest is arguments to the Contains() method.
-message ContainsRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// A ContainsResponse is the return value of the Contains() method.
-message ContainsResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional bool exists = 2 [(gogoproto.nullable) = false];
-}
-
 // A GetRequest is arguments to the Get() method.
 message GetRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -288,7 +277,6 @@ message EndTransactionResponse {
 message RequestUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
-    ContainsRequest contains = 1;
     GetRequest get = 2;
     PutRequest put = 3;
     ConditionalPutRequest conditional_put = 4;
@@ -305,7 +293,6 @@ message RequestUnion {
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
-    ContainsResponse contains = 1;
     GetResponse get = 2;
     PutResponse put = 3;
     ConditionalPutResponse conditional_put = 4;

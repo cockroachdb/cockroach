@@ -228,7 +228,6 @@ message InternalLeaderLeaseResponse{
 message InternalRequestUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
-    ContainsRequest contains = 1;
     GetRequest get = 2;
     PutRequest put = 3;
     ConditionalPutRequest conditional_put = 4;
@@ -249,7 +248,6 @@ message InternalRequestUnion {
 message InternalResponseUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
-    ContainsResponse contains = 1;
     GetResponse get = 2;
     PutResponse put = 3;
     ConditionalPutResponse conditional_put = 4;
@@ -311,7 +309,6 @@ message InternalRaftCommandUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
     // Non-batched external requests. This section is the same as RequestUnion.
-    ContainsRequest contains = 1;
     GetRequest get = 2;
     PutRequest put = 3;
     ConditionalPutRequest conditional_put = 4;

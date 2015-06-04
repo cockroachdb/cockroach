@@ -42,8 +42,6 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
 class ClientCmdID;
 class RequestHeader;
 class ResponseHeader;
-class ContainsRequest;
-class ContainsResponse;
 class GetRequest;
 class GetResponse;
 class PutRequest;
@@ -474,178 +472,6 @@ class ResponseHeader : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static ResponseHeader* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class ContainsRequest : public ::google::protobuf::Message {
- public:
-  ContainsRequest();
-  virtual ~ContainsRequest();
-
-  ContainsRequest(const ContainsRequest& from);
-
-  inline ContainsRequest& operator=(const ContainsRequest& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const ContainsRequest& default_instance();
-
-  void Swap(ContainsRequest* other);
-
-  // implements Message ----------------------------------------------
-
-  ContainsRequest* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const ContainsRequest& from);
-  void MergeFrom(const ContainsRequest& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional .cockroach.proto.RequestHeader header = 1;
-  inline bool has_header() const;
-  inline void clear_header();
-  static const int kHeaderFieldNumber = 1;
-  inline const ::cockroach::proto::RequestHeader& header() const;
-  inline ::cockroach::proto::RequestHeader* mutable_header();
-  inline ::cockroach::proto::RequestHeader* release_header();
-  inline void set_allocated_header(::cockroach::proto::RequestHeader* header);
-
-  // @@protoc_insertion_point(class_scope:cockroach.proto.ContainsRequest)
- private:
-  inline void set_has_header();
-  inline void clear_has_header();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::cockroach::proto::RequestHeader* header_;
-  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
-
-  void InitAsDefaultInstance();
-  static ContainsRequest* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class ContainsResponse : public ::google::protobuf::Message {
- public:
-  ContainsResponse();
-  virtual ~ContainsResponse();
-
-  ContainsResponse(const ContainsResponse& from);
-
-  inline ContainsResponse& operator=(const ContainsResponse& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const ContainsResponse& default_instance();
-
-  void Swap(ContainsResponse* other);
-
-  // implements Message ----------------------------------------------
-
-  ContainsResponse* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const ContainsResponse& from);
-  void MergeFrom(const ContainsResponse& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  inline bool has_header() const;
-  inline void clear_header();
-  static const int kHeaderFieldNumber = 1;
-  inline const ::cockroach::proto::ResponseHeader& header() const;
-  inline ::cockroach::proto::ResponseHeader* mutable_header();
-  inline ::cockroach::proto::ResponseHeader* release_header();
-  inline void set_allocated_header(::cockroach::proto::ResponseHeader* header);
-
-  // optional bool exists = 2;
-  inline bool has_exists() const;
-  inline void clear_exists();
-  static const int kExistsFieldNumber = 2;
-  inline bool exists() const;
-  inline void set_exists(bool value);
-
-  // @@protoc_insertion_point(class_scope:cockroach.proto.ContainsResponse)
- private:
-  inline void set_has_header();
-  inline void clear_has_header();
-  inline void set_has_exists();
-  inline void clear_has_exists();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::cockroach::proto::ResponseHeader* header_;
-  bool exists_;
-  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
-
-  void InitAsDefaultInstance();
-  static ContainsResponse* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -2129,7 +1955,6 @@ class RequestUnion : public ::google::protobuf::Message {
   static const RequestUnion& default_instance();
 
   enum ValueCase {
-    kContains = 1,
     kGet = 2,
     kPut = 3,
     kConditionalPut = 4,
@@ -2170,15 +1995,6 @@ class RequestUnion : public ::google::protobuf::Message {
   // nested types ----------------------------------------------------
 
   // accessors -------------------------------------------------------
-
-  // optional .cockroach.proto.ContainsRequest contains = 1;
-  inline bool has_contains() const;
-  inline void clear_contains();
-  static const int kContainsFieldNumber = 1;
-  inline const ::cockroach::proto::ContainsRequest& contains() const;
-  inline ::cockroach::proto::ContainsRequest* mutable_contains();
-  inline ::cockroach::proto::ContainsRequest* release_contains();
-  inline void set_allocated_contains(::cockroach::proto::ContainsRequest* contains);
 
   // optional .cockroach.proto.GetRequest get = 2;
   inline bool has_get() const;
@@ -2255,7 +2071,6 @@ class RequestUnion : public ::google::protobuf::Message {
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.RequestUnion)
  private:
-  inline void set_has_contains();
   inline void set_has_get();
   inline void set_has_put();
   inline void set_has_conditional_put();
@@ -2274,7 +2089,6 @@ class RequestUnion : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   union ValueUnion {
-    ::cockroach::proto::ContainsRequest* contains_;
     ::cockroach::proto::GetRequest* get_;
     ::cockroach::proto::PutRequest* put_;
     ::cockroach::proto::ConditionalPutRequest* conditional_put_;
@@ -2319,7 +2133,6 @@ class ResponseUnion : public ::google::protobuf::Message {
   static const ResponseUnion& default_instance();
 
   enum ValueCase {
-    kContains = 1,
     kGet = 2,
     kPut = 3,
     kConditionalPut = 4,
@@ -2360,15 +2173,6 @@ class ResponseUnion : public ::google::protobuf::Message {
   // nested types ----------------------------------------------------
 
   // accessors -------------------------------------------------------
-
-  // optional .cockroach.proto.ContainsResponse contains = 1;
-  inline bool has_contains() const;
-  inline void clear_contains();
-  static const int kContainsFieldNumber = 1;
-  inline const ::cockroach::proto::ContainsResponse& contains() const;
-  inline ::cockroach::proto::ContainsResponse* mutable_contains();
-  inline ::cockroach::proto::ContainsResponse* release_contains();
-  inline void set_allocated_contains(::cockroach::proto::ContainsResponse* contains);
 
   // optional .cockroach.proto.GetResponse get = 2;
   inline bool has_get() const;
@@ -2445,7 +2249,6 @@ class ResponseUnion : public ::google::protobuf::Message {
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.ResponseUnion)
  private:
-  inline void set_has_contains();
   inline void set_has_get();
   inline void set_has_put();
   inline void set_has_conditional_put();
@@ -2464,7 +2267,6 @@ class ResponseUnion : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   union ValueUnion {
-    ::cockroach::proto::ContainsResponse* contains_;
     ::cockroach::proto::GetResponse* get_;
     ::cockroach::proto::PutResponse* put_;
     ::cockroach::proto::ConditionalPutResponse* conditional_put_;
@@ -3663,120 +3465,6 @@ inline void ResponseHeader::set_allocated_txn(::cockroach::proto::Transaction* t
 
 // -------------------------------------------------------------------
 
-// ContainsRequest
-
-// optional .cockroach.proto.RequestHeader header = 1;
-inline bool ContainsRequest::has_header() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void ContainsRequest::set_has_header() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void ContainsRequest::clear_has_header() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void ContainsRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
-  clear_has_header();
-}
-inline const ::cockroach::proto::RequestHeader& ContainsRequest::header() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ContainsRequest.header)
-  return header_ != NULL ? *header_ : *default_instance_->header_;
-}
-inline ::cockroach::proto::RequestHeader* ContainsRequest::mutable_header() {
-  set_has_header();
-  if (header_ == NULL) header_ = new ::cockroach::proto::RequestHeader;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ContainsRequest.header)
-  return header_;
-}
-inline ::cockroach::proto::RequestHeader* ContainsRequest::release_header() {
-  clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
-  header_ = NULL;
-  return temp;
-}
-inline void ContainsRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
-  delete header_;
-  header_ = header;
-  if (header) {
-    set_has_header();
-  } else {
-    clear_has_header();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ContainsRequest.header)
-}
-
-// -------------------------------------------------------------------
-
-// ContainsResponse
-
-// optional .cockroach.proto.ResponseHeader header = 1;
-inline bool ContainsResponse::has_header() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void ContainsResponse::set_has_header() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void ContainsResponse::clear_has_header() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void ContainsResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
-  clear_has_header();
-}
-inline const ::cockroach::proto::ResponseHeader& ContainsResponse::header() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ContainsResponse.header)
-  return header_ != NULL ? *header_ : *default_instance_->header_;
-}
-inline ::cockroach::proto::ResponseHeader* ContainsResponse::mutable_header() {
-  set_has_header();
-  if (header_ == NULL) header_ = new ::cockroach::proto::ResponseHeader;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ContainsResponse.header)
-  return header_;
-}
-inline ::cockroach::proto::ResponseHeader* ContainsResponse::release_header() {
-  clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
-  header_ = NULL;
-  return temp;
-}
-inline void ContainsResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
-  delete header_;
-  header_ = header;
-  if (header) {
-    set_has_header();
-  } else {
-    clear_has_header();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ContainsResponse.header)
-}
-
-// optional bool exists = 2;
-inline bool ContainsResponse::has_exists() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void ContainsResponse::set_has_exists() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void ContainsResponse::clear_has_exists() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void ContainsResponse::clear_exists() {
-  exists_ = false;
-  clear_has_exists();
-}
-inline bool ContainsResponse::exists() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ContainsResponse.exists)
-  return exists_;
-}
-inline void ContainsResponse::set_exists(bool value) {
-  set_has_exists();
-  exists_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.ContainsResponse.exists)
-}
-
-// -------------------------------------------------------------------
-
 // GetRequest
 
 // optional .cockroach.proto.RequestHeader header = 1;
@@ -4956,49 +4644,6 @@ EndTransactionResponse::mutable_resolved() {
 
 // RequestUnion
 
-// optional .cockroach.proto.ContainsRequest contains = 1;
-inline bool RequestUnion::has_contains() const {
-  return value_case() == kContains;
-}
-inline void RequestUnion::set_has_contains() {
-  _oneof_case_[0] = kContains;
-}
-inline void RequestUnion::clear_contains() {
-  if (has_contains()) {
-    delete value_.contains_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::ContainsRequest& RequestUnion::contains() const {
-  return has_contains() ? *value_.contains_
-                      : ::cockroach::proto::ContainsRequest::default_instance();
-}
-inline ::cockroach::proto::ContainsRequest* RequestUnion::mutable_contains() {
-  if (!has_contains()) {
-    clear_value();
-    set_has_contains();
-    value_.contains_ = new ::cockroach::proto::ContainsRequest;
-  }
-  return value_.contains_;
-}
-inline ::cockroach::proto::ContainsRequest* RequestUnion::release_contains() {
-  if (has_contains()) {
-    clear_has_value();
-    ::cockroach::proto::ContainsRequest* temp = value_.contains_;
-    value_.contains_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void RequestUnion::set_allocated_contains(::cockroach::proto::ContainsRequest* contains) {
-  clear_value();
-  if (contains) {
-    set_has_contains();
-    value_.contains_ = contains;
-  }
-}
-
 // optional .cockroach.proto.GetRequest get = 2;
 inline bool RequestUnion::has_get() const {
   return value_case() == kGet;
@@ -5355,49 +5000,6 @@ inline RequestUnion::ValueCase RequestUnion::value_case() const {
 // -------------------------------------------------------------------
 
 // ResponseUnion
-
-// optional .cockroach.proto.ContainsResponse contains = 1;
-inline bool ResponseUnion::has_contains() const {
-  return value_case() == kContains;
-}
-inline void ResponseUnion::set_has_contains() {
-  _oneof_case_[0] = kContains;
-}
-inline void ResponseUnion::clear_contains() {
-  if (has_contains()) {
-    delete value_.contains_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::ContainsResponse& ResponseUnion::contains() const {
-  return has_contains() ? *value_.contains_
-                      : ::cockroach::proto::ContainsResponse::default_instance();
-}
-inline ::cockroach::proto::ContainsResponse* ResponseUnion::mutable_contains() {
-  if (!has_contains()) {
-    clear_value();
-    set_has_contains();
-    value_.contains_ = new ::cockroach::proto::ContainsResponse;
-  }
-  return value_.contains_;
-}
-inline ::cockroach::proto::ContainsResponse* ResponseUnion::release_contains() {
-  if (has_contains()) {
-    clear_has_value();
-    ::cockroach::proto::ContainsResponse* temp = value_.contains_;
-    value_.contains_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void ResponseUnion::set_allocated_contains(::cockroach::proto::ContainsResponse* contains) {
-  clear_value();
-  if (contains) {
-    set_has_contains();
-    value_.contains_ = contains;
-  }
-}
 
 // optional .cockroach.proto.GetResponse get = 2;
 inline bool ResponseUnion::has_get() const {
