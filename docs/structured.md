@@ -11,15 +11,15 @@ implements a tabular model of data storage which somewhat resembles a relational
 database at a high level. The terms namespace, table, column, and index/key
 collectively define the structured data abstraction, each roughly akin to
 database, table, column, and index/key in a relational database. The structured
-data layer, when complete, introduces concepts of data storage that many
+data layer introduces concepts of data storage that many
 database users are familiar with, and greatly increases the range of use-cases
 that Cockroach is able to ergonomically service.
 
 ##Goals##
 
-Add support for the following entities: <i>namespaces, tables, columns, and
-indexes</i>. These notions are chosen for their similarity to <i>databases, tables,
-columns, and indexes</i> in relational databases, but they are not intended to be
+Add support for the following entities: *namespaces, tables, columns, and
+indexes*. These notions are chosen for their similarity to *databases, tables,
+columns, and indexes* in relational databases, but they are not intended to be
 implementations thereof. Each entity will support:
 
 - Creation: of a namespace, table, column in O(1).
@@ -36,37 +36,36 @@ global-key addressing. Non-primary-keyed queries will be supported through the u
 
 ##Non-Goals##
 
-For now we don't intend developing the following:
+For now we don't intend on developing the following:
 
 - Add support for triggers, stored-procedures, and integrity constraints
 
-- Add the notion of column types beyond <i>a sequence of bytes</i>. Add support for
+- Add the notion of column types beyond *a sequence of bytes*. Add support for
   unbounded sub-collections of columns.
 
 - Add support for non-tabular storage. This might be supported in the future.
 
 - Add support for column locality-groups to improve data layout for performance.
 
-## Design ##
+##Design##
 
 We support high level entities like Namespace, Table, Index, and Column.
 {Namespace,Table}Descriptor stores the entity metadata for {Namespace,Table}.
 
-<pre>
- <code>NamespaceDescriptor {
+
+ `NamespaceDescriptor {
          NamespaceID = … ,
          Permissions = …,
-         ...}</code>
+         ...}`
 
- <code>TableDescriptor {
+ `TableDescriptor {
          TableID = …,
          Columns = [{ ColumnID = …, Name = ... }, ...],
          Indexes = [{ IndexID = …, Name = …, ColumnIDs = [ … ]}, ...],
          Permissions = …
          NextFreeColumnId = …
          NextFreeIndexID = ...,
-         ...}</code>
-</pre>
+         ...}`
 
 In order to support fast renaming, we indirect entity access through a
 hierarchical name-to-identifier mapping. NamespaceID and TableID are
@@ -75,8 +74,7 @@ to each Table.
 
 To simplify our implementation, our Tables will require the presence of a
 primary key. Follow-up work may relax this requirement. An investigation of use
-cases not requiring a primary key is required to specify this work. A cell in
-the Table can be addressed for a particular Column and Row.
+cases not requiring a primary key is required to specify this work.
 
 Initially, all the Table metadata in a cluster will be distributed by gossip and
 cached by each cockroach node. To reduce contention on the Table metadata, a
@@ -89,7 +87,7 @@ be taken to not expose these implementation details to the user.
 The “/” separators used below are shorthand for ordered encoding of the
 separated values.
 
-*Global metadata keys*
+**Global metadata keys**
 
 The root namespace is an unnamed namespace with a fixed ID of 0. Within it,
 metadata addressing will work as follows:
@@ -160,9 +158,9 @@ on lastname with IndexID=1. Column telephone might have a columnID=6. For an
 employee with employee-id=3456, the employee’s telephone can be queried/modified
 through the API using the query:
 <pre>
- <code>{ table: “/microsoft/employees”,
-         key: “3456”,
-         columns : [“telephone” }</code>
+ `{ table: “/microsoft/employees”,
+    key: “3456”,
+    columns : [“telephone” }`
 </pre>
 The query is converted internally by cockroach into a global key: /9876/0/3456/6
 (`/TableID/PrimaryIndexID/Key/ColumnID`).
@@ -170,10 +168,10 @@ The query is converted internally by cockroach into a global key: /9876/0/3456/6
 Assume a secondary index is built for the last-name column. Telephone numbers of
 employees with lastname=”kimball” can be queried using the query:
 <pre>
- <code>{ table: “/microsoft/employees”,
-         index: “last-name”,
-         key: “kimball”,
-         columns: [“telephone”] }</code>
+ `{ table: “/microsoft/employees”,
+    index: “last-name”,
+    key: “kimball”,
+    columns: [“telephone”] }`
 </pre>
 and this might produce two records for Spencer and Andy. Internally cockroach
 looks up the secondary index using key prefix:
