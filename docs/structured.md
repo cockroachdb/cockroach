@@ -52,20 +52,23 @@ For now we don't intend on developing the following:
 We support high level entities like Namespace, Table, Index, and Column.
 {Namespace,Table}Descriptor stores the entity metadata for {Namespace,Table}.
 
-
- `NamespaceDescriptor {
+```proto
+     NamespaceDescriptor {
          NamespaceID = … ,
          Permissions = …,
-         ...}`
+         ...}
+```
 
- `TableDescriptor {
+```proto
+      TableDescriptor {
          TableID = …,
          Columns = [{ ColumnID = …, Name = ... }, ...],
          Indexes = [{ IndexID = …, Name = …, ColumnIDs = [ … ]}, ...],
          Permissions = …
          NextFreeColumnId = …
          NextFreeIndexID = ...,
-         ...}`
+         ...}
+```
 
 In order to support fast renaming, we indirect entity access through a
 hierarchical name-to-identifier mapping. NamespaceID and TableID are
