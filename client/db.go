@@ -228,22 +228,20 @@ func (db *DB) InternalKV() *KV {
 	return &db.kv
 }
 
-// Get retrieves one or more keys. Each requested key will have a corresponding
-// row in the returned Result.
+// Get retrieves the value for a key, returning the retrieved key/value or an
+// error.
 //
-//   r, err := db.Get("a", "b", "c")
-//   // string(r.Rows[0].Key) == "a"
-//   // string(r.Rows[1].Key) == "b"
-//   // string(r.Rows[2].Key) == "c"
+//   r, err := db.Get("a")
+//   // string(r.Key) == "a"
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Get(keys ...interface{}) (Result, error) {
-	return runOne(db, db.B.Get(keys...))
+func (db *DB) Get(key interface{}) (KeyValue, error) {
+	return runOneRow(db, db.B.Get(key))
 }
 
-// GetProto retrieves a single key/value and decodes the resulting value as a
-// proto message.
+// GetProto retrieves the value for a key and decodes the result as a proto
+// message.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
@@ -252,78 +250,68 @@ func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
 	if err != nil {
 		return err
 	}
-	return r.Rows[0].ValueProto(msg)
+	return r.ValueProto(msg)
 }
 
 // Put sets the value for a key.
 //
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (db *DB) Put(key, value interface{}) (Result, error) {
-	return runOne(db, db.B.Put(key, value))
+func (db *DB) Put(key, value interface{}) error {
+	_, err := runOneResult(db, db.B.Put(key, value))
+	return err
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue.
 //
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (db *DB) CPut(key, value, expValue interface{}) (Result, error) {
-	return runOne(db, db.B.CPut(key, value, expValue))
+func (db *DB) CPut(key, value, expValue interface{}) error {
+	_, err := runOneResult(db, db.B.CPut(key, value, expValue))
+	return err
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
 // be created with an initial value of 0 which will then be incremented. If the
 // key exists but was set using Put or CPut an error will be returned.
 //
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Inc(key interface{}, value int64) (Result, error) {
-	return runOne(db, db.B.Inc(key, value))
+func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
+	return runOneRow(db, db.B.Inc(key, value))
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
 //
-// The returned Result will contain up to maxRows rows and Result.Err will
-// indicate success or failure.
+// The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Scan(begin, end interface{}, maxRows int64) (Result, error) {
-	return runOne(db, db.B.Scan(begin, end, maxRows))
+func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+	r, err := runOneResult(db, db.B.Scan(begin, end, maxRows))
+	return r.Rows, err
 }
 
 // Del deletes one or more keys.
 //
-// Each key will have a corresponding row in the returned Result.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) Del(keys ...interface{}) (Result, error) {
-	return runOne(db, db.B.Del(keys...))
+func (db *DB) Del(keys ...interface{}) error {
+	_, err := runOneResult(db, db.B.Del(keys...))
+	return err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
-//
-// The returned Result will contain 0 rows and Result.Err will indicate success
-// or failure.
 //
 // TODO(pmattis): Perhaps the result should return which rows were deleted.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (db *DB) DelRange(begin, end interface{}) (Result, error) {
-	return runOne(db, db.B.DelRange(begin, end))
+func (db *DB) DelRange(begin, end interface{}) error {
+	_, err := runOneResult(db, db.B.DelRange(begin, end))
+	return err
 }
 
 // AdminMerge merges the range containing key and the subsequent
@@ -334,7 +322,7 @@ func (db *DB) DelRange(begin, end interface{}) (Result, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) AdminMerge(key interface{}) error {
-	_, err := runOne(db, (&Batch{}).adminMerge(key))
+	_, err := runOneResult(db, (&Batch{}).adminMerge(key))
 	return err
 }
 
@@ -343,7 +331,7 @@ func (db *DB) AdminMerge(key interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) AdminSplit(splitKey interface{}) error {
-	_, err := runOne(db, (&Batch{}).adminSplit(splitKey))
+	_, err := runOneResult(db, (&Batch{}).adminSplit(splitKey))
 	return err
 }
 
@@ -432,42 +420,36 @@ func (tx *Tx) SetSnapshotIsolation() {
 	tx.txn.txn.Isolation = proto.SNAPSHOT
 }
 
-// Get retrieves one or more keys. Each requested key will have a corresponding
-// row in the returned Result.
+// Get retrieves the value for a key, returning the retrieved key/value or an
+// error.
 //
-//   r, err := db.Get("a", "b", "c")
-//   // string(r.Rows[0].Key) == "a"
-//   // string(r.Rows[1].Key) == "b"
-//   // string(r.Rows[2].Key) == "c"
+//   r, err := db.Get("a")
+//   // string(r.Key) == "a"
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Get(keys ...interface{}) (Result, error) {
-	return runOne(tx, tx.B.Get(keys...))
+func (tx *Tx) Get(key interface{}) (KeyValue, error) {
+	return runOneRow(tx, tx.B.Get(key))
 }
 
-// Put sets the value for a key.
-//
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
+// Put sets the value for a key
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) Put(key, value interface{}) (Result, error) {
-	return runOne(tx, tx.B.Put(key, value))
+func (tx *Tx) Put(key, value interface{}) error {
+	_, err := runOneResult(tx, tx.B.Put(key, value))
+	return err
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue.
 //
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) CPut(key, value, expValue interface{}) (Result, error) {
-	return runOne(tx, tx.B.CPut(key, value, expValue))
+func (tx *Tx) CPut(key, value, expValue interface{}) error {
+	_, err := runOneResult(tx, tx.B.CPut(key, value, expValue))
+	return err
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -479,29 +461,28 @@ func (tx *Tx) CPut(key, value, expValue interface{}) (Result, error) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Inc(key interface{}, value int64) (Result, error) {
-	return runOne(tx, tx.B.Inc(key, value))
+func (tx *Tx) Inc(key interface{}, value int64) (KeyValue, error) {
+	return runOneRow(tx, tx.B.Inc(key, value))
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
 //
-// The returned Result will contain up to maxRows rows and Result.Err will
-// indicate success or failure.
+// The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Scan(begin, end interface{}, maxRows int64) (Result, error) {
-	return runOne(tx, tx.B.Scan(begin, end, maxRows))
+func (tx *Tx) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+	r, err := runOneResult(tx, tx.B.Scan(begin, end, maxRows))
+	return r.Rows, err
 }
 
 // Del deletes one or more keys.
 //
-// Each key will have a corresponding row in the returned Result.
-//
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) Del(keys ...interface{}) (Result, error) {
-	return runOne(tx, tx.B.Del(keys...))
+func (tx *Tx) Del(keys ...interface{}) error {
+	_, err := runOneResult(tx, tx.B.Del(keys...))
+	return err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -511,8 +492,9 @@ func (tx *Tx) Del(keys ...interface{}) (Result, error) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (tx *Tx) DelRange(begin, end interface{}) (Result, error) {
-	return runOne(tx, tx.B.DelRange(begin, end))
+func (tx *Tx) DelRange(begin, end interface{}) error {
+	_, err := runOneResult(tx, tx.B.DelRange(begin, end))
+	return err
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -696,28 +678,22 @@ func (b *Batch) InternalAddCall(call Call) {
 	b.initResult(1 /* calls */, 0 /* numRows */, nil)
 }
 
-// Get retrieves one or more keys. A new result will be appended to the batch
-// and each requested key will have a corresponding row in the Result.
+// Get retrieves the value for a key. A new result will be appended to the
+// batch which will contain a single row.
 //
-//   r, err := db.Get("a", "b", "c")
+//   r, err := db.Get("a")
 //   // string(r.Rows[0].Key) == "a"
-//   // string(r.Rows[1].Key) == "b"
-//   // string(r.Rows[2].Key) == "c"
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) Get(keys ...interface{}) *Batch {
-	var calls []Call
-	for _, key := range keys {
-		k, err := marshalKey(key)
-		if err != nil {
-			b.initResult(0, len(keys), err)
-			break
-		}
-		calls = append(calls, Get(proto.Key(k)))
+func (b *Batch) Get(key interface{}) *Batch {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, err)
+		return b
 	}
-	b.calls = append(b.calls, calls...)
-	b.initResult(len(calls), len(calls), nil)
+	b.calls = append(b.calls, Get(proto.Key(k)))
+	b.initResult(1, 1, nil)
 	return b
 }
 
@@ -903,8 +879,8 @@ func (b *Batch) adminSplit(splitKey interface{}) *Batch {
 
 type batcher struct{}
 
-func (b batcher) Get(keys ...interface{}) *Batch {
-	return (&Batch{}).Get(keys...)
+func (b batcher) Get(key interface{}) *Batch {
+	return (&Batch{}).Get(key)
 }
 
 func (b batcher) Put(key, value interface{}) *Batch {
@@ -972,10 +948,18 @@ type Runner interface {
 	Run(b *Batch) error
 }
 
-func runOne(r Runner, b *Batch) (Result, error) {
+func runOneResult(r Runner, b *Batch) (Result, error) {
 	if err := r.Run(b); err != nil {
 		return Result{Err: err}, err
 	}
 	res := b.Results[0]
 	return res, res.Err
+}
+
+func runOneRow(r Runner, b *Batch) (KeyValue, error) {
+	if err := r.Run(b); err != nil {
+		return KeyValue{}, err
+	}
+	res := b.Results[0]
+	return res.Rows[0], res.Err
 }

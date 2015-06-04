@@ -113,12 +113,12 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	sr, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), proto.KeyMax, 0)
+	rows, err := localDB.Scan(keys.LocalPrefix.PrefixEnd(), proto.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var keys []proto.Key
-	for _, kv := range sr.Rows {
+	for _, kv := range rows {
 		keys = append(keys, kv.Key)
 	}
 	var expectedKeys = []proto.Key{
@@ -389,10 +389,10 @@ func TestNodeStatus(t *testing.T) {
 	oldStats := compareStoreStatus(t, ts.node, expectedNodeStatus, 0)
 
 	// Write some values left and right of the proposed split key.
-	if _, err := ts.db.Put("a", content); err != nil {
+	if err := ts.db.Put("a", content); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ts.db.Put("c", content); err != nil {
+	if err := ts.db.Put("c", content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -464,10 +464,10 @@ func TestNodeStatus(t *testing.T) {
 	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 2)
 
 	// Write some values left and right of the proposed split key.
-	if _, err := ts.db.Put("aa", content); err != nil {
+	if err := ts.db.Put("aa", content); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ts.db.Put("cc", content); err != nil {
+	if err := ts.db.Put("cc", content); err != nil {
 		t.Fatal(err)
 	}
 

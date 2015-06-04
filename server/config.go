@@ -238,8 +238,7 @@ func putConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 		}
 	}
 	key := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-	_, err := db.Put(key, config)
-	return err
+	return db.Put(key, config)
 }
 
 // getConfig retrieves the configuration for the specified key. If the
@@ -254,15 +253,15 @@ func getConfig(db *client.DB, configPrefix proto.Key, config gogoproto.Message,
 	path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all configs if the key is empty.
 	if len(path) == 0 {
-		var sr client.Result
-		if sr, err = db.Scan(configPrefix, configPrefix.PrefixEnd(), maxGetResults); err != nil {
+		var rows []client.KeyValue
+		if rows, err = db.Scan(configPrefix, configPrefix.PrefixEnd(), maxGetResults); err != nil {
 			return
 		}
-		if len(sr.Rows) == maxGetResults {
+		if len(rows) == maxGetResults {
 			log.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
 		}
 		var prefixes []string
-		for _, row := range sr.Rows {
+		for _, row := range rows {
 			trimmed := bytes.TrimPrefix(row.Key, configPrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
@@ -288,6 +287,5 @@ func deleteConfig(db *client.DB, configPrefix proto.Key, path string, r *http.Re
 		return util.Errorf("the default configuration cannot be deleted")
 	}
 	configKey := keys.MakeKey(configPrefix, proto.Key(path[1:]))
-	_, err := db.Del(configKey)
-	return err
+	return db.Del(configKey)
 }

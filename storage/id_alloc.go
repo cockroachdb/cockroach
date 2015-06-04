@@ -113,7 +113,7 @@ func (ia *idAllocator) allocateBlock(incr int64) {
 			log.Warningf("unable to allocate %d ids from %s: %s", incr, idKey, err)
 			return retry.Continue, err
 		}
-		newValue = r.Rows[0].ValueInt()
+		newValue = r.ValueInt()
 		return retry.Break, nil
 	})
 	if err != nil {

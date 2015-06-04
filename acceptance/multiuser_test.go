@@ -73,7 +73,7 @@ func TestMultiuser(t *testing.T) {
 	}
 
 	for i, w := range writes {
-		_, err := w.client.Put(w.key, w.key)
+		err := w.client.Put(w.key, w.key)
 		if (err == nil) != w.success {
 			t.Errorf("test case #%d: %+v, got err=%v", i, w, err)
 		}
@@ -92,7 +92,7 @@ func TestMultiuser(t *testing.T) {
 	}
 
 	for i, r := range reads {
-		_, err := r.client.Get(r.key, r.key)
+		_, err := r.client.Get(r.key)
 		if (err == nil) != r.success {
 			t.Errorf("test case #%d: %+v, got err=%v", i, r, err)
 		}

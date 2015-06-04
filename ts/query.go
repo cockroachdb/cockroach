@@ -405,7 +405,7 @@ func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
 	// query.
 	startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
 	endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-	sr, err := db.db.Scan(startKey, endKey, 0)
+	rows, err := db.db.Scan(startKey, endKey, 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -413,7 +413,7 @@ func (db *DB) Query(query proto.TimeSeriesQueryRequest_Query, r Resolution,
 	// Construct a new dataSpan for each distinct source encountered in the
 	// query. Each dataspan will contain all data queried from the same source.
 	sourceSpans := make(map[string]*dataSpan)
-	for _, row := range sr.Rows {
+	for _, row := range rows {
 		data := &proto.InternalTimeSeriesData{}
 		if err := row.ValueProto(data); err != nil {
 			return nil, nil, err

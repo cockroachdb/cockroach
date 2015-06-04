@@ -55,14 +55,14 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	r, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), 1000)
+	rows, err := kvDB.Scan(startKey, keys.Meta2Prefix.PrefixEnd(), 1000)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		osExit(1)
 		return
 	}
 
-	for _, row := range r.Rows {
+	for _, row := range rows {
 		desc := &proto.RangeDescriptor{}
 		if err := row.ValueProto(desc); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", row.Key)

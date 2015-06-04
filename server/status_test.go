@@ -452,13 +452,13 @@ func TestMetricsRecording(t *testing.T) {
 		gr, err := tsrv.db.Get(key)
 		if err != nil {
 			return err
-		} else if !gr.Rows[0].Exists() {
+		} else if !gr.Exists() {
 			return util.Errorf("key %s had nil value", key)
 		}
 
 		// The value should be an internal time series.
 		data := &proto.InternalTimeSeriesData{}
-		if err := gr.Rows[0].ValueProto(data); err != nil {
+		if err := gr.ValueProto(data); err != nil {
 			return err
 		}
 		return nil

@@ -61,14 +61,12 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 	if err := gob.NewEncoder(&buf).Encode(s); err != nil {
 		return err
 	}
-	_, err := db.kvDB.Put(k, buf.Bytes())
-	return err
+	return db.kvDB.Put(k, buf.Bytes())
 }
 
 // DeleteSchema removes s from the kv store.
 func (db *structuredDB) DeleteSchema(s *Schema) error {
-	_, err := db.kvDB.Del(keys.MakeKey(keys.SchemaPrefix, proto.Key(s.Key)))
-	return err
+	return db.kvDB.Del(keys.MakeKey(keys.SchemaPrefix, proto.Key(s.Key)))
 }
 
 // GetSchema returns the Schema with the given key, or nil if
@@ -80,14 +78,14 @@ func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !gr.Rows[0].Exists() {
+	if !gr.Exists() {
 		// No value present.
 		return nil, nil
 	}
 	// TODO(pmattis): This is an inappropriate use of gob. Replace with
 	// something else.
 	s := &Schema{}
-	if err := gob.NewDecoder(bytes.NewBuffer(gr.Rows[0].ValueBytes())).Decode(s); err != nil {
+	if err := gob.NewDecoder(bytes.NewBuffer(gr.ValueBytes())).Decode(s); err != nil {
 		return nil, err
 	}
 	return s, nil

@@ -53,7 +53,7 @@ func TestPut(t *testing.T) {
 			for time.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)
 				v := value[:r.Intn(len(value))]
-				if _, err := c.Put(fmt.Sprintf("%08d", k), v); err != nil {
+				if err := c.Put(fmt.Sprintf("%08d", k), v); err != nil {
 					errs <- err
 					return
 				}
