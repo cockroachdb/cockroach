@@ -32,12 +32,12 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
-func createTestClient(t *testing.T, addr string) *client.KV {
+func createTestClient(t *testing.T, addr string) *client.DB {
 	db, err := client.Open("https://root@" + addr + "?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db.InternalKV()
+	return db
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
@@ -46,76 +46,51 @@ func TestKVDBCoverage(t *testing.T) {
 	s := startServer(t)
 	defer s.Stop()
 
-	kvClient := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.ServingAddr())
 	key := proto.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
 	value3 := []byte("value3")
 
 	// Put first value at key.
-	putReq := &proto.PutRequest{Value: proto.Value{Bytes: value1}}
-	putReq.Key = key
-	putResp := &proto.PutResponse{}
-	if err := kvClient.Run(client.Call{Args: putReq, Reply: putResp}); err != nil || putResp.Error != nil {
-		t.Fatalf("%s, %s", err, putResp.GoError())
+	if err := db.Put(key, value1); err != nil {
+		t.Fatal(err)
 	}
 
-	// Verify put with Contains.
-	containsReq := &proto.ContainsRequest{}
-	containsReq.Key = key
-	containsResp := &proto.ContainsResponse{}
-	if err := kvClient.Run(client.Call{Args: containsReq, Reply: containsResp}); err != nil || containsResp.Error != nil {
-		t.Fatalf("%s, %s", err, containsResp.GoError())
-	}
-	if !containsResp.Exists {
-		t.Error("expected contains to be true")
+	// Verify put.
+	if gr, err := db.Get(key); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Error("expected key to exist after delete")
 	}
 
 	// Conditional put should succeed, changing value1 to value2.
-	cPutReq := &proto.ConditionalPutRequest{
-		Value:    proto.Value{Bytes: value2},
-		ExpValue: &proto.Value{Bytes: value1},
-	}
-	cPutReq.Key = key
-	cPutResp := &proto.ConditionalPutResponse{}
-	if err := kvClient.Run(client.Call{Args: cPutReq, Reply: cPutResp}); err != nil || cPutResp.Error != nil {
-		t.Fatalf("%s, %s", err, cPutResp.GoError())
+	if err := db.CPut(key, value2, value1); err != nil {
+		t.Fatal(err)
 	}
 
 	// Verify get by looking up conditional put value.
-	getReq := &proto.GetRequest{}
-	getReq.Key = key
-	getResp := &proto.GetResponse{}
-	if err := kvClient.Run(client.Call{Args: getReq, Reply: getResp}); err != nil || getResp.Error != nil {
-		t.Fatalf("%s, %s", err, getResp.GoError())
-	}
-	if !bytes.Equal(getResp.Value.Bytes, value2) {
-		t.Errorf("expected get to return %q; got %q", value2, getResp.Value.Bytes)
+	if gr, err := db.Get(key); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Equal(gr.ValueBytes(), value2) {
+		t.Errorf("expected get to return %q; got %q", value2, gr.ValueBytes())
 	}
 
 	// Increment.
-	incrReq := &proto.IncrementRequest{Increment: 10}
-	incrReq.Key = proto.Key("i")
-	incrResp := &proto.IncrementResponse{}
-	if err := kvClient.Run(client.Call{Args: incrReq, Reply: incrResp}); err != nil || incrResp.Error != nil {
-		t.Fatalf("%s, %s", err, incrResp.GoError())
-	}
-	if incrResp.NewValue != incrReq.Increment {
-		t.Errorf("expected increment new value of %d; got %d", incrReq.Increment, incrResp.NewValue)
+	if ir, err := db.Inc("i", 10); err != nil {
+		t.Fatal(err)
+	} else if ir.ValueInt() != 10 {
+		t.Errorf("expected increment new value of %d; got %d", 10, ir.ValueInt())
 	}
 
 	// Delete conditional put value.
-	delReq := &proto.DeleteRequest{}
-	delReq.Key = key
-	delResp := &proto.DeleteResponse{}
-	if err := kvClient.Run(client.Call{Args: delReq, Reply: delResp}); err != nil || delResp.Error != nil {
-		t.Fatalf("%s, %s", err, delResp.GoError())
+	if err := db.Del(key); err != nil {
+		t.Fatal(err)
 	}
-	if err := kvClient.Run(client.Call{Args: containsReq, Reply: containsResp}); err != nil || containsResp.Error != nil {
-		t.Fatalf("%s, %s", err, containsResp.GoError())
-	}
-	if containsResp.Exists {
-		t.Error("expected contains to be false after delete")
+	if gr, err := db.Get(key); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Error("expected key to not exist after delete")
 	}
 
 	// Put values in anticipation of scan & delete range.
@@ -125,36 +100,24 @@ func TestKVDBCoverage(t *testing.T) {
 		{Key: proto.Key("c"), Value: proto.Value{Bytes: value3}},
 	}
 	for _, kv := range keyValues {
-		putReq.Key, putReq.Value = kv.Key, kv.Value
-		if err := kvClient.Run(client.Call{Args: putReq, Reply: putResp}); err != nil || putResp.Error != nil {
-			t.Fatalf("%s, %s", err, putResp.GoError())
+		if err := db.Put(kv.Key, kv.Value.Bytes); err != nil {
+			t.Fatal(err)
 		}
 	}
-	scanReq := &proto.ScanRequest{}
-	scanReq.Key = proto.Key("a")
-	scanReq.EndKey = proto.Key("c").Next()
-	scanResp := &proto.ScanResponse{}
-	if err := kvClient.Run(client.Call{Args: scanReq, Reply: scanResp}); err != nil || scanResp.Error != nil {
-		t.Fatalf("%s, %s", err, scanResp.GoError())
-	}
-	if len(scanResp.Rows) != len(keyValues) {
-		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(scanResp.Rows))
-	}
-	for i, kv := range keyValues {
-		if !bytes.Equal(scanResp.Rows[i].Value.Bytes, kv.Value.Bytes) {
-			t.Errorf("%d: key %q, values %q != %q", i, kv.Key, scanResp.Rows[i].Value.Bytes, kv.Value.Bytes)
+	if rows, err := db.Scan("a", "d", 0); err != nil {
+		t.Fatal(err)
+	} else if len(rows) != len(keyValues) {
+		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
+	} else {
+		for i, kv := range keyValues {
+			if !bytes.Equal(rows[i].ValueBytes(), kv.Value.Bytes) {
+				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[i].ValueBytes(), kv.Value.Bytes)
+			}
 		}
 	}
 
-	deleteRangeReq := &proto.DeleteRangeRequest{}
-	deleteRangeReq.Key = proto.Key("a")
-	deleteRangeReq.EndKey = proto.Key("c").Next()
-	deleteRangeResp := &proto.DeleteRangeResponse{}
-	if err := kvClient.Run(client.Call{Args: deleteRangeReq, Reply: deleteRangeResp}); err != nil || deleteRangeResp.Error != nil {
-		t.Fatalf("%s, %s", err, deleteRangeResp.GoError())
-	}
-	if deleteRangeResp.NumDeleted != int64(len(keyValues)) {
-		t.Fatalf("expected %d rows in deleterange; got %d", len(keyValues), deleteRangeResp.NumDeleted)
+	if err := db.DelRange("a", "c"); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -178,13 +141,15 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{&proto.InternalTruncateLogRequest{}, &proto.InternalTruncateLogResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
-	kvClient := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.ServingAddr())
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
 		if proto.IsRange(test.args) {
 			test.args.Header().EndKey = test.args.Header().Key.Next()
 		}
-		err := kvClient.Run(client.Call{Args: test.args, Reply: test.reply})
+		b := &client.Batch{}
+		b.InternalAddCall(client.Call{Args: test.args, Reply: test.reply})
+		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
 		} else if err.Error() != "404 Not Found" {
@@ -199,13 +164,13 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	s := startServer(t)
 	defer s.Stop()
 
-	kvClient := createTestClient(t, s.ServingAddr())
-	txnOpts := &client.TransactionOptions{Name: "test"}
-	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
+	db := createTestClient(t, s.ServingAddr())
+	err := db.Tx(func(tx *client.Tx) error {
 		// Make an EndTransaction request which would fail if not
 		// stripped. In this case, we set the start key to "bar" for a
 		// split of the default range; start key must be "" in this case.
-		return txn.Run(client.Call{
+		b := &client.Batch{}
+		b.InternalAddCall(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
 				Commit:        true,
@@ -217,6 +182,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
+		return tx.Run(b)
 	})
 	if err == nil {
 		t.Errorf("expected 400 bad request error on commit")
@@ -301,38 +267,30 @@ func TestKVDBTransaction(t *testing.T) {
 	s := startServer(t)
 	defer s.Stop()
 
-	kvClient := createTestClient(t, s.ServingAddr())
+	db := createTestClient(t, s.ServingAddr())
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")
-	// Use snapshot isolation so non-transactional read can always push.
-	txnOpts := &client.TransactionOptions{
-		Name:      "test",
-		Isolation: proto.SNAPSHOT,
-	}
-	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
-		if err := txn.Run(client.Put(key, value)); err != nil {
+	err := db.Tx(func(tx *client.Tx) error {
+		// Use snapshot isolation so non-transactional read can always push.
+		tx.SetSnapshotIsolation()
+
+		if err := tx.Put(key, value); err != nil {
 			t.Fatal(err)
 		}
 
 		// Attempt to read outside of txn.
-		call := client.Get(key)
-		gr := call.Reply.(*proto.GetResponse)
-		if err := kvClient.Run(call); err != nil {
+		if gr, err := db.Get(key); err != nil {
 			t.Fatal(err)
-		}
-		if gr.Value != nil {
+		} else if gr.Exists() {
 			t.Errorf("expected nil value; got %+v", gr.Value)
 		}
 
 		// Read within the transaction.
-		call = client.Get(key)
-		gr = call.Reply.(*proto.GetResponse)
-		if err := txn.Run(call); err != nil {
+		if gr, err := tx.Get(key); err != nil {
 			t.Fatal(err)
-		}
-		if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-			t.Errorf("expected value %q; got %q", value, gr.Value.Bytes)
+		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
+			t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 		}
 		return nil
 	})
@@ -341,12 +299,9 @@ func TestKVDBTransaction(t *testing.T) {
 	}
 
 	// Verify the value is now visible after commit.
-	call := client.Get(key)
-	gr := call.Reply.(*proto.GetResponse)
-	if err = kvClient.Run(call); err != nil {
+	if gr, err := db.Get(key); err != nil {
 		t.Errorf("expected success reading value; got %s", err)
-	}
-	if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-		t.Errorf("expected value %q; got %q", value, gr.Value.Bytes)
+	} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
+		t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 	}
 }

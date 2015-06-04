@@ -235,8 +235,7 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	// resolve intents.  If intents are left unresolved then the
 	// asynchronous resolution may happen after the call to RemoveRange
 	// below, reviving the range and breaking the test.
-	kv := store.DB().InternalKV()
-	if err := kv.Run(client.Scan(keys.LocalMax, keys.SystemMax, 1000)); err != nil {
+	if _, err := store.DB().Scan(keys.LocalMax, keys.SystemMax, 1000); err != nil {
 		t.Fatal(err)
 	}
 
