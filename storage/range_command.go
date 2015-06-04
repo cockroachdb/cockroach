@@ -833,35 +833,35 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("split range %d at %s", desc.RaftID, splitKey),
-	}
-	kv := r.rm.DB().InternalKV()
-	if err = kv.RunTransaction(txnOpts, func(txn *client.Txn) error {
+	if err = r.rm.DB().Tx(func(tx *client.Tx) error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
+		b := &client.Batch{}
 		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
-		txn.Prepare(updateRangeDescriptorCall(desc1Key, nil, newDesc))
-		// Update existing range descriptor for first half of split.
-		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
-		txn.Prepare(updateRangeDescriptorCall(desc2Key, desc, &updatedDesc))
-		// Update range descriptor addressing record(s).
-		calls, err := splitRangeAddressing(newDesc, &updatedDesc)
-		if err != nil {
+		if err := updateRangeDescriptor(b, desc1Key, nil, newDesc); err != nil {
 			return err
 		}
-		txn.Prepare(calls...)
-		if err := txn.Flush(); err != nil {
+		// Update existing range descriptor for first half of split.
+		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
+		if err := updateRangeDescriptor(b, desc2Key, desc, &updatedDesc); err != nil {
+			return err
+		}
+		// Update range descriptor addressing record(s).
+		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
+			return err
+		}
+		if err := tx.Run(b); err != nil {
 			return err
 		}
 		// Update the RangeTree.
-		if err := InsertRange(txn, newDesc.StartKey); err != nil {
+		b = &client.Batch{}
+		if err := InsertRange(tx, b, newDesc.StartKey); err != nil {
 			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		txn.Prepare(client.Call{
+		b.InternalAddCall(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: args.Key},
 				Commit:        true,
@@ -875,7 +875,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Flush()
+		return tx.Run(b)
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %s failed: %s", splitKey, err))
 	}
@@ -1003,29 +1003,26 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 	log.Infof("initiating a merge of %s into %s", subsumedRng, r)
 
-	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("merge range %d into %d", subsumedDesc.RaftID, desc.RaftID),
-	}
-	kv := r.rm.DB().InternalKV()
-	if err := kv.RunTransaction(txnOpts, func(txn *client.Txn) error {
+	if err := r.rm.DB().Tx(func(tx *client.Tx) error {
 		// Update the range descriptor for the receiving range.
+		b := &client.Batch{}
 		desc1Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
-		txn.Prepare(updateRangeDescriptorCall(desc1Key, desc, &updatedDesc))
+		if err := updateRangeDescriptor(b, desc1Key, desc, &updatedDesc); err != nil {
+			return err
+		}
 
 		// Remove the range descriptor for the deleted range.
 		// TODO(bdarnell): need a conditional delete?
 		desc2Key := keys.RangeDescriptorKey(subsumedDesc.StartKey)
-		txn.Prepare(client.Delete(desc2Key))
+		b.Del(desc2Key)
 
-		calls, err := mergeRangeAddressing(desc, &updatedDesc)
-		if err != nil {
+		if err := mergeRangeAddressing(b, desc, &updatedDesc); err != nil {
 			return err
 		}
-		txn.Prepare(calls...)
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		txn.Prepare(client.Call{
+		b.InternalAddCall(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: args.Key},
 				Commit:        true,
@@ -1039,7 +1036,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Flush()
+		return tx.Run(b)
 	}); err != nil {
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
 			subsumedDesc.RaftID, desc.RaftID, err))
@@ -1136,27 +1133,24 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
 
-	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("change replicas of %d", desc.RaftID),
-	}
-	kv := r.rm.DB().InternalKV()
-	err := kv.RunTransaction(txnOpts, func(txn *client.Txn) error {
+	err := r.rm.DB().Tx(func(tx *client.Tx) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
+		b := &client.Batch{}
 		descKey := keys.RangeDescriptorKey(updatedDesc.StartKey)
 
-		txn.Prepare(updateRangeDescriptorCall(descKey, desc, &updatedDesc))
-
-		// Update range descriptor addressing record(s).
-		calls, err := updateRangeAddressing(&updatedDesc)
-		if err != nil {
+		if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
 			return err
 		}
-		txn.Prepare(calls...)
+
+		// Update range descriptor addressing record(s).
+		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
+			return err
+		}
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		txn.Prepare(client.Call{
+		b.InternalAddCall(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 				Commit:        true,
@@ -1172,7 +1166,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return txn.Flush()
+		return tx.Run(b)
 	})
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
@@ -1205,39 +1199,25 @@ func replicaSetsEqual(a, b []proto.Replica) bool {
 	return true
 }
 
-// updateRangeDescriptorCall returns a client.Call to execute a ConditionalPut
-// on the range descriptor.
-// The conditional put verifies that changes to the range descriptor are made
-// in a well-defined order, preventing a scenario where a wayward replica which
-// is no longer part of the original Raft group comes back online to form a splinter
-// group with a node which was also a former replica, and hijacks the range
-// descriptor. This is a last line of defense; other mechanisms should prevent
-// rogue replicas from getting this far (see #768).
-func updateRangeDescriptorCall(descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) client.Call {
-	var oldValue *proto.Value
+// updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
+// conditional put verifies that changes to the range descriptor are made in a
+// well-defined order, preventing a scenario where a wayward replica which is
+// no longer part of the original Raft group comes back online to form a
+// splinter group with a node which was also a former replica, and hijacks the
+// range descriptor. This is a last line of defense; other mechanisms should
+// prevent rogue replicas from getting this far (see #768).
+func updateRangeDescriptor(b *client.Batch, descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) error {
+	var oldValue []byte
 	if oldDesc != nil {
-		oldData, err := gogoproto.Marshal(oldDesc)
-		if err != nil {
-			return client.Call{Err: err}
+		var err error
+		if oldValue, err = gogoproto.Marshal(oldDesc); err != nil {
+			return err
 		}
-		oldValue = &proto.Value{Bytes: oldData}
 	}
-
-	newData, err := gogoproto.Marshal(newDesc)
+	newValue, err := gogoproto.Marshal(newDesc)
 	if err != nil {
-		return client.Call{Err: err}
+		return err
 	}
-	newValue := proto.Value{Bytes: newData}
-	newValue.InitChecksum(descKey)
-
-	return client.Call{
-		Args: &proto.ConditionalPutRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: descKey,
-			},
-			Value:    newValue,
-			ExpValue: oldValue,
-		},
-		Reply: &proto.ConditionalPutResponse{},
-	}
+	b.CPut(descKey, newValue, oldValue)
+	return nil
 }

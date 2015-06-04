@@ -115,19 +115,17 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	for i, test := range testCases {
 		left := &proto.RangeDescriptor{RaftID: int64(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
 		right := &proto.RangeDescriptor{RaftID: int64(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
-		var calls []client.Call
+		b := &client.Batch{}
 		if test.split {
-			var err error
-			if calls, err = splitRangeAddressing(left, right); err != nil {
+			if err := splitRangeAddressing(b, left, right); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			var err error
-			if calls, err = mergeRangeAddressing(left, right); err != nil {
+			if err := mergeRangeAddressing(b, left, right); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := store.DB().InternalKV().Run(calls...); err != nil {
+		if err := store.DB().Run(b); err != nil {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
@@ -207,7 +205,7 @@ func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	left := &proto.RangeDescriptor{StartKey: proto.KeyMin, EndKey: meta1Key(proto.Key("a"))}
 	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: proto.KeyMax}
-	if _, err := splitRangeAddressing(left, right); err == nil {
+	if err := splitRangeAddressing(&client.Batch{}, left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
 }
