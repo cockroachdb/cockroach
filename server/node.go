@@ -561,8 +561,10 @@ func (n *Node) startRuntimeStats(stopper *util.Stopper) {
 				uPerc := float64(newUtime-uTime) / dur
 				sPerc := float64(newStime-sTime) / dur
 
-				log.Infof("runtime stats: %d goroutines, %.2fMB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-					runtime.NumGoroutine(), activeMB, cgoRate, uPerc, sPerc, float64(dPauseNS)/dur, dNumGC)
+				log.Infof("runtime stats: %d tasks, %d goroutines, %.2fMB active, "+
+					"%.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+					stopper.NumTasks(), runtime.NumGoroutine(), activeMB, cgoRate,
+					uPerc, sPerc, float64(dPauseNS)/dur, dNumGC)
 
 				uTime, sTime = newUtime, newStime
 				cgoCall = curCgoCall
