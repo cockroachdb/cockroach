@@ -193,12 +193,9 @@ func (c *Clock) PhysicalTime() time.Time {
 // in which case the state of the clock will not have been
 // altered.
 // To timestamp events of local origin, use Now instead.
-func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
+func (c *Clock) Update(rt proto.Timestamp) proto.Timestamp {
 	c.Lock()
 	defer c.Unlock()
-	defer func() {
-		result = c.timestamp()
-	}()
 	physicalClock := c.physicalClock()
 
 	if physicalClock > c.state.WallTime && physicalClock > rt.WallTime {
@@ -206,7 +203,7 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 		// as the new wall time and the logical clock is reset.
 		c.state.WallTime = physicalClock
 		c.state.Logical = 0
-		return
+		return c.timestamp()
 	}
 
 	// In the remaining cases, our physical clock plays no role
@@ -235,7 +232,5 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 		}
 		c.state.Logical++
 	}
-	// The variable result will be updated via defer just
-	// before the object is unlocked.
-	return
+	return c.timestamp()
 }

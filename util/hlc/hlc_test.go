@@ -133,7 +133,6 @@ func TestClock(t *testing.T) {
 	}
 
 	var current proto.Timestamp
-	var err error
 	for i, step := range expectedHistory {
 		m.Set(step.wallClock)
 		switch step.event {
@@ -143,9 +142,9 @@ func TestClock(t *testing.T) {
 			fallthrough
 		default:
 			previous := c.Timestamp()
-			current, err = c.Update(*step.input)
-			if current.Equal(previous) && err == nil {
-				t.Errorf("%d: clock not updated even though no error occurred", i)
+			current = c.Update(*step.input)
+			if current.Equal(previous) {
+				t.Errorf("%d: clock not updated", i)
 			}
 		}
 		if !current.Equal(step.expected) {

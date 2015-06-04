@@ -1198,13 +1198,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		}
 		// Update our clock with the incoming request timestamp. This
 		// advances the local node's clock to a high water mark from
-		// amongst all nodes with which it has interacted. The update is
-		// bounded by the max clock drift.
-		_, err := s.ctx.Clock.Update(header.Timestamp)
-		if err != nil {
-			reply.Header().SetGoError(err)
-			return err
-		}
+		// amongst all nodes with which it has interacted.
+		s.ctx.Clock.Update(header.Timestamp)
 	}
 
 	// Backoff and retry loop for handling errors.
