@@ -79,6 +79,10 @@ func (kv *KeyValue) setValue(v *proto.Value) {
 	}
 }
 
+func (kv *KeyValue) setTimestamp(t proto.Timestamp) {
+	kv.Timestamp = t.GoTime()
+}
+
 // ValueBytes returns the value as a byte slice. This method will panic if the
 // value's type is not a byte slice.
 func (kv *KeyValue) ValueBytes() []byte {
@@ -603,16 +607,20 @@ func (b *Batch) fillResults() error {
 					row.setValue(t.Value)
 				}
 			case *proto.PutResponse:
+				req := call.Args.(*proto.PutRequest)
 				row := &result.Rows[k]
-				row.Key = []byte(call.Args.(*proto.PutRequest).Key)
+				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.setValue(&call.Args.(*proto.PutRequest).Value)
+					row.setValue(&req.Value)
+					row.setTimestamp(t.Timestamp)
 				}
 			case *proto.ConditionalPutResponse:
+				req := call.Args.(*proto.ConditionalPutRequest)
 				row := &result.Rows[k]
-				row.Key = []byte(call.Args.(*proto.ConditionalPutRequest).Key)
+				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.setValue(&call.Args.(*proto.ConditionalPutRequest).Value)
+					row.setValue(&req.Value)
+					row.setTimestamp(t.Timestamp)
 				}
 			case *proto.IncrementResponse:
 				row := &result.Rows[k]

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -46,7 +47,6 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	s := startServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.ServingAddr())
-	db.User = storage.UserRoot
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -66,7 +66,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// lookup, etc, ad nauseam.
 	success := make(chan struct{})
 	go func() {
-		if err := db.Run(client.Get(proto.Key("a"))); err != nil {
+		if _, err := db.Get("a"); err != nil {
 			t.Fatal(err)
 		}
 		close(success)
@@ -84,21 +84,12 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // key range at key "b". Returns the test server and client.
 // The caller is responsible for stopping the server and
 // closing the client.
-func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
+func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.DB) {
 	s := startServer(t)
 	db := createTestClient(t, s.ServingAddr())
-	db.User = storage.UserRoot
 
 	// Split the keyspace at "b".
-	if err := db.Run(client.Call{
-		Args: &proto.AdminSplitRequest{
-			RequestHeader: proto.RequestHeader{
-				Key: proto.Key("b"),
-			},
-			SplitKey: proto.Key("b"),
-		},
-		Reply: &proto.AdminSplitResponse{},
-	}); err != nil {
+	if err := db.AdminSplit("b"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,18 +102,15 @@ func TestMultiRangeScan(t *testing.T) {
 	defer s.Stop()
 
 	// Write keys "a" and "b".
-	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
-		if err := db.Run(client.Put(key, []byte("value"))); err != nil {
+	for _, key := range []string{"a", "b"} {
+		if err := db.Put(key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	call := client.Scan(proto.Key("a"), proto.Key("c"), 0)
-	sr := call.Reply.(*proto.ScanResponse)
-	if err := db.Run(call); err != nil {
+	if rows, err := db.Scan("a", "c", 0); err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
-	}
-	if l := len(sr.Rows); l != 2 {
+	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 }
@@ -135,22 +123,25 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	defer s.Stop()
 
 	// Write keys "a" and "b".
-	keys := []proto.Key{proto.Key("a"), proto.Key("b")}
-	ts := []proto.Timestamp{}
+	keys := []string{"a", "b"}
+	ts := []time.Time{}
+	b := &client.Batch{}
 	for _, key := range keys {
-		call := client.Put(key, []byte("value"))
-		pr := call.Reply.(*proto.PutResponse)
-		if err := db.Run(call); err != nil {
-			t.Fatal(err)
-		}
-		ts = append(ts, pr.Timestamp)
+		b.Put(key, "value")
+	}
+	if err := db.Run(b); err != nil {
+		t.Fatal(err)
+	}
+	for i := range keys {
+		ts = append(ts, b.Results[i].Rows[0].Timestamp)
+		log.Infof("%d: %s", i, b.Results[i].Rows[0].Timestamp)
 	}
 
 	// Do an inconsistent scan from a new dist sender and verify it does
 	// the read at its local clock and doesn't receive an
 	// OpRequiresTxnError. We set the local clock to the timestamp of
 	// the first key to verify it's used to read only key "a".
-	manual := hlc.NewManualClock(ts[1].WallTime - 1)
+	manual := hlc.NewManualClock(ts[1].UnixNano() - 1)
 	clock := hlc.NewClock(manual.UnixNano)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
 	call := client.Scan(proto.Key("a"), proto.Key("c"), 0)
@@ -165,7 +156,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	if l := len(sr.Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
 	}
-	if key := sr.Rows[0].Key; !key.Equal(keys[0]) {
+	if key := string(sr.Rows[0].Key); keys[0] != key {
 		t.Errorf("expected key %q; got %q", keys[0], key)
 	}
 }
@@ -175,16 +166,14 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 func TestStartEqualsEndKeyScan(t *testing.T) {
 	s := startServer(t)
 	db := createTestClient(t, s.ServingAddr())
-	db.User = storage.UserRoot
 	defer s.Stop()
 
 	// Write key "a".
-	if err := db.Run(client.Put(proto.Key("a"), []byte("value"))); err != nil {
+	if err := db.Put("a", "value"); err != nil {
 		t.Fatal(err)
 	}
 
-	call := client.Scan(proto.Key("a"), proto.Key("a"), 0)
-	if err := db.Run(call); err == nil {
+	if _, err := db.Scan("a", "a", 0); err == nil {
 		t.Fatalf("expected error on scan with startkey == endkey")
 	}
 }
@@ -194,20 +183,11 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 func TestSplitByMeta2KeyMax(t *testing.T) {
 	s := startServer(t)
 	db := createTestClient(t, s.ServingAddr())
-	db.User = storage.UserRoot
 	defer s.Stop()
 
 	ch := make(chan struct{})
 	go func() {
-		if err := db.Run(client.Call{
-			Args: &proto.AdminSplitRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: proto.KeyMin,
-				},
-				SplitKey: keys.Meta2KeyMax,
-			},
-			Reply: &proto.AdminSplitResponse{},
-		}); err == nil {
+		if err := db.AdminSplit(keys.Meta2KeyMax); err == nil {
 			t.Fatalf("range split on Meta2KeyMax should fail")
 		}
 		close(ch)

@@ -272,8 +272,9 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 		PushType:  proto.ABORT_TXN,
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
-	kv := rng.rm.DB().InternalKV()
-	if err := kv.Run(client.Call{Args: pushArgs, Reply: pushReply}); err != nil {
+	b := &client.Batch{}
+	b.InternalAddCall(client.Call{Args: pushArgs, Reply: pushReply})
+	if err := rng.rm.DB().Run(b); err != nil {
 		log.Warningf("push of txn %s failed: %s", meta.Txn, err)
 		updateOldestIntent(meta.Timestamp.WallTime)
 		return
