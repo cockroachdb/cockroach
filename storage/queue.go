@@ -119,7 +119,7 @@ func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
 		name:     name,
 		impl:     impl,
 		maxSize:  maxSize,
-		incoming: make(chan *Range, 10),
+		incoming: make(chan *Range, 50),
 		ranges:   map[int64]*rangeItem{},
 	}
 }
