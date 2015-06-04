@@ -309,9 +309,6 @@ func (sr *ScanResponse) Count() int64 {
 }
 
 // Method implements the Request interface.
-func (*ContainsRequest) Method() Method { return Contains }
-
-// Method implements the Request interface.
 func (*GetRequest) Method() Method { return Get }
 
 // Method implements the Request interface.
@@ -373,9 +370,6 @@ func (*InternalTruncateLogRequest) Method() Method { return InternalTruncateLog 
 
 // Method implements the Request interface.
 func (*InternalBatchRequest) Method() Method { return InternalBatch }
-
-// CreateReply implements the Request interface.
-func (*ContainsRequest) CreateReply() Response { return &ContainsResponse{} }
 
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
@@ -442,7 +436,6 @@ func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLead
 // CreateReply implements the Request interface.
 func (*InternalBatchRequest) CreateReply() Response { return &InternalBatchResponse{} }
 
-func (*ContainsRequest) flags() int                   { return isRead }
 func (*GetRequest) flags() int                        { return isRead }
 func (*PutRequest) flags() int                        { return isWrite | isTxnWrite }
 func (*ConditionalPutRequest) flags() int             { return isRead | isWrite | isTxnWrite }

@@ -552,7 +552,6 @@ func TestVerifyPermissions(t *testing.T) {
 	}
 
 	allRequestTypes := []proto.Request{
-		&proto.ContainsRequest{},
 		&proto.GetRequest{},
 		&proto.PutRequest{},
 		&proto.ConditionalPutRequest{},

@@ -58,8 +58,6 @@ func verifyRequest(args proto.Request) error {
 func createArgsAndReply(method string) (proto.Request, proto.Response) {
 	if m, ok := proto.AllMethods[method]; ok {
 		switch m {
-		case proto.Contains:
-			return &proto.ContainsRequest{}, &proto.ContainsResponse{}
 		case proto.Get:
 			return &proto.GetRequest{}, &proto.GetResponse{}
 		case proto.Put:
@@ -163,11 +161,6 @@ type rpcDBServer DBServer
 func (s *rpcDBServer) executeCmd(args proto.Request, reply proto.Response) error {
 	s.sender.Send(context.TODO(), client.Call{Args: args, Reply: reply})
 	return nil
-}
-
-// Contains .
-func (s *rpcDBServer) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
-	return s.executeCmd(args, reply)
 }
 
 // Get .
