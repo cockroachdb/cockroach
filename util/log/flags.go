@@ -23,6 +23,7 @@ import "flag"
 func init() {
 	flag.BoolVar(&logging.toStderr, "logtostderr", true, "log to standard error instead of files")
 	flag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	flag.BoolVar(&logging.json, "logjson", false, "log in JSON format")
 	flag.StringVar(&logging.color, "color", "auto", "colorize standard error output according to severity")
 	flag.Var(&logging.verbosity, "verbosity", "log level for V logs")
 	// TODO(tschottdorf): decide if we need this.
