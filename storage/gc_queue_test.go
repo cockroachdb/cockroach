@@ -332,7 +332,7 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 	// Create a new range within "/db1" and verify that lookup of
 	// zone config results in the
 	rng2 := createRange(tc.store, 2, proto.Key("/db1/a"), proto.Key("/db1/b"))
-	if err := tc.store.AddRange(rng2); err != nil {
+	if err := tc.store.AddRangeTest(rng2); err != nil {
 		t.Fatal(err)
 	}
 

@@ -263,7 +263,7 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	}
 
 	// Re-add the range. This is necessary for a clean shutdown.
-	if err := store.AddRange(rangeB); err != nil {
+	if err := store.AddRangeTest(rangeB); err != nil {
 		t.Fatal(err)
 	}
 }

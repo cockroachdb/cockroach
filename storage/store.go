@@ -998,9 +998,9 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	return nil
 }
 
-// AddRange adds the range to the store's range map and to the sorted
-// rangesByKey slice.
-func (s *Store) AddRange(rng *Range) error {
+// AddRangeTest adds the range to the store's range map and to the sorted
+// rangesByKey slice. To be used only by unittests.
+func (s *Store) AddRangeTest(rng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err := s.addRangeInternal(rng, true)
