@@ -15,6 +15,7 @@
 		cockroach/proto/internal.proto
 		cockroach/proto/log.proto
 		cockroach/proto/status.proto
+		cockroach/proto/structured.proto
 		cockroach/proto/timeseries.proto
 
 	It has these top-level messages:
