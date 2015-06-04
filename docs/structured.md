@@ -139,14 +139,16 @@ under the secondary keys.
 
 **Interleaved table layout**
 
-We will not be implementing interleaved tables initially but it’s worth
-discussing how we might arrange their data. Imagine you have two tables A and B
-with B configured to be interleaved within A. The `/TableID-A/PrimaryIndexID/Key`
-prefix determines the key prefix where the data from table B will be stored
-along with an entire row from table A at primary key Key. All the rows from
-table B will bear the prefix `/TableID-A/PrimaryIndexID/Key/TableID-B`, with
-`/TableID-A/PrimaryIndexID/Key/TableID-B/KeyB` being a prefix for a particular row
-in the table.
+We will not be implementing interleaved tables as discussed in the
+[spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
+paper initially but it’s worth discussing how we might arrange their data.
+Imagine you have two tables A and B with B configured to be interleaved within
+A. The `/TableID-A/PrimaryIndexID/Key` prefix determines the key prefix where
+the data from table B will be stored along with an entire row from table A at
+primary key Key. All the rows from table B will bear the prefix
+`/TableID-A/PrimaryIndexID/Key/TableID-B`, with
+`/TableID-A/PrimaryIndexID/Key/TableID-B/KeyB` being a prefix for a particular
+row in the table.
 
 ##Examples##
 
