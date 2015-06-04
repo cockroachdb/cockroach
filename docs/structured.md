@@ -53,21 +53,21 @@ We support high level entities like Namespace, Table, Index, and Column.
 {Namespace,Table}Descriptor stores the entity metadata for {Namespace,Table}.
 
 ```proto
-     NamespaceDescriptor {
-         NamespaceID = … ,
-         Permissions = …,
-         ...}
+NamespaceDescriptor {
+  NamespaceID = … ,
+  Permissions = …,
+  ...}
 ```
 
 ```proto
-      TableDescriptor {
-         TableID = …,
-         Columns = [{ ColumnID = …, Name = ... }, ...],
-         Indexes = [{ IndexID = …, Name = …, ColumnIDs = [ … ]}, ...],
-         Permissions = …
-         NextFreeColumnId = …
-         NextFreeIndexID = ...,
-         ...}
+TableDescriptor {
+  TableID = …,
+  Columns = [{ ColumnID = …, Name = ... }, ...],
+  Indexes = [{ IndexID = …, Name = …, ColumnIDs = [ … ]}, ...],
+  Permissions = …
+  NextFreeColumnId = …
+  NextFreeIndexID = ...,
+  ...}
 ```
 
 In order to support fast renaming, we indirect entity access through a
@@ -90,7 +90,7 @@ be taken to not expose these implementation details to the user.
 The “/” separators used below are shorthand for ordered encoding of the
 separated values.
 
-**Global metadata keys**
+###Global metadata key###
 
 The root namespace is an unnamed namespace with a fixed ID of 0. Within it,
 metadata addressing will work as follows:
@@ -109,10 +109,11 @@ marking it deleted in its table descriptor. This will allow folks to recover
 their data for a few days/weeks before we garbage collect the table in the
 background.
 
-**Data addressing**
+###Data addressing###
 
-An Index consists of keys with the following prefix: `/TableID/IndexID/Key>`, where
-TableID represents the Table being addressed and IndexID the index in use.
+The Index data used to find data in the database is stored in the database
+itself at keys with the following prefix: `/TableID/IndexID/Key>`, where TableID
+represents the Table being addressed and IndexID the index in use.
 
 **Primary key addressing**
 
@@ -161,22 +162,22 @@ on lastname with IndexID=1. Column telephone might have a columnID=6. For an
 employee with employee-id=3456, the employee’s telephone can be queried/modified
 through the API using the query:
 
-```proto
+<pre><code>
   { table: “/microsoft/employees”,
     key: “3456”,
     columns : [“telephone” }
-```
+</code></pre>
 The query is converted internally by cockroach into a global key: /9876/0/3456/6
 (`/TableID/PrimaryIndexID/Key/ColumnID`).
 
 Assume a secondary index is built for the last-name column. Telephone numbers of
 employees with lastname=”kimball” can be queried using the query:
-```proto
+<pre><code>
   { table: “/microsoft/employees”,
     index: “last-name”,
     key: “kimball”,
     columns: [“telephone”] }
-```
+</code></pre>
 and this might produce two records for Spencer and Andy. Internally cockroach
 looks up the secondary index using key prefix:
 `/TableID/SecondaryIndexID/Key`=/9876/1/kimball to get to the two employee ids for
