@@ -574,7 +574,7 @@ func (n *Node) startRuntimeStats(stopper *util.Stopper) {
 	})
 }
 
-// executeCmd creates a client.Call struct and sends if via our local sender.
+// executeCmd creates a client.Call struct and sends it via our local sender.
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
 	// TODO(tschottdorf) get a hold on the client's ip and add it to the
 	// context before dispatching.

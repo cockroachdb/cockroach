@@ -159,7 +159,7 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 // registration.
 type rpcDBServer DBServer
 
-// executeCmd creates a client.Call struct and sends if via our local sender.
+// executeCmd creates a client.Call struct and sends it via our local sender.
 func (s *rpcDBServer) executeCmd(args proto.Request, reply proto.Response) error {
 	s.sender.Send(context.TODO(), client.Call{Args: args, Reply: reply})
 	return nil
