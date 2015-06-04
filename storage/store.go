@@ -1183,6 +1183,19 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		return err
 	}
 	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
+		if s.Clock().MaxOffset() > 0 {
+			// Once a command is submitted to raft, all replica's logical
+			// clocks will be ratcheted forward to match. If the command
+			// appears to come from a node with a bad clock, reject it now
+			// before we reach that point.
+			offset := time.Duration(header.Timestamp.WallTime - s.Clock().PhysicalNow())
+			if offset > s.Clock().MaxOffset() {
+				err := util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+					header.Timestamp.WallTime, offset)
+				reply.Header().SetGoError(err)
+				return err
+			}
+		}
 		// Update our clock with the incoming request timestamp. This
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted. The update is

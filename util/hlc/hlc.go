@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TODO(Tobias): Figure out if it would make sense to save some
@@ -216,9 +216,8 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 		if c.maxOffset.Nanoseconds() > 0 &&
 			rt.WallTime-physicalClock > c.maxOffset.Nanoseconds() {
 			// The remote wall time is too far ahead to be trustworthy.
-			err = util.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
+			log.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
 				rt.WallTime, rt.WallTime-physicalClock)
-			return
 		}
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.

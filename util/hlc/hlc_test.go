@@ -125,9 +125,6 @@ func TestClock(t *testing.T) {
 		{7, SEND, nil, proto.Timestamp{WallTime: 10, Logical: 7}},
 		// Wall clocks coincide, but the local logical clock wins.
 		{8, RECV, &proto.Timestamp{WallTime: 10, Logical: 4}, proto.Timestamp{WallTime: 10, Logical: 8}},
-		// The next message comes from a faulty clock and should
-		// be discarded.
-		{9, RECV, &proto.Timestamp{WallTime: 1100, Logical: 888}, proto.Timestamp{WallTime: 10, Logical: 8}},
 		// Wall clocks coincide, but the remote logical clock wins.
 		{10, RECV, &proto.Timestamp{WallTime: 10, Logical: 99}, proto.Timestamp{WallTime: 10, Logical: 100}},
 		// The physical clock has caught up and takes over.
@@ -156,35 +153,6 @@ func TestClock(t *testing.T) {
 		}
 	}
 	c.Now()
-}
-
-// TestSetMaxOffset ensures that checking received timestamps
-// for excessive offsets works correctly.
-func TestSetMaxOffset(t *testing.T) {
-	m := NewManualClock(123456789)
-	skewedTime := int64(123456789 + 51)
-	c := NewClock(m.UnixNano)
-	if c.MaxOffset() != 0 {
-		t.Fatalf("unexpected offset setting")
-	}
-	c.SetMaxOffset(50)
-	if c.MaxOffset() != 50 {
-		t.Fatalf("unexpected offset setting")
-	}
-	c.Now()
-	if c.Timestamp().WallTime != m.UnixNano() {
-		t.Fatalf("unexpected clock value")
-	}
-	_, err := c.Update(proto.Timestamp{WallTime: skewedTime})
-	if err == nil {
-		t.Fatalf("clock offset not recognized")
-	}
-	// Disable offset checking.
-	c.SetMaxOffset(0)
-	_, err = c.Update(proto.Timestamp{WallTime: skewedTime})
-	if err != nil || c.Timestamp().WallTime != skewedTime {
-		t.Fatalf("failed to disable offset checking")
-	}
 }
 
 // ExampleManualClock shows how a manual clock can be
