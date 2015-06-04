@@ -215,7 +215,7 @@ func TestSplitByMeta2KeyMax(t *testing.T) {
 
 	select {
 	case <-ch:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(5 * time.Second):
 		t.Error("range split on Meta2KeyMax timed out")
 	}
 }
