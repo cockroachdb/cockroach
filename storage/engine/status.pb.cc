@@ -1,1 +1,0 @@
-cockroach/proto/status.pb.cc

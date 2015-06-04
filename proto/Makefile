@@ -44,8 +44,9 @@ PROTOC_GEN_GOGO := $(GOPATH)/bin/protoc-gen-gogo
 # The gogoprotobuf customtype and unmarshaller extensions do not play nicely with integer
 # types. Manually wack the generate code to make it compile.
 all:
-	(cd ../.. && $(PROTOC) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=cockroach/storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS:%=cockroach/proto/%))
-	(cd ../.. && $(PROTOC) --cpp_out=cockroach/storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS))
+	(cd ../.. && $(PROTOC) --proto_path=$(PROTO_PATH)   --cpp_out=cockroach/storage/engine       $(GOGO_PROTOS))
+	(cd ../.. && $(PROTOC) --proto_path=.:$(PROTO_PATH) --cpp_out=cockroach/storage/engine       $(filter %api.proto %data.proto %internal.proto %config.proto %errors.proto, $(PROTOS:%=cockroach/proto/%)))
+	(cd ../.. && $(PROTOC) --proto_path=.:$(PROTO_PATH) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. $(PROTOS:%=cockroach/proto/%))
 	(cd ../storage/engine && ln -sf gogoproto/gogo.pb.cc .)
 	(cd ../storage/engine && ln -sf cockroach/proto/*.pb.cc .)
 	sed -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' < config.pb.go > config.pb.go.new && \
