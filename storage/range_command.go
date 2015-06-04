@@ -602,10 +602,11 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *proto.MVCCStats, args *
 	}
 
 	if !pusherWins {
+		err := proto.NewTransactionPushError(args.Txn, reply.PusheeTxn)
 		if log.V(1) {
-			log.Infof("failed to push intent %s vs %s using priority=%d", reply.PusheeTxn, args.Txn, priority)
+			log.Info(err)
 		}
-		reply.SetGoError(proto.NewTransactionPushError(args.Txn, reply.PusheeTxn))
+		reply.SetGoError(err)
 		return
 	}
 
