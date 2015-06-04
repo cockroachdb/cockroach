@@ -57,7 +57,7 @@ func getCoord(db *client.KV) *TxnCoordSender {
 }
 
 // newTxn begins a transaction.
-func newTxn(db *client.KV, clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
+func newTxn(clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
 	return proto.NewTransaction("test", baseKey, 1, proto.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
 }
 
@@ -94,7 +94,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	kv := s.DB.InternalKV()
 	coord := getCoord(kv)
 
-	txn := newTxn(kv, s.Clock, proto.Key("a"))
+	txn := newTxn(s.Clock, proto.Key("a"))
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
@@ -214,7 +214,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	defer s.Stop()
 	kv := s.DB.InternalKV()
 	coord := getCoord(kv)
-	txn := newTxn(kv, s.Clock, proto.Key("a"))
+	txn := newTxn(s.Clock, proto.Key("a"))
 
 	for _, rng := range ranges {
 		if rng.end != nil {
@@ -249,8 +249,8 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	kv := s.DB.InternalKV()
 	coord := getCoord(kv)
 
-	txn1 := newTxn(kv, s.Clock, proto.Key("a"))
-	txn2 := newTxn(kv, s.Clock, proto.Key("b"))
+	txn1 := newTxn(s.Clock, proto.Key("a"))
+	txn2 := newTxn(s.Clock, proto.Key("b"))
 	if err := kv.Run(client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn1),
 		Reply: &proto.PutResponse{}}); err != nil {
@@ -278,7 +278,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	coord.heartbeatInterval = 1 * time.Millisecond
 
-	txn := newTxn(kv, s.Clock, proto.Key("a"))
+	txn := newTxn(s.Clock, proto.Key("a"))
 	if err := kv.Run(client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
 		Reply: &proto.PutResponse{}}); err != nil {
@@ -350,7 +350,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	defer s.Stop()
 	kv := s.DB.InternalKV()
 
-	txn := newTxn(kv, s.Clock, proto.Key("a"))
+	txn := newTxn(s.Clock, proto.Key("a"))
 	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
 	if err := kv.Run(client.Call{
@@ -388,7 +388,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 
 	// Create a transaction with intent at "a".
 	key := proto.Key("a")
-	txn := newTxn(kv, s.Clock, key)
+	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
 	if err := kv.Run(client.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
@@ -397,7 +397,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	}
 
 	// Push the transaction to abort it.
-	txn2 := newTxn(kv, s.Clock, key)
+	txn2 := newTxn(s.Clock, key)
 	txn2.Priority = 2
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -449,7 +449,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	coord.heartbeatInterval = 1 * time.Millisecond
 
-	txn := newTxn(kv, s.Clock, proto.Key("a"))
+	txn := newTxn(s.Clock, proto.Key("a"))
 	if err := kv.Run(client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
 		Reply: &proto.PutResponse{}}); err != nil {

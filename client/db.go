@@ -74,10 +74,8 @@ func (kv *KeyValue) setValue(v *proto.Value) {
 	} else if v.Integer != nil {
 		kv.Value = v.Integer
 	}
-	if ts := v.Timestamp; ts != nil {
-		sec := ts.WallTime / 1e9
-		nsec := ts.WallTime % 1e9
-		kv.Timestamp = time.Unix(sec, nsec)
+	if v.Timestamp != nil {
+		kv.Timestamp = v.Timestamp.GoTime()
 	}
 }
 
@@ -418,6 +416,14 @@ func (tx *Tx) SetSnapshotIsolation() {
 	// operations run on it. Needs to tie into the Txn reset in case of
 	// retries.
 	tx.txn.txn.Isolation = proto.SNAPSHOT
+}
+
+// InternalSetPriority sets the transaction priority. It is intended for
+// internal (testing) use only.
+func (tx *Tx) InternalSetPriority(priority int32) {
+	// The negative user priority translates into a positive (and known) priority
+	// for the transaction.
+	tx.txn.kv.UserPriority = -priority
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an

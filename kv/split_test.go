@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -51,7 +50,6 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
 	for j := 0; ; j++ {
-		txnOpts := &client.TransactionOptions{Name: fmt.Sprintf("concurrent test %d:%d", i, j)}
 		select {
 		case <-done:
 			if wg != nil {
@@ -60,7 +58,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.InternalKV().RunTransaction(txnOpts, func(txn *client.Txn) error {
+			err := db.Tx(func(tx *client.Tx) error {
 				if first && txnChannel != nil {
 					txnChannel <- struct{}{}
 				} else if !first && retries != nil {
@@ -70,7 +68,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := util.RandBytes(src, 10)
 					val := util.RandBytes(src, int(src.Int31n(valBytes)))
-					if err := txn.Run(client.Put(key, val)); err != nil {
+					if err := tx.Put(key, val); err != nil {
 						log.Infof("experienced an error in routine %d: %s", i, err)
 						return err
 					}
