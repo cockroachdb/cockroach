@@ -20,6 +20,7 @@ package kv
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -152,7 +153,7 @@ func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request, _
 	// A limit of zero implies no limit.
 	limit, err := strconv.ParseInt(r.FormValue(rangeParamLimit), 10, 64)
 	if len(r.FormValue(rangeParamLimit)) > 0 && err != nil {
-		http.Error(w, "error parsing limit: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("error parsing limit: %s", err), http.StatusBadRequest)
 		return
 	}
 	if limit < 0 {
@@ -202,7 +203,7 @@ func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request,
 		defer r.Body.Close()
 		inputVal, err = strconv.ParseInt(string(b), 10, 64)
 		if err != nil {
-			http.Error(w, "could not parse int64 for increment: "+err.Error(), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("could not parse int64 for increment: %s", err), http.StatusBadRequest)
 			return
 		}
 	}

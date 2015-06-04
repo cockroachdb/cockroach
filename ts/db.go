@@ -98,7 +98,7 @@ func (p *poller) poll() {
 	}
 
 	if err := p.db.StoreData(p.r, data); err != nil {
-		log.Warningf("error writing time series data: %s", err.Error())
+		log.Warningf("error writing time series data: %s", err)
 	}
 }
 
