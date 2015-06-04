@@ -50,7 +50,13 @@ func startStatusServer() (*httptest.Server, *util.Stopper) {
 		log.Fatal(err)
 	}
 	status := newStatusServer(db, nil)
-	httpServer := httptest.NewTLSServer(status.router)
+	httpServer := httptest.NewUnstartedServer(status.router)
+	tlsConfig, err := testContext.GetServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	httpServer.TLS = tlsConfig
+	httpServer.StartTLS()
 	stopper.AddCloser(httpServer)
 	return httpServer, stopper
 }

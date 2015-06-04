@@ -27,9 +27,12 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -40,9 +43,21 @@ var (
 )
 
 func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {
-	server := httptest.NewTLSServer(handler)
-	addr := server.Listener.Addr().String()
-	return server, addr
+	ctx := &base.Context{
+		Insecure: false,
+		Certs:    security.EmbeddedCertsDir,
+	}
+
+	httpServer := httptest.NewUnstartedServer(handler)
+	tlsConfig, err := ctx.GetServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	httpServer.TLS = tlsConfig
+	httpServer.StartTLS()
+
+	addr := httpServer.Listener.Addr().String()
+	return httpServer, addr
 }
 
 // TestHTTPSenderSend verifies sending posts.

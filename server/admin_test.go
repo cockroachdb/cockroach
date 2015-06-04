@@ -46,7 +46,13 @@ func startAdminServer() (string, *util.Stopper) {
 	admin := newAdminServer(db, stopper)
 	mux := http.NewServeMux()
 	admin.registerHandlers(mux)
-	httpServer := httptest.NewTLSServer(mux)
+	httpServer := httptest.NewUnstartedServer(mux)
+	tlsConfig, err := testContext.GetServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	httpServer.TLS = tlsConfig
+	httpServer.StartTLS()
 	stopper.AddCloser(httpServer)
 
 	if strings.HasPrefix(httpServer.URL, "http://") {

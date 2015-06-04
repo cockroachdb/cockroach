@@ -28,6 +28,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/testutils"
 )
 
@@ -70,8 +72,20 @@ func newTestDB() *testDB {
 }
 
 func startServer(t *testing.T) {
-	server := httptest.NewTLSServer(NewRESTServer(newTestDB()))
-	serverAddr = server.Listener.Addr().String()
+	ctx := &base.Context{
+		Insecure: false,
+		Certs:    security.EmbeddedCertsDir,
+	}
+
+	httpServer := httptest.NewUnstartedServer(NewRESTServer(newTestDB()))
+	tlsConfig, err := ctx.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpServer.TLS = tlsConfig
+	httpServer.StartTLS()
+
+	serverAddr = httpServer.Listener.Addr().String()
 }
 
 func TestGetPutDeleteSchema(t *testing.T) {
