@@ -160,22 +160,23 @@ The primary index has a default IndexID=0 and there could be a secondary index
 on lastname with IndexID=1. Column telephone might have a columnID=6. For an
 employee with employee-id=3456, the employee’s telephone can be queried/modified
 through the API using the query:
-<pre>
- `{ table: “/microsoft/employees”,
+
+```proto
+  { table: “/microsoft/employees”,
     key: “3456”,
-    columns : [“telephone” }`
-</pre>
+    columns : [“telephone” }
+```
 The query is converted internally by cockroach into a global key: /9876/0/3456/6
 (`/TableID/PrimaryIndexID/Key/ColumnID`).
 
 Assume a secondary index is built for the last-name column. Telephone numbers of
 employees with lastname=”kimball” can be queried using the query:
-<pre>
- `{ table: “/microsoft/employees”,
+```proto
+  { table: “/microsoft/employees”,
     index: “last-name”,
     key: “kimball”,
-    columns: [“telephone”] }`
-</pre>
+    columns: [“telephone”] }
+```
 and this might produce two records for Spencer and Andy. Internally cockroach
 looks up the secondary index using key prefix:
 `/TableID/SecondaryIndexID/Key`=/9876/1/kimball to get to the two employee ids for
