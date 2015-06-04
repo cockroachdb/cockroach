@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -287,4 +288,58 @@ func TestDebugName(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestCommonMethods(t *testing.T) {
+	batchType := reflect.TypeOf(&client.Batch{})
+	batcherType := reflect.TypeOf(client.DB{}.B)
+	dbType := reflect.TypeOf(&client.DB{})
+	txType := reflect.TypeOf(&client.Tx{})
+	types := []reflect.Type{batchType, batcherType, dbType, txType}
+
+	type key struct {
+		typ    reflect.Type
+		method string
+	}
+	blacklist := map[key]struct{}{
+		key{batchType, "InternalAddCall"}:   {},
+		key{dbType, "AdminMerge"}:           {},
+		key{dbType, "AdminSplit"}:           {},
+		key{dbType, "InternalKV"}:           {},
+		key{dbType, "Run"}:                  {},
+		key{dbType, "Tx"}:                   {},
+		key{txType, "Commit"}:               {},
+		key{txType, "DebugName"}:            {},
+		key{txType, "InternalSetPriority"}:  {},
+		key{txType, "Run"}:                  {},
+		key{txType, "SetDebugName"}:         {},
+		key{txType, "SetSnapshotIsolation"}: {},
+	}
+
+	for b := range blacklist {
+		if _, ok := b.typ.MethodByName(b.method); !ok {
+			t.Fatalf("blacklist method (%s).%s does not exist", b.typ, b.method)
+		}
+	}
+
+	for _, typ := range types {
+		for j := 0; j < typ.NumMethod(); j++ {
+			m := typ.Method(j)
+			if len(m.PkgPath) > 0 {
+				continue
+			}
+			if _, ok := blacklist[key{typ, m.Name}]; ok {
+				continue
+			}
+			for _, otherTyp := range types {
+				if typ == otherTyp {
+					continue
+				}
+				if _, ok := otherTyp.MethodByName(m.Name); !ok {
+					t.Errorf("(%s).%s does not exist, but (%s).%s does",
+						otherTyp, m.Name, typ, m.Name)
+				}
+			}
+		}
+	}
 }
