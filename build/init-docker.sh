@@ -1,6 +1,13 @@
 #!/bin/bash
 
-set -u
+if [ "${DOCKER_HOST+x}" = "x" -a "$(uname)" = "Darwin" ]; then
+    if ! type -P "boot2docker" >& /dev/null; then
+	echo "boot2docker not found!"
+	exit 1
+    fi
+    echo "boot2docker shellinit # initializing DOCKER_* env variables"
+    eval $(boot2docker shellinit 2>/dev/null)
+fi
 
 # Verify that Docker is installed.
 DOCKER="docker"
