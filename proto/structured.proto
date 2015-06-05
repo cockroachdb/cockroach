@@ -27,6 +27,11 @@ option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+// For Cockroach internal use.
+message Internal {
+  optional uint32 id = 1 [(gogoproto.nullable) = false];
+}
+ 
 message Table {
   optional string name = 1 [(gogoproto.nullable) = false];
 }
@@ -37,11 +42,8 @@ message Column {
   }
   optional string name = 1 [(gogoproto.nullable) = false];
   optional ColumnType type = 2 [(gogoproto.nullable) = false];
-  // Fields for Cockroach internal use.
-  message Internal {
-    optional uint32 id = 1 [(gogoproto.nullable) = false];
-  }
-  optional Internal internal = 9 [(gogoproto.nullable) = false];
+  // For Cockroach internal use.
+  optional Internal internal = 9 [(gogoproto.nullable) = true];
 }
 
 message Index {
@@ -51,11 +53,8 @@ message Index {
   // column_name refers to a column in the TableSchema's columns. Special
   // care is taken to update this when deleting columns.
   repeated string column_names = 3 [(gogoproto.nullable) = false];
-  // Fields for Cockroach internal use.
-  message Internal {
-    optional uint32 id = 1 [(gogoproto.nullable) = false];
-  }
-  optional Internal internal = 9 [(gogoproto.nullable) = false];
+  // For Cockroach internal use.
+  optional Internal internal = 9 [(gogoproto.nullable) = true];
 }
 
 // TableSchema used to configure a db table. The internal messages
@@ -66,11 +65,8 @@ message TableSchema {
   // An ordered list of indexes included in the table. The first index is the
   // primary key; it is required.
   repeated Index indexes = 3 [(gogoproto.nullable) = false];
-  // Fields for Cockroach internal use.
-  message Internal {
-    optional uint32 id = 1 [(gogoproto.nullable) = false];
-  }
-  optional Internal internal = 9 [(gogoproto.nullable) = false];
+  // For Cockroach internal use.
+  optional Internal internal = 9 [(gogoproto.nullable) = true];
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata
