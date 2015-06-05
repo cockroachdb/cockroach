@@ -105,7 +105,7 @@ Table: `\x00tbl<NamespaceID><TableName>` -> `TableDescriptor`
 
 Creating/Renaming/Deleting: Creating a new Namespace or Table involves
 allocating a new ID, initializing the {Namespace,Table}Descriptor, and storing
-the descriptor at key: /parentID/name. Renaming involves deleting the
+the descriptor at key /parentID/name. Renaming involves deleting the
 `/old-parentID/old-name` and creating `/new-parentID/new-name`. A namespace can
 only be deleted if it does not contain any children. A table is deleted by
 marking it deleted in its table descriptor. This will allow folks to recover
@@ -116,7 +116,8 @@ background.
 
 The Index data used to find data in the database is stored in the database
 itself at keys with the following prefix: `/TableID/IndexID/Key>`, where TableID
-represents the Table being addressed and IndexID the index in use.
+represents the Table being addressed and IndexID the index in use. The encoding
+used ensures that the data and metadata are well-separated.
 
 **Primary key addressing**
 
