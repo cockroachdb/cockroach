@@ -64,22 +64,6 @@ func (m *Internal) GetId() uint32 {
 	return 0
 }
 
-type Table struct {
-	Name             string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *Table) Reset()         { *m = Table{} }
-func (m *Table) String() string { return proto1.CompactTextString(m) }
-func (*Table) ProtoMessage()    {}
-
-func (m *Table) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
-
 type Column struct {
 	Name string            `protobuf:"bytes,1,opt,name=name" json:"name"`
 	Type Column_ColumnType `protobuf:"varint,2,opt,name=type,enum=cockroach.proto.Column_ColumnType" json:"type"`
@@ -310,71 +294,6 @@ func (m *Internal) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-
-	return nil
-}
-func (m *Table) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Name = string(data[index:postIndex])
-			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -1059,17 +978,6 @@ func (m *Internal) Size() (n int) {
 	return n
 }
 
-func (m *Table) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovStructured(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *Column) Size() (n int) {
 	var l int
 	_ = l
@@ -1204,31 +1112,6 @@ func (m *Internal) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Id))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *Table) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Table) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

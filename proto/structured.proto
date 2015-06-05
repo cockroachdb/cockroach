@@ -32,10 +32,6 @@ message Internal {
   optional uint32 id = 1 [(gogoproto.nullable) = false];
 }
  
-message Table {
-  optional string name = 1 [(gogoproto.nullable) = false];
-}
-
 message Column {
   enum ColumnType {
     BYTES = 0;
