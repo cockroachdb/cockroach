@@ -24,9 +24,10 @@ implementations thereof. Each entity will support:
 
 - Creation: of a namespace, table, column in O(1).
 
-- Renaming: in O(1) Most configuration changes in O(1): A change in permissions
-  for instance, will be in O(1) time. Adding a new index will take O(n) time,
-where n is the number of rows in the table.
+- Renaming: in O(1)
+
+-  Most configuration changes in O(1): with some exceptions like creating a
+   new index will take O(n) time, where n is the number of rows in the table.
 
 - Deletion: in O(n) where n is the number of subordinate entities (tables for a
   namespace, rows for a table).
@@ -38,7 +39,7 @@ global-key addressing. Non-primary-keyed queries will be supported through the u
 
 For now we don't intend on developing the following:
 
-- Add support for triggers, stored-procedures, and integrity constraints
+- Add support for triggers, stored-procedures, and integrity constraints.
 
 - Add the notion of column types beyond *a sequence of bytes*. Add support for
   unbounded sub-collections of columns.
@@ -47,6 +48,8 @@ For now we don't intend on developing the following:
 
 - Add support for column locality-groups to improve data layout for performance.
 
+- Add support for interleaved tables.
+
 ##Design##
 
 We support high level entities like Namespace, Table, Index, and Column.
@@ -54,20 +57,22 @@ We support high level entities like Namespace, Table, Index, and Column.
 
 ```proto
 NamespaceDescriptor {
-  NamespaceID = … ,
-  Permissions = …,
-  ...}
+  NamespaceID = ...,
+  Permissions = ...,
+  ...
+}
 ```
 
 ```proto
 TableDescriptor {
-  TableID = …,
-  Columns = [{ ColumnID = …, Name = ... }, ...],
-  Indexes = [{ IndexID = …, Name = …, ColumnIDs = [ … ]}, ...],
-  Permissions = …
-  NextFreeColumnId = …
+  TableID = ...,
+  Columns = [{ ColumnID = ..., Name = ... }, ...],
+  Indexes = [{ IndexID = ..., Name = ..., ColumnIDs = [ ... ]}, ...],
+  Permissions = ...,
+  NextFreeColumnId = ...,
   NextFreeIndexID = ...,
-  ...}
+  ...
+}
 ```
 
 In order to support fast renaming, we indirect entity access through a
@@ -80,30 +85,28 @@ primary key. Follow-up work may relax this requirement. An investigation of use
 cases not requiring a primary key is required to specify this work.
 
 Initially, all the Table metadata in a cluster will be distributed by gossip and
-cached by each cockroach node. To reduce contention on the Table metadata, a
+cached by each Cockroach node. To reduce contention on the Table metadata, a
 database transaction on the data within a Table will only contain the data being
 addressed, and will not include a database read of the Table metadata. Care will
 be taken to not expose these implementation details to the user.
 
 ##Addressing: Anatomy of a key##
 
-The “/” separators used below are shorthand for ordered encoding of the
-separated values.
+The "/" separator is used below to disambiguate the components forming each
+key, and to stress an order to the way the components line up to form the key.
 
 ###Global metadata key###
 
-The root namespace is an unnamed namespace with a fixed ID of 0. Within it,
-metadata addressing will work as follows:
+The metadata addressing will work as follows:
 
-Namespace: `\x00ns<NamespaceName>` -> NamespaceDescriptor { NamespaceID = …, ...}
+Namespace: `\x00ns<NamespaceName>` -> `NamespaceDescriptor`
 
-Table: `\x00tbl<NamespaceID><TableName>` -> TableDescriptor { TableID = …,
-local-IDs, … }
+Table: `\x00tbl<NamespaceID><TableName>` -> `TableDescriptor`
 
 Creating/Renaming/Deleting: Creating a new Namespace or Table involves
 allocating a new ID, initializing the {Namespace,Table}Descriptor, and storing
-the descriptor at key:/parent-id/name. Renaming involves deleting the
-`/old-parent-id/old-name` and creating `/new-parent-id/new-name`. A namespace can
+the descriptor at key: /parentID/name. Renaming involves deleting the
+`/old-parentID/old-name` and creating `/new-parentID/new-name`. A namespace can
 only be deleted if it does not contain any children. A table is deleted by
 marking it deleted in its table descriptor. This will allow folks to recover
 their data for a few days/weeks before we garbage collect the table in the
@@ -118,29 +121,29 @@ represents the Table being addressed and IndexID the index in use.
 **Primary key addressing**
 
 This schema is made possible by the uniqueness constraint inherent to primary
-keys. The use of a primary key prefix: `/TableID/PrimaryIndexID/Key`, keys into a
-unique row in the database. A cell within a row under a particular column will
-be addressed by suffixing the desired ColumnID:
-`/TableID/PrimaryIndexID/Key/ColumnID`.  PrimaryIndexID is variable to allow
+keys. The primary key prefix `/TableID/PrimaryIndexID/Key` keys into a
+unique row in the database. A cell within a row under a particular column is
+addressed by adding the desired ColumnID to the key prefix:
+`/TableID/PrimaryIndexID/Key/ColumnID`. PrimaryIndexID is variable to allow
 changing the primary key.
 
 **Secondary key addressing**
 
 Secondary keys will be implemented as a layer of indirection to the primary
-keys. Unlike primary keys, secondary keys are not required to be unique.  So we
-will employ the following key anatomy that address null values:
+keys. Unlike primary keys, secondary keys are not required to be unique. So we
+will employ the following key anatomy:
 `/TableID/SecondaryIndexID/SecondaryKey/PrimaryKey`. Thus, multiple PrimaryKeys
 can be enumerated under a single SecondaryKey. A lookup will involve looking up
 the secondary index using the secondary key to pick up all the primary keys, and
 further using the primary keys to get to all the data rows. A row insertion
-involves: computing the primary and secondary keys for the row, adding the data
+involves computing the primary and secondary keys for the row, adding the data
 under the primary key, and adding the primary key to all the secondary indexes
-under the secondary keys.
+under the secondary keys. A row deletion behaves analogously.
 
 **Interleaved table layout**
 
 We will not be implementing interleaved tables as discussed in the
-[spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
+[Spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
 paper initially but it’s worth discussing how we might arrange their data.
 Imagine you have two tables A and B with B configured to be interleaved within
 A. The `/TableID-A/PrimaryIndexID/Key` prefix determines the key prefix where
@@ -164,23 +167,26 @@ on lastname with IndexID=1. Column telephone might have a columnID=6. For an
 employee with employee-id=3456, the employee’s telephone can be queried/modified
 through the API using the query:
 
-<pre><code>
+```?
   { table: “/microsoft/employees”,
     key: “3456”,
     columns : [“telephone” }
-</code></pre>
-The query is converted internally by cockroach into a global key: /9876/0/3456/6
+```
+
+The query is converted internally by Cockroach into a global key: /9876/0/3456/6
 (`/TableID/PrimaryIndexID/Key/ColumnID`).
 
 Assume a secondary index is built for the last-name column. Telephone numbers of
 employees with lastname=”kimball” can be queried using the query:
-<pre><code>
+
+```?
   { table: “/microsoft/employees”,
     index: “last-name”,
     key: “kimball”,
     columns: [“telephone”] }
-</code></pre>
-and this might produce two records for Spencer and Andy. Internally cockroach
+```
+
+and this might produce two records for Spencer and Andy. Internally Cockroach
 looks up the secondary index using key prefix:
 `/TableID/SecondaryIndexID/Key`=/9876/1/kimball to get to the two employee ids for
 Spencer and Andy, viz.: 1234 and 2345. The two telephone numbers are looked up
@@ -188,9 +194,9 @@ using keys: /9876/0/1234/6 and /9876/0/2345/6.
 
 **Key:Value DB**
 
- It is important to note that a key-value store is simply a degenerate case of
+It is important to note that a key:value store is simply a degenerate case of
 the more fully-featured namespace & table based schema defined here. A user
-interested in using cockroach as a key:value store to store all their documents
+interested in using Cockroach as a key:value store to store all their documents
 keyed by a document-id might define a table=“documents” under
 namespace=”published”, with a column “document”. The user can lookup/modify the
 database documents using the tuple (“/published/documents”, document-id,
@@ -204,7 +210,7 @@ these permissions, etc, per namespace and per table.
 
 **API**
 
-The cockroach API will be a protobuf service API. The read API will support a
+The Cockroach API will be a protobuf service API. The read API will support a
 Get() on a key filtered on a group of columns. It will also support a Scan() of
 multiple rows in a table into a stream of ResultSets. The client API written in
 a particular language can export iterators over a ResultSet. The write API will
