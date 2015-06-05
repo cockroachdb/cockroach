@@ -97,20 +97,19 @@ key, and to stress an order to the way the components line up to form the key.
 
 ###Global metadata key###
 
-The metadata addressing will work as follows:
+The metadata addressing will use the following key:Descriptor mappings:
 
-Namespace: `\x00ns<NamespaceName>` -> `NamespaceDescriptor`
+`\x00ns<NamespaceName>` : `NamespaceDescriptor`
 
-Table: `\x00tbl<NamespaceID><TableName>` -> `TableDescriptor`
+`\x00tbl<NamespaceID><TableName>` : `TableDescriptor`
 
 Creating/Renaming/Deleting: Creating a new Namespace or Table involves
 allocating a new ID, initializing the {Namespace,Table}Descriptor, and storing
-the descriptor at key /parentID/name. Renaming involves deleting the
-`/old-parentID/old-name` and creating `/new-parentID/new-name`. A namespace can
-only be deleted if it does not contain any children. A table is deleted by
-marking it deleted in its table descriptor. This will allow folks to recover
-their data for a few days/weeks before we garbage collect the table in the
-background.
+the descriptor at its key defined above. Renaming involves deleting the old
+key and creating a new one. A namespace can only be deleted if it does not
+contain any children. A table is deleted by marking it deleted in its table
+descriptor. This will allow folks to recover their data for a few days/weeks
+before we garbage collect the table in the background.
 
 ###Data addressing###
 
