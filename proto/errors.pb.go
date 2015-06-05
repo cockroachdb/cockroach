@@ -89,19 +89,12 @@ func (m *NotLeaderError) GetLeader() *Replica {
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 type RangeNotFoundError struct {
-	RaftID           int64  `protobuf:"varint,1,opt,name=raft_id" json:"raft_id"`
+	RaftID           RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
 func (*RangeNotFoundError) ProtoMessage() {}
-
-func (m *RangeNotFoundError) GetRaftID() int64 {
-	if m != nil {
-		return m.RaftID
-	}
-	return 0
-}
 
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
@@ -658,7 +651,7 @@ func (m *RangeNotFoundError) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.RaftID |= (int64(b) & 0x7F) << shift
+				m.RaftID |= (RaftID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

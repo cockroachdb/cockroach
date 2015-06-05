@@ -24,9 +24,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
@@ -38,21 +35,6 @@ func (n NodeID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
-// Marshal implements the gogoproto Marshaler interface.
-func (n NodeID) Marshal() ([]byte, error) {
-	return proto.EncodeVarint(uint64(n)), nil
-}
-
-// Unmarshal implements the gogoproto Unmarshaler interface.
-func (n *NodeID) Unmarshal(bytes []byte) error {
-	x, length := proto.DecodeVarint(bytes)
-	if length != len(bytes) {
-		return util.Errorf("invalid varint")
-	}
-	*n = NodeID(x)
-	return nil
-}
-
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
 
@@ -60,21 +42,6 @@ type StoreID int32
 // It is used to format the ID for use in Gossip keys.
 func (n StoreID) String() string {
 	return strconv.FormatInt(int64(n), 10)
-}
-
-// Marshal implements the gogoproto Marshaler interface.
-func (n StoreID) Marshal() ([]byte, error) {
-	return proto.EncodeVarint(uint64(n)), nil
-}
-
-// Unmarshal implements the gogoproto Unmarshaler interface.
-func (n *StoreID) Unmarshal(bytes []byte) error {
-	x, length := proto.DecodeVarint(bytes)
-	if length != len(bytes) {
-		return util.Errorf("invalid varint")
-	}
-	*n = StoreID(x)
-	return nil
 }
 
 // RaftNodeID is a custom type for a Raft node ID. A raft node ID

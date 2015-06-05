@@ -73,7 +73,7 @@ func MakeTableMetadataKey(namespaceID uint32, tableName string) proto.Key {
 // MakeRangeIDKey creates a range-local key based on the range's
 // Raft ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
-func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
+func MakeRangeIDKey(raftID proto.RaftID, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != LocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, LocalSuffixLength))
 	}
@@ -82,62 +82,62 @@ func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
-func RaftLogKey(raftID int64, logIndex uint64) proto.Key {
+func RaftLogKey(raftID proto.RaftID, logIndex uint64) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftLogSuffix,
 		encoding.EncodeUint64(nil, logIndex))
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
-func RaftLogPrefix(raftID int64) proto.Key {
+func RaftLogPrefix(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftLogSuffix, proto.Key{})
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
-func RaftHardStateKey(raftID int64) proto.Key {
+func RaftHardStateKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftHardStateSuffix, proto.Key{})
 }
 
 // DecodeRaftStateKey extracts the Raft ID from a RaftStateKey.
-func DecodeRaftStateKey(key proto.Key) int64 {
+func DecodeRaftStateKey(key proto.Key) proto.RaftID {
 	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
 		panic(fmt.Sprintf("key %q does not have %q prefix", key, LocalRangeIDPrefix))
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(LocalRangeIDPrefix):]
 	_, raftID := encoding.DecodeUvarint(b)
-	return int64(raftID)
+	return proto.RaftID(raftID)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
-func RaftTruncatedStateKey(raftID int64) proto.Key {
+func RaftTruncatedStateKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftTruncatedStateSuffix, proto.Key{})
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
-func RaftAppliedIndexKey(raftID int64) proto.Key {
+func RaftAppliedIndexKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftAppliedIndexSuffix, proto.Key{})
 }
 
 // RaftLeaderLeaseKey returns a system-local key for a raft leader lease.
-func RaftLeaderLeaseKey(raftID int64) proto.Key {
+func RaftLeaderLeaseKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftLeaderLeaseSuffix, proto.Key{})
 }
 
 // RaftLastIndexKey returns a system-local key for a raft last index.
-func RaftLastIndexKey(raftID int64) proto.Key {
+func RaftLastIndexKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRaftLastIndexSuffix, proto.Key{})
 }
 
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Raft ID.
-func RangeStatsKey(raftID int64) proto.Key {
+func RangeStatsKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRangeStatsSuffix, nil)
 }
 
 // ResponseCacheKey returns a range-local key by Raft ID for a
 // response cache entry, with detail specified by encoding the
 // supplied client command ID.
-func ResponseCacheKey(raftID int64, cmdID *proto.ClientCmdID) proto.Key {
+func ResponseCacheKey(raftID proto.RaftID, cmdID *proto.ClientCmdID) proto.Key {
 	detail := proto.Key{}
 	if cmdID != nil {
 		// Wall time helps sort for locality.
@@ -180,13 +180,13 @@ func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
 
 // RangeGCMetadataKey returns a range-local key for range garbage
 // collection metadata.
-func RangeGCMetadataKey(raftID int64) proto.Key {
+func RangeGCMetadataKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRangeGCMetadataSuffix, proto.Key{})
 }
 
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
-func RangeLastVerificationTimestampKey(raftID int64) proto.Key {
+func RangeLastVerificationTimestampKey(raftID proto.RaftID) proto.Key {
 	return MakeRangeIDKey(raftID, LocalRangeLastVerificationTimestampSuffix, proto.Key{})
 }
 

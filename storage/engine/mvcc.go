@@ -300,13 +300,13 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the supplied MVCCStats struct.
-func MVCCGetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
+func MVCCGetRangeStats(engine Engine, raftID proto.RaftID, ms *proto.MVCCStats) error {
 	_, err := MVCCGetProto(engine, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
 	return err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
-func MVCCSetRangeStats(engine Engine, raftID int64, ms *proto.MVCCStats) error {
+func MVCCSetRangeStats(engine Engine, raftID proto.RaftID, ms *proto.MVCCStats) error {
 	return MVCCPutProto(engine, nil, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
 }
 
@@ -1273,7 +1273,7 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 //
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeyRanges.
-func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto.Key, error) {
+func MVCCFindSplitKey(engine Engine, raftID proto.RaftID, key, endKey proto.Key) (proto.Key, error) {
 	if key.Less(keys.LocalMax) {
 		key = keys.LocalMax
 	}

@@ -97,9 +97,9 @@ message RawKeyValue {
 message StoreIdent {
   optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
   optional int32 node_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
 // A SplitTrigger is run after a successful commit of an AdminSplit
@@ -118,7 +118,8 @@ message SplitTrigger {
 // for the merge to be completed and put into operation.
 message MergeTrigger {
   optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
-  optional int64 subsumed_raft_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SubsumedRaftID"];
+  optional int64 subsumed_raft_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "SubsumedRaftID", (gogoproto.casttype) = "RaftID"];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -130,9 +131,9 @@ enum ReplicaChangeType {
 
 message ChangeReplicasTrigger {
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
   optional ReplicaChangeType change_type = 3 [(gogoproto.nullable) = false];
 
   // The new replica list with this change applied.
@@ -259,7 +260,8 @@ message Lease {
   // The expiration is a timestamp at which the lease will expire.
   optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
   // The Raft NodeID on which the would-be lease holder lives.
-  optional uint64 raft_node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftNodeID"];
+  optional uint64 raft_node_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RaftNodeID", (gogoproto.casttype) = "RaftNodeID"];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

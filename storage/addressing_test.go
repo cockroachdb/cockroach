@@ -113,8 +113,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	expMetas := metaSlice{}
 
 	for i, test := range testCases {
-		left := &proto.RangeDescriptor{RaftID: int64(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
-		right := &proto.RangeDescriptor{RaftID: int64(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
+		left := &proto.RangeDescriptor{RaftID: proto.RaftID(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
+		right := &proto.RangeDescriptor{RaftID: proto.RaftID(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
 		b := &client.Batch{}
 		if test.split {
 			if err := splitRangeAddressing(b, left, right); err != nil {

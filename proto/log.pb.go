@@ -33,11 +33,11 @@ type LogEntry struct {
 	Format string         `protobuf:"bytes,6,opt,name=format" json:"format"`
 	Args   []LogEntry_Arg `protobuf:"bytes,7,rep,name=args" json:"args"`
 	// Optional parameters which may be set with log entry.
-	NodeID  *int32 `protobuf:"varint,8,opt,name=node_id" json:"node_id,omitempty"`
-	StoreID *int32 `protobuf:"varint,9,opt,name=store_id" json:"store_id,omitempty"`
-	RaftID  *int64 `protobuf:"varint,10,opt,name=raft_id" json:"raft_id,omitempty"`
-	Method  *int32 `protobuf:"varint,11,opt,name=method" json:"method,omitempty"`
-	Key     Key    `protobuf:"bytes,12,opt,name=key,customtype=Key" json:"key"`
+	NodeID  *NodeID  `protobuf:"varint,8,opt,name=node_id,casttype=NodeID" json:"node_id,omitempty"`
+	StoreID *StoreID `protobuf:"varint,9,opt,name=store_id,casttype=StoreID" json:"store_id,omitempty"`
+	RaftID  *RaftID  `protobuf:"varint,10,opt,name=raft_id,casttype=RaftID" json:"raft_id,omitempty"`
+	Method  *Method  `protobuf:"varint,11,opt,name=method,casttype=Method" json:"method,omitempty"`
+	Key     Key      `protobuf:"bytes,12,opt,name=key,customtype=Key" json:"key"`
 	// Stack traces if requested.
 	Stacks           []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks"`
 	XXX_unrecognized []byte `json:"-"`
@@ -94,34 +94,6 @@ func (m *LogEntry) GetArgs() []LogEntry_Arg {
 		return m.Args
 	}
 	return nil
-}
-
-func (m *LogEntry) GetNodeID() int32 {
-	if m != nil && m.NodeID != nil {
-		return *m.NodeID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetStoreID() int32 {
-	if m != nil && m.StoreID != nil {
-		return *m.StoreID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetRaftID() int64 {
-	if m != nil && m.RaftID != nil {
-		return *m.RaftID
-	}
-	return 0
-}
-
-func (m *LogEntry) GetMethod() int32 {
-	if m != nil && m.Method != nil {
-		return *m.Method
-	}
-	return 0
 }
 
 func (m *LogEntry) GetStacks() []byte {
@@ -319,14 +291,14 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
 			}
-			var v int32
+			var v NodeID
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				v |= (int32(b) & 0x7F) << shift
+				v |= (NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -336,14 +308,14 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StoreID", wireType)
 			}
-			var v int32
+			var v StoreID
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				v |= (int32(b) & 0x7F) << shift
+				v |= (StoreID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -353,14 +325,14 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
 			}
-			var v int64
+			var v RaftID
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				v |= (int64(b) & 0x7F) << shift
+				v |= (RaftID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -370,14 +342,14 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Method", wireType)
 			}
-			var v int32
+			var v Method
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				v |= (int32(b) & 0x7F) << shift
+				v |= (Method(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

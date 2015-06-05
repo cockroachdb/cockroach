@@ -50,7 +50,7 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 //
 // A ResponseCache is safe for concurrent access.
 type ResponseCache struct {
-	raftID int64
+	raftID proto.RaftID
 	engine engine.Engine
 	sync.Mutex
 }
@@ -59,7 +59,7 @@ type ResponseCache struct {
 // maintains a response cache, not just the leader. However, when a
 // replica loses or gains leadership of the Raft consensus group, the
 // inflight map should be cleared.
-func NewResponseCache(raftID int64, engine engine.Engine) *ResponseCache {
+func NewResponseCache(raftID proto.RaftID, engine engine.Engine) *ResponseCache {
 	return &ResponseCache{
 		raftID: raftID,
 		engine: engine,
@@ -105,7 +105,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Respon
 // failures decoding individual cache entries return an error. The
 // copy is done directly using the engine instead of interpreting
 // values through MVCC for efficiency.
-func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
+func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) error {
 	rc.Lock()
 	defer rc.Unlock()
 
@@ -141,7 +141,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 // is in progress. Failures decoding individual cache entries return an
 // error. The copy is done directly using the engine instead of interpreting
 // values through MVCC for efficiency.
-func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID int64) error {
+func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RaftID) error {
 	prefix := keys.ResponseCacheKey(originRaftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())

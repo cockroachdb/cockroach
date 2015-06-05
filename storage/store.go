@@ -197,8 +197,8 @@ func (e *NotBootstrappedError) Error() string {
 // cycles through a store's rangesByKey btree.
 type storeRangeSet struct {
 	store   *Store
-	raftIDs []int64 // Raft IDs of ranges to be visited.
-	visited int     // Number of visited ranges. -1 when Visit() is not being called.
+	raftIDs []proto.RaftID // Raft IDs of ranges to be visited.
+	visited int            // Number of visited ranges. -1 when Visit() is not being called.
 }
 
 func newStoreRangeSet(store *Store) *storeRangeSet {
@@ -213,7 +213,7 @@ func (rs *storeRangeSet) Visit(visitor func(*Range) bool) {
 	// that we can safely (e.g., no race, no range skip) iterate
 	// over ranges regardless of how BTree is implemented.
 	rs.store.mu.RLock()
-	rs.raftIDs = make([]int64, rs.store.rangesByKey.Len())
+	rs.raftIDs = make([]proto.RaftID, rs.store.rangesByKey.Len())
 	i := 0
 	rs.store.rangesByKey.Ascend(func(item btree.Item) bool {
 		rs.raftIDs[i] = item.(*Range).Desc().RaftID
@@ -269,10 +269,10 @@ type Store struct {
 	nodeDesc       *proto.NodeDescriptor
 	initComplete   sync.WaitGroup // Signaled by async init tasks
 
-	mu           sync.RWMutex     // Protects variables below...
-	ranges       map[int64]*Range // Map of ranges by Raft ID
-	rangesByKey  *btree.BTree     // btree keyed by ranges end keys.
-	uninitRanges map[int64]*Range // Map of uninitialized ranges by Raft ID
+	mu           sync.RWMutex            // Protects variables below...
+	ranges       map[proto.RaftID]*Range // Map of ranges by Raft ID
+	rangesByKey  *btree.BTree            // btree keyed by ranges end keys.
+	uninitRanges map[proto.RaftID]*Range // Map of uninitialized ranges by Raft ID
 }
 
 var _ multiraft.Storage = &Store{}
@@ -357,9 +357,9 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 		db:           ctx.DB,
 		engine:       eng,
 		_allocator:   newAllocator(ctx.Gossip),
-		ranges:       map[int64]*Range{},
+		ranges:       map[proto.RaftID]*Range{},
 		rangesByKey:  btree.New(64 /* degree */),
-		uninitRanges: map[int64]*Range{},
+		uninitRanges: map[proto.RaftID]*Range{},
 		nodeDesc:     nodeDesc,
 	}
 
@@ -791,7 +791,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 }
 
 // GetRange fetches a range by Raft ID. Returns an error if no range is found.
-func (s *Store) GetRange(raftID int64) (*Range, error) {
+func (s *Store) GetRange(raftID proto.RaftID) (*Range, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if rng, ok := s.ranges[raftID]; ok {
@@ -823,8 +823,8 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 }
 
 // RaftStatus returns the current raft status of the given range.
-func (s *Store) RaftStatus(raftID int64) *raft.Status {
-	return s.multiraft.Status(uint64(raftID))
+func (s *Store) RaftStatus(raftID proto.RaftID) *raft.Status {
+	return s.multiraft.Status(raftID)
 }
 
 // BootstrapRange creates the first range in the cluster and manually
@@ -966,7 +966,7 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 		return nil, err
 	}
 	desc := &proto.RangeDescriptor{
-		RaftID:   id,
+		RaftID:   proto.RaftID(id),
 		StartKey: start,
 		EndKey:   end,
 		Replicas: append([]proto.Replica(nil), replicas...),
@@ -1008,7 +1008,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
 // on the same store.
-func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error {
+func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID proto.RaftID) error {
 	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
 		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingRng.Desc().EndKey)
@@ -1092,7 +1092,7 @@ func (s *Store) addRangeToRangeMap(rng *Range) error {
 func (s *Store) RemoveRange(rng *Range) error {
 	// RemoveGroup needs to access the storage, which in turn needs the
 	// lock. Some care is needed to avoid deadlocks.
-	if err := s.multiraft.RemoveGroup(uint64(rng.Desc().RaftID)); err != nil {
+	if err := s.multiraft.RemoveGroup(rng.Desc().RaftID); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -1384,7 +1384,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		panic("proposed a nil command")
 	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
-	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
+	err := s.multiraft.CreateGroup(cmd.RaftID)
 	if err != nil {
 		ch := make(chan error, 1)
 		ch <- err
@@ -1401,12 +1401,12 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 		// needs to understand it; it cannot simply be an opaque command.
 		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
-		return s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
+		return s.multiraft.ChangeGroupMembership(cmd.RaftID, string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
 			proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
 			data)
 	}
-	return s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
+	return s.multiraft.SubmitCommand(cmd.RaftID, string(idKey), data)
 }
 
 // processRaft processes read/write commands that have been committed
@@ -1419,14 +1419,14 @@ func (s *Store) processRaft() {
 			select {
 			case e := <-s.multiraft.Events:
 				var cmd proto.InternalRaftCommand
-				var groupID int64
+				var groupID proto.RaftID
 				var commandID string
 				var index uint64
 				var callback func(error)
 
 				switch e := e.(type) {
 				case *multiraft.EventCommandCommitted:
-					groupID = int64(e.GroupID)
+					groupID = e.GroupID
 					commandID = e.CommandID
 					index = e.Index
 					err := gogoproto.Unmarshal(e.Command, &cmd)
@@ -1439,7 +1439,7 @@ func (s *Store) processRaft() {
 					}
 
 				case *multiraft.EventMembershipChangeCommitted:
-					groupID = int64(e.GroupID)
+					groupID = e.GroupID
 					commandID = e.CommandID
 					index = e.Index
 					callback = e.Callback
@@ -1479,14 +1479,14 @@ func (s *Store) processRaft() {
 }
 
 // GroupStorage implements the multiraft.Storage interface.
-func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
+func (s *Store) GroupStorage(groupID proto.RaftID) multiraft.WriteableGroupStorage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r, ok := s.ranges[int64(groupID)]
+	r, ok := s.ranges[groupID]
 	if !ok {
 		var err error
 		r, err = NewRange(&proto.RangeDescriptor{
-			RaftID: int64(groupID),
+			RaftID: groupID,
 			// TODO(bdarnell): other fields are unknown; need to populate them from
 			// snapshot.
 		}, s)
@@ -1505,10 +1505,10 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 }
 
 // AppliedIndex implements the multiraft.StateMachine interface.
-func (s *Store) AppliedIndex(groupID uint64) (uint64, error) {
+func (s *Store) AppliedIndex(groupID proto.RaftID) (uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	r, ok := s.ranges[int64(groupID)]
+	r, ok := s.ranges[groupID]
 	if !ok {
 		return 0, util.Errorf("range %d not found", groupID)
 	}

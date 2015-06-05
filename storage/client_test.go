@@ -279,7 +279,7 @@ func (m *multiTestContext) restart() {
 }
 
 // replicateRange replicates the given range onto the given stores.
-func (m *multiTestContext) replicateRange(raftID int64, sourceStoreIndex int, dests ...int) {
+func (m *multiTestContext) replicateRange(raftID proto.RaftID, sourceStoreIndex int, dests ...int) {
 	rng, err := m.stores[sourceStoreIndex].GetRange(raftID)
 	if err != nil {
 		m.t.Fatal(err)
@@ -311,7 +311,7 @@ func (m *multiTestContext) replicateRange(raftID int64, sourceStoreIndex int, de
 
 // unreplicateRange removes a replica of the range in the source store
 // from the dest store.
-func (m *multiTestContext) unreplicateRange(raftID int64, source, dest int) {
+func (m *multiTestContext) unreplicateRange(raftID proto.RaftID, source, dest int) {
 	rng, err := m.stores[source].GetRange(raftID)
 	if err != nil {
 		m.t.Fatal(err)
@@ -333,7 +333,7 @@ func (m *multiTestContext) unreplicateRange(raftID int64, source, dest int) {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
+func getArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -347,7 +347,7 @@ func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, raftID int64, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
+func putArgs(key, value []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -364,7 +364,7 @@ func putArgs(key, value []byte, raftID int64, storeID proto.StoreID) (*proto.Put
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
+func incrementArgs(key []byte, inc int64, raftID proto.RaftID, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -377,7 +377,7 @@ func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (
 	return args, reply
 }
 
-func internalTruncateLogArgs(index uint64, raftID int64, storeID proto.StoreID) (
+func internalTruncateLogArgs(index uint64, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalTruncateLogRequest, *proto.InternalTruncateLogResponse) {
 	args := &proto.InternalTruncateLogRequest{
 		RequestHeader: proto.RequestHeader{

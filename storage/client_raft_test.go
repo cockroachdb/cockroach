@@ -43,7 +43,7 @@ import (
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := int64(1)
+	raftID := proto.RaftID(1)
 	splitKey := proto.Key("m")
 	key1 := proto.Key("a")
 	key2 := proto.Key("z")
@@ -51,9 +51,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	var raftID2 int64
+	var raftID2 proto.RaftID
 
-	get := func(store *storage.Store, raftID int64, key proto.Key) int64 {
+	get := func(store *storage.Store, raftID proto.RaftID, key proto.Key) int64 {
 		args, resp := getArgs(key, raftID, store.StoreID())
 		err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: resp})
 		if err != nil {
@@ -76,7 +76,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
 		defer stopper.Stop()
 
-		increment := func(raftID int64, key proto.Key, value int64) (*proto.IncrementResponse, error) {
+		increment := func(raftID proto.RaftID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args, resp := incrementArgs(key, value, raftID, store.StoreID())
 			err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: resp})
 			return resp, err
@@ -533,7 +533,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	raftID := int64(1)
+	raftID := proto.RaftID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
@@ -585,7 +585,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		defer mtc.Stop()
 
 		// Replicate the initial range to three of the four nodes.
-		raftID := int64(1)
+		raftID := proto.RaftID(1)
 		mtc.replicateRange(raftID, 0, 3, 1)
 
 		incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())

@@ -196,7 +196,7 @@ type rangeDataAccumulator struct {
 	// a scan. The seenScan collection is used to properly handle
 	// UpdateRangeEvents in this case.
 	isScanning bool
-	seenScan   map[int64]struct{}
+	seenScan   map[proto.RaftID]struct{}
 }
 
 func (rda *rangeDataAccumulator) registerRange(event *storage.RegisterRangeEvent) {
@@ -252,7 +252,7 @@ func (rda *rangeDataAccumulator) beginScanRanges(event *storage.BeginScanRangesE
 	rda.isScanning = true
 	rda.stats = proto.MVCCStats{}
 	rda.rangeCount = 0
-	rda.seenScan = make(map[int64]struct{})
+	rda.seenScan = make(map[proto.RaftID]struct{})
 }
 
 func (rda *rangeDataAccumulator) endScanRanges(event *storage.EndScanRangesEvent) {

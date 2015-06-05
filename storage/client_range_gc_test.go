@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -33,7 +34,7 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
-	raftID := int64(1)
+	raftID := proto.RaftID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	mtc.unreplicateRange(raftID, 0, 1)

@@ -43,7 +43,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	rs := &testRangeSet{rangesByKey: btree.New(64 /* degree */)}
 	for i := 0; i < count; i++ {
 		desc := &proto.RangeDescriptor{
-			RaftID:   int64(i),
+			RaftID:   proto.RaftID(i),
 			StartKey: proto.Key(fmt.Sprintf("%03d", i)),
 			EndKey:   proto.Key(fmt.Sprintf("%03d", i+1)),
 		}

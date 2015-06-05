@@ -245,6 +245,10 @@ static const int kMoretagsFieldNumber = 65006;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
     ::google::protobuf::internal::StringTypeTraits, 9, false >
   moretags;
+static const int kCasttypeFieldNumber = 65007;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  casttype;
 
 // ===================================================================
 

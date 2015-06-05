@@ -99,11 +99,11 @@ type queueImpl interface {
 type baseQueue struct {
 	name       string
 	impl       queueImpl
-	maxSize    int                  // Maximum number of ranges to queue
-	incoming   chan struct{}        // Channel signalled when a new range is added to the queue.
-	sync.Mutex                      // Mutex protects priorityQ and ranges
-	priorityQ  priorityQueue        // The priority queue
-	ranges     map[int64]*rangeItem // Map from RaftID to rangeItem (for updating priority)
+	maxSize    int                         // Maximum number of ranges to queue
+	incoming   chan struct{}               // Channel signalled when a new range is added to the queue.
+	sync.Mutex                             // Mutex protects priorityQ and ranges
+	priorityQ  priorityQueue               // The priority queue
+	ranges     map[proto.RaftID]*rangeItem // Map from RaftID to rangeItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled bool
 }
@@ -120,7 +120,7 @@ func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
 		impl:     impl,
 		maxSize:  maxSize,
 		incoming: make(chan struct{}, 1),
-		ranges:   map[int64]*rangeItem{},
+		ranges:   map[proto.RaftID]*rangeItem{},
 	}
 }
 
@@ -225,7 +225,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 			// Exit on stopper.
 			case <-stopper.ShouldStop():
 				bq.Lock()
-				bq.ranges = map[int64]*rangeItem{}
+				bq.ranges = map[proto.RaftID]*rangeItem{}
 				bq.priorityQ = nil
 				bq.Unlock()
 				return

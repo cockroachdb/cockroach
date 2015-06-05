@@ -317,7 +317,7 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 	}
 
 	// Compare the store ids.
-	storeIDs := make(map[int32]int)
+	storeIDs := make(map[proto.StoreID]int)
 	for _, id := range expectedNodeStatus.StoreIDs {
 		storeIDs[id]++
 	}
@@ -361,7 +361,7 @@ func TestNodeStatus(t *testing.T) {
 
 	expectedNodeStatus := &proto.NodeStatus{
 		RangeCount:           1,
-		StoreIDs:             []int32{1, 2, 3},
+		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            0,
 		UpdatedAt:            0,
 		Desc:                 ts.node.Descriptor,
@@ -395,7 +395,7 @@ func TestNodeStatus(t *testing.T) {
 
 	expectedNodeStatus = &proto.NodeStatus{
 		RangeCount:           1,
-		StoreIDs:             []int32{1, 2, 3},
+		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            oldStats.StartedAt,
 		UpdatedAt:            oldStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
@@ -438,7 +438,7 @@ func TestNodeStatus(t *testing.T) {
 
 	expectedNodeStatus = &proto.NodeStatus{
 		RangeCount:           2,
-		StoreIDs:             []int32{1, 2, 3},
+		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            oldStats.StartedAt,
 		UpdatedAt:            oldStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
@@ -470,7 +470,7 @@ func TestNodeStatus(t *testing.T) {
 
 	expectedNodeStatus = &proto.NodeStatus{
 		RangeCount:           2,
-		StoreIDs:             []int32{1, 2, 3},
+		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            oldStats.StartedAt,
 		UpdatedAt:            oldStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,

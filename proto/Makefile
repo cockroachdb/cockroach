@@ -63,9 +63,3 @@ $(ROACH_CPP_HEADERS) $(ROACH_CPP_SOURCES): $(notdir $(ROACH_CPP_PROTOS)) $(GOGO_
 
 $(ROACH_GO_SOURCES): $(ROACH_PROTOS) $(GOGO_PROTO) $(PROTOC) $(PROTOC_GEN_GOGO)
 	(cd $(ORG_ROOT) && $(PROTOC) --proto_path=.:$(PROTO_PATH) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. $(PREFIXED_PROTOS))
-	# The gogoprotobuf customtype and unmarshaller extensions do not play nicely with integer
-	# types. Manually whack the generate code to make it compile.
-	# The below `.bak` is a dirty hack to work around an incompatability between
-	# GNU sed and BSD sed. See http://stackoverflow.com/questions/5694228
-	sed -i.bak -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' $(shell git grep -l -E '\(gogoproto\.customtype\) = "(Node|Store)ID"' -- *.proto | sed s/\.proto/.pb.go/)
-	rm *.pb.go.bak

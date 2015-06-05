@@ -95,7 +95,7 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	g := makeTestGossip(t)
-	raftID := int64(99)
+	raftID := proto.RaftID(99)
 
 	nodeAttrs := map[int32][]string{
 		1: {}, // The local node, set in each test case.

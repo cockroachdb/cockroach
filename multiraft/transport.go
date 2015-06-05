@@ -52,7 +52,7 @@ type Transport interface {
 
 // RaftMessageRequest wraps a raft message.
 type RaftMessageRequest struct {
-	GroupID uint64
+	GroupID proto.RaftID
 	Message raftpb.Message
 }
 

@@ -6,6 +6,7 @@ package multiraft
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -35,7 +36,7 @@ func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
 }
 
-func (b *BlockableStorage) GroupStorage(g uint64) WriteableGroupStorage {
+func (b *BlockableStorage) GroupStorage(g proto.RaftID) WriteableGroupStorage {
 	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}
 }
 

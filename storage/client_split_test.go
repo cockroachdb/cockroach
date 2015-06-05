@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminSplitArgs(key, splitKey []byte, raftID int64, storeID proto.StoreID) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
+func adminSplitArgs(key, splitKey []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
 	args := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -53,7 +53,7 @@ func adminSplitArgs(key, splitKey []byte, raftID int64, storeID proto.StoreID) (
 	return args, reply
 }
 
-func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats) error {
+func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS proto.MVCCStats) error {
 	var ms proto.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		return err
@@ -153,7 +153,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	raftID := int64(1)
+	raftID := proto.RaftID(1)
 	splitKey := proto.Key("m")
 	content := proto.Key("asdvb")
 
@@ -343,7 +343,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written.
-func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64, t *testing.T) {
+func fillRange(store *storage.Store, raftID proto.RaftID, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
 		var ms proto.MVCCStats

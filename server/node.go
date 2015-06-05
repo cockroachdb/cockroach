@@ -484,7 +484,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				// Walk through all the stores on this node.
 				var rangeCount, leaderRangeCount, replicatedRangeCount, availableRangeCount int32
 				stats := &proto.MVCCStats{}
-				accessedStoreIDs := []int32{}
+				accessedStoreIDs := []proto.StoreID{}
 				// will never error because `return nil` below
 				_ = n.lSender.VisitStores(func(store *storage.Store) error {
 					storeStatus, err := store.GetStatus()
@@ -496,7 +496,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 						// The store scanner hasn't run on this node yet.
 						return nil
 					}
-					accessedStoreIDs = append(accessedStoreIDs, int32(store.Ident.StoreID))
+					accessedStoreIDs = append(accessedStoreIDs, store.Ident.StoreID)
 					rangeCount += storeStatus.RangeCount
 					leaderRangeCount += storeStatus.LeaderRangeCount
 					replicatedRangeCount += storeStatus.ReplicatedRangeCount

@@ -303,8 +303,8 @@ func (m *RawKeyValue) GetValue() []byte {
 // store-reserved system key (KeyLocalIdent).
 type StoreIdent struct {
 	ClusterID        string  `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id"`
-	NodeID           NodeID  `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,3,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	NodeID           NodeID  `protobuf:"varint,2,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID          StoreID `protobuf:"varint,3,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -354,7 +354,7 @@ func (m *SplitTrigger) GetNewDesc() RangeDescriptor {
 // for the merge to be completed and put into operation.
 type MergeTrigger struct {
 	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	SubsumedRaftID   int64           `protobuf:"varint,2,opt,name=subsumed_raft_id" json:"subsumed_raft_id"`
+	SubsumedRaftID   RaftID          `protobuf:"varint,2,opt,name=subsumed_raft_id,casttype=RaftID" json:"subsumed_raft_id"`
 	XXX_unrecognized []byte          `json:"-"`
 }
 
@@ -369,16 +369,9 @@ func (m *MergeTrigger) GetUpdatedDesc() RangeDescriptor {
 	return RangeDescriptor{}
 }
 
-func (m *MergeTrigger) GetSubsumedRaftID() int64 {
-	if m != nil {
-		return m.SubsumedRaftID
-	}
-	return 0
-}
-
 type ChangeReplicasTrigger struct {
-	NodeID     NodeID            `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	NodeID     NodeID            `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	ChangeType ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=cockroach.proto.ReplicaChangeType" json:"change_type"`
 	// The new replica list with this change applied.
 	UpdatedReplicas  []Replica `protobuf:"bytes,4,rep,name=updated_replicas" json:"updated_replicas"`
@@ -608,8 +601,8 @@ type Lease struct {
 	// The expiration is a timestamp at which the lease will expire.
 	Expiration Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration"`
 	// The Raft NodeID on which the would-be lease holder lives.
-	RaftNodeID       uint64 `protobuf:"varint,3,opt,name=raft_node_id" json:"raft_node_id"`
-	XXX_unrecognized []byte `json:"-"`
+	RaftNodeID       RaftNodeID `protobuf:"varint,3,opt,name=raft_node_id,casttype=RaftNodeID" json:"raft_node_id"`
+	XXX_unrecognized []byte     `json:"-"`
 }
 
 func (m *Lease) Reset()      { *m = Lease{} }
@@ -627,13 +620,6 @@ func (m *Lease) GetExpiration() Timestamp {
 		return m.Expiration
 	}
 	return Timestamp{}
-}
-
-func (m *Lease) GetRaftNodeID() uint64 {
-	if m != nil {
-		return m.RaftNodeID
-	}
-	return 0
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
@@ -1583,7 +1569,7 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.SubsumedRaftID |= (int64(b) & 0x7F) << shift
+				m.SubsumedRaftID |= (RaftID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2339,7 +2325,7 @@ func (m *Lease) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.RaftNodeID |= (uint64(b) & 0x7F) << shift
+				m.RaftNodeID |= (RaftNodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

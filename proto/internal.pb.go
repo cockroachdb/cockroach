@@ -997,8 +997,8 @@ func (m *InternalRaftCommandUnion) GetInternalBatch() *InternalBatchRequest {
 // An InternalRaftCommand is a command which can be serialized and
 // sent via raft.
 type InternalRaftCommand struct {
-	RaftID           int64                    `protobuf:"varint,1,opt,name=raft_id" json:"raft_id"`
-	OriginNodeID     uint64                   `protobuf:"varint,2,opt,name=origin_node_id" json:"origin_node_id"`
+	RaftID           RaftID                   `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	OriginNodeID     RaftNodeID               `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
 	Cmd              InternalRaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 	XXX_unrecognized []byte                   `json:"-"`
 }
@@ -1006,20 +1006,6 @@ type InternalRaftCommand struct {
 func (m *InternalRaftCommand) Reset()         { *m = InternalRaftCommand{} }
 func (m *InternalRaftCommand) String() string { return proto1.CompactTextString(m) }
 func (*InternalRaftCommand) ProtoMessage()    {}
-
-func (m *InternalRaftCommand) GetRaftID() int64 {
-	if m != nil {
-		return m.RaftID
-	}
-	return 0
-}
-
-func (m *InternalRaftCommand) GetOriginNodeID() uint64 {
-	if m != nil {
-		return m.OriginNodeID
-	}
-	return 0
-}
 
 func (m *InternalRaftCommand) GetCmd() InternalRaftCommandUnion {
 	if m != nil {
@@ -1035,7 +1021,7 @@ func (m *InternalRaftCommand) GetCmd() InternalRaftCommandUnion {
 //
 // This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
 type RaftMessageRequest struct {
-	GroupID uint64 `protobuf:"varint,1,opt,name=group_id" json:"group_id"`
+	GroupID RaftID `protobuf:"varint,1,opt,name=group_id,casttype=RaftID" json:"group_id"`
 	// The raft payload, an encoded raftpb.Message. We transmit the message as
 	// an opaque blob to avoid the complexity of importing proto files across
 	// packages.
@@ -1046,13 +1032,6 @@ type RaftMessageRequest struct {
 func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
 func (m *RaftMessageRequest) String() string { return proto1.CompactTextString(m) }
 func (*RaftMessageRequest) ProtoMessage()    {}
-
-func (m *RaftMessageRequest) GetGroupID() uint64 {
-	if m != nil {
-		return m.GroupID
-	}
-	return 0
-}
 
 func (m *RaftMessageRequest) GetMsg() []byte {
 	if m != nil {
@@ -4717,7 +4696,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.RaftID |= (int64(b) & 0x7F) << shift
+				m.RaftID |= (RaftID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4732,7 +4711,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.OriginNodeID |= (uint64(b) & 0x7F) << shift
+				m.OriginNodeID |= (RaftNodeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4814,7 +4793,7 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.GroupID |= (uint64(b) & 0x7F) << shift
+				m.GroupID |= (RaftID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5071,7 +5050,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			v |= uint64(data[index-3]) << 40
 			v |= uint64(data[index-2]) << 48
 			v |= uint64(data[index-1]) << 56
-			m.Sum = math.Float64frombits(v)
+			m.Sum = float64(math.Float64frombits(v))
 		case 8:
 			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Max", wireType)
@@ -5089,7 +5068,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			v |= uint64(data[index-3]) << 40
 			v |= uint64(data[index-2]) << 48
 			v |= uint64(data[index-1]) << 56
-			v2 := math.Float64frombits(v)
+			v2 := float64(math.Float64frombits(v))
 			m.Max = &v2
 		case 9:
 			if wireType != 1 {
@@ -5108,7 +5087,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			v |= uint64(data[index-3]) << 40
 			v |= uint64(data[index-2]) << 48
 			v |= uint64(data[index-1]) << 56
-			v2 := math.Float64frombits(v)
+			v2 := float64(math.Float64frombits(v))
 			m.Min = &v2
 		default:
 			var sizeOfWire int

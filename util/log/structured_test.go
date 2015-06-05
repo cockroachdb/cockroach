@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
 
@@ -39,11 +38,17 @@ func (t testArg) String() string {
 
 func testContext() context.Context {
 	ctx := context.Background()
-	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RaftID, int64(3), Method, proto.Get, Key, proto.Key("key"))
+	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RaftID, proto.RaftID(3), Method, proto.Get, Key, proto.Key("key"))
 }
 
 func TestSetLogEntry(t *testing.T) {
 	ctx := testContext()
+
+	nodeID := ctx.Value(NodeID).(proto.NodeID)
+	storeID := ctx.Value(StoreID).(proto.StoreID)
+	raftID := ctx.Value(RaftID).(proto.RaftID)
+	method := ctx.Value(Method).(proto.Method)
+	key := ctx.Value(Key).(proto.Key)
 
 	testCases := []struct {
 		ctx      context.Context
@@ -53,14 +58,14 @@ func TestSetLogEntry(t *testing.T) {
 	}{
 		{nil, "", []interface{}{}, proto.LogEntry{}},
 		{ctx, "", []interface{}{}, proto.LogEntry{
-			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32((int32)(proto.Get)), Key: []byte("key"),
+			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
 		}},
 		{ctx, "no args", []interface{}{}, proto.LogEntry{
-			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32((int32)(proto.Get)), Key: []byte("key"),
+			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
 			Format: "no args",
 		}},
 		{ctx, "1 arg %s", []interface{}{"foo"}, proto.LogEntry{
-			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32((int32)(proto.Get)), Key: []byte("key"),
+			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
 			Format: "1 arg %s",
 			Args: []proto.LogEntry_Arg{
 				{Type: "string", Str: "foo"},

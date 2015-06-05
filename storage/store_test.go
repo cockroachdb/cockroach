@@ -260,7 +260,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, raftID int64, start, end proto.Key) *Range {
+func createRange(s *Store, raftID proto.RaftID, start, end proto.Key) *Range {
 	desc := &proto.RangeDescriptor{
 		RaftID:   raftID,
 		StartKey: start,
@@ -358,7 +358,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
-		rng := createRange(store, int64(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
+		rng := createRange(store, proto.RaftID(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddRangeTest(rng); err != nil {
 			t.Fatal(err)
 		}
@@ -372,7 +372,7 @@ func TestStoreRangeSet(t *testing.T) {
 		}
 		i := 1
 		ranges.Visit(func(rng *Range) bool {
-			if rng.Desc().RaftID != int64(i) {
+			if rng.Desc().RaftID != proto.RaftID(i) {
 				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
@@ -394,14 +394,14 @@ func TestStoreRangeSet(t *testing.T) {
 		i := 1
 		ranges.Visit(func(rng *Range) bool {
 			if i == 1 {
-				if rng.Desc().RaftID != int64(i) {
+				if rng.Desc().RaftID != proto.RaftID(i) {
 					t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 				}
 				close(visited)
 				<-updated
 			} else {
 				// The second range will be removed and skipped.
-				if rng.Desc().RaftID != int64(i+1) {
+				if rng.Desc().RaftID != proto.RaftID(i+1) {
 					t.Errorf("expected range with Raft ID %d; got %v", i+1, rng)
 				}
 			}
@@ -668,7 +668,7 @@ func TestStoreRaftIDAllocation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if desc.RaftID != int64(2+i) {
+		if desc.RaftID != proto.RaftID(2+i) {
 			t.Errorf("expected Raft id %d; got %d", 2+i, desc.RaftID)
 		}
 	}

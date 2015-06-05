@@ -101,7 +101,7 @@ type testContext struct {
 	transport     multiraft.Transport
 	store         *Store
 	rng           *Range
-	rangeID       int64
+	rangeID       proto.RaftID
 	gossip        *gossip.Gossip
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
@@ -327,7 +327,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
-		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)), // a different node
+		RaftNodeID: proto.MakeRaftNodeID(2, 2), // a different node
 	})
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
@@ -377,7 +377,7 @@ func TestRangeHasLeaderLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)),
+		RaftNodeID: proto.MakeRaftNodeID(2, 2),
 	})
 	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now().Add(15, 0)); held || expired {
 		t.Errorf("expected another replica to have leader lease")
@@ -407,7 +407,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)),
+		RaftNodeID: proto.MakeRaftNodeID(2, 2),
 	})
 
 	header := proto.RequestHeader{
@@ -501,7 +501,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
-		RaftNodeID: uint64(proto.MakeRaftNodeID(2, 2)),
+		RaftNodeID: proto.MakeRaftNodeID(2, 2),
 	})
 
 	// Expire that lease.
@@ -512,7 +512,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &proto.Lease{
 		Start:      now.Add(11, 0),
 		Expiration: now.Add(20, 0),
-		RaftNodeID: uint64(tc.store.RaftNodeID()),
+		RaftNodeID: tc.store.RaftNodeID(),
 	})
 	if !verifyPerm() {
 		t.Errorf("expected gossip of new config")
@@ -558,7 +558,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 		setLeaderLease(t, tc.rng, &proto.Lease{
 			Start:      test.start,
 			Expiration: test.expiration,
-			RaftNodeID: uint64(test.nodeID),
+			RaftNodeID: test.nodeID,
 		})
 		// Verify expected low water mark.
 		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, nil)
@@ -703,7 +703,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
+func getArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -717,7 +717,7 @@ func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, raftID int64, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
+func putArgs(key, value []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
@@ -734,7 +734,7 @@ func putArgs(key, value []byte, raftID int64, storeID proto.StoreID) (*proto.Put
 }
 
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
-func deleteArgs(key proto.Key, raftID int64, storeID proto.StoreID) (*proto.DeleteRequest, *proto.DeleteResponse) {
+func deleteArgs(key proto.Key, raftID proto.RaftID, storeID proto.StoreID) (*proto.DeleteRequest, *proto.DeleteResponse) {
 	args := &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -749,7 +749,7 @@ func deleteArgs(key proto.Key, raftID int64, storeID proto.StoreID) (*proto.Dele
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
-func readOrWriteArgs(key proto.Key, read bool, raftID int64, storeID proto.StoreID) (proto.Request, proto.Response) {
+func readOrWriteArgs(key proto.Key, read bool, raftID proto.RaftID, storeID proto.StoreID) (proto.Request, proto.Response) {
 	if read {
 		gArgs, gReply := getArgs(key, raftID, storeID)
 		return gArgs, gReply
@@ -760,7 +760,7 @@ func readOrWriteArgs(key proto.Key, read bool, raftID int64, storeID proto.Store
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
+func incrementArgs(key []byte, inc int64, raftID proto.RaftID, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -773,7 +773,7 @@ func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (
 	return args, reply
 }
 
-func scanArgs(start, end []byte, raftID int64, storeID proto.StoreID) (*proto.ScanRequest, *proto.ScanResponse) {
+func scanArgs(start, end []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.ScanRequest, *proto.ScanResponse) {
 	args := &proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     start,
@@ -788,7 +788,7 @@ func scanArgs(start, end []byte, raftID int64, storeID proto.StoreID) (*proto.Sc
 
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
-func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID proto.StoreID) (
+func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
@@ -805,7 +805,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID proto
 
 // pushTxnArgs returns request/response pair for InternalPushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID int64, storeID proto.StoreID) (
+func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -824,7 +824,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 }
 
 // heartbeatArgs returns request/response pair for InternalHeartbeatTxn RPC.
-func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID proto.StoreID) (
+func heartbeatArgs(txn *proto.Transaction, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -841,7 +841,7 @@ func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID proto.StoreID) 
 // internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID proto.StoreID) (
+func internalMergeArgs(key []byte, value proto.Value, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalMergeRequest, *proto.InternalMergeResponse) {
 	args := &proto.InternalMergeRequest{
 		RequestHeader: proto.RequestHeader{
@@ -855,7 +855,7 @@ func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID prot
 	return args, reply
 }
 
-func internalTruncateLogArgs(index uint64, raftID int64, storeID proto.StoreID) (
+func internalTruncateLogArgs(index uint64, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalTruncateLogRequest, *proto.InternalTruncateLogResponse) {
 	args := &proto.InternalTruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
@@ -1964,7 +1964,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats, t *testing.T) {
+func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS proto.MVCCStats, t *testing.T) {
 	var ms proto.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		t.Fatal(err)

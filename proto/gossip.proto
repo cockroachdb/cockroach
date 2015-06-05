@@ -27,7 +27,7 @@ import "gogoproto/gogo.proto";
 message GossipRequest {
   // Requesting node's ID.
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   // Address of the requesting client.
   optional Addr addr = 2 [(gogoproto.nullable) = false];
   // Local address of client on requesting node (this is a kludge to

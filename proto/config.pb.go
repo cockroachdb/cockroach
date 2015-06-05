@@ -40,8 +40,8 @@ func (m *Attributes) GetAttrs() []string {
 // device) and associated attributes. Replicas are stored in Range
 // lookup records (meta1, meta2).
 type Replica struct {
-	NodeID           NodeID  `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,2,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	NodeID           NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID          StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -52,7 +52,7 @@ func (*Replica) ProtoMessage() {}
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 type RangeDescriptor struct {
-	RaftID int64 `protobuf:"varint,1,opt,name=raft_id" json:"raft_id"`
+	RaftID RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 	// StartKey is the first key which may be contained by this range.
 	StartKey Key `protobuf:"bytes,2,opt,name=start_key,customtype=Key" json:"start_key"`
 	// EndKey marks the end of the range's possible keys.  EndKey itself is not
@@ -68,13 +68,6 @@ type RangeDescriptor struct {
 func (m *RangeDescriptor) Reset()         { *m = RangeDescriptor{} }
 func (m *RangeDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*RangeDescriptor) ProtoMessage()    {}
-
-func (m *RangeDescriptor) GetRaftID() int64 {
-	if m != nil {
-		return m.RaftID
-	}
-	return 0
-}
 
 func (m *RangeDescriptor) GetReplicas() []Replica {
 	if m != nil {
@@ -295,7 +288,7 @@ func (m *StoreCapacity) GetRangeCount() int32 {
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID           NodeID     `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	NodeID           NodeID     `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	Address          Addr       `protobuf:"bytes,2,opt,name=address" json:"address"`
 	Attrs            Attributes `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
 	XXX_unrecognized []byte     `json:"-"`
@@ -322,7 +315,7 @@ func (m *NodeDescriptor) GetAttrs() Attributes {
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
 type StoreDescriptor struct {
-	StoreID          StoreID        `protobuf:"varint,1,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	StoreID          StoreID        `protobuf:"varint,1,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	Attrs            Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
 	Node             NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
 	Capacity         StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
@@ -523,7 +516,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.RaftID |= (int64(b) & 0x7F) << shift
+				m.RaftID |= (RaftID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

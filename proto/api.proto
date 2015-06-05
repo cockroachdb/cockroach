@@ -93,7 +93,8 @@ message RequestHeader {
   // RaftID specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.
-  optional int64 raft_id = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+  optional int64 raft_id = 7 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
   // UserPriority specifies priority multiple for non-transactional
   // commands. This value should be a positive integer [1, 2^31-1).
   // It's properly viewed as a multiple for how likely this

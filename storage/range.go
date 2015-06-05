@@ -173,7 +173,7 @@ type rangeManager interface {
 
 	// Range manipulation methods.
 	LookupRange(start, end proto.Key) *Range
-	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
+	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID proto.RaftID) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
@@ -288,7 +288,7 @@ func (r *Range) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, proto.KeyMin)
 }
 
-func loadLeaderLease(eng engine.Engine, raftID int64) (*proto.Lease, error) {
+func loadLeaderLease(eng engine.Engine, raftID proto.RaftID) (*proto.Lease, error) {
 	lease := &proto.Lease{}
 	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(raftID), proto.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
@@ -334,7 +334,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 		Lease: proto.Lease{
 			Start:      timestamp,
 			Expiration: expiration,
-			RaftNodeID: uint64(r.rm.RaftNodeID()),
+			RaftNodeID: r.rm.RaftNodeID(),
 		},
 	}
 	// Send lease request directly to raft in order to skip unnecessary
@@ -389,7 +389,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 // node ID) holds the leader lease covering the specified timestamp.
 func (r *Range) verifyLeaderLease(originRaftNodeID proto.RaftNodeID, timestamp proto.Timestamp) bool {
 	l := r.getLease()
-	return uint64(originRaftNodeID) == l.RaftNodeID && timestamp.Less(l.Expiration)
+	return originRaftNodeID == l.RaftNodeID && timestamp.Less(l.Expiration)
 }
 
 // HasLeaderLease returns whether this replica holds or was the last
@@ -398,7 +398,7 @@ func (r *Range) verifyLeaderLease(originRaftNodeID proto.RaftNodeID, timestamp p
 // is expected.
 func (r *Range) HasLeaderLease(timestamp proto.Timestamp) (bool, bool) {
 	if l := r.getLease(); l.RaftNodeID != 0 {
-		held := l.RaftNodeID == uint64(r.rm.RaftNodeID())
+		held := l.RaftNodeID == r.rm.RaftNodeID()
 		expired := !timestamp.Less(l.Expiration)
 		return held, expired
 	}
@@ -730,7 +730,7 @@ func (r *Range) proposeRaftCommand(args proto.Request, reply proto.Response) (<-
 	}
 	raftCmd := proto.InternalRaftCommand{
 		RaftID:       r.Desc().RaftID,
-		OriginNodeID: uint64(r.rm.RaftNodeID()),
+		OriginNodeID: r.rm.RaftNodeID(),
 	}
 	cmdID := args.Header().GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
 	ok := raftCmd.Cmd.SetValue(args)

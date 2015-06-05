@@ -95,7 +95,7 @@ func (c *testCluster) start() {
 
 // createGroup replicates a group consisting of numReplicas members,
 // the first being the node at index firstNode.
-func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
+func (c *testCluster) createGroup(groupID proto.RaftID, firstNode, numReplicas int) {
 	var replicaIDs []uint64
 	for i := 0; i < numReplicas; i++ {
 		replicaIDs = append(replicaIDs, uint64(c.nodes[firstNode+i].nodeID))
@@ -129,8 +129,8 @@ func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 	}
 }
 
-func (c *testCluster) triggerElection(nodeIndex int, groupID uint64) {
-	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), groupID); err != nil {
+func (c *testCluster) triggerElection(nodeIndex int, groupID proto.RaftID) {
+	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -158,7 +158,7 @@ func TestInitialLeaderElection(t *testing.T) {
 		log.Infof("testing leader election for node %v", leaderIndex)
 		stopper := util.NewStopper()
 		cluster := newTestCluster(nil, 3, stopper, t)
-		groupID := uint64(1)
+		groupID := proto.RaftID(1)
 		cluster.createGroup(groupID, 0, 3)
 
 		cluster.triggerElection(leaderIndex, groupID)
@@ -193,7 +193,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 	stopper := util.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := uint64(1)
+	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 3)
 
 	// Process a Ready with a new leader but no new commits.
@@ -244,7 +244,7 @@ func TestCommand(t *testing.T) {
 	stopper := util.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := uint64(1)
+	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
 	cluster.waitForElection(0)
@@ -267,7 +267,7 @@ func TestSlowStorage(t *testing.T) {
 	stopper := util.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := uint64(1)
+	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 3)
 
 	cluster.triggerElection(0, groupID)
@@ -316,7 +316,7 @@ func TestMembershipChange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Create a group with a single member, cluster.nodes[0].
-	groupID := uint64(1)
+	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 1)
 	// An automatic election is triggered since this is a single-node Raft group.
 	cluster.waitForElection(0)
@@ -376,7 +376,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	numCommit := int32(200)
 
 	cluster := newTestCluster(nil, 1, stopper, t)
-	groupID := uint64(1)
+	groupID := proto.RaftID(1)
 
 	cluster.createGroup(groupID, 0, 1 /* replicas */)
 	startSeq := int32(0) // updated atomically from now on

@@ -21,7 +21,7 @@ var _ = math.Inf
 // store.
 type StoreStatus struct {
 	Desc                 StoreDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	NodeID               NodeID          `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	NodeID               NodeID          `protobuf:"varint,2,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	RangeCount           int32           `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
 	StartedAt            int64           `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
 	UpdatedAt            int64           `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
@@ -96,7 +96,7 @@ func (m *StoreStatus) GetAvailableRangeCount() int32 {
 // node.
 type NodeStatus struct {
 	Desc                 NodeDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	StoreIDs             []int32        `protobuf:"varint,2,rep,name=store_ids" json:"store_ids"`
+	StoreIDs             []StoreID      `protobuf:"varint,2,rep,name=store_ids,casttype=StoreID" json:"store_ids"`
 	RangeCount           int32          `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
 	StartedAt            int64          `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
 	UpdatedAt            int64          `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`
@@ -116,13 +116,6 @@ func (m *NodeStatus) GetDesc() NodeDescriptor {
 		return m.Desc
 	}
 	return NodeDescriptor{}
-}
-
-func (m *NodeStatus) GetStoreIDs() []int32 {
-	if m != nil {
-		return m.StoreIDs
-	}
-	return nil
 }
 
 func (m *NodeStatus) GetRangeCount() int32 {
@@ -419,14 +412,14 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StoreIDs", wireType)
 			}
-			var v int32
+			var v StoreID
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				v |= (int32(b) & 0x7F) << shift
+				v |= (StoreID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

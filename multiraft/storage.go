@@ -20,6 +20,7 @@ package multiraft
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
@@ -40,7 +41,7 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // The Storage interface is supplied by the application to manage persistent storage
 // of raft data.
 type Storage interface {
-	GroupStorage(groupID uint64) WriteableGroupStorage
+	GroupStorage(groupID proto.RaftID) WriteableGroupStorage
 }
 
 // The StateMachine interface is supplied by the application to manage a persistent
@@ -49,12 +50,12 @@ type Storage interface {
 type StateMachine interface {
 	// AppliedIndex returns the last index which has been applied to the given group's
 	// state machine.
-	AppliedIndex(groupID uint64) (uint64, error)
+	AppliedIndex(groupID proto.RaftID) (uint64, error)
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
 type MemoryStorage struct {
-	groups map[uint64]WriteableGroupStorage
+	groups map[proto.RaftID]WriteableGroupStorage
 	mu     sync.Mutex
 }
 
@@ -64,12 +65,12 @@ var _ Storage = (*MemoryStorage)(nil)
 // NewMemoryStorage creates a MemoryStorage.
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
-		groups: make(map[uint64]WriteableGroupStorage),
+		groups: make(map[proto.RaftID]WriteableGroupStorage),
 	}
 }
 
 // GroupStorage implements the Storage interface.
-func (m *MemoryStorage) GroupStorage(groupID uint64) WriteableGroupStorage {
+func (m *MemoryStorage) GroupStorage(groupID proto.RaftID) WriteableGroupStorage {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	g, ok := m.groups[groupID]
@@ -89,12 +90,12 @@ type groupWriteRequest struct {
 
 // writeRequest is a collection of groupWriteRequests.
 type writeRequest struct {
-	groups map[uint64]*groupWriteRequest
+	groups map[proto.RaftID]*groupWriteRequest
 }
 
 // newWriteRequest creates a writeRequest.
 func newWriteRequest() *writeRequest {
-	return &writeRequest{make(map[uint64]*groupWriteRequest)}
+	return &writeRequest{make(map[proto.RaftID]*groupWriteRequest)}
 }
 
 // groupWriteResponse represents the final state of a persistent group.
@@ -110,7 +111,7 @@ type groupWriteResponse struct {
 
 // writeResponse is a collection of groupWriteResponses.
 type writeResponse struct {
-	groups map[uint64]*groupWriteResponse
+	groups map[proto.RaftID]*groupWriteResponse
 }
 
 // writeTask manages a goroutine that interacts with the storage system.
@@ -151,7 +152,7 @@ func (w *writeTask) start(stopper *util.Stopper) {
 			if log.V(6) {
 				log.Infof("writeTask got request %#v", *request)
 			}
-			response := &writeResponse{make(map[uint64]*groupWriteResponse)}
+			response := &writeResponse{make(map[proto.RaftID]*groupWriteResponse)}
 
 			for groupID, groupReq := range request.groups {
 				group := w.storage.GroupStorage(groupID)

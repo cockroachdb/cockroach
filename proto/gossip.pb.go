@@ -16,7 +16,7 @@ var _ = math.Inf
 // GossipRequest is the request struct passed with the Gossip RPC.
 type GossipRequest struct {
 	// Requesting node's ID.
-	NodeID NodeID `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	NodeID NodeID `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	// Address of the requesting client.
 	Addr Addr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Local address of client on requesting node (this is a kludge to

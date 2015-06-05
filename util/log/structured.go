@@ -25,7 +25,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/proto"
-	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
 
@@ -64,17 +63,17 @@ func setLogEntry(ctx context.Context, format string, args []interface{}, entry *
 	if ctx != nil {
 		for i := Field(0); i < maxField; i++ {
 			if v := ctx.Value(i); v != nil {
-				switch i {
-				case NodeID:
-					entry.NodeID = gogoproto.Int32(int32(v.(proto.NodeID)))
-				case StoreID:
-					entry.StoreID = gogoproto.Int32(int32(v.(proto.StoreID)))
-				case RaftID:
-					entry.RaftID = gogoproto.Int64(v.(int64))
-				case Method:
-					entry.Method = gogoproto.Int32(int32(v.(proto.Method)))
-				case Key:
-					entry.Key = v.(proto.Key)
+				switch vTyp := v.(type) {
+				case proto.NodeID:
+					entry.NodeID = &vTyp
+				case proto.StoreID:
+					entry.StoreID = &vTyp
+				case proto.RaftID:
+					entry.RaftID = &vTyp
+				case proto.Method:
+					entry.Method = &vTyp
+				case proto.Key:
+					entry.Key = vTyp
 				}
 			}
 		}

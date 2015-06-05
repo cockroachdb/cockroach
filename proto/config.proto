@@ -40,16 +40,17 @@ message Replica {
   option (gogoproto.goproto_stringer) = false;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 message RangeDescriptor {
-  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+  optional int64 raft_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
   // StartKey is the first key which may be contained by this range.
   optional bytes start_key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not
@@ -137,7 +138,7 @@ message StoreCapacity {
 
 // NodeDescriptor holds details on node physical/network topology.
 message NodeDescriptor {
-  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional Addr address = 2 [(gogoproto.nullable) = false];
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
 }
@@ -145,7 +146,7 @@ message NodeDescriptor {
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
 message StoreDescriptor {
-  optional int32 store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+  optional int32 store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
   optional Attributes attrs = 2 [(gogoproto.nullable) = false];
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];

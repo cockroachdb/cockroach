@@ -752,7 +752,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 	// add the maximum clock offset to account for any difference in
 	// clocks between the expiration (set by a remote node) and this
 	// node.
-	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && prevLease.RaftNodeID != r.getLease().RaftNodeID {
+	if r.getLease().RaftNodeID == r.rm.RaftNodeID() && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
 		log.Infof("range %d: new leader lease %s", r.Desc().RaftID, args.Lease)
 	}

@@ -33,7 +33,7 @@ import (
 // processing goroutine and should never be individually updated; use
 // Update() instead. For access from other goroutines, use GetMVCC().
 type rangeStats struct {
-	raftID          int64
+	raftID          proto.RaftID
 	sync.Mutex      // Protects MVCCStats
 	proto.MVCCStats // embedded, cached version of stat values
 }
@@ -43,7 +43,7 @@ type rangeStats struct {
 // nanos and intent count are pulled from the engine and cached in the
 // struct for efficient processing (i.e. each new merge does not
 // require the values to be read from the engine).
-func newRangeStats(raftID int64, e engine.Engine) (*rangeStats, error) {
+func newRangeStats(raftID proto.RaftID, e engine.Engine) (*rangeStats, error) {
 	rs := &rangeStats{raftID: raftID}
 	if err := engine.MVCCGetRangeStats(e, raftID, &rs.MVCCStats); err != nil {
 		return nil, err

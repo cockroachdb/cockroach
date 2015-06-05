@@ -31,7 +31,8 @@ option (gogoproto.unmarshaler_all) = true;
 // store.
 message StoreStatus {
   optional StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
-  optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  optional int32 node_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];
@@ -45,7 +46,8 @@ message StoreStatus {
 // node.
 message NodeStatus {
   optional NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  repeated int32 store_ids = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreIDs"];
+  repeated int32 store_ids = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];

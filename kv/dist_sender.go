@@ -404,7 +404,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(raftID int64, replicas replicaSlice, order rpc.OrderingPolicy,
+func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request, reply proto.Response) error {
 	if len(replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", args.Method())

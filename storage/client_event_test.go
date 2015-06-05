@@ -177,7 +177,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	defer mtc.Stop()
 
 	// Replicate the default range.
-	raftID := int64(1)
+	raftID := proto.RaftID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	// Add some data in a transaction

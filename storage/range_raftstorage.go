@@ -182,7 +182,7 @@ func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.Engine, raftID int64, appliedIndex uint64) error {
+func setAppliedIndex(eng engine.Engine, raftID proto.RaftID, appliedIndex uint64) error {
 	return engine.MVCCPut(eng, nil, /* stats */
 		keys.RaftAppliedIndexKey(raftID),
 		proto.ZeroTimestamp,
@@ -215,7 +215,7 @@ func (r *Range) loadLastIndex() (uint64, error) {
 }
 
 // setLastIndex persists a new last index.
-func setLastIndex(eng engine.Engine, raftID int64, lastIndex uint64) error {
+func setLastIndex(eng engine.Engine, raftID proto.RaftID, lastIndex uint64) error {
 	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(raftID),
 		proto.ZeroTimestamp, proto.Value{
 			Bytes: encoding.EncodeUint64(nil, lastIndex),

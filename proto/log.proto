@@ -48,10 +48,10 @@ message LogEntry {
   }
   repeated Arg args = 7 [(gogoproto.nullable) = false];
   // Optional parameters which may be set with log entry.
-  optional int32 node_id = 8 [(gogoproto.customname) = "NodeID"];
-  optional int32 store_id = 9 [(gogoproto.customname) = "StoreID"];
-  optional int64 raft_id = 10 [(gogoproto.customname) = "RaftID"];
-  optional int32 method = 11;
+  optional int32 node_id = 8 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  optional int32 store_id = 9 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+  optional int64 raft_id = 10 [(gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
+  optional int32 method = 11 [(gogoproto.casttype) = "Method"];
   optional bytes key = 12 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // Stack traces if requested.
   optional bytes stacks = 13 [(gogoproto.nullable) = false];

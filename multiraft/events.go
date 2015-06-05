@@ -26,14 +26,14 @@ import (
 // An EventLeaderElection is broadcast when a group starts or completes
 // an election. NodeID is zero when an election is in progress.
 type EventLeaderElection struct {
-	GroupID uint64
+	GroupID proto.RaftID
 	NodeID  proto.RaftNodeID
 	Term    uint64
 }
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
 type EventCommandCommitted struct {
-	GroupID uint64
+	GroupID proto.RaftID
 	// CommandID is the application-supplied ID for this command. The same CommandID
 	// may be seen multiple times, so the application should remember this CommandID
 	// for deduping.
@@ -49,7 +49,7 @@ type EventCommandCommitted struct {
 // has been committed.
 type EventMembershipChangeCommitted struct {
 	// GroupID, CommandID, and Index are the same as for EventCommandCommitted.
-	GroupID    uint64
+	GroupID    proto.RaftID
 	CommandID  string
 	Index      uint64
 	NodeID     proto.RaftNodeID
