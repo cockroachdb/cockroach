@@ -17,38 +17,40 @@ import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 var _ = proto1.Marshal
 var _ = math.Inf
 
-type Column_ColumnType int32
+type ColumnSchema_ColumnType int32
 
 const (
-	Column_BYTES Column_ColumnType = 0
+	ColumnSchema_BYTES ColumnSchema_ColumnType = 0
 )
 
-var Column_ColumnType_name = map[int32]string{
+var ColumnSchema_ColumnType_name = map[int32]string{
 	0: "BYTES",
 }
-var Column_ColumnType_value = map[string]int32{
+var ColumnSchema_ColumnType_value = map[string]int32{
 	"BYTES": 0,
 }
 
-func (x Column_ColumnType) Enum() *Column_ColumnType {
-	p := new(Column_ColumnType)
+func (x ColumnSchema_ColumnType) Enum() *ColumnSchema_ColumnType {
+	p := new(ColumnSchema_ColumnType)
 	*p = x
 	return p
 }
-func (x Column_ColumnType) String() string {
-	return proto1.EnumName(Column_ColumnType_name, int32(x))
+func (x ColumnSchema_ColumnType) String() string {
+	return proto1.EnumName(ColumnSchema_ColumnType_name, int32(x))
 }
-func (x *Column_ColumnType) UnmarshalJSON(data []byte) error {
-	value, err := proto1.UnmarshalJSONEnum(Column_ColumnType_value, data, "Column_ColumnType")
+func (x *ColumnSchema_ColumnType) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(ColumnSchema_ColumnType_value, data, "ColumnSchema_ColumnType")
 	if err != nil {
 		return err
 	}
-	*x = Column_ColumnType(value)
+	*x = ColumnSchema_ColumnType(value)
 	return nil
 }
 
 // For Cockroach internal use.
 type Internal struct {
+	// The TableSchema has a globally-unique ID, while its member
+	// {Column,Index}Schema have locally-unique IDs.
 	Id               uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -64,40 +66,40 @@ func (m *Internal) GetId() uint32 {
 	return 0
 }
 
-type Column struct {
-	Name string            `protobuf:"bytes,1,opt,name=name" json:"name"`
-	Type Column_ColumnType `protobuf:"varint,2,opt,name=type,enum=cockroach.proto.Column_ColumnType" json:"type"`
+type ColumnSchema struct {
+	Name string                  `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Type ColumnSchema_ColumnType `protobuf:"varint,2,opt,name=type,enum=cockroach.proto.ColumnSchema_ColumnType" json:"type"`
 	// For Cockroach internal use.
 	Internal         *Internal `protobuf:"bytes,9,opt,name=internal" json:"internal,omitempty"`
 	XXX_unrecognized []byte    `json:"-"`
 }
 
-func (m *Column) Reset()         { *m = Column{} }
-func (m *Column) String() string { return proto1.CompactTextString(m) }
-func (*Column) ProtoMessage()    {}
+func (m *ColumnSchema) Reset()         { *m = ColumnSchema{} }
+func (m *ColumnSchema) String() string { return proto1.CompactTextString(m) }
+func (*ColumnSchema) ProtoMessage()    {}
 
-func (m *Column) GetName() string {
+func (m *ColumnSchema) GetName() string {
 	if m != nil {
 		return m.Name
 	}
 	return ""
 }
 
-func (m *Column) GetType() Column_ColumnType {
+func (m *ColumnSchema) GetType() ColumnSchema_ColumnType {
 	if m != nil {
 		return m.Type
 	}
-	return Column_BYTES
+	return ColumnSchema_BYTES
 }
 
-func (m *Column) GetInternal() *Internal {
+func (m *ColumnSchema) GetInternal() *Internal {
 	if m != nil {
 		return m.Internal
 	}
 	return nil
 }
 
-type Index struct {
+type IndexSchema struct {
 	Name   string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	Unique bool   `protobuf:"varint,2,opt,name=unique" json:"unique"`
 	// An ordered list of column names of which the index is comprised. Each
@@ -109,32 +111,32 @@ type Index struct {
 	XXX_unrecognized []byte    `json:"-"`
 }
 
-func (m *Index) Reset()         { *m = Index{} }
-func (m *Index) String() string { return proto1.CompactTextString(m) }
-func (*Index) ProtoMessage()    {}
+func (m *IndexSchema) Reset()         { *m = IndexSchema{} }
+func (m *IndexSchema) String() string { return proto1.CompactTextString(m) }
+func (*IndexSchema) ProtoMessage()    {}
 
-func (m *Index) GetName() string {
+func (m *IndexSchema) GetName() string {
 	if m != nil {
 		return m.Name
 	}
 	return ""
 }
 
-func (m *Index) GetUnique() bool {
+func (m *IndexSchema) GetUnique() bool {
 	if m != nil {
 		return m.Unique
 	}
 	return false
 }
 
-func (m *Index) GetColumnNames() []string {
+func (m *IndexSchema) GetColumnNames() []string {
 	if m != nil {
 		return m.ColumnNames
 	}
 	return nil
 }
 
-func (m *Index) GetInternal() *Internal {
+func (m *IndexSchema) GetInternal() *Internal {
 	if m != nil {
 		return m.Internal
 	}
@@ -142,13 +144,14 @@ func (m *Index) GetInternal() *Internal {
 }
 
 // TableSchema used to configure a db table. The internal messages
-// within Column, Index, and TableSchema are for cockroach internal use.
+// within ColumnSchema, IndexSchema, and TableSchema are for
+// cockroach internal use.
 type TableSchema struct {
-	Name    string   `protobuf:"bytes,1,opt,name=name" json:"name"`
-	Columns []Column `protobuf:"bytes,2,rep,name=columns" json:"columns"`
+	Name    string         `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Columns []ColumnSchema `protobuf:"bytes,2,rep,name=columns" json:"columns"`
 	// An ordered list of indexes included in the table. The first index is the
 	// primary key; it is required.
-	Indexes []Index `protobuf:"bytes,3,rep,name=indexes" json:"indexes"`
+	Indexes []IndexSchema `protobuf:"bytes,3,rep,name=indexes" json:"indexes"`
 	// For Cockroach internal use.
 	Internal         *Internal `protobuf:"bytes,9,opt,name=internal" json:"internal,omitempty"`
 	XXX_unrecognized []byte    `json:"-"`
@@ -165,14 +168,14 @@ func (m *TableSchema) GetName() string {
 	return ""
 }
 
-func (m *TableSchema) GetColumns() []Column {
+func (m *TableSchema) GetColumns() []ColumnSchema {
 	if m != nil {
 		return m.Columns
 	}
 	return nil
 }
 
-func (m *TableSchema) GetIndexes() []Index {
+func (m *TableSchema) GetIndexes() []IndexSchema {
 	if m != nil {
 		return m.Indexes
 	}
@@ -187,8 +190,7 @@ func (m *TableSchema) GetInternal() *Internal {
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata
-// key. The TableDescriptor has a globally-unique ID, while its member
-// {Column,Index}Descriptors have locally-unique IDs.
+// key.
 type TableDescriptor struct {
 	TableSchema `protobuf:"bytes,2,opt,name=table,embedded=table" json:"table"`
 	// next_column_id is used to ensure that deleted column ids are not reused
@@ -258,7 +260,7 @@ func (m *CreateTableResponse) GetTableId() uint32 {
 }
 
 func init() {
-	proto1.RegisterEnum("cockroach.proto.Column_ColumnType", Column_ColumnType_name, Column_ColumnType_value)
+	proto1.RegisterEnum("cockroach.proto.ColumnSchema_ColumnType", ColumnSchema_ColumnType_name, ColumnSchema_ColumnType_value)
 }
 func (m *Internal) Unmarshal(data []byte) error {
 	l := len(data)
@@ -318,7 +320,7 @@ func (m *Internal) Unmarshal(data []byte) error {
 
 	return nil
 }
-func (m *Column) Unmarshal(data []byte) error {
+func (m *ColumnSchema) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
 	for index < l {
@@ -369,7 +371,7 @@ func (m *Column) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.Type |= (Column_ColumnType(b) & 0x7F) << shift
+				m.Type |= (ColumnSchema_ColumnType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -425,7 +427,7 @@ func (m *Column) Unmarshal(data []byte) error {
 
 	return nil
 }
-func (m *Index) Unmarshal(data []byte) error {
+func (m *IndexSchema) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
 	for index < l {
@@ -617,7 +619,7 @@ func (m *TableSchema) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Columns = append(m.Columns, Column{})
+			m.Columns = append(m.Columns, ColumnSchema{})
 			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
@@ -642,7 +644,7 @@ func (m *TableSchema) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Indexes = append(m.Indexes, Index{})
+			m.Indexes = append(m.Indexes, IndexSchema{})
 			if err := m.Indexes[len(m.Indexes)-1].Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
@@ -978,7 +980,7 @@ func (m *Internal) Size() (n int) {
 	return n
 }
 
-func (m *Column) Size() (n int) {
+func (m *ColumnSchema) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -994,7 +996,7 @@ func (m *Column) Size() (n int) {
 	return n
 }
 
-func (m *Index) Size() (n int) {
+func (m *IndexSchema) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -1118,7 +1120,7 @@ func (m *Internal) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
-func (m *Column) Marshal() (data []byte, err error) {
+func (m *ColumnSchema) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -1128,7 +1130,7 @@ func (m *Column) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Column) MarshalTo(data []byte) (n int, err error) {
+func (m *ColumnSchema) MarshalTo(data []byte) (n int, err error) {
 	var i int
 	_ = i
 	var l int
@@ -1156,7 +1158,7 @@ func (m *Column) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
-func (m *Index) Marshal() (data []byte, err error) {
+func (m *IndexSchema) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -1166,7 +1168,7 @@ func (m *Index) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Index) MarshalTo(data []byte) (n int, err error) {
+func (m *IndexSchema) MarshalTo(data []byte) (n int, err error) {
 	var i int
 	_ = i
 	var l int
