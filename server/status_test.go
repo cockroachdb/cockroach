@@ -449,18 +449,7 @@ func TestMetricsRecording(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		now := tsrv.Clock().PhysicalNow()
 		key := ts.MakeDataKey("cr.store.livebytes.1", "", ts.Resolution10s, now)
-		gr, err := tsrv.db.Get(key)
-		if err != nil {
-			return err
-		} else if !gr.Exists() {
-			return util.Errorf("key %s had nil value", key)
-		}
-
-		// The value should be an internal time series.
 		data := &proto.InternalTimeSeriesData{}
-		if err := gr.ValueProto(data); err != nil {
-			return err
-		}
-		return nil
+		return tsrv.db.GetProto(key, data)
 	})
 }

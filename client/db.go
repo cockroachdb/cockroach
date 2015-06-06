@@ -724,6 +724,24 @@ func (b *Batch) Get(key interface{}) *Batch {
 	return b
 }
 
+// GetProto retrieves the value for a key and decodes the result as a proto
+// message. A new result will be appended to the batch which will contain a
+// single row. Note that the proto will not be decoded until after the batch is
+// executed using DB.Run or Tx.Run.
+//
+// key can be either a byte slice, a string, a fmt.Stringer or an
+// encoding.BinaryMarshaler.
+func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) *Batch {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, err)
+		return b
+	}
+	b.calls = append(b.calls, GetProto(proto.Key(k), msg))
+	b.initResult(1, 1, nil)
+	return b
+}
+
 // Put sets the value for a key.
 //
 // A new result will be appended to the batch which will contain a single row
@@ -908,6 +926,10 @@ type batcher struct{}
 
 func (b batcher) Get(key interface{}) *Batch {
 	return (&Batch{}).Get(key)
+}
+
+func (b batcher) GetProto(key interface{}, msg gogoproto.Message) *Batch {
+	return (&Batch{}).GetProto(key, msg)
 }
 
 func (b batcher) Put(key, value interface{}) *Batch {
