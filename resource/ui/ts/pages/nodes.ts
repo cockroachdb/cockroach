@@ -42,7 +42,9 @@ module AdminViews {
       }
 
       private static _queryManagerBuilder(nodeId: string, agg: Models.Metrics.QueryAggregator, source:string): Models.Metrics.QueryManager {
-        var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, agg, "cr.node." + source + "." + nodeId);
+        var query = Models.Metrics.NewQuery(
+			Models.Metrics.select.Avg("cr.node." + source + "." + nodeId)
+		).timespan(Models.Metrics.time.Recent(10 * 60 * 1000));
         return new Models.Metrics.QueryManager(query);
       }
 

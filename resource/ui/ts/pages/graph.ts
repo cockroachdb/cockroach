@@ -21,16 +21,21 @@ module AdminViews {
        * displaying the same data set as retrieved by a QueryManager.
        */
       export module Page {
+          import metrics = Models.Metrics;
           class Controller implements _mithril.MithrilController {
               manager:Models.Metrics.QueryManager;
               showRates:boolean;
               interval:number;
 
-              sumquery = new Models.Metrics.RecentQuery(10 * 60 * 1000,
-                    Models.Metrics.QueryAggregator.AVG, "cr.node.calls.success.1");
-              ratequery = new Models.Metrics.RecentQuery(10 * 60 * 1000,
-                  Models.Metrics.QueryAggregator.AVG_RATE, "cr.node.calls.success.1");
-
+              timespan = metrics.time.Recent(10 * 60 * 1000);
+              sumquery = metrics.NewQuery(
+					  metrics.select.Avg("cr.node.calls.success.1").title("Successful calls"),
+					  metrics.select.Avg("cr.node.calls.error.1").title("Error calls")
+					)
+				  .timespan(this.timespan);
+              ratequery = metrics.NewQuery(metrics.select.AvgRate("cr.node.calls.success.1"))
+				  .timespan(this.timespan);
+						  
               constructor(){
                   this.manager = new Models.Metrics.QueryManager(this.sumquery);
                   this.manager.refresh();
