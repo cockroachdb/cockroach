@@ -109,7 +109,7 @@ type baseQueue struct {
 }
 
 // newBaseQueue returns a new instance of baseQueue with the
-// specified shouldQ function to determine which ranges to queue
+// specified shouldQueue function to determine which ranges to queue
 // and maxSize to limit the growth of the queue. Note that
 // maxSize doesn't prevent new ranges from being added, it just
 // limits the total size. Higher priority ranges can still be
@@ -137,9 +137,9 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 	bq.processLoop(clock, stopper)
 }
 
-// MaybeAdd adds the specified range if bq.shouldQ specifies it should
+// MaybeAdd adds the specified range if bq.shouldQueue specifies it should
 // be queued. Ranges are added to the queue using the priority
-// returned by bq.shouldQ. If the queue is too full, an already-queued
+// returned by bq.shouldQueue. If the queue is too full, an already-queued
 // range with the lowest priority may be dropped.
 func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 	bq.Lock()
