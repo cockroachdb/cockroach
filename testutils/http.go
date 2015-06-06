@@ -49,7 +49,7 @@ type TestHTTPSession struct {
 func NewTestHTTPSession(t util.Tester, ctx *base.Context, baseURL string) *TestHTTPSession {
 	client, err := ctx.GetHTTPClient()
 	if err != nil {
-		t.Fatalf("error creating context: %s", err.Error())
+		t.Fatalf("error creating client: %s", err)
 	}
 	return &TestHTTPSession{
 		t:       t,

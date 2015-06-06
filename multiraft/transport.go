@@ -122,7 +122,7 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 				return
 			}
 			// TODO(bdarnell): are any transient errors possible here?
-			log.Fatalf("localRPCTransport.accept: %s", err.Error())
+			log.Fatalf("localRPCTransport.accept: %s", err)
 			continue
 		}
 		lt.mu.Lock()

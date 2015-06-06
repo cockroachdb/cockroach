@@ -53,14 +53,14 @@ func TestSetLogEntry(t *testing.T) {
 	}{
 		{nil, "", []interface{}{}, proto.LogEntry{}},
 		{ctx, "", []interface{}{}, proto.LogEntry{
-			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32(1), Key: []byte("key"),
+			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32((int32)(proto.Get)), Key: []byte("key"),
 		}},
 		{ctx, "no args", []interface{}{}, proto.LogEntry{
-			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32(1), Key: []byte("key"),
+			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32((int32)(proto.Get)), Key: []byte("key"),
 			Format: "no args",
 		}},
 		{ctx, "1 arg %s", []interface{}{"foo"}, proto.LogEntry{
-			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32(1), Key: []byte("key"),
+			NodeID: gogoproto.Int32(1), StoreID: gogoproto.Int32(2), RaftID: gogoproto.Int64(3), Method: gogoproto.Int32((int32)(proto.Get)), Key: []byte("key"),
 			Format: "1 arg %s",
 			Args: []proto.LogEntry_Arg{
 				{Type: "string", Str: "foo"},

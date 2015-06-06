@@ -163,57 +163,46 @@ func (s *rpcDBServer) executeCmd(args proto.Request, reply proto.Response) error
 	return nil
 }
 
-// Get .
 func (s *rpcDBServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// Put .
 func (s *rpcDBServer) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// ConditionalPut .
 func (s *rpcDBServer) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// Increment .
 func (s *rpcDBServer) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// Delete .
 func (s *rpcDBServer) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// DeleteRange .
 func (s *rpcDBServer) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// Scan .
 func (s *rpcDBServer) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// EndTransaction .
 func (s *rpcDBServer) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// Batch .
 func (s *rpcDBServer) Batch(args *proto.BatchRequest, reply *proto.BatchResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// AdminSplit .
 func (s *rpcDBServer) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
 	return s.executeCmd(args, reply)
 }
 
-// AdminMerge .
 func (s *rpcDBServer) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
 	return s.executeCmd(args, reply)
 }

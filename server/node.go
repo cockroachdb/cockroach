@@ -583,99 +583,78 @@ func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error 
 	return nil
 }
 
-// TODO(spencer): fill in method comments below.
-
-// Get .
 func (n *nodeServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// Put .
 func (n *nodeServer) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// ConditionalPut .
 func (n *nodeServer) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// Increment .
 func (n *nodeServer) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// Delete .
 func (n *nodeServer) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// DeleteRange .
 func (n *nodeServer) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// Scan .
 func (n *nodeServer) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// EndTransaction .
 func (n *nodeServer) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// AdminSplit .
 func (n *nodeServer) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// AdminMerge .
 func (n *nodeServer) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalRangeLookup .
 func (n *nodeServer) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalHeartbeatTxn .
 func (n *nodeServer) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalGC .
 func (n *nodeServer) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalPushTxn .
 func (n *nodeServer) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalResolveIntent .
 func (n *nodeServer) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalResolveIntentRange .
 func (n *nodeServer) InternalResolveIntentRange(args *proto.InternalResolveIntentRangeRequest, reply *proto.InternalResolveIntentRangeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalMerge .
 func (n *nodeServer) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalTruncateLog .
 func (n *nodeServer) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
 	return n.executeCmd(args, reply)
 }
 
-// InternalLeaderLease .
 func (n *nodeServer) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest,
 	reply *proto.InternalLeaderLeaseResponse) error {
 	return n.executeCmd(args, reply)

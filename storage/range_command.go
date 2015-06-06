@@ -53,39 +53,39 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 		return reply.Header().GoError()
 	}
 
-	switch args.(type) {
+	switch tArgs := args.(type) {
 	case *proto.GetRequest:
-		r.Get(batch, args.(*proto.GetRequest), reply.(*proto.GetResponse))
+		r.Get(batch, tArgs, reply.(*proto.GetResponse))
 	case *proto.PutRequest:
-		r.Put(batch, ms, args.(*proto.PutRequest), reply.(*proto.PutResponse))
+		r.Put(batch, ms, tArgs, reply.(*proto.PutResponse))
 	case *proto.ConditionalPutRequest:
-		r.ConditionalPut(batch, ms, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
+		r.ConditionalPut(batch, ms, tArgs, reply.(*proto.ConditionalPutResponse))
 	case *proto.IncrementRequest:
-		r.Increment(batch, ms, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
+		r.Increment(batch, ms, tArgs, reply.(*proto.IncrementResponse))
 	case *proto.DeleteRequest:
-		r.Delete(batch, ms, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
+		r.Delete(batch, ms, tArgs, reply.(*proto.DeleteResponse))
 	case *proto.DeleteRangeRequest:
-		r.DeleteRange(batch, ms, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
+		r.DeleteRange(batch, ms, tArgs, reply.(*proto.DeleteRangeResponse))
 	case *proto.ScanRequest:
-		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
+		r.Scan(batch, tArgs, reply.(*proto.ScanResponse))
 	case *proto.EndTransactionRequest:
-		r.EndTransaction(batch, ms, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
+		r.EndTransaction(batch, ms, tArgs, reply.(*proto.EndTransactionResponse))
 	case *proto.InternalRangeLookupRequest:
-		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
+		r.InternalRangeLookup(batch, tArgs, reply.(*proto.InternalRangeLookupResponse))
 	case *proto.InternalHeartbeatTxnRequest:
-		r.InternalHeartbeatTxn(batch, ms, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
+		r.InternalHeartbeatTxn(batch, ms, tArgs, reply.(*proto.InternalHeartbeatTxnResponse))
 	case *proto.InternalGCRequest:
-		r.InternalGC(batch, ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
+		r.InternalGC(batch, ms, tArgs, reply.(*proto.InternalGCResponse))
 	case *proto.InternalPushTxnRequest:
-		r.InternalPushTxn(batch, ms, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
+		r.InternalPushTxn(batch, ms, tArgs, reply.(*proto.InternalPushTxnResponse))
 	case *proto.InternalResolveIntentRequest:
-		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
+		r.InternalResolveIntent(batch, ms, tArgs, reply.(*proto.InternalResolveIntentResponse))
 	case *proto.InternalMergeRequest:
-		r.InternalMerge(batch, ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
+		r.InternalMerge(batch, ms, tArgs, reply.(*proto.InternalMergeResponse))
 	case *proto.InternalTruncateLogRequest:
-		r.InternalTruncateLog(batch, ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
+		r.InternalTruncateLog(batch, ms, tArgs, reply.(*proto.InternalTruncateLogResponse))
 	case *proto.InternalLeaderLeaseRequest:
-		r.InternalLeaderLease(batch, ms, args.(*proto.InternalLeaderLeaseRequest), reply.(*proto.InternalLeaderLeaseResponse))
+		r.InternalLeaderLease(batch, ms, tArgs, reply.(*proto.InternalLeaderLeaseResponse))
 	default:
 		return util.Errorf("unrecognized command %s", args.Method())
 	}

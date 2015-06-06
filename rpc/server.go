@@ -131,10 +131,9 @@ func (s *Server) Serve(handler http.Handler) {
 
 	go func() {
 		if err := http.Serve(s.listener, s); err != nil {
-			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				return
+			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+				log.Fatal(err)
 			}
-			log.Fatal(err)
 		}
 	}()
 }

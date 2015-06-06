@@ -4,9 +4,9 @@ package proto
 
 import "fmt"
 
-const _Method_name = "ContainsGetPutConditionalPutIncrementDeleteDeleteRangeScanEndTransactionReapQueueEnqueueUpdateEnqueueMessageBatchAdminSplitAdminMergeInternalRangeLookupInternalHeartbeatTxnInternalGCInternalPushTxnInternalResolveIntentInternalResolveIntentRangeInternalMergeInternalTruncateLogInternalLeaderLeaseInternalBatch"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeScanEndTransactionReapQueueEnqueueUpdateEnqueueMessageBatchAdminSplitAdminMergeInternalRangeLookupInternalHeartbeatTxnInternalGCInternalPushTxnInternalResolveIntentInternalResolveIntentRangeInternalMergeInternalTruncateLogInternalLeaderLeaseInternalBatch"
 
-var _Method_index = [...]uint16{0, 8, 11, 14, 28, 37, 43, 54, 58, 72, 81, 94, 108, 113, 123, 133, 152, 172, 182, 197, 218, 244, 257, 276, 295, 308}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 50, 64, 73, 86, 100, 105, 115, 125, 144, 164, 174, 189, 210, 236, 249, 268, 287, 300}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {
