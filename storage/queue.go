@@ -100,7 +100,7 @@ type baseQueue struct {
 	name       string
 	impl       queueImpl
 	maxSize    int                  // Maximum number of ranges to queue
-	incoming   chan *Range          // Channel for ranges to be queued
+	incoming   chan struct{}        // Channel signalled when a new range is added to the queue.
 	sync.Mutex                      // Mutex protects priorityQ and ranges
 	priorityQ  priorityQueue        // The priority queue
 	ranges     map[int64]*rangeItem // Map from RaftID to rangeItem (for updating priority)
@@ -119,7 +119,7 @@ func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
 		name:     name,
 		impl:     impl,
 		maxSize:  maxSize,
-		incoming: make(chan *Range, 50),
+		incoming: make(chan struct{}, 1),
 		ranges:   map[int64]*rangeItem{},
 	}
 }
@@ -174,7 +174,11 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 		bq.remove(pqLen - 1)
 	}
 	// Signal the processLoop that a range has been added.
-	bq.incoming <- rng
+	select {
+	case bq.incoming <- struct{}{}:
+	default:
+		// No need to signal again.
+	}
 }
 
 // MaybeRemove removes the specified range from the queue if enqueued.
@@ -201,8 +205,8 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 
 		for {
 			select {
-			// Incoming ranges set the next time to process in the event that
-			// there were previously no ranges in the queue.
+			// Incoming signal sets the next time to process if there were previously
+			// no ranges in the queue.
 			case <-bq.incoming:
 				if nextTime == nil {
 					// When the first range is added, wake up immediately. This is
