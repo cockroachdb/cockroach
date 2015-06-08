@@ -104,6 +104,7 @@ type LocalTestCluster struct {
 	Store   *storage.Store
 	DB      *client.DB
 	lSender *retryableLocalSender
+	Sender  *TxnCoordSender
 	Stopper *util.Stopper
 }
 
@@ -120,9 +121,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())
-	sender := NewTxnCoordSender(ltc.lSender, ltc.Clock, false, ltc.Stopper)
+	ltc.Sender = NewTxnCoordSender(ltc.lSender, ltc.Clock, false, ltc.Stopper)
 	var err error
-	if ltc.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if ltc.DB, err = client.Open("//root@", client.SenderOpt(ltc.Sender)); err != nil {
 		t.Fatal(err)
 	}
 	transport := multiraft.NewLocalRPCTransport()
