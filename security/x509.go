@@ -39,12 +39,11 @@ import (
 const (
 	validFor      = time.Hour * 24 * 365
 	maxPathLength = 2
-	keyBits       = 2048
 )
 
-// generateKeyPair returns a random 2048 bit RSA key pair key pair.
-func generateKeyPair() (crypto.PrivateKey, crypto.PublicKey, error) {
-	private, err := rsa.GenerateKey(rand.Reader, keyBits)
+// generateKeyPair returns a random 'keySize' bit RSA key pair.
+func generateKeyPair(keySize int) (crypto.PrivateKey, crypto.PublicKey, error) {
+	private, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -106,8 +105,8 @@ func newTemplate(commonName string) (*x509.Certificate, error) {
 
 // GenerateCA generates a CA certificate and returns the cert bytes as
 // well as the private key used to generate the certificate.
-func GenerateCA() ([]byte, crypto.PrivateKey, error) {
-	privateKey, publicKey, err := generateKeyPair()
+func GenerateCA(keySize int) ([]byte, crypto.PrivateKey, error) {
+	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -133,9 +132,9 @@ func GenerateCA() ([]byte, crypto.PrivateKey, error) {
 // GenerateNodeCert generates a node certificate and returns the cert bytes as
 // well as the private key used to generate the certificate.
 // The CA cert and private key should be passed in.
-func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, hosts []string) (
+func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, hosts []string) (
 	[]byte, crypto.PrivateKey, error) {
-	privateKey, publicKey, err := generateKeyPair()
+	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -170,10 +169,10 @@ func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, hosts [
 // well as the private key used to generate the certificate.
 // The CA cert and private key should be passed in.
 // 'user' is the unique username stored in the Subject.CommonName field.
-func GenerateClientCert(caCert *x509.Certificate, caKey crypto.PrivateKey, name string) (
+func GenerateClientCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, name string) (
 	[]byte, crypto.PrivateKey, error) {
 
-	privateKey, publicKey, err := generateKeyPair()
+	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
 	}

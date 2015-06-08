@@ -84,7 +84,7 @@ func writeCertificateAndKey(certsDir string, prefix string,
 
 // RunCreateCACert is the entry-point from the command-line interface
 // to generate CA cert and key.
-func RunCreateCACert(certsDir string) error {
+func RunCreateCACert(certsDir string, keySize int) error {
 	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
@@ -96,18 +96,17 @@ func RunCreateCACert(certsDir string) error {
 	}
 
 	// Generate certificate.
-	certificate, key, err := GenerateCA()
+	certificate, key, err := GenerateCA(keySize)
 	if err != nil {
 		return util.Errorf("error creating CA certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(certsDir, "ca", certificate, key)
-	return err
+	return writeCertificateAndKey(certsDir, "ca", certificate, key)
 }
 
 // RunCreateNodeCert is the entry-point from the command-line interface
 // to generate node cert and key.
-func RunCreateNodeCert(certsDir string, hosts []string) error {
+func RunCreateNodeCert(certsDir string, keySize int, hosts []string) error {
 	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
@@ -132,18 +131,17 @@ func RunCreateNodeCert(certsDir string, hosts []string) error {
 	}
 
 	// Generate certificate.
-	certificate, key, err := GenerateNodeCert(x509Cert, caCert.PrivateKey, hosts)
+	certificate, key, err := GenerateNodeCert(x509Cert, caCert.PrivateKey, keySize, hosts)
 	if err != nil {
 		return util.Errorf("error creating node certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(certsDir, "node", certificate, key)
-	return err
+	return writeCertificateAndKey(certsDir, "node", certificate, key)
 }
 
 // RunCreateClientCert is the entry-point from the command-line interface
 // to generate a client cert and key.
-func RunCreateClientCert(certsDir string, username string) error {
+func RunCreateClientCert(certsDir string, keySize int, username string) error {
 	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
@@ -168,11 +166,10 @@ func RunCreateClientCert(certsDir string, username string) error {
 	}
 
 	// Generate certificate.
-	certificate, key, err := GenerateClientCert(x509Cert, caCert.PrivateKey, username)
+	certificate, key, err := GenerateClientCert(x509Cert, caCert.PrivateKey, keySize, username)
 	if err != nil {
 		return util.Errorf("error creating client certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(certsDir, username, certificate, key)
-	return err
+	return writeCertificateAndKey(certsDir, username, certificate, key)
 }

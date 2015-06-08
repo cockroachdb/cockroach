@@ -117,7 +117,11 @@ func LoadInsecureTLSConfig() *tls.Config {
 }
 
 // LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
-// specified directory. The directory must contain ca.crt.
+// specified directory. The directory must contain the following files:
+// - ca.crt   -- the certificate of the cluster CA
+// - node.crt -- the certificate of this node; should be signed by the CA
+// - node.key -- the private key of this node
+// If the path is prefixed with "embedded=", load the embedded certs.
 func LoadClientTLSConfigFromDir(certDir string) (*tls.Config, error) {
 	certPEM, err := readFileFn(path.Join(certDir, "node.crt"))
 	if err != nil {
@@ -169,7 +173,7 @@ func LoadInsecureClientTLSConfig() *tls.Config {
 // LogRequestCertificates examines a http request and logs a summary of the TLS config.
 func LogRequestCertificates(r *http.Request) {
 	if r.TLS == nil {
-		if log.V(1) {
+		if log.V(3) {
 			log.Infof("%s %s: no TLS", r.Method, r.URL)
 		}
 		return
@@ -187,7 +191,7 @@ func LogRequestCertificates(r *http.Request) {
 		}
 		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
 	}
-	if log.V(1) {
+	if log.V(3) {
 		log.Infof("%s %s: peer certs: %v, chain: %v", r.Method, r.URL, peerCerts, verifiedChain)
 	}
 }

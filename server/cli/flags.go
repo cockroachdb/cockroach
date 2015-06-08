@@ -82,6 +82,9 @@ var flagUsage = map[string]string{
 	"gossip-interval": `
         Approximate interval (time.Duration) for gossiping new information to peers.
 `,
+	"key-size": `
+        Key size in bits for CA/Node/Client certificates.
+`,
 	"linearizable": `
         Enables linearizable behaviour of operations on this node by making
         sure that no commit timestamp is reported back to the client until all
@@ -181,7 +184,9 @@ func initFlags(ctx *server.Context) {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+		f.IntVar(&keySize, "key-size", defaultKeySize, flagUsage["key-size"])
 		cmd.MarkFlagRequired("certs")
+		cmd.MarkFlagRequired("key-size")
 	}
 
 	clientCmds := []*cobra.Command{kvCmd, rangeCmd, acctCmd, permCmd, zoneCmd, quitCmd}
