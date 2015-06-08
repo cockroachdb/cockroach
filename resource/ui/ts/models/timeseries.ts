@@ -1,13 +1,23 @@
 // source: models/timeseries.ts
+// TODO(mrtracy): rename to metrics.ts.
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../util/chainprop.ts" />
+/// <reference path="../util/convert.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 /**
  * Models contains data models pulled from cockroach.
  */
 module Models {
+    /**
+     * Metrics package represents the internal performance metrics collected by
+     * cockroach.
+     */
     export module Metrics {
         import promise = _mithril.MithrilPromise;
+
+        // TODO(mrtracy): Extract all of the protobuffer-based interfaces into a
+        // 'proto' package.
 
         /** 
          * QueryAggregator is an enumeration of the available aggregator
@@ -32,7 +42,7 @@ module Models {
 
         /**
          * QueryResult is a single query result. This needs to be kept in sync
-         * with the TimeSeriesQueryResult.Query protobuffer message on the server.
+         * with the TimeSeriesQueryResponse.Result protobuffer message on the server.
          * (/protos/timeseries.proto).
          */
         export interface QueryResult {
@@ -43,70 +53,208 @@ module Models {
         /**
          * QueryResultSet matches the successful output of the /ts/query
          * endpoint. This needs to be kept in sync with the
-         * TimeSeriesQueryResult protobuffer message on the server.
+         * TimeSeriesQueryResponse protobuffer message on the server.
          * (/protos/timeseries.proto).
          */
         export interface QueryResultSet {
             results: QueryResult[];
         }
 
+
         /**
-         * Query is a common interface implemented by the query types in * this module.
+         * QueryRequest is a single query request as expected by the server.
+         * This needs to be kept in sync with the TimeSeriesQueryRequest.Query
+         * protobuffer message on the server.
+         * (/protos/timeseries.proto).
          */
-        export interface Query {
-            query:()=>promise<QueryResultSet>;
+        export interface QueryRequest {
+            name:string;
+            aggregator:QueryAggregator;
         }
 
         /**
-         * Query dispatches a single time series query to the server.
+         * QueryRequestSet matches the expected input of the /ts/query endpoint.
+         * This needs to be kept in sync with the TimeSeriesQueryRequest
+         * protobuffer message on the server.
+         * (/protos/timeseries.proto).
          */
-        function query(start:Date, end:Date, agg:QueryAggregator, series:string[]):promise<QueryResultSet> {
-            var url = "/ts/query";
-            var data = {
-                start_nanos: start.getTime() * 1.0e6,
-                end_nanos: end.getTime() * 1.0e6,
-                queries: series.map((r) => {return {
-                    name: r,
-                    aggregator: agg,
-                };}),
+        export interface QueryRequestSet {
+            start_nanos:number;
+            end_nanos:number;
+            queries:QueryRequest[];
+        }
+
+
+        /**
+         * select contains time series selectors for use in metrics queries. 
+         * Each selector defines a dataset on the server which should be
+         * queried, along with additional information about how to process the
+         * data (e.g. aggregation functions, transformations) and displayed (e.g.
+         * a friendly title for graph legends).
+         */
+        export module select {
+            /**
+             * Selector is the common interface implemented by all Selector
+             * types. The is a read-only interface used by other components to
+             * extract relevant information from the selector.
+             */
+            export interface Selector {
+                /**
+                 * request returns a QueryRequest object based on this selector.
+                 */
+                request():QueryRequest;
+                /**
+                 * title returns a display-friendly title for this series.
+                 */
+                title():string;
             }
-        
-            return m.request({url:url, method:"POST", extract:nonJsonErrors, data:data})
-                .then((d:QueryResultSet) => {
-                    // Populate missing collection fields with empty arrays.
-                    if (!d.results) {
-                        d.results = [];
+
+            /**
+             * AvgSelector selects the average value of the supplied time series.
+             */
+            class AvgSelector implements Selector {
+                constructor(private series_name:string) {}
+
+                title = Utils.chainProp(this, this.series_name);
+
+                request = ():QueryRequest => {
+                    return {
+                        name:this.series_name,
+                        aggregator:QueryAggregator.AVG,
                     }
-                    d.results.forEach((r) => {
-                        if (!r.datapoints) {
-                            r.datapoints = []
-                        }
-                    });
-                    return d;
-                });
+                }
+            }
+
+            /**
+             * AvgRateSelector selects the rate of change of the average value
+             * of the supplied time series.
+             */
+            class AvgRateSelector implements Selector {
+                constructor(private series_name:string) {}
+
+                title = Utils.chainProp(this, this.series_name);
+
+                request = ():QueryRequest => {
+                    return {
+                        name:this.series_name,
+                        aggregator:QueryAggregator.AVG_RATE,
+                    }
+                }
+            }
+
+            /**
+             * Avg instantiates a new AvgSelector for the supplied time series.
+             */
+            export function Avg(series:string):AvgSelector {
+                return new AvgSelector(series);
+            }
+
+            /**
+             * AvgRate instantiates a new AvgRateSelector for the supplied time
+             * series.
+             */
+            export function AvgRate(series:string):AvgRateSelector {
+                return new AvgRateSelector(series);
+            }
         }
 
-        /** 
-         * RecentQuery is a query which monitors a duration of constant size
-         * extending backwards from the current time. When refreshed, the query
-         * will be re-issued to extend to the current time.
+        /**
+         * time contains available time span specifiers for metrics queries.
          */
-        export class RecentQuery {
-            private _series:string[];
-            constructor(public windowDuration:number, private _agg:QueryAggregator, ...series:string[]) {
-                this._series = series;
+        export module time {
+            /**
+             * TimeSpan is the interface implemeted by time span specifiers.
+             */
+            export interface TimeSpan {
+                /**
+                 * timespan returns a two-value number array which defines the
+                 * time range of a query. The first value is a timestamp for the
+                 * start of the range, the second value a timestamp for the end
+                 * of the range.
+                 */
+                timespan():number[];
             }
 
-            query():promise<QueryResultSet> {
-                var endTime = new Date();
-                var startTime = new Date(endTime.getTime() - this.windowDuration);
-                return query(startTime, endTime, this._agg, this._series);
+
+            /**
+             * Recent selects a duration of constant size extending backwards
+             * from the current time. The current time is recomputed each time
+             * Recent's timespan() method is called.
+             */
+            export function Recent(duration:number):TimeSpan {
+                return {
+                    timespan: function():number[] {
+                        var endTime = new Date();
+                        var startTime = new Date(endTime.getTime() - duration);
+                        return [startTime.getTime(), endTime.getTime()]
+                    }
+                }
             }
+        }
+
+        /**
+         * Query describes a single, repeatable query for time series data. Each
+         * query contains one or more time series selectors, and a time span
+         * over which to query those selectors.
+         */
+        class Query {
+            constructor(private _selectors:select.Selector[]) {}
+
+            /**
+             * timespan gets or sets the TimeSpan over which data should be
+             * queried. By default, the query will return the last ten minutes
+             * of data.
+             */
+            timespan = Utils.chainProp(this, time.Recent(10 * 60 * 1000));
+
+            /**
+             * execute dispatches a query to the server and returns a promise
+             * for the results.
+             */
+            execute():promise<QueryResultSet> {
+                var s = this.timespan().timespan();
+                var req:QueryRequestSet = {
+                    start_nanos: Utils.milliToNanos(s[0]),
+                    end_nanos: Utils.milliToNanos(s[1]),
+                    queries:[],
+                }
+                for (var i = 0; i < this._selectors.length; i++) {
+                    req.queries.push(this._selectors[i].request())
+                }
+                return Query.dispatch_query(req)
+            }
+
+            private static dispatch_query(q:QueryRequestSet):promise<QueryResultSet> {
+                var url = "/ts/query";
+                return m.request({url:url, method:"POST", extract:nonJsonErrors, data:q})
+                    .then((d:QueryResultSet) => {
+                        // Populate missing collection fields with empty arrays.
+                        if (!d.results) {
+                            d.results = [];
+                        }
+                        d.results.forEach((r) => {
+                            if (!r.datapoints) {
+                                r.datapoints = []
+                            }
+                        });
+                        return d;
+                    });
+            }
+        }
+
+        /**
+         * NewQuery constructs a new query object which queries the supplied
+         * selectors. Additional properties of the query can be configured by
+         * calling setter methods on the returned Query.
+         */
+        export function NewQuery(...selectors:select.Selector[]) {
+            return new Query(selectors);
         }
 
         /**
          * QueryManager supports the sharing of query result data between
-         * multiple components.
+         * multiple components. This is useful when multiple components need to
+         * synchronize on the same result set.
          */
         export class QueryManager {
             private _result:QueryResultSet = null;
@@ -115,7 +263,7 @@ module Models {
 
             // This structure will be non-null when a query is in-flight, or has
             // completed but not been processed. When an in-flight query
-            // completes, only one of these fields will contain a value.
+            // completes, only one of its fields will contain a value.
             private _outstanding:{
                 result:promise<QueryResultSet>;
                 error:_mithril.MithrilProperty<Error>;
@@ -182,7 +330,7 @@ module Models {
                 this.result();
                 if (!this._outstanding) {
                     this._outstanding = {
-                        result:this._query.query(),
+                        result:this._query.execute(),
                         error:m.prop(<Error> null), 
                     }
                     this._outstanding.result.then(null, this._outstanding.error);

@@ -1,6 +1,8 @@
 // source: pages/stores.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/store_status.ts" />
+/// <reference path="../models/timeseries.ts" />
+/// <reference path="../components/metrics.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -13,6 +15,8 @@ module AdminViews {
    * Stores is the view for exploring the status of all Stores.
    */
   export module Stores {
+	import metrics = Models.Metrics;
+
     // TODO(bram): Lots of duplicate code between here and nodes.ts, refactor
     // it into one place.
     export interface RefreshFunction {
@@ -21,7 +25,7 @@ module AdminViews {
     }
 
     export interface QueryManagerSourceMap {
-      [storeId: number]: { [source: string]: Models.Metrics.QueryManager }
+      [storeId: number]: { [source: string]: metrics.QueryManager }
     }
 
     export var storeStatuses: Models.StoreStatus.Stores = new Models.StoreStatus.Stores();
@@ -39,12 +43,18 @@ module AdminViews {
         }
       }
 
-      private static _queryManagerBuilder(storeId: string, agg: Models.Metrics.QueryAggregator, source: string): Models.Metrics.QueryManager {
-        var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, agg, "cr.store." + source + "." + storeId);
-        return new Models.Metrics.QueryManager(query);
+      private static _queryManagerBuilder(storeId: string, agg: metrics.QueryAggregator, source: string): metrics.QueryManager {
+		// TODO(mrtracy): This page has an impending, significant refactoring.
+		// The query API was changed after this page was originally built, and
+		// now uses composed functions to describe queries. Because this page
+		// page never uses the rate aggregator, 
+        var query = metrics.NewQuery(
+			metrics.select.Avg("cr.store." + source + "." + storeId)
+		).timespan(metrics.time.Recent(10 * 60 * 1000));
+        return new metrics.QueryManager(query);
       }
 
-      private _addChart(agg: Models.Metrics.QueryAggregator, source: string): void {
+      private _addChart(agg: metrics.QueryAggregator, source: string): void {
         var name = agg + ":" + source;
         if (queryManagers[this._storeId][name] == null) {
           queryManagers[this._storeId][name] = Controller._queryManagerBuilder(this._storeId, agg, source);
@@ -65,17 +75,17 @@ module AdminViews {
           if (queryManagers[storeId] == null) {
             queryManagers[storeId] = {};
           }
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "keycount");
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "valcount");
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "livecount");
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "intentcount");
-          this._addChart(Models.Metrics.QueryAggregator.AVG, "ranges");
+          this._addChart(metrics.QueryAggregator.AVG, "keycount");
+          this._addChart(metrics.QueryAggregator.AVG, "valcount");
+          this._addChart(metrics.QueryAggregator.AVG, "livecount");
+          this._addChart(metrics.QueryAggregator.AVG, "intentcount");
+          this._addChart(metrics.QueryAggregator.AVG, "ranges");
 
           //TODO(Bram): Byte charts won't display properly.
-          //this._addChart(Models.Metrics.QueryAggregator.AVG, "valbytes");
-          //this._addChart(Models.Metrics.QueryAggregator.AVG, "livebytes");
-          //this._addChart(Models.Metrics.QueryAggregator.AVG, "intentbytes");
-          //this._addChart(Models.Metrics.QueryAggregator.AVG, "keybytes");
+          //this._addChart(metrics.QueryAggregator.AVG, "valbytes");
+          //this._addChart(metrics.QueryAggregator.AVG, "livebytes");
+          //this._addChart(metrics.QueryAggregator.AVG, "intentbytes");
+          //this._addChart(metrics.QueryAggregator.AVG, "keybytes");
         } else {
           this._storeId = null;
         }

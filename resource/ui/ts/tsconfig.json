@@ -14,6 +14,7 @@
     "files": [
         "./header.ts",
         "./app.ts",
+        "./util/chainprop.ts",
         "./models/node_status.ts",
         "./models/stats.ts",
         "./models/store_status.ts",

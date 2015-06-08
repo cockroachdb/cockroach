@@ -22,8 +22,36 @@
 //		    Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
+// source: util/chainprop.ts
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Utils;
+(function (Utils) {
+    function chainProp(_this, val) {
+        var obj = val;
+        return function (value) {
+            if (value === undefined) {
+                return obj;
+            }
+            obj = value;
+            return _this;
+        };
+    }
+    Utils.chainProp = chainProp;
+})(Utils || (Utils = {}));
+// source: util/convert.ts
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Utils;
+(function (Utils) {
+    function milliToNanos(millis) {
+        return millis * 1.0e6;
+    }
+    Utils.milliToNanos = milliToNanos;
+})(Utils || (Utils = {}));
 // source: models/timeseries.ts
+// TODO(mrtracy): rename to metrics.ts.
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../util/chainprop.ts" />
+/// <reference path="../util/convert.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Models;
 (function (Models) {
@@ -34,49 +62,100 @@ var Models;
             QueryAggregator[QueryAggregator["AVG_RATE"] = 2] = "AVG_RATE";
         })(Metrics.QueryAggregator || (Metrics.QueryAggregator = {}));
         var QueryAggregator = Metrics.QueryAggregator;
-        function query(start, end, agg, series) {
-            var url = "/ts/query";
-            var data = {
-                start_nanos: start.getTime() * 1.0e6,
-                end_nanos: end.getTime() * 1.0e6,
-                queries: series.map(function (r) {
-                    return {
-                        name: r,
-                        aggregator: agg,
+        var select;
+        (function (select) {
+            var AvgSelector = (function () {
+                function AvgSelector(series_name) {
+                    var _this = this;
+                    this.series_name = series_name;
+                    this.title = Utils.chainProp(this, this.series_name);
+                    this.request = function () {
+                        return {
+                            name: _this.series_name,
+                            aggregator: QueryAggregator.AVG,
+                        };
                     };
-                }),
-            };
-            return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data })
-                .then(function (d) {
-                if (!d.results) {
-                    d.results = [];
                 }
-                d.results.forEach(function (r) {
-                    if (!r.datapoints) {
-                        r.datapoints = [];
-                    }
-                });
-                return d;
-            });
-        }
-        var RecentQuery = (function () {
-            function RecentQuery(windowDuration, _agg) {
-                var series = [];
-                for (var _i = 2; _i < arguments.length; _i++) {
-                    series[_i - 2] = arguments[_i];
+                return AvgSelector;
+            })();
+            var AvgRateSelector = (function () {
+                function AvgRateSelector(series_name) {
+                    var _this = this;
+                    this.series_name = series_name;
+                    this.title = Utils.chainProp(this, this.series_name);
+                    this.request = function () {
+                        return {
+                            name: _this.series_name,
+                            aggregator: QueryAggregator.AVG_RATE,
+                        };
+                    };
                 }
-                this.windowDuration = windowDuration;
-                this._agg = _agg;
-                this._series = series;
+                return AvgRateSelector;
+            })();
+            function Avg(series) {
+                return new AvgSelector(series);
             }
-            RecentQuery.prototype.query = function () {
-                var endTime = new Date();
-                var startTime = new Date(endTime.getTime() - this.windowDuration);
-                return query(startTime, endTime, this._agg, this._series);
+            select.Avg = Avg;
+            function AvgRate(series) {
+                return new AvgRateSelector(series);
+            }
+            select.AvgRate = AvgRate;
+        })(select = Metrics.select || (Metrics.select = {}));
+        var time;
+        (function (time) {
+            function Recent(duration) {
+                return {
+                    timespan: function () {
+                        var endTime = new Date();
+                        var startTime = new Date(endTime.getTime() - duration);
+                        return [startTime.getTime(), endTime.getTime()];
+                    }
+                };
+            }
+            time.Recent = Recent;
+        })(time = Metrics.time || (Metrics.time = {}));
+        var Query = (function () {
+            function Query(_selectors) {
+                this._selectors = _selectors;
+                this.timespan = Utils.chainProp(this, time.Recent(10 * 60 * 1000));
+            }
+            Query.prototype.execute = function () {
+                var s = this.timespan().timespan();
+                var req = {
+                    start_nanos: Utils.milliToNanos(s[0]),
+                    end_nanos: Utils.milliToNanos(s[1]),
+                    queries: [],
+                };
+                for (var i = 0; i < this._selectors.length; i++) {
+                    req.queries.push(this._selectors[i].request());
+                }
+                return Query.dispatch_query(req);
             };
-            return RecentQuery;
+            Query.dispatch_query = function (q) {
+                var url = "/ts/query";
+                return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: q })
+                    .then(function (d) {
+                    if (!d.results) {
+                        d.results = [];
+                    }
+                    d.results.forEach(function (r) {
+                        if (!r.datapoints) {
+                            r.datapoints = [];
+                        }
+                    });
+                    return d;
+                });
+            };
+            return Query;
         })();
-        Metrics.RecentQuery = RecentQuery;
+        function NewQuery() {
+            var selectors = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                selectors[_i - 0] = arguments[_i];
+            }
+            return new Query(selectors);
+        }
+        Metrics.NewQuery = NewQuery;
         var QueryManager = (function () {
             function QueryManager(_query) {
                 this._query = _query;
@@ -115,7 +194,7 @@ var Models;
                 this.result();
                 if (!this._outstanding) {
                     this._outstanding = {
-                        result: this._query.query(),
+                        result: this._query.execute(),
                         error: m.prop(null),
                     };
                     this._outstanding.result.then(null, this._outstanding.error);
@@ -228,11 +307,15 @@ var AdminViews;
     (function (Graph) {
         var Page;
         (function (Page) {
+            var metrics = Models.Metrics;
             var Controller = (function () {
                 function Controller() {
                     var _this = this;
-                    this.sumquery = new Models.Metrics.RecentQuery(10 * 60 * 1000, Models.Metrics.QueryAggregator.AVG, "cr.node.calls.success.1");
-                    this.ratequery = new Models.Metrics.RecentQuery(10 * 60 * 1000, Models.Metrics.QueryAggregator.AVG_RATE, "cr.node.calls.success.1");
+                    this.timespan = metrics.time.Recent(10 * 60 * 1000);
+                    this.sumquery = metrics.NewQuery(metrics.select.Avg("cr.node.calls.success.1").title("Successful calls"), metrics.select.Avg("cr.node.calls.error.1").title("Error calls"))
+                        .timespan(this.timespan);
+                    this.ratequery = metrics.NewQuery(metrics.select.AvgRate("cr.node.calls.success.1"))
+                        .timespan(this.timespan);
                     this.toggleGraph = function () {
                         _this.showRates = !_this.showRates;
                         if (_this.showRates) {
@@ -554,7 +637,7 @@ var AdminViews;
                 }
             };
             Controller._queryManagerBuilder = function (nodeId, agg, source) {
-                var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, agg, "cr.node." + source + "." + nodeId);
+                var query = Models.Metrics.NewQuery(Models.Metrics.select.Avg("cr.node." + source + "." + nodeId)).timespan(Models.Metrics.time.Recent(10 * 60 * 1000));
                 return new Models.Metrics.QueryManager(query);
             };
             Controller.prototype._addChart = function (agg, source) {
@@ -1037,10 +1120,13 @@ var Models;
 // source: pages/stores.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/store_status.ts" />
+/// <reference path="../models/timeseries.ts" />
+/// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
     var Stores;
     (function (Stores) {
+        var metrics = Models.Metrics;
         Stores.storeStatuses = new Models.StoreStatus.Stores();
         Stores.queryManagers = {};
         var Controller = (function () {
@@ -1055,11 +1141,11 @@ var AdminViews;
                     if (Stores.queryManagers[storeId] == null) {
                         Stores.queryManagers[storeId] = {};
                     }
-                    this._addChart(Models.Metrics.QueryAggregator.AVG, "keycount");
-                    this._addChart(Models.Metrics.QueryAggregator.AVG, "valcount");
-                    this._addChart(Models.Metrics.QueryAggregator.AVG, "livecount");
-                    this._addChart(Models.Metrics.QueryAggregator.AVG, "intentcount");
-                    this._addChart(Models.Metrics.QueryAggregator.AVG, "ranges");
+                    this._addChart(metrics.QueryAggregator.AVG, "keycount");
+                    this._addChart(metrics.QueryAggregator.AVG, "valcount");
+                    this._addChart(metrics.QueryAggregator.AVG, "livecount");
+                    this._addChart(metrics.QueryAggregator.AVG, "intentcount");
+                    this._addChart(metrics.QueryAggregator.AVG, "ranges");
                 }
                 else {
                     this._storeId = null;
@@ -1073,8 +1159,8 @@ var AdminViews;
                 }
             };
             Controller._queryManagerBuilder = function (storeId, agg, source) {
-                var query = new Models.Metrics.RecentQuery(10 * 60 * 1000, agg, "cr.store." + source + "." + storeId);
-                return new Models.Metrics.QueryManager(query);
+                var query = metrics.NewQuery(metrics.select.Avg("cr.store." + source + "." + storeId)).timespan(metrics.time.Recent(10 * 60 * 1000));
+                return new metrics.QueryManager(query);
             };
             Controller.prototype._addChart = function (agg, source) {
                 var name = agg + ":" + source;
