@@ -53,7 +53,7 @@ func DisableLogFileOutput() {
 // logDepth uses the PrintWith to format the output string and
 // formulate the context information into the machine-readable
 // dictionary for separate binary-log output.
-func logDepth(ctx context.Context, depth int, sev severity, format string, args []interface{}) {
+func logDepth(ctx context.Context, depth int, sev Severity, format string, args []interface{}) {
 	// TODO(tschottdorf): logging hooks should have their entry point here.
 	AddStructured(ctx, sev, depth+1, format, args)
 }
@@ -63,25 +63,25 @@ func logDepth(ctx context.Context, depth int, sev severity, format string, args 
 // given message and any additional pairs specified as consecutive elements in
 // kvs.
 func Infoc(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, infoLog, format, args)
+	logDepth(ctx, 1, InfoLog, format, args)
 }
 
 // Info logs to the INFO log.
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Info(args ...interface{}) {
-	logDepth(nil, 1, infoLog, "", args)
+	logDepth(nil, 1, InfoLog, "", args)
 }
 
 // Infof logs to the INFO log. Don't use it; use Info or Infoc instead.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
 func Infof(format string, args ...interface{}) {
-	logDepth(nil, 1, infoLog, format, args)
+	logDepth(nil, 1, InfoLog, format, args)
 }
 
 // InfoDepth logs to the INFO log, offsetting the caller's stack frame by
 // 'depth'.
 func InfoDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, infoLog, "", args)
+	logDepth(nil, depth+1, InfoLog, "", args)
 }
 
 // Warningc logs to the WARNING and INFO logs. It extracts values from the
@@ -89,53 +89,53 @@ func InfoDepth(depth int, args ...interface{}) {
 // with the given message and any additional pairs specified as consecutive
 // elements in kvs.
 func Warningc(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, warningLog, format, args)
+	logDepth(ctx, 1, WarningLog, format, args)
 }
 
 // Warning logs to the WARNING and INFO logs.
 // Warningf logs to the WARNING and INFO logs. Don't use it; use Warning or
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Warning(args ...interface{}) {
-	logDepth(nil, 1, warningLog, "", args)
+	logDepth(nil, 1, WarningLog, "", args)
 }
 
 // Warningf logs to the WARNING and INFO logs. Don't use it; use Warning or
 // Warningc instead. Arguments are handled in the manner of fmt.Printf; a
 // newline is appended if missing.
 func Warningf(format string, args ...interface{}) {
-	logDepth(nil, 1, warningLog, format, args)
+	logDepth(nil, 1, WarningLog, format, args)
 }
 
 // WarningDepth logs to the WARNING and INFO logs, offsetting the caller's
 // stack frame by 'depth'.
 func WarningDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, warningLog, "", args)
+	logDepth(nil, depth+1, WarningLog, "", args)
 }
 
 // Errorc logs to the ERROR, WARNING, and INFO logs. It extracts values from
 // Field keys specified in this package and logs them along with the given
 // message and any additional pairs specified as consecutive elements in kvs.
 func Errorc(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, errorLog, format, args)
+	logDepth(ctx, 1, ErrorLog, format, args)
 }
 
 // Error logs to the ERROR, WARNING, and INFO logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Error(args ...interface{}) {
-	logDepth(nil, 1, errorLog, "", args)
+	logDepth(nil, 1, ErrorLog, "", args)
 }
 
 // Errorf logs to the ERROR, WARNING, and INFO logs. Don't use it; use Error
 // Info or Errorc instead. Arguments are handled in the manner of fmt.Printf;
 // a newline is appended if missing.
 func Errorf(format string, args ...interface{}) {
-	logDepth(nil, 1, errorLog, format, args)
+	logDepth(nil, 1, ErrorLog, format, args)
 }
 
 // ErrorDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
 // caller's stack frame by 'depth'.
 func ErrorDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, errorLog, "", args)
+	logDepth(nil, depth+1, ErrorLog, "", args)
 }
 
 // Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
@@ -144,28 +144,28 @@ func ErrorDepth(depth int, args ...interface{}) {
 // them along with the given message and any additional pairs specified as
 // consecutive elements in kvs.
 func Fatalc(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, fatalLog, format, args)
+	logDepth(ctx, 1, FatalLog, format, args)
 }
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Print; a newline is appended.
 func Fatal(args ...interface{}) {
-	logDepth(nil, 1, fatalLog, "", args)
+	logDepth(nil, 1, FatalLog, "", args)
 }
 
 // Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Printf; a newline is appended.
 func Fatalf(format string, args ...interface{}) {
-	logDepth(nil, 1, fatalLog, format, args)
+	logDepth(nil, 1, FatalLog, format, args)
 }
 
 // FatalDepth logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255),
 // offsetting the caller's stack frame by 'depth'.
 func FatalDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, fatalLog, "", args)
+	logDepth(nil, depth+1, FatalLog, "", args)
 }
 
 // V returns true if the logging verbosity is set to the specified level or

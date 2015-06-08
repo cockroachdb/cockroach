@@ -31,7 +31,7 @@ import (
 
 // AddStructured creates a structured log entry to be written to the
 // specified facility of the logger.
-func AddStructured(ctx context.Context, s severity, depth int, format string, args []interface{}) {
+func AddStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line := Caller(depth + 1)
 	entry := &proto.LogEntry{}
 	setLogEntry(ctx, format, args, entry)

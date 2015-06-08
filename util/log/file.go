@@ -16,6 +16,8 @@
 
 // File I/O for logs.
 
+// Author: Bram Gruneir (bram@cockroachlabs.com)
+
 package log
 
 import (
@@ -28,15 +30,18 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
-var MaxSize uint64 = 1024 * 1024 * 1800
+var MaxSize uint64 = 1024 * 1024 * 10
 
 // If non-empty, overrides the choice of directory in which to write logs.
 // See createLogDirs for the full list of possible destinations.
@@ -45,8 +50,15 @@ var logDir *string
 // logDirs lists the candidate directories for new log files.
 var logDirs []string
 
-// logFileRE matches log files to avoid exposing non-log files accidentally.
-var logFileRE = regexp.MustCompile(`log\.(INFO|WARNING|ERROR)\.`)
+// logFileRE matches log files to avoid exposing non-log files accidentally
+// and it splits the details of the filename into groups for easy parsing.
+// The log file format is {process}.{host}.{username}.log.{severity}.{timestamp}
+// cockroach.Brams-MacBook-Pro.bram.log.WARNING.2015-06-09T16_10_48-04_00.30209
+// All underscore in process, host and username are escaped to double
+// underscores and all periods are escaped to an underscore.
+// For compatibility with Windows filenames, all colons from the timestamp
+// (RFC3339) are converted to underscores.
+var logFileRE = regexp.MustCompile(`([^\.]+)\.([^\.]+)\.([^\.]+)\.log\.(ERROR|WARNING|INFO)\.([^\.]+)\.(\d+)`)
 
 func createLogDirs() {
 	if *logDir != "" {
@@ -85,36 +97,86 @@ func shortHostname(hostname string) string {
 	return hostname
 }
 
-// logName returns a new log file name containing tag, with start time t, and
-// the name for the symlink for tag.
-func logName(tag string, t time.Time) (name, link string) {
-	name = fmt.Sprintf("%s.%s.%s.log.%s.%04d%02d%02d-%02d%02d%02d.%d",
-		program,
-		host,
-		userName,
-		tag,
-		t.Year(),
-		t.Month(),
-		t.Day(),
-		t.Hour(),
-		t.Minute(),
-		t.Second(),
+// removePeriods removes all extraneous periods. This is required to ensure that
+// the only periods in the filename are the ones added by logName so it can
+// be easily parsed.
+func removePeriods(s string) string {
+	return strings.Replace(s, ".", "", -1)
+}
+
+// logName returns a new log file name containing the severity, with start time
+// t, and the name for the symlink for the severity.
+func logName(severity Severity, t time.Time) (name, link string) {
+	// Replace the ':'s in the time format with '_'s to allow for log files in
+	// Windows.
+	tFormatted := strings.Replace(t.Format(time.RFC3339), ":", "_", -1)
+
+	name = fmt.Sprintf("%s.%s.%s.log.%s.%s.%d",
+		removePeriods(program),
+		removePeriods(host),
+		removePeriods(userName),
+		severity.Name(),
+		tFormatted,
 		pid)
-	return name, program + "." + tag
+	return name, program + "." + severity.Name()
+}
+
+// A FileDetails holds all of the particulars that can be parsed by the name of
+// a log file.
+type FileDetails struct {
+	Program  string
+	Host     string
+	UserName string
+	Severity Severity
+	Time     time.Time
+	PID      uint
+}
+
+func parseLogFilename(filename string) (FileDetails, error) {
+	matches := logFileRE.FindStringSubmatch(filename)
+	if matches == nil || len(matches) != 7 {
+		return FileDetails{}, util.Errorf("malformed log filename")
+	}
+
+	sev, sevFound := SeverityByName(matches[4])
+	if !sevFound {
+		return FileDetails{}, util.Errorf("malformed severity")
+	}
+
+	// Replace the '_'s with ':'s to restore the correct time format.
+	fixTime := strings.Replace(matches[5], "_", ":", -1)
+	time, err := time.Parse(time.RFC3339, fixTime)
+	if err != nil {
+		return FileDetails{}, err
+	}
+
+	pid, err := strconv.ParseInt(matches[6], 10, 0)
+	if err != nil {
+		return FileDetails{}, err
+	}
+
+	return FileDetails{
+		Program:  matches[1],
+		Host:     matches[2],
+		UserName: matches[3],
+		Severity: sev,
+		Time:     time,
+		PID:      uint(pid),
+	}, nil
 }
 
 var onceLogDirs sync.Once
 
 // create creates a new log file and returns the file and its filename, which
-// contains tag ("INFO", "FATAL", etc.) and t.  If the file is created
+// contains severity ("INFO", "FATAL", etc.) and t.  If the file is created
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
-func create(tag string, t time.Time) (f *os.File, filename string, err error) {
+func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
 	onceLogDirs.Do(createLogDirs)
 	if len(logDirs) == 0 {
 		return nil, "", errors.New("log: no log dirs")
 	}
-	name, link := logName(tag, t)
+	name, link := logName(severity, t)
 	var lastErr error
 	for _, dir := range logDirs {
 		fname := filepath.Join(dir, name)
@@ -137,16 +199,20 @@ func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
 }
 
-// verifyFileInfo verifies that the file specified by filename is a
+// getFileDetails verifies that the file specified by filename is a
 // regular file and filename matches the expected filename pattern.
-// Returns nil on success; otherwise error.
-func verifyFileInfo(info os.FileInfo) error {
+// Returns the log file details success; otherwise error.
+func getFileDetails(info os.FileInfo) (FileDetails, error) {
 	if info.Mode()&os.ModeType != 0 {
-		return util.Errorf("not a regular file")
-	} else if !logFileRE.MatchString(info.Name()) {
-		return util.Errorf("not a log file")
+		return FileDetails{}, util.Errorf("not a regular file")
 	}
-	return nil
+
+	details, err := parseLogFilename(info.Name())
+	if err != nil {
+		return FileDetails{}, err
+	}
+
+	return details, nil
 }
 
 func verifyFile(filename string) error {
@@ -154,7 +220,8 @@ func verifyFile(filename string) error {
 	if err != nil {
 		return err
 	}
-	return verifyFileInfo(info)
+	_, err = getFileDetails(info)
+	return err
 }
 
 // A FileInfo holds the filename and size of a log file.
@@ -162,6 +229,7 @@ type FileInfo struct {
 	Name         string // base name
 	SizeBytes    int64
 	ModTimeNanos int64 // most recent mode time in unix nanos
+	Details      FileDetails
 }
 
 // ListLogFiles returns a slice of FileInfo structs for each log file
@@ -174,11 +242,13 @@ func ListLogFiles() ([]FileInfo, error) {
 			return results, err
 		}
 		for _, info := range infos {
-			if verifyFileInfo(info) == nil {
+			details, err := getFileDetails(info)
+			if err == nil {
 				results = append(results, FileInfo{
 					Name:         info.Name(),
 					SizeBytes:    info.Size(),
 					ModTimeNanos: info.ModTime().UnixNano(),
+					Details:      details,
 				})
 			}
 		}
@@ -220,4 +290,102 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 		}
 	}
 	return nil, err
+}
+
+// sortableFileInfoSlice is required so we can sort FileInfos.
+type sortableFileInfoSlice []FileInfo
+
+func (a sortableFileInfoSlice) Len() int      { return len(a) }
+func (a sortableFileInfoSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortableFileInfoSlice) Less(i, j int) bool {
+	return a[i].Details.Time.UnixNano() < a[j].Details.Time.UnixNano()
+}
+
+// selectFiles selects all log files that have an timestamp before the endTime and
+// the correct severity. It then sorts them in decreasing order, with the most
+// recent as the first one.
+func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []FileInfo {
+	files := sortableFileInfoSlice{}
+	for _, logFile := range logFiles {
+		if logFile.Details.Severity == severity && logFile.Details.Time.UnixNano() <= endTimestamp {
+			files = append(files, logFile)
+		}
+	}
+
+	// Sort the files in reverse order so we will fetch the newest first.
+	sort.Sort(sort.Reverse(files))
+	return files
+}
+
+// FetchEntriesFromFiles fetches all available logs on disk that are of the
+// level of severity (or worse) and are between the start and end times. It will
+// stop reading in new files if the maxEntries is exceeded. The logs entries
+// returned will be in decreasing order, with the closest log to the start
+// time being the first entry.
+func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int) ([]proto.LogEntry, error) {
+	logFiles, err := ListLogFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	selectedFiles := selectFiles(logFiles, severity, endTimestamp)
+
+	entries := []proto.LogEntry{}
+	for _, file := range selectedFiles {
+		newEntries, entryBeforeStart, err := readAllEntriesFromFile(
+			file,
+			startTimestamp,
+			endTimestamp,
+			maxEntries-len(entries))
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, newEntries...)
+		if len(entries) >= maxEntries {
+			break
+		}
+		if entryBeforeStart {
+			// Stop processing files that won't have any timestamps after
+			// startTime.
+			break
+		}
+	}
+	return entries, nil
+}
+
+// readAllEntriesFromFile reads in all log entries from a given file that are
+// between the start and end times and returns the entries in the reverse order,
+// from newest to oldest. It also returns a flag that denotes if any timestamp
+// occurred before the startTime to ensure inform the caller that no more log
+// files need to be processed. If the number of entries is exceeds maxEntries
+// then processing of new entries is stopped immediately.
+func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int) ([]proto.LogEntry, bool, error) {
+	reader, err := GetLogReader(file.Name, false)
+	defer reader.Close()
+	if reader == nil || err != nil {
+		return nil, false, err
+	}
+	entries := []proto.LogEntry{}
+	decoder := NewEntryDecoder(reader)
+	entryBeforeStart := false
+	for {
+		entry := proto.LogEntry{}
+		if err := decoder.Decode(&entry); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, false, err
+		}
+		if entry.Time >= startTimestamp && entry.Time <= endTimestamp {
+			entries = append([]proto.LogEntry{entry}, entries...)
+			if len(entries) >= maxEntries {
+				break
+			}
+		}
+		if entry.Time < startTimestamp {
+			entryBeforeStart = true
+		}
+
+	}
+	return entries, entryBeforeStart, nil
 }
