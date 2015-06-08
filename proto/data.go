@@ -532,6 +532,11 @@ func (t Transaction) String() string {
 		util.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
 
+// Short returns the short form of the Transaction's UUID.
+func (t Transaction) Short() string {
+	return util.UUID(t.ID).Short()
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (mvcc *MVCCMetadata) IsInline() bool {
 	return mvcc.Value != nil
