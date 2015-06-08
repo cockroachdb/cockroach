@@ -35,7 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/montanaflynn/stats"
 )
+
+const statusLogInterval = 5 * time.Second
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -69,6 +72,10 @@ type txnMetadata struct {
 	// transaction operations to this coordinator. Accessed and updated
 	// atomically.
 	lastUpdateNanos int64
+
+	// Analogous to lastUpdateNanos, this is the wall time at which the
+	// transaction was instantiated.
+	firstUpdateNanos int64
 
 	// timeoutDuration is the time after which the transaction should be
 	// considered abandoned by the client. That is, when
@@ -112,12 +119,18 @@ func (tm *txnMetadata) setLastUpdate(nowNanos int64) {
 	atomic.StoreInt64(&tm.lastUpdateNanos, nowNanos)
 }
 
+// getLastUpdate atomically loads the nanosecond wall time of the most
+// recent client operation.
+func (tm *txnMetadata) getLastUpdate() int64 {
+	return atomic.LoadInt64(&tm.lastUpdateNanos)
+}
+
 // hasClientAbandonedCoord returns true if the transaction has not
 // been updated by the client adding a request within the allowed
 // timeout.
 func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 	timeout := nowNanos - tm.timeoutDuration.Nanoseconds()
-	return atomic.LoadInt64(&tm.lastUpdateNanos) < timeout
+	return tm.getLastUpdate() < timeout
 }
 
 // close sends resolve intent commands for all key ranges this
@@ -186,6 +199,16 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 	tm.keys.Clear()
 }
 
+// txnCoordStats tallies up statistics about the transactions which have
+// completed on this sender.
+type txnCoordStats struct {
+	committed, abandoned, aborted int
+
+	// Store float64 since that's what we want in the end.
+	durations []float64 // nanoseconds
+	restarts  []float64 // restarts (as measured by epoch)
+}
+
 // A TxnCoordSender is an implementation of client.Sender which
 // wraps a lower-level Sender (either a LocalSender or a DistSender)
 // to which it sends commands. It acts as a man-in-the-middle,
@@ -200,9 +223,10 @@ type TxnCoordSender struct {
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
-	sync.Mutex                                // Protects the txns map.
+	sync.Mutex                                // protects txns and txnStats
 	txns              map[string]*txnMetadata // txn key to metadata
-	linearizable      bool                    // Enables linearizable behaviour.
+	txnStats          txnCoordStats           // statistics of recent txns
+	linearizable      bool                    // enables linearizable behaviour
 	stopper           *util.Stopper
 }
 
@@ -220,7 +244,62 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		linearizable:      linearizable,
 		stopper:           stopper,
 	}
+
+	tc.stopper.RunWorker(tc.startStats)
 	return tc
+}
+
+// startStats blocks and periodically logs transaction statistics (throughput,
+// success rates, durations, ...).
+// TODO(tschottdorf): Use a proper metrics subsystem for this (+the store-level
+// stats).
+// TODO(mrtracy): Add this to TimeSeries.
+func (tc *TxnCoordSender) startStats() {
+	res := time.Millisecond // for duration logging resolution
+	lastNow := tc.clock.PhysicalNow()
+	for {
+		select {
+		case <-time.After(statusLogInterval):
+			if !log.V(1) {
+				continue
+			}
+
+			tc.Lock()
+			curStats := tc.txnStats
+			tc.txnStats = txnCoordStats{}
+			tc.Unlock()
+
+			now := tc.clock.PhysicalNow()
+
+			// Tests have weird clocks.
+			if now-lastNow <= 0 {
+				continue
+			}
+
+			num := len(curStats.durations)
+			dMax := time.Duration(stats.Max(curStats.durations))
+			dMean := time.Duration(stats.Mean(curStats.durations))
+			dDev := time.Duration(stats.StdDevP(curStats.durations))
+			rMax := stats.Max(curStats.restarts)
+			rMean := stats.Mean(curStats.restarts)
+			rDev := stats.StdDevP(curStats.restarts)
+
+			rate := float64(int64(num)*int64(time.Second)) / float64(now-lastNow)
+			var pCommitted, pAbandoned, pAborted float32
+			if num > 0 {
+				pCommitted = 100 * float32(curStats.committed) / float32(num)
+				pAbandoned = 100 * float32(curStats.abandoned) / float32(num)
+				pAborted = 100 * float32(curStats.aborted) / float32(num)
+			}
+			log.Infof("txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%.1f avg/σ/max restarts (%d samples)",
+				rate, pCommitted, pAborted, pAbandoned, util.TruncateDuration(dMean, res),
+				util.TruncateDuration(dDev, res), util.TruncateDuration(dMax, res),
+				rMean, rDev, rMax, num)
+			lastNow = now
+		case <-tc.stopper.ShouldStop():
+			return
+		}
+	}
 }
 
 // Send implements the client.Sender interface. If the call is part
@@ -298,7 +377,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		} else {
 			header.Timestamp = header.Txn.Timestamp
 		}
-		// End transaction must have its key set to the txn ID.
+		// EndTransaction must have its key set to that of the txn.
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			header.Key = header.Txn.Key
 			// Remember when EndTransaction started in case we want to
@@ -318,34 +397,47 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		tc.updateResponseTxn(header, call.Reply.Header())
 	}
 
-	// If successful, we're in a transaction, and the command leaves
-	// transactional intents, add the key or key range to the intents map.
-	// If the transaction metadata doesn't yet exist, create it.
-	if call.Reply.Header().GoError() == nil && header.Txn != nil && proto.IsTransactionWrite(call.Args) {
+	if txn := call.Reply.Header().Txn; txn != nil {
 		tc.Lock()
-		var ok bool
-		var txnMeta *txnMetadata
-		if txnMeta, ok = tc.txns[string(header.Txn.ID)]; !ok {
-			txnMeta = &txnMetadata{
-				txn:             *header.Txn,
-				keys:            cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-				lastUpdateNanos: tc.clock.PhysicalNow(),
-				timeoutDuration: tc.clientTimeout,
-				txnEnd:          make(chan struct{}),
+		txnMeta := tc.txns[string(txn.ID)]
+		// If this transactional command leaves transactional intents, add the key
+		// or key range to the intents map. If the transaction metadata doesn't yet
+		// exist, create it.
+		if call.Reply.Header().GoError() == nil {
+			if proto.IsTransactionWrite(call.Args) {
+				if txnMeta == nil {
+					txnMeta = &txnMetadata{
+						txn:              *txn,
+						keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+						firstUpdateNanos: tc.clock.PhysicalNow(),
+						lastUpdateNanos:  tc.clock.PhysicalNow(),
+						timeoutDuration:  tc.clientTimeout,
+						txnEnd:           make(chan struct{}),
+					}
+					id := string(txn.ID)
+					tc.txns[id] = txnMeta
+					tc.heartbeat(id)
+				}
+				txnMeta.addKeyRange(header.Key, header.EndKey)
 			}
-			tc.txns[string(header.Txn.ID)] = txnMeta
-			tc.heartbeat(txnMeta)
+			// Update our record of this transaction.
+			if txnMeta != nil {
+				txnMeta.txn = *txn
+				txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+			}
 		}
-		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
-		txnMeta.addKeyRange(header.Key, header.EndKey)
 		tc.Unlock()
 	}
 
 	// Cleanup intents and transaction map if end of transaction.
 	switch t := call.Reply.Header().GoError().(type) {
+	case *proto.TransactionStatusError:
+		// Likely already committed or more obscure errors such as epoch or
+		// timestamp regressions; consider it dead.
+		tc.cleanupTxn(t.Txn, nil)
 	case *proto.TransactionAbortedError:
 		// If already aborted, cleanup the txn on this TxnCoordSender.
-		tc.cleanupTxn(&t.Txn, nil)
+		tc.cleanupTxn(t.Txn, nil)
 	case *proto.OpRequiresTxnError:
 		// Run a one-off transaction with that single command.
 		if log.V(1) {
@@ -369,35 +461,36 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 			log.Warning(err)
 		}
 	case nil:
-		var txn *proto.Transaction
 		var resolved []proto.Key
-		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
-			txn = call.Reply.Header().Txn
-			// If the --linearizable flag is set, we want to make sure that
-			// all the clocks in the system are past the commit timestamp
-			// of the transaction. This is guaranteed if either
-			// - the commit timestamp is MaxOffset behind startNS
-			// - MaxOffset ns were spent in this function
-			// when returning to the client. Below we choose the option
-			// that involves less waiting, which is likely the first one
-			// unless a transaction commits with an odd timestamp.
-			if tsNS := txn.Timestamp.WallTime; startNS > tsNS {
-				startNS = tsNS
+		if txn := call.Reply.Header().Txn; txn != nil {
+			if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
+				// If the --linearizable flag is set, we want to make sure that
+				// all the clocks in the system are past the commit timestamp
+				// of the transaction. This is guaranteed if either
+				// - the commit timestamp is MaxOffset behind startNS
+				// - MaxOffset ns were spent in this function
+				// when returning to the client. Below we choose the option
+				// that involves less waiting, which is likely the first one
+				// unless a transaction commits with an odd timestamp.
+				if tsNS := txn.Timestamp.WallTime; startNS > tsNS {
+					startNS = tsNS
+				}
+				sleepNS := tc.clock.MaxOffset() -
+					time.Duration(tc.clock.PhysicalNow()-startNS)
+				if tc.linearizable && sleepNS > 0 {
+					defer func() {
+						if log.V(1) {
+							log.Infof("%v: waiting %s on EndTransaction for linearizability", txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+						}
+						time.Sleep(sleepNS)
+					}()
+				}
+				resolved = call.Reply.(*proto.EndTransactionResponse).Resolved
+				if txn.Status != proto.PENDING {
+					tc.cleanupTxn(*txn, resolved)
+				}
+
 			}
-			sleepNS := tc.clock.MaxOffset() -
-				time.Duration(tc.clock.PhysicalNow()-startNS)
-			if tc.linearizable && sleepNS > 0 {
-				defer func() {
-					if log.V(1) {
-						log.Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
-					}
-					time.Sleep(sleepNS)
-				}()
-			}
-			resolved = call.Reply.(*proto.EndTransactionResponse).Resolved
-		}
-		if txn != nil && txn.Status != proto.PENDING {
-			tc.cleanupTxn(txn, resolved)
 		}
 	}
 }
@@ -507,72 +600,127 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 
 // cleanupTxn is called to resolve write intents which were set down over
 // the course of the transaction. The txnMetadata object is removed from
-// the txns map.
-func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction, resolved []proto.Key) {
+// the txns map and taken into account for statistics.
+func (tc *TxnCoordSender) cleanupTxn(txn proto.Transaction, resolved []proto.Key) {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
 	if !ok {
 		return
 	}
-	txnMeta.close(txn, resolved, tc.wrapped, tc.stopper)
-	delete(tc.txns, string(txn.ID))
+
+	// The supplied txn may be newed than the one in txnMeta, which is relevant
+	// for stats.
+	txnMeta.txn = txn
+	tc.unregisterTxnLocked(txnMeta)
+	txnMeta.close(&txn, resolved, tc.wrapped, tc.stopper)
+}
+
+// unregisterTxnLocked idempotently deletes a txnMetadata object from the sender
+// and collects its stats.
+func (tc *TxnCoordSender) unregisterTxnLocked(txnMeta *txnMetadata) {
+	id := string(txnMeta.txn.ID)
+	if _, ok := tc.txns[id]; !ok {
+		return
+	}
+	tc.txnStats.durations = append(tc.txnStats.durations, float64(tc.clock.PhysicalNow()-txnMeta.firstUpdateNanos))
+	tc.txnStats.restarts = append(tc.txnStats.restarts, float64(txnMeta.txn.Epoch))
+	switch txnMeta.txn.Status {
+	case proto.ABORTED:
+		tc.txnStats.aborted++
+	case proto.PENDING:
+		tc.txnStats.abandoned++
+	case proto.COMMITTED:
+		tc.txnStats.committed++
+	}
+	delete(tc.txns, id)
 }
 
 // heartbeat periodically sends an InternalHeartbeatTxn RPC to an
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the TxnCoordSender is closed.
-func (tc *TxnCoordSender) heartbeat(txnMeta *txnMetadata) {
+func (tc *TxnCoordSender) heartbeat(id string) {
 	tc.stopper.RunWorker(func() {
 		ticker := time.NewTicker(tc.heartbeatInterval)
 		defer ticker.Stop()
-		request := &proto.InternalHeartbeatTxnRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:  txnMeta.txn.Key,
-				User: storage.UserRoot,
-				Txn:  &txnMeta.txn,
-			},
+
+		tc.Lock()
+		var closer chan struct{}
+		if txnMeta, ok := tc.txns[id]; ok {
+			closer = txnMeta.txnEnd
+		}
+		tc.Unlock()
+		if closer == nil {
+			return
 		}
 
 		// Loop with ticker for periodic heartbeats.
 		for {
 			select {
 			case <-ticker.C:
-				if !tc.stopper.StartTask() {
-					continue
-				}
-				// Before we send a heartbeat, determine whether this transaction
-				// should be considered abandoned. If so, exit heartbeat.
-				if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
-					tc.Lock()
-					delete(tc.txns, string(txnMeta.txn.ID))
-					tc.Unlock()
-					if log.V(1) {
-						log.Infof("transaction %s abandoned; stopping heartbeat", txnMeta.txn)
+				tc.Lock()
+				var txn proto.Transaction
+				_, proceed := tc.txns[id]
+				if proceed {
+					txnMeta := tc.txns[id] // assign only here for local scope
+					// Before we send a heartbeat, determine whether this transaction
+					// should be considered abandoned. If so, exit heartbeat.
+					if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
+						tc.unregisterTxnLocked(txnMeta)
+						// TODO(tschottdorf): should we be more proactive here?
+						// The client might be continuing the transaction
+						// through another coordinator, but in the most likely
+						// case it's just gone and the open transaction record
+						// could block concurrent operations.
+						if log.V(1) {
+							log.Infof("transaction %s abandoned; stopping heartbeat",
+								txnMeta.txn)
+						}
+						proceed = false
 					}
-					tc.stopper.FinishTask()
+					// txnMeta.txn is possibly replaced concurrently,
+					// so grab a copy.
+					txn = txnMeta.txn
+				}
+				tc.Unlock()
+				if !proceed {
 					return
 				}
+
+				request := &proto.InternalHeartbeatTxnRequest{
+					RequestHeader: proto.RequestHeader{
+						Key:  txn.Key,
+						User: storage.UserRoot,
+						Txn:  &txn,
+					},
+				}
+
 				request.Header().Timestamp = tc.clock.Now()
 				reply := &proto.InternalHeartbeatTxnResponse{}
 				call := client.Call{
 					Args:  request,
 					Reply: reply,
 				}
+
+				if !tc.stopper.StartTask() {
+					continue
+				}
 				tc.wrapped.Send(context.TODO(), call)
 				// If the transaction is not in pending state, then we can stop
 				// the heartbeat. It's either aborted or committed, and we resolve
 				// write intents accordingly.
 				if reply.GoError() != nil {
-					log.Warningf("heartbeat to %s failed: %s", txnMeta.txn, reply.GoError())
+					log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
 				} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-					tc.cleanupTxn(reply.Txn, nil)
-					tc.stopper.FinishTask()
-					return
+					tc.cleanupTxn(*reply.Txn, nil)
+					proceed = false
 				}
 				tc.stopper.FinishTask()
+				if !proceed {
+					return
+				}
 
-			case <-txnMeta.txnEnd:
+			case <-closer:
 				// Transaction finished.
 				return
 

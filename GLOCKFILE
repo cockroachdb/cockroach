@@ -26,6 +26,7 @@ github.com/jteeuwen/go-bindata 83a44d533bf65a1d05c51314ec58d6ee72ec2ddb
 github.com/julienschmidt/httprouter 8c199fb6259ffc1af525cc3ad52ee60ba8359669
 github.com/kisielk/errcheck a48456c583c0111c8310fc59335f6496b8eb85f1
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
+github.com/montanaflynn/stats a284fdcb4087fd56fbafa546cdf350c0e2c4a99f
 github.com/robfig/glock e0f25993e42f3aff6494cf397815841a3491d890
 github.com/samalba/dockerclient 142d8fe0150952d52867ac222e3a02eb17916f01
 github.com/spf13/cobra 8f5946caaeeff40a98d67f60c25e89c3525038a3
