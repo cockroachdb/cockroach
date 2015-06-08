@@ -98,6 +98,9 @@ message CreateTableResponse {
 
 // TODO(tamird): Investigate generating code from this. For now, it is useful
 // as documentation.
-service SchemaService {
-  rpc CreateTable (CreateTableRequest) returns (CreateTableResponse);
-}
+// TODO(tamird): Uncomment the below when one of the following is fixed
+// https://github.com/gogo/protobuf/issues/60
+// https://github.com/grpc/grpc-go/issues/219
+// service SchemaService {
+//   rpc CreateTable (CreateTableRequest) returns (CreateTableResponse);
+// }

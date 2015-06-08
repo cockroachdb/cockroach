@@ -3213,9 +3213,6 @@ func (m *Error) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x20
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
 	if m.Detail != nil {
 		data[i] = 0x1a
 		i++
@@ -3226,6 +3223,9 @@ func (m *Error) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n33
 	}
+	data[i] = 0x20
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

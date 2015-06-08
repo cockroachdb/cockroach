@@ -994,15 +994,14 @@ func (m *Value) Unmarshal(data []byte) error {
 				return fmt.Errorf("proto: wrong wireType = %d for field Checksum", wireType)
 			}
 			var v uint32
-			i := index + 4
-			if i > l {
+			if (index + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			index = i
-			v = uint32(data[i-4])
-			v |= uint32(data[i-3]) << 8
-			v |= uint32(data[i-2]) << 16
-			v |= uint32(data[i-1]) << 24
+			index += 4
+			v = uint32(data[index-4])
+			v |= uint32(data[index-3]) << 8
+			v |= uint32(data[index-2]) << 16
+			v |= uint32(data[index-1]) << 24
 			m.Checksum = &v
 		case 4:
 			if wireType != 2 {

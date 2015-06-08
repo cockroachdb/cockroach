@@ -84,55 +84,54 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
     "tions\030\250\354\003 \001(\010:5\n\rmarshaler_all\022\034.google."
     "protobuf.FileOptions\030\251\354\003 \001(\010:7\n\017unmarsha"
     "ler_all\022\034.google.protobuf.FileOptions\030\252\354"
-    "\003 \001(\010:4\n\014bufferto_all\022\034.google.protobuf."
-    "FileOptions\030\253\354\003 \001(\010:1\n\tsizer_all\022\034.googl"
-    "e.protobuf.FileOptions\030\254\354\003 \001(\010:A\n\031goprot"
-    "o_enum_stringer_all\022\034.google.protobuf.Fi"
-    "leOptions\030\255\354\003 \001(\010:9\n\021enum_stringer_all\022\034"
-    ".google.protobuf.FileOptions\030\256\354\003 \001(\010:<\n\024"
-    "unsafe_marshaler_all\022\034.google.protobuf.F"
-    "ileOptions\030\257\354\003 \001(\010:>\n\026unsafe_unmarshaler"
-    "_all\022\034.google.protobuf.FileOptions\030\260\354\003 \001"
-    "(\010:B\n\032goproto_extensions_map_all\022\034.googl"
-    "e.protobuf.FileOptions\030\261\354\003 \001(\010:@\n\030goprot"
-    "o_unrecognized_all\022\034.google.protobuf.Fil"
-    "eOptions\030\262\354\003 \001(\010::\n\017goproto_getters\022\037.go"
-    "ogle.protobuf.MessageOptions\030\201\364\003 \001(\010:;\n\020"
-    "goproto_stringer\022\037.google.protobuf.Messa"
-    "geOptions\030\203\364\003 \001(\010:8\n\rverbose_equal\022\037.goo"
-    "gle.protobuf.MessageOptions\030\204\364\003 \001(\010:/\n\004f"
-    "ace\022\037.google.protobuf.MessageOptions\030\205\364\003"
-    " \001(\010:3\n\010gostring\022\037.google.protobuf.Messa"
-    "geOptions\030\206\364\003 \001(\010:3\n\010populate\022\037.google.p"
-    "rotobuf.MessageOptions\030\207\364\003 \001(\010:3\n\010string"
-    "er\022\037.google.protobuf.MessageOptions\030\300\213\004 "
-    "\001(\010:2\n\007onlyone\022\037.google.protobuf.Message"
-    "Options\030\211\364\003 \001(\010:0\n\005equal\022\037.google.protob"
-    "uf.MessageOptions\030\215\364\003 \001(\010:6\n\013description"
-    "\022\037.google.protobuf.MessageOptions\030\216\364\003 \001("
-    "\010:2\n\007testgen\022\037.google.protobuf.MessageOp"
-    "tions\030\217\364\003 \001(\010:3\n\010benchgen\022\037.google.proto"
-    "buf.MessageOptions\030\220\364\003 \001(\010:4\n\tmarshaler\022"
-    "\037.google.protobuf.MessageOptions\030\221\364\003 \001(\010"
-    ":6\n\013unmarshaler\022\037.google.protobuf.Messag"
-    "eOptions\030\222\364\003 \001(\010:3\n\010bufferto\022\037.google.pr"
-    "otobuf.MessageOptions\030\223\364\003 \001(\010:0\n\005sizer\022\037"
-    ".google.protobuf.MessageOptions\030\224\364\003 \001(\010:"
-    ";\n\020unsafe_marshaler\022\037.google.protobuf.Me"
-    "ssageOptions\030\227\364\003 \001(\010:=\n\022unsafe_unmarshal"
-    "er\022\037.google.protobuf.MessageOptions\030\230\364\003 "
-    "\001(\010:A\n\026goproto_extensions_map\022\037.google.p"
-    "rotobuf.MessageOptions\030\231\364\003 \001(\010:\?\n\024goprot"
-    "o_unrecognized\022\037.google.protobuf.Message"
-    "Options\030\232\364\003 \001(\010:1\n\010nullable\022\035.google.pro"
-    "tobuf.FieldOptions\030\351\373\003 \001(\010:.\n\005embed\022\035.go"
-    "ogle.protobuf.FieldOptions\030\352\373\003 \001(\010:3\n\ncu"
-    "stomtype\022\035.google.protobuf.FieldOptions\030"
-    "\353\373\003 \001(\t:3\n\ncustomname\022\035.google.protobuf."
-    "FieldOptions\030\354\373\003 \001(\t:0\n\007jsontag\022\035.google"
-    ".protobuf.FieldOptions\030\355\373\003 \001(\t:1\n\010moreta"
-    "gs\022\035.google.protobuf.FieldOptions\030\356\373\003 \001("
-    "\tB!\n\023com.google.protobufB\nGoGoProtos", 3036);
+    "\003 \001(\010:1\n\tsizer_all\022\034.google.protobuf.Fil"
+    "eOptions\030\254\354\003 \001(\010:A\n\031goproto_enum_stringe"
+    "r_all\022\034.google.protobuf.FileOptions\030\255\354\003 "
+    "\001(\010:9\n\021enum_stringer_all\022\034.google.protob"
+    "uf.FileOptions\030\256\354\003 \001(\010:<\n\024unsafe_marshal"
+    "er_all\022\034.google.protobuf.FileOptions\030\257\354\003"
+    " \001(\010:>\n\026unsafe_unmarshaler_all\022\034.google."
+    "protobuf.FileOptions\030\260\354\003 \001(\010:B\n\032goproto_"
+    "extensions_map_all\022\034.google.protobuf.Fil"
+    "eOptions\030\261\354\003 \001(\010:@\n\030goproto_unrecognized"
+    "_all\022\034.google.protobuf.FileOptions\030\262\354\003 \001"
+    "(\010:8\n\020gogoproto_import\022\034.google.protobuf"
+    ".FileOptions\030\263\354\003 \001(\010::\n\017goproto_getters\022"
+    "\037.google.protobuf.MessageOptions\030\201\364\003 \001(\010"
+    ":;\n\020goproto_stringer\022\037.google.protobuf.M"
+    "essageOptions\030\203\364\003 \001(\010:8\n\rverbose_equal\022\037"
+    ".google.protobuf.MessageOptions\030\204\364\003 \001(\010:"
+    "/\n\004face\022\037.google.protobuf.MessageOptions"
+    "\030\205\364\003 \001(\010:3\n\010gostring\022\037.google.protobuf.M"
+    "essageOptions\030\206\364\003 \001(\010:3\n\010populate\022\037.goog"
+    "le.protobuf.MessageOptions\030\207\364\003 \001(\010:3\n\010st"
+    "ringer\022\037.google.protobuf.MessageOptions\030"
+    "\300\213\004 \001(\010:2\n\007onlyone\022\037.google.protobuf.Mes"
+    "sageOptions\030\211\364\003 \001(\010:0\n\005equal\022\037.google.pr"
+    "otobuf.MessageOptions\030\215\364\003 \001(\010:6\n\013descrip"
+    "tion\022\037.google.protobuf.MessageOptions\030\216\364"
+    "\003 \001(\010:2\n\007testgen\022\037.google.protobuf.Messa"
+    "geOptions\030\217\364\003 \001(\010:3\n\010benchgen\022\037.google.p"
+    "rotobuf.MessageOptions\030\220\364\003 \001(\010:4\n\tmarsha"
+    "ler\022\037.google.protobuf.MessageOptions\030\221\364\003"
+    " \001(\010:6\n\013unmarshaler\022\037.google.protobuf.Me"
+    "ssageOptions\030\222\364\003 \001(\010:0\n\005sizer\022\037.google.p"
+    "rotobuf.MessageOptions\030\224\364\003 \001(\010:;\n\020unsafe"
+    "_marshaler\022\037.google.protobuf.MessageOpti"
+    "ons\030\227\364\003 \001(\010:=\n\022unsafe_unmarshaler\022\037.goog"
+    "le.protobuf.MessageOptions\030\230\364\003 \001(\010:A\n\026go"
+    "proto_extensions_map\022\037.google.protobuf.M"
+    "essageOptions\030\231\364\003 \001(\010:\?\n\024goproto_unrecog"
+    "nized\022\037.google.protobuf.MessageOptions\030\232"
+    "\364\003 \001(\010:1\n\010nullable\022\035.google.protobuf.Fie"
+    "ldOptions\030\351\373\003 \001(\010:.\n\005embed\022\035.google.prot"
+    "obuf.FieldOptions\030\352\373\003 \001(\010:3\n\ncustomtype\022"
+    "\035.google.protobuf.FieldOptions\030\353\373\003 \001(\t:3"
+    "\n\ncustomname\022\035.google.protobuf.FieldOpti"
+    "ons\030\354\373\003 \001(\t:0\n\007jsontag\022\035.google.protobuf"
+    ".FieldOptions\030\355\373\003 \001(\t:1\n\010moretags\022\035.goog"
+    "le.protobuf.FieldOptions\030\356\373\003 \001(\tB!\n\023com."
+    "google.protobufB\nGoGoProtos", 2987);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "gogoproto/gogo.proto", &protobuf_RegisterTypes);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
@@ -191,9 +190,6 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
     63018, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::FileOptions::default_instance(),
-    63019, 8, false, false);
-  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
-    &::google::protobuf::FileOptions::default_instance(),
     63020, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::FileOptions::default_instance(),
@@ -213,6 +209,9 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::FileOptions::default_instance(),
     63026, 8, false, false);
+  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
+    &::google::protobuf::FileOptions::default_instance(),
+    63027, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::MessageOptions::default_instance(),
     64001, 8, false, false);
@@ -255,9 +254,6 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::MessageOptions::default_instance(),
     64018, 8, false, false);
-  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
-    &::google::protobuf::MessageOptions::default_instance(),
-    64019, 8, false, false);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::MessageOptions::default_instance(),
     64020, 8, false, false);
@@ -356,9 +352,6 @@ struct StaticDescriptorInitializer_gogoproto_2fgogo_2eproto {
   unmarshaler_all(kUnmarshalerAllFieldNumber, false);
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
-  bufferto_all(kBuffertoAllFieldNumber, false);
-::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
-    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   sizer_all(kSizerAllFieldNumber, false);
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
@@ -378,6 +371,9 @@ struct StaticDescriptorInitializer_gogoproto_2fgogo_2eproto {
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   goproto_unrecognized_all(kGoprotoUnrecognizedAllFieldNumber, false);
+::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  gogoproto_import(kGogoprotoImportFieldNumber, false);
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   goproto_getters(kGoprotoGettersFieldNumber, false);
@@ -420,9 +416,6 @@ struct StaticDescriptorInitializer_gogoproto_2fgogo_2eproto {
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   unmarshaler(kUnmarshalerFieldNumber, false);
-::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
-    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
-  bufferto(kBuffertoFieldNumber, false);
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   sizer(kSizerFieldNumber, false);
