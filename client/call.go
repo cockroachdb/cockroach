@@ -19,6 +19,7 @@ package client
 
 import (
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -36,9 +37,9 @@ type Call struct {
 // resetClientCmdID sets the client command ID if the call is for a
 // read-write method. The client command ID provides idempotency
 // protection in conjunction with the server.
-func (c *Call) resetClientCmdID(clock Clock) {
+func (c *Call) resetClientCmdID() {
 	c.Args.Header().CmdID = proto.ClientCmdID{
-		WallTime: clock.Now(),
+		WallTime: time.Now().UnixNano(),
 		Random:   rand.Int63(),
 	}
 }

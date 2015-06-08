@@ -177,7 +177,7 @@ func (t *Txn) Run(calls ...Call) error {
 func (t *Txn) Prepare(calls ...Call) {
 	t.updateState(calls)
 	for _, c := range calls {
-		c.resetClientCmdID(t.kv.clock)
+		c.resetClientCmdID()
 	}
 	t.prepared = append(t.prepared, calls...)
 }
