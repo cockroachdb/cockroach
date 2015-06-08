@@ -38,9 +38,12 @@ const (
 	// anticipation of an initially simple query system where only key suffixes
 	// can be wildcarded.
 	storeTimeSeriesNameFmt = "cr.store.%s.%d"
-	// nodeTimeSeriesFmt is the current format for cockroach's node-specific time
-	// series keys.
+	// nodeTimeSeriesFmt is the current format for time series keys which record
+	// node-specific data.
 	nodeTimeSeriesNameFmt = "cr.node.%s.%d"
+	// runtimeStatTimeSeriesFmt is the current format for time series keys which
+	// record runtime system stats on a node.
+	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s.%d"
 )
 
 // NodeStatusRecorder is used to periodically persist the status of a node as a

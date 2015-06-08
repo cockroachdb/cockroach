@@ -28,12 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-type recorderTestModel struct {
-	monitor  *NodeStatusMonitor
-	recorder *NodeStatusRecorder
-	model    []proto.TimeSeriesData
-}
-
 type byTimeAndName []proto.TimeSeriesData
 
 func (a byTimeAndName) Len() int      { return len(a) }
