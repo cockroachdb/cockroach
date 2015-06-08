@@ -57,13 +57,13 @@ func NodeStatusKey(nodeID int32) proto.Key {
 }
 
 // NamespaceMetadataKey returns the key for the namespace.
-func NamespaceMetadataKey(namespace string) proto.Key {
+func MakeNamespaceMetadataKey(namespace string) proto.Key {
 	return MakeKey(NamespaceMetadataPrefix, proto.Key(namespace))
 }
 
 // TableMetadataKey returns the key for the table in namespaceID.
-func TableMetadataKey(namespaceID uint32, tableName string) proto.Key {
-	return MakeKey(TableMetadataPrefix, encoding.EncodeUvarint(nil, uint64(namespaceID)), proto.Key("-"), proto.Key(tableName))
+func MakeTableMetadataKey(namespaceID uint32, tableName string) proto.Key {
+	return MakeKey(TableMetadataPrefix, encoding.EncodeUvarint(nil, uint64(namespaceID)), proto.Key(tableName))
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's

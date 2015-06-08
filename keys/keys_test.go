@@ -63,8 +63,8 @@ func TestKeyAddress(t *testing.T) {
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
 		{TransactionKey(proto.Key("baz"), proto.Key(util.NewUUID4())), proto.Key("baz")},
 		{TransactionKey(proto.KeyMax, proto.Key(util.NewUUID4())), proto.KeyMax},
-		{NamespaceMetadataKey("foo"), proto.Key("\x00ns-foo")},
-		{TableMetadataKey(123, "bar"), proto.Key("\x00tbl-\t{-bar")},
+		{MakeNamespaceMetadataKey("foo"), proto.Key("\x00ns-foo")},
+		{MakeTableMetadataKey(123, "bar"), proto.Key("\x00tbl-\t{bar")},
 		{nil, nil},
 	}
 	for i, test := range testCases {
