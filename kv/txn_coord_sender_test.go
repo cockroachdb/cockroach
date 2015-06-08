@@ -51,9 +51,9 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 	}
 }
 
-// getCoord type casts the db's sender to a coordinator and returns it.
-func getCoord(db *client.KV) *TxnCoordSender {
-	return db.Sender.(*TxnCoordSender)
+func sendCall(coord *TxnCoordSender, call client.Call) error {
+	coord.Send(context.TODO(), call)
+	return call.Reply.Header().GoError()
 }
 
 // newTxn begins a transaction.
@@ -91,17 +91,16 @@ func createDeleteRangeRequest(key, endKey proto.Key, txn *proto.Transaction) *pr
 func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
-	coord := getCoord(kv)
 
 	txn := newTxn(s.Clock, proto.Key("a"))
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	if err := kv.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+	call := client.Call{Args: putReq, Reply: &proto.PutResponse{}}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
-	txnMeta, ok := coord.txns[string(txn.ID)]
+	txnMeta, ok := s.Sender.txns[string(txn.ID)]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
@@ -109,16 +108,17 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 
 	// Advance time and send another put request. Lock the coordinator
 	// to prevent a data race.
-	coord.Lock()
+	s.Sender.Lock()
 	s.Manual.Set(1)
-	coord.Unlock()
-	if err := kv.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+	s.Sender.Unlock()
+	call = client.Call{Args: putReq, Reply: &proto.PutResponse{}}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
-	if len(coord.txns) != 1 {
-		t.Errorf("expected length of transactions map to be 1; got %d", len(coord.txns))
+	if len(s.Sender.txns) != 1 {
+		t.Errorf("expected length of transactions map to be 1; got %d", len(s.Sender.txns))
 	}
-	txnMeta = coord.txns[string(txn.ID)]
+	txnMeta = s.Sender.txns[string(txn.ID)]
 	if lu := atomic.LoadInt64(&txnMeta.lastUpdateNanos); ts >= lu || lu != s.Manual.UnixNano() {
 		t.Errorf("expected last update time to advance; got %d", lu)
 	}
@@ -129,11 +129,10 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	kv.Sender.Send(context.Background(), client.Call{
+	s.Sender.Send(context.Background(), client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
@@ -169,10 +168,9 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
 
 	reply := &proto.PutResponse{}
-	kv.Sender.Send(context.Background(), client.Call{
+	s.Sender.Send(context.Background(), client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -212,19 +210,19 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
-	coord := getCoord(kv)
 	txn := newTxn(s.Clock, proto.Key("a"))
 
 	for _, rng := range ranges {
 		if rng.end != nil {
 			delRangeReq := createDeleteRangeRequest(rng.start, rng.end, txn)
-			if err := kv.Run(client.Call{Args: delRangeReq, Reply: &proto.DeleteRangeResponse{}}); err != nil {
+			call := client.Call{Args: delRangeReq, Reply: &proto.DeleteRangeResponse{}}
+			if err := sendCall(s.Sender, call); err != nil {
 				t.Fatal(err)
 			}
 		} else {
 			putReq := createPutRequest(rng.start, []byte("value"), txn)
-			if err := kv.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+			call := client.Call{Args: putReq, Reply: &proto.PutResponse{}}
+			if err := sendCall(s.Sender, call); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -232,7 +230,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" interval cache. "a" and range "aa"-"c".
-	txnMeta, ok := coord.txns[string(txn.ID)]
+	txnMeta, ok := s.Sender.txns[string(txn.ID)]
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
@@ -246,24 +244,24 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
-	coord := getCoord(kv)
 
 	txn1 := newTxn(s.Clock, proto.Key("a"))
 	txn2 := newTxn(s.Clock, proto.Key("b"))
-	if err := kv.Run(client.Call{
+	call := client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn1),
-		Reply: &proto.PutResponse{}}); err != nil {
+		Reply: &proto.PutResponse{}}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
-	if err := kv.Run(client.Call{
+	call = client.Call{
 		Args:  createPutRequest(proto.Key("b"), []byte("value"), txn2),
-		Reply: &proto.PutResponse{}}); err != nil {
+		Reply: &proto.PutResponse{}}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(coord.txns) != 2 {
-		t.Errorf("expected length of transactions map to be 2; got %d", len(coord.txns))
+	if len(s.Sender.txns) != 2 {
+		t.Errorf("expected length of transactions map to be 2; got %d", len(s.Sender.txns))
 	}
 }
 
@@ -272,16 +270,15 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
-	coord := getCoord(kv)
 
 	// Set heartbeat interval to 1ms for testing.
-	coord.heartbeatInterval = 1 * time.Millisecond
+	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	if err := kv.Run(client.Call{
+	call := client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
-		Reply: &proto.PutResponse{}}); err != nil {
+		Reply: &proto.PutResponse{}}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,15 +286,15 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS proto.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			ok, txn, err := getTxn(kv, txn)
+			ok, txn, err := getTxn(s.Sender, txn)
 			if !ok || err != nil {
 				return false
 			}
 			// Advance clock by 1ns.
 			// Locking the TxnCoordSender to prevent a data race.
-			coord.Lock()
+			s.Sender.Lock()
 			s.Manual.Increment(1)
-			coord.Unlock()
+			s.Sender.Unlock()
 			if heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
 				return true
@@ -310,22 +307,25 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *client.KV, txn *proto.Transaction) (bool, *proto.Transaction, error) {
+func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transaction, error) {
 	hr := &proto.InternalHeartbeatTxnResponse{}
-	if err := db.Run(client.Call{
+	call := client.Call{
 		Args: &proto.InternalHeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: txn.Key,
 				Txn: txn,
 			},
-		}, Reply: hr}); err != nil {
+		},
+		Reply: hr,
+	}
+	coord.Send(context.TODO(), call)
+	if err := call.Reply.Header().GoError(); err != nil {
 		return false, nil, err
 	}
 	return true, hr.Txn, nil
 }
 
-func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T) {
-	coord := getCoord(db)
+func verifyCleanup(key proto.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
 	if len(coord.txns) != 0 {
 		t.Errorf("expected empty transactions map; got %d", len(coord.txns))
 	}
@@ -348,21 +348,22 @@ func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T
 func TestTxnCoordSenderEndTxn(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
 
 	txn := newTxn(s.Clock, proto.Key("a"))
 	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
-	if err := kv.Run(client.Call{
+	call := client.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
-		Reply: pReply}); err != nil {
+		Reply: pReply,
+	}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
 	if pReply.GoError() != nil {
 		t.Fatal(pReply.GoError())
 	}
 	etReply := &proto.EndTransactionResponse{}
-	kv.Sender.Send(context.Background(), client.Call{
+	s.Sender.Send(context.Background(), client.Call{
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
@@ -376,7 +377,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	if etReply.Error != nil {
 		t.Fatal(etReply.GoError())
 	}
-	verifyCleanup(key, kv, s.Eng, t)
+	verifyCleanup(key, s.Sender, s.Eng, t)
 }
 
 // TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a
@@ -384,15 +385,16 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
 
 	// Create a transaction with intent at "a".
 	key := proto.Key("a")
 	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
-	if err := kv.Run(client.Call{
+	call := client.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
-		Reply: &proto.PutResponse{}}); err != nil {
+		Reply: &proto.PutResponse{},
+	}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
 
@@ -408,9 +410,11 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	if err := kv.Run(client.Call{
+	call = client.Call{
 		Args:  pushArgs,
-		Reply: &proto.InternalPushTxnResponse{}}); err != nil {
+		Reply: &proto.InternalPushTxnResponse{},
+	}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
 
@@ -424,9 +428,11 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		},
 		Commit: true,
 	}
-	err := kv.Run(client.Call{
+	call = client.Call{
 		Args:  etArgs,
-		Reply: &proto.EndTransactionResponse{}})
+		Reply: &proto.EndTransactionResponse{},
+	}
+	err := sendCall(s.Sender, call)
 	switch err.(type) {
 	case nil:
 		t.Fatal("expected txn aborted error")
@@ -435,7 +441,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	default:
 		t.Fatalf("expected transaction aborted error; got %s", err)
 	}
-	verifyCleanup(key, kv, s.Eng, t)
+	verifyCleanup(key, s.Sender, s.Eng, t)
 }
 
 // TestTxnCoordSenderGC verifies that the coordinator cleans up extant
@@ -443,30 +449,30 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 func TestTxnCoordSenderGC(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
-	kv := s.DB.InternalKV()
-	coord := getCoord(kv)
 
 	// Set heartbeat interval to 1ms for testing.
-	coord.heartbeatInterval = 1 * time.Millisecond
+	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	if err := kv.Run(client.Call{
+	call := client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
-		Reply: &proto.PutResponse{}}); err != nil {
+		Reply: &proto.PutResponse{},
+	}
+	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, advance clock past the default client timeout.
 	// Locking the TxnCoordSender to prevent a data race.
-	coord.Lock()
+	s.Sender.Lock()
 	s.Manual.Set(defaultClientTimeout.Nanoseconds() + 1)
-	coord.Unlock()
+	s.Sender.Unlock()
 
 	if err := util.IsTrueWithin(func() bool {
 		// Locking the TxnCoordSender to prevent a data race.
-		coord.Lock()
-		_, ok := coord.txns[string(txn.ID)]
-		coord.Unlock()
+		s.Sender.Lock()
+		_, ok := s.Sender.txns[string(txn.ID)]
+		s.Sender.Unlock()
 		return !ok
 	}, 50*time.Millisecond); err != nil {
 		t.Error("expected garbage collection")
