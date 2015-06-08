@@ -56,6 +56,16 @@ func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
+// MakeNamespaceMetadataKey returns the key for the namespace.
+func MakeNamespaceMetadataKey(namespace string) proto.Key {
+	return MakeKey(NamespaceMetadataPrefix, proto.Key(namespace))
+}
+
+// MakeTableMetadataKey returns the key for the table in namespaceID.
+func MakeTableMetadataKey(namespaceID uint32, tableName string) proto.Key {
+	return MakeKey(TableMetadataPrefix, encoding.EncodeUvarint(nil, uint64(namespaceID)), proto.Key(tableName))
+}
+
 // MakeRangeIDKey creates a range-local key based on the range's
 // Raft ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
