@@ -51,7 +51,7 @@ message IndexSchema {
 }
 
 // TableSchema used to configure a db table. The id within ColumnSchema,
-// IndexSchema, and TableSchema are for cockroach internal use only.
+// IndexSchema, or TableSchema is for cockroach internal use only.
 message TableSchema {
   optional string name = 1 [(gogoproto.nullable) = false];
   repeated ColumnSchema columns = 2 [(gogoproto.nullable) = false];

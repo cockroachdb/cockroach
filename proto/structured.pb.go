@@ -127,7 +127,7 @@ func (m *IndexSchema) GetId() uint32 {
 }
 
 // TableSchema used to configure a db table. The id within ColumnSchema,
-// IndexSchema, and TableSchema are for cockroach internal use only.
+// IndexSchema, or TableSchema is for cockroach internal use only.
 type TableSchema struct {
 	Name    string         `protobuf:"bytes,1,opt,name=name" json:"name"`
 	Columns []ColumnSchema `protobuf:"bytes,2,rep,name=columns" json:"columns"`
