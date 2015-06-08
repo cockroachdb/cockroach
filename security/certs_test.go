@@ -37,28 +37,28 @@ func TestGenerateCerts(t *testing.T) {
 	defer util.CleanupDir(certsDir)
 
 	// Try certs generation with empty Certs dir argument.
-	err := security.RunCreateCACert("")
+	err := security.RunCreateCACert("", 512)
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
-	err = security.RunCreateNodeCert("", []string{"localhost"})
+	err = security.RunCreateNodeCert("", 512, []string{"localhost"})
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Try generating node certs without CA certs present.
-	err = security.RunCreateNodeCert(certsDir, []string{"localhost"})
+	err = security.RunCreateNodeCert(certsDir, 512, []string{"localhost"})
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Now try in the proper order.
-	err = security.RunCreateCACert(certsDir)
+	err = security.RunCreateCACert(certsDir, 512)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = security.RunCreateNodeCert(certsDir, []string{"localhost"})
+	err = security.RunCreateNodeCert(certsDir, 512, []string{"localhost"})
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -73,12 +73,12 @@ func TestUseCerts(t *testing.T) {
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 
-	err := security.RunCreateCACert(certsDir)
+	err := security.RunCreateCACert(certsDir, 512)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = security.RunCreateNodeCert(certsDir, []string{"127.0.0.1"})
+	err = security.RunCreateNodeCert(certsDir, 512, []string{"127.0.0.1"})
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

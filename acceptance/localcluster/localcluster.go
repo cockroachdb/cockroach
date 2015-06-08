@@ -300,7 +300,7 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 
 func (l *Cluster) createCACert() {
 	log.Infof("creating ca")
-	c := l.createRoach(-1, "cert", "--certs=/certs", "create-ca")
+	c := l.createRoach(-1, "cert", "--certs=/certs", "create-ca", "--key-size=512")
 	defer c.mustRemove()
 	maybePanic(c.Start(nil, nil, l.vols))
 	maybePanic(c.Wait())
@@ -312,7 +312,7 @@ func (l *Cluster) createNodeCerts() {
 	for i := range l.Nodes {
 		nodes = append(nodes, node(i))
 	}
-	args := []string{"cert", "--certs=/certs", "create-node"}
+	args := []string{"cert", "--certs=/certs", "create-node", "--key-size=512"}
 	args = append(args, nodes...)
 	c := l.createRoach(-1, args...)
 	defer c.mustRemove()

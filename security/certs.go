@@ -84,7 +84,7 @@ func writeCertificateAndKey(certsDir string, prefix string,
 
 // RunCreateCACert is the entry-point from the command-line interface
 // to generate CA cert and key.
-func RunCreateCACert(certsDir string) error {
+func RunCreateCACert(certsDir string, keySize int) error {
 	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
@@ -96,18 +96,17 @@ func RunCreateCACert(certsDir string) error {
 	}
 
 	// Generate certificate.
-	certificate, key, err := GenerateCA()
+	certificate, key, err := GenerateCA(keySize)
 	if err != nil {
 		return util.Errorf("error creating CA certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(certsDir, "ca", certificate, key)
-	return err
+	return writeCertificateAndKey(certsDir, "ca", certificate, key)
 }
 
 // RunCreateNodeCert is the entry-point from the command-line interface
 // to generate node cert and key.
-func RunCreateNodeCert(certsDir string, hosts []string) error {
+func RunCreateNodeCert(certsDir string, keySize int, hosts []string) error {
 	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
@@ -132,11 +131,45 @@ func RunCreateNodeCert(certsDir string, hosts []string) error {
 	}
 
 	// Generate certificate.
-	certificate, key, err := GenerateNodeCert(x509Cert, caCert.PrivateKey, hosts)
+	certificate, key, err := GenerateNodeCert(x509Cert, caCert.PrivateKey, keySize, hosts)
 	if err != nil {
 		return util.Errorf("error creating node certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(certsDir, "node", certificate, key)
-	return err
+	return writeCertificateAndKey(certsDir, "node", certificate, key)
+}
+
+// RunCreateClientCert is the entry-point from the command-line interface
+// to generate a client cert and key.
+func RunCreateClientCert(certsDir string, keySize int, username string) error {
+	if certsDir == "" {
+		return util.Errorf("no certs directory specified, use --certs")
+	}
+	if len(username) == 0 {
+		return util.Errorf("no username specified.")
+	}
+
+	// Load the CA certificate.
+	caCertPath := path.Join(certsDir, "ca.crt")
+	caKeyPath := path.Join(certsDir, "ca.key")
+	// LoadX509KeyPair does a bunch of validation, including len(Certificates) != 0.
+	caCert, err := tls.LoadX509KeyPair(caCertPath, caKeyPath)
+	if err != nil {
+		return util.Errorf("error loading CA certificate %s and key %s: %s",
+			caCertPath, caKeyPath, err)
+	}
+
+	// Extract x509 certificate from tls cert.
+	x509Cert, err := x509.ParseCertificate(caCert.Certificate[0])
+	if err != nil {
+		return util.Errorf("error parsing CA certificate %s: %s", caCertPath, err)
+	}
+
+	// Generate certificate.
+	certificate, key, err := GenerateClientCert(x509Cert, caCert.PrivateKey, keySize, username)
+	if err != nil {
+		return util.Errorf("error creating client certificate and key: %s", err)
+	}
+
+	return writeCertificateAndKey(certsDir, username, certificate, key)
 }

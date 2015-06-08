@@ -23,10 +23,14 @@ package security
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
+	"net/http"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -72,9 +76,9 @@ func LoadTLSConfigFromDir(certDir string) (*tls.Config, error) {
 }
 
 // LoadTLSConfig creates a TLSConfig from the supplied byte strings containing
-// - the certificate of the cluster CA,
 // - the certificate of this node (should be signed by the CA),
 // - the private key of this node.
+// - the certificate of the cluster CA,
 func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
@@ -90,10 +94,8 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		// TODO(marc): no client certs for now. Even specifying VerifyClientCertIfGiven
-		// causes issues with various browsers. We should switch to
-		// tls.RequireAndVerifyClientCert once client certs are properly set.
-		ClientAuth: tls.NoClientCert,
+		// Verify client certs if passed.
+		ClientAuth: tls.VerifyClientCertIfGiven,
 		RootCAs:    certPool,
 		ClientCAs:  certPool,
 
@@ -115,18 +117,38 @@ func LoadInsecureTLSConfig() *tls.Config {
 }
 
 // LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
-// specified directory. The directory must contain ca.crt.
+// specified directory. The directory must contain the following files:
+// - ca.crt   -- the certificate of the cluster CA
+// - node.crt -- the certificate of this node; should be signed by the CA
+// - node.key -- the private key of this node
+// If the path is prefixed with "embedded=", load the embedded certs.
 func LoadClientTLSConfigFromDir(certDir string) (*tls.Config, error) {
+	certPEM, err := readFileFn(path.Join(certDir, "node.crt"))
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := readFileFn(path.Join(certDir, "node.key"))
+	if err != nil {
+		return nil, err
+	}
 	caPEM, err := readFileFn(path.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}
-	return LoadClientTLSConfig(caPEM)
+
+	return LoadClientTLSConfig(certPEM, keyPEM, caPEM)
 }
 
-// LoadClientTLSConfig creates a client TLSConfig from the supplied byte strings containing
-// the certificate of the cluster CA.
-func LoadClientTLSConfig(caPEM []byte) (*tls.Config, error) {
+// LoadClientTLSConfig creates a client TLSConfig from the supplied byte strings containing:
+// - the certificate of this client (should be signed by the CA),
+// - the private key of this client.
+// - the certificate of the cluster CA,
+func LoadClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, err
+	}
+
 	certPool := x509.NewCertPool()
 
 	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
@@ -135,12 +157,9 @@ func LoadClientTLSConfig(caPEM []byte) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		RootCAs: certPool,
-		// TODO(marc): remove once we have a certificate deployment story in place.
-		InsecureSkipVerify: true,
-
-		// Use only TLS v1.2
-		MinVersion: tls.VersionTLS12,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      certPool,
+		MinVersion:   tls.VersionTLS12,
 	}, nil
 }
 
@@ -148,5 +167,31 @@ func LoadClientTLSConfig(caPEM []byte) (*tls.Config, error) {
 func LoadInsecureClientTLSConfig() *tls.Config {
 	return &tls.Config{
 		InsecureSkipVerify: true,
+	}
+}
+
+// LogRequestCertificates examines a http request and logs a summary of the TLS config.
+func LogRequestCertificates(r *http.Request) {
+	if r.TLS == nil {
+		if log.V(3) {
+			log.Infof("%s %s: no TLS", r.Method, r.URL)
+		}
+		return
+	}
+
+	peerCerts := []string{}
+	verifiedChain := []string{}
+	for _, cert := range r.TLS.PeerCertificates {
+		peerCerts = append(peerCerts, fmt.Sprintf("%s (%s, %s)", cert.Subject.CommonName, cert.DNSNames, cert.IPAddresses))
+	}
+	for _, chain := range r.TLS.VerifiedChains {
+		subjects := []string{}
+		for _, cert := range chain {
+			subjects = append(subjects, cert.Subject.CommonName)
+		}
+		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
+	}
+	if log.V(3) {
+		log.Infof("%s %s: peer certs: %v, chain: %v", r.Method, r.URL, peerCerts, verifiedChain)
 	}
 }

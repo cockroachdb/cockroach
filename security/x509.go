@@ -39,12 +39,11 @@ import (
 const (
 	validFor      = time.Hour * 24 * 365
 	maxPathLength = 2
-	keyBits       = 2048
 )
 
-// generateKeyPair returns a random 2048 bit RSA key pair key pair.
-func generateKeyPair() (crypto.PrivateKey, crypto.PublicKey, error) {
-	private, err := rsa.GenerateKey(rand.Reader, keyBits)
+// generateKeyPair returns a random 'keySize' bit RSA key pair.
+func generateKeyPair(keySize int) (crypto.PrivateKey, crypto.PublicKey, error) {
+	private, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -75,7 +74,7 @@ func certificatePEMBlock(cert []byte) (*pem.Block, error) {
 
 // newTemplate returns a partially-filled template.
 // It should be further populated based on whether the cert is for a CA or node.
-func newTemplate() (*x509.Certificate, error) {
+func newTemplate(commonName string) (*x509.Certificate, error) {
 	// Generate a random serial number.
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -90,14 +89,13 @@ func newTemplate() (*x509.Certificate, error) {
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			Organization: []string{"Cockroach"},
-			CommonName:   "CockroachTest",
+			CommonName:   commonName,
 		},
 		NotBefore: notBefore,
 		NotAfter:  notBefore.Add(validFor),
 
 		KeyUsage: x509.KeyUsageKeyEncipherment |
-			x509.KeyUsageDigitalSignature |
-			x509.KeyUsageContentCommitment,
+			x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		MaxPathLen:            maxPathLength,
 	}
@@ -107,13 +105,13 @@ func newTemplate() (*x509.Certificate, error) {
 
 // GenerateCA generates a CA certificate and returns the cert bytes as
 // well as the private key used to generate the certificate.
-func GenerateCA() ([]byte, crypto.PrivateKey, error) {
-	privateKey, publicKey, err := generateKeyPair()
+func GenerateCA(keySize int) ([]byte, crypto.PrivateKey, error) {
+	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	template, err := newTemplate()
+	template, err := newTemplate("Cockroach CA")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -121,6 +119,7 @@ func GenerateCA() ([]byte, crypto.PrivateKey, error) {
 	// Set CA-specific fields.
 	template.IsCA = true
 	template.KeyUsage |= x509.KeyUsageCertSign
+	template.KeyUsage |= x509.KeyUsageContentCommitment
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
 	if err != nil {
@@ -133,14 +132,14 @@ func GenerateCA() ([]byte, crypto.PrivateKey, error) {
 // GenerateNodeCert generates a node certificate and returns the cert bytes as
 // well as the private key used to generate the certificate.
 // The CA cert and private key should be passed in.
-func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, hosts []string) (
+func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, hosts []string) (
 	[]byte, crypto.PrivateKey, error) {
-	privateKey, publicKey, err := generateKeyPair()
+	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	template, err := newTemplate()
+	template, err := newTemplate("Cockroach Node")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,6 +156,40 @@ func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, hosts [
 			}
 		}
 	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, publicKey, caKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return certBytes, privateKey, nil
+}
+
+// GenerateClientCert generates a client certificate and returns the cert bytes as
+// well as the private key used to generate the certificate.
+// The CA cert and private key should be passed in.
+// 'user' is the unique username stored in the Subject.CommonName field.
+func GenerateClientCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, name string) (
+	[]byte, crypto.PrivateKey, error) {
+
+	privateKey, publicKey, err := generateKeyPair(keySize)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// TODO(marc): should we add extra checks?
+	if len(name) == 0 {
+		return nil, nil, util.Errorf("name cannot be empty")
+	}
+
+	template, err := newTemplate(name)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Set client-specific fields.
+	// Client authentication only.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, publicKey, caKey)
 	if err != nil {

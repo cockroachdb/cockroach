@@ -14,6 +14,8 @@ openssl x509 -in node.crt -text
 
 To regenerate:
 ```bash
-cockroach cert --certs=resource/test_certs create-ca
-cockroach cert --certs=resource/test_certs create-node 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+rm -f resource/test_certs/{ca,node}.{crt,key}
+cockroach cert --certs=resource/test_certs create-ca --key-size=512
+cockroach cert --certs=resource/test_certs create-node --key-size=512 0.0.0.0 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+go generate security/securitytest/securitytest.go
 ```

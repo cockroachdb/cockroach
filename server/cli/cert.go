@@ -25,13 +25,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const defaultKeySize = 2048
+
+var keySize int
+
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
 var createCACertCmd = &cobra.Command{
 	Use:   "create-ca [options]",
 	Short: "create CA cert and key",
 	Long: `
-Generates a new key pair, a new CA certificate and writes them to
+Generates a new key pair and CA certificate, writing them to
 individual files in the directory specified by --certs (required).
 `,
 	Run: runCreateCACert,
@@ -40,7 +44,7 @@ individual files in the directory specified by --certs (required).
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) {
-	err := security.RunCreateCACert(Context.Certs)
+	err := security.RunCreateCACert(Context.Certs, keySize)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate CA certificate: %s\n", err)
 		osExit(1)
@@ -54,7 +58,7 @@ var createNodeCertCmd = &cobra.Command{
 	Use:   "create-node [options] <host 1> <host 2> ... <host N>",
 	Short: "create node cert and key",
 	Long: `
-Generates a new key pair, a new node certificate and writes them to
+Generates a new key pair and node certificate, writing them to
 individual files in the directory specified by --certs (required).
 The certs directory should contain a CA cert and key.
 At least one host should be passed in (either IP address of dns name).
@@ -65,9 +69,33 @@ At least one host should be passed in (either IP address of dns name).
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateNodeCert(cmd *cobra.Command, args []string) {
-	err := security.RunCreateNodeCert(Context.Certs, args)
+	err := security.RunCreateNodeCert(Context.Certs, keySize, args)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate node certificate: %s\n", err)
+		osExit(1)
+		return
+	}
+}
+
+// A createClientCert command generates a client certificate and stores it
+// in the cert directory under <username>.crt and key under <username>.key.
+var createClientCertCmd = &cobra.Command{
+	Use:   "create-client [options] username",
+	Short: "create client cert and key",
+	Long: `
+Generates a new key pair and client certificate, writing them to
+individual files in the directory specified by --certs (required).
+The certs directory should contain a CA cert and key.
+`,
+	Run: runCreateClientCert,
+}
+
+// runCreateClientCert generates key pair and CA certificate and writes them
+// to their corresponding files.
+func runCreateClientCert(cmd *cobra.Command, args []string) {
+	err := security.RunCreateClientCert(Context.Certs, keySize, args[0])
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to generate clent certificate: %s\n", err)
 		osExit(1)
 		return
 	}
@@ -76,11 +104,12 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) {
 var certCmds = []*cobra.Command{
 	createCACertCmd,
 	createNodeCertCmd,
+	createClientCertCmd,
 }
 
 var certCmd = &cobra.Command{
 	Use:   "cert",
-	Short: "create ca and node certs",
+	Short: "create ca, node, and client certs",
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 	},
