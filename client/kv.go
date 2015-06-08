@@ -33,12 +33,6 @@ type TransactionOptions struct {
 	UserPriority int32
 }
 
-// A Clock is an interface which provides the current time.
-type Clock interface {
-	// Now returns nanoseconds since the Jan 1, 1970 GMT.
-	Now() int64
-}
-
 // KV provides access to a KV store. A KV instance is safe for
 // concurrent use by multiple goroutines.
 type KV struct {
@@ -51,7 +45,6 @@ type KV struct {
 	UserPriority    int32
 	TxnRetryOptions retry.Options
 	Sender          Sender
-	clock           Clock
 }
 
 // newKV creates a new instance of KV using the specified sender. To
@@ -64,7 +57,6 @@ func newKV(sender Sender) *KV {
 	return &KV{
 		Sender:          sender,
 		TxnRetryOptions: DefaultTxnRetryOptions,
-		clock:           systemClock{},
 	}
 }
 
@@ -92,7 +84,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 		if c.Args.Header().UserPriority == nil && kv.UserPriority != 0 {
 			c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
 		}
-		c.resetClientCmdID(kv.clock)
+		c.resetClientCmdID()
 		kv.Sender.Send(context.TODO(), c)
 		err = c.Reply.Header().GoError()
 		if err != nil {

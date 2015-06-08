@@ -32,15 +32,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// A systemClock is an implementation of the Clock interface that
-// returns the node's wall time.
-type systemClock struct{}
-
-// Now implements the Clock interface, returning the node's wall time.
-func (systemClock) Now() int64 {
-	return time.Now().UnixNano()
-}
-
 // KeyValue represents a single key/value pair and corresponding timestamp.
 type KeyValue struct {
 	Key       []byte
@@ -209,7 +200,6 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	db.kv.Sender = sender
 	db.kv.User = u.User.Username()
 	db.kv.TxnRetryOptions = DefaultTxnRetryOptions
-	db.kv.clock = systemClock{}
 
 	if priority := q["priority"]; len(priority) > 0 {
 		p, err := strconv.Atoi(priority[0])
