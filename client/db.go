@@ -688,21 +688,19 @@ func (b *Batch) fillResults() error {
 }
 
 // InternalAddCall adds the specified call to the batch. It is intended for
-// internal use only. It is an error to use InternalAddCall to execute
-// operations that are available via the Batch methods (e.g. Get).
+// internal use only.
 func (b *Batch) InternalAddCall(call Call) {
+	numRows := 0
 	switch call.Args.(type) {
 	case *proto.GetRequest,
 		*proto.PutRequest,
 		*proto.ConditionalPutRequest,
 		*proto.IncrementRequest,
-		*proto.ScanRequest,
-		*proto.DeleteRequest,
-		*proto.DeleteRangeRequest:
-		panic(fmt.Errorf("unsupported internal request type: %T", call.Args))
+		*proto.DeleteRequest:
+		numRows = 1
 	}
 	b.calls = append(b.calls, call)
-	b.initResult(1 /* calls */, 0 /* numRows */, nil)
+	b.initResult(1 /* calls */, numRows, nil)
 }
 
 // Get retrieves the value for a key. A new result will be appended to the

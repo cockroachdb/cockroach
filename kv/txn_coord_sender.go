@@ -443,9 +443,6 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		if log.V(1) {
 			log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
 		}
-		txnOpts := &client.TransactionOptions{
-			Name: "auto-wrap",
-		}
 		tmpDB, err := client.Open(
 			fmt.Sprintf("//%s?priority=%d",
 				call.Args.Header().User, call.Args.Header().GetUserPriority()),
@@ -455,8 +452,11 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 			return
 		}
 		call.Reply.Reset()
-		if err := tmpDB.InternalKV().RunTransaction(txnOpts, func(txn *client.Txn) error {
-			return txn.Run(call)
+		if err := tmpDB.Tx(func(tx *client.Tx) error {
+			tx.SetDebugName("auto-wrap")
+			b := &client.Batch{}
+			b.InternalAddCall(call)
+			return tx.Commit(b)
 		}); err != nil {
 			log.Warning(err)
 		}
