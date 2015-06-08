@@ -230,6 +230,21 @@ func (db *DB) InternalKV() *KV {
 	return &db.kv
 }
 
+// InternalSender returns the internal sender. It is intended for internal use
+// only.
+//
+// TODO(peter): This is temporary. Once client.KV goes away we can put
+// KV.Sender directly in DB.
+func (db *DB) InternalSender() Sender {
+	return db.kv.Sender
+}
+
+// InternalSetSender sets the internal set field. It is intended for internal
+// use only.
+func (db *DB) InternalSetSender(sender Sender) {
+	db.kv.Sender = sender
+}
+
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error.
 //

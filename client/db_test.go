@@ -306,6 +306,8 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "AdminMerge"}:           {},
 		key{dbType, "AdminSplit"}:           {},
 		key{dbType, "InternalKV"}:           {},
+		key{dbType, "InternalSender"}:       {},
+		key{dbType, "InternalSetSender"}:    {},
 		key{dbType, "Run"}:                  {},
 		key{dbType, "Tx"}:                   {},
 		key{txType, "Commit"}:               {},
