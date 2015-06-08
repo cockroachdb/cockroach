@@ -56,12 +56,12 @@ func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
-// NamespaceMetadataKey returns the key for the namespace.
+// MakeNamespaceMetadataKey returns the key for the namespace.
 func MakeNamespaceMetadataKey(namespace string) proto.Key {
 	return MakeKey(NamespaceMetadataPrefix, proto.Key(namespace))
 }
 
-// TableMetadataKey returns the key for the table in namespaceID.
+// MakeTableMetadataKey returns the key for the table in namespaceID.
 func MakeTableMetadataKey(namespaceID uint32, tableName string) proto.Key {
 	return MakeKey(TableMetadataPrefix, encoding.EncodeUvarint(nil, uint64(namespaceID)), proto.Key(tableName))
 }
