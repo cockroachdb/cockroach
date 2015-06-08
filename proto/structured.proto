@@ -27,21 +27,15 @@ option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-// For Cockroach internal use.
-message Internal {
-  // The TableSchema has a globally-unique ID, while its member
-  // {Column,Index}Schema have locally-unique IDs.
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
-}
- 
 message ColumnSchema {
   enum ColumnType {
     BYTES = 0;
   }
   optional string name = 1 [(gogoproto.nullable) = false];
   optional ColumnType type = 2 [(gogoproto.nullable) = false];
-  // For Cockroach internal use.
-  optional Internal internal = 9 [(gogoproto.nullable) = true];
+  // For Cockroach internal use only. A Column has a unique id local to
+  // the Table it is a part of.
+  optional uint32 id = 9 [(gogoproto.nullable) = false];
 }
 
 message IndexSchema {
@@ -51,24 +45,24 @@ message IndexSchema {
   // column_name refers to a column in the TableSchema's columns. Special
   // care is taken to update this when deleting columns.
   repeated string column_names = 3 [(gogoproto.nullable) = false];
-  // For Cockroach internal use.
-  optional Internal internal = 9 [(gogoproto.nullable) = true];
+  // For Cockroach internal use only. An Index has a unique id local to
+  // the Table it is a part of.
+  optional uint32 id = 9 [(gogoproto.nullable) = false];
 }
 
-// TableSchema used to configure a db table. The internal messages
-// within ColumnSchema, IndexSchema, and TableSchema are for
-// cockroach internal use.
+// TableSchema used to configure a db table. The id within ColumnSchema,
+// IndexSchema, and TableSchema are for cockroach internal use only.
 message TableSchema {
   optional string name = 1 [(gogoproto.nullable) = false];
   repeated ColumnSchema columns = 2 [(gogoproto.nullable) = false];
   // An ordered list of indexes included in the table. The first index is the
   // primary key; it is required.
   repeated IndexSchema indexes = 3 [(gogoproto.nullable) = false];
-  // For Cockroach internal use.
-  optional Internal internal = 9 [(gogoproto.nullable) = true];
+  // For Cockroach internal use only. A Table has a globally unique id.
+  optional uint32 id = 9 [(gogoproto.nullable) = false];
 }
 
-// A TableDescriptor represents a table and is stored in a structured metadata
+// A TableDescriptor represents a Table and is stored in a structured metadata
 // key.
 message TableDescriptor {
   optional TableSchema table = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
