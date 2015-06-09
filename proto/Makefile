@@ -13,8 +13,7 @@
 # permissions and limitations under the License. See the AUTHORS file
 # for names of contributors.
 #
-# Author: Spencer Kimball (spencer.kimball@gmail.com)
-# Author: Andrew Bonventre (andybons@gmail.com)
+# Author: Tamir Duberstein (tamird@gmail.com)
 
 REPO_ROOT      := $(realpath ..)
 ORG_ROOT       := $(REPO_ROOT)/..
@@ -25,8 +24,8 @@ ENGINE_ROOT := $(REPO_ROOT)/storage/engine
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
-#                                   ^  ^  ^~ GOPATH
-#                                   |  |~ GOPATH/src
+#                        ^  ^~ GOPATH
+#                        |~ GOPATH/src
 
 GOPATH_BIN := $(GOPATH)/bin
 

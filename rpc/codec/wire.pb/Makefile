@@ -13,17 +13,30 @@
 # permissions and limitations under the License. See the AUTHORS file
 # for names of contributors.
 #
-# Author: Spencer Kimball (spencer.kimball@gmail.com)
+# Author: Tamir Duberstein (tamird@gmail.com)
+
+REPO_ROOT      := $(realpath ../../..)
+ORG_ROOT       := $(REPO_ROOT)/..
+GITHUB_ROOT    := $(ORG_ROOT)/..
+GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
 
 # Ensure we only have one entry in GOPATH
-GOPATH := $(shell pwd)/../../../../../../..
+GOPATH := $(GITHUB_ROOT)/../..
+#                        ^  ^~ GOPATH
+#                        |~ GOPATH/src
 
-PROTOC      := $(GOPATH)/bin/protoc
-PROTOS      := $(sort $(wildcard *.proto))
-PROTO_GO    := $(PROTOS:.proto=.pb.go)
+GOPATH_BIN := $(GOPATH)/bin
 
-PROTO_PATH := ../..:$(GOPATH)/src/github.com/gogo/protobuf:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
-PROTOC_GEN_GOGO := $(GOPATH)/bin/protoc-gen-gogo
+PROTOC          := $(GOPATH_BIN)/protoc
+PROTOC_GEN_GOGO := $(GOPATH_BIN)/protoc-gen-gogo
+GOGO_PROTO      := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
+PROTO_PATH      := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
+RPC_PROTOS      := $(sort $(wildcard *.proto))
 
-all:
-	$(PROTOC) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. --proto_path=.:$(PROTO_PATH) $(PROTOS)
+RPC_GO_SOURCES  := $(RPC_PROTOS:%.proto=%.pb.go)
+
+.PHONY:
+all: $(RPC_GO_SOURCES)
+
+$(RPC_GO_SOURCES): $(RPC_PROTOS) $(GOGO_PROTO) $(PROTOC) $(PROTOC_GEN_GOGO)
+	$(PROTOC) --proto_path=.:$(PROTO_PATH) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. $(RPC_PROTOS)

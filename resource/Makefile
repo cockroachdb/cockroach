@@ -13,29 +13,41 @@
 # permissions and limitations under the License. See the AUTHORS file
 # for names of contributors.
 #
-# Author: Matt Tracy (matt@cockroachlabs.com)
+# Author: Tamir Duberstein (tamird@gmail.com)
 
-GOBINDATA_PACKAGE := resource
+REPO_ROOT      := $(realpath ..)
+ORG_ROOT       := $(REPO_ROOT)/..
+GITHUB_ROOT    := $(ORG_ROOT)/..
 
-GOBINDATA_TARGET := ./embedded.go
+# Ensure we only have one entry in GOPATH
+GOPATH := $(GITHUB_ROOT)/../..
+#                        ^  ^~ GOPATH
+#                        |~ GOPATH/src
 
-GOBINDATA_SOURCE := ui/...
+GOPATH_BIN := $(GOPATH)/bin
 
-GOBINDATA_FLAGS := -mode 0644 -modtime 1400000000
+GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
-.PHONY: all
-all: gobindata 
+TYPESCRIPT_SOURCES     := ui/ts
+TYPESCRIPT_TARGET      := ui/js/app.js
+GOBINDATA_TARGET       := ./embedded.go
+GOBINDATA_DEBUG_TARGET := ./embedded_debug.go
 
-.PHONY: js
-js:
-	tsc -p ui/ts/
+.PHONY:
+all: $(GOBINDATA_TARGET)
+	rm -f $(GOBINDATA_DEBUG_TARGET)
 
-.PHONY: gobindata
-gobindata: js
-	go-bindata $(GOBINDATA_FLAGS) -pkg $(GOBINDATA_PACKAGE) -o $(GOBINDATA_TARGET) $(GOBINDATA_SOURCE)
-	gofmt -s -w $(GOBINDATA_TARGET)
-	goimports -w $(GOBINDATA_TARGET)
+.PHONY:
+debug: $(GOBINDATA_DEBUG_TARGET)
+	rm -f $(GOBINDATA_TARGET)
 
-.PHONY: debug
-debug: GOBINDATA_FLAGS += -debug
-debug: gobindata
+$(TYPESCRIPT_TARGET): $(TYPESCRIPT_SOURCES)
+	tsc -p $(TYPESCRIPT_SOURCES)
+
+$(GOBINDATA_TARGET): $(TYPESCRIPT_TARGET) $(GO_BINDATA)
+	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg resource -o $@ ui/...
+	gofmt -s -w $@
+	goimports -w $@
+
+$(GOBINDATA_DEBUG_TARGET): $(TYPESCRIPT_TARGET) $(GO_BINDATA)
+	$(GO_BINDATA) -pkg resource -o $@ -debug ui/...
