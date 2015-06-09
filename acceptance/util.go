@@ -36,10 +36,13 @@ func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) *client
 
 // makeDBClientForUser creates a DB client for node 'i' and user 'user'.
 func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user string, node int) *client.DB {
-	// We always run these tests with certs.
+	// We need to run with "InsecureSkipVerify" (set when Certs="" inside the http sender).
+	// This is due to the fact that we're running outside docker, so we cannot use a fixed hostname
+	// to reach the cluster. This in turn means that we do not have a verified server name in the certs.
 	c, err := client.Open("https://" + user + "@" +
 		cluster.Nodes[node].Addr("").String() +
-		"?certs=" + cluster.CertsDir)
+		"?certs=")
+
 	if err != nil {
 		t.Fatal(err)
 	}
