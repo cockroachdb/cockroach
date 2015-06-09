@@ -57,12 +57,12 @@ all: $(ROACH_CPP_HEADERS) $(ROACH_CPP_SOURCES) $(ROACH_GO_SOURCES)
 # (and these directories must be in the include path), but cgo can only compile
 # a single directory so we symlink the generated pb.cc files into the storage/engine
 # directory.
-$(ROACH_CPP_HEADERS) $(ROACH_CPP_SOURCES): $(notdir $(ROACH_CPP_PROTOS)) $(GOGO_PROTO)
+$(ROACH_CPP_HEADERS) $(ROACH_CPP_SOURCES): $(notdir $(ROACH_CPP_PROTOS)) $(GOGO_PROTO) $(PROTOC) $(PROTOC_GEN_GOGO)
 	(cd $(ORG_ROOT) && $(PROTOC) --proto_path=.:$(PROTO_PATH) --cpp_out=$(REPO_ROOT)/storage/engine $(GOGO_PROTO) $(ROACH_CPP_PROTOS))
 	(cd $(ENGINE_ROOT) && ln -sf gogoproto/gogo.pb.cc .)
 	(cd $(ENGINE_ROOT) && ln -sf cockroach/proto/*.pb.cc .)
 
-$(ROACH_GO_SOURCES): $(ROACH_PROTOS) $(GOGO_PROTO)
+$(ROACH_GO_SOURCES): $(ROACH_PROTOS) $(GOGO_PROTO) $(PROTOC) $(PROTOC_GEN_GOGO)
 	(cd $(ORG_ROOT) && $(PROTOC) --proto_path=.:$(PROTO_PATH) --plugin=$(PROTOC_GEN_GOGO) --gogo_out=. $(PREFIXED_PROTOS))
 	# The gogoprotobuf customtype and unmarshaller extensions do not play nicely with integer
 	# types. Manually whack the generate code to make it compile.
