@@ -23,12 +23,6 @@ option go_package = "roachpb";
 import "cockroach/roachpb/metadata.proto";
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // Span is supplied with every storage node request.
 message Span {
   // The key for request. If the request operates on a range, this

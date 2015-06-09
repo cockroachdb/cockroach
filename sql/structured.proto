@@ -23,12 +23,6 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/sql/privilege.proto";
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 message ColumnType {
   // These mirror the types supported by the sql/parser. See
   // sql/parser/types.go.

@@ -21,12 +21,6 @@ option go_package = "ts";
 
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // TimeSeriesDatapoint is a single point of time series data; a value associated
 // with a timestamp.
 message TimeSeriesDatapoint {

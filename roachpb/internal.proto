@@ -23,12 +23,6 @@ import "cockroach/roachpb/api.proto";
 import "cockroach/roachpb/metadata.proto";
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // A RaftCommand is a command which can be serialized and sent via
 // raft.
 message RaftCommand {
