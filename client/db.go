@@ -22,13 +22,16 @@ import (
 	"encoding"
 	"fmt"
 	"net/url"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -137,7 +140,17 @@ type DB struct {
 	//
 	//   err := db.Run(db.B.Put("a", "1").Put("b", "2"))
 	B batcher
-	kv
+
+	Sender Sender
+
+	// user is the default user to set on API calls. If User is set to
+	// non-empty in call arguments, this value is ignored.
+	user string
+	// userPriority is the default user priority to set on API calls. If
+	// userPriority is set non-zero in call arguments, this value is
+	// ignored.
+	userPriority    int32
+	txnRetryOptions retry.Options
 }
 
 // Option is the signature for a function which applies an option to a DB.
@@ -146,7 +159,7 @@ type Option func(*DB)
 // SenderOpt sets the sender for a DB.
 func SenderOpt(sender Sender) Option {
 	return func(db *DB) {
-		db.kv.Sender = sender
+		db.Sender = sender
 	}
 }
 
@@ -196,17 +209,18 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		return nil, err
 	}
 
-	db := &DB{}
-	db.kv.Sender = sender
-	db.kv.user = u.User.Username()
-	db.kv.txnRetryOptions = DefaultTxnRetryOptions
+	db := &DB{
+		Sender:          sender,
+		user:            u.User.Username(),
+		txnRetryOptions: DefaultTxnRetryOptions,
+	}
 
 	if priority := q["priority"]; len(priority) > 0 {
 		p, err := strconv.Atoi(priority[0])
 		if err != nil {
 			return nil, err
 		}
-		db.kv.userPriority = int32(p)
+		db.userPriority = int32(p)
 	}
 
 	for _, opt := range opts {
@@ -351,192 +365,76 @@ func (db *DB) Run(b *Batch) error {
 //
 // TODO(pmattis): Allow transaction options to be specified.
 func (db *DB) Tx(retryable func(tx *Tx) error) error {
-	_, file, line, ok := runtime.Caller(1)
+	return newTx(db, 1).exec(retryable)
+}
 
-	tx := Tx{}
-	tx.txn.init(&db.kv)
-	return tx.txn.exec(func(txn *txn) error {
-		if ok {
-			// TODO(pmattis): include the parent directory?
-			tx.txn.txn.Name = fmt.Sprintf("%s:%d", filepath.Base(file), line)
+// send runs the specified calls synchronously in a single batch and
+// returns any errors.
+func (db *DB) send(calls ...Call) (err error) {
+	if len(calls) == 0 {
+		return nil
+	}
+
+	// First check if any call contains an error. This allows the
+	// generation of a Call to create an error that is reported
+	// here. See PutProto for an example.
+	for _, call := range calls {
+		if call.Err != nil {
+			return call.Err
 		}
-		return retryable(&tx)
-	})
-}
-
-// Tx is an in-progress distributed database transaction. A Tx is not safe for
-// concurrent use by multiple goroutines.
-type Tx struct {
-	// B is a helper to make creating a new batch and performing an
-	// operation on it easer:
-	//
-	//   err := db.Tx(func(tx *Tx) error {
-	//     return tx.Commit(tx.B.Put("a", "1").Put("b", "2"))
-	//   })
-	B batcher
-	txn
-}
-
-// SetDebugName sets the debug name associated with the transaction which will
-// appear in log files and the web UI. Each transaction starts out with an
-// automatically assigned debug name composed of the file and line number where
-// the transaction was created.
-func (tx *Tx) SetDebugName(name string) {
-	if _, file, line, ok := runtime.Caller(1); ok {
-		tx.txn.txn.Name = fmt.Sprintf("%s:%d: %s", filepath.Base(file), line, name)
-	} else {
-		tx.txn.txn.Name = name
 	}
-}
 
-// DebugName returns the debug name associated with the transaction.
-func (tx *Tx) DebugName() string {
-	return tx.txn.txn.Name
-}
-
-// SetSnapshotIsolation sets the transaction's isolation type to
-// snapshot. Transactions default to serializable isolation. The
-// isolation must be set before any operations are performed on the
-// transaction.
-//
-// TODO(pmattis): This isn't tested yet but will be as part of the
-// conversion of client_test.go.
-func (tx *Tx) SetSnapshotIsolation() {
-	// TODO(pmattis): Panic if the transaction has already had
-	// operations run on it. Needs to tie into the Txn reset in case of
-	// retries.
-	tx.txn.txn.Isolation = proto.SNAPSHOT
-}
-
-// InternalSetPriority sets the transaction priority. It is intended for
-// internal (testing) use only.
-func (tx *Tx) InternalSetPriority(priority int32) {
-	// The negative user priority translates into a positive (and known) priority
-	// for the transaction.
-	tx.txn.kv.userPriority = -priority
-}
-
-// Get retrieves the value for a key, returning the retrieved key/value or an
-// error.
-//
-//   r, err := db.Get("a")
-//   // string(r.Key) == "a"
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (tx *Tx) Get(key interface{}) (KeyValue, error) {
-	return runOneRow(tx, tx.B.Get(key))
-}
-
-// GetProto retrieves the value for a key and decodes the result as a proto
-// message.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (tx *Tx) GetProto(key interface{}, msg gogoproto.Message) error {
-	r, err := tx.Get(key)
-	if err != nil {
-		return err
+	if len(calls) == 1 {
+		c := calls[0]
+		if c.Args.Header().User == "" {
+			c.Args.Header().User = db.user
+		}
+		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
+			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
+		}
+		c.resetClientCmdID()
+		db.Sender.Send(context.TODO(), c)
+		err = c.Reply.Header().GoError()
+		if err != nil {
+			if log.V(1) {
+				log.Infof("failed %s: %s", c.Method(), err)
+			}
+		} else if c.Post != nil {
+			err = c.Post()
+		}
+		return
 	}
-	return r.ValueProto(msg)
-}
 
-// Put sets the value for a key
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) Put(key, value interface{}) error {
-	_, err := runOneResult(tx, tx.B.Put(key, value))
-	return err
-}
-
-// CPut conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (tx *Tx) CPut(key, value, expValue interface{}) error {
-	_, err := runOneResult(tx, tx.B.CPut(key, value, expValue))
-	return err
-}
-
-// Inc increments the integer value at key. If the key does not exist it will
-// be created with an initial value of 0 which will then be incremented. If the
-// key exists but was set using Put or CPut an error will be returned.
-//
-// The returned Result will contain a single row and Result.Err will indicate
-// success or failure.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (tx *Tx) Inc(key interface{}, value int64) (KeyValue, error) {
-	return runOneRow(tx, tx.B.Inc(key, value))
-}
-
-// Scan retrieves the rows between begin (inclusive) and end (exclusive).
-//
-// The returned []KeyValue will contain up to maxRows elements.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (tx *Tx) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	r, err := runOneResult(tx, tx.B.Scan(begin, end, maxRows))
-	return r.Rows, err
-}
-
-// Del deletes one or more keys.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (tx *Tx) Del(keys ...interface{}) error {
-	_, err := runOneResult(tx, tx.B.Del(keys...))
-	return err
-}
-
-// DelRange deletes the rows between begin (inclusive) and end (exclusive).
-//
-// The returned Result will contain 0 rows and Result.Err will indicate success
-// or failure.
-//
-// key can be either a byte slice, a string, a fmt.Stringer or an
-// encoding.BinaryMarshaler.
-func (tx *Tx) DelRange(begin, end interface{}) error {
-	_, err := runOneResult(tx, tx.B.DelRange(begin, end))
-	return err
-}
-
-// Run executes the operations queued up within a batch. Before executing any
-// of the operations the batch is first checked to see if there were any errors
-// during its construction (e.g. failure to marshal a proto message).
-//
-// The operations within a batch are run in parallel and the order is
-// non-deterministic. It is an unspecified behavior to modify and retrieve the
-// same key within a batch.
-//
-// Upon completion, Batch.Results will contain the results for each
-// operation. The order of the results matches the order the operations were
-// added to the batch.
-func (tx *Tx) Run(b *Batch) error {
-	if err := b.prepare(); err != nil {
-		return err
+	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
+	for _, call := range calls {
+		bArgs.Add(call.Args)
 	}
-	if err := tx.send(b.calls...); err != nil {
-		return err
-	}
-	return b.fillResults()
-}
+	err = db.send(Call{Args: bArgs, Reply: bReply})
 
-// Commit executes the operations queued up within a batch and commits the
-// transaction. Explicitly committing a transaction is optional, but more
-// efficient than relying on the implicit commit performed when the transaction
-// function returns without error.
-func (tx *Tx) Commit(b *Batch) error {
-	args := &proto.EndTransactionRequest{Commit: true}
-	reply := &proto.EndTransactionResponse{}
-	b.calls = append(b.calls, Call{Args: args, Reply: reply})
-	b.initResult(1, 0, nil)
-	return tx.Run(b)
+	// Recover from protobuf merge panics.
+	defer func() {
+		if r := recover(); r != nil {
+			// Take care to log merge error and to return it if no error has
+			// already been set.
+			mergeErr := util.Errorf("unable to merge response: %s", r)
+			log.Error(mergeErr)
+			if err == nil {
+				err = mergeErr
+			}
+		}
+	}()
+
+	// Transfer individual responses from batch response to prepared replies.
+	for i, reply := range bReply.Responses {
+		c := calls[i]
+		gogoproto.Merge(c.Reply, reply.GetValue().(gogoproto.Message))
+		if c.Post != nil {
+			if e := c.Post(); e != nil && err != nil {
+				err = e
+			}
+		}
+	}
+	return
 }
 
 // Batch provides for the parallel execution of a number of database

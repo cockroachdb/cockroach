@@ -18,7 +18,10 @@
 package client
 
 import (
+	"errors"
+	"reflect"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -26,6 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+func newDB(sender Sender) *DB {
+	return &DB{
+		Sender:          sender,
+		txnRetryOptions: DefaultTxnRetryOptions,
+	}
+}
 
 func newTestSender(handler func(Call)) SenderFunc {
 	txnKey := proto.Key("test-txn")
@@ -84,11 +94,10 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		call.Reply.Header().Txn.Timestamp = test.responseTS
 	}))
 
-	var txn txn
-	txn.init(&db.kv)
+	tx := newTx(db, 0)
 
 	for testIdx = range testCases {
-		txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		tx.db.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
 
@@ -99,11 +108,179 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}))
 
-	var txn txn
-	txn.init(&db.kv)
-	txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	tx := newTx(db, 0)
+	tx.db.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
-	if len(txn.txn.ID) != 0 {
+	if len(tx.txn.ID) != 0 {
 		t.Errorf("expected txn to be cleared")
+	}
+}
+
+// TestTransactionConfig verifies the proper unwrapping and
+// re-wrapping of the client's sender when starting a transaction.
+// Also verifies that User and UserPriority are propagated to the
+// transactional client.
+func TestTransactionConfig(t *testing.T) {
+	db := newDB(newTestSender(func(call Call) {}))
+	db.user = "foo"
+	db.userPriority = 101
+	if err := db.Tx(func(tx *Tx) error {
+		if tx.db.user != db.user {
+			t.Errorf("expected txn user %s; got %s", db.user, tx.db.user)
+		}
+		if tx.db.userPriority != db.userPriority {
+			t.Errorf("expected txn user priority %d; got %d", db.userPriority, tx.db.userPriority)
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+}
+
+// TestCommitReadOnlyTransaction verifies that transaction is
+// committed but EndTransaction is not sent if only read-only
+// operations were performed.
+func TestCommitReadOnlyTransaction(t *testing.T) {
+	var calls []proto.Method
+	db := newDB(newTestSender(func(call Call) {
+		calls = append(calls, call.Method())
+	}))
+	if err := db.Tx(func(tx *Tx) error {
+		_, err := tx.Get("a")
+		return err
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+	expectedCalls := []proto.Method{proto.Get}
+	if !reflect.DeepEqual(expectedCalls, calls) {
+		t.Errorf("expected %s, got %s", expectedCalls, calls)
+	}
+}
+
+// TestCommitMutatingTransaction verifies that transaction is committed
+// upon successful invocation of the retryable func.
+func TestCommitMutatingTransaction(t *testing.T) {
+	var calls []proto.Method
+	db := newDB(newTestSender(func(call Call) {
+		calls = append(calls, call.Method())
+		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
+			t.Errorf("expected commit to be true; got %t", et.Commit)
+		}
+	}))
+	if err := db.Tx(func(tx *Tx) error {
+		return tx.Put("a", "b")
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+	expectedCalls := []proto.Method{proto.Put, proto.EndTransaction}
+	if !reflect.DeepEqual(expectedCalls, calls) {
+		t.Errorf("expected %s, got %s", expectedCalls, calls)
+	}
+}
+
+// TestCommitTransactionOnce verifies that if the transaction is
+// ended explicitly in the retryable func, it is not automatically
+// ended a second time at completion of retryable func.
+func TestCommitTransactionOnce(t *testing.T) {
+	count := 0
+	db := newDB(newTestSender(func(call Call) {
+		count++
+	}))
+	if err := db.Tx(func(tx *Tx) error {
+		return tx.Commit(&Batch{})
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+	if count != 1 {
+		t.Errorf("expected single invocation of EndTransaction; got %d", count)
+	}
+}
+
+// TestAbortReadOnlyTransaction verifies that transaction is aborted
+// upon failed invocation of the retryable func.
+func TestAbortReadOnlyTransaction(t *testing.T) {
+	db := newDB(newTestSender(func(call Call) {
+		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
+			t.Errorf("did not expect EndTransaction")
+		}
+	}))
+	if err := db.Tx(func(tx *Tx) error {
+		return errors.New("foo")
+	}); err == nil {
+		t.Error("expected error on abort")
+	}
+}
+
+// TestAbortMutatingTransaction verifies that transaction is aborted
+// upon failed invocation of the retryable func.
+func TestAbortMutatingTransaction(t *testing.T) {
+	var calls []proto.Method
+	db := newDB(newTestSender(func(call Call) {
+		calls = append(calls, call.Method())
+		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
+			t.Errorf("expected commit to be false; got %t", et.Commit)
+		}
+	}))
+
+	if err := db.Tx(func(tx *Tx) error {
+		if err := tx.Put("a", "b"); err != nil {
+			return err
+		}
+		return errors.New("foo")
+	}); err == nil {
+		t.Error("expected error on abort")
+	}
+	expectedCalls := []proto.Method{proto.Put, proto.EndTransaction}
+	if !reflect.DeepEqual(expectedCalls, calls) {
+		t.Errorf("expected %s, got %s", expectedCalls, calls)
+	}
+}
+
+// TestRunTransactionRetryOnErrors verifies that the transaction
+// is retried on the correct errors.
+func TestRunTransactionRetryOnErrors(t *testing.T) {
+	testCases := []struct {
+		err   error
+		retry bool // Expect retry?
+	}{
+		{&proto.ReadWithinUncertaintyIntervalError{}, true},
+		{&proto.TransactionAbortedError{}, true},
+		{&proto.TransactionPushError{}, true},
+		{&proto.TransactionRetryError{}, true},
+		{&proto.Error{}, false},
+		{&proto.RangeNotFoundError{}, false},
+		{&proto.RangeKeyMismatchError{}, false},
+		{&proto.TransactionStatusError{}, false},
+	}
+
+	for i, test := range testCases {
+		count := 0
+		db := newDB(newTestSender(func(call Call) {
+			if _, ok := call.Args.(*proto.PutRequest); ok {
+				count++
+				if count == 1 {
+					call.Reply.Header().SetGoError(test.err)
+				}
+			}
+		}))
+		db.txnRetryOptions.Backoff = 1 * time.Millisecond
+		err := db.Tx(func(tx *Tx) error {
+			return tx.Put("a", "b")
+		})
+		if test.retry {
+			if count != 2 {
+				t.Errorf("%d: expected one retry; got %d", i, count)
+			}
+			if err != nil {
+				t.Errorf("%d: expected success on retry; got %s", i, err)
+			}
+		} else {
+			if count != 1 {
+				t.Errorf("%d: expected no retries; got %d", i, count)
+			}
+			if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+				t.Errorf("%d: expected error of type %T; got %T", i, test.err, err)
+			}
+		}
 	}
 }
