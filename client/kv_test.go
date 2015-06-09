@@ -47,7 +47,7 @@ func TestKVTransactionEmptyFlush(t *testing.T) {
 	client := newKV(newTestSender(func(call Call) {
 		count++
 	}))
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		if count != 0 {
 			t.Errorf("expected 0 count; got %d", count)
 		}
@@ -87,7 +87,7 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 			}
 		}))
 
-		if err := client.RunTransaction(nil, func(txn *Txn) error {
+		if err := client.RunTransaction(func(txn *txn) error {
 			for j := 0; j < i; j++ {
 				txn.Prepare(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 			}
@@ -113,7 +113,7 @@ func TestKVTransactionConfig(t *testing.T) {
 	client := newKV(newTestSender(func(call Call) {}))
 	client.User = "foo"
 	client.UserPriority = 101
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		if txn.kv.User != client.User {
 			t.Errorf("expected txn user %s; got %s", client.User, txn.kv.User)
 		}
@@ -134,7 +134,7 @@ func TestKVCommitReadOnlyTransaction(t *testing.T) {
 	client := newKV(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 	}))
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		return txn.Run(Get(proto.Key("a")))
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -155,7 +155,7 @@ func TestKVCommitMutatingTransaction(t *testing.T) {
 			t.Errorf("expected commit to be true; got %t", et.Commit)
 		}
 	}))
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		return txn.Run(Put(proto.Key("a"), nil))
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -174,7 +174,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	client := newKV(newTestSender(func(call Call) {
 		count++
 	}))
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		if err := txn.Run(Call{
 			Args:  &proto.EndTransactionRequest{Commit: true},
 			Reply: &proto.EndTransactionResponse{},
@@ -198,7 +198,7 @@ func TestKVAbortReadOnlyTransaction(t *testing.T) {
 			t.Errorf("did not expect EndTransaction")
 		}
 	}))
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		return errors.New("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
@@ -216,7 +216,7 @@ func TestKVAbortMutatingTransaction(t *testing.T) {
 		}
 	}))
 
-	if err := client.RunTransaction(nil, func(txn *Txn) error {
+	if err := client.RunTransaction(func(txn *txn) error {
 		if err := txn.Run(Put(proto.Key("a"), nil)); err != nil {
 			return err
 		}
@@ -258,7 +258,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 			}
 		}))
 		client.TxnRetryOptions.Backoff = 1 * time.Millisecond
-		err := client.RunTransaction(nil, func(txn *Txn) error {
+		err := client.RunTransaction(func(txn *txn) error {
 			reply := &proto.PutResponse{}
 			return client.Run(Call{Args: testPutReq, Reply: reply})
 		})

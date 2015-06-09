@@ -85,7 +85,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		}
 		call.Reply.Header().Txn.Timestamp = test.responseTS
 	}))
-	txn := newTxn(kv, nil)
+	txn := newTxn(kv)
 
 	for testIdx = range testCases {
 		txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
@@ -98,7 +98,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}))
-	txn := newTxn(kv, nil)
+	txn := newTxn(kv)
 
 	txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
