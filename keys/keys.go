@@ -63,7 +63,11 @@ func MakeNamespaceMetadataKey(namespace string) proto.Key {
 
 // MakeTableMetadataKey returns the key for the table in namespaceID.
 func MakeTableMetadataKey(namespaceID uint32, tableName string) proto.Key {
-	return MakeKey(TableMetadataPrefix, encoding.EncodeUvarint(nil, uint64(namespaceID)), proto.Key(tableName))
+	k := make([]byte, 0, len(TableMetadataPrefix)+10+len(tableName))
+	k = append(k, TableMetadataPrefix...)
+	k = encoding.EncodeUvarint(k, uint64(namespaceID))
+	k = append(k, tableName...)
+	return k
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
