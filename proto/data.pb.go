@@ -459,6 +459,7 @@ func (m *NodeList) GetNodes() []int32 {
 // transaction is assigned a random priority. This priority will be
 // used to decide whether a transaction will be aborted during
 // contention.
+// TODO(vivek): Remove parts of Transaction that expose internals.
 type Transaction struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// Key is the key which anchors the transaction. This is typically
