@@ -450,12 +450,22 @@ func TestMetricsRecording(t *testing.T) {
 	}
 	defer tsrv.Stop()
 
+	checkTimeSeriesKey := func(now int64, keyName string) error {
+		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
+		data := &proto.InternalTimeSeriesData{}
+		return tsrv.db.GetProto(key, data)
+	}
+
 	// Verify that metrics for the current timestamp are recorded. This should
 	// be true very quickly.
 	util.SucceedsWithin(t, time.Second, func() error {
 		now := tsrv.Clock().PhysicalNow()
-		key := ts.MakeDataKey("cr.store.livebytes.1", "", ts.Resolution10s, now)
-		data := &proto.InternalTimeSeriesData{}
-		return tsrv.db.GetProto(key, data)
+		if err := checkTimeSeriesKey(now, "cr.store.livebytes.1"); err != nil {
+			return err
+		}
+		if err := checkTimeSeriesKey(now, "cr.node.sys.allocbytes.1"); err != nil {
+			return err
+		}
+		return nil
 	})
 }

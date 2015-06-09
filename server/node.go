@@ -20,9 +20,7 @@ package server
 import (
 	"container/list"
 	"net"
-	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/net/context"
@@ -260,7 +258,6 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	n.startedAt = n.ctx.Clock.Now().WallTime
 	n.startStoresScanner(stopper)
 	n.startGossip(stopper)
-	n.startRuntimeStats(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
@@ -524,54 +521,6 @@ func (n *Node) waitForScanCompletion() int64 {
 		n.completedScan.Wait()
 	}
 	return n.scanCount
-}
-
-// startRuntimeStats periodically outputs runtime statistics to the log files.
-// TODO(mtracy|bram) store these runtime stats into time series.
-func (n *Node) startRuntimeStats(stopper *util.Stopper) {
-	stopper.RunWorker(func() {
-		ticker := time.NewTicker(runtimeStatsInterval)
-		defer ticker.Stop()
-		var cgoCall, uTime, sTime int64
-		var pauseNS uint64
-		var numGC uint32
-		ms := runtime.MemStats{}
-		for {
-			tStart := time.Now()
-			select {
-			case <-stopper.ShouldStop():
-				return
-			case <-ticker.C:
-				dur := float64(time.Since(tStart))
-				runtime.ReadMemStats(&ms)
-				curCgoCall := runtime.NumCgoCall()
-				cgoRate := float64((curCgoCall-cgoCall)*int64(time.Second)) / dur
-
-				activeMB := float64(ms.Alloc) / mb
-
-				dPauseNS := ms.PauseTotalNs - pauseNS
-				dNumGC := ms.NumGC - numGC
-
-				ru := syscall.Rusage{}
-				if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-					log.Errorf("Getrusage failed: %v", err)
-				}
-				newUtime := ru.Utime.Nano()
-				newStime := ru.Stime.Nano()
-				uPerc := float64(newUtime-uTime) / dur
-				sPerc := float64(newStime-sTime) / dur
-
-				log.Infof("runtime stats: %d tasks, %d goroutines, %.2fMB active, "+
-					"%.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-					stopper.NumTasks(), runtime.NumGoroutine(), activeMB, cgoRate,
-					uPerc, sPerc, float64(dPauseNS)/dur, dNumGC)
-
-				uTime, sTime = newUtime, newStime
-				cgoCall = curCgoCall
-				pauseNS, numGC = ms.PauseTotalNs, ms.NumGC
-			}
-		}
-	})
 }
 
 // executeCmd creates a client.Call struct and sends it via our local sender.
