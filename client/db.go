@@ -104,7 +104,7 @@ func (kv *KeyValue) ValueProto(msg gogoproto.Message) error {
 	return fmt.Errorf("unable to unmarshal proto: %T", kv.Value)
 }
 
-// Result holds the result for a single DB or Tx operation (e.g. Get, Put,
+// Result holds the result for a single DB or Txn operation (e.g. Get, Put,
 // etc).
 type Result struct {
 	calls int
@@ -357,15 +357,15 @@ func (db *DB) Run(b *Batch) error {
 	return b.fillResults()
 }
 
-// Tx executes retryable in the context of a distributed transaction. The
+// Txn executes retryable in the context of a distributed transaction. The
 // transaction is automatically aborted if retryable returns any error aside
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
 //
 // TODO(pmattis): Allow transaction options to be specified.
-func (db *DB) Tx(retryable func(tx *Tx) error) error {
-	return newTx(db, 1).exec(retryable)
+func (db *DB) Txn(retryable func(txn *Txn) error) error {
+	return newTxn(*db, 1 /* depth */).exec(retryable)
 }
 
 // send runs the specified calls synchronously in a single batch and
@@ -439,7 +439,7 @@ func (db *DB) send(calls ...Call) (err error) {
 
 // Batch provides for the parallel execution of a number of database
 // operations. Operations are added to the Batch and then the Batch is executed
-// via either DB.Run, Tx.Run or Tx.Commit.
+// via either DB.Run, Txn.Run or Txn.Commit.
 //
 // TODO(pmattis): Allow a timestamp to be specified which is applied to all
 // operations within the batch.
@@ -609,7 +609,7 @@ func (b *Batch) Get(key interface{}) *Batch {
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message. A new result will be appended to the batch which will contain a
 // single row. Note that the proto will not be decoded until after the batch is
-// executed using DB.Run or Tx.Run.
+// executed using DB.Run or Txn.Run.
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.

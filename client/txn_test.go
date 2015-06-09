@@ -94,10 +94,10 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		call.Reply.Header().Txn.Timestamp = test.responseTS
 	}))
 
-	tx := newTx(db, 0)
+	txn := newTxn(*db, 0)
 
 	for testIdx = range testCases {
-		tx.db.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		txn.db.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
 
@@ -108,10 +108,10 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}))
 
-	tx := newTx(db, 0)
-	tx.db.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+	txn := newTxn(*db, 0)
+	txn.db.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
-	if len(tx.txn.ID) != 0 {
+	if len(txn.txn.ID) != 0 {
 		t.Errorf("expected txn to be cleared")
 	}
 }
@@ -124,12 +124,12 @@ func TestTransactionConfig(t *testing.T) {
 	db := newDB(newTestSender(func(call Call) {}))
 	db.user = "foo"
 	db.userPriority = 101
-	if err := db.Tx(func(tx *Tx) error {
-		if tx.db.user != db.user {
-			t.Errorf("expected txn user %s; got %s", db.user, tx.db.user)
+	if err := db.Txn(func(txn *Txn) error {
+		if txn.db.user != db.user {
+			t.Errorf("expected txn user %s; got %s", db.user, txn.db.user)
 		}
-		if tx.db.userPriority != db.userPriority {
-			t.Errorf("expected txn user priority %d; got %d", db.userPriority, tx.db.userPriority)
+		if txn.db.userPriority != db.userPriority {
+			t.Errorf("expected txn user priority %d; got %d", db.userPriority, txn.db.userPriority)
 		}
 		return nil
 	}); err != nil {
@@ -145,8 +145,8 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	db := newDB(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 	}))
-	if err := db.Tx(func(tx *Tx) error {
-		_, err := tx.Get("a")
+	if err := db.Txn(func(txn *Txn) error {
+		_, err := txn.Get("a")
 		return err
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -167,8 +167,8 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			t.Errorf("expected commit to be true; got %t", et.Commit)
 		}
 	}))
-	if err := db.Tx(func(tx *Tx) error {
-		return tx.Put("a", "b")
+	if err := db.Txn(func(txn *Txn) error {
+		return txn.Put("a", "b")
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
@@ -186,8 +186,8 @@ func TestCommitTransactionOnce(t *testing.T) {
 	db := newDB(newTestSender(func(call Call) {
 		count++
 	}))
-	if err := db.Tx(func(tx *Tx) error {
-		return tx.Commit(&Batch{})
+	if err := db.Txn(func(txn *Txn) error {
+		return txn.Commit(&Batch{})
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
@@ -204,7 +204,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 			t.Errorf("did not expect EndTransaction")
 		}
 	}))
-	if err := db.Tx(func(tx *Tx) error {
+	if err := db.Txn(func(txn *Txn) error {
 		return errors.New("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
@@ -222,8 +222,8 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		}
 	}))
 
-	if err := db.Tx(func(tx *Tx) error {
-		if err := tx.Put("a", "b"); err != nil {
+	if err := db.Txn(func(txn *Txn) error {
+		if err := txn.Put("a", "b"); err != nil {
 			return err
 		}
 		return errors.New("foo")
@@ -264,8 +264,8 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 			}
 		}))
 		db.txnRetryOptions.Backoff = 1 * time.Millisecond
-		err := db.Tx(func(tx *Tx) error {
-			return tx.Put("a", "b")
+		err := db.Txn(func(txn *Txn) error {
+			return txn.Put("a", "b")
 		})
 		if test.retry {
 			if count != 2 {

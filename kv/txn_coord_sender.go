@@ -452,11 +452,11 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 			return
 		}
 		call.Reply.Reset()
-		if err := tmpDB.Tx(func(tx *client.Tx) error {
-			tx.SetDebugName("auto-wrap")
+		if err := tmpDB.Txn(func(txn *client.Txn) error {
+			txn.SetDebugName("auto-wrap")
 			b := &client.Batch{}
 			b.InternalAddCall(call)
-			return tx.Commit(b)
+			return txn.Commit(b)
 		}); err != nil {
 			log.Warning(err)
 		}

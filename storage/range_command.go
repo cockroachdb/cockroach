@@ -819,7 +819,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	if err = r.rm.DB().Tx(func(tx *client.Tx) error {
+	if err = r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
@@ -837,12 +837,12 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
 			return err
 		}
-		if err := tx.Run(b); err != nil {
+		if err := txn.Run(b); err != nil {
 			return err
 		}
 		// Update the RangeTree.
 		b = &client.Batch{}
-		if err := InsertRange(tx, b, newDesc.StartKey); err != nil {
+		if err := InsertRange(txn, b, newDesc.StartKey); err != nil {
 			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
@@ -861,7 +861,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return tx.Run(b)
+		return txn.Run(b)
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %s failed: %s", splitKey, err))
 	}
@@ -989,7 +989,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 	log.Infof("initiating a merge of %s into %s", subsumedRng, r)
 
-	if err := r.rm.DB().Tx(func(tx *client.Tx) error {
+	if err := r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
 		b := &client.Batch{}
 		desc1Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
@@ -1022,7 +1022,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return tx.Run(b)
+		return txn.Run(b)
 	}); err != nil {
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
 			subsumedDesc.RaftID, desc.RaftID, err))
@@ -1119,7 +1119,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
 
-	err := r.rm.DB().Tx(func(tx *client.Tx) error {
+	err := r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}
@@ -1152,7 +1152,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return tx.Run(b)
+		return txn.Run(b)
 	})
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)

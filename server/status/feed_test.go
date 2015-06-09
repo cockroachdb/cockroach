@@ -230,8 +230,8 @@ func TestServerNodeEventFeed(t *testing.T) {
 	}
 
 	// Add some data in a transaction
-	err = db.Tx(func(tx *client.Tx) error {
-		return tx.Commit(tx.B.Put("a", "asdf").Put("c", "jkl;"))
+	err = db.Txn(func(txn *client.Txn) error {
+		return txn.Commit(txn.B.Put("a", "asdf").Put("c", "jkl;"))
 	})
 	if err != nil {
 		t.Fatalf("error putting data to db: %s", err)

@@ -34,7 +34,7 @@ type cachedNode struct {
 // RangeTree is used to hold the relevant context information for any
 // operations on the range tree.
 type treeContext struct {
-	tx    *client.Tx
+	txn   *client.Txn
 	tree  *proto.RangeTree
 	dirty bool
 	nodes map[string]cachedNode
@@ -77,13 +77,13 @@ func (tc *treeContext) flush(b *client.Batch) error {
 }
 
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
-func getRangeTree(tx *client.Tx) (*treeContext, error) {
+func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := &proto.RangeTree{}
-	if err := tx.GetProto(keys.RangeTreeRoot, tree); err != nil {
+	if err := txn.GetProto(keys.RangeTreeRoot, tree); err != nil {
 		return nil, err
 	}
 	return &treeContext{
-		tx:    tx,
+		txn:   txn,
 		tree:  tree,
 		dirty: false,
 		nodes: map[string]cachedNode{},
@@ -122,7 +122,7 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := &proto.RangeTreeNode{}
-	if err := tc.tx.GetProto(keys.RangeTreeNodeKey(*key), node); err != nil {
+	if err := tc.txn.GetProto(keys.RangeTreeNodeKey(*key), node); err != nil {
 		return nil, err
 	}
 	tc.nodes[keyString] = cachedNode{
@@ -136,8 +136,8 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 // from operations that create new ranges, such as range.splitTrigger.
 // TODO(bram): Can we optimize this by inserting as a child of the range being
 // split?
-func InsertRange(tx *client.Tx, b *client.Batch, key proto.Key) error {
-	tc, err := getRangeTree(tx)
+func InsertRange(txn *client.Txn, b *client.Batch, key proto.Key) error {
+	tc, err := getRangeTree(txn)
 	if err != nil {
 		return err
 	}

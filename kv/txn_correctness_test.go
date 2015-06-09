@@ -74,7 +74,7 @@ type cmd struct {
 	txnIdx      int    // transaction index in the history
 	historyIdx  int    // this suffixes key so tests get unique keys
 	fn          func(
-		c *cmd, tx *client.Tx, t *testing.T) error // execution function
+		c *cmd, txn *client.Txn, t *testing.T) error // execution function
 	ch   chan struct{}    // channel for other commands to wait
 	prev <-chan struct{}  // channel this command must wait on before executing
 	env  map[string]int64 // contains all previously read values
@@ -90,14 +90,14 @@ func (c *cmd) init(prevCmd *cmd) {
 	c.debug = ""
 }
 
-func (c *cmd) execute(tx *client.Tx, t *testing.T) (string, error) {
+func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 	if c.prev != nil {
 		<-c.prev
 	}
 	if log.V(1) {
 		log.Infof("executing %s", c)
 	}
-	err := c.fn(c, tx, t)
+	err := c.fn(c, txn, t)
 	if c.ch != nil {
 		c.ch <- struct{}{}
 	}
@@ -139,8 +139,8 @@ func (c *cmd) String() string {
 }
 
 // readCmd reads a value from the db and stores it in the env.
-func readCmd(c *cmd, tx *client.Tx, t *testing.T) error {
-	r, err := tx.Get(c.getKey())
+func readCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+	r, err := txn.Get(c.getKey())
 	if err != nil {
 		return err
 	}
@@ -152,13 +152,13 @@ func readCmd(c *cmd, tx *client.Tx, t *testing.T) error {
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
-func deleteRngCmd(c *cmd, tx *client.Tx, t *testing.T) error {
-	return tx.DelRange(c.getKey(), c.getEndKey())
+func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+	return txn.DelRange(c.getKey(), c.getEndKey())
 }
 
 // scanCmd reads the values from the db from [key, endKey).
-func scanCmd(c *cmd, tx *client.Tx, t *testing.T) error {
-	rows, err := tx.Scan(c.getKey(), c.getEndKey(), 0)
+func scanCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+	rows, err := txn.Scan(c.getKey(), c.getEndKey(), 0)
 	if err != nil {
 		return err
 	}
@@ -175,8 +175,8 @@ func scanCmd(c *cmd, tx *client.Tx, t *testing.T) error {
 
 // incCmd adds one to the value of c.key in the env and writes
 // it to the db. If c.key isn't in the db, writes 1.
-func incCmd(c *cmd, tx *client.Tx, t *testing.T) error {
-	r, err := tx.Inc(c.getKey(), 1)
+func incCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+	r, err := txn.Inc(c.getKey(), 1)
 	if err != nil {
 		return err
 	}
@@ -187,26 +187,26 @@ func incCmd(c *cmd, tx *client.Tx, t *testing.T) error {
 
 // sumCmd sums the values of all keys != c.key read during the transaction and
 // writes the result to the db.
-func sumCmd(c *cmd, tx *client.Tx, t *testing.T) error {
+func sumCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 	sum := int64(0)
 	for k, v := range c.env {
 		if k != c.key {
 			sum += v
 		}
 	}
-	r, err := tx.Inc(c.getKey(), sum)
+	r, err := txn.Inc(c.getKey(), sum)
 	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp)
 	return err
 }
 
 // commitCmd commits the transaction.
-func commitCmd(c *cmd, tx *client.Tx, t *testing.T) error {
-	return tx.Commit(&client.Batch{})
+func commitCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+	return txn.Commit(&client.Batch{})
 }
 
 // cmdDict maps from command name to function implementing the command.
 // Use only upper case letters for commands. More than one letter is OK.
-var cmdDict = map[string]func(c *cmd, db *client.Tx, t *testing.T) error{
+var cmdDict = map[string]func(c *cmd, txn *client.Txn, t *testing.T) error{
 	"R":   readCmd,
 	"I":   incCmd,
 	"DR":  deleteRngCmd,
@@ -526,8 +526,8 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 		c.historyIdx = historyIdx
 		c.env = verifyEnv
 		c.init(nil)
-		err := db.Tx(func(tx *client.Tx) error {
-			fmtStr, err := c.execute(tx, t)
+		err := db.Txn(func(txn *client.Txn) error {
+			fmtStr, err := c.execute(txn, t)
 			if err != nil {
 				return err
 			}
@@ -559,12 +559,12 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	isolation proto.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
-	err := db.Tx(func(tx *client.Tx) error {
-		tx.SetDebugName(txnName)
+	err := db.Txn(func(txn *client.Txn) error {
+		txn.SetDebugName(txnName)
 		if isolation == proto.SNAPSHOT {
-			tx.SetSnapshotIsolation()
+			txn.SetSnapshotIsolation()
 		}
-		tx.InternalSetPriority(priority)
+		txn.InternalSetPriority(priority)
 
 		env := map[string]int64{}
 		// TODO(spencer): restarts must create additional histories. They
@@ -584,7 +584,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		}
 		for i := range cmds {
 			cmds[i].env = env
-			if err := hv.runCmd(tx, txnIdx, retry, i, cmds, t); err != nil {
+			if err := hv.runCmd(txn, txnIdx, retry, i, cmds, t); err != nil {
 				return err
 			}
 		}
@@ -594,8 +594,8 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	return err
 }
 
-func (hv *historyVerifier) runCmd(tx *client.Tx, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
-	fmtStr, err := cmds[cmdIdx].execute(tx, t)
+func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
+	fmtStr, err := cmds[cmdIdx].execute(txn, t)
 	if err != nil {
 		return err
 	}

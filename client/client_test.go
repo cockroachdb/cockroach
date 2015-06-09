@@ -140,15 +140,15 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
-		err := db.Tx(func(tx *client.Tx) error {
+		err := db.Txn(func(txn *client.Txn) error {
 			if test.isolation == proto.SNAPSHOT {
-				tx.SetSnapshotIsolation()
+				txn.SetSnapshotIsolation()
 			}
-			tx.InternalSetPriority(int32(txnPri))
+			txn.InternalSetPriority(int32(txnPri))
 
 			count++
 			// Lay down the intent.
-			if err := tx.Put(key, "txn-value"); err != nil {
+			if err := txn.Put(key, "txn-value"); err != nil {
 				return err
 			}
 			// The wait group lets us pause txn until after the non-txn method has run once.
@@ -231,11 +231,11 @@ func TestClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := db.Tx(func(tx *client.Tx) error {
-			tx.SetSnapshotIsolation()
+		err := db.Txn(func(txn *client.Txn) error {
+			txn.SetSnapshotIsolation()
 
 			// Put transactional value.
-			if err := tx.Put(key, value); err != nil {
+			if err := txn.Put(key, value); err != nil {
 				return err
 			}
 			// Attempt to read outside of txn.
@@ -245,7 +245,7 @@ func TestClientRunTransaction(t *testing.T) {
 				return util.Errorf("expected nil value; got %+v", gr.Value)
 			}
 			// Read within the transaction.
-			if gr, err := tx.Get(key); err != nil {
+			if gr, err := txn.Get(key); err != nil {
 				return err
 			} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
 				return util.Errorf("expected value %q; got %q", value, gr.ValueBytes())
@@ -437,11 +437,11 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Tx(func(tx *client.Tx) error {
-				tx.SetDebugName(fmt.Sprintf("test-%d", i))
+			if err := db.Txn(func(txn *client.Txn) error {
+				txn.SetDebugName(fmt.Sprintf("test-%d", i))
 
 				// Retrieve the other key.
-				gr, err := tx.Get(readKey)
+				gr, err := txn.Get(readKey)
 				if err != nil {
 					return err
 				}
@@ -451,7 +451,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 					otherValue = gr.ValueInt()
 				}
 
-				_, err = tx.Inc(writeKey, 1+otherValue)
+				_, err = txn.Inc(writeKey, 1+otherValue)
 				return err
 			}); err != nil {
 				t.Error(err)

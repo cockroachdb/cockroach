@@ -203,8 +203,8 @@ func ExampleTx_Commit() {
 	s, db := setup()
 	defer s.Stop()
 
-	err := db.Tx(func(tx *client.Tx) error {
-		return tx.Commit(tx.B.Put("aa", "1").Put("ab", "2"))
+	err := db.Txn(func(txn *client.Txn) error {
+		return txn.Commit(txn.B.Put("aa", "1").Put("ab", "2"))
 	})
 	if err != nil {
 		panic(err)
@@ -282,9 +282,9 @@ func TestDebugName(t *testing.T) {
 
 	_, file, _, _ := runtime.Caller(0)
 	base := filepath.Base(file)
-	_ = db.Tx(func(tx *client.Tx) error {
-		if !strings.HasPrefix(tx.DebugName(), base+":") {
-			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", tx.DebugName(), base)
+	_ = db.Txn(func(txn *client.Txn) error {
+		if !strings.HasPrefix(txn.DebugName(), base+":") {
+			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), base)
 		}
 		return nil
 	})
@@ -294,25 +294,25 @@ func TestCommonMethods(t *testing.T) {
 	batchType := reflect.TypeOf(&client.Batch{})
 	batcherType := reflect.TypeOf(client.DB{}.B)
 	dbType := reflect.TypeOf(&client.DB{})
-	txType := reflect.TypeOf(&client.Tx{})
-	types := []reflect.Type{batchType, batcherType, dbType, txType}
+	txnType := reflect.TypeOf(&client.Txn{})
+	types := []reflect.Type{batchType, batcherType, dbType, txnType}
 
 	type key struct {
 		typ    reflect.Type
 		method string
 	}
 	blacklist := map[key]struct{}{
-		key{batchType, "InternalAddCall"}:   {},
-		key{dbType, "AdminMerge"}:           {},
-		key{dbType, "AdminSplit"}:           {},
-		key{dbType, "Run"}:                  {},
-		key{dbType, "Tx"}:                   {},
-		key{txType, "Commit"}:               {},
-		key{txType, "DebugName"}:            {},
-		key{txType, "InternalSetPriority"}:  {},
-		key{txType, "Run"}:                  {},
-		key{txType, "SetDebugName"}:         {},
-		key{txType, "SetSnapshotIsolation"}: {},
+		key{batchType, "InternalAddCall"}:    {},
+		key{dbType, "AdminMerge"}:            {},
+		key{dbType, "AdminSplit"}:            {},
+		key{dbType, "Run"}:                   {},
+		key{dbType, "Txn"}:                   {},
+		key{txnType, "Commit"}:               {},
+		key{txnType, "DebugName"}:            {},
+		key{txnType, "InternalSetPriority"}:  {},
+		key{txnType, "Run"}:                  {},
+		key{txnType, "SetDebugName"}:         {},
+		key{txnType, "SetSnapshotIsolation"}: {},
 	}
 
 	for b := range blacklist {
