@@ -163,8 +163,7 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto() {
     "ntent_age\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n "
     "\001(\003B\022\310\336\037\000\342\336\037\nGCBytesAge\022\027\n\tsys_bytes\030\014 \001"
     "(\003B\004\310\336\037\000\022\027\n\tsys_count\030\r \001(\003B\004\310\336\037\000\022\037\n\021las"
-    "t_update_nanos\030\036 \001(\003B\004\310\336\037\000B\024Z\006engine\340\342\036\001"
-    "\310\342\036\001\320\342\036\001", 808);
+    "t_update_nanos\030\036 \001(\003B\004\310\336\037\000B\010Z\006engine", 796);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/storage/engine/mvcc.proto", &protobuf_RegisterTypes);
   MVCCValue::default_instance_ = new MVCCValue();

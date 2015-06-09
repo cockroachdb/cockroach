@@ -47,10 +47,6 @@ option go_package = "wire";
 
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 enum CompressionType {
   NONE = 0;
   SNAPPY = 1;

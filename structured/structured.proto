@@ -21,10 +21,6 @@ option go_package = "structured";
 
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 message Table {
   optional string name = 1 [(gogoproto.nullable) = false];
 }

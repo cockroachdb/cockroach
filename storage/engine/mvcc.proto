@@ -22,10 +22,6 @@ option go_package = "engine";
 import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // MVCCValue differentiates between normal versioned values and
 // deletion tombstones.
 message MVCCValue {

@@ -23,10 +23,6 @@ import "cockroach/proto/config.proto";
 import "cockroach/storage/engine/mvcc.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // NodeStatus contains the stats needed to calculate the current status of a
 // node.
 message NodeStatus {

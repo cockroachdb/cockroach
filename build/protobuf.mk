@@ -32,7 +32,7 @@ GOPATH := $(GITHUB_ROOT)/../..
 
 GOPATH_BIN      := $(GOPATH)/bin
 PROTOC          := $(GOPATH_BIN)/protoc
-PLUGIN_SUFFIX   := gogo
+PLUGIN_SUFFIX   := gogofast
 PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
 GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf

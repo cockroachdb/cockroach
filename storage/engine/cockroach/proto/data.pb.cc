@@ -463,7 +463,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAP"
     "SHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PEN"
     "DING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000"
-    "B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 2381);
+    "B\007Z\005proto", 2369);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();

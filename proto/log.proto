@@ -21,10 +21,6 @@ option go_package = "proto";
 
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // Log represents a cockroach structured log entry.
 message LogEntry {
   // Log message severity.
