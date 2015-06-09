@@ -653,54 +653,50 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 		return err
 	}
 
-	var newMeta *proto.MVCCMetadata
-	// In case the key metadata exists.
 	if ok {
-		// There is an uncommitted write intent and the current Put
-		// operation does not come from the same transaction.
-		// This should not happen since range should check the existing
-		// write intent before executing any Put action at MVCC level.
-		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
-			return &proto.WriteIntentError{Intents: []proto.WriteIntentError_Intent{{Key: key, Txn: *meta.Txn}}}
-		}
+		// There is existing metadata for this key; ensure our write is permitted.
 
-		// We can update the current metadata only if both the timestamp
-		// and epoch of the new intent are greater than or equal to
-		// existing. If either of these conditions doesn't hold, it's
-		// likely the case that an older RPC is arriving out of order.
-		//
-		// Note that if meta.Txn!=nil and txn==nil, a WriteIntentError was
-		// returned above.
-		if !timestamp.Less(meta.Timestamp) &&
-			(meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
-			// If this is an intent and timestamps have changed,
-			// need to remove old version.
-			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
+		if meta.Txn != nil {
+			// There is an uncommitted write intent.
+
+			if txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
+				// The current Put operation does not come from the same
+				// transaction.
+				return &proto.WriteIntentError{Intents: []proto.WriteIntentError_Intent{{Key: key, Txn: *meta.Txn}}}
+			} else if txn.Epoch < meta.Txn.Epoch || timestamp.Less(meta.Timestamp) {
+				// Ignore old writes from the current transaction; it's just an
+				// RPC arriving out of order.
+				return nil
+			}
+
+			// We are replacing our own older write intent. If we are
+			// writing at the same timestamp we can simply overwrite it;
+			// otherwise we must explicitly delete the obsolete intent.
+			if !timestamp.Equal(meta.Timestamp) {
 				versionKey := mvccEncodeTimestamp(metaKey, meta.Timestamp)
 				if err := engine.Clear(versionKey); err != nil {
 					return err
 				}
 			}
-			newMeta = &buf.newMeta
-			buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-		} else if timestamp.Less(meta.Timestamp) && meta.Txn == nil {
-			// If we receive a Put request to write before an already-
-			// committed version, send write tool old error.
-			return &proto.WriteTooOldError{Timestamp: timestamp, ExistingTimestamp: meta.Timestamp}
 		} else {
-			// Otherwise, it's an old write to the current transaction. Just ignore.
-			return nil
+			// No pending transaction, so we can write as long as it is not
+			// in the past.
+			if !meta.Timestamp.Less(timestamp) {
+				return &proto.WriteTooOldError{Timestamp: timestamp, ExistingTimestamp: meta.Timestamp}
+			}
 		}
-	} else { // In case the key metadata does not exist yet.
-		// If this is a delete, do nothing!
+	} else {
+		// No existing metadata record. If this is a delete, do nothing;
+		// otherwise we can perform the write.
 		if value.Deleted {
 			return nil
 		}
-		// Create key metadata.
+
+		// Clear the meta pointer so it is not used in updateStatsOnPut below.
 		meta = nil
-		newMeta = &buf.newMeta
-		buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 	}
+	newMeta := &buf.newMeta
+	buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
 	// into the key, so don't need it in both places).
