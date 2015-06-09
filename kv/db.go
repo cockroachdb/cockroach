@@ -50,13 +50,27 @@ func verifyRequest(args proto.Request) error {
 	return nil
 }
 
+var allPublicMethods = map[string]proto.Method{
+	proto.Get.String():            proto.Get,
+	proto.Put.String():            proto.Put,
+	proto.ConditionalPut.String(): proto.ConditionalPut,
+	proto.Increment.String():      proto.Increment,
+	proto.Delete.String():         proto.Delete,
+	proto.DeleteRange.String():    proto.DeleteRange,
+	proto.Scan.String():           proto.Scan,
+	proto.EndTransaction.String(): proto.EndTransaction,
+	proto.Batch.String():          proto.Batch,
+	proto.AdminSplit.String():     proto.AdminSplit,
+	proto.AdminMerge.String():     proto.AdminMerge,
+}
+
 // createArgsAndReply returns allocated request and response pairs
 // according to the specified method. Note that createArgsAndReply
 // only knows about public methods and explicitly returns nil for
 // internal methods. Do not change this behavior without also fixing
 // DBServer.ServeHTTP.
 func createArgsAndReply(method string) (proto.Request, proto.Response) {
-	if m, ok := proto.AllMethods[method]; ok {
+	if m, ok := allPublicMethods[method]; ok {
 		switch m {
 		case proto.Get:
 			return &proto.GetRequest{}, &proto.GetResponse{}

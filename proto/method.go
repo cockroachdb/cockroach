@@ -107,28 +107,3 @@ const (
 	// superset of the Batch method.
 	InternalBatch
 )
-
-// AllMethods is a map from string to method enum.
-var AllMethods = map[string]Method{
-	Get.String():                        Get,
-	Put.String():                        Put,
-	ConditionalPut.String():             ConditionalPut,
-	Increment.String():                  Increment,
-	Delete.String():                     Delete,
-	DeleteRange.String():                DeleteRange,
-	Scan.String():                       Scan,
-	EndTransaction.String():             EndTransaction,
-	Batch.String():                      Batch,
-	AdminSplit.String():                 AdminSplit,
-	AdminMerge.String():                 AdminMerge,
-	InternalRangeLookup.String():        InternalRangeLookup,
-	InternalHeartbeatTxn.String():       InternalHeartbeatTxn,
-	InternalGC.String():                 InternalGC,
-	InternalPushTxn.String():            InternalPushTxn,
-	InternalResolveIntent.String():      InternalResolveIntent,
-	InternalResolveIntentRange.String(): InternalResolveIntentRange,
-	InternalMerge.String():              InternalMerge,
-	InternalTruncateLog.String():        InternalTruncateLog,
-	InternalLeaderLease.String():        InternalLeaderLease,
-	InternalBatch.String():              InternalBatch,
-}
