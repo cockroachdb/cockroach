@@ -1210,13 +1210,22 @@ func (m *RaftTruncatedState) GetTerm() uint64 {
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
 // all of the range's data and metadata, including the raft log, response cache, etc.
 type RaftSnapshotData struct {
-	KV               []*RaftSnapshotData_KeyValue `protobuf:"bytes,1,rep" json:"KV,omitempty"`
+	// The latest RangeDescriptor
+	RangeDescriptor  RangeDescriptor              `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
+	KV               []*RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep" json:"KV,omitempty"`
 	XXX_unrecognized []byte                       `json:"-"`
 }
 
 func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
 func (m *RaftSnapshotData) String() string { return proto1.CompactTextString(m) }
 func (*RaftSnapshotData) ProtoMessage()    {}
+
+func (m *RaftSnapshotData) GetRangeDescriptor() RangeDescriptor {
+	if m != nil {
+		return m.RangeDescriptor
+	}
+	return RangeDescriptor{}
+}
 
 func (m *RaftSnapshotData) GetKV() []*RaftSnapshotData_KeyValue {
 	if m != nil {
@@ -5205,6 +5214,30 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeDescriptor", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.RangeDescriptor.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KV", wireType)
 			}
 			var msglen int
@@ -6277,6 +6310,8 @@ func (m *RaftTruncatedState) Size() (n int) {
 func (m *RaftSnapshotData) Size() (n int) {
 	var l int
 	_ = l
+	l = m.RangeDescriptor.Size()
+	n += 1 + l + sovInternal(uint64(l))
 	if len(m.KV) > 0 {
 		for _, e := range m.KV {
 			l = e.Size()
@@ -7936,9 +7971,17 @@ func (m *RaftSnapshotData) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.RangeDescriptor.Size()))
+	n84, err := m.RangeDescriptor.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n84
 	if len(m.KV) > 0 {
 		for _, msg := range m.KV {
-			data[i] = 0xa
+			data[i] = 0x12
 			i++
 			i = encodeVarintInternal(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])

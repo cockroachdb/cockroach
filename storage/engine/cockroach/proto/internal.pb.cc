@@ -749,7 +749,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftTruncatedState, _internal_metadata_),
       -1);
   RaftSnapshotData_descriptor_ = file->message_type(30);
-  static const int RaftSnapshotData_offsets_[1] = {
+  static const int RaftSnapshotData_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, range_descriptor_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, kv_),
   };
   RaftSnapshotData_reflection_ =
@@ -1124,13 +1125,15 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "\000\022\023\n\005count\030\006 \001(\rB\004\310\336\037\000\022\021\n\003sum\030\007 \001(\001B\004\310\336\037"
     "\000\022\013\n\003max\030\010 \001(\001\022\013\n\003min\030\t \001(\001\"=\n\022RaftTrunc"
     "atedState\022\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002"
-    " \001(\004B\004\310\336\037\000\"z\n\020RaftSnapshotData\022>\n\002KV\030\001 \003"
-    "(\0132*.cockroach.proto.RaftSnapshotData.Ke"
-    "yValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014\022"
-    "\r\n\005value\030\002 \001(\014*G\n\013PushTxnType\022\022\n\016PUSH_TI"
-    "MESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLEANUP_TXN\020"
-    "\002\032\004\210\243\036\000*%\n\021InternalValueType\022\n\n\006_CR_TS\020\001"
-    "\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 7347);
+    " \001(\004B\004\310\336\037\000\"\274\001\n\020RaftSnapshotData\022@\n\020range"
+    "_descriptor\030\001 \001(\0132 .cockroach.proto.Rang"
+    "eDescriptorB\004\310\336\037\000\022>\n\002KV\030\002 \003(\0132*.cockroac"
+    "h.proto.RaftSnapshotData.KeyValueB\006\342\336\037\002K"
+    "V\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001("
+    "\014*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\t"
+    "ABORT_TXN\020\001\022\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000*%\n\021In"
+    "ternalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\023Z\005pro"
+    "to\340\342\036\001\310\342\036\001\320\342\036\001", 7414);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -16810,6 +16813,7 @@ void RaftSnapshotData_KeyValue::InternalSwap(RaftSnapshotData_KeyValue* other) {
 // -------------------------------------------------------------------
 
 #ifndef _MSC_VER
+const int RaftSnapshotData::kRangeDescriptorFieldNumber;
 const int RaftSnapshotData::kKVFieldNumber;
 #endif  // !_MSC_VER
 
@@ -16820,6 +16824,7 @@ RaftSnapshotData::RaftSnapshotData()
 }
 
 void RaftSnapshotData::InitAsDefaultInstance() {
+  range_descriptor_ = const_cast< ::cockroach::proto::RangeDescriptor*>(&::cockroach::proto::RangeDescriptor::default_instance());
 }
 
 RaftSnapshotData::RaftSnapshotData(const RaftSnapshotData& from)
@@ -16832,6 +16837,7 @@ RaftSnapshotData::RaftSnapshotData(const RaftSnapshotData& from)
 
 void RaftSnapshotData::SharedCtor() {
   _cached_size_ = 0;
+  range_descriptor_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -16842,6 +16848,7 @@ RaftSnapshotData::~RaftSnapshotData() {
 
 void RaftSnapshotData::SharedDtor() {
   if (this != default_instance_) {
+    delete range_descriptor_;
   }
 }
 
@@ -16871,6 +16878,9 @@ RaftSnapshotData* RaftSnapshotData::New(::google::protobuf::Arena* arena) const 
 }
 
 void RaftSnapshotData::Clear() {
+  if (has_range_descriptor()) {
+    if (range_descriptor_ != NULL) range_descriptor_->::cockroach::proto::RangeDescriptor::Clear();
+  }
   kv_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -16888,9 +16898,22 @@ bool RaftSnapshotData::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+      // optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
       case 1: {
         if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_range_descriptor()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_KV;
+        break;
+      }
+
+      // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_KV:
           DO_(input->IncrementRecursionDepth());
          parse_loop_KV:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
@@ -16898,7 +16921,7 @@ bool RaftSnapshotData::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(10)) goto parse_loop_KV;
+        if (input->ExpectTag(18)) goto parse_loop_KV;
         input->UnsafeDecrementRecursionDepth();
         if (input->ExpectAtEnd()) goto success;
         break;
@@ -16929,10 +16952,16 @@ failure:
 void RaftSnapshotData::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.RaftSnapshotData)
-  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+  // optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
+  if (has_range_descriptor()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, *this->range_descriptor_, output);
+  }
+
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
   for (unsigned int i = 0, n = this->kv_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->kv(i), output);
+      2, this->kv(i), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -16945,11 +16974,18 @@ void RaftSnapshotData::SerializeWithCachedSizes(
 ::google::protobuf::uint8* RaftSnapshotData::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RaftSnapshotData)
-  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+  // optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
+  if (has_range_descriptor()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, *this->range_descriptor_, target);
+  }
+
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
   for (unsigned int i = 0, n = this->kv_size(); i < n; i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        1, this->kv(i), target);
+        2, this->kv(i), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -16963,7 +16999,14 @@ void RaftSnapshotData::SerializeWithCachedSizes(
 int RaftSnapshotData::ByteSize() const {
   int total_size = 0;
 
-  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+  // optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
+  if (has_range_descriptor()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        *this->range_descriptor_);
+  }
+
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
   total_size += 1 * this->kv_size();
   for (int i = 0; i < this->kv_size(); i++) {
     total_size +=
@@ -16997,6 +17040,11 @@ void RaftSnapshotData::MergeFrom(const ::google::protobuf::Message& from) {
 void RaftSnapshotData::MergeFrom(const RaftSnapshotData& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   kv_.MergeFrom(from.kv_);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_range_descriptor()) {
+      mutable_range_descriptor()->::cockroach::proto::RangeDescriptor::MergeFrom(from.range_descriptor());
+    }
+  }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
   }
@@ -17024,6 +17072,7 @@ void RaftSnapshotData::Swap(RaftSnapshotData* other) {
   InternalSwap(other);
 }
 void RaftSnapshotData::InternalSwap(RaftSnapshotData* other) {
+  std::swap(range_descriptor_, other->range_descriptor_);
   kv_.UnsafeArenaSwap(&other->kv_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -17151,7 +17200,50 @@ void RaftSnapshotData_KeyValue::clear_value() {
 
 // RaftSnapshotData
 
-// repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+// optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
+bool RaftSnapshotData::has_range_descriptor() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void RaftSnapshotData::set_has_range_descriptor() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void RaftSnapshotData::clear_has_range_descriptor() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void RaftSnapshotData::clear_range_descriptor() {
+  if (range_descriptor_ != NULL) range_descriptor_->::cockroach::proto::RangeDescriptor::Clear();
+  clear_has_range_descriptor();
+}
+ const ::cockroach::proto::RangeDescriptor& RaftSnapshotData::range_descriptor() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.range_descriptor)
+  return range_descriptor_ != NULL ? *range_descriptor_ : *default_instance_->range_descriptor_;
+}
+ ::cockroach::proto::RangeDescriptor* RaftSnapshotData::mutable_range_descriptor() {
+  set_has_range_descriptor();
+  if (range_descriptor_ == NULL) {
+    range_descriptor_ = new ::cockroach::proto::RangeDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.range_descriptor)
+  return range_descriptor_;
+}
+ ::cockroach::proto::RangeDescriptor* RaftSnapshotData::release_range_descriptor() {
+  clear_has_range_descriptor();
+  ::cockroach::proto::RangeDescriptor* temp = range_descriptor_;
+  range_descriptor_ = NULL;
+  return temp;
+}
+ void RaftSnapshotData::set_allocated_range_descriptor(::cockroach::proto::RangeDescriptor* range_descriptor) {
+  delete range_descriptor_;
+  range_descriptor_ = range_descriptor;
+  if (range_descriptor) {
+    set_has_range_descriptor();
+  } else {
+    clear_has_range_descriptor();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.range_descriptor)
+}
+
+// repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
 int RaftSnapshotData::kv_size() const {
   return kv_.size();
 }
