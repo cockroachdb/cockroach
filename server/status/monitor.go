@@ -105,11 +105,11 @@ func (nsm *NodeStatusMonitor) SetNodeID(id proto.NodeID) {
 	nsm.nodeID = id
 }
 
-// OnAddRange receives AddRangeEvents retrieved from an storage event
+// OnRegisterRange receives RegisterRangeEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
-func (nsm *NodeStatusMonitor) OnAddRange(event *storage.AddRangeEvent) {
-	nsm.GetStoreMonitor(event.StoreID).addRange(event)
+func (nsm *NodeStatusMonitor) OnRegisterRange(event *storage.RegisterRangeEvent) {
+	nsm.GetStoreMonitor(event.StoreID).registerRange(event)
 }
 
 // OnUpdateRange receives UpdateRangeEvents retrieved from an storage event
@@ -199,14 +199,19 @@ type rangeDataAccumulator struct {
 	seenScan   map[int64]struct{}
 }
 
-func (rda *rangeDataAccumulator) addRange(event *storage.AddRangeEvent) {
+func (rda *rangeDataAccumulator) registerRange(event *storage.RegisterRangeEvent) {
 	rda.Lock()
 	defer rda.Unlock()
-	if rda.isScanning {
+	// Either we're scanning and this is for a scan, or we're not scanning and
+	// then we don't want scan events.
+	if rda.isScanning != event.Scan {
+		return
+	}
+	if event.Scan {
 		rda.seenScan[event.Desc.RaftID] = struct{}{}
 		rda.rangeCount++
-		rda.stats.Add(&event.Stats)
 	}
+	rda.stats.Add(&event.Stats)
 }
 
 func (rda *rangeDataAccumulator) updateRange(event *storage.UpdateRangeEvent) {

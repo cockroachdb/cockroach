@@ -85,20 +85,23 @@ func TestNodeStatusRecorder(t *testing.T) {
 	monitor.OnBeginScanRanges(&storage.BeginScanRangesEvent{
 		StoreID: proto.StoreID(2),
 	})
-	monitor.OnAddRange(&storage.AddRangeEvent{
+	monitor.OnRegisterRange(&storage.RegisterRangeEvent{
 		StoreID: proto.StoreID(1),
 		Desc:    desc1,
 		Stats:   stats,
+		Scan:    true,
 	})
-	monitor.OnAddRange(&storage.AddRangeEvent{
+	monitor.OnRegisterRange(&storage.RegisterRangeEvent{
 		StoreID: proto.StoreID(1),
 		Desc:    desc2,
 		Stats:   stats,
+		Scan:    true,
 	})
-	monitor.OnAddRange(&storage.AddRangeEvent{
+	monitor.OnRegisterRange(&storage.RegisterRangeEvent{
 		StoreID: proto.StoreID(2),
 		Desc:    desc1,
 		Stats:   stats,
+		Scan:    true,
 	})
 	monitor.OnEndScanRanges(&storage.EndScanRangesEvent{
 		StoreID: proto.StoreID(1),

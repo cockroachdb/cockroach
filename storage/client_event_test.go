@@ -20,6 +20,7 @@ package storage_test
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type storeEventReader struct {
@@ -50,10 +52,10 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 	case *storage.StartStoreEvent:
 		sid = event.StoreID
 		eventStr = "StartStore"
-	case *storage.AddRangeEvent:
+	case *storage.RegisterRangeEvent:
 		sid = event.StoreID
-		eventStr = fmt.Sprintf("AddRange rid=%d, live=%d",
-			event.Desc.RaftID, event.Stats.LiveBytes)
+		eventStr = fmt.Sprintf("RegisterRange scan=%t, rid=%d, live=%d",
+			event.Scan, event.Desc.RaftID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
 		if event.Method == proto.InternalResolveIntent || event.Method == proto.InternalResolveIntentRange {
 			// InternalResolveIntent is a best effort call that seems to make
@@ -125,6 +127,28 @@ func (ser *storeEventReader) updateCountString() string {
 		response += fmt.Sprintf("proto.StoreID(%d): %d,\n", int64(id), c)
 	}
 	return response
+}
+
+func checkMatch(patternMap, lineMap map[proto.StoreID][]string) bool {
+	if len(patternMap) != len(lineMap) {
+		return false
+	}
+	for s, patterns := range patternMap {
+		lines, ok := lineMap[s]
+		if !ok {
+			return false
+		}
+		if len(patterns) != len(lines) {
+			return false
+		}
+		for i := 0; i < len(patterns); i++ {
+			if match, err := regexp.Match(patterns[i], []byte(lines[i])); !match || err != nil {
+				log.Errorf("%d: %s did not match %s: %v", i, patterns[i], lines[i], err)
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // TestMultiStoreEventFeed verifies that events on multiple stores are properly
@@ -208,7 +232,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		proto.StoreID(1): {
 			"StartStore",
 			"BeginScanRanges",
-			"AddRange rid=1, live=344",
+			"RegisterRange scan=true, rid=1, live=.*",
 			"EndScanRanges",
 			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
@@ -218,6 +242,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
+			"RegisterRange scan=false, rid=1, live=.*",
 			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
@@ -226,12 +251,13 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"StartStore",
 			"BeginScanRanges",
 			"EndScanRanges",
+			"RegisterRange scan=false, rid=1, live=.*",
 			"SplitRange origId=1, newId=2, origKey=290, newKey=15",
 			"SplitRange origId=2, newId=3, origKey=15, newKey=0",
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
 	}
-	if a, e := ser.perStoreFeeds, expected; !reflect.DeepEqual(a, e) {
+	if a, e := ser.perStoreFeeds, expected; !checkMatch(e, a) {
 		t.Errorf("event feed did not match expected value. Actual values have been printed to compare with above expectation.\n")
 		t.Logf("Event feed information:\n%s", ser.eventFeedString())
 	}

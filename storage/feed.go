@@ -22,16 +22,20 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// AddRangeEvent occurs when a new range is added to a store.  This event
-// includes the Range's RangeDescriptor and current MVCCStats.
-type AddRangeEvent struct {
+// RegisterRangeEvent occurs in two scenarios. Firstly, while a store
+// broadcasts its list of ranges to initialize one or more new accumulators
+// (with Scan set to true), or secondly, when a new range is initialized on
+// the store (for example through replication), with Scan set to false. This
+// event includes the Range's RangeDescriptor and current MVCCStats.
+type RegisterRangeEvent struct {
 	StoreID proto.StoreID
 	Desc    *proto.RangeDescriptor
 	Stats   proto.MVCCStats
+	Scan    bool
 }
 
-// UpdateRangeEvent occurs whenever a Range is modified. This structure includes
-// the same information as AddRangeEvent, but also includes a second set of
+// UpdateRangeEvent occurs whenever a Range is modified. This structure
+// includes the basic range information, but also includes a second set of
 // MVCCStats containing the delta from the Range's previous stats. If the
 // update did not modify any statistics, this delta may be nil.
 type UpdateRangeEvent struct {
@@ -53,12 +57,12 @@ type RemoveRangeEvent struct {
 
 // SplitRangeEvent occurs whenever a range is split in two. This Event actually
 // contains two other events: an UpdateRangeEvent for the Range which
-// originally existed, and a AddRangeEvent for the range that was created via
+// originally existed, and a RegisterRangeEvent for the range created via
 // the split.
 type SplitRangeEvent struct {
 	StoreID  proto.StoreID
 	Original UpdateRangeEvent
-	New      AddRangeEvent
+	New      RegisterRangeEvent
 }
 
 // MergeRangeEvent occurs whenever a range is merged into another. This Event
@@ -77,9 +81,9 @@ type StartStoreEvent struct {
 
 // BeginScanRangesEvent occurs when the store is about to scan over all ranges.
 // During such a scan, each existing range will be published to the feed as a
-// AddRangeEvent. This is used because downstream consumers may be tracking
-// statistics via the Deltas in UpdateRangeEvent; this event informs subscribers
-// to clear currently cached values.
+// RegisterRangeEvent with the Scan flag set. This is used because downstream
+// consumers may be tracking statistics via the Deltas in UpdateRangeEvent;
+// this event informs subscribers to clear currently cached values.
 type BeginScanRangesEvent struct {
 	StoreID proto.StoreID
 }
@@ -108,13 +112,13 @@ func NewStoreEventFeed(id proto.StoreID, feed *util.Feed) StoreEventFeed {
 	}
 }
 
-// addRange publishes a AddRangeEvent to this feed which describes the addition
-// of the supplied Range.
-func (sef StoreEventFeed) addRange(rng *Range) {
+// registerRange publishes a RegisterRangeEvent to this feed which describes a
+// range on the store. See RegisterRangeEvent for details.
+func (sef StoreEventFeed) registerRange(rng *Range, scan bool) {
 	if sef.f == nil {
 		return
 	}
-	sef.f.Publish(makeAddRangeEvent(sef.id, rng))
+	sef.f.Publish(makeRegisterRangeEvent(sef.id, rng, scan))
 }
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
@@ -180,7 +184,7 @@ func (sef StoreEventFeed) endScanRanges() {
 // StoreEventListener is an interface that can be implemented by objects which
 // listen for events published by stores.
 type StoreEventListener interface {
-	OnAddRange(event *AddRangeEvent)
+	OnRegisterRange(event *RegisterRangeEvent)
 	OnUpdateRange(event *UpdateRangeEvent)
 	OnRemoveRange(event *RemoveRangeEvent)
 	OnSplitRange(event *SplitRangeEvent)
@@ -199,8 +203,8 @@ func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
 		switch specificEvent := event.(type) {
 		case *StartStoreEvent:
 			l.OnStartStore(specificEvent)
-		case *AddRangeEvent:
-			l.OnAddRange(specificEvent)
+		case *RegisterRangeEvent:
+			l.OnRegisterRange(specificEvent)
 		case *UpdateRangeEvent:
 			l.OnUpdateRange(specificEvent)
 		case *RemoveRangeEvent:
@@ -217,11 +221,12 @@ func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
 	}
 }
 
-func makeAddRangeEvent(id proto.StoreID, rng *Range) *AddRangeEvent {
-	return &AddRangeEvent{
+func makeRegisterRangeEvent(id proto.StoreID, rng *Range, scan bool) *RegisterRangeEvent {
+	return &RegisterRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
 		Stats:   rng.stats.GetMVCC(),
+		Scan:    scan,
 	}
 }
 
@@ -250,7 +255,7 @@ func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Range) *SplitRangeEv
 			Desc:  rngOrig.Desc(),
 			Stats: rngOrig.stats.GetMVCC(),
 		},
-		New: AddRangeEvent{
+		New: RegisterRangeEvent{
 			Desc:  rngNew.Desc(),
 			Stats: rngNew.stats.GetMVCC(),
 		},

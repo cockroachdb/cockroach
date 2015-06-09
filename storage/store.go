@@ -456,7 +456,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		if err != nil {
 			return false, err
 		}
-		s.feed.addRange(rng)
+		s.feed.registerRange(rng, true /* scan */)
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
 		// election-related traffic in a cold start.
@@ -1007,7 +1007,7 @@ func (s *Store) AddRangeTest(rng *Range) error {
 	if err != nil {
 		return err
 	}
-	s.feed.addRange(rng)
+	s.feed.registerRange(rng, false /* scan */)
 	return nil
 }
 
@@ -1084,6 +1084,7 @@ func (s *Store) processRangeDescriptorUpdate(rng *Range) error {
 		return nil
 	}
 	delete(s.uninitRanges, rng.Desc().RaftID)
+	s.feed.registerRange(rng, false /* scan */)
 
 	s.rangesByKey = append(s.rangesByKey, rng)
 	sort.Sort(s.rangesByKey)
