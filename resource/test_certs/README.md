@@ -16,6 +16,6 @@ To regenerate:
 ```bash
 rm -f resource/test_certs/{ca,node}.{crt,key}
 cockroach cert --certs=resource/test_certs create-ca --key-size=512
-cockroach cert --certs=resource/test_certs create-node --key-size=512 0.0.0.0 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+cockroach cert --certs=resource/test_certs create-node --key-size=512 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
 go generate security/securitytest/securitytest.go
 ```
