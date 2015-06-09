@@ -27,61 +27,47 @@ option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-message Table {
-  optional string name = 1 [(gogoproto.nullable) = false];
-}
-
-message Column {
+message ColumnSchema {
   enum ColumnType {
     BYTES = 0;
   }
-
   optional string name = 1 [(gogoproto.nullable) = false];
   optional ColumnType type = 2 [(gogoproto.nullable) = false];
+  // For Cockroach internal use only. A Column has a unique id local to
+  // the Table it is a part of.
+  optional uint32 id = 9 [(gogoproto.nullable) = false];
 }
 
-message Index {
+message IndexSchema {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional bool unique = 2 [(gogoproto.nullable) = false];
+  // An ordered list of column names of which the index is comprised. Each
+  // column_name refers to a column in the TableSchema's columns. Special
+  // care is taken to update this when deleting columns.
+  repeated string column_names = 3 [(gogoproto.nullable) = false];
+  // For Cockroach internal use only. An Index has a unique id local to
+  // the Table it is a part of.
+  optional uint32 id = 9 [(gogoproto.nullable) = false];
 }
 
+// TableSchema used to configure a db table. The id within ColumnSchema,
+// IndexSchema, or TableSchema is for cockroach internal use only.
 message TableSchema {
-  message IndexByName {
-    optional Index index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-    // An ordered list of column names of which the index is comprised. Each
-    // column_name refers to a column in the TableSchema's columns.
-    repeated string column_names = 2 [(gogoproto.nullable) = false];
-  }
-  optional Table table = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated Column columns = 2 [(gogoproto.nullable) = false];
+  optional string name = 1 [(gogoproto.nullable) = false];
+  repeated ColumnSchema columns = 2 [(gogoproto.nullable) = false];
   // An ordered list of indexes included in the table. The first index is the
   // primary key; it is required.
-  repeated IndexByName indexes = 3 [(gogoproto.nullable) = false];
+  repeated IndexSchema indexes = 3 [(gogoproto.nullable) = false];
+  // For Cockroach internal use only. A Table has a globally unique id.
+  optional uint32 id = 9 [(gogoproto.nullable) = false];
 }
 
-message ColumnDescriptor {
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
-  optional Column column = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-message IndexDescriptor {
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
-  optional Index index = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // An ordered list of column ids of which the index is comprised. Each
-  // column_id refers to a column in the TableDescriptor's columns; special
-  // care is taken to update this when deleting columns.
-  repeated uint32 column_ids = 3 [(gogoproto.nullable) = false];
-}
-
-// A TableDescriptor represents a table and is stored in a structured metadata
-// key. The TableDescriptor has a globally-unique ID, while its member
-// {Column,Index}Descriptors have locally-unique IDs.
+// A TableDescriptor represents a Table and is stored in a structured metadata
+// key.
 message TableDescriptor {
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
-  optional Table table = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated ColumnDescriptor columns = 3 [(gogoproto.nullable) = false];
+  optional TableSchema table = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // next_column_id is used to ensure that deleted column ids are not reused
   optional uint32 next_column_id = 4 [(gogoproto.nullable) = false];
-  repeated IndexDescriptor indexes = 5 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused
   optional uint32 next_index_id = 6 [(gogoproto.nullable) = false];
 }
