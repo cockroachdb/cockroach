@@ -22,6 +22,20 @@
 //		    Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
+// source: models/proto.ts
+// Author: Matt Tracy (matt@cockroachlabs.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
+var Models;
+(function (Models) {
+    var Proto;
+    (function (Proto) {
+        (function (QueryAggregator) {
+            QueryAggregator[QueryAggregator["AVG"] = 1] = "AVG";
+            QueryAggregator[QueryAggregator["AVG_RATE"] = 2] = "AVG_RATE";
+        })(Proto.QueryAggregator || (Proto.QueryAggregator = {}));
+        var QueryAggregator = Proto.QueryAggregator;
+    })(Proto = Models.Proto || (Models.Proto = {}));
+})(Models || (Models = {}));
 // source: util/chainprop.ts
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
@@ -49,6 +63,7 @@ var Utils;
 })(Utils || (Utils = {}));
 // source: models/timeseries.ts
 // TODO(mrtracy): rename to metrics.ts.
+/// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
@@ -57,11 +72,6 @@ var Models;
 (function (Models) {
     var Metrics;
     (function (Metrics) {
-        (function (QueryAggregator) {
-            QueryAggregator[QueryAggregator["AVG"] = 1] = "AVG";
-            QueryAggregator[QueryAggregator["AVG_RATE"] = 2] = "AVG_RATE";
-        })(Metrics.QueryAggregator || (Metrics.QueryAggregator = {}));
-        var QueryAggregator = Metrics.QueryAggregator;
         var select;
         (function (select) {
             var AvgSelector = (function () {
@@ -72,7 +82,7 @@ var Models;
                     this.request = function () {
                         return {
                             name: _this.series_name,
-                            aggregator: QueryAggregator.AVG,
+                            aggregator: Models.Proto.QueryAggregator.AVG,
                         };
                     };
                 }
@@ -86,7 +96,7 @@ var Models;
                     this.request = function () {
                         return {
                             name: _this.series_name,
-                            aggregator: QueryAggregator.AVG_RATE,
+                            aggregator: Models.Proto.QueryAggregator.AVG_RATE,
                         };
                     };
                 }
@@ -380,6 +390,7 @@ var AdminViews;
 })(AdminViews || (AdminViews = {}));
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="proto.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
@@ -440,7 +451,9 @@ var Models;
     })(Stats = Models.Stats || (Models.Stats = {}));
 })(Models || (Models = {}));
 // source: models/node_status.ts
+/// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
@@ -622,8 +635,8 @@ var AdminViews;
                     if (Nodes.queryManagers[nodeId] == null) {
                         Nodes.queryManagers[nodeId] = {};
                     }
-                    this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.success");
-                    this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.error");
+                    this._addChart(Models.Proto.QueryAggregator.AVG_RATE, "calls.success");
+                    this._addChart(Models.Proto.QueryAggregator.AVG_RATE, "calls.error");
                 }
                 else {
                     this._nodeId = null;
@@ -1141,11 +1154,11 @@ var AdminViews;
                     if (Stores.queryManagers[storeId] == null) {
                         Stores.queryManagers[storeId] = {};
                     }
-                    this._addChart(metrics.QueryAggregator.AVG, "keycount");
-                    this._addChart(metrics.QueryAggregator.AVG, "valcount");
-                    this._addChart(metrics.QueryAggregator.AVG, "livecount");
-                    this._addChart(metrics.QueryAggregator.AVG, "intentcount");
-                    this._addChart(metrics.QueryAggregator.AVG, "ranges");
+                    this._addChart(Models.Proto.QueryAggregator.AVG, "keycount");
+                    this._addChart(Models.Proto.QueryAggregator.AVG, "valcount");
+                    this._addChart(Models.Proto.QueryAggregator.AVG, "livecount");
+                    this._addChart(Models.Proto.QueryAggregator.AVG, "intentcount");
+                    this._addChart(Models.Proto.QueryAggregator.AVG, "ranges");
                 }
                 else {
                     this._storeId = null;

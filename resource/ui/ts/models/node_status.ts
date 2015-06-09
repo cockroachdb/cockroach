@@ -1,5 +1,7 @@
 // source: models/node_status.ts
+/// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -7,43 +9,20 @@ module Models {
     export module NodeStatus {
         import promise = _mithril.MithrilPromise;
 
-        export interface Address {
-            network: string;
-            address: string;
-        }
-
-        export interface NodeDescription {
-            node_id: number;
-            address: Address;
-            attrs: any;
-        }
-
-        export interface NodeStatus {
-            desc: NodeDescription;
-            store_ids: number[];
-            range_count: number;
-            started_at: number;
-            updated_at: number;
-            stats: Models.Stats.MVCCStats;
-            leader_range_count: number;
-            replicated_range_count: number;
-            available_range_count: number;
-        }
-
         export interface NodeStatusResponseSet {
-            d: NodeStatus[]
+            d: Proto.NodeStatus[]
         }
 
         export interface NodeStatusListMap {
-            [nodeId: number]: NodeStatus[]
+            [nodeId: number]: Proto.NodeStatus[]
         }
 
         export interface NodeDescriptionMap {
-            [nodeId: number]: NodeDescription
+            [nodeId: number]: Proto.NodeDescriptor
         }
 
         export interface NodeStatusMap {
-            [nodeId: number]: NodeStatus
+            [nodeId: number]: Proto.NodeStatus
         }
 
         export class Nodes {
@@ -85,7 +64,7 @@ module Models {
 
             private _pruneOldEntries(): void {
                 for (var nodeId in this._data()) {
-                    var status = <NodeStatus[]>this._data()[nodeId];
+                    var status = <Proto.NodeStatus[]>this._data()[nodeId];
                     if (status.length > Nodes._dataLimit) {
                         status = status.slice(status.length - Nodes._dataPrunedSize,status.length - 1)
                     }
@@ -93,7 +72,7 @@ module Models {
             }
 
             // TODO(Bram): Move to utility class.
-            private static _availability(status: NodeStatus): string {
+            private static _availability(status: Proto.NodeStatus): string {
                 if (status.leader_range_count == 0) {
                     return "100%";
                 }
@@ -101,7 +80,7 @@ module Models {
             }
 
             // TODO(Bram): Move to utility class.
-            private static _replicated(status: NodeStatus): string {
+            private static _replicated(status: Proto.NodeStatus): string {
                 if (status.leader_range_count == 0) {
                     return "100%";
                 }
@@ -147,13 +126,13 @@ module Models {
 
             public AllDetails(): _mithril.MithrilVirtualElement {
 
-                var status = <NodeStatus>{
+                var status = <Proto.NodeStatus>{
                     range_count: 0,
                     updated_at: 0,
                     leader_range_count: 0,
                     replicated_range_count: 0,
                     available_range_count: 0,
-                    stats: <Models.Stats.MVCCStats>{
+                    stats: <Proto.MVCCStats>{
                         live_bytes: 0,
                         key_bytes: 0,
                         val_bytes: 0,

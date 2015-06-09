@@ -1,5 +1,6 @@
 // source: models/timeseries.ts
 // TODO(mrtracy): rename to metrics.ts.
+/// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
@@ -15,75 +16,6 @@ module Models {
      */
     export module Metrics {
         import promise = _mithril.MithrilPromise;
-
-        // TODO(mrtracy): Extract all of the protobuffer-based interfaces into a
-        // 'proto' package.
-
-        /** 
-         * QueryAggregator is an enumeration of the available aggregator
-         * functions for time series queries. This needs to be kept in sync with
-         * the TimeSeriesQueryAggregator enumeration on the server.
-         * (/protos/timeseries.proto)
-         */
-        export enum QueryAggregator {
-            AVG = 1,
-            AVG_RATE = 2,
-        }
-
-        /**
-         * Datapoint is a single datapoint in a query response. This needs to be
-         * kept in sync with the TimeSeriesDatapoint protobuffer message on the
-         * server. (/protos/timeseries.proto).
-         */
-        export interface Datapoint {
-            timestamp_nanos: number;
-            value: number;
-        }
-
-        /**
-         * QueryResult is a single query result. This needs to be kept in sync
-         * with the TimeSeriesQueryResponse.Result protobuffer message on the server.
-         * (/protos/timeseries.proto).
-         */
-        export interface QueryResult {
-            name:string;
-            datapoints: Datapoint[]
-        }
-
-        /**
-         * QueryResultSet matches the successful output of the /ts/query
-         * endpoint. This needs to be kept in sync with the
-         * TimeSeriesQueryResponse protobuffer message on the server.
-         * (/protos/timeseries.proto).
-         */
-        export interface QueryResultSet {
-            results: QueryResult[];
-        }
-
-
-        /**
-         * QueryRequest is a single query request as expected by the server.
-         * This needs to be kept in sync with the TimeSeriesQueryRequest.Query
-         * protobuffer message on the server.
-         * (/protos/timeseries.proto).
-         */
-        export interface QueryRequest {
-            name:string;
-            aggregator:QueryAggregator;
-        }
-
-        /**
-         * QueryRequestSet matches the expected input of the /ts/query endpoint.
-         * This needs to be kept in sync with the TimeSeriesQueryRequest
-         * protobuffer message on the server.
-         * (/protos/timeseries.proto).
-         */
-        export interface QueryRequestSet {
-            start_nanos:number;
-            end_nanos:number;
-            queries:QueryRequest[];
-        }
-
 
         /**
          * select contains time series selectors for use in metrics queries. 
@@ -102,7 +34,7 @@ module Models {
                 /**
                  * request returns a QueryRequest object based on this selector.
                  */
-                request():QueryRequest;
+                request():Proto.QueryRequest;
                 /**
                  * title returns a display-friendly title for this series.
                  */
@@ -117,10 +49,10 @@ module Models {
 
                 title = Utils.chainProp(this, this.series_name);
 
-                request = ():QueryRequest => {
+                request = ():Proto.QueryRequest => {
                     return {
                         name:this.series_name,
-                        aggregator:QueryAggregator.AVG,
+                        aggregator:Proto.QueryAggregator.AVG,
                     }
                 }
             }
@@ -134,10 +66,10 @@ module Models {
 
                 title = Utils.chainProp(this, this.series_name);
 
-                request = ():QueryRequest => {
+                request = ():Proto.QueryRequest => {
                     return {
                         name:this.series_name,
-                        aggregator:QueryAggregator.AVG_RATE,
+                        aggregator:Proto.QueryAggregator.AVG_RATE,
                     }
                 }
             }
@@ -211,9 +143,9 @@ module Models {
              * execute dispatches a query to the server and returns a promise
              * for the results.
              */
-            execute():promise<QueryResultSet> {
+            execute():promise<Proto.QueryResultSet> {
                 var s = this.timespan().timespan();
-                var req:QueryRequestSet = {
+                var req:Proto.QueryRequestSet = {
                     start_nanos: Utils.milliToNanos(s[0]),
                     end_nanos: Utils.milliToNanos(s[1]),
                     queries:[],
@@ -224,10 +156,10 @@ module Models {
                 return Query.dispatch_query(req)
             }
 
-            private static dispatch_query(q:QueryRequestSet):promise<QueryResultSet> {
+            private static dispatch_query(q:Proto.QueryRequestSet):promise<Proto.QueryResultSet> {
                 var url = "/ts/query";
                 return m.request({url:url, method:"POST", extract:nonJsonErrors, data:q})
-                    .then((d:QueryResultSet) => {
+                    .then((d:Proto.QueryResultSet) => {
                         // Populate missing collection fields with empty arrays.
                         if (!d.results) {
                             d.results = [];
@@ -257,7 +189,7 @@ module Models {
          * synchronize on the same result set.
          */
         export class QueryManager {
-            private _result:QueryResultSet = null;
+            private _result:Proto.QueryResultSet = null;
             private _error:Error = null;
             private _resultEpoch:number = 0;
 
@@ -265,7 +197,7 @@ module Models {
             // completed but not been processed. When an in-flight query
             // completes, only one of its fields will contain a value.
             private _outstanding:{
-                result:promise<QueryResultSet>;
+                result:promise<Proto.QueryResultSet>;
                 error:_mithril.MithrilProperty<Error>;
             } = null
 
@@ -300,7 +232,7 @@ module Models {
              * result returns the most recent result of the query, if any is
              * present.
              */
-            result():QueryResultSet {
+            result():Proto.QueryResultSet {
                 this.processOutstanding();
                 return this._result;
             }
@@ -325,7 +257,7 @@ module Models {
                 return this._error;
             }
 
-            refresh():promise<QueryResultSet> {
+            refresh():promise<Proto.QueryResultSet> {
                 // Clear outstanding request if it has already returned.
                 this.result();
                 if (!this._outstanding) {

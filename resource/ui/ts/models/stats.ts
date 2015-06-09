@@ -1,5 +1,6 @@
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="proto.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 /**
@@ -7,22 +8,6 @@
  */
 module Models {
     export module Stats {
-        export interface MVCCStats {
-            live_bytes: number;
-            key_bytes: number;
-            val_bytes: number;
-            intent_bytes: number;
-            live_count: number;
-            key_count: number;
-            val_count: number;
-            intent_count: number;
-            intent_age: number;
-            gc_bytes_age: number;
-            sys_bytes: number;
-            sys_count: number;
-            last_update_nanos: number;
-        }
-
         // This function was adapted from
         // https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
         var kibi = 1024
@@ -47,7 +32,7 @@ module Models {
         var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
         var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
 
-        export function CreateStatsTable(stats: MVCCStats): _mithril.MithrilVirtualElement {
+        export function CreateStatsTable(stats: Proto.MVCCStats): _mithril.MithrilVirtualElement {
             return m("div", [
                 m("h3", "Statistics"),
                 m("table", { style: tableStyle }, [

@@ -43,7 +43,7 @@ module AdminViews {
         }
       }
 
-      private static _queryManagerBuilder(storeId: string, agg: metrics.QueryAggregator, source: string): metrics.QueryManager {
+      private static _queryManagerBuilder(storeId: string, agg: Models.Proto.QueryAggregator, source: string): metrics.QueryManager {
 		// TODO(mrtracy): This page has an impending, significant refactoring.
 		// The query API was changed after this page was originally built, and
 		// now uses composed functions to describe queries. Because this page
@@ -54,7 +54,7 @@ module AdminViews {
         return new metrics.QueryManager(query);
       }
 
-      private _addChart(agg: metrics.QueryAggregator, source: string): void {
+      private _addChart(agg: Models.Proto.QueryAggregator, source: string): void {
         var name = agg + ":" + source;
         if (queryManagers[this._storeId][name] == null) {
           queryManagers[this._storeId][name] = Controller._queryManagerBuilder(this._storeId, agg, source);
@@ -75,11 +75,11 @@ module AdminViews {
           if (queryManagers[storeId] == null) {
             queryManagers[storeId] = {};
           }
-          this._addChart(metrics.QueryAggregator.AVG, "keycount");
-          this._addChart(metrics.QueryAggregator.AVG, "valcount");
-          this._addChart(metrics.QueryAggregator.AVG, "livecount");
-          this._addChart(metrics.QueryAggregator.AVG, "intentcount");
-          this._addChart(metrics.QueryAggregator.AVG, "ranges");
+          this._addChart(Models.Proto.QueryAggregator.AVG, "keycount");
+          this._addChart(Models.Proto.QueryAggregator.AVG, "valcount");
+          this._addChart(Models.Proto.QueryAggregator.AVG, "livecount");
+          this._addChart(Models.Proto.QueryAggregator.AVG, "intentcount");
+          this._addChart(Models.Proto.QueryAggregator.AVG, "ranges");
 
           //TODO(Bram): Byte charts won't display properly.
           //this._addChart(metrics.QueryAggregator.AVG, "valbytes");

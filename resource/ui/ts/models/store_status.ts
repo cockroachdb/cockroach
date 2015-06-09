@@ -9,43 +9,20 @@ module Models {
     export module StoreStatus {
         import promise = _mithril.MithrilPromise;
 
-        export interface StoreDescription {
-            store_id: number;
-            node: Models.NodeStatus.NodeDescription;
-            attrs: any;
-        }
-
-        export interface Capacity {
-            Capacity: number;
-            Available: number;
-            RangeCount: number;
-        }
-
-        export interface StoreStatus {
-            desc: StoreDescription;
-            range_count: number;
-            started_at: number;
-            updated_at: number;
-            stats: Models.Stats.MVCCStats;
-            leader_range_count: number;
-            replicated_range_count: number;
-            available_range_count: number;
-        }
-
         export interface StoreStatusResponseSet {
-            d: StoreStatus[]
+            d: Proto.StoreStatus[]
         }
 
         export interface StoreStatusListMap {
-            [storeId: number]: StoreStatus[]
+            [storeId: number]: Proto.StoreStatus[]
         }
 
         export interface StoreDescriptionMap {
-            [storeId: number]: StoreDescription
+            [storeId: number]: Proto.StoreDescriptor
         }
 
         export interface StoreStatusMap {
-            [storeId: number]: StoreStatus
+            [storeId: number]: Proto.StoreStatus
         }
 
         export class Stores {
@@ -87,7 +64,7 @@ module Models {
 
             private _pruneOldEntries(): void {
                 for (var storeId in this._data()) {
-                    var status = <StoreStatus[]>this._data()[storeId];
+                    var status = <Proto.StoreStatus[]>this._data()[storeId];
                     if (status.length > Stores._dataLimit) {
                         status = status.slice(status.length - Stores._dataPrunedSize, status.length - 1)
                     }
@@ -95,7 +72,7 @@ module Models {
             }
 
             // TODO(Bram): Move to utility class.
-            private static _availability(store: StoreStatus):string {
+            private static _availability(store: Proto.StoreStatus):string {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
@@ -103,7 +80,7 @@ module Models {
             }
 
             // TODO(Bram): Move to utility class.
-            private static _replicated(store: StoreStatus): string {
+            private static _replicated(store: Proto.StoreStatus): string {
                 if (store.leader_range_count == 0) {
                     return "100%";
                 }
@@ -145,13 +122,13 @@ module Models {
                 // TODO(Bram): This is all really ugly here. Refactor it and the
                 // equivalent in node_status.ts into one place that contains
                 // a better way to sum these stats.
-                var status = <StoreStatus>{
+                var status = <Proto.StoreStatus>{
                     range_count: 0,
                     updated_at: 0,
                     leader_range_count: 0,
                     replicated_range_count: 0,
                     available_range_count: 0,
-                    stats: <Models.Stats.MVCCStats>{
+                    stats: <Proto.MVCCStats>{
                         live_bytes: 0,
                         key_bytes: 0,
                         val_bytes: 0,
