@@ -29,9 +29,8 @@ var _ = proto.Marshal
 var _ = math.Inf
 
 type ArithRequest struct {
-	A                int32  `protobuf:"varint,1,opt,name=a" json:"a"`
-	B                int32  `protobuf:"varint,2,opt,name=b" json:"b"`
-	XXX_unrecognized []byte `json:"-"`
+	A int32 `protobuf:"varint,1,opt,name=a" json:"a"`
+	B int32 `protobuf:"varint,2,opt,name=b" json:"b"`
 }
 
 func (m *ArithRequest) Reset()         { *m = ArithRequest{} }
@@ -53,8 +52,7 @@ func (m *ArithRequest) GetB() int32 {
 }
 
 type ArithResponse struct {
-	C                int32  `protobuf:"varint,1,opt,name=c" json:"c"`
-	XXX_unrecognized []byte `json:"-"`
+	C int32 `protobuf:"varint,1,opt,name=c" json:"c"`
 }
 
 func (m *ArithResponse) Reset()         { *m = ArithResponse{} }
@@ -136,7 +134,6 @@ func (m *ArithRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -194,7 +191,6 @@ func (m *ArithResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -206,9 +202,6 @@ func (m *ArithRequest) Size() (n int) {
 	_ = l
 	n += 1 + sovArith(uint64(m.A))
 	n += 1 + sovArith(uint64(m.B))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -216,9 +209,6 @@ func (m *ArithResponse) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovArith(uint64(m.C))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -256,9 +246,6 @@ func (m *ArithRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintArith(data, i, uint64(m.B))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -280,9 +267,6 @@ func (m *ArithResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintArith(data, i, uint64(m.C))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

@@ -28,6 +28,8 @@ import io "io"
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = math.Inf
@@ -50,8 +52,8 @@ func (x Column_ColumnType) Enum() *Column_ColumnType {
 	*p = x
 	return p
 }
-func (x Column_ColumnType) String() string {
-	return proto.EnumName(Column_ColumnType_name, int32(x))
+func (x Column_ColumnType) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Column_ColumnType_name, int32(x))
 }
 func (x *Column_ColumnType) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Column_ColumnType_value, data, "Column_ColumnType")
@@ -63,8 +65,7 @@ func (x *Column_ColumnType) UnmarshalJSON(data []byte) error {
 }
 
 type Table struct {
-	Name             string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	XXX_unrecognized []byte `json:"-"`
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 }
 
 func (m *Table) Reset()         { *m = Table{} }
@@ -79,9 +80,8 @@ func (m *Table) GetName() string {
 }
 
 type Column struct {
-	Name             string            `protobuf:"bytes,1,opt,name=name" json:"name"`
-	Type             Column_ColumnType `protobuf:"varint,2,opt,name=type,enum=cockroach.structured.Column_ColumnType" json:"type"`
-	XXX_unrecognized []byte            `json:"-"`
+	Name string            `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Type Column_ColumnType `protobuf:"varint,2,opt,name=type,enum=cockroach.structured.Column_ColumnType" json:"type"`
 }
 
 func (m *Column) Reset()         { *m = Column{} }
@@ -103,9 +103,8 @@ func (m *Column) GetType() Column_ColumnType {
 }
 
 type Index struct {
-	Name             string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	Unique           bool   `protobuf:"varint,2,opt,name=unique" json:"unique"`
-	XXX_unrecognized []byte `json:"-"`
+	Name   string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Unique bool   `protobuf:"varint,2,opt,name=unique" json:"unique"`
 }
 
 func (m *Index) Reset()         { *m = Index{} }
@@ -131,8 +130,7 @@ type TableSchema struct {
 	Columns []Column `protobuf:"bytes,2,rep,name=columns" json:"columns"`
 	// An ordered list of indexes included in the table. The first index is the
 	// primary key; it is required.
-	Indexes          []TableSchema_IndexByName `protobuf:"bytes,3,rep,name=indexes" json:"indexes"`
-	XXX_unrecognized []byte                    `json:"-"`
+	Indexes []TableSchema_IndexByName `protobuf:"bytes,3,rep,name=indexes" json:"indexes"`
 }
 
 func (m *TableSchema) Reset()         { *m = TableSchema{} }
@@ -157,8 +155,7 @@ type TableSchema_IndexByName struct {
 	Index `protobuf:"bytes,1,opt,name=index,embedded=index" json:"index"`
 	// An ordered list of column names of which the index is comprised. Each
 	// column_name refers to a column in the TableSchema's columns.
-	ColumnNames      []string `protobuf:"bytes,2,rep,name=column_names" json:"column_names,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	ColumnNames []string `protobuf:"bytes,2,rep,name=column_names" json:"column_names,omitempty"`
 }
 
 func (m *TableSchema_IndexByName) Reset()         { *m = TableSchema_IndexByName{} }
@@ -173,9 +170,8 @@ func (m *TableSchema_IndexByName) GetColumnNames() []string {
 }
 
 type ColumnDescriptor struct {
-	ID               uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
-	Column           `protobuf:"bytes,2,opt,name=column,embedded=column" json:"column"`
-	XXX_unrecognized []byte `json:"-"`
+	ID     uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
+	Column `protobuf:"bytes,2,opt,name=column,embedded=column" json:"column"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -195,8 +191,7 @@ type IndexDescriptor struct {
 	// An ordered list of column ids of which the index is comprised. Each
 	// column_id refers to a column in the TableDescriptor's columns; special
 	// care is taken to update this when deleting columns.
-	ColumnIDs        []uint32 `protobuf:"varint,3,rep,name=column_ids" json:"column_ids,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	ColumnIDs []uint32 `protobuf:"varint,3,rep,name=column_ids" json:"column_ids,omitempty"`
 }
 
 func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
@@ -228,8 +223,7 @@ type TableDescriptor struct {
 	NextColumnID uint32            `protobuf:"varint,4,opt,name=next_column_id" json:"next_column_id"`
 	Indexes      []IndexDescriptor `protobuf:"bytes,5,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused
-	NextIndexID      uint32 `protobuf:"varint,6,opt,name=next_index_id" json:"next_index_id"`
-	XXX_unrecognized []byte `json:"-"`
+	NextIndexID uint32 `protobuf:"varint,6,opt,name=next_index_id" json:"next_index_id"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -332,7 +326,6 @@ func (m *Table) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -412,7 +405,6 @@ func (m *Column) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -494,7 +486,6 @@ func (m *Index) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -611,7 +602,6 @@ func (m *TableSchema) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -700,7 +690,6 @@ func (m *TableSchema_IndexByName) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -782,7 +771,6 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -881,7 +869,6 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1043,7 +1030,6 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1055,9 +1041,6 @@ func (m *Table) Size() (n int) {
 	_ = l
 	l = len(m.Name)
 	n += 1 + l + sovStructured(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1067,9 +1050,6 @@ func (m *Column) Size() (n int) {
 	l = len(m.Name)
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.Type))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1079,9 +1059,6 @@ func (m *Index) Size() (n int) {
 	l = len(m.Name)
 	n += 1 + l + sovStructured(uint64(l))
 	n += 2
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1102,9 +1079,6 @@ func (m *TableSchema) Size() (n int) {
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1119,9 +1093,6 @@ func (m *TableSchema_IndexByName) Size() (n int) {
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1131,9 +1102,6 @@ func (m *ColumnDescriptor) Size() (n int) {
 	n += 1 + sovStructured(uint64(m.ID))
 	l = m.Column.Size()
 	n += 1 + l + sovStructured(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1147,9 +1115,6 @@ func (m *IndexDescriptor) Size() (n int) {
 		for _, e := range m.ColumnIDs {
 			n += 1 + sovStructured(uint64(e))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1174,9 +1139,6 @@ func (m *TableDescriptor) Size() (n int) {
 		}
 	}
 	n += 1 + sovStructured(uint64(m.NextIndexID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1212,9 +1174,6 @@ func (m *Table) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
 	i += copy(data[i:], m.Name)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1240,9 +1199,6 @@ func (m *Column) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Type))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1273,9 +1229,6 @@ func (m *Index) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1326,9 +1279,6 @@ func (m *TableSchema) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1370,9 +1320,6 @@ func (m *TableSchema_IndexByName) MarshalTo(data []byte) (n int, err error) {
 			i += copy(data[i:], s)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1402,9 +1349,6 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n3
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1440,9 +1384,6 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1503,9 +1444,6 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x30
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1535,4 +1473,11 @@ func encodeVarintStructured(data []byte, offset int, v uint64) int {
 	}
 	data[offset] = uint8(v)
 	return offset + 1
+}
+func (x Column_ColumnType) String() string {
+	s, ok := Column_ColumnType_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

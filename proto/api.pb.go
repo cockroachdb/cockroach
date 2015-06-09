@@ -56,6 +56,8 @@ import io "io"
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
 var _ = math.Inf
@@ -95,8 +97,8 @@ func (x ReadConsistencyType) Enum() *ReadConsistencyType {
 	*p = x
 	return p
 }
-func (x ReadConsistencyType) String() string {
-	return proto1.EnumName(ReadConsistencyType_name, int32(x))
+func (x ReadConsistencyType) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(ReadConsistencyType_name, int32(x))
 }
 func (x *ReadConsistencyType) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(ReadConsistencyType_value, data, "ReadConsistencyType")
@@ -124,9 +126,8 @@ func (x *ReadConsistencyType) UnmarshalJSON(data []byte) error {
 // NOTE: An accurate time signal IS NOT required for correctness.
 type ClientCmdID struct {
 	// Nanoseconds since Unix epoch.
-	WallTime         int64  `protobuf:"varint,1,opt,name=wall_time" json:"wall_time"`
-	Random           int64  `protobuf:"varint,2,opt,name=random" json:"random"`
-	XXX_unrecognized []byte `json:"-"`
+	WallTime int64 `protobuf:"varint,1,opt,name=wall_time" json:"wall_time"`
+	Random   int64 `protobuf:"varint,2,opt,name=random" json:"random"`
 }
 
 func (m *ClientCmdID) Reset()         { *m = ClientCmdID{} }
@@ -193,8 +194,7 @@ type RequestHeader struct {
 	// ReadConsistency specifies the consistency for read
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
-	ReadConsistency  ReadConsistencyType `protobuf:"varint,10,opt,name=read_consistency,enum=cockroach.proto.ReadConsistencyType" json:"read_consistency"`
-	XXX_unrecognized []byte              `json:"-"`
+	ReadConsistency ReadConsistencyType `protobuf:"varint,10,opt,name=read_consistency,enum=cockroach.proto.ReadConsistencyType" json:"read_consistency"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -267,8 +267,7 @@ type ResponseHeader struct {
 	// Transaction is non-nil if the request specified a non-nil
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
-	Txn              *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
-	XXX_unrecognized []byte       `json:"-"`
+	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 }
 
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
@@ -298,8 +297,7 @@ func (m *ResponseHeader) GetTxn() *Transaction {
 
 // A GetRequest is the argument for the Get() method.
 type GetRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *GetRequest) Reset()         { *m = GetRequest{} }
@@ -309,9 +307,8 @@ func (*GetRequest) ProtoMessage()    {}
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
 type GetResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value            *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value          *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *GetResponse) Reset()         { *m = GetResponse{} }
@@ -327,9 +324,8 @@ func (m *GetResponse) GetValue() *Value {
 
 // A PutRequest is the argument to the Put() method.
 type PutRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value         Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
 func (m *PutRequest) Reset()         { *m = PutRequest{} }
@@ -345,8 +341,7 @@ func (m *PutRequest) GetValue() Value {
 
 // A PutResponse is the return value from the Put() method.
 type PutResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *PutResponse) Reset()         { *m = PutResponse{} }
@@ -366,8 +361,7 @@ type ConditionalPutRequest struct {
 	// ExpValue.Bytes empty to test for non-existence. Specify as nil
 	// to indicate there should be no existing entry. This is different
 	// from the expectation that the value exists but is empty.
-	ExpValue         *Value `protobuf:"bytes,3,opt,name=exp_value" json:"exp_value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ExpValue *Value `protobuf:"bytes,3,opt,name=exp_value" json:"exp_value,omitempty"`
 }
 
 func (m *ConditionalPutRequest) Reset()         { *m = ConditionalPutRequest{} }
@@ -391,8 +385,7 @@ func (m *ConditionalPutRequest) GetExpValue() *Value {
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 type ConditionalPutResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *ConditionalPutResponse) Reset()         { *m = ConditionalPutResponse{} }
@@ -406,9 +399,8 @@ func (*ConditionalPutResponse) ProtoMessage()    {}
 // by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
 // cannot be invoked on an incremented key.
 type IncrementRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Increment        int64  `protobuf:"varint,2,opt,name=increment" json:"increment"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Increment     int64 `protobuf:"varint,2,opt,name=increment" json:"increment"`
 }
 
 func (m *IncrementRequest) Reset()         { *m = IncrementRequest{} }
@@ -426,9 +418,8 @@ func (m *IncrementRequest) GetIncrement() int64 {
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
 type IncrementResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	NewValue         int64  `protobuf:"varint,2,opt,name=new_value" json:"new_value"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	NewValue       int64 `protobuf:"varint,2,opt,name=new_value" json:"new_value"`
 }
 
 func (m *IncrementResponse) Reset()         { *m = IncrementResponse{} }
@@ -444,8 +435,7 @@ func (m *IncrementResponse) GetNewValue() int64 {
 
 // A DeleteRequest is the argument to the Delete() method.
 type DeleteRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *DeleteRequest) Reset()         { *m = DeleteRequest{} }
@@ -454,8 +444,7 @@ func (*DeleteRequest) ProtoMessage()    {}
 
 // A DeleteResponse is the return value from the Delete() method.
 type DeleteResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *DeleteResponse) Reset()         { *m = DeleteResponse{} }
@@ -468,8 +457,7 @@ type DeleteRangeRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, *all* entries between Key (inclusive) and EndKey
 	// (exclusive) are deleted. Must be >= 0
-	MaxEntriesToDelete int64  `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
-	XXX_unrecognized   []byte `json:"-"`
+	MaxEntriesToDelete int64 `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
 }
 
 func (m *DeleteRangeRequest) Reset()         { *m = DeleteRangeRequest{} }
@@ -488,8 +476,7 @@ func (m *DeleteRangeRequest) GetMaxEntriesToDelete() int64 {
 type DeleteRangeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Number of entries removed.
-	NumDeleted       int64  `protobuf:"varint,2,opt,name=num_deleted" json:"num_deleted"`
-	XXX_unrecognized []byte `json:"-"`
+	NumDeleted int64 `protobuf:"varint,2,opt,name=num_deleted" json:"num_deleted"`
 }
 
 func (m *DeleteRangeResponse) Reset()         { *m = DeleteRangeResponse{} }
@@ -508,8 +495,7 @@ func (m *DeleteRangeResponse) GetNumDeleted() int64 {
 type ScanRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Must be > 0.
-	MaxResults       int64  `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
-	XXX_unrecognized []byte `json:"-"`
+	MaxResults int64 `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
 }
 
 func (m *ScanRequest) Reset()         { *m = ScanRequest{} }
@@ -527,8 +513,7 @@ func (m *ScanRequest) GetMaxResults() int64 {
 type ScanResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Empty if no rows were scanned.
-	Rows             []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
-	XXX_unrecognized []byte     `json:"-"`
+	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
 }
 
 func (m *ScanResponse) Reset()         { *m = ScanResponse{} }
@@ -552,7 +537,6 @@ type EndTransactionRequest struct {
 	// internal use only and will be ignored if requested through the
 	// public-facing KV API.
 	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,3,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
-	XXX_unrecognized      []byte                 `json:"-"`
 }
 
 func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
@@ -588,8 +572,7 @@ type EndTransactionResponse struct {
 	// Remaining time (ns).
 	CommitWait int64 `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
 	// List of intents resolved by EndTransaction call.
-	Resolved         []Key  `protobuf:"bytes,3,rep,name=resolved,casttype=Key" json:"resolved,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Resolved []Key `protobuf:"bytes,3,rep,name=resolved,casttype=Key" json:"resolved,omitempty"`
 }
 
 func (m *EndTransactionResponse) Reset()         { *m = EndTransactionResponse{} }
@@ -606,15 +589,14 @@ func (m *EndTransactionResponse) GetCommitWait() int64 {
 // A RequestUnion contains exactly one of the optional requests.
 // Values added here must be added to InternalRequestUnion as well.
 type RequestUnion struct {
-	Get              *GetRequest            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
-	Put              *PutRequest            `protobuf:"bytes,3,opt,name=put" json:"put,omitempty"`
-	ConditionalPut   *ConditionalPutRequest `protobuf:"bytes,4,opt,name=conditional_put" json:"conditional_put,omitempty"`
-	Increment        *IncrementRequest      `protobuf:"bytes,5,opt,name=increment" json:"increment,omitempty"`
-	Delete           *DeleteRequest         `protobuf:"bytes,6,opt,name=delete" json:"delete,omitempty"`
-	DeleteRange      *DeleteRangeRequest    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
-	Scan             *ScanRequest           `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
-	EndTransaction   *EndTransactionRequest `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Get            *GetRequest            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
+	Put            *PutRequest            `protobuf:"bytes,3,opt,name=put" json:"put,omitempty"`
+	ConditionalPut *ConditionalPutRequest `protobuf:"bytes,4,opt,name=conditional_put" json:"conditional_put,omitempty"`
+	Increment      *IncrementRequest      `protobuf:"bytes,5,opt,name=increment" json:"increment,omitempty"`
+	Delete         *DeleteRequest         `protobuf:"bytes,6,opt,name=delete" json:"delete,omitempty"`
+	DeleteRange    *DeleteRangeRequest    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
+	Scan           *ScanRequest           `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
+	EndTransaction *EndTransactionRequest `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
 }
 
 func (m *RequestUnion) Reset()         { *m = RequestUnion{} }
@@ -680,15 +662,14 @@ func (m *RequestUnion) GetEndTransaction() *EndTransactionRequest {
 // A ResponseUnion contains exactly one of the optional responses.
 // Values added here must be added to InternalResponseUnion as well.
 type ResponseUnion struct {
-	Get              *GetResponse            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
-	Put              *PutResponse            `protobuf:"bytes,3,opt,name=put" json:"put,omitempty"`
-	ConditionalPut   *ConditionalPutResponse `protobuf:"bytes,4,opt,name=conditional_put" json:"conditional_put,omitempty"`
-	Increment        *IncrementResponse      `protobuf:"bytes,5,opt,name=increment" json:"increment,omitempty"`
-	Delete           *DeleteResponse         `protobuf:"bytes,6,opt,name=delete" json:"delete,omitempty"`
-	DeleteRange      *DeleteRangeResponse    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
-	Scan             *ScanResponse           `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
-	EndTransaction   *EndTransactionResponse `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	Get            *GetResponse            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
+	Put            *PutResponse            `protobuf:"bytes,3,opt,name=put" json:"put,omitempty"`
+	ConditionalPut *ConditionalPutResponse `protobuf:"bytes,4,opt,name=conditional_put" json:"conditional_put,omitempty"`
+	Increment      *IncrementResponse      `protobuf:"bytes,5,opt,name=increment" json:"increment,omitempty"`
+	Delete         *DeleteResponse         `protobuf:"bytes,6,opt,name=delete" json:"delete,omitempty"`
+	DeleteRange    *DeleteRangeResponse    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
+	Scan           *ScanResponse           `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
+	EndTransaction *EndTransactionResponse `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
 }
 
 func (m *ResponseUnion) Reset()         { *m = ResponseUnion{} }
@@ -760,9 +741,8 @@ func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 type BatchRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Requests         []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
-	XXX_unrecognized []byte         `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Requests      []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 }
 
 func (m *BatchRequest) Reset()         { *m = BatchRequest{} }
@@ -781,9 +761,8 @@ func (m *BatchRequest) GetRequests() []RequestUnion {
 // error in the response header is set to the first error from the
 // slice of responses, if applicable.
 type BatchResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Responses        []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
-	XXX_unrecognized []byte          `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Responses      []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 }
 
 func (m *BatchResponse) Reset()         { *m = BatchResponse{} }
@@ -818,9 +797,8 @@ func (m *BatchResponse) GetResponses() []ResponseUnion {
 // metadata (e.g. response cache and range stats must be copied or
 // recomputed).
 type AdminSplitRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	SplitKey         Key    `protobuf:"bytes,2,opt,name=split_key,casttype=Key" json:"split_key,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	SplitKey      Key `protobuf:"bytes,2,opt,name=split_key,casttype=Key" json:"split_key,omitempty"`
 }
 
 func (m *AdminSplitRequest) Reset()         { *m = AdminSplitRequest{} }
@@ -830,8 +808,7 @@ func (*AdminSplitRequest) ProtoMessage()    {}
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
 type AdminSplitResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *AdminSplitResponse) Reset()         { *m = AdminSplitResponse{} }
@@ -848,8 +825,7 @@ func (*AdminSplitResponse) ProtoMessage()    {}
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
 type AdminMergeRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *AdminMergeRequest) Reset()         { *m = AdminMergeRequest{} }
@@ -859,8 +835,7 @@ func (*AdminMergeRequest) ProtoMessage()    {}
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
 type AdminMergeResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *AdminMergeResponse) Reset()         { *m = AdminMergeResponse{} }
@@ -936,7 +911,6 @@ func (m *ClientCmdID) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1191,7 +1165,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1312,7 +1285,6 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1379,7 +1351,6 @@ func (m *GetRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1473,7 +1444,6 @@ func (m *GetResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1564,7 +1534,6 @@ func (m *PutRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1631,7 +1600,6 @@ func (m *PutResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1749,7 +1717,6 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1816,7 +1783,6 @@ func (m *ConditionalPutResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1898,7 +1864,6 @@ func (m *IncrementRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1980,7 +1945,6 @@ func (m *IncrementResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2047,7 +2011,6 @@ func (m *DeleteRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2114,7 +2077,6 @@ func (m *DeleteResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2196,7 +2158,6 @@ func (m *DeleteRangeRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2278,7 +2239,6 @@ func (m *DeleteRangeResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2360,7 +2320,6 @@ func (m *ScanRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2452,7 +2411,6 @@ func (m *ScanResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2563,7 +2521,6 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2668,7 +2625,6 @@ func (m *EndTransactionResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2927,7 +2883,6 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3186,7 +3141,6 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3278,7 +3232,6 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3370,7 +3323,6 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3459,7 +3411,6 @@ func (m *AdminSplitRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3526,7 +3477,6 @@ func (m *AdminSplitResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3593,7 +3543,6 @@ func (m *AdminMergeRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3660,7 +3609,6 @@ func (m *AdminMergeResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3774,9 +3722,6 @@ func (m *ClientCmdID) Size() (n int) {
 	_ = l
 	n += 1 + sovApi(uint64(m.WallTime))
 	n += 1 + sovApi(uint64(m.Random))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3808,9 +3753,6 @@ func (m *RequestHeader) Size() (n int) {
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.ReadConsistency))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3827,9 +3769,6 @@ func (m *ResponseHeader) Size() (n int) {
 		l = m.Txn.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3838,9 +3777,6 @@ func (m *GetRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3853,9 +3789,6 @@ func (m *GetResponse) Size() (n int) {
 		l = m.Value.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3866,9 +3799,6 @@ func (m *PutRequest) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3877,9 +3807,6 @@ func (m *PutResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3894,9 +3821,6 @@ func (m *ConditionalPutRequest) Size() (n int) {
 		l = m.ExpValue.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3905,9 +3829,6 @@ func (m *ConditionalPutResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3917,9 +3838,6 @@ func (m *IncrementRequest) Size() (n int) {
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.Increment))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3929,9 +3847,6 @@ func (m *IncrementResponse) Size() (n int) {
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.NewValue))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3940,9 +3855,6 @@ func (m *DeleteRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3951,9 +3863,6 @@ func (m *DeleteResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3963,9 +3872,6 @@ func (m *DeleteRangeRequest) Size() (n int) {
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxEntriesToDelete))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3975,9 +3881,6 @@ func (m *DeleteRangeResponse) Size() (n int) {
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.NumDeleted))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3987,9 +3890,6 @@ func (m *ScanRequest) Size() (n int) {
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxResults))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4004,9 +3904,6 @@ func (m *ScanResponse) Size() (n int) {
 			n += 1 + l + sovApi(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4019,9 +3916,6 @@ func (m *EndTransactionRequest) Size() (n int) {
 	if m.InternalCommitTrigger != nil {
 		l = m.InternalCommitTrigger.Size()
 		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -4037,9 +3931,6 @@ func (m *EndTransactionResponse) Size() (n int) {
 			l = len(b)
 			n += 1 + l + sovApi(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -4079,9 +3970,6 @@ func (m *RequestUnion) Size() (n int) {
 		l = m.EndTransaction.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4120,9 +4008,6 @@ func (m *ResponseUnion) Size() (n int) {
 		l = m.EndTransaction.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4136,9 +4021,6 @@ func (m *BatchRequest) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovApi(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -4154,9 +4036,6 @@ func (m *BatchResponse) Size() (n int) {
 			n += 1 + l + sovApi(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4169,9 +4048,6 @@ func (m *AdminSplitRequest) Size() (n int) {
 		l = len(m.SplitKey)
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4180,9 +4056,6 @@ func (m *AdminSplitResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4191,9 +4064,6 @@ func (m *AdminMergeRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4202,9 +4072,6 @@ func (m *AdminMergeResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -4242,9 +4109,6 @@ func (m *ClientCmdID) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Random))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4324,9 +4188,6 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x50
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4373,9 +4234,6 @@ func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n7
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4402,9 +4260,6 @@ func (m *GetRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n8
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4441,9 +4296,6 @@ func (m *GetResponse) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n10
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4478,9 +4330,6 @@ func (m *PutRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n12
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4507,9 +4356,6 @@ func (m *PutResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n13
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4554,9 +4400,6 @@ func (m *ConditionalPutRequest) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n16
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4583,9 +4426,6 @@ func (m *ConditionalPutResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n17
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4615,9 +4455,6 @@ func (m *IncrementRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Increment))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4647,9 +4484,6 @@ func (m *IncrementResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NewValue))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4676,9 +4510,6 @@ func (m *DeleteRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n20
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4705,9 +4536,6 @@ func (m *DeleteResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n21
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4737,9 +4565,6 @@ func (m *DeleteRangeRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxEntriesToDelete))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4769,9 +4594,6 @@ func (m *DeleteRangeResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NumDeleted))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4801,9 +4623,6 @@ func (m *ScanRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxResults))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4841,9 +4660,6 @@ func (m *ScanResponse) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -4889,9 +4705,6 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n27
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -4928,9 +4741,6 @@ func (m *EndTransactionResponse) MarshalTo(data []byte) (n int, err error) {
 			i = encodeVarintApi(data, i, uint64(len(b)))
 			i += copy(data[i:], b)
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -5030,9 +4840,6 @@ func (m *RequestUnion) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n36
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5131,9 +4938,6 @@ func (m *ResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n44
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5171,9 +4975,6 @@ func (m *BatchRequest) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -5213,9 +5014,6 @@ func (m *BatchResponse) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5248,9 +5046,6 @@ func (m *AdminSplitRequest) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintApi(data, i, uint64(len(m.SplitKey)))
 		i += copy(data[i:], m.SplitKey)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5277,9 +5072,6 @@ func (m *AdminSplitResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n48
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5306,9 +5098,6 @@ func (m *AdminMergeRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n49
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5335,9 +5124,6 @@ func (m *AdminMergeResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n50
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -5367,4 +5153,11 @@ func encodeVarintApi(data []byte, offset int, v uint64) int {
 	}
 	data[offset] = uint8(v)
 	return offset + 1
+}
+func (x ReadConsistencyType) String() string {
+	s, ok := ReadConsistencyType_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

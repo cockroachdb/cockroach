@@ -14,6 +14,8 @@ import io "io"
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
 var _ = math.Inf
@@ -50,8 +52,8 @@ func (x TimeSeriesQueryAggregator) Enum() *TimeSeriesQueryAggregator {
 	*p = x
 	return p
 }
-func (x TimeSeriesQueryAggregator) String() string {
-	return proto1.EnumName(TimeSeriesQueryAggregator_name, int32(x))
+func (x TimeSeriesQueryAggregator) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(TimeSeriesQueryAggregator_name, int32(x))
 }
 func (x *TimeSeriesQueryAggregator) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(TimeSeriesQueryAggregator_value, data, "TimeSeriesQueryAggregator")
@@ -69,8 +71,7 @@ type TimeSeriesDatapoint struct {
 	// since the unix epoch.
 	TimestampNanos int64 `protobuf:"varint,1,opt,name=timestamp_nanos" json:"timestamp_nanos"`
 	// A floating point representation of the value of this datapoint.
-	Value            float64 `protobuf:"fixed64,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte  `json:"-"`
+	Value float64 `protobuf:"fixed64,2,opt,name=value" json:"value"`
 }
 
 func (m *TimeSeriesDatapoint) Reset()         { *m = TimeSeriesDatapoint{} }
@@ -102,8 +103,7 @@ type TimeSeriesData struct {
 	// A string which identifies the unique source from which the variable was measured.
 	Source string `protobuf:"bytes,2,opt,name=source" json:"source"`
 	// Datapoints representing one or more measurements taken from the variable.
-	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,3,rep,name=datapoints" json:"datapoints,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Datapoints []*TimeSeriesDatapoint `protobuf:"bytes,3,rep,name=datapoints" json:"datapoints,omitempty"`
 }
 
 func (m *TimeSeriesData) Reset()         { *m = TimeSeriesData{} }
@@ -142,8 +142,7 @@ type TimeSeriesQueryRequest struct {
 	EndNanos int64 `protobuf:"varint,2,opt,name=end_nanos" json:"end_nanos"`
 	// A set of Queries for this request. A request must have at least one
 	// Query.
-	Queries          []TimeSeriesQueryRequest_Query `protobuf:"bytes,3,rep,name=queries" json:"queries"`
-	XXX_unrecognized []byte                         `json:"-"`
+	Queries []TimeSeriesQueryRequest_Query `protobuf:"bytes,3,rep,name=queries" json:"queries"`
 }
 
 func (m *TimeSeriesQueryRequest) Reset()         { *m = TimeSeriesQueryRequest{} }
@@ -177,8 +176,7 @@ type TimeSeriesQueryRequest_Query struct {
 	// The name of the time series to query.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// The aggregation function to apply to points in the result.
-	Aggregator       *TimeSeriesQueryAggregator `protobuf:"varint,2,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
-	XXX_unrecognized []byte                     `json:"-"`
+	Aggregator *TimeSeriesQueryAggregator `protobuf:"varint,2,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
 }
 
 func (m *TimeSeriesQueryRequest_Query) Reset()         { *m = TimeSeriesQueryRequest_Query{} }
@@ -207,8 +205,7 @@ type TimeSeriesQueryResponse struct {
 	// A set of Results; there will be one result for each Query in the matching
 	// TimeSeriesQueryRequest, in the same order. A Result will be present for
 	// each Query even if there are zero datapoints to return.
-	Results          []*TimeSeriesQueryResponse_Result `protobuf:"bytes,1,rep,name=results" json:"results,omitempty"`
-	XXX_unrecognized []byte                            `json:"-"`
+	Results []*TimeSeriesQueryResponse_Result `protobuf:"bytes,1,rep,name=results" json:"results,omitempty"`
 }
 
 func (m *TimeSeriesQueryResponse) Reset()         { *m = TimeSeriesQueryResponse{} }
@@ -232,8 +229,7 @@ type TimeSeriesQueryResponse_Result struct {
 	// The aggregation function applied to points in the result.
 	Aggregator *TimeSeriesQueryAggregator `protobuf:"varint,3,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
 	// Datapoints describing the queried data.
-	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,4,rep,name=datapoints" json:"datapoints,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Datapoints []*TimeSeriesDatapoint `protobuf:"bytes,4,rep,name=datapoints" json:"datapoints,omitempty"`
 }
 
 func (m *TimeSeriesQueryResponse_Result) Reset()         { *m = TimeSeriesQueryResponse_Result{} }
@@ -342,7 +338,6 @@ func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -454,7 +449,6 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -552,7 +546,6 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -634,7 +627,6 @@ func (m *TimeSeriesQueryRequest_Query) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -702,7 +694,6 @@ func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -831,7 +822,6 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -843,9 +833,6 @@ func (m *TimeSeriesDatapoint) Size() (n int) {
 	_ = l
 	n += 1 + sovTimeseries(uint64(m.TimestampNanos))
 	n += 9
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -862,9 +849,6 @@ func (m *TimeSeriesData) Size() (n int) {
 			n += 1 + l + sovTimeseries(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -879,9 +863,6 @@ func (m *TimeSeriesQueryRequest) Size() (n int) {
 			n += 1 + l + sovTimeseries(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -892,9 +873,6 @@ func (m *TimeSeriesQueryRequest_Query) Size() (n int) {
 	n += 1 + l + sovTimeseries(uint64(l))
 	if m.Aggregator != nil {
 		n += 1 + sovTimeseries(uint64(*m.Aggregator))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -907,9 +885,6 @@ func (m *TimeSeriesQueryResponse) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTimeseries(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -933,9 +908,6 @@ func (m *TimeSeriesQueryResponse_Result) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTimeseries(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -974,9 +946,6 @@ func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x11
 	i++
 	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(m.Value)))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1015,9 +984,6 @@ func (m *TimeSeriesData) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1054,9 +1020,6 @@ func (m *TimeSeriesQueryRequest) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1083,9 +1046,6 @@ func (m *TimeSeriesQueryRequest_Query) MarshalTo(data []byte) (n int, err error)
 		data[i] = 0x10
 		i++
 		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1116,9 +1076,6 @@ func (m *TimeSeriesQueryResponse) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1174,9 +1131,6 @@ func (m *TimeSeriesQueryResponse_Result) MarshalTo(data []byte) (n int, err erro
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1206,4 +1160,11 @@ func encodeVarintTimeseries(data []byte, offset int, v uint64) int {
 	}
 	data[offset] = uint8(v)
 	return offset + 1
+}
+func (x TimeSeriesQueryAggregator) String() string {
+	s, ok := TimeSeriesQueryAggregator_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

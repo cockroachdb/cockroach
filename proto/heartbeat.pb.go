@@ -31,8 +31,7 @@ type RemoteOffset struct {
 	// The maximum error of the measured offset, in nanoseconds.
 	Uncertainty int64 `protobuf:"varint,2,opt,name=uncertainty" json:"uncertainty"`
 	// Measurement time, in nanoseconds from unix epoch.
-	MeasuredAt       int64  `protobuf:"varint,3,opt,name=measured_at" json:"measured_at"`
-	XXX_unrecognized []byte `json:"-"`
+	MeasuredAt int64 `protobuf:"varint,3,opt,name=measured_at" json:"measured_at"`
 }
 
 func (m *RemoteOffset) Reset()      { *m = RemoteOffset{} }
@@ -67,8 +66,7 @@ type PingRequest struct {
 	// The last offset the client measured with the server.
 	Offset RemoteOffset `protobuf:"bytes,2,opt,name=offset" json:"offset"`
 	// The address of the client.
-	Addr             string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
-	XXX_unrecognized []byte `json:"-"`
+	Addr string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
 }
 
 func (m *PingRequest) Reset()         { *m = PingRequest{} }
@@ -99,9 +97,8 @@ func (m *PingRequest) GetAddr() string {
 // A PingResponse contains the echoed ping request string.
 type PingResponse struct {
 	// An echo of value sent with PingRequest.
-	Pong             string `protobuf:"bytes,1,opt,name=pong" json:"pong"`
-	ServerTime       int64  `protobuf:"varint,2,opt,name=server_time" json:"server_time"`
-	XXX_unrecognized []byte `json:"-"`
+	Pong       string `protobuf:"bytes,1,opt,name=pong" json:"pong"`
+	ServerTime int64  `protobuf:"varint,2,opt,name=server_time" json:"server_time"`
 }
 
 func (m *PingResponse) Reset()         { *m = PingResponse{} }
@@ -205,7 +202,6 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -316,7 +312,6 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -396,7 +391,6 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -409,9 +403,6 @@ func (m *RemoteOffset) Size() (n int) {
 	n += 1 + sovHeartbeat(uint64(m.Offset))
 	n += 1 + sovHeartbeat(uint64(m.Uncertainty))
 	n += 1 + sovHeartbeat(uint64(m.MeasuredAt))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -424,9 +415,6 @@ func (m *PingRequest) Size() (n int) {
 	n += 1 + l + sovHeartbeat(uint64(l))
 	l = len(m.Addr)
 	n += 1 + l + sovHeartbeat(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -436,9 +424,6 @@ func (m *PingResponse) Size() (n int) {
 	l = len(m.Pong)
 	n += 1 + l + sovHeartbeat(uint64(l))
 	n += 1 + sovHeartbeat(uint64(m.ServerTime))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -479,9 +464,6 @@ func (m *RemoteOffset) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintHeartbeat(data, i, uint64(m.MeasuredAt))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -516,9 +498,6 @@ func (m *PingRequest) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
 	i += copy(data[i:], m.Addr)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -544,9 +523,6 @@ func (m *PingResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintHeartbeat(data, i, uint64(m.ServerTime))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

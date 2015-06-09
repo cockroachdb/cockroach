@@ -42,7 +42,6 @@ type StoreStatus struct {
 	LeaderRangeCount     int32                                         `protobuf:"varint,7,opt,name=leader_range_count" json:"leader_range_count"`
 	ReplicatedRangeCount int32                                         `protobuf:"varint,8,opt,name=replicated_range_count" json:"replicated_range_count"`
 	AvailableRangeCount  int32                                         `protobuf:"varint,9,opt,name=available_range_count" json:"available_range_count"`
-	XXX_unrecognized     []byte                                        `json:"-"`
 }
 
 func (m *StoreStatus) Reset()         { *m = StoreStatus{} }
@@ -296,7 +295,6 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -317,9 +315,6 @@ func (m *StoreStatus) Size() (n int) {
 	n += 1 + sovStatus(uint64(m.LeaderRangeCount))
 	n += 1 + sovStatus(uint64(m.ReplicatedRangeCount))
 	n += 1 + sovStatus(uint64(m.AvailableRangeCount))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -388,9 +383,6 @@ func (m *StoreStatus) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x48
 	i++
 	i = encodeVarintStatus(data, i, uint64(m.AvailableRangeCount))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

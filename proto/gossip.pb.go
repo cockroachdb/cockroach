@@ -29,8 +29,7 @@ type GossipRequest struct {
 	// Maximum sequence number of gossip from this peer.
 	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq" json:"max_seq"`
 	// Reciprocal delta of new info since last gossip.
-	Delta            []byte `protobuf:"bytes,5,opt,name=delta" json:"delta,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Delta []byte `protobuf:"bytes,5,opt,name=delta" json:"delta,omitempty"`
 }
 
 func (m *GossipRequest) Reset()         { *m = GossipRequest{} }
@@ -71,8 +70,7 @@ type GossipResponse struct {
 	// Requested delta of server's infostore.
 	Delta []byte `protobuf:"bytes,1,opt,name=delta" json:"delta,omitempty"`
 	// Non-nil means client should retry with this address.
-	Alternate        *Addr  `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Alternate *Addr `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
 }
 
 func (m *GossipResponse) Reset()         { *m = GossipResponse{} }
@@ -231,7 +229,6 @@ func (m *GossipRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -323,7 +320,6 @@ func (m *GossipResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -343,9 +339,6 @@ func (m *GossipRequest) Size() (n int) {
 		l = len(m.Delta)
 		n += 1 + l + sovGossip(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -359,9 +352,6 @@ func (m *GossipResponse) Size() (n int) {
 	if m.Alternate != nil {
 		l = m.Alternate.Size()
 		n += 1 + l + sovGossip(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -422,9 +412,6 @@ func (m *GossipRequest) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintGossip(data, i, uint64(len(m.Delta)))
 		i += copy(data[i:], m.Delta)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -458,9 +445,6 @@ func (m *GossipResponse) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n3
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
