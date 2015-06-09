@@ -72,34 +72,36 @@ type adminServer struct {
 	acct    *acctHandler
 	perm    *permHandler
 	zone    *zoneHandler
+	mux     *http.ServeMux
 }
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
 func newAdminServer(db *client.DB, stopper *util.Stopper) *adminServer {
-	return &adminServer{
+	server := &adminServer{
 		db:      db,
 		stopper: stopper,
 		acct:    &acctHandler{db: db},
 		perm:    &permHandler{db: db},
 		zone:    &zoneHandler{db: db},
+		mux:     http.NewServeMux(),
 	}
+
+	server.mux.HandleFunc(acctPathPrefix, server.handleAcctAction)
+	server.mux.HandleFunc(acctPathPrefix+"/", server.handleAcctAction)
+	server.mux.HandleFunc(debugEndpoint, server.handleDebug)
+	server.mux.HandleFunc(healthPath, server.handleHealth)
+	server.mux.HandleFunc(quitPath, server.handleQuit)
+	server.mux.HandleFunc(permPathPrefix, server.handlePermAction)
+	server.mux.HandleFunc(permPathPrefix+"/", server.handlePermAction)
+	server.mux.HandleFunc(zonePathPrefix, server.handleZoneAction)
+	server.mux.HandleFunc(zonePathPrefix+"/", server.handleZoneAction)
+	return server
 }
 
-// registerHandlers registers admin handlers with the supplied
-// serve mux.
-func (s *adminServer) registerHandlers(mux *http.ServeMux) {
-	// Pass through requests to /debug to the default serve mux so we
-	// get exported variables and pprof tools.
-	mux.HandleFunc(acctPathPrefix, s.handleAcctAction)
-	mux.HandleFunc(acctPathPrefix+"/", s.handleAcctAction)
-	mux.HandleFunc(debugEndpoint, s.handleDebug)
-	mux.HandleFunc(healthPath, s.handleHealth)
-	mux.HandleFunc(quitPath, s.handleQuit)
-	mux.HandleFunc(permPathPrefix, s.handlePermAction)
-	mux.HandleFunc(permPathPrefix+"/", s.handlePermAction)
-	mux.HandleFunc(zonePathPrefix, s.handleZoneAction)
-	mux.HandleFunc(zonePathPrefix+"/", s.handleZoneAction)
+// ServeHTTP implements http.Handler.
+func (s *adminServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
 }
 
 // handleHealth responds to health requests from monitoring services.
