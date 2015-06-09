@@ -20,8 +20,11 @@
 
 	It has these top-level messages:
 		ClientCmdID
+		ColumnKey
+		TableKey
 		RequestHeader
 		ResponseHeader
+		TableRow
 		GetRequest
 		GetResponse
 		PutRequest
@@ -149,6 +152,71 @@ func (m *ClientCmdID) GetRandom() int64 {
 	return 0
 }
 
+// A column key component. Multiple ColumnKey together are used to key into
+// a table index.
+type ColumnKey struct {
+	ColumnName *string `protobuf:"bytes,1,opt,name=column_name" json:"column_name,omitempty"`
+	Key        []byte  `protobuf:"bytes,2,opt,name=key" json:"key,omitempty"`
+	// The end key is optional and not specified if only one column
+	// key is needed by the request. It must order strictly after key,
+	// and when specified, the request is for keys starting with key,
+	// up to but excluding end_key.
+	EndKey           []byte `protobuf:"bytes,3,opt,name=end_key" json:"end_key,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *ColumnKey) Reset()         { *m = ColumnKey{} }
+func (m *ColumnKey) String() string { return proto1.CompactTextString(m) }
+func (*ColumnKey) ProtoMessage()    {}
+
+func (m *ColumnKey) GetColumnName() string {
+	if m != nil && m.ColumnName != nil {
+		return *m.ColumnName
+	}
+	return ""
+}
+
+func (m *ColumnKey) GetKey() []byte {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *ColumnKey) GetEndKey() []byte {
+	if m != nil {
+		return m.EndKey
+	}
+	return nil
+}
+
+// A TableKey represents all the column key components used to key into
+// a table index.
+type TableKey struct {
+	TableName *string `protobuf:"bytes,1,opt,name=table_name" json:"table_name,omitempty"`
+	// The different key components from each column.
+	Columns          []*ColumnKey `protobuf:"bytes,2,rep,name=columns" json:"columns,omitempty"`
+	XXX_unrecognized []byte       `json:"-"`
+}
+
+func (m *TableKey) Reset()         { *m = TableKey{} }
+func (m *TableKey) String() string { return proto1.CompactTextString(m) }
+func (*TableKey) ProtoMessage()    {}
+
+func (m *TableKey) GetTableName() string {
+	if m != nil && m.TableName != nil {
+		return *m.TableName
+	}
+	return ""
+}
+
+func (m *TableKey) GetColumns() []*ColumnKey {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
 // RequestHeader is supplied with every storage node request.
 type RequestHeader struct {
 	// Timestamp specifies time at which read or writes should be
@@ -166,6 +234,9 @@ type RequestHeader struct {
 	// that the operation takes place on the key range from Key to EndKey,
 	// including Key and excluding EndKey.
 	EndKey Key `protobuf:"bytes,4,opt,name=end_key,customtype=Key" json:"end_key"`
+	// A key for a request referencing data in a Table. A request referencing
+	// a table must have an empty key and end_key above.
+	TableKey TableKey `protobuf:"bytes,11,opt,name=table_key" json:"table_key"`
 	// User is the originating user. Used to lookup priority when
 	// scheduling queued operations at target node.
 	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
@@ -217,6 +288,13 @@ func (m *RequestHeader) GetCmdID() ClientCmdID {
 		return m.CmdID
 	}
 	return ClientCmdID{}
+}
+
+func (m *RequestHeader) GetTableKey() TableKey {
+	if m != nil {
+		return m.TableKey
+	}
+	return TableKey{}
 }
 
 func (m *RequestHeader) GetUser() string {
@@ -305,6 +383,48 @@ func (m *ResponseHeader) GetTxn() *Transaction {
 	return nil
 }
 
+// A TableRow represents a series of column values within a row in
+// a table.
+type TableRow struct {
+	Columns          []*TableRow_ColumnValue `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
+	XXX_unrecognized []byte                  `json:"-"`
+}
+
+func (m *TableRow) Reset()         { *m = TableRow{} }
+func (m *TableRow) String() string { return proto1.CompactTextString(m) }
+func (*TableRow) ProtoMessage()    {}
+
+func (m *TableRow) GetColumns() []*TableRow_ColumnValue {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+type TableRow_ColumnValue struct {
+	ColumnName       []byte `protobuf:"bytes,1,opt,name=column_name" json:"column_name,omitempty"`
+	Value            *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *TableRow_ColumnValue) Reset()         { *m = TableRow_ColumnValue{} }
+func (m *TableRow_ColumnValue) String() string { return proto1.CompactTextString(m) }
+func (*TableRow_ColumnValue) ProtoMessage()    {}
+
+func (m *TableRow_ColumnValue) GetColumnName() []byte {
+	if m != nil {
+		return m.ColumnName
+	}
+	return nil
+}
+
+func (m *TableRow_ColumnValue) GetValue() *Value {
+	if m != nil {
+		return m.Value
+	}
+	return nil
+}
+
 // A GetRequest is arguments to the Get() method.
 type GetRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -318,9 +438,11 @@ func (*GetRequest) ProtoMessage()    {}
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
 type GetResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value            *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value          *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	// A TableRow is part of a response for a request referencing a table.
+	Row              TableRow `protobuf:"bytes,3,opt,name=row" json:"row"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *GetResponse) Reset()         { *m = GetResponse{} }
@@ -334,13 +456,22 @@ func (m *GetResponse) GetValue() *Value {
 	return nil
 }
 
+func (m *GetResponse) GetRow() TableRow {
+	if m != nil {
+		return m.Row
+	}
+	return TableRow{}
+}
+
 // A PutRequest is arguments to the Put() method. Note that to write
 // an empty value, the value parameter is still specified, but both
 // Bytes and Integer are set to nil.
 type PutRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value         Value `protobuf:"bytes,2,opt,name=value" json:"value"`
+	// A TableRow is part of a put request referencing a table.
+	Row              TableRow `protobuf:"bytes,3,opt,name=row" json:"row"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *PutRequest) Reset()         { *m = PutRequest{} }
@@ -352,6 +483,13 @@ func (m *PutRequest) GetValue() Value {
 		return m.Value
 	}
 	return Value{}
+}
+
+func (m *PutRequest) GetRow() TableRow {
+	if m != nil {
+		return m.Row
+	}
+	return TableRow{}
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -373,12 +511,14 @@ func (*PutResponse) ProtoMessage()    {}
 type ConditionalPutRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The value to put.
-	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Value Value     `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Row   *TableRow `protobuf:"bytes,4,opt,name=row" json:"row,omitempty"`
 	// ExpValue.Bytes empty to test for non-existence. Specify as nil
 	// to indicate there should be no existing entry. This is different
 	// from the expectation that the value exists but is empty.
-	ExpValue         *Value `protobuf:"bytes,3,opt,name=exp_value" json:"exp_value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ExpValue         *Value    `protobuf:"bytes,3,opt,name=exp_value" json:"exp_value,omitempty"`
+	ExpRow           *TableRow `protobuf:"bytes,5,opt,name=exp_row" json:"exp_row,omitempty"`
+	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *ConditionalPutRequest) Reset()         { *m = ConditionalPutRequest{} }
@@ -392,9 +532,23 @@ func (m *ConditionalPutRequest) GetValue() Value {
 	return Value{}
 }
 
+func (m *ConditionalPutRequest) GetRow() *TableRow {
+	if m != nil {
+		return m.Row
+	}
+	return nil
+}
+
 func (m *ConditionalPutRequest) GetExpValue() *Value {
 	if m != nil {
 		return m.ExpValue
+	}
+	return nil
+}
+
+func (m *ConditionalPutRequest) GetExpRow() *TableRow {
+	if m != nil {
+		return m.ExpRow
 	}
 	return nil
 }
@@ -538,8 +692,13 @@ func (m *ScanRequest) GetMaxResults() int64 {
 type ScanResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Empty if no rows were scanned.
-	Rows             []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
-	XXX_unrecognized []byte     `json:"-"`
+	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+	// If the scan is for a table scan the following fields are populated.
+	//
+	// Columns in the table scan.
+	ColumnNames      [][]byte            `protobuf:"bytes,3,rep,name=column_names" json:"column_names,omitempty"`
+	TableRows        []*ScanResponse_Row `protobuf:"bytes,4,rep,name=table_rows" json:"table_rows,omitempty"`
+	XXX_unrecognized []byte              `json:"-"`
 }
 
 func (m *ScanResponse) Reset()         { *m = ScanResponse{} }
@@ -549,6 +708,37 @@ func (*ScanResponse) ProtoMessage()    {}
 func (m *ScanResponse) GetRows() []KeyValue {
 	if m != nil {
 		return m.Rows
+	}
+	return nil
+}
+
+func (m *ScanResponse) GetColumnNames() [][]byte {
+	if m != nil {
+		return m.ColumnNames
+	}
+	return nil
+}
+
+func (m *ScanResponse) GetTableRows() []*ScanResponse_Row {
+	if m != nil {
+		return m.TableRows
+	}
+	return nil
+}
+
+type ScanResponse_Row struct {
+	// Values for the different columns specified above.
+	Value            []*Value `protobuf:"bytes,1,rep,name=value" json:"value,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ScanResponse_Row) Reset()         { *m = ScanResponse_Row{} }
+func (m *ScanResponse_Row) String() string { return proto1.CompactTextString(m) }
+func (*ScanResponse_Row) ProtoMessage()    {}
+
+func (m *ScanResponse_Row) GetValue() []*Value {
+	if m != nil {
+		return m.Value
 	}
 	return nil
 }
@@ -954,6 +1144,207 @@ func (m *ClientCmdID) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *ColumnKey) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ColumnName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[index:postIndex])
+			m.ColumnName = &s
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndKey = append([]byte{}, data[index:postIndex]...)
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TableKey) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[index:postIndex])
+			m.TableName = &s
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, &ColumnKey{})
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
 func (m *RequestHeader) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -1066,6 +1457,30 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.EndKey.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableKey.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1334,6 +1749,166 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *TableRow) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, &TableRow_ColumnValue{})
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TableRow_ColumnValue) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ColumnName", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ColumnName = append([]byte{}, data[index:postIndex]...)
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Value == nil {
+				m.Value = &Value{}
+			}
+			if err := m.Value.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
 func (m *GetRequest) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -1471,6 +2046,30 @@ func (m *GetResponse) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -1559,6 +2158,30 @@ func (m *PutRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.Value.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1720,6 +2343,33 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Row == nil {
+				m.Row = &TableRow{}
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ExpValue", wireType)
@@ -1744,6 +2394,33 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 				m.ExpValue = &Value{}
 			}
 			if err := m.ExpValue.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExpRow", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ExpRow == nil {
+				m.ExpRow = &TableRow{}
+			}
+			if err := m.ExpRow.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2447,6 +3124,122 @@ func (m *ScanResponse) Unmarshal(data []byte) error {
 			}
 			m.Rows = append(m.Rows, KeyValue{})
 			if err := m.Rows[len(m.Rows)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ColumnNames", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ColumnNames = append(m.ColumnNames, make([]byte, postIndex-index))
+			copy(m.ColumnNames[len(m.ColumnNames)-1], data[index:postIndex])
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRows", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TableRows = append(m.TableRows, &ScanResponse_Row{})
+			if err := m.TableRows[len(m.TableRows)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ScanResponse_Row) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = append(m.Value, &Value{})
+			if err := m.Value[len(m.Value)-1].Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3800,6 +4593,46 @@ func (m *ClientCmdID) Size() (n int) {
 	return n
 }
 
+func (m *ColumnKey) Size() (n int) {
+	var l int
+	_ = l
+	if m.ColumnName != nil {
+		l = len(*m.ColumnName)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *TableKey) Size() (n int) {
+	var l int
+	_ = l
+	if m.TableName != nil {
+		l = len(*m.TableName)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if len(m.Columns) > 0 {
+		for _, e := range m.Columns {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *RequestHeader) Size() (n int) {
 	var l int
 	_ = l
@@ -3810,6 +4643,8 @@ func (m *RequestHeader) Size() (n int) {
 	l = m.Key.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.EndKey.Size()
+	n += 1 + l + sovApi(uint64(l))
+	l = m.TableKey.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = len(m.User)
 	n += 1 + l + sovApi(uint64(l))
@@ -3849,6 +4684,38 @@ func (m *ResponseHeader) Size() (n int) {
 	return n
 }
 
+func (m *TableRow) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, e := range m.Columns {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *TableRow_ColumnValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.ColumnName != nil {
+		l = len(m.ColumnName)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.Value != nil {
+		l = m.Value.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *GetRequest) Size() (n int) {
 	var l int
 	_ = l
@@ -3869,6 +4736,8 @@ func (m *GetResponse) Size() (n int) {
 		l = m.Value.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
+	l = m.Row.Size()
+	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3881,6 +4750,8 @@ func (m *PutRequest) Size() (n int) {
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
+	n += 1 + l + sovApi(uint64(l))
+	l = m.Row.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3906,8 +4777,16 @@ func (m *ConditionalPutRequest) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
+	if m.Row != nil {
+		l = m.Row.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
 	if m.ExpValue != nil {
 		l = m.ExpValue.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.ExpRow != nil {
+		l = m.ExpRow.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -4016,6 +4895,33 @@ func (m *ScanResponse) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	if len(m.Rows) > 0 {
 		for _, e := range m.Rows {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
+	if len(m.ColumnNames) > 0 {
+		for _, b := range m.ColumnNames {
+			l = len(b)
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
+	if len(m.TableRows) > 0 {
+		for _, e := range m.TableRows {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ScanResponse_Row) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Value) > 0 {
+		for _, e := range m.Value {
 			l = e.Size()
 			n += 1 + l + sovApi(uint64(l))
 		}
@@ -4262,6 +5168,84 @@ func (m *ClientCmdID) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
+func (m *ColumnKey) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ColumnKey) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ColumnName != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintApi(data, i, uint64(len(*m.ColumnName)))
+		i += copy(data[i:], *m.ColumnName)
+	}
+	if m.Key != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.EndKey != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TableKey) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableKey) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.TableName != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintApi(data, i, uint64(len(*m.TableName)))
+		i += copy(data[i:], *m.TableName)
+	}
+	if len(m.Columns) > 0 {
+		for _, msg := range m.Columns {
+			data[i] = 0x12
+			i++
+			i = encodeVarintApi(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *RequestHeader) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -4309,6 +5293,14 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n4
+	data[i] = 0x5a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.TableKey.Size()))
+	n5, err := m.TableKey.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
 	data[i] = 0x2a
 	i++
 	i = encodeVarintApi(data, i, uint64(len(m.User)))
@@ -4316,11 +5308,11 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x32
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
-	n5, err := m.Replica.MarshalTo(data[i:])
+	n6, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n6
 	data[i] = 0x38
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RaftID))
@@ -4333,11 +5325,11 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x4a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n6, err := m.Txn.MarshalTo(data[i:])
+		n7, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n6
+		i += n7
 	}
 	data[i] = 0x50
 	i++
@@ -4367,29 +5359,99 @@ func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Error.Size()))
-		n7, err := m.Error.MarshalTo(data[i:])
+		n8, err := m.Error.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n8
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n8, err := m.Timestamp.MarshalTo(data[i:])
+	n9, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n9
 	if m.Txn != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n9, err := m.Txn.MarshalTo(data[i:])
+		n10, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n10
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TableRow) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableRow) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, msg := range m.Columns {
+			data[i] = 0xa
+			i++
+			i = encodeVarintApi(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TableRow_ColumnValue) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableRow_ColumnValue) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ColumnName != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.ColumnName)))
+		i += copy(data[i:], m.ColumnName)
+	}
+	if m.Value != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Value.Size()))
+		n11, err := m.Value.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n11
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -4415,11 +5477,11 @@ func (m *GetRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n10, err := m.RequestHeader.MarshalTo(data[i:])
+	n12, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n12
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4444,21 +5506,29 @@ func (m *GetResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n11, err := m.ResponseHeader.MarshalTo(data[i:])
+	n13, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n11
+	i += n13
 	if m.Value != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-		n12, err := m.Value.MarshalTo(data[i:])
+		n14, err := m.Value.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n14
 	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Row.Size()))
+	n15, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n15
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4483,19 +5553,27 @@ func (m *PutRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n13, err := m.RequestHeader.MarshalTo(data[i:])
+	n16, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n13
+	i += n16
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-	n14, err := m.Value.MarshalTo(data[i:])
+	n17, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n14
+	i += n17
+	data[i] = 0x1a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Row.Size()))
+	n18, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4520,11 +5598,11 @@ func (m *PutResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n15, err := m.ResponseHeader.MarshalTo(data[i:])
+	n19, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n15
+	i += n19
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4549,28 +5627,48 @@ func (m *ConditionalPutRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n16, err := m.RequestHeader.MarshalTo(data[i:])
+	n20, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n16
+	i += n20
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-	n17, err := m.Value.MarshalTo(data[i:])
+	n21, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n21
+	if m.Row != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Row.Size()))
+		n22, err := m.Row.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n22
+	}
 	if m.ExpValue != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.ExpValue.Size()))
-		n18, err := m.ExpValue.MarshalTo(data[i:])
+		n23, err := m.ExpValue.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n18
+		i += n23
+	}
+	if m.ExpRow != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.ExpRow.Size()))
+		n24, err := m.ExpRow.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n24
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -4596,11 +5694,11 @@ func (m *ConditionalPutResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n19, err := m.ResponseHeader.MarshalTo(data[i:])
+	n25, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n25
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4625,11 +5723,11 @@ func (m *IncrementRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n20, err := m.RequestHeader.MarshalTo(data[i:])
+	n26, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
+	i += n26
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Increment))
@@ -4657,11 +5755,11 @@ func (m *IncrementResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n21, err := m.ResponseHeader.MarshalTo(data[i:])
+	n27, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n21
+	i += n27
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NewValue))
@@ -4689,11 +5787,11 @@ func (m *DeleteRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n22, err := m.RequestHeader.MarshalTo(data[i:])
+	n28, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n28
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4718,11 +5816,11 @@ func (m *DeleteResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n23, err := m.ResponseHeader.MarshalTo(data[i:])
+	n29, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n23
+	i += n29
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4747,11 +5845,11 @@ func (m *DeleteRangeRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n24, err := m.RequestHeader.MarshalTo(data[i:])
+	n30, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n24
+	i += n30
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxEntriesToDelete))
@@ -4779,11 +5877,11 @@ func (m *DeleteRangeResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n25, err := m.ResponseHeader.MarshalTo(data[i:])
+	n31, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n25
+	i += n31
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NumDeleted))
@@ -4811,11 +5909,11 @@ func (m *ScanRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n26, err := m.RequestHeader.MarshalTo(data[i:])
+	n32, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n26
+	i += n32
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxResults))
@@ -4843,14 +5941,67 @@ func (m *ScanResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n27, err := m.ResponseHeader.MarshalTo(data[i:])
+	n33, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n27
+	i += n33
 	if len(m.Rows) > 0 {
 		for _, msg := range m.Rows {
 			data[i] = 0x12
+			i++
+			i = encodeVarintApi(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.ColumnNames) > 0 {
+		for _, b := range m.ColumnNames {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintApi(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
+		}
+	}
+	if len(m.TableRows) > 0 {
+		for _, msg := range m.TableRows {
+			data[i] = 0x22
+			i++
+			i = encodeVarintApi(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ScanResponse_Row) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ScanResponse_Row) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Value) > 0 {
+		for _, msg := range m.Value {
+			data[i] = 0xa
 			i++
 			i = encodeVarintApi(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -4884,11 +6035,11 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n28, err := m.RequestHeader.MarshalTo(data[i:])
+	n34, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n28
+	i += n34
 	data[i] = 0x10
 	i++
 	if m.Commit {
@@ -4901,11 +6052,11 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.InternalCommitTrigger.Size()))
-		n29, err := m.InternalCommitTrigger.MarshalTo(data[i:])
+		n35, err := m.InternalCommitTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n35
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -4931,11 +6082,11 @@ func (m *EndTransactionResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n30, err := m.ResponseHeader.MarshalTo(data[i:])
+	n36, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n30
+	i += n36
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.CommitWait))
@@ -4976,81 +6127,81 @@ func (m *RequestUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n31, err := m.Get.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n31
-	}
-	if m.Put != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n32, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n32
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n33, err := m.ConditionalPut.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n33
-	}
-	if m.Increment != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n34, err := m.Increment.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n34
-	}
-	if m.Delete != nil {
-		data[i] = 0x32
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n35, err := m.Delete.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n35
-	}
-	if m.DeleteRange != nil {
-		data[i] = 0x3a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n36, err := m.DeleteRange.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n36
-	}
-	if m.Scan != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n37, err := m.Scan.MarshalTo(data[i:])
+		n37, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n37
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x4a
+	if m.Put != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n38, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
+		n38, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n38
+	}
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
+		n39, err := m.ConditionalPut.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n39
+	}
+	if m.Increment != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
+		n40, err := m.Increment.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n40
+	}
+	if m.Delete != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
+		n41, err := m.Delete.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n41
+	}
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
+		n42, err := m.DeleteRange.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n42
+	}
+	if m.Scan != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
+		n43, err := m.Scan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n43
+	}
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
+		n44, err := m.EndTransaction.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n44
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -5077,81 +6228,81 @@ func (m *ResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n39, err := m.Get.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n39
-	}
-	if m.Put != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n40, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n40
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n41, err := m.ConditionalPut.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n41
-	}
-	if m.Increment != nil {
-		data[i] = 0x2a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n42, err := m.Increment.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n42
-	}
-	if m.Delete != nil {
-		data[i] = 0x32
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n43, err := m.Delete.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n43
-	}
-	if m.DeleteRange != nil {
-		data[i] = 0x3a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n44, err := m.DeleteRange.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n44
-	}
-	if m.Scan != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n45, err := m.Scan.MarshalTo(data[i:])
+		n45, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n45
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x4a
+	if m.Put != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n46, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
+		n46, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n46
+	}
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
+		n47, err := m.ConditionalPut.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n47
+	}
+	if m.Increment != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
+		n48, err := m.Increment.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n48
+	}
+	if m.Delete != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
+		n49, err := m.Delete.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n49
+	}
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
+		n50, err := m.DeleteRange.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n50
+	}
+	if m.Scan != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
+		n51, err := m.Scan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n51
+	}
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
+		n52, err := m.EndTransaction.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n52
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -5177,11 +6328,11 @@ func (m *BatchRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n47, err := m.RequestHeader.MarshalTo(data[i:])
+	n53, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n47
+	i += n53
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -5218,11 +6369,11 @@ func (m *BatchResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n48, err := m.ResponseHeader.MarshalTo(data[i:])
+	n54, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n48
+	i += n54
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -5259,19 +6410,19 @@ func (m *AdminSplitRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n49, err := m.RequestHeader.MarshalTo(data[i:])
+	n55, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n49
+	i += n55
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.SplitKey.Size()))
-	n50, err := m.SplitKey.MarshalTo(data[i:])
+	n56, err := m.SplitKey.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n50
+	i += n56
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -5296,11 +6447,11 @@ func (m *AdminSplitResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n51, err := m.ResponseHeader.MarshalTo(data[i:])
+	n57, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n51
+	i += n57
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -5325,11 +6476,11 @@ func (m *AdminMergeRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n52, err := m.RequestHeader.MarshalTo(data[i:])
+	n58, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n52
+	i += n58
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -5354,11 +6505,11 @@ func (m *AdminMergeResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n53, err := m.ResponseHeader.MarshalTo(data[i:])
+	n59, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n53
+	i += n59
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

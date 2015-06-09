@@ -67,6 +67,26 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
+// A column key component. Multiple ColumnKey together are used to key into
+// a table index.
+message ColumnKey {
+  optional string column_name = 1;
+  optional bytes key = 2; 
+  // The end key is optional and not specified if only one column
+  // key is needed by the request. It must order strictly after key,
+  // and when specified, the request is for keys starting with key,
+  // up to but excluding end_key.
+  optional bytes end_key = 3; 
+}
+
+// A TableKey represents all the column key components used to key into
+// a table index.
+message TableKey {
+  optional string table_name = 1;
+  // The different key components from each column.
+  repeated ColumnKey columns = 2;
+}
+
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   // Timestamp specifies time at which read or writes should be
@@ -84,6 +104,9 @@ message RequestHeader {
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
   optional bytes end_key = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  // A key for a request referencing data in a Table. A request referencing
+  // a table must have an empty key and end_key above.
+  optional TableKey table_key = 11 [(gogoproto.nullable) = false];
   // User is the originating user. Used to lookup priority when
   // scheduling queued operations at target node.
   optional string user = 5 [(gogoproto.nullable) = false];
@@ -134,6 +157,16 @@ message ResponseHeader {
   optional Transaction txn = 3;
 }
 
+// A TableRow represents a series of column values within a row in
+// a table. 
+message TableRow {
+  message ColumnValue {
+    optional bytes column_name = 1;
+    optional Value value = 2;
+  }
+  repeated ColumnValue columns = 1; 
+}
+
 // A GetRequest is arguments to the Get() method.
 message GetRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -144,6 +177,8 @@ message GetRequest {
 message GetResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2;
+  // A TableRow is part of a response for a request referencing a table.
+  optional TableRow row = 3 [(gogoproto.nullable) = false];
 }
 
 // A PutRequest is arguments to the Put() method. Note that to write
@@ -152,6 +187,8 @@ message GetResponse {
 message PutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
+  // A TableRow is part of a put request referencing a table.
+  optional TableRow row = 3 [(gogoproto.nullable) = false];
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -169,10 +206,12 @@ message ConditionalPutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   optional Value value = 2 [(gogoproto.nullable) = false];
+  optional TableRow row = 4;
   // ExpValue.Bytes empty to test for non-existence. Specify as nil
   // to indicate there should be no existing entry. This is different
   // from the expectation that the value exists but is empty.
   optional Value exp_value = 3;
+  optional TableRow exp_row = 5;
 }
 
 // A ConditionalPutResponse is the return value from the
@@ -240,6 +279,15 @@ message ScanResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+  // If the scan is for a table scan the following fields are populated.
+  //
+  // Columns in the table scan.
+  repeated bytes column_names = 3;
+  message Row {
+    // Values for the different columns specified above.
+    repeated Value value = 1;
+  }
+  repeated Row table_rows = 4;
 }
 
 // An EndTransactionRequest is arguments to the EndTransaction() method.

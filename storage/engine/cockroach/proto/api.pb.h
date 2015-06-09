@@ -40,8 +40,12 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
 void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
 
 class ClientCmdID;
+class ColumnKey;
+class TableKey;
 class RequestHeader;
 class ResponseHeader;
+class TableRow;
+class TableRow_ColumnValue;
 class GetRequest;
 class GetResponse;
 class PutRequest;
@@ -56,6 +60,7 @@ class DeleteRangeRequest;
 class DeleteRangeResponse;
 class ScanRequest;
 class ScanResponse;
+class ScanResponse_Row;
 class EndTransactionRequest;
 class EndTransactionResponse;
 class RequestUnion;
@@ -178,6 +183,217 @@ class ClientCmdID : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class ColumnKey : public ::google::protobuf::Message {
+ public:
+  ColumnKey();
+  virtual ~ColumnKey();
+
+  ColumnKey(const ColumnKey& from);
+
+  inline ColumnKey& operator=(const ColumnKey& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ColumnKey& default_instance();
+
+  void Swap(ColumnKey* other);
+
+  // implements Message ----------------------------------------------
+
+  ColumnKey* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ColumnKey& from);
+  void MergeFrom(const ColumnKey& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string column_name = 1;
+  inline bool has_column_name() const;
+  inline void clear_column_name();
+  static const int kColumnNameFieldNumber = 1;
+  inline const ::std::string& column_name() const;
+  inline void set_column_name(const ::std::string& value);
+  inline void set_column_name(const char* value);
+  inline void set_column_name(const char* value, size_t size);
+  inline ::std::string* mutable_column_name();
+  inline ::std::string* release_column_name();
+  inline void set_allocated_column_name(::std::string* column_name);
+
+  // optional bytes key = 2;
+  inline bool has_key() const;
+  inline void clear_key();
+  static const int kKeyFieldNumber = 2;
+  inline const ::std::string& key() const;
+  inline void set_key(const ::std::string& value);
+  inline void set_key(const char* value);
+  inline void set_key(const void* value, size_t size);
+  inline ::std::string* mutable_key();
+  inline ::std::string* release_key();
+  inline void set_allocated_key(::std::string* key);
+
+  // optional bytes end_key = 3;
+  inline bool has_end_key() const;
+  inline void clear_end_key();
+  static const int kEndKeyFieldNumber = 3;
+  inline const ::std::string& end_key() const;
+  inline void set_end_key(const ::std::string& value);
+  inline void set_end_key(const char* value);
+  inline void set_end_key(const void* value, size_t size);
+  inline ::std::string* mutable_end_key();
+  inline ::std::string* release_end_key();
+  inline void set_allocated_end_key(::std::string* end_key);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.ColumnKey)
+ private:
+  inline void set_has_column_name();
+  inline void clear_has_column_name();
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_end_key();
+  inline void clear_has_end_key();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* column_name_;
+  ::std::string* key_;
+  ::std::string* end_key_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static ColumnKey* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class TableKey : public ::google::protobuf::Message {
+ public:
+  TableKey();
+  virtual ~TableKey();
+
+  TableKey(const TableKey& from);
+
+  inline TableKey& operator=(const TableKey& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const TableKey& default_instance();
+
+  void Swap(TableKey* other);
+
+  // implements Message ----------------------------------------------
+
+  TableKey* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const TableKey& from);
+  void MergeFrom(const TableKey& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string table_name = 1;
+  inline bool has_table_name() const;
+  inline void clear_table_name();
+  static const int kTableNameFieldNumber = 1;
+  inline const ::std::string& table_name() const;
+  inline void set_table_name(const ::std::string& value);
+  inline void set_table_name(const char* value);
+  inline void set_table_name(const char* value, size_t size);
+  inline ::std::string* mutable_table_name();
+  inline ::std::string* release_table_name();
+  inline void set_allocated_table_name(::std::string* table_name);
+
+  // repeated .cockroach.proto.ColumnKey columns = 2;
+  inline int columns_size() const;
+  inline void clear_columns();
+  static const int kColumnsFieldNumber = 2;
+  inline const ::cockroach::proto::ColumnKey& columns(int index) const;
+  inline ::cockroach::proto::ColumnKey* mutable_columns(int index);
+  inline ::cockroach::proto::ColumnKey* add_columns();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ColumnKey >&
+      columns() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ColumnKey >*
+      mutable_columns();
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.TableKey)
+ private:
+  inline void set_has_table_name();
+  inline void clear_has_table_name();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* table_name_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ColumnKey > columns_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static TableKey* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class RequestHeader : public ::google::protobuf::Message {
  public:
   RequestHeader();
@@ -273,6 +489,15 @@ class RequestHeader : public ::google::protobuf::Message {
   inline ::std::string* release_end_key();
   inline void set_allocated_end_key(::std::string* end_key);
 
+  // optional .cockroach.proto.TableKey table_key = 11;
+  inline bool has_table_key() const;
+  inline void clear_table_key();
+  static const int kTableKeyFieldNumber = 11;
+  inline const ::cockroach::proto::TableKey& table_key() const;
+  inline ::cockroach::proto::TableKey* mutable_table_key();
+  inline ::cockroach::proto::TableKey* release_table_key();
+  inline void set_allocated_table_key(::cockroach::proto::TableKey* table_key);
+
   // optional string user = 5;
   inline bool has_user() const;
   inline void clear_user();
@@ -334,6 +559,8 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_key();
   inline void set_has_end_key();
   inline void clear_has_end_key();
+  inline void set_has_table_key();
+  inline void clear_has_table_key();
   inline void set_has_user();
   inline void clear_has_user();
   inline void set_has_replica();
@@ -355,6 +582,7 @@ class RequestHeader : public ::google::protobuf::Message {
   ::cockroach::proto::ClientCmdID* cmd_id_;
   ::std::string* key_;
   ::std::string* end_key_;
+  ::cockroach::proto::TableKey* table_key_;
   ::std::string* user_;
   ::cockroach::proto::Replica* replica_;
   ::google::protobuf::int64 raft_id_;
@@ -472,6 +700,186 @@ class ResponseHeader : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static ResponseHeader* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class TableRow_ColumnValue : public ::google::protobuf::Message {
+ public:
+  TableRow_ColumnValue();
+  virtual ~TableRow_ColumnValue();
+
+  TableRow_ColumnValue(const TableRow_ColumnValue& from);
+
+  inline TableRow_ColumnValue& operator=(const TableRow_ColumnValue& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const TableRow_ColumnValue& default_instance();
+
+  void Swap(TableRow_ColumnValue* other);
+
+  // implements Message ----------------------------------------------
+
+  TableRow_ColumnValue* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const TableRow_ColumnValue& from);
+  void MergeFrom(const TableRow_ColumnValue& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes column_name = 1;
+  inline bool has_column_name() const;
+  inline void clear_column_name();
+  static const int kColumnNameFieldNumber = 1;
+  inline const ::std::string& column_name() const;
+  inline void set_column_name(const ::std::string& value);
+  inline void set_column_name(const char* value);
+  inline void set_column_name(const void* value, size_t size);
+  inline ::std::string* mutable_column_name();
+  inline ::std::string* release_column_name();
+  inline void set_allocated_column_name(::std::string* column_name);
+
+  // optional .cockroach.proto.Value value = 2;
+  inline bool has_value() const;
+  inline void clear_value();
+  static const int kValueFieldNumber = 2;
+  inline const ::cockroach::proto::Value& value() const;
+  inline ::cockroach::proto::Value* mutable_value();
+  inline ::cockroach::proto::Value* release_value();
+  inline void set_allocated_value(::cockroach::proto::Value* value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.TableRow.ColumnValue)
+ private:
+  inline void set_has_column_name();
+  inline void clear_has_column_name();
+  inline void set_has_value();
+  inline void clear_has_value();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* column_name_;
+  ::cockroach::proto::Value* value_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static TableRow_ColumnValue* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class TableRow : public ::google::protobuf::Message {
+ public:
+  TableRow();
+  virtual ~TableRow();
+
+  TableRow(const TableRow& from);
+
+  inline TableRow& operator=(const TableRow& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const TableRow& default_instance();
+
+  void Swap(TableRow* other);
+
+  // implements Message ----------------------------------------------
+
+  TableRow* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const TableRow& from);
+  void MergeFrom(const TableRow& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  typedef TableRow_ColumnValue ColumnValue;
+
+  // accessors -------------------------------------------------------
+
+  // repeated .cockroach.proto.TableRow.ColumnValue columns = 1;
+  inline int columns_size() const;
+  inline void clear_columns();
+  static const int kColumnsFieldNumber = 1;
+  inline const ::cockroach::proto::TableRow_ColumnValue& columns(int index) const;
+  inline ::cockroach::proto::TableRow_ColumnValue* mutable_columns(int index);
+  inline ::cockroach::proto::TableRow_ColumnValue* add_columns();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TableRow_ColumnValue >&
+      columns() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TableRow_ColumnValue >*
+      mutable_columns();
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.TableRow)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TableRow_ColumnValue > columns_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static TableRow* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -627,12 +1035,23 @@ class GetResponse : public ::google::protobuf::Message {
   inline ::cockroach::proto::Value* release_value();
   inline void set_allocated_value(::cockroach::proto::Value* value);
 
+  // optional .cockroach.proto.TableRow row = 3;
+  inline bool has_row() const;
+  inline void clear_row();
+  static const int kRowFieldNumber = 3;
+  inline const ::cockroach::proto::TableRow& row() const;
+  inline ::cockroach::proto::TableRow* mutable_row();
+  inline ::cockroach::proto::TableRow* release_row();
+  inline void set_allocated_row(::cockroach::proto::TableRow* row);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.GetResponse)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_value();
   inline void clear_has_value();
+  inline void set_has_row();
+  inline void clear_has_row();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -640,6 +1059,7 @@ class GetResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::ResponseHeader* header_;
   ::cockroach::proto::Value* value_;
+  ::cockroach::proto::TableRow* row_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -720,12 +1140,23 @@ class PutRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::Value* release_value();
   inline void set_allocated_value(::cockroach::proto::Value* value);
 
+  // optional .cockroach.proto.TableRow row = 3;
+  inline bool has_row() const;
+  inline void clear_row();
+  static const int kRowFieldNumber = 3;
+  inline const ::cockroach::proto::TableRow& row() const;
+  inline ::cockroach::proto::TableRow* mutable_row();
+  inline ::cockroach::proto::TableRow* release_row();
+  inline void set_allocated_row(::cockroach::proto::TableRow* row);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.PutRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_value();
   inline void clear_has_value();
+  inline void set_has_row();
+  inline void clear_has_row();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -733,6 +1164,7 @@ class PutRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::Value* value_;
+  ::cockroach::proto::TableRow* row_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -894,6 +1326,15 @@ class ConditionalPutRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::Value* release_value();
   inline void set_allocated_value(::cockroach::proto::Value* value);
 
+  // optional .cockroach.proto.TableRow row = 4;
+  inline bool has_row() const;
+  inline void clear_row();
+  static const int kRowFieldNumber = 4;
+  inline const ::cockroach::proto::TableRow& row() const;
+  inline ::cockroach::proto::TableRow* mutable_row();
+  inline ::cockroach::proto::TableRow* release_row();
+  inline void set_allocated_row(::cockroach::proto::TableRow* row);
+
   // optional .cockroach.proto.Value exp_value = 3;
   inline bool has_exp_value() const;
   inline void clear_exp_value();
@@ -903,14 +1344,27 @@ class ConditionalPutRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::Value* release_exp_value();
   inline void set_allocated_exp_value(::cockroach::proto::Value* exp_value);
 
+  // optional .cockroach.proto.TableRow exp_row = 5;
+  inline bool has_exp_row() const;
+  inline void clear_exp_row();
+  static const int kExpRowFieldNumber = 5;
+  inline const ::cockroach::proto::TableRow& exp_row() const;
+  inline ::cockroach::proto::TableRow* mutable_exp_row();
+  inline ::cockroach::proto::TableRow* release_exp_row();
+  inline void set_allocated_exp_row(::cockroach::proto::TableRow* exp_row);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.ConditionalPutRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_value();
   inline void clear_has_value();
+  inline void set_has_row();
+  inline void clear_has_row();
   inline void set_has_exp_value();
   inline void clear_has_exp_value();
+  inline void set_has_exp_row();
+  inline void clear_has_exp_row();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -918,7 +1372,9 @@ class ConditionalPutRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::Value* value_;
+  ::cockroach::proto::TableRow* row_;
   ::cockroach::proto::Value* exp_value_;
+  ::cockroach::proto::TableRow* exp_row_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -1626,6 +2082,88 @@ class ScanRequest : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class ScanResponse_Row : public ::google::protobuf::Message {
+ public:
+  ScanResponse_Row();
+  virtual ~ScanResponse_Row();
+
+  ScanResponse_Row(const ScanResponse_Row& from);
+
+  inline ScanResponse_Row& operator=(const ScanResponse_Row& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ScanResponse_Row& default_instance();
+
+  void Swap(ScanResponse_Row* other);
+
+  // implements Message ----------------------------------------------
+
+  ScanResponse_Row* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ScanResponse_Row& from);
+  void MergeFrom(const ScanResponse_Row& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // repeated .cockroach.proto.Value value = 1;
+  inline int value_size() const;
+  inline void clear_value();
+  static const int kValueFieldNumber = 1;
+  inline const ::cockroach::proto::Value& value(int index) const;
+  inline ::cockroach::proto::Value* mutable_value(int index);
+  inline ::cockroach::proto::Value* add_value();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Value >&
+      value() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Value >*
+      mutable_value();
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.ScanResponse.Row)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Value > value_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static ScanResponse_Row* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ScanResponse : public ::google::protobuf::Message {
  public:
   ScanResponse();
@@ -1677,6 +2215,8 @@ class ScanResponse : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
+  typedef ScanResponse_Row Row;
+
   // accessors -------------------------------------------------------
 
   // optional .cockroach.proto.ResponseHeader header = 1;
@@ -1700,6 +2240,34 @@ class ScanResponse : public ::google::protobuf::Message {
   inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue >*
       mutable_rows();
 
+  // repeated bytes column_names = 3;
+  inline int column_names_size() const;
+  inline void clear_column_names();
+  static const int kColumnNamesFieldNumber = 3;
+  inline const ::std::string& column_names(int index) const;
+  inline ::std::string* mutable_column_names(int index);
+  inline void set_column_names(int index, const ::std::string& value);
+  inline void set_column_names(int index, const char* value);
+  inline void set_column_names(int index, const void* value, size_t size);
+  inline ::std::string* add_column_names();
+  inline void add_column_names(const ::std::string& value);
+  inline void add_column_names(const char* value);
+  inline void add_column_names(const void* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& column_names() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_column_names();
+
+  // repeated .cockroach.proto.ScanResponse.Row table_rows = 4;
+  inline int table_rows_size() const;
+  inline void clear_table_rows();
+  static const int kTableRowsFieldNumber = 4;
+  inline const ::cockroach::proto::ScanResponse_Row& table_rows(int index) const;
+  inline ::cockroach::proto::ScanResponse_Row* mutable_table_rows(int index);
+  inline ::cockroach::proto::ScanResponse_Row* add_table_rows();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ScanResponse_Row >&
+      table_rows() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ScanResponse_Row >*
+      mutable_table_rows();
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.ScanResponse)
  private:
   inline void set_has_header();
@@ -1711,6 +2279,8 @@ class ScanResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::ResponseHeader* header_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue > rows_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> column_names_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ScanResponse_Row > table_rows_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -2869,6 +3439,348 @@ inline void ClientCmdID::set_random(::google::protobuf::int64 value) {
 
 // -------------------------------------------------------------------
 
+// ColumnKey
+
+// optional string column_name = 1;
+inline bool ColumnKey::has_column_name() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ColumnKey::set_has_column_name() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ColumnKey::clear_has_column_name() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ColumnKey::clear_column_name() {
+  if (column_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_->clear();
+  }
+  clear_has_column_name();
+}
+inline const ::std::string& ColumnKey::column_name() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ColumnKey.column_name)
+  return *column_name_;
+}
+inline void ColumnKey::set_column_name(const ::std::string& value) {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  column_name_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.ColumnKey.column_name)
+}
+inline void ColumnKey::set_column_name(const char* value) {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  column_name_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.ColumnKey.column_name)
+}
+inline void ColumnKey::set_column_name(const char* value, size_t size) {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  column_name_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.ColumnKey.column_name)
+}
+inline ::std::string* ColumnKey::mutable_column_name() {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ColumnKey.column_name)
+  return column_name_;
+}
+inline ::std::string* ColumnKey::release_column_name() {
+  clear_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = column_name_;
+    column_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void ColumnKey::set_allocated_column_name(::std::string* column_name) {
+  if (column_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete column_name_;
+  }
+  if (column_name) {
+    set_has_column_name();
+    column_name_ = column_name;
+  } else {
+    clear_has_column_name();
+    column_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ColumnKey.column_name)
+}
+
+// optional bytes key = 2;
+inline bool ColumnKey::has_key() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ColumnKey::set_has_key() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ColumnKey::clear_has_key() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ColumnKey::clear_key() {
+  if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_->clear();
+  }
+  clear_has_key();
+}
+inline const ::std::string& ColumnKey::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ColumnKey.key)
+  return *key_;
+}
+inline void ColumnKey::set_key(const ::std::string& value) {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  key_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.ColumnKey.key)
+}
+inline void ColumnKey::set_key(const char* value) {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  key_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.ColumnKey.key)
+}
+inline void ColumnKey::set_key(const void* value, size_t size) {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  key_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.ColumnKey.key)
+}
+inline ::std::string* ColumnKey::mutable_key() {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ColumnKey.key)
+  return key_;
+}
+inline ::std::string* ColumnKey::release_key() {
+  clear_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = key_;
+    key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void ColumnKey::set_allocated_key(::std::string* key) {
+  if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete key_;
+  }
+  if (key) {
+    set_has_key();
+    key_ = key;
+  } else {
+    clear_has_key();
+    key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ColumnKey.key)
+}
+
+// optional bytes end_key = 3;
+inline bool ColumnKey::has_end_key() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void ColumnKey::set_has_end_key() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void ColumnKey::clear_has_end_key() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void ColumnKey::clear_end_key() {
+  if (end_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    end_key_->clear();
+  }
+  clear_has_end_key();
+}
+inline const ::std::string& ColumnKey::end_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ColumnKey.end_key)
+  return *end_key_;
+}
+inline void ColumnKey::set_end_key(const ::std::string& value) {
+  set_has_end_key();
+  if (end_key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    end_key_ = new ::std::string;
+  }
+  end_key_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.ColumnKey.end_key)
+}
+inline void ColumnKey::set_end_key(const char* value) {
+  set_has_end_key();
+  if (end_key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    end_key_ = new ::std::string;
+  }
+  end_key_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.ColumnKey.end_key)
+}
+inline void ColumnKey::set_end_key(const void* value, size_t size) {
+  set_has_end_key();
+  if (end_key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    end_key_ = new ::std::string;
+  }
+  end_key_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.ColumnKey.end_key)
+}
+inline ::std::string* ColumnKey::mutable_end_key() {
+  set_has_end_key();
+  if (end_key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    end_key_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ColumnKey.end_key)
+  return end_key_;
+}
+inline ::std::string* ColumnKey::release_end_key() {
+  clear_has_end_key();
+  if (end_key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = end_key_;
+    end_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void ColumnKey::set_allocated_end_key(::std::string* end_key) {
+  if (end_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete end_key_;
+  }
+  if (end_key) {
+    set_has_end_key();
+    end_key_ = end_key;
+  } else {
+    clear_has_end_key();
+    end_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ColumnKey.end_key)
+}
+
+// -------------------------------------------------------------------
+
+// TableKey
+
+// optional string table_name = 1;
+inline bool TableKey::has_table_name() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void TableKey::set_has_table_name() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void TableKey::clear_has_table_name() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void TableKey::clear_table_name() {
+  if (table_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    table_name_->clear();
+  }
+  clear_has_table_name();
+}
+inline const ::std::string& TableKey::table_name() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TableKey.table_name)
+  return *table_name_;
+}
+inline void TableKey::set_table_name(const ::std::string& value) {
+  set_has_table_name();
+  if (table_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    table_name_ = new ::std::string;
+  }
+  table_name_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.TableKey.table_name)
+}
+inline void TableKey::set_table_name(const char* value) {
+  set_has_table_name();
+  if (table_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    table_name_ = new ::std::string;
+  }
+  table_name_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.TableKey.table_name)
+}
+inline void TableKey::set_table_name(const char* value, size_t size) {
+  set_has_table_name();
+  if (table_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    table_name_ = new ::std::string;
+  }
+  table_name_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.TableKey.table_name)
+}
+inline ::std::string* TableKey::mutable_table_name() {
+  set_has_table_name();
+  if (table_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    table_name_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TableKey.table_name)
+  return table_name_;
+}
+inline ::std::string* TableKey::release_table_name() {
+  clear_has_table_name();
+  if (table_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = table_name_;
+    table_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void TableKey::set_allocated_table_name(::std::string* table_name) {
+  if (table_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete table_name_;
+  }
+  if (table_name) {
+    set_has_table_name();
+    table_name_ = table_name;
+  } else {
+    clear_has_table_name();
+    table_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TableKey.table_name)
+}
+
+// repeated .cockroach.proto.ColumnKey columns = 2;
+inline int TableKey::columns_size() const {
+  return columns_.size();
+}
+inline void TableKey::clear_columns() {
+  columns_.Clear();
+}
+inline const ::cockroach::proto::ColumnKey& TableKey::columns(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TableKey.columns)
+  return columns_.Get(index);
+}
+inline ::cockroach::proto::ColumnKey* TableKey::mutable_columns(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TableKey.columns)
+  return columns_.Mutable(index);
+}
+inline ::cockroach::proto::ColumnKey* TableKey::add_columns() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.TableKey.columns)
+  return columns_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ColumnKey >&
+TableKey::columns() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.TableKey.columns)
+  return columns_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ColumnKey >*
+TableKey::mutable_columns() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.TableKey.columns)
+  return &columns_;
+}
+
+// -------------------------------------------------------------------
+
 // RequestHeader
 
 // optional .cockroach.proto.Timestamp timestamp = 1;
@@ -3105,15 +4017,56 @@ inline void RequestHeader::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.end_key)
 }
 
-// optional string user = 5;
-inline bool RequestHeader::has_user() const {
+// optional .cockroach.proto.TableKey table_key = 11;
+inline bool RequestHeader::has_table_key() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-inline void RequestHeader::set_has_user() {
+inline void RequestHeader::set_has_table_key() {
   _has_bits_[0] |= 0x00000010u;
 }
-inline void RequestHeader::clear_has_user() {
+inline void RequestHeader::clear_has_table_key() {
   _has_bits_[0] &= ~0x00000010u;
+}
+inline void RequestHeader::clear_table_key() {
+  if (table_key_ != NULL) table_key_->::cockroach::proto::TableKey::Clear();
+  clear_has_table_key();
+}
+inline const ::cockroach::proto::TableKey& RequestHeader::table_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.table_key)
+  return table_key_ != NULL ? *table_key_ : *default_instance_->table_key_;
+}
+inline ::cockroach::proto::TableKey* RequestHeader::mutable_table_key() {
+  set_has_table_key();
+  if (table_key_ == NULL) table_key_ = new ::cockroach::proto::TableKey;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.table_key)
+  return table_key_;
+}
+inline ::cockroach::proto::TableKey* RequestHeader::release_table_key() {
+  clear_has_table_key();
+  ::cockroach::proto::TableKey* temp = table_key_;
+  table_key_ = NULL;
+  return temp;
+}
+inline void RequestHeader::set_allocated_table_key(::cockroach::proto::TableKey* table_key) {
+  delete table_key_;
+  table_key_ = table_key;
+  if (table_key) {
+    set_has_table_key();
+  } else {
+    clear_has_table_key();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.table_key)
+}
+
+// optional string user = 5;
+inline bool RequestHeader::has_user() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void RequestHeader::set_has_user() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void RequestHeader::clear_has_user() {
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void RequestHeader::clear_user() {
   if (user_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -3183,13 +4136,13 @@ inline void RequestHeader::set_allocated_user(::std::string* user) {
 
 // optional .cockroach.proto.Replica replica = 6;
 inline bool RequestHeader::has_replica() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void RequestHeader::set_has_replica() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void RequestHeader::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void RequestHeader::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
@@ -3224,13 +4177,13 @@ inline void RequestHeader::set_allocated_replica(::cockroach::proto::Replica* re
 
 // optional int64 raft_id = 7;
 inline bool RequestHeader::has_raft_id() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void RequestHeader::set_has_raft_id() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void RequestHeader::clear_has_raft_id() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void RequestHeader::clear_raft_id() {
   raft_id_ = GOOGLE_LONGLONG(0);
@@ -3248,13 +4201,13 @@ inline void RequestHeader::set_raft_id(::google::protobuf::int64 value) {
 
 // optional int32 user_priority = 8 [default = 1];
 inline bool RequestHeader::has_user_priority() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void RequestHeader::set_has_user_priority() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void RequestHeader::clear_has_user_priority() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void RequestHeader::clear_user_priority() {
   user_priority_ = 1;
@@ -3272,13 +4225,13 @@ inline void RequestHeader::set_user_priority(::google::protobuf::int32 value) {
 
 // optional .cockroach.proto.Transaction txn = 9;
 inline bool RequestHeader::has_txn() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void RequestHeader::set_has_txn() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void RequestHeader::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void RequestHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
@@ -3313,13 +4266,13 @@ inline void RequestHeader::set_allocated_txn(::cockroach::proto::Transaction* tx
 
 // optional .cockroach.proto.ReadConsistencyType read_consistency = 10;
 inline bool RequestHeader::has_read_consistency() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void RequestHeader::set_has_read_consistency() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void RequestHeader::clear_has_read_consistency() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void RequestHeader::clear_read_consistency() {
   read_consistency_ = 0;
@@ -3465,6 +4418,161 @@ inline void ResponseHeader::set_allocated_txn(::cockroach::proto::Transaction* t
 
 // -------------------------------------------------------------------
 
+// TableRow_ColumnValue
+
+// optional bytes column_name = 1;
+inline bool TableRow_ColumnValue::has_column_name() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void TableRow_ColumnValue::set_has_column_name() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void TableRow_ColumnValue::clear_has_column_name() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void TableRow_ColumnValue::clear_column_name() {
+  if (column_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_->clear();
+  }
+  clear_has_column_name();
+}
+inline const ::std::string& TableRow_ColumnValue::column_name() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TableRow.ColumnValue.column_name)
+  return *column_name_;
+}
+inline void TableRow_ColumnValue::set_column_name(const ::std::string& value) {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  column_name_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.TableRow.ColumnValue.column_name)
+}
+inline void TableRow_ColumnValue::set_column_name(const char* value) {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  column_name_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.TableRow.ColumnValue.column_name)
+}
+inline void TableRow_ColumnValue::set_column_name(const void* value, size_t size) {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  column_name_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.TableRow.ColumnValue.column_name)
+}
+inline ::std::string* TableRow_ColumnValue::mutable_column_name() {
+  set_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    column_name_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TableRow.ColumnValue.column_name)
+  return column_name_;
+}
+inline ::std::string* TableRow_ColumnValue::release_column_name() {
+  clear_has_column_name();
+  if (column_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = column_name_;
+    column_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void TableRow_ColumnValue::set_allocated_column_name(::std::string* column_name) {
+  if (column_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete column_name_;
+  }
+  if (column_name) {
+    set_has_column_name();
+    column_name_ = column_name;
+  } else {
+    clear_has_column_name();
+    column_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TableRow.ColumnValue.column_name)
+}
+
+// optional .cockroach.proto.Value value = 2;
+inline bool TableRow_ColumnValue::has_value() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void TableRow_ColumnValue::set_has_value() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void TableRow_ColumnValue::clear_has_value() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void TableRow_ColumnValue::clear_value() {
+  if (value_ != NULL) value_->::cockroach::proto::Value::Clear();
+  clear_has_value();
+}
+inline const ::cockroach::proto::Value& TableRow_ColumnValue::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TableRow.ColumnValue.value)
+  return value_ != NULL ? *value_ : *default_instance_->value_;
+}
+inline ::cockroach::proto::Value* TableRow_ColumnValue::mutable_value() {
+  set_has_value();
+  if (value_ == NULL) value_ = new ::cockroach::proto::Value;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TableRow.ColumnValue.value)
+  return value_;
+}
+inline ::cockroach::proto::Value* TableRow_ColumnValue::release_value() {
+  clear_has_value();
+  ::cockroach::proto::Value* temp = value_;
+  value_ = NULL;
+  return temp;
+}
+inline void TableRow_ColumnValue::set_allocated_value(::cockroach::proto::Value* value) {
+  delete value_;
+  value_ = value;
+  if (value) {
+    set_has_value();
+  } else {
+    clear_has_value();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TableRow.ColumnValue.value)
+}
+
+// -------------------------------------------------------------------
+
+// TableRow
+
+// repeated .cockroach.proto.TableRow.ColumnValue columns = 1;
+inline int TableRow::columns_size() const {
+  return columns_.size();
+}
+inline void TableRow::clear_columns() {
+  columns_.Clear();
+}
+inline const ::cockroach::proto::TableRow_ColumnValue& TableRow::columns(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TableRow.columns)
+  return columns_.Get(index);
+}
+inline ::cockroach::proto::TableRow_ColumnValue* TableRow::mutable_columns(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TableRow.columns)
+  return columns_.Mutable(index);
+}
+inline ::cockroach::proto::TableRow_ColumnValue* TableRow::add_columns() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.TableRow.columns)
+  return columns_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TableRow_ColumnValue >&
+TableRow::columns() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.TableRow.columns)
+  return columns_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TableRow_ColumnValue >*
+TableRow::mutable_columns() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.TableRow.columns)
+  return &columns_;
+}
+
+// -------------------------------------------------------------------
+
 // GetRequest
 
 // optional .cockroach.proto.RequestHeader header = 1;
@@ -3594,6 +4702,47 @@ inline void GetResponse::set_allocated_value(::cockroach::proto::Value* value) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.GetResponse.value)
 }
 
+// optional .cockroach.proto.TableRow row = 3;
+inline bool GetResponse::has_row() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void GetResponse::set_has_row() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void GetResponse::clear_has_row() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void GetResponse::clear_row() {
+  if (row_ != NULL) row_->::cockroach::proto::TableRow::Clear();
+  clear_has_row();
+}
+inline const ::cockroach::proto::TableRow& GetResponse::row() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.GetResponse.row)
+  return row_ != NULL ? *row_ : *default_instance_->row_;
+}
+inline ::cockroach::proto::TableRow* GetResponse::mutable_row() {
+  set_has_row();
+  if (row_ == NULL) row_ = new ::cockroach::proto::TableRow;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.GetResponse.row)
+  return row_;
+}
+inline ::cockroach::proto::TableRow* GetResponse::release_row() {
+  clear_has_row();
+  ::cockroach::proto::TableRow* temp = row_;
+  row_ = NULL;
+  return temp;
+}
+inline void GetResponse::set_allocated_row(::cockroach::proto::TableRow* row) {
+  delete row_;
+  row_ = row;
+  if (row) {
+    set_has_row();
+  } else {
+    clear_has_row();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.GetResponse.row)
+}
+
 // -------------------------------------------------------------------
 
 // PutRequest
@@ -3678,6 +4827,47 @@ inline void PutRequest::set_allocated_value(::cockroach::proto::Value* value) {
     clear_has_value();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PutRequest.value)
+}
+
+// optional .cockroach.proto.TableRow row = 3;
+inline bool PutRequest::has_row() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void PutRequest::set_has_row() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void PutRequest::clear_has_row() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void PutRequest::clear_row() {
+  if (row_ != NULL) row_->::cockroach::proto::TableRow::Clear();
+  clear_has_row();
+}
+inline const ::cockroach::proto::TableRow& PutRequest::row() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.PutRequest.row)
+  return row_ != NULL ? *row_ : *default_instance_->row_;
+}
+inline ::cockroach::proto::TableRow* PutRequest::mutable_row() {
+  set_has_row();
+  if (row_ == NULL) row_ = new ::cockroach::proto::TableRow;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.PutRequest.row)
+  return row_;
+}
+inline ::cockroach::proto::TableRow* PutRequest::release_row() {
+  clear_has_row();
+  ::cockroach::proto::TableRow* temp = row_;
+  row_ = NULL;
+  return temp;
+}
+inline void PutRequest::set_allocated_row(::cockroach::proto::TableRow* row) {
+  delete row_;
+  row_ = row;
+  if (row) {
+    set_has_row();
+  } else {
+    clear_has_row();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PutRequest.row)
 }
 
 // -------------------------------------------------------------------
@@ -3811,15 +5001,56 @@ inline void ConditionalPutRequest::set_allocated_value(::cockroach::proto::Value
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ConditionalPutRequest.value)
 }
 
-// optional .cockroach.proto.Value exp_value = 3;
-inline bool ConditionalPutRequest::has_exp_value() const {
+// optional .cockroach.proto.TableRow row = 4;
+inline bool ConditionalPutRequest::has_row() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void ConditionalPutRequest::set_has_exp_value() {
+inline void ConditionalPutRequest::set_has_row() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void ConditionalPutRequest::clear_has_exp_value() {
+inline void ConditionalPutRequest::clear_has_row() {
   _has_bits_[0] &= ~0x00000004u;
+}
+inline void ConditionalPutRequest::clear_row() {
+  if (row_ != NULL) row_->::cockroach::proto::TableRow::Clear();
+  clear_has_row();
+}
+inline const ::cockroach::proto::TableRow& ConditionalPutRequest::row() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ConditionalPutRequest.row)
+  return row_ != NULL ? *row_ : *default_instance_->row_;
+}
+inline ::cockroach::proto::TableRow* ConditionalPutRequest::mutable_row() {
+  set_has_row();
+  if (row_ == NULL) row_ = new ::cockroach::proto::TableRow;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ConditionalPutRequest.row)
+  return row_;
+}
+inline ::cockroach::proto::TableRow* ConditionalPutRequest::release_row() {
+  clear_has_row();
+  ::cockroach::proto::TableRow* temp = row_;
+  row_ = NULL;
+  return temp;
+}
+inline void ConditionalPutRequest::set_allocated_row(::cockroach::proto::TableRow* row) {
+  delete row_;
+  row_ = row;
+  if (row) {
+    set_has_row();
+  } else {
+    clear_has_row();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ConditionalPutRequest.row)
+}
+
+// optional .cockroach.proto.Value exp_value = 3;
+inline bool ConditionalPutRequest::has_exp_value() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ConditionalPutRequest::set_has_exp_value() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ConditionalPutRequest::clear_has_exp_value() {
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void ConditionalPutRequest::clear_exp_value() {
   if (exp_value_ != NULL) exp_value_->::cockroach::proto::Value::Clear();
@@ -3850,6 +5081,47 @@ inline void ConditionalPutRequest::set_allocated_exp_value(::cockroach::proto::V
     clear_has_exp_value();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ConditionalPutRequest.exp_value)
+}
+
+// optional .cockroach.proto.TableRow exp_row = 5;
+inline bool ConditionalPutRequest::has_exp_row() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void ConditionalPutRequest::set_has_exp_row() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void ConditionalPutRequest::clear_has_exp_row() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void ConditionalPutRequest::clear_exp_row() {
+  if (exp_row_ != NULL) exp_row_->::cockroach::proto::TableRow::Clear();
+  clear_has_exp_row();
+}
+inline const ::cockroach::proto::TableRow& ConditionalPutRequest::exp_row() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ConditionalPutRequest.exp_row)
+  return exp_row_ != NULL ? *exp_row_ : *default_instance_->exp_row_;
+}
+inline ::cockroach::proto::TableRow* ConditionalPutRequest::mutable_exp_row() {
+  set_has_exp_row();
+  if (exp_row_ == NULL) exp_row_ = new ::cockroach::proto::TableRow;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ConditionalPutRequest.exp_row)
+  return exp_row_;
+}
+inline ::cockroach::proto::TableRow* ConditionalPutRequest::release_exp_row() {
+  clear_has_exp_row();
+  ::cockroach::proto::TableRow* temp = exp_row_;
+  exp_row_ = NULL;
+  return temp;
+}
+inline void ConditionalPutRequest::set_allocated_exp_row(::cockroach::proto::TableRow* exp_row) {
+  delete exp_row_;
+  exp_row_ = exp_row;
+  if (exp_row) {
+    set_has_exp_row();
+  } else {
+    clear_has_exp_row();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ConditionalPutRequest.exp_row)
 }
 
 // -------------------------------------------------------------------
@@ -4334,6 +5606,40 @@ inline void ScanRequest::set_max_results(::google::protobuf::int64 value) {
 
 // -------------------------------------------------------------------
 
+// ScanResponse_Row
+
+// repeated .cockroach.proto.Value value = 1;
+inline int ScanResponse_Row::value_size() const {
+  return value_.size();
+}
+inline void ScanResponse_Row::clear_value() {
+  value_.Clear();
+}
+inline const ::cockroach::proto::Value& ScanResponse_Row::value(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ScanResponse.Row.value)
+  return value_.Get(index);
+}
+inline ::cockroach::proto::Value* ScanResponse_Row::mutable_value(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ScanResponse.Row.value)
+  return value_.Mutable(index);
+}
+inline ::cockroach::proto::Value* ScanResponse_Row::add_value() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.ScanResponse.Row.value)
+  return value_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Value >&
+ScanResponse_Row::value() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.ScanResponse.Row.value)
+  return value_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Value >*
+ScanResponse_Row::mutable_value() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ScanResponse.Row.value)
+  return &value_;
+}
+
+// -------------------------------------------------------------------
+
 // ScanResponse
 
 // optional .cockroach.proto.ResponseHeader header = 1;
@@ -4405,6 +5711,90 @@ inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue >*
 ScanResponse::mutable_rows() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ScanResponse.rows)
   return &rows_;
+}
+
+// repeated bytes column_names = 3;
+inline int ScanResponse::column_names_size() const {
+  return column_names_.size();
+}
+inline void ScanResponse::clear_column_names() {
+  column_names_.Clear();
+}
+inline const ::std::string& ScanResponse::column_names(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ScanResponse.column_names)
+  return column_names_.Get(index);
+}
+inline ::std::string* ScanResponse::mutable_column_names(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ScanResponse.column_names)
+  return column_names_.Mutable(index);
+}
+inline void ScanResponse::set_column_names(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.proto.ScanResponse.column_names)
+  column_names_.Mutable(index)->assign(value);
+}
+inline void ScanResponse::set_column_names(int index, const char* value) {
+  column_names_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.ScanResponse.column_names)
+}
+inline void ScanResponse::set_column_names(int index, const void* value, size_t size) {
+  column_names_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.ScanResponse.column_names)
+}
+inline ::std::string* ScanResponse::add_column_names() {
+  return column_names_.Add();
+}
+inline void ScanResponse::add_column_names(const ::std::string& value) {
+  column_names_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.proto.ScanResponse.column_names)
+}
+inline void ScanResponse::add_column_names(const char* value) {
+  column_names_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.proto.ScanResponse.column_names)
+}
+inline void ScanResponse::add_column_names(const void* value, size_t size) {
+  column_names_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.proto.ScanResponse.column_names)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+ScanResponse::column_names() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.ScanResponse.column_names)
+  return column_names_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+ScanResponse::mutable_column_names() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ScanResponse.column_names)
+  return &column_names_;
+}
+
+// repeated .cockroach.proto.ScanResponse.Row table_rows = 4;
+inline int ScanResponse::table_rows_size() const {
+  return table_rows_.size();
+}
+inline void ScanResponse::clear_table_rows() {
+  table_rows_.Clear();
+}
+inline const ::cockroach::proto::ScanResponse_Row& ScanResponse::table_rows(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ScanResponse.table_rows)
+  return table_rows_.Get(index);
+}
+inline ::cockroach::proto::ScanResponse_Row* ScanResponse::mutable_table_rows(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ScanResponse.table_rows)
+  return table_rows_.Mutable(index);
+}
+inline ::cockroach::proto::ScanResponse_Row* ScanResponse::add_table_rows() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.ScanResponse.table_rows)
+  return table_rows_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ScanResponse_Row >&
+ScanResponse::table_rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.ScanResponse.table_rows)
+  return table_rows_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::ScanResponse_Row >*
+ScanResponse::mutable_table_rows() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ScanResponse.table_rows)
+  return &table_rows_;
 }
 
 // -------------------------------------------------------------------
