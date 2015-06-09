@@ -29,6 +29,15 @@ const (
 	MaxReservedDescID = 999
 )
 
+// Method implements the Request interface.
+func (*CreateTableRequest) Method() Method { return CreateTable }
+
+// CreateReply implements the Request interface.
+func (*CreateTableRequest) CreateReply() Response { return &CreateTableResponse{} }
+
+// flags implements the Request interface.
+func (*CreateTableRequest) flags() int { return (&ConditionalPutRequest{}).flags() }
+
 func validateName(name, typ string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("empty %s name", typ)
