@@ -16,107 +16,111 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
-Package client provides clients for accessing the various
-externally-facing Cockroach database endpoints.
+Package client provides clients for accessing the various externally-facing
+Cockroach database endpoints.
 
-TODO(pmattis): Update these docs to talk about the DB interface.
+DB Client
 
-KV Client
+The DB client is a fully-featured client of Cockroach's key-value database. It
+provides a simple, synchronous interface well-suited to parallel updates and
+queries.
 
-The KV client is a fully-featured client of Cockroach's key-value
-database. It provides a simple, synchronous interface well-suited to
-parallel updates and queries.
+The simplest way to use the client is through the Run method. Run synchronously
+invokes the call, fills in the the reply and returns an error. The example
+below shows a get and a put.
 
-The simplest way to use the client is through the Run method. Run
-synchronously invokes the call and fills in the the reply and returns
-an error. The example below shows a get and a put.
+	db, err := client.Open("https://root@localhost:8080")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := db.Put("a", "hello"); err != nil {
+		log.Fatal(err)
+	}
+	if gr, err := db.Get("a"); err != nil {
+		log.Fatal(err)
+	} else {
+		log.Printf("%s", gr.ValueBytes())  // "hello"
+	}
 
-  kv := client.newKV(nil, client.newHTTPSender("localhost:8080", httpClient))
+The API is synchronous, but accommodates efficient parallel updates and queries
+using Batch objects. An arbitrary number of calls may be added to a Batch which
+is executed using DB.Run. Note however that the individual calls within a batch
+are not guaranteed to have atomic semantics. A transaction must be used to
+guarantee atomicity. A simple example of using a Batch which does two scans in
+parallel and then sends a sequence of puts in parallel:
 
-  getCall := client.Get(proto.Key("a"))
-  getResp := getCall.Reply.(*proto.GetResponse)
-  if err := kv.Run(getCall); err != nil {
-    log.Fatal(err)
-  }
-  if err := kv.Run(client.Put(proto.Key("b"), getResp.Value.Bytes)) err != nil {
-    log.Fatal(err)
-  }
+	db, err := client.Open("https://root@localhost:8080")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-The API is synchronous, but accommodates efficient parallel updates
-and queries using the variadic Run method. An arbitrary number of
-calls may be passed to Run which are sent to Cockroach as part of a
-batch. Note however that such the individual API calls within a batch
-are not guaranteed to have atomic semantics. A transaction must be
-used to guarantee atomicity. A simple example of using the API which
-does two scans in parallel and then sends a sequence of puts in
-parallel:
+	b1 := &client.Batch{}
+	b1.Scan("a", "c\x00", 1000)
+	b1.Scan("x", "z\x00", 1000)
 
-  kv := client.newKV(nil, client.newHTTPSender("localhost:8080", httpClient))
+	// Run sends both scans in parallel and returns the first error or nil.
+	if err := db.Run(b1); err != nil {
+		log.Fatal(err)
+	}
 
-  acScan := client.Scan(proto.Key("a"), proto.Key("c\x00"), 1000)
-  xzScan := client.Scan(proto.Key("x"), proto.Key("z\x00"), 1000)
+	acResult := b1.Results[0]
+	xzResult := b1.Results[1]
 
-  // Run sends both scans in parallel and returns first error or nil.
-  if err := kv.Run(acScan, xzScan); err != nil {
-    log.Fatal(err)
-  }
+	// Append maximum value from "a"-"c" to all values from "x"-"z".
+	max := []byte(nil)
+	for _, row := range acResult.Rows {
+		if bytes.Compare(max, row.ValueBytes()) < 0 {
+			max = row.ValueBytes()
+		}
+	}
 
-  acResp := acScan.Reply.(*proto.ScanResponse)
-  xzResp := xzScan.Reply.(*proto.ScanResponse)
+	b2 := &client.Batch{}
+	for _, row := range xzResult.Rows {
+		b2.Put(row.Key, bytes.Join([][]byte{row.ValueBytes(), max}, []byte(nil)))
+	}
 
-  // Append maximum value from "a"-"c" to all values from "x"-"z".
-  max := []byte(nil)
-  for _, keyVal := range acResp.Rows {
-    if bytes.Compare(max, keyVal.Value.Bytes) < 0 {
-      max = keyVal.Value.Bytes
-    }
-  }
-  var calls []*client.Call
-  for keyVal := range xzResp.Rows {
-    putCall := client.Put(keyVal.Key, bytes.Join([][]byte{keyVal.Value.Bytes, max}, []byte(nil)))
-    calls = append(calls, putCall)
-  }
+	// Run all puts for parallel execution.
+	if err := db.Run(b2); err != nil {
+		log.Fatal(err)
+	}
 
-  // Run all puts for parallel execution.
-  if err := kv.Run(calls...); err != nil {
-    log.Fatal(err)
-  }
+Transactions are supported through the DB.Txn() method, which takes a retryable
+function, itself composed of the same simple mix of API calls typical of a
+non-transactional operation. Within the context of the Txn() call, all method
+invocations are transparently given necessary transactional details, and
+conflicts are handled with backoff/retry loops and transaction restarts as
+necessary. An example of using transactions with parallel writes:
 
-Transactions are supported through the RunTransaction() method, which
-takes a retryable function, itself composed of the same simple mix of
-API calls typical of a non-transactional operation. Within the context
-of the RunTransaction call, all method invocations are transparently
-given necessary transactional details, and conflicts are handled with
-backoff/retry loops and transaction restarts as necessary. An example
-of using transactions with parallel writes:
+	db, err := client.Open("https://root@localhost:8080")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-  kv := client.newKV(nil, client.newHTTPSender("localhost:8080", httpClient))
+	err := db.Txn(func(txn *client.Txn) error {
+		b := &client.Batch{}
+		for i := 0; i < 100; i++ {
+			key := fmt.Sprintf("testkey-%02d", i)
+			b.Put(key, "test value")
+		}
 
-  opts := &client.transactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-  err := kv.RunTransaction(opts, func(txn *client.Txn) error {
-    for i := 0; i < 100; i++ {
-      key := proto.Key(fmt.Sprintf("testkey-%02d", i))
-      txn.Prepare(client.Put(key, []byte("test value")))
-    }
+		// Note that the Txn client is flushed automatically when this function
+		// returns success (i.e. nil). Calling Commit explicitly can sometimes
+		// reduce the number of RPCs.
+		return txn.Commit(b)
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    // Note that the Txn client is flushed automatically on transaction
-    // commit. Invoking Flush after individual API methods is only
-    // required if the result needs to be received to take conditional
-    // action.
-    return nil
-  })
-  if err != nil {
-    log.Fatal(err)
-  }
+Note that with Cockroach's lock-free transactions, clients should expect
+retries as a matter of course. This is why the transaction functionality is
+exposed through a retryable function. The retryable function should have no
+side effects which are not idempotent.
 
-Note that with Cockroach's lock-free transactions, clients should
-expect retries as a matter of course. This is why the transaction
-functionality is exposed through a retryable function. The retryable
-function should have no side effects which are not idempotent.
-
-Transactions should endeavor to write using KV.Prepare calls. This
-allows writes to the same range to be batched together. In cases where
-the entire transaction affects only a single range, transactions can
-commit in a single round trip.
+Transactions should endeavor to use batches to perform multiple operations in a
+single RPC. In addition to the reduced number of RPCs to the server, this
+allows writes to the same range to be batched together. In cases where the
+entire transaction affects only a single range, transactions can commit in a
+single round trip.
 */
 package client
