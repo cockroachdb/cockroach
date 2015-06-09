@@ -26,16 +26,9 @@ import (
 	"golang.org/x/net/context"
 )
 
-// TransactionOptions are parameters for use with KV.RunTransaction.
-type TransactionOptions struct {
-	Name         string // Concise desc of txn for debugging
-	Isolation    proto.IsolationType
-	UserPriority int32
-}
-
-// KV provides access to a KV store. A KV instance is safe for
+// kv provides access to a KV store. A kv instance is safe for
 // concurrent use by multiple goroutines.
-type KV struct {
+type kv struct {
 	// User is the default user to set on API calls. If User is set to
 	// non-empty in call arguments, this value is ignored.
 	User string
@@ -53,8 +46,8 @@ type KV struct {
 // formulate client command IDs, which provide idempotency on API
 // calls and defaults to the system clock.
 // implementation.
-func newKV(sender Sender) *KV {
-	return &KV{
+func newKV(sender Sender) *kv {
+	return &kv{
 		Sender:          sender,
 		TxnRetryOptions: DefaultTxnRetryOptions,
 	}
@@ -62,7 +55,7 @@ func newKV(sender Sender) *KV {
 
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (kv *KV) Run(calls ...Call) (err error) {
+func (kv *kv) Run(calls ...Call) (err error) {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -134,8 +127,8 @@ func (kv *KV) Run(calls ...Call) (err error) {
 // returns any error aside from recoverable internal errors, and is
 // automatically committed otherwise. retryable should have no side
 // effects which could cause problems in the event it must be run more
-// than once. The opts struct contains transaction settings.
-func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) error) error {
-	txn := newTxn(kv, opts)
+// than once.
+func (kv *kv) RunTransaction(retryable func(txn *txn) error) error {
+	txn := newTxn(kv)
 	return txn.exec(retryable)
 }

@@ -137,7 +137,7 @@ type DB struct {
 	//
 	//   err := db.Run(db.B.Put("a", "1").Put("b", "2"))
 	B  batcher
-	kv KV
+	kv kv
 }
 
 // Option is the signature for a function which applies an option to a DB.
@@ -213,11 +213,6 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		opt(db)
 	}
 	return db, nil
-}
-
-// InternalKV returns the internal KV. It is intended for internal use only.
-func (db *DB) InternalKV() *KV {
-	return &db.kv
 }
 
 // InternalSender returns the internal sender. It is intended for internal use
@@ -373,7 +368,7 @@ func (db *DB) Run(b *Batch) error {
 func (db *DB) Tx(retryable func(tx *Tx) error) error {
 	_, file, line, ok := runtime.Caller(1)
 
-	return db.kv.RunTransaction(nil, func(txn *Txn) error {
+	return db.kv.RunTransaction(func(txn *txn) error {
 		tx := &Tx{txn: txn}
 		if ok {
 			// TODO(pmattis): include the parent directory?
@@ -393,7 +388,7 @@ type Tx struct {
 	//     return tx.Commit(tx.B.Put("a", "1").Put("b", "2"))
 	//   })
 	B   batcher
-	txn *Txn
+	txn *txn
 }
 
 // SetDebugName sets the debug name associated with the transaction which will

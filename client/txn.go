@@ -40,34 +40,34 @@ var (
 )
 
 type txnSender struct {
-	*Txn
+	*txn
 }
 
 func (ts *txnSender) Send(ctx context.Context, call Call) {
 	// Send call through wrapped sender.
-	call.Args.Header().Txn = &ts.txn
+	call.Args.Header().Txn = &ts.txn.txn
 	ts.wrapped.Send(ctx, call)
-	ts.txn.Update(call.Reply.Header().Txn)
+	ts.txn.txn.Update(call.Reply.Header().Txn)
 
 	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
-		ts.txn = proto.Transaction{
-			Name:      ts.txn.Name,
-			Isolation: ts.txn.Isolation,
+		ts.txn.txn = proto.Transaction{
+			Name:      ts.txn.txn.Name,
+			Isolation: ts.txn.txn.Isolation,
 			Priority:  err.Txn.Priority, // acts as a minimum priority on restart
 		}
 	}
 }
 
-// Txn provides serial access to a KV store via Run and parallel
+// txn provides serial access to a KV store via Run and parallel
 // access via Prepare and Flush. On receipt of
 // TransactionRestartError, the transaction epoch is incremented and
 // error passed to caller. On receipt of TransactionAbortedError, the
 // transaction is re-created and the error passed to caller.
 //
-// A Txn instance is not thread safe.
-type Txn struct {
-	kv           KV
+// A txn instance is not thread safe.
+type txn struct {
+	kv           kv
 	wrapped      Sender
 	txn          proto.Transaction
 	txnSender    txnSender
@@ -76,30 +76,17 @@ type Txn struct {
 	haveEndTxn   bool // True if there was an explicit EndTransaction
 }
 
-var defaultTxnOpts = TransactionOptions{}
-
-func newTxn(kv *KV, opts *TransactionOptions) *Txn {
-	if opts == nil {
-		opts = &defaultTxnOpts
-	}
-
-	t := &Txn{
+func newTxn(kv *kv) *txn {
+	t := &txn{
 		kv:      *kv,
 		wrapped: kv.Sender,
-		txn: proto.Transaction{
-			Name:      opts.Name,
-			Isolation: opts.Isolation,
-		},
 	}
-	t.txnSender.Txn = t
+	t.txnSender.txn = t
 	t.kv.Sender = &t.txnSender
-	if opts != &defaultTxnOpts {
-		t.kv.UserPriority = opts.UserPriority
-	}
 	return t
 }
 
-func (t *Txn) exec(retryable func(txn *Txn) error) error {
+func (t *txn) exec(retryable func(txn *txn) error) error {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	retryOpts := t.kv.TxnRetryOptions
@@ -145,7 +132,7 @@ func (t *Txn) exec(retryable func(txn *Txn) error) error {
 
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (t *Txn) Run(calls ...Call) error {
+func (t *txn) Run(calls ...Call) error {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -174,7 +161,7 @@ func (t *Txn) Run(calls ...Call) error {
 // with the KV interface, but potentially removes the optimization to
 // send the EndTransaction in the same batch as the final set of
 // prepared calls.
-func (t *Txn) Prepare(calls ...Call) {
+func (t *txn) Prepare(calls ...Call) {
 	t.updateState(calls)
 	for _, c := range calls {
 		c.resetClientCmdID()
@@ -188,7 +175,7 @@ func (t *Txn) Prepare(calls ...Call) {
 // executed successfully. Otherwise, Flush returns the first error,
 // where calls are executed in the order in which they were prepared.
 // After Flush returns, all prepared reply structs will be valid.
-func (t *Txn) Flush() error {
+func (t *txn) Flush() error {
 	calls := t.prepared
 	t.prepared = nil
 	if len(calls) == 0 {
@@ -197,7 +184,7 @@ func (t *Txn) Flush() error {
 	return t.kv.Run(calls...)
 }
 
-func (t *Txn) updateState(calls []Call) {
+func (t *txn) updateState(calls []Call) {
 	for _, c := range calls {
 		if b, ok := c.Args.(*proto.BatchRequest); ok {
 			for _, br := range b.Requests {
@@ -209,7 +196,7 @@ func (t *Txn) updateState(calls []Call) {
 	}
 }
 
-func (t *Txn) updateStateForRequest(r proto.Request) {
+func (t *txn) updateStateForRequest(r proto.Request) {
 	if !t.haveTxnWrite {
 		t.haveTxnWrite = proto.IsTransactionWrite(r)
 	} else if _, ok := r.(*proto.EndTransactionRequest); ok {
