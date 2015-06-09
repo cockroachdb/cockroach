@@ -27,19 +27,10 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var (
-	txnKey = proto.Key("test-txn")
-	txnID  = []byte(util.NewUUID4())
-)
-
-func makeTS(walltime int64, logical int32) proto.Timestamp {
-	return proto.Timestamp{
-		WallTime: walltime,
-		Logical:  logical,
-	}
-}
-
 func newTestSender(handler func(Call)) SenderFunc {
+	txnKey := proto.Key("test-txn")
+	txnID := []byte(util.NewUUID4())
+
 	return func(_ context.Context, call Call) {
 		header := call.Args.Header()
 		header.UserPriority = gogoproto.Int32(-1)
@@ -65,6 +56,13 @@ func newTestSender(handler func(Call)) SenderFunc {
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
+	makeTS := func(walltime int64, logical int32) proto.Timestamp {
+		return proto.Timestamp{
+			WallTime: walltime,
+			Logical:  logical,
+		}
+	}
+
 	testCases := []struct {
 		expRequestTS, responseTS proto.Timestamp
 	}{
@@ -78,14 +76,16 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	}
 
 	var testIdx int
-	kv := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		test := testCases[testIdx]
 		if !test.expRequestTS.Equal(call.Args.Header().Txn.Timestamp) {
 			t.Errorf("%d: expected ts %s got %s", testIdx, test.expRequestTS, call.Args.Header().Txn.Timestamp)
 		}
 		call.Reply.Header().Txn.Timestamp = test.responseTS
 	}))
-	txn := newTxn(kv)
+
+	var txn txn
+	txn.init(&db.kv)
 
 	for testIdx = range testCases {
 		txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
@@ -94,12 +94,13 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
-	kv := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}))
-	txn := newTxn(kv)
 
+	var txn txn
+	txn.init(&db.kv)
 	txn.kv.Sender.Send(context.Background(), Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
 	if len(txn.txn.ID) != 0 {

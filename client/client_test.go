@@ -85,11 +85,8 @@ func createTestNotifyClient(addr string, priority int) (*client.DB, *notifyingSe
 	if err != nil {
 		log.Fatal(err)
 	}
-	// TODO(peter): This is currently the only use of
-	// InternalSender/InternalSetSender. Remove once db.Sender is exposed.
-	origSender := db.InternalSender()
-	sender := &notifyingSender{wrapped: origSender}
-	db.InternalSetSender(sender)
+	sender := &notifyingSender{wrapped: db.Sender}
+	db.Sender = sender
 	return db, sender
 }
 

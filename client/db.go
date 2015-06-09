@@ -136,8 +136,8 @@ type DB struct {
 	// operation on it easer:
 	//
 	//   err := db.Run(db.B.Put("a", "1").Put("b", "2"))
-	B  batcher
-	kv kv
+	B batcher
+	kv
 }
 
 // Option is the signature for a function which applies an option to a DB.
@@ -198,36 +198,21 @@ func Open(addr string, opts ...Option) (*DB, error) {
 
 	db := &DB{}
 	db.kv.Sender = sender
-	db.kv.User = u.User.Username()
-	db.kv.TxnRetryOptions = DefaultTxnRetryOptions
+	db.kv.user = u.User.Username()
+	db.kv.txnRetryOptions = DefaultTxnRetryOptions
 
 	if priority := q["priority"]; len(priority) > 0 {
 		p, err := strconv.Atoi(priority[0])
 		if err != nil {
 			return nil, err
 		}
-		db.kv.UserPriority = int32(p)
+		db.kv.userPriority = int32(p)
 	}
 
 	for _, opt := range opts {
 		opt(db)
 	}
 	return db, nil
-}
-
-// InternalSender returns the internal sender. It is intended for internal use
-// only.
-//
-// TODO(peter): This is temporary. Once client.KV goes away we can put
-// KV.Sender directly in DB.
-func (db *DB) InternalSender() Sender {
-	return db.kv.Sender
-}
-
-// InternalSetSender sets the internal set field. It is intended for internal
-// use only.
-func (db *DB) InternalSetSender(sender Sender) {
-	db.kv.Sender = sender
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -352,7 +337,7 @@ func (db *DB) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	if err := db.kv.Run(b.calls...); err != nil {
+	if err := db.send(b.calls...); err != nil {
 		return err
 	}
 	return b.fillResults()
@@ -368,13 +353,14 @@ func (db *DB) Run(b *Batch) error {
 func (db *DB) Tx(retryable func(tx *Tx) error) error {
 	_, file, line, ok := runtime.Caller(1)
 
-	return db.kv.RunTransaction(func(txn *txn) error {
-		tx := &Tx{txn: txn}
+	tx := Tx{}
+	tx.txn.init(&db.kv)
+	return tx.txn.exec(func(txn *txn) error {
 		if ok {
 			// TODO(pmattis): include the parent directory?
 			tx.txn.txn.Name = fmt.Sprintf("%s:%d", filepath.Base(file), line)
 		}
-		return retryable(tx)
+		return retryable(&tx)
 	})
 }
 
@@ -387,8 +373,8 @@ type Tx struct {
 	//   err := db.Tx(func(tx *Tx) error {
 	//     return tx.Commit(tx.B.Put("a", "1").Put("b", "2"))
 	//   })
-	B   batcher
-	txn *txn
+	B batcher
+	txn
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
@@ -427,7 +413,7 @@ func (tx *Tx) SetSnapshotIsolation() {
 func (tx *Tx) InternalSetPriority(priority int32) {
 	// The negative user priority translates into a positive (and known) priority
 	// for the transaction.
-	tx.txn.kv.UserPriority = -priority
+	tx.txn.kv.userPriority = -priority
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -535,7 +521,7 @@ func (tx *Tx) Run(b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	if err := tx.txn.Run(b.calls...); err != nil {
+	if err := tx.send(b.calls...); err != nil {
 		return err
 	}
 	return b.fillResults()

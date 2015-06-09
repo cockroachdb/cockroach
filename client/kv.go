@@ -29,33 +29,21 @@ import (
 // kv provides access to a KV store. A kv instance is safe for
 // concurrent use by multiple goroutines.
 type kv struct {
-	// User is the default user to set on API calls. If User is set to
+	Sender Sender
+
+	// user is the default user to set on API calls. If User is set to
 	// non-empty in call arguments, this value is ignored.
-	User string
-	// UserPriority is the default user priority to set on API calls. If
-	// UserPriority is set non-zero in call arguments, this value is
+	user string
+	// userPriority is the default user priority to set on API calls. If
+	// userPriority is set non-zero in call arguments, this value is
 	// ignored.
-	UserPriority    int32
-	TxnRetryOptions retry.Options
-	Sender          Sender
+	userPriority    int32
+	txnRetryOptions retry.Options
 }
 
-// newKV creates a new instance of KV using the specified sender. To
-// create a transactional client, the KV struct should be manually
-// initialized in order to utilize a txnSender. Clock is used to
-// formulate client command IDs, which provide idempotency on API
-// calls and defaults to the system clock.
-// implementation.
-func newKV(sender Sender) *kv {
-	return &kv{
-		Sender:          sender,
-		TxnRetryOptions: DefaultTxnRetryOptions,
-	}
-}
-
-// Run runs the specified calls synchronously in a single batch and
+// send runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (kv *kv) Run(calls ...Call) (err error) {
+func (kv *kv) send(calls ...Call) (err error) {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -72,10 +60,10 @@ func (kv *kv) Run(calls ...Call) (err error) {
 	if len(calls) == 1 {
 		c := calls[0]
 		if c.Args.Header().User == "" {
-			c.Args.Header().User = kv.User
+			c.Args.Header().User = kv.user
 		}
-		if c.Args.Header().UserPriority == nil && kv.UserPriority != 0 {
-			c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
+		if c.Args.Header().UserPriority == nil && kv.userPriority != 0 {
+			c.Args.Header().UserPriority = gogoproto.Int32(kv.userPriority)
 		}
 		c.resetClientCmdID()
 		kv.Sender.Send(context.TODO(), c)
@@ -94,7 +82,7 @@ func (kv *kv) Run(calls ...Call) (err error) {
 	for _, call := range calls {
 		bArgs.Add(call.Args)
 	}
-	err = kv.Run(Call{Args: bArgs, Reply: bReply})
+	err = kv.send(Call{Args: bArgs, Reply: bReply})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -120,15 +108,4 @@ func (kv *kv) Run(calls ...Call) (err error) {
 		}
 	}
 	return
-}
-
-// RunTransaction executes retryable in the context of a distributed
-// transaction. The transaction is automatically aborted if retryable
-// returns any error aside from recoverable internal errors, and is
-// automatically committed otherwise. retryable should have no side
-// effects which could cause problems in the event it must be run more
-// than once.
-func (kv *kv) RunTransaction(retryable func(txn *txn) error) error {
-	txn := newTxn(kv)
-	return txn.exec(retryable)
 }

@@ -26,48 +26,40 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
-func TestKVCallError(t *testing.T) {
+func newDB(sender Sender) *DB {
+	return &DB{
+		kv: kv{
+			Sender:          sender,
+			txnRetryOptions: DefaultTxnRetryOptions,
+		},
+	}
+}
+
+func TestCallError(t *testing.T) {
 	count := 0
-	client := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		count++
 	}))
 
 	testError := "test error"
-	if err := client.Run(Call{Err: errors.New(testError)}); err == nil {
+	if err := db.send(Call{Err: errors.New(testError)}); err == nil {
 		t.Fatalf("expected error, but found success")
 	} else if err.Error() != testError {
 		t.Fatalf("expected %s, but got %s", testError, err)
 	}
 }
 
-// TestKVTransactionEmptyFlush verifies that flushing without preparing any
-// calls is a noop.
-func TestKVTransactionEmptyFlush(t *testing.T) {
-	count := 0
-	client := newKV(newTestSender(func(call Call) {
-		count++
-	}))
-	if err := client.RunTransaction(func(txn *txn) error {
-		if count != 0 {
-			t.Errorf("expected 0 count; got %d", count)
-		}
-		return txn.Flush()
-	}); err != nil {
-		t.Error(err)
-	}
-}
-
-// TestKVClientCommandID verifies that client command ID is set
+// TestClientCommandID verifies that client command ID is set
 // on call.
-func TestKVClientCommandID(t *testing.T) {
+func TestClientCommandID(t *testing.T) {
 	count := 0
-	client := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		count++
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")
 		}
 	}))
-	if err := client.Run(Call{Args: testPutReq, Reply: &proto.PutResponse{}}); err != nil {
+	if err := db.Put("a", "b"); err != nil {
 		t.Error(err)
 	}
 	if count != 1 {
@@ -75,50 +67,20 @@ func TestKVClientCommandID(t *testing.T) {
 	}
 }
 
-// TestKVTransactionPrepareAndFlush verifies that Flush sends single prepared
-// call without a batch and more than one prepared calls with a batch.
-func TestKVTransactionPrepareAndFlush(t *testing.T) {
-	for i := 1; i < 3; i++ {
-		var calls []proto.Method
-		client := newKV(newTestSender(func(call Call) {
-			calls = append(calls, call.Method())
-			if call.Args.Header().CmdID.WallTime == 0 {
-				t.Errorf("expected batch client command ID to be initialized: %v", call.Args.Header().CmdID)
-			}
-		}))
-
-		if err := client.RunTransaction(func(txn *txn) error {
-			for j := 0; j < i; j++ {
-				txn.Prepare(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
-			}
-			return txn.Flush()
-		}); err != nil {
-			t.Error(err)
-		}
-		expectedCalls := []proto.Method{proto.Batch, proto.EndTransaction}
-		if i == 1 {
-			expectedCalls[0] = proto.Put
-		}
-		if !reflect.DeepEqual(expectedCalls, calls) {
-			t.Errorf("expected %s, got %s", expectedCalls, calls)
-		}
-	}
-}
-
-// TestKVTransactionConfig verifies the proper unwrapping and
+// TestTransactionConfig verifies the proper unwrapping and
 // re-wrapping of the client's sender when starting a transaction.
 // Also verifies that User and UserPriority are propagated to the
 // transactional client.
-func TestKVTransactionConfig(t *testing.T) {
-	client := newKV(newTestSender(func(call Call) {}))
-	client.User = "foo"
-	client.UserPriority = 101
-	if err := client.RunTransaction(func(txn *txn) error {
-		if txn.kv.User != client.User {
-			t.Errorf("expected txn user %s; got %s", client.User, txn.kv.User)
+func TestTransactionConfig(t *testing.T) {
+	db := newDB(newTestSender(func(call Call) {}))
+	db.user = "foo"
+	db.userPriority = 101
+	if err := db.Tx(func(tx *Tx) error {
+		if tx.txn.kv.user != db.user {
+			t.Errorf("expected txn user %s; got %s", db.user, tx.txn.kv.user)
 		}
-		if txn.kv.UserPriority != client.UserPriority {
-			t.Errorf("expected txn user priority %d; got %d", client.UserPriority, txn.kv.UserPriority)
+		if tx.txn.kv.userPriority != db.userPriority {
+			t.Errorf("expected txn user priority %d; got %d", db.userPriority, tx.txn.kv.userPriority)
 		}
 		return nil
 	}); err != nil {
@@ -126,16 +88,17 @@ func TestKVTransactionConfig(t *testing.T) {
 	}
 }
 
-// TestKVCommitReadOnlyTransaction verifies that transaction is
+// TestCommitReadOnlyTransaction verifies that transaction is
 // committed but EndTransaction is not sent if only read-only
 // operations were performed.
-func TestKVCommitReadOnlyTransaction(t *testing.T) {
+func TestCommitReadOnlyTransaction(t *testing.T) {
 	var calls []proto.Method
-	client := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 	}))
-	if err := client.RunTransaction(func(txn *txn) error {
-		return txn.Run(Get(proto.Key("a")))
+	if err := db.Tx(func(tx *Tx) error {
+		_, err := tx.Get("a")
+		return err
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
@@ -145,18 +108,18 @@ func TestKVCommitReadOnlyTransaction(t *testing.T) {
 	}
 }
 
-// TestKVCommitMutatingTransaction verifies that transaction is committed
+// TestCommitMutatingTransaction verifies that transaction is committed
 // upon successful invocation of the retryable func.
-func TestKVCommitMutatingTransaction(t *testing.T) {
+func TestCommitMutatingTransaction(t *testing.T) {
 	var calls []proto.Method
-	client := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
 			t.Errorf("expected commit to be true; got %t", et.Commit)
 		}
 	}))
-	if err := client.RunTransaction(func(txn *txn) error {
-		return txn.Run(Put(proto.Key("a"), nil))
+	if err := db.Tx(func(tx *Tx) error {
+		return tx.Put("a", "b")
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
@@ -166,22 +129,16 @@ func TestKVCommitMutatingTransaction(t *testing.T) {
 	}
 }
 
-// TestKVCommitTransactionOnce verifies that if the transaction is
+// TestCommitTransactionOnce verifies that if the transaction is
 // ended explicitly in the retryable func, it is not automatically
 // ended a second time at completion of retryable func.
-func TestKVCommitTransactionOnce(t *testing.T) {
+func TestCommitTransactionOnce(t *testing.T) {
 	count := 0
-	client := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		count++
 	}))
-	if err := client.RunTransaction(func(txn *txn) error {
-		if err := txn.Run(Call{
-			Args:  &proto.EndTransactionRequest{Commit: true},
-			Reply: &proto.EndTransactionResponse{},
-		}); err != nil {
-			t.Fatal(err)
-		}
-		return nil
+	if err := db.Tx(func(tx *Tx) error {
+		return tx.Commit(&Batch{})
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
@@ -190,34 +147,34 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	}
 }
 
-// TestKVAbortReadOnlyTransaction verifies that transaction is aborted
+// TestAbortReadOnlyTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
-func TestKVAbortReadOnlyTransaction(t *testing.T) {
-	client := newKV(newTestSender(func(call Call) {
+func TestAbortReadOnlyTransaction(t *testing.T) {
+	db := newDB(newTestSender(func(call Call) {
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
 	}))
-	if err := client.RunTransaction(func(txn *txn) error {
+	if err := db.Tx(func(tx *Tx) error {
 		return errors.New("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
 	}
 }
 
-// TestKVAbortMutatingTransaction verifies that transaction is aborted
+// TestAbortMutatingTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
-func TestKVAbortMutatingTransaction(t *testing.T) {
+func TestAbortMutatingTransaction(t *testing.T) {
 	var calls []proto.Method
-	client := newKV(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
 			t.Errorf("expected commit to be false; got %t", et.Commit)
 		}
 	}))
 
-	if err := client.RunTransaction(func(txn *txn) error {
-		if err := txn.Run(Put(proto.Key("a"), nil)); err != nil {
+	if err := db.Tx(func(tx *Tx) error {
+		if err := tx.Put("a", "b"); err != nil {
 			return err
 		}
 		return errors.New("foo")
@@ -230,9 +187,9 @@ func TestKVAbortMutatingTransaction(t *testing.T) {
 	}
 }
 
-// TestKVRunTransactionRetryOnErrors verifies that the transaction
+// TestRunTransactionRetryOnErrors verifies that the transaction
 // is retried on the correct errors.
-func TestKVRunTransactionRetryOnErrors(t *testing.T) {
+func TestRunTransactionRetryOnErrors(t *testing.T) {
 	testCases := []struct {
 		err   error
 		retry bool // Expect retry?
@@ -249,7 +206,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 
 	for i, test := range testCases {
 		count := 0
-		client := newKV(newTestSender(func(call Call) {
+		db := newDB(newTestSender(func(call Call) {
 			if _, ok := call.Args.(*proto.PutRequest); ok {
 				count++
 				if count == 1 {
@@ -257,10 +214,9 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 				}
 			}
 		}))
-		client.TxnRetryOptions.Backoff = 1 * time.Millisecond
-		err := client.RunTransaction(func(txn *txn) error {
-			reply := &proto.PutResponse{}
-			return client.Run(Call{Args: testPutReq, Reply: reply})
+		db.txnRetryOptions.Backoff = 1 * time.Millisecond
+		err := db.Tx(func(tx *Tx) error {
+			return tx.Put("a", "b")
 		})
 		if test.retry {
 			if count != 2 {
