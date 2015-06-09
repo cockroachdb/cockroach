@@ -127,9 +127,9 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"NewRange",
 			func(feed StoreEventFeed) {
-				feed.addRange(rng1)
+				feed.registerRange(rng1, false /* scan */)
 			},
-			&AddRangeEvent{
+			&RegisterRangeEvent{
 				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
 					RaftID:   1,
@@ -210,7 +210,7 @@ func TestStoreEventFeed(t *testing.T) {
 						ValBytes:  -170,
 					},
 				},
-				New: AddRangeEvent{
+				New: RegisterRangeEvent{
 					Desc: &proto.RangeDescriptor{
 						RaftID:   2,
 						StartKey: proto.Key("b"),

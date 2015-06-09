@@ -77,12 +77,19 @@ func TestNodeStatusMonitor(t *testing.T) {
 				Stats:   stats,
 				Delta:   stats,
 			},
-			&storage.AddRangeEvent{
+			&storage.RegisterRangeEvent{
+				StoreID: id,
+				Desc:    desc2,
+				Stats:   stats,
+				Scan:    false, // should lead to this being ignored
+			},
+			&storage.RegisterRangeEvent{
 				StoreID: id,
 				Desc:    desc1,
 				Stats:   stats,
+				Scan:    true, // not ignored
 			},
-			&storage.UpdateRangeEvent{ // Update during scan after add, should be picked up.
+			&storage.UpdateRangeEvent{ // Update during scan after register, should be picked up
 				StoreID: id,
 				Desc:    desc1,
 				Stats:   stats,
@@ -90,6 +97,12 @@ func TestNodeStatusMonitor(t *testing.T) {
 			},
 			&storage.EndScanRangesEvent{ // End Scan.
 				StoreID: id,
+			},
+			&storage.RegisterRangeEvent{
+				StoreID: id,
+				Desc:    desc2,
+				Stats:   stats,
+				Scan:    true, // ignored, not in ScanRanges mode
 			},
 			&storage.UpdateRangeEvent{
 				StoreID: id,
@@ -111,10 +124,11 @@ func TestNodeStatusMonitor(t *testing.T) {
 					Stats:   stats,
 					Delta:   stats,
 				},
-				New: storage.AddRangeEvent{
+				New: storage.RegisterRangeEvent{
 					StoreID: id,
 					Desc:    desc2,
 					Stats:   stats,
+					Scan:    false,
 				},
 			},
 			&storage.UpdateRangeEvent{
