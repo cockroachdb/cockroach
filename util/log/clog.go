@@ -83,11 +83,6 @@ func (s *severity) String() string {
 	return strconv.FormatInt(int64(*s), 10)
 }
 
-// Get is part of the flag.Value interface.
-func (s *severity) Get() interface{} {
-	return *s
-}
-
 // Set is part of the flag.Value interface.
 func (s *severity) Set(value string) error {
 	var threshold severity
@@ -198,11 +193,6 @@ func (l *level) String() string {
 	return strconv.FormatInt(int64(*l), 10)
 }
 
-// Get is part of the flag.Value interface.
-func (l *level) Get() interface{} {
-	return *l
-}
-
 // Set is part of the flag.Value interface.
 func (l *level) Set(value string) error {
 	v, err := strconv.Atoi(value)
@@ -250,12 +240,6 @@ func (m *moduleSpec) String() string {
 		fmt.Fprintf(&b, "%s=%d", f.pattern, f.level)
 	}
 	return b.String()
-}
-
-// Get is part of the (Go 1.2)  flag.Getter interface. It always returns nil for this flag type since the
-// struct is not exported.
-func (m *moduleSpec) Get() interface{} {
-	return nil
 }
 
 var errVmoduleSyntax = errors.New("syntax error: expect comma-separated list of filename=N")
@@ -328,12 +312,6 @@ func (t *traceLocation) String() string {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	return fmt.Sprintf("%s:%d", t.file, t.line)
-}
-
-// Get is part of the (Go 1.2) flag.Getter interface. It always returns nil for this flag type since the
-// struct is not exported
-func (t *traceLocation) Get() interface{} {
-	return nil
 }
 
 var errTraceSyntax = errors.New("syntax error: expect file.go:234")
