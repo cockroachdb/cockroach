@@ -4,7 +4,7 @@ set -eu
 
 image="cockroachdb/builder"
 
-if [ "$1" = "init" ]; then
+if [ "${1:-}" = "init" ]; then
     docker build --tag="${image}" - <<EOF
 FROM golang:1.4.2
 
