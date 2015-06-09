@@ -15,6 +15,7 @@
         "./header.ts",
         "./app.ts",
         "./util/chainprop.ts",
+        "./models/proto.ts",
         "./models/node_status.ts",
         "./models/stats.ts",
         "./models/store_status.ts",

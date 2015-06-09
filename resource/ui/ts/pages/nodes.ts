@@ -41,14 +41,14 @@ module AdminViews {
         }
       }
 
-      private static _queryManagerBuilder(nodeId: string, agg: Models.Metrics.QueryAggregator, source:string): Models.Metrics.QueryManager {
+      private static _queryManagerBuilder(nodeId: string, agg: Models.Proto.QueryAggregator, source:string): Models.Metrics.QueryManager {
         var query = Models.Metrics.NewQuery(
 			Models.Metrics.select.Avg("cr.node." + source + "." + nodeId)
 		).timespan(Models.Metrics.time.Recent(10 * 60 * 1000));
         return new Models.Metrics.QueryManager(query);
       }
 
-      private _addChart(agg: Models.Metrics.QueryAggregator, source:string):void {
+      private _addChart(agg: Models.Proto.QueryAggregator, source:string):void {
         var name = agg + ":" + source;
         if (queryManagers[this._nodeId][name] == null) {
           queryManagers[this._nodeId][name] = Controller._queryManagerBuilder(this._nodeId, agg, source);
@@ -69,8 +69,8 @@ module AdminViews {
           if (queryManagers[nodeId] == null) {
             queryManagers[nodeId] = {};
           }
-          this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.success");
-          this._addChart(Models.Metrics.QueryAggregator.AVG_RATE, "calls.error");
+          this._addChart(Models.Proto.QueryAggregator.AVG_RATE, "calls.success");
+          this._addChart(Models.Proto.QueryAggregator.AVG_RATE, "calls.error");
         } else {
           this._nodeId = null;
         }
