@@ -86,8 +86,8 @@ func TestSingleKey(t *testing.T) {
 			var r result
 			for time.Now().Before(deadline) {
 				start := time.Now()
-				err := c.Tx(func(tx *client.Tx) error {
-					r, err := tx.Get(key)
+				err := c.Txn(func(txn *client.Txn) error {
+					r, err := txn.Get(key)
 					if err != nil {
 						return err
 					}
@@ -95,7 +95,7 @@ func TestSingleKey(t *testing.T) {
 					if err := v.UnmarshalBinary(r.ValueBytes()); err != nil {
 						return err
 					}
-					return tx.Commit(tx.B.Put(key, v+1))
+					return txn.Commit(txn.B.Put(key, v+1))
 				})
 				if err != nil {
 					resultCh <- result{err: err}

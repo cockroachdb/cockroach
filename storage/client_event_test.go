@@ -181,10 +181,10 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	// Add some data in a transaction
-	err := mtc.db.Tx(func(tx *client.Tx) error {
-		b := tx.B.Put("a", "asdf")
+	err := mtc.db.Txn(func(txn *client.Txn) error {
+		b := txn.B.Put("a", "asdf")
 		b.Put("c", "jkl;")
-		return tx.Commit(b)
+		return txn.Commit(b)
 	})
 	if err != nil {
 		t.Fatalf("error putting data to db: %s", err)

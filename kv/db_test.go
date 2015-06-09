@@ -165,7 +165,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	defer s.Stop()
 
 	db := createTestClient(t, s.ServingAddr())
-	err := db.Tx(func(tx *client.Tx) error {
+	err := db.Txn(func(txn *client.Txn) error {
 		// Make an EndTransaction request which would fail if not
 		// stripped. In this case, we set the start key to "bar" for a
 		// split of the default range; start key must be "" in this case.
@@ -182,7 +182,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
-		return tx.Run(b)
+		return txn.Run(b)
 	})
 	if err == nil {
 		t.Errorf("expected 400 bad request error on commit")
@@ -271,11 +271,11 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Tx(func(tx *client.Tx) error {
+	err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
-		tx.SetSnapshotIsolation()
+		txn.SetSnapshotIsolation()
 
-		if err := tx.Put(key, value); err != nil {
+		if err := txn.Put(key, value); err != nil {
 			t.Fatal(err)
 		}
 
@@ -287,7 +287,7 @@ func TestKVDBTransaction(t *testing.T) {
 		}
 
 		// Read within the transaction.
-		if gr, err := tx.Get(key); err != nil {
+		if gr, err := txn.Get(key); err != nil {
 			t.Fatal(err)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 			t.Errorf("expected value %q; got %q", value, gr.ValueBytes())

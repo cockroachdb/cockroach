@@ -58,7 +58,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.Tx(func(tx *client.Tx) error {
+			err := db.Txn(func(txn *client.Txn) error {
 				if first && txnChannel != nil {
 					txnChannel <- struct{}{}
 				} else if !first && retries != nil {
@@ -68,7 +68,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := util.RandBytes(src, 10)
 					val := util.RandBytes(src, int(src.Int31n(valBytes)))
-					if err := tx.Put(key, val); err != nil {
+					if err := txn.Put(key, val); err != nil {
 						log.Infof("experienced an error in routine %d: %s", i, err)
 						return err
 					}

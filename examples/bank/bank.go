@@ -74,8 +74,8 @@ func (bank *Bank) makeAccountID(id int) []byte {
 // Read the balances in all the accounts and return them.
 func (bank *Bank) sumAllAccounts() int64 {
 	var result int64
-	err := bank.db.Tx(func(tx *client.Tx) error {
-		rows, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+	err := bank.db.Txn(func(txn *client.Txn) error {
+		rows, err := txn.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 		}
 		var err error
 		if *useTransaction {
-			err = bank.db.Tx(func(tx *client.Tx) error { return transferMoney(tx) })
+			err = bank.db.Txn(func(txn *client.Txn) error { return transferMoney(txn) })
 		} else {
 			err = transferMoney(bank.db)
 		}
@@ -166,9 +166,9 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 // any new accounts.
 func (bank *Bank) initBankAccounts(cash int64) int64 {
 	var totalCash int64
-	if err := bank.db.Tx(func(tx *client.Tx) error {
+	if err := bank.db.Txn(func(txn *client.Txn) error {
 		// Check if the accounts have been initialized by another instance.
-		rows, err := tx.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
+		rows, err := txn.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 				totalCash += cash
 			}
 		}
-		return tx.Run(batch)
+		return txn.Run(batch)
 	}); err != nil {
 		log.Fatal(err)
 	}
