@@ -182,7 +182,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 
 	// Add some data in a transaction
 	err := mtc.db.Txn(func(txn *client.Txn) error {
-		b := txn.B.Put("a", "asdf")
+		b := client.B().Put("a", "asdf")
 		b.Put("c", "jkl;")
 		return txn.Commit(b)
 	})

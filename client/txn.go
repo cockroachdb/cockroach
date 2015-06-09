@@ -66,13 +66,6 @@ func (ts *txnSender) Send(ctx context.Context, call Call) {
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	// B is a helper to make creating a new batch and performing an
-	// operation on it easer:
-	//
-	//   err := db.Txn(func(txn *Txn) error {
-	//     return txn.Commit(txn.B.Put("a", "1").Put("b", "2"))
-	//   })
-	B            batcher
 	db           DB
 	wrapped      Sender
 	txn          proto.Transaction
@@ -142,7 +135,7 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Get(key interface{}) (KeyValue, error) {
-	return runOneRow(txn, txn.B.Get(key))
+	return runOneRow(txn, B().Get(key))
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -163,7 +156,7 @@ func (txn *Txn) GetProto(key interface{}, msg gogoproto.Message) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (txn *Txn) Put(key, value interface{}) error {
-	_, err := runOneResult(txn, txn.B.Put(key, value))
+	_, err := runOneResult(txn, B().Put(key, value))
 	return err
 }
 
@@ -174,7 +167,7 @@ func (txn *Txn) Put(key, value interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (txn *Txn) CPut(key, value, expValue interface{}) error {
-	_, err := runOneResult(txn, txn.B.CPut(key, value, expValue))
+	_, err := runOneResult(txn, B().CPut(key, value, expValue))
 	return err
 }
 
@@ -188,7 +181,7 @@ func (txn *Txn) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
-	return runOneRow(txn, txn.B.Inc(key, value))
+	return runOneRow(txn, B().Inc(key, value))
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
@@ -198,7 +191,7 @@ func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	r, err := runOneResult(txn, txn.B.Scan(begin, end, maxRows))
+	r, err := runOneResult(txn, B().Scan(begin, end, maxRows))
 	return r.Rows, err
 }
 
@@ -207,7 +200,7 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Del(keys ...interface{}) error {
-	_, err := runOneResult(txn, txn.B.Del(keys...))
+	_, err := runOneResult(txn, B().Del(keys...))
 	return err
 }
 
@@ -219,7 +212,7 @@ func (txn *Txn) Del(keys ...interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) DelRange(begin, end interface{}) error {
-	_, err := runOneResult(txn, txn.B.DelRange(begin, end))
+	_, err := runOneResult(txn, B().DelRange(begin, end))
 	return err
 }
 

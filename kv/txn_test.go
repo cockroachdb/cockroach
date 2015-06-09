@@ -108,7 +108,7 @@ func BenchmarkTxnWrites(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		s.Manual.Increment(1)
 		if tErr := s.DB.Txn(func(txn *client.Txn) error {
-			return txn.Commit(txn.B.Put(key, fmt.Sprintf("value-%d", i)))
+			return txn.Commit(client.B().Put(key, fmt.Sprintf("value-%d", i)))
 		}); tErr != nil {
 			b.Fatal(tErr)
 		}
