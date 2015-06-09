@@ -68,10 +68,10 @@ func tlsDialHTTP(network, address string, config *tls.Config) (net.Conn, error) 
 
 	// Require successful HTTP response before switching to RPC protocol.
 	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
-	if err == nil && resp.Status == connected {
-		return conn, nil
-	}
 	if err == nil {
+		if resp.Status == connected {
+			return conn, nil
+		}
 		err = util.Errorf("unexpected HTTP response: %s", resp.Status)
 	}
 	conn.Close()
