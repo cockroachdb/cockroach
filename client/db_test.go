@@ -264,6 +264,7 @@ func TestOpenArgs(t *testing.T) {
 		{"https://root@" + s.ServingAddr() + "?certs=test_certs", false},
 		{"https://" + s.ServingAddr() + "?certs=test_certs", false},
 		{"https://" + s.ServingAddr() + "?certs=foo", true},
+		{s.ServingAddr(), true},
 	}
 
 	for _, test := range testCases {
