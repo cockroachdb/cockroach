@@ -154,8 +154,8 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 
 // MatchByPrefix returns the longest matching PrefixConfig. If the key
 // specified does not match an existing prefix, a panic will
-// result. Based on the comments in build(), that example will have a
-// final list of PrefixConfig entries which look like:
+// result. Based on the comments in NewPrefixConfigMap, that example
+// will have a final list of PrefixConfig entries which look like:
 //
 //   "/":          config1
 //   "/db1":       config2
@@ -286,7 +286,7 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 //   /db1 - /db2: config2
 //   /db2 - /db3: config1
 //
-// After calling PrefixConfigMap.build(), our prefixes will look
+// After calling NewPrefixConfigMap, our prefixes will look
 // like:
 //
 //   /:    config1
