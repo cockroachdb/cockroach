@@ -129,9 +129,10 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 
 	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)
+		// Could be many errors: bad host; bad certificate ...
 		if err != nil {
-			log.Info(err)
-			return retry.Continue, nil
+			log.Error(err)
+			return retry.Break, nil
 		}
 
 		c.mu.Lock()
