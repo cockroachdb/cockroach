@@ -1,6 +1,6 @@
 // source: pages/stores.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../models/store_status.ts" />
+/// <reference path="../models/status.ts" />
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
@@ -28,7 +28,7 @@ module AdminViews {
       [storeId: number]: { [source: string]: metrics.QueryManager }
     }
 
-    export var storeStatuses: Models.StoreStatus.Stores = new Models.StoreStatus.Stores();
+    export var storeStatuses = new Models.Status.Stores();
     export var queryManagers: QueryManagerSourceMap = {};
 
     export class Controller implements _mithril.MithrilController {
@@ -80,12 +80,6 @@ module AdminViews {
           this._addChart(Models.Proto.QueryAggregator.AVG, "livecount");
           this._addChart(Models.Proto.QueryAggregator.AVG, "intentcount");
           this._addChart(Models.Proto.QueryAggregator.AVG, "ranges");
-
-          //TODO(Bram): Byte charts won't display properly.
-          //this._addChart(metrics.QueryAggregator.AVG, "valbytes");
-          //this._addChart(metrics.QueryAggregator.AVG, "livebytes");
-          //this._addChart(metrics.QueryAggregator.AVG, "intentbytes");
-          //this._addChart(metrics.QueryAggregator.AVG, "keybytes");
         } else {
           this._storeId = null;
         }
@@ -110,8 +104,8 @@ module AdminViews {
         return m("div", [
           m("h2", "Stores List"),
           m("ul", [
-            Object.keys(storeStatuses.desc()).sort().map(function(storeId) {
-              var desc = storeStatuses.desc()[storeId];
+            storeStatuses.GetStoreIds().map(function(storeId) {
+              var desc = storeStatuses.GetDesc(storeId);
               return m("li", { key: desc.store_id },
                 m("div", [
                   m.trust("&nbsp;&bull;&nbsp;"),

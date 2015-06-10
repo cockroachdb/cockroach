@@ -1,6 +1,6 @@
 // source: pages/nodes.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../models/node_status.ts" />
+/// <reference path="../models/status.ts" />
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
@@ -26,7 +26,7 @@ module AdminViews {
       [nodeId: number]: { [source: string]: Models.Metrics.QueryManager }
     }
 
-    export var nodeStatuses: Models.NodeStatus.Nodes = new Models.NodeStatus.Nodes();
+    export var nodeStatuses = new Models.Status.Nodes();
     export var queryManagers: QueryManagerSourceMap = {};
 
     export class Controller implements _mithril.MithrilController {
@@ -95,8 +95,8 @@ module AdminViews {
         return m("div", [
           m("h2", "Nodes List"),
           m("ul", [
-            Object.keys(nodeStatuses.desc()).sort().map(function(nodeId) {
-              var desc = nodeStatuses.desc()[nodeId];
+            nodeStatuses.GetNodeIds().map(function(nodeId) {
+              var desc = nodeStatuses.GetDesc(nodeId);
               return m("li", { key: desc.node_id },
                 m("div", [
                   m.trust("&nbsp;&bull;&nbsp;"),

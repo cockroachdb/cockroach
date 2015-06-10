@@ -37,6 +37,48 @@ module Models {
             last_update_nanos: number;
         }
 
+        /**
+         * Create a new object which implements MVCCStats interface, with zero
+         * values.
+         */
+        export function NewMVCCStats():MVCCStats {
+            return {
+                live_bytes: 0,
+                key_bytes: 0,
+                val_bytes: 0,
+                intent_bytes: 0,
+                live_count: 0,
+                key_count: 0,
+                val_count: 0,
+                intent_count: 0,
+                intent_age: 0,
+                gc_bytes_age: 0,
+                sys_bytes: 0,
+                sys_count: 0,
+                last_update_nanos: 0,
+            }
+        }
+
+        /**
+         * AccumulateMVCCStats accumulates values from a source MVCCStats into
+         * the values of a destination MVCCStats value.
+         */
+        export function AccumulateMVCCStats(dest:Proto.MVCCStats, src:Proto.MVCCStats) {
+                dest.live_bytes += src.live_bytes;
+                dest.key_bytes += src.key_bytes;
+                dest.val_bytes += src.val_bytes;
+                dest.intent_bytes += src.intent_bytes;
+                dest.live_count += src.live_count;
+                dest.key_count += src.key_count;
+                dest.val_count += src.val_count;
+                dest.intent_count += src.intent_count;
+                dest.intent_age += src.intent_age;
+                dest.gc_bytes_age += src.gc_bytes_age;
+                dest.sys_bytes += src.sys_bytes;
+                dest.sys_count += src.sys_count;
+                dest.last_update_nanos = Math.max(dest.last_update_nanos, src.last_update_nanos);
+        }
+
         /*****************************
          * /proto/config.proto
          ****************************/
@@ -111,6 +153,32 @@ module Models {
             leader_range_count: number;
             replicated_range_count: number;
             available_range_count: number;
+        }
+
+        /**
+         * Status is the common interface shared by NodeStatus and StoreStatus.
+         */
+        export interface Status{
+            range_count: number;
+            started_at: number;
+            updated_at: number;
+            stats: MVCCStats;
+            leader_range_count: number;
+            replicated_range_count: number;
+            available_range_count: number;
+        }
+
+        /**
+         * AccumulateStauts accumulates values from a source status into
+         * the values of a destination status value.
+         */
+        export function AccumulateStatus(dest:Status, src:Status) {
+            dest.range_count += src.range_count;
+            dest.leader_range_count += src.leader_range_count;
+            dest.replicated_range_count += src.replicated_range_count;
+            dest.available_range_count += src.available_range_count;
+            dest.updated_at = Math.max(dest.updated_at, src.updated_at);
+            AccumulateMVCCStats(dest.stats, src.stats);
         }
 
         /*****************************

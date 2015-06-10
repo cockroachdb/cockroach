@@ -29,6 +29,49 @@ var Models;
 (function (Models) {
     var Proto;
     (function (Proto) {
+        function NewMVCCStats() {
+            return {
+                live_bytes: 0,
+                key_bytes: 0,
+                val_bytes: 0,
+                intent_bytes: 0,
+                live_count: 0,
+                key_count: 0,
+                val_count: 0,
+                intent_count: 0,
+                intent_age: 0,
+                gc_bytes_age: 0,
+                sys_bytes: 0,
+                sys_count: 0,
+                last_update_nanos: 0,
+            };
+        }
+        Proto.NewMVCCStats = NewMVCCStats;
+        function AccumulateMVCCStats(dest, src) {
+            dest.live_bytes += src.live_bytes;
+            dest.key_bytes += src.key_bytes;
+            dest.val_bytes += src.val_bytes;
+            dest.intent_bytes += src.intent_bytes;
+            dest.live_count += src.live_count;
+            dest.key_count += src.key_count;
+            dest.val_count += src.val_count;
+            dest.intent_count += src.intent_count;
+            dest.intent_age += src.intent_age;
+            dest.gc_bytes_age += src.gc_bytes_age;
+            dest.sys_bytes += src.sys_bytes;
+            dest.sys_count += src.sys_count;
+            dest.last_update_nanos = Math.max(dest.last_update_nanos, src.last_update_nanos);
+        }
+        Proto.AccumulateMVCCStats = AccumulateMVCCStats;
+        function AccumulateStatus(dest, src) {
+            dest.range_count += src.range_count;
+            dest.leader_range_count += src.leader_range_count;
+            dest.replicated_range_count += src.replicated_range_count;
+            dest.available_range_count += src.available_range_count;
+            dest.updated_at = Math.max(dest.updated_at, src.updated_at);
+            AccumulateMVCCStats(dest.stats, src.stats);
+        }
+        Proto.AccumulateStatus = AccumulateStatus;
         (function (QueryAggregator) {
             QueryAggregator[QueryAggregator["AVG"] = 1] = "AVG";
             QueryAggregator[QueryAggregator["AVG_RATE"] = 2] = "AVG_RATE";
@@ -450,21 +493,112 @@ var Models;
         Stats.CreateStatsTable = CreateStatsTable;
     })(Stats = Models.Stats || (Models.Stats = {}));
 })(Models || (Models = {}));
-// source: models/node_status.ts
-/// <reference path="proto.ts" />
+// source: models/store_status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 var Models;
 (function (Models) {
-    var NodeStatus;
-    (function (NodeStatus) {
+    var Status;
+    (function (Status) {
+        function _availability(status) {
+            if (status.leader_range_count == 0) {
+                return "100%";
+            }
+            return Math.floor(status.available_range_count / status.leader_range_count * 100).toString() + "%";
+        }
+        function _replicated(status) {
+            if (status.leader_range_count == 0) {
+                return "100%";
+            }
+            return Math.floor(status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
+        }
+        var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
+        function _formatDate(nanos) {
+            var datetime = new Date(nanos / 1.0e6);
+            return _datetimeFormatter(datetime);
+        }
+        var Stores = (function () {
+            function Stores() {
+                this._data = {};
+            }
+            Stores.prototype.Query = function () {
+                var _this = this;
+                var url = "/_status/stores/";
+                return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                    .then(function (results) {
+                    results.d.forEach(function (status) {
+                        var storeId = status.desc.store_id;
+                        _this._data[storeId] = status;
+                    });
+                    return results;
+                });
+            };
+            Stores.prototype.GetStoreIds = function () {
+                return Object.keys(this._data).sort();
+            };
+            Stores.prototype.GetDesc = function (storeId) {
+                return this._data[storeId].desc;
+            };
+            Stores.prototype.Details = function (storeId) {
+                var store = this._data[storeId];
+                if (store == null) {
+                    return m("div", "No data present yet.");
+                }
+                return m("div", [
+                    m("table", [
+                        m("tr", [m("td", "Node Id:"), m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))]),
+                        m("tr", [m("td", "Node Network:"), m("td", store.desc.node.address.network)]),
+                        m("tr", [m("td", "Node Address:"), m("td", store.desc.node.address.address)]),
+                        m("tr", [m("td", "Started at:"), m("td", _formatDate(store.started_at))]),
+                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(store.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", _availability(store))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(store))])
+                    ]),
+                    Models.Stats.CreateStatsTable(store.stats)
+                ]);
+            };
+            Stores.prototype.AllDetails = function () {
+                var status = {
+                    range_count: 0,
+                    updated_at: 0,
+                    started_at: 0,
+                    leader_range_count: 0,
+                    replicated_range_count: 0,
+                    available_range_count: 0,
+                    stats: Models.Proto.NewMVCCStats()
+                };
+                for (var storeId in this._data) {
+                    var storeStatus = this._data[storeId];
+                    Models.Proto.AccumulateStatus(status, storeStatus);
+                }
+                ;
+                return m("div", [
+                    m("h2", "Details"),
+                    m("table", [
+                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(status.updated_at))]),
+                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
+                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
+                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
+                        m("tr", [m("td", "Availablility:"), m("td", _availability(status))]),
+                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
+                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(status))])
+                    ]),
+                    Models.Stats.CreateStatsTable(status.stats)
+                ]);
+            };
+            return Stores;
+        })();
+        Status.Stores = Stores;
         var Nodes = (function () {
             function Nodes() {
-                this._data = m.prop({});
-                this.desc = m.prop({});
-                this.statuses = m.prop({});
+                this._data = {};
             }
             Nodes.prototype.Query = function () {
                 var _this = this;
@@ -473,53 +607,19 @@ var Models;
                     .then(function (results) {
                     results.d.forEach(function (status) {
                         var nodeId = status.desc.node_id;
-                        if (_this._data()[nodeId] == null) {
-                            _this._data()[nodeId] = [];
-                        }
-                        var statusList = _this._data()[nodeId];
-                        if ((statusList.length == 0) ||
-                            (statusList[statusList.length - 1].updated_at < status.updated_at)) {
-                            _this._data()[nodeId].push(status);
-                            _this.statuses()[nodeId] = status;
-                        }
+                        _this._data[nodeId] = status;
                     });
-                    _this._pruneOldEntries();
-                    _this._updateDescriptions();
                     return results;
                 });
             };
-            Nodes.prototype._updateDescriptions = function () {
-                this.desc({});
-                for (var nodeId in this._data()) {
-                    this.desc()[nodeId] = this._data()[nodeId][this._data()[nodeId].length - 1].desc;
-                }
+            Nodes.prototype.GetNodeIds = function () {
+                return Object.keys(this._data).sort();
             };
-            Nodes.prototype._pruneOldEntries = function () {
-                for (var nodeId in this._data()) {
-                    var status = this._data()[nodeId];
-                    if (status.length > Nodes._dataLimit) {
-                        status = status.slice(status.length - Nodes._dataPrunedSize, status.length - 1);
-                    }
-                }
-            };
-            Nodes._availability = function (status) {
-                if (status.leader_range_count == 0) {
-                    return "100%";
-                }
-                return Math.floor(status.available_range_count / status.leader_range_count * 100).toString() + "%";
-            };
-            Nodes._replicated = function (status) {
-                if (status.leader_range_count == 0) {
-                    return "100%";
-                }
-                return Math.floor(status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
-            };
-            Nodes._formatDate = function (nanos) {
-                var datetime = new Date(nanos / 1.0e6);
-                return Nodes._datetimeFormater(datetime);
+            Nodes.prototype.GetDesc = function (nodeId) {
+                return this._data[nodeId].desc;
             };
             Nodes.prototype.Details = function (nodeId) {
-                var node = this.statuses()[nodeId];
+                var node = this._data[nodeId];
                 if (node == null) {
                     return m("div", "No data present yet.");
                 }
@@ -534,14 +634,14 @@ var Models;
                         ]),
                         m("tr", [m("td", "Network:"), m("td", node.desc.address.network)]),
                         m("tr", [m("td", "Address:"), m("td", node.desc.address.address)]),
-                        m("tr", [m("td", "Started at:"), m("td", Nodes._formatDate(node.started_at))]),
-                        m("tr", [m("td", "Updated at:"), m("td", Nodes._formatDate(node.updated_at))]),
+                        m("tr", [m("td", "Started at:"), m("td", _formatDate(node.started_at))]),
+                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(node.updated_at))]),
                         m("tr", [m("td", "Ranges:"), m("td", node.range_count)]),
                         m("tr", [m("td", "Leader Ranges:"), m("td", node.leader_range_count)]),
                         m("tr", [m("td", "Available Ranges:"), m("td", node.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", Nodes._availability(node))]),
+                        m("tr", [m("td", "Availablility:"), m("td", _availability(node))]),
                         m("tr", [m("td", "Under-Replicated Ranges:"), m("td", node.leader_range_count - node.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", Nodes._replicated(node))])
+                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(node))])
                     ]),
                     Models.Stats.CreateStatsTable(node.stats)
                 ]);
@@ -553,75 +653,45 @@ var Models;
                     leader_range_count: 0,
                     replicated_range_count: 0,
                     available_range_count: 0,
-                    stats: {
-                        live_bytes: 0,
-                        key_bytes: 0,
-                        val_bytes: 0,
-                        intent_bytes: 0,
-                        live_count: 0,
-                        key_count: 0,
-                        val_count: 0,
-                        intent_count: 0,
-                        sys_bytes: 0,
-                        sys_count: 0
-                    }
+                    stats: Models.Proto.NewMVCCStats(),
                 };
-                for (var nodeId in this.statuses()) {
-                    var nodeStatus = this.statuses()[nodeId];
-                    status.range_count += nodeStatus.range_count;
-                    status.leader_range_count += nodeStatus.leader_range_count;
-                    status.replicated_range_count += nodeStatus.replicated_range_count;
-                    status.available_range_count += nodeStatus.available_range_count;
-                    if (nodeStatus.updated_at > status.updated_at) {
-                        status.updated_at = nodeStatus.updated_at;
-                    }
-                    status.stats.live_bytes += nodeStatus.stats.live_bytes;
-                    status.stats.key_bytes += nodeStatus.stats.key_bytes;
-                    status.stats.val_bytes += nodeStatus.stats.val_bytes;
-                    status.stats.intent_bytes += nodeStatus.stats.intent_bytes;
-                    status.stats.live_count += nodeStatus.stats.live_count;
-                    status.stats.key_count += nodeStatus.stats.key_count;
-                    status.stats.val_count += nodeStatus.stats.val_count;
-                    status.stats.intent_count += nodeStatus.stats.intent_count;
-                    status.stats.sys_bytes += nodeStatus.stats.sys_bytes;
-                    status.stats.sys_count += nodeStatus.stats.sys_count;
+                for (var nodeId in this._data) {
+                    var nodeStatus = this._data[nodeId];
+                    Models.Proto.AccumulateStatus(status, nodeStatus);
                 }
                 ;
                 return m("div", [
                     m("h2", "Details"),
                     m("table", [
-                        m("tr", [m("td", "Updated at:"), m("td", Nodes._formatDate(status.updated_at))]),
+                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(status.updated_at))]),
                         m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
                         m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
                         m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", Nodes._availability(status))]),
+                        m("tr", [m("td", "Availablility:"), m("td", _availability(status))]),
                         m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", Nodes._replicated(status))])
+                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(status))])
                     ]),
                     Models.Stats.CreateStatsTable(status.stats)
                 ]);
             };
-            Nodes._dataLimit = 100000;
-            Nodes._dataPrunedSize = 90000;
-            Nodes._datetimeFormater = d3.time.format("%Y-%m-%d %H:%M:%S");
             return Nodes;
         })();
-        NodeStatus.Nodes = Nodes;
+        Status.Nodes = Nodes;
         function nonJsonErrors(xhr, opts) {
             return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
         }
-    })(NodeStatus = Models.NodeStatus || (Models.NodeStatus = {}));
+    })(Status = Models.Status || (Models.Status = {}));
 })(Models || (Models = {}));
 // source: pages/nodes.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../models/node_status.ts" />
+/// <reference path="../models/status.ts" />
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
     var Nodes;
     (function (Nodes) {
-        Nodes.nodeStatuses = new Models.NodeStatus.Nodes();
+        Nodes.nodeStatuses = new Models.Status.Nodes();
         Nodes.queryManagers = {};
         var Controller = (function () {
             function Controller(nodeId) {
@@ -677,8 +747,8 @@ var AdminViews;
                 return m("div", [
                     m("h2", "Nodes List"),
                     m("ul", [
-                        Object.keys(Nodes.nodeStatuses.desc()).sort().map(function (nodeId) {
-                            var desc = Nodes.nodeStatuses.desc()[nodeId];
+                        Nodes.nodeStatuses.GetNodeIds().map(function (nodeId) {
+                            var desc = Nodes.nodeStatuses.GetDesc(nodeId);
                             return m("li", { key: desc.node_id }, m("div", [
                                 m.trust("&nbsp;&bull;&nbsp;"),
                                 m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
@@ -974,165 +1044,9 @@ var AdminViews;
         })(Page = RestExplorer.Page || (RestExplorer.Page = {}));
     })(RestExplorer = AdminViews.RestExplorer || (AdminViews.RestExplorer = {}));
 })(AdminViews || (AdminViews = {}));
-// source: models/store_status.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
-/// <reference path="node_status.ts" />
-/// <reference path="stats.ts" />
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
-var Models;
-(function (Models) {
-    var StoreStatus;
-    (function (StoreStatus) {
-        var Stores = (function () {
-            function Stores() {
-                this._data = m.prop({});
-                this.desc = m.prop({});
-                this.statuses = m.prop({});
-            }
-            Stores.prototype.Query = function () {
-                var _this = this;
-                var url = "/_status/stores/";
-                return m.request({ url: url, method: "GET", extract: nonJsonErrors })
-                    .then(function (results) {
-                    results.d.forEach(function (status) {
-                        var storeId = status.desc.store_id;
-                        if (_this._data()[storeId] == null) {
-                            _this._data()[storeId] = [];
-                        }
-                        var statusList = _this._data()[storeId];
-                        if ((statusList.length == 0) ||
-                            (statusList[statusList.length - 1].updated_at < status.updated_at)) {
-                            _this._data()[storeId].push(status);
-                            _this.statuses()[storeId] = status;
-                        }
-                    });
-                    _this._pruneOldEntries();
-                    _this._updateDescriptions();
-                    return results;
-                });
-            };
-            Stores.prototype._updateDescriptions = function () {
-                this.desc({});
-                for (var storeId in this._data()) {
-                    this.desc()[storeId] = this._data()[storeId][this._data()[storeId].length - 1].desc;
-                }
-            };
-            Stores.prototype._pruneOldEntries = function () {
-                for (var storeId in this._data()) {
-                    var status = this._data()[storeId];
-                    if (status.length > Stores._dataLimit) {
-                        status = status.slice(status.length - Stores._dataPrunedSize, status.length - 1);
-                    }
-                }
-            };
-            Stores._availability = function (store) {
-                if (store.leader_range_count == 0) {
-                    return "100%";
-                }
-                return Math.floor(store.available_range_count / store.leader_range_count * 100).toString() + "%";
-            };
-            Stores._replicated = function (store) {
-                if (store.leader_range_count == 0) {
-                    return "100%";
-                }
-                return Math.floor(store.replicated_range_count / store.leader_range_count * 100).toString() + "%";
-            };
-            Stores._formatDate = function (nanos) {
-                var datetime = new Date(nanos / 1.0e6);
-                return Stores._datetimeFormater(datetime);
-            };
-            Stores.prototype.Details = function (storeId) {
-                var store = this.statuses()[storeId];
-                if (store == null) {
-                    return m("div", "No data present yet.");
-                }
-                return m("div", [
-                    m("table", [
-                        m("tr", [m("td", "Node Id:"), m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))]),
-                        m("tr", [m("td", "Node Network:"), m("td", store.desc.node.address.network)]),
-                        m("tr", [m("td", "Node Address:"), m("td", store.desc.node.address.address)]),
-                        m("tr", [m("td", "Started at:"), m("td", Stores._formatDate(store.started_at))]),
-                        m("tr", [m("td", "Updated at:"), m("td", Stores._formatDate(store.updated_at))]),
-                        m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
-                        m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
-                        m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", Stores._availability(store))]),
-                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", Stores._replicated(store))])
-                    ]),
-                    Models.Stats.CreateStatsTable(store.stats)
-                ]);
-            };
-            Stores.prototype.AllDetails = function () {
-                var status = {
-                    range_count: 0,
-                    updated_at: 0,
-                    leader_range_count: 0,
-                    replicated_range_count: 0,
-                    available_range_count: 0,
-                    stats: {
-                        live_bytes: 0,
-                        key_bytes: 0,
-                        val_bytes: 0,
-                        intent_bytes: 0,
-                        live_count: 0,
-                        key_count: 0,
-                        val_count: 0,
-                        intent_count: 0,
-                        sys_bytes: 0,
-                        sys_count: 0
-                    }
-                };
-                for (var storeId in this.statuses()) {
-                    var storeStatus = this.statuses()[storeId];
-                    status.range_count += storeStatus.range_count;
-                    status.leader_range_count += storeStatus.leader_range_count;
-                    status.replicated_range_count += storeStatus.replicated_range_count;
-                    status.available_range_count += storeStatus.available_range_count;
-                    if (storeStatus.updated_at > status.updated_at) {
-                        status.updated_at = storeStatus.updated_at;
-                    }
-                    status.stats.live_bytes += storeStatus.stats.live_bytes;
-                    status.stats.key_bytes += storeStatus.stats.key_bytes;
-                    status.stats.val_bytes += storeStatus.stats.val_bytes;
-                    status.stats.intent_bytes += storeStatus.stats.intent_bytes;
-                    status.stats.live_count += storeStatus.stats.live_count;
-                    status.stats.key_count += storeStatus.stats.key_count;
-                    status.stats.val_count += storeStatus.stats.val_count;
-                    status.stats.intent_count += storeStatus.stats.intent_count;
-                    status.stats.sys_bytes += storeStatus.stats.sys_bytes;
-                    status.stats.sys_count += storeStatus.stats.sys_count;
-                }
-                ;
-                return m("div", [
-                    m("h2", "Details"),
-                    m("table", [
-                        m("tr", [m("td", "Updated at:"), m("td", Stores._formatDate(status.updated_at))]),
-                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
-                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
-                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", Stores._availability(status))]),
-                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", Stores._replicated(status))])
-                    ]),
-                    Models.Stats.CreateStatsTable(status.stats)
-                ]);
-            };
-            Stores._dataLimit = 100000;
-            Stores._dataPrunedSize = 90000;
-            Stores._datetimeFormater = d3.time.format("%Y-%m-%d %H:%M:%S");
-            return Stores;
-        })();
-        StoreStatus.Stores = Stores;
-        function nonJsonErrors(xhr, opts) {
-            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
-        }
-    })(StoreStatus = Models.StoreStatus || (Models.StoreStatus = {}));
-})(Models || (Models = {}));
 // source: pages/stores.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../models/store_status.ts" />
+/// <reference path="../models/status.ts" />
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
@@ -1140,7 +1054,7 @@ var AdminViews;
     var Stores;
     (function (Stores) {
         var metrics = Models.Metrics;
-        Stores.storeStatuses = new Models.StoreStatus.Stores();
+        Stores.storeStatuses = new Models.Status.Stores();
         Stores.queryManagers = {};
         var Controller = (function () {
             function Controller(storeId) {
@@ -1199,8 +1113,8 @@ var AdminViews;
                 return m("div", [
                     m("h2", "Stores List"),
                     m("ul", [
-                        Object.keys(Stores.storeStatuses.desc()).sort().map(function (storeId) {
-                            var desc = Stores.storeStatuses.desc()[storeId];
+                        Stores.storeStatuses.GetStoreIds().map(function (storeId) {
+                            var desc = Stores.storeStatuses.GetDesc(storeId);
                             return m("li", { key: desc.store_id }, m("div", [
                                 m.trust("&nbsp;&bull;&nbsp;"),
                                 m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
