@@ -191,10 +191,9 @@ func (s *Server) initHTTP() {
 	s.mux.Handle("/", http.FileServer(
 		&assetfs.AssetFS{Asset: resource.Asset, AssetDir: resource.AssetDir, Prefix: "./ui/"}))
 
-	// Admin handlers.
-	s.admin.registerHandlers(s.mux)
-
-	// Status endpoints:
+	// The admin server handles both /debug/ and /_admin/
+	s.mux.Handle(adminEndpoint, s.admin)
+	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusKeyPrefix, s.status)
 
 	s.mux.Handle(kv.RESTPrefix, s.kvREST)

@@ -45,7 +45,8 @@ func startAdminServer() (string, *util.Stopper) {
 	}
 	admin := newAdminServer(db, stopper)
 	mux := http.NewServeMux()
-	admin.registerHandlers(mux)
+	mux.Handle(adminEndpoint, admin)
+	mux.Handle(debugEndpoint, admin)
 	httpServer := httptest.NewUnstartedServer(mux)
 	tlsConfig, err := testContext.GetServerTLSConfig()
 	if err != nil {
