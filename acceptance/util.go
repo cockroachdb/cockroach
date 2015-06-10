@@ -41,7 +41,7 @@ func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user strin
 	// to reach the cluster. This in turn means that we do not have a verified server name in the certs.
 	c, err := client.Open("https://" + user + "@" +
 		cluster.Nodes[node].Addr("").String() +
-		"?certs=")
+		"?certs=" + cluster.CertsDir)
 
 	if err != nil {
 		t.Fatal(err)
