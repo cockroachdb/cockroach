@@ -140,7 +140,9 @@ func ExampleBatch() {
 	s, db := setup()
 	defer s.Stop()
 
-	b := db.B.Get("aa").Put("bb", "2")
+	b := &client.Batch{}
+	b.Get("aa")
+	b.Put("bb", "2")
 	if err := db.Run(b); err != nil {
 		panic(err)
 	}
@@ -159,7 +161,10 @@ func ExampleDB_Scan() {
 	s, db := setup()
 	defer s.Stop()
 
-	b := db.B.Put("aa", "1").Put("ab", "2").Put("bb", "3")
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
 	if err := db.Run(b); err != nil {
 		panic(err)
 	}
@@ -180,7 +185,11 @@ func ExampleDB_Del() {
 	s, db := setup()
 	defer s.Stop()
 
-	if err := db.Run(db.B.Put("aa", "1").Put("ab", "2").Put("ac", "3")); err != nil {
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("ac", "3")
+	if err := db.Run(b); err != nil {
 		panic(err)
 	}
 	if err := db.Del("ab"); err != nil {
@@ -204,13 +213,18 @@ func ExampleTx_Commit() {
 	defer s.Stop()
 
 	err := db.Txn(func(txn *client.Txn) error {
-		return txn.Commit(txn.B.Put("aa", "1").Put("ab", "2"))
+		b := &client.Batch{}
+		b.Put("aa", "1")
+		b.Put("ab", "2")
+		return txn.Commit(b)
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	b := db.B.Get("aa").Get("ab")
+	b := &client.Batch{}
+	b.Get("aa")
+	b.Get("ab")
 	if err := db.Run(b); err != nil {
 		panic(err)
 	}
@@ -293,10 +307,9 @@ func TestDebugName(t *testing.T) {
 
 func TestCommonMethods(t *testing.T) {
 	batchType := reflect.TypeOf(&client.Batch{})
-	batcherType := reflect.TypeOf(client.DB{}.B)
 	dbType := reflect.TypeOf(&client.DB{})
 	txnType := reflect.TypeOf(&client.Txn{})
-	types := []reflect.Type{batchType, batcherType, dbType, txnType}
+	types := []reflect.Type{batchType, dbType, txnType}
 
 	type key struct {
 		typ    reflect.Type

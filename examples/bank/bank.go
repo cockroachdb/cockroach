@@ -114,7 +114,8 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 		// transferMoney transfers exchangeAmount between the two accounts
 		transferMoney := func(runner client.Runner) error {
 			batchRead := &client.Batch{}
-			batchRead.Get(from).Get(to)
+			batchRead.Get(from)
+			batchRead.Get(to)
 			if err := runner.Run(batchRead); err != nil {
 				return err
 			}
@@ -143,7 +144,8 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 			} else if toValue, err := toAccount.encode(); err != nil {
 				return err
 			} else {
-				batchWrite.Put(from, fromValue).Put(to, toValue)
+				batchWrite.Put(from, fromValue)
+				batchWrite.Put(to, toValue)
 			}
 			return runner.Run(batchWrite)
 		}
