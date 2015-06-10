@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/rpc/codec"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -80,7 +79,6 @@ var connected = "200 Connected to Go RPC"
 
 // ServeHTTP implements an http.Handler that answers RPC requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	security.LogRequestCertificates(r)
 	if r.URL.Path != rpc.DefaultRPCPath {
 		if s.handler != nil {
 			s.handler.ServeHTTP(w, r)
@@ -89,6 +87,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// TODO(marc): figure out the right way to do authentication,
+	// and how to pass verified credentials.
+
 	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
 	if r.Method != "CONNECT" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
