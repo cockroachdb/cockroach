@@ -627,34 +627,36 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
 	}
 
-	meta := &buf.meta
 	metaKey := mvccEncodeKey(buf.key[0:0], key)
-	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, &buf.meta)
 	if err != nil {
 		return err
 	}
-	origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.Equal(proto.ZeroTimestamp)
-	if ok && putIsInline != meta.IsInline() {
+	if ok && putIsInline != buf.meta.IsInline() {
 		return util.Errorf("%q: put is inline=%t, but existing value is inline=%t",
-			metaKey, putIsInline, meta.IsInline())
+			metaKey, putIsInline, buf.meta.IsInline())
 	}
 	if putIsInline {
 		var metaKeySize, metaValSize int64
 		if value.Deleted {
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
-			meta.Value = value.Value
-			metaKeySize, metaValSize, err = PutProto(engine, metaKey, meta)
+			buf.meta = proto.MVCCMetadata{Value: value.Value}
+			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
 		}
 		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
 		return err
 	}
 
+	var meta *proto.MVCCMetadata
+	var origAgeSeconds int64
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
+		meta = &buf.meta
+		origAgeSeconds = timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
@@ -691,12 +693,9 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 		if value.Deleted {
 			return nil
 		}
-
-		// Clear the meta pointer so it is not used in updateStatsOnPut below.
-		meta = nil
 	}
-	newMeta := &buf.newMeta
 	buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+	newMeta := &buf.newMeta
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
 	// into the key, so don't need it in both places).
