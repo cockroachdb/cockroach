@@ -1,6 +1,7 @@
-// source: models/store_status.ts
+// source: models/status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../util/querycache.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 // Author: Matt Tracy (matt@cockroachlabs.com)
@@ -38,30 +39,33 @@ module Models {
         }
 
         export class Stores {
-            private _data:StoreStatusMap = {};
-
-            Query(): promise<StoreStatusResponseSet> {
+            private _data = new Utils.QueryCache(():promise<StoreStatusMap> => {
                 var url = "/_status/stores/";
                 return m.request({ url: url, method: "GET", extract: nonJsonErrors })
                     .then((results: StoreStatusResponseSet) => {
+                        var data:StoreStatusMap = {};
                         results.d.forEach((status) => {
                             var storeId = status.desc.store_id;
-                            this._data[storeId] = status;
+                            data[storeId] = status;
                         });
-                        return results;
+                        return data;
                     });
-            }
+            })
 
             public GetStoreIds():string[] {
-                return Object.keys(this._data).sort();
+                return Object.keys(this._data.result()).sort();
             }
 
             public GetDesc(storeId:string):Proto.StoreDescriptor {
-                return this._data[storeId].desc;
+                return this._data.result()[storeId].desc;
+            }
+
+            public refresh() {
+                this._data.refresh();
             }
 
             public Details(storeId:string):_mithril.MithrilVirtualElement {
-                var store = this._data[storeId];
+                var store = this._data.result()[storeId];
                 if (store == null) {
                     return m("div", "No data present yet.")
                 }
@@ -94,8 +98,9 @@ module Models {
                     stats: Proto.NewMVCCStats()
                 };
 
-                for (var storeId in this._data) {
-                    var storeStatus = this._data[storeId];
+                var data = this._data.result();
+                for (var storeId in data) {
+                    var storeStatus = data[storeId];
 					Proto.AccumulateStatus(status, storeStatus);
                 };
 
@@ -124,30 +129,33 @@ module Models {
         }
 
         export class Nodes {
-            private _data:NodeStatusMap = {}
-
-            Query(): promise<NodeStatusResponseSet> {
+            private _data = new Utils.QueryCache(():promise<NodeStatusMap> => {
                 var url = "/_status/nodes/";
                 return m.request({ url: url, method: "GET", extract: nonJsonErrors })
                     .then((results: NodeStatusResponseSet) => {
+                        var data:NodeStatusMap = {};
                         results.d.forEach((status) => {
                             var nodeId = status.desc.node_id;
-							this._data[nodeId] = status;
+							data[nodeId] = status;
                         });
-                        return results;
+                        return data;
                     });
-            }
+            });
 
             public GetNodeIds():string[] {
-                return Object.keys(this._data).sort();
+                return Object.keys(this._data.result()).sort();
             }
 
             public GetDesc(nodeId:string):Proto.NodeDescriptor {
-                return this._data[nodeId].desc;
+                return this._data.result()[nodeId].desc;
+            }
+
+            public refresh() {
+                this._data.refresh();
             }
 
             public Details(nodeId: string): _mithril.MithrilVirtualElement {
-                var node = this._data[nodeId];
+                var node = this._data.result()[nodeId];
                 if (node == null) {
                     return m("div", "No data present yet.")
                 }
@@ -186,8 +194,9 @@ module Models {
                     stats: Proto.NewMVCCStats(),
                 };
 
-                for (var nodeId in this._data) {
-                    var nodeStatus = this._data[nodeId];
+                var data = this._data.result();
+                for (var nodeId in data) {
+                    var nodeStatus = data[nodeId];
 					Proto.AccumulateStatus(status, nodeStatus);
                 };
 

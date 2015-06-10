@@ -129,7 +129,7 @@ module Models {
          * query contains one or more time series selectors, and a time span
          * over which to query those selectors.
          */
-        class Query {
+        export class Query {
             constructor(private _selectors:select.Selector[]) {}
 
             /**
@@ -140,10 +140,16 @@ module Models {
             timespan = Utils.chainProp(this, time.Recent(10 * 60 * 1000));
 
             /**
+             * title gets or sets the title of this query, which can be applied
+             * to visualizations of the data from this query.
+             */
+            title = Utils.chainProp(this, "Query Title");
+
+            /**
              * execute dispatches a query to the server and returns a promise
              * for the results.
              */
-            execute():promise<Proto.QueryResultSet> {
+            execute = ():promise<Proto.QueryResultSet> => {
                 var s = this.timespan().timespan();
                 var req:Proto.QueryRequestSet = {
                     start_nanos: Utils.milliToNanos(s[0]),
@@ -179,96 +185,8 @@ module Models {
          * selectors. Additional properties of the query can be configured by
          * calling setter methods on the returned Query.
          */
-        export function NewQuery(...selectors:select.Selector[]) {
+        export function NewQuery(...selectors:select.Selector[]):Query {
             return new Query(selectors);
-        }
-
-        /**
-         * QueryManager supports the sharing of query result data between
-         * multiple components. This is useful when multiple components need to
-         * synchronize on the same result set.
-         */
-        export class QueryManager {
-            private _result:Proto.QueryResultSet = null;
-            private _error:Error = null;
-            private _resultEpoch:number = 0;
-
-            // This structure will be non-null when a query is in-flight, or has
-            // completed but not been processed. When an in-flight query
-            // completes, only one of its fields will contain a value.
-            private _outstanding:{
-                result:promise<Proto.QueryResultSet>;
-                error:_mithril.MithrilProperty<Error>;
-            } = null
-
-            /**
-             * Construct a new QueryManager which obtains results from the
-             * supplied query.
-             */
-            constructor(private _query:Query) {}
-
-            private processOutstanding(){
-                if (this._outstanding) {
-                    var completed = 
-                        (this._outstanding.error() != null || this._outstanding.result() != null);
-
-                    if (completed) {
-                        this._result = this._outstanding.result();
-                        this._error = this._outstanding.error();
-                        this._outstanding = null
-                        this._resultEpoch++;
-                    }
-                }
-            }
-
-            /**
-             * setQuery changes the query underlying this manager.
-             */
-            setQuery(q:Query){
-                this._query = q;
-            }
-
-            /**
-             * result returns the most recent result of the query, if any is
-             * present.
-             */
-            result():Proto.QueryResultSet {
-                this.processOutstanding();
-                return this._result;
-            }
-
-            /**
-             * epoch returns the epoch of the current query result; this is a
-             * monotonically increasing counter which is incremented with each
-             * query (whether successful or not). The first query result has an
-             * epoch of 1.
-             */
-            epoch():number {
-                this.processOutstanding();
-                return this._resultEpoch;
-            }
-
-            /**
-             * error returns the error resulting from the most recent call to
-             * refresh(), if any occured.
-             */
-            error():Error {
-                this.processOutstanding();
-                return this._error;
-            }
-
-            refresh():promise<Proto.QueryResultSet> {
-                // Clear outstanding request if it has already returned.
-                this.result();
-                if (!this._outstanding) {
-                    this._outstanding = {
-                        result:this._query.execute(),
-                        error:m.prop(<Error> null), 
-                    }
-                    this._outstanding.result.then(null, this._outstanding.error);
-                }
-                return this._outstanding.result;
-            }
         }
 
         /**

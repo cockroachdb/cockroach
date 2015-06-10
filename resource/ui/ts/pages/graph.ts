@@ -1,6 +1,7 @@
 // source: pages/graph.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../util/querycache.ts" />
 /// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
@@ -23,7 +24,7 @@ module AdminViews {
       export module Page {
           import metrics = Models.Metrics;
           class Controller implements _mithril.MithrilController {
-              manager:Models.Metrics.QueryManager;
+              manager:Utils.QueryCache<Models.Proto.QueryResultSet>;
               showRates:boolean;
               interval:number;
 
@@ -37,7 +38,7 @@ module AdminViews {
 				  .timespan(this.timespan);
 						  
               constructor(){
-                  this.manager = new Models.Metrics.QueryManager(this.sumquery);
+                  this.manager = new Utils.QueryCache(this.sumquery.execute);
                   this.manager.refresh();
                   this.interval = setInterval(() => this.manager.refresh(), 10000);
               }
@@ -49,9 +50,9 @@ module AdminViews {
               toggleGraph = () => {
                   this.showRates = !this.showRates;
                   if (this.showRates) {
-                      this.manager.setQuery(this.ratequery);
+                      this.manager.setQuery(this.ratequery.execute);
                   } else {
-                      this.manager.setQuery(this.sumquery);
+                      this.manager.setQuery(this.sumquery.execute);
                   }
                   this.manager.refresh();
               }
