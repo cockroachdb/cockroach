@@ -22,6 +22,7 @@ import (
 	"encoding"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -145,6 +146,10 @@ type DB struct {
 	// ignored.
 	userPriority    int32
 	txnRetryOptions retry.Options
+
+	// TODO(pmattis): Need locking here, but this struct is copied by value into
+	// Txn. Probably need to separate out the fields above.
+	experimentalModels map[reflect.Type]*model
 }
 
 // Option is the signature for a function which applies an option to a DB.
@@ -227,6 +232,11 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	return db, nil
 }
 
+// NewBatch creates and returns a new empty batch object for use with the DB.
+func (db *DB) NewBatch() *Batch {
+	return &Batch{DB: db}
+}
+
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error.
 //
@@ -236,7 +246,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Get(key interface{}) (KeyValue, error) {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.Get(key)
 	return runOneRow(db, b)
 }
@@ -259,7 +269,7 @@ func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (db *DB) Put(key, value interface{}) error {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.Put(key, value)
 	_, err := runOneResult(db, b)
 	return err
@@ -272,7 +282,7 @@ func (db *DB) Put(key, value interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (db *DB) CPut(key, value, expValue interface{}) error {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.CPut(key, value, expValue)
 	_, err := runOneResult(db, b)
 	return err
@@ -285,7 +295,7 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.Inc(key, value)
 	return runOneRow(db, b)
 }
@@ -297,7 +307,7 @@ func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.Scan(begin, end, maxRows)
 	r, err := runOneResult(db, b)
 	return r.Rows, err
@@ -308,7 +318,7 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Del(keys ...interface{}) error {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.Del(keys...)
 	_, err := runOneResult(db, b)
 	return err
@@ -321,7 +331,7 @@ func (db *DB) Del(keys ...interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) DelRange(begin, end interface{}) error {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.DelRange(begin, end)
 	_, err := runOneResult(db, b)
 	return err
@@ -335,7 +345,7 @@ func (db *DB) DelRange(begin, end interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) AdminMerge(key interface{}) error {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.adminMerge(key)
 	_, err := runOneResult(db, b)
 	return err
@@ -346,7 +356,7 @@ func (db *DB) AdminMerge(key interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) AdminSplit(splitKey interface{}) error {
-	b := &Batch{}
+	b := db.NewBatch()
 	b.adminSplit(splitKey)
 	_, err := runOneResult(db, b)
 	return err

@@ -126,6 +126,11 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 	txn.db.userPriority = -priority
 }
 
+// NewBatch creates and returns a new empty batch object for use with the Txn.
+func (txn *Txn) NewBatch() *Batch {
+	return &Batch{DB: &txn.db}
+}
+
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error.
 //
@@ -135,7 +140,7 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Get(key interface{}) (KeyValue, error) {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.Get(key)
 	return runOneRow(txn, b)
 }
@@ -158,7 +163,7 @@ func (txn *Txn) GetProto(key interface{}, msg gogoproto.Message) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (txn *Txn) Put(key, value interface{}) error {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.Put(key, value)
 	_, err := runOneResult(txn, b)
 	return err
@@ -171,7 +176,7 @@ func (txn *Txn) Put(key, value interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (txn *Txn) CPut(key, value, expValue interface{}) error {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
 	_, err := runOneResult(txn, b)
 	return err
@@ -187,7 +192,7 @@ func (txn *Txn) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.Inc(key, value)
 	return runOneRow(txn, b)
 }
@@ -199,7 +204,7 @@ func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.Scan(begin, end, maxRows)
 	r, err := runOneResult(txn, b)
 	return r.Rows, err
@@ -210,7 +215,7 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) Del(keys ...interface{}) error {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.Del(keys...)
 	_, err := runOneResult(txn, b)
 	return err
@@ -224,7 +229,7 @@ func (txn *Txn) Del(keys ...interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (txn *Txn) DelRange(begin, end interface{}) error {
-	b := &Batch{}
+	b := txn.NewBatch()
 	b.DelRange(begin, end)
 	_, err := runOneResult(txn, b)
 	return err
