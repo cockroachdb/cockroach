@@ -232,7 +232,9 @@ func Open(addr string, opts ...Option) (*DB, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Get(key interface{}) (KeyValue, error) {
-	return runOneRow(db, B().Get(key))
+	b := &Batch{}
+	b.Get(key)
+	return runOneRow(db, b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -253,7 +255,9 @@ func (db *DB) GetProto(key interface{}, msg gogoproto.Message) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (db *DB) Put(key, value interface{}) error {
-	_, err := runOneResult(db, B().Put(key, value))
+	b := &Batch{}
+	b.Put(key, value)
+	_, err := runOneResult(db, b)
 	return err
 }
 
@@ -264,7 +268,9 @@ func (db *DB) Put(key, value interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
 func (db *DB) CPut(key, value, expValue interface{}) error {
-	_, err := runOneResult(db, B().CPut(key, value, expValue))
+	b := &Batch{}
+	b.CPut(key, value, expValue)
+	_, err := runOneResult(db, b)
 	return err
 }
 
@@ -275,7 +281,9 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
-	return runOneRow(db, B().Inc(key, value))
+	b := &Batch{}
+	b.Inc(key, value)
+	return runOneRow(db, b)
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
@@ -285,7 +293,9 @@ func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	r, err := runOneResult(db, B().Scan(begin, end, maxRows))
+	b := &Batch{}
+	b.Scan(begin, end, maxRows)
+	r, err := runOneResult(db, b)
 	return r.Rows, err
 }
 
@@ -294,7 +304,9 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) Del(keys ...interface{}) error {
-	_, err := runOneResult(db, B().Del(keys...))
+	b := &Batch{}
+	b.Del(keys...)
+	_, err := runOneResult(db, b)
 	return err
 }
 
@@ -305,7 +317,9 @@ func (db *DB) Del(keys ...interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) DelRange(begin, end interface{}) error {
-	_, err := runOneResult(db, B().DelRange(begin, end))
+	b := &Batch{}
+	b.DelRange(begin, end)
+	_, err := runOneResult(db, b)
 	return err
 }
 
@@ -317,7 +331,9 @@ func (db *DB) DelRange(begin, end interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) AdminMerge(key interface{}) error {
-	_, err := runOneResult(db, B().adminMerge(key))
+	b := &Batch{}
+	b.adminMerge(key)
+	_, err := runOneResult(db, b)
 	return err
 }
 
@@ -326,7 +342,9 @@ func (db *DB) AdminMerge(key interface{}) error {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (db *DB) AdminSplit(splitKey interface{}) error {
-	_, err := runOneResult(db, B().adminSplit(splitKey))
+	b := &Batch{}
+	b.adminSplit(splitKey)
+	_, err := runOneResult(db, b)
 	return err
 }
 

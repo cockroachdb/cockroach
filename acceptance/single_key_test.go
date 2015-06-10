@@ -95,7 +95,9 @@ func TestSingleKey(t *testing.T) {
 					if err := v.UnmarshalBinary(r.ValueBytes()); err != nil {
 						return err
 					}
-					return txn.Commit(client.B().Put(key, v+1))
+					b := &client.Batch{}
+					b.Put(key, v+1)
+					return txn.Commit(b)
 				})
 				if err != nil {
 					resultCh <- result{err: err}

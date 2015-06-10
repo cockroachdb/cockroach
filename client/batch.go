@@ -35,7 +35,9 @@ type Batch struct {
 	// of the results matches the order the operations were added to the
 	// batch. For example:
 	//
-	//   b := client.B().Put("a", "1").Put("b", "2")
+	//   b := &client.Batch{}
+	//   b.Put("a", "1")
+	//   b.Put("b", "2")
 	//   _ = db.Run(b)
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
@@ -44,13 +46,6 @@ type Batch struct {
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue
 	rowsIdx    int
-}
-
-// B creates a new empty batch:
-//
-//   err := db.Run(client.B().Put("a", "1").Put("b", "2"))
-func B() *Batch {
-	return &Batch{}
 }
 
 func (b *Batch) prepare() error {
@@ -189,15 +184,14 @@ func (b *Batch) InternalAddCall(call Call) {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) Get(key interface{}) *Batch {
+func (b *Batch) Get(key interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, Get(proto.Key(k)))
 	b.initResult(1, 1, nil)
-	return b
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -207,15 +201,14 @@ func (b *Batch) Get(key interface{}) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) *Batch {
+func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, GetProto(proto.Key(k), msg))
 	b.initResult(1, 1, nil)
-	return b
 }
 
 // Put sets the value for a key.
@@ -225,20 +218,19 @@ func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (b *Batch) Put(key, value interface{}) *Batch {
+func (b *Batch) Put(key, value interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	v, err := marshalValue(value)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, Put(proto.Key(k), v))
 	b.initResult(1, 1, nil)
-	return b
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -250,25 +242,24 @@ func (b *Batch) Put(key, value interface{}) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler. value can be any key type or a proto.Message.
-func (b *Batch) CPut(key, value, expValue interface{}) *Batch {
+func (b *Batch) CPut(key, value, expValue interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	v, err := marshalValue(value)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	ev, err := marshalValue(expValue)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, ConditionalPut(proto.Key(k), v, ev))
 	b.initResult(1, 1, nil)
-	return b
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -280,15 +271,14 @@ func (b *Batch) CPut(key, value, expValue interface{}) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) Inc(key interface{}, value int64) *Batch {
+func (b *Batch) Inc(key interface{}, value int64) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, Increment(proto.Key(k), value))
 	b.initResult(1, 1, nil)
-	return b
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive).
@@ -298,20 +288,19 @@ func (b *Batch) Inc(key interface{}, value int64) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) Scan(s, e interface{}, maxRows int64) *Batch {
+func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, err)
-		return b
+		return
 	}
 	end, err := marshalKey(e)
 	if err != nil {
 		b.initResult(0, 0, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, Scan(proto.Key(begin), proto.Key(end), maxRows))
 	b.initResult(1, 0, nil)
-	return b
 }
 
 // Del deletes one or more keys.
@@ -321,19 +310,18 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) Del(keys ...interface{}) *Batch {
+func (b *Batch) Del(keys ...interface{}) {
 	var calls []Call
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
 			b.initResult(0, len(keys), err)
-			return b
+			return
 		}
 		calls = append(calls, Delete(proto.Key(k)))
 	}
 	b.calls = append(b.calls, calls...)
 	b.initResult(len(calls), len(calls), nil)
-	return b
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -343,29 +331,28 @@ func (b *Batch) Del(keys ...interface{}) *Batch {
 //
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
-func (b *Batch) DelRange(s, e interface{}) *Batch {
+func (b *Batch) DelRange(s, e interface{}) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, err)
-		return b
+		return
 	}
 	end, err := marshalKey(e)
 	if err != nil {
 		b.initResult(0, 0, err)
-		return b
+		return
 	}
 	b.calls = append(b.calls, DeleteRange(proto.Key(begin), proto.Key(end)))
 	b.initResult(1, 0, nil)
-	return b
 }
 
 // adminMerge is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminMerge(key interface{}) *Batch {
+func (b *Batch) adminMerge(key interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 0, err)
-		return b
+		return
 	}
 	req := &proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
@@ -375,16 +362,15 @@ func (b *Batch) adminMerge(key interface{}) *Batch {
 	resp := &proto.AdminMergeResponse{}
 	b.calls = append(b.calls, Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)
-	return b
 }
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(splitKey interface{}) *Batch {
+func (b *Batch) adminSplit(splitKey interface{}) {
 	k, err := marshalKey(splitKey)
 	if err != nil {
 		b.initResult(0, 0, err)
-		return b
+		return
 	}
 	req := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
@@ -395,5 +381,4 @@ func (b *Batch) adminSplit(splitKey interface{}) *Batch {
 	resp := &proto.AdminSplitResponse{}
 	b.calls = append(b.calls, Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)
-	return b
 }
