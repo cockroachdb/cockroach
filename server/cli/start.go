@@ -24,10 +24,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 
@@ -89,14 +87,7 @@ specified via the --stores flag. This is a comma-separated list of paths to
 storage directories or for in-memory stores, the number of bytes. Although the
 paths should be specified to correspond uniquely to physical devices, this
 requirement isn't strictly enforced. See the --stores flag help description for
-additional details.
-
-A node exports an HTTP API with the following endpoints:
-
-  Health check:           /healthz
-  Key-value REST:         ` + kv.RESTPrefix + `
-  Structured Schema REST: ` + structured.StructuredKeyPrefix + `
-`,
+additional details.`,
 	Example: `  cockroach start --certs=<dir> --gossip=host1:port1[,...] --stores=ssd=/mnt/ssd1,...`,
 	Run:     runStart,
 }

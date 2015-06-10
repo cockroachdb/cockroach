@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -56,22 +55,20 @@ var (
 type Server struct {
 	ctx *Context
 
-	mux            *http.ServeMux
-	clock          *hlc.Clock
-	rpc            *rpc.Server
-	gossip         *gossip.Gossip
-	db             *client.DB
-	kvDB           *kv.DBServer
-	kvREST         *kv.RESTServer
-	node           *Node
-	admin          *adminServer
-	status         *statusServer
-	structuredDB   structured.DB
-	structuredREST *structured.RESTServer
-	tsDB           *ts.DB
-	tsServer       *ts.Server
-	raftTransport  multiraft.Transport
-	stopper        *util.Stopper
+	mux           *http.ServeMux
+	clock         *hlc.Clock
+	rpc           *rpc.Server
+	gossip        *gossip.Gossip
+	db            *client.DB
+	kvDB          *kv.DBServer
+	kvREST        *kv.RESTServer
+	node          *Node
+	admin         *adminServer
+	status        *statusServer
+	tsDB          *ts.DB
+	tsServer      *ts.Server
+	raftTransport multiraft.Transport
+	stopper       *util.Stopper
 }
 
 // NewServer creates a Server from a server.Context.
@@ -141,8 +138,6 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.status = newStatusServer(s.db, s.gossip)
-	s.structuredDB = structured.NewDB(s.db)
-	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 	s.stopper.AddCloser(nCtx.EventFeed)
@@ -187,6 +182,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 	return nil
 }
 
+// initHTTP registers http prefixes. Each distinct prefix should be tested
+// for authentication settings in authentication_test.go.
 func (s *Server) initHTTP() {
 	s.mux.Handle("/", http.FileServer(
 		&assetfs.AssetFS{Asset: resource.Asset, AssetDir: resource.AssetDir, Prefix: "./ui/"}))
@@ -196,10 +193,37 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusKeyPrefix, s.status)
 
-	s.mux.Handle(kv.RESTPrefix, s.kvREST)
-	s.mux.Handle(kv.DBPrefix, s.kvDB)
-	s.mux.Handle(structured.StructuredKeyPrefix, s.structuredREST)
-	s.mux.Handle(ts.URLPrefix, s.tsServer)
+	s.mux.HandleFunc(kv.RESTPrefix, s.authenticateRequest(s.kvREST))
+	s.mux.HandleFunc(kv.DBPrefix, s.authenticateRequest(s.kvDB))
+	s.mux.HandleFunc(ts.URLPrefix, s.authenticateRequest(s.tsServer))
+}
+
+// authenticateRequest is a simple wrapper around a http handler.
+// If running in secure mode, verifies that the request is authenticated.
+// TODO(marc):
+// - pass verified credentials down.
+// - cookie-based auth for status/admin/debug/rest endpoints.
+func (s *Server) authenticateRequest(handler http.Handler) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.ctx.Insecure {
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		security.LogRequestCertificates(r)
+		// Verify that we have:
+		// - a TLS config
+		// - at least one client certificate
+		// - all client certificates have a valid chain
+		// TODO(marc): we should verify that the chain ends in our CA. Is it really needed though? It should be the only
+		// one in the pool.
+		// We should probably check for exactly one cert.
+		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || len(r.TLS.VerifiedChains) != len(r.TLS.PeerCertificates) {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}
 }
 
 // Stop stops the server.
@@ -233,7 +257,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer gzw.Close()
 		w = gzw
 	}
-	security.LogRequestCertificates(r)
 	s.mux.ServeHTTP(w, r)
 }
 
