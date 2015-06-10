@@ -14,14 +14,17 @@
 // for names of contributors.
 //
 // Author: Shawn Morel (shawn@strangemonad.com)
+// Author: Bram Gruneir (bram@cockroachlabs.com)
 
 package server
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -51,13 +54,22 @@ const (
 	statusLocalKeyPrefix = statusKeyPrefix + "local/"
 
 	// statusLocalLogKeyPrefix exposes a list of log files for the node.
-	// logs -> lists available log files
-	// logs/ -> lists available log files
-	// logs/{file} -> fetches contents of named log
-	statusLocalLogKeyPrefix = statusLocalKeyPrefix + "logs/"
+	// logfiles -> lists available log files
+	// logfiles/ -> lists available log files
+	// logfiles/{file} -> fetches contents of named log
+	statusLocalLogFileKeyPrefix = statusLocalKeyPrefix + "logfiles/"
+	// statusLocalLogFileKeyPattern is the pattern to match
+	// logfiles/{file}
+	statusLocalLogFileKeyPattern = statusLocalLogFileKeyPrefix + ":file"
+
+	// statusLocalLogKeyPrefix exposes a list of logs for the node.
+	// log -> equivalent to logs/info
+	// log/ -> equivalent to logs/info
+	// log/{level} -> returns the logs for the provided level and higher
+	statusLocalLogKeyPrefix = statusLocalKeyPrefix + "log/"
 	// statusLocalLogKeyPattern is the pattern to match
-	// logs/{file}
-	statusLocalLogKeyPattern = statusLocalLogKeyPrefix + ":file"
+	// log/{level}
+	statusLocalLogKeyPattern = statusLocalLogKeyPrefix + ":level"
 
 	// statusLocalStacksKey exposes stack traces of running goroutines.
 	statusLocalStacksKey = statusLocalKeyPrefix + "stacks"
@@ -82,6 +94,9 @@ const (
 
 	// statusTransactionsKeyPrefix exposes transaction statistics.
 	statusTransactionsKeyPrefix = statusKeyPrefix + "txns/"
+
+	// Default Maximum number of log entries returned.
+	defaultMaxLogEntries = 1000
 )
 
 // A statusServer provides a RESTful status API.
@@ -102,7 +117,9 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip) *statusServer {
 	server.router.GET(statusKeyPrefix, server.handleClusterStatus)
 	server.router.GET(statusGossipKeyPrefix, server.handleGossipStatus)
 	server.router.GET(statusLocalKeyPrefix, server.handleLocalStatus)
-	server.router.GET(statusLocalLogKeyPrefix, server.handleLocalLogs)
+	server.router.GET(statusLocalLogFileKeyPrefix, server.handleLocalLogFiles)
+	server.router.GET(statusLocalLogFileKeyPattern, server.handleLocalLogFile)
+	server.router.GET(statusLocalLogKeyPrefix, server.handleLocalLog)
 	server.router.GET(statusLocalLogKeyPattern, server.handleLocalLog)
 	server.router.GET(statusLocalStacksKey, server.handleLocalStacks)
 	server.router.GET(statusNodeKeyPrefix, server.handleNodesStatus)
@@ -164,8 +181,8 @@ func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request,
 	w.Write(b)
 }
 
-// handleLocalLogs handles GET requests for list of available logs.
-func (s *statusServer) handleLocalLogs(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// handleLocalLogFiles handles GET requests for list of available logs.
+func (s *statusServer) handleLocalLogFiles(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	log.Flush()
 	logFiles, err := log.ListLogFiles()
 	if err != nil {
@@ -184,10 +201,10 @@ func (s *statusServer) handleLocalLogs(w http.ResponseWriter, r *http.Request, _
 	w.Write(b)
 }
 
-// handleLocalLog handles GET requests for a single log. If no filename is
+// handleLocalLogFile handles GET requests for a single log. If no filename is
 // available, it returns 404. The log contents are returned in structured
 // format as JSON.
-func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	log.Flush()
 	file := ps.ByName("file")
 	reader, err := log.GetLogReader(file, false /* !allowAbsolute */)
@@ -211,6 +228,99 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 			return
 		}
 		entries = append(entries, entry)
+	}
+
+	b, contentType, err := util.MarshalResponse(r, entries, []util.EncodingType{util.JSONEncoding})
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(b)
+}
+
+// parseInt64WithDefault attempts to parse the passed in string. If an empty
+// string is supplied or parsing results in an error the default value is
+// returned.  If an error does occur during parsing, the error is returned as
+// well.
+func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
+	if len(s) == 0 {
+		return defaultValue, nil
+	}
+	result, err := strconv.ParseInt(s, 10, 0)
+	if err != nil {
+		return defaultValue, err
+	}
+	return result, nil
+}
+
+// handleLocalLog returns the log entries parsed from the log file that occurred
+// after or on the query parameter "starttime" and before or on the query
+// parameter "endtime". Additionally, if a level is specified via the URL, the
+// log entries are scoped to that level. If no "starttime" is provided, then
+// a "starttime" of a day ago is used.  If no "endtime" is provided, the current
+// time is used. The cutoff for entries is defaults to defaultMaxLogEntries but
+// can be adjusted via the "max" query parameter.
+func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	log.Flush()
+	level := ps.ByName("level")
+	var sev log.Severity
+	if len(level) == 0 {
+		sev = log.InfoLog
+	} else {
+		var sevFound bool
+		sev, sevFound = log.SeverityByName(level)
+		if !sevFound {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "could not determine level %s", level)
+			return
+		}
+	}
+
+	startTimestamp, err := parseInt64WithDefault(
+		r.URL.Query().Get("starttime"),
+		time.Now().AddDate(0, 0, -1).UnixNano())
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "starttime could not be parsed:%s", err)
+		return
+	}
+
+	endTimestamp, err := parseInt64WithDefault(
+		r.URL.Query().Get("endtime"),
+		time.Now().UnixNano())
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "endtime could not be parsed:%s", err)
+		return
+	}
+
+	if startTimestamp > endTimestamp {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "startime:%d is greater than endtime:%d", startTimestamp, endTimestamp)
+		return
+	}
+
+	maxEntries, err := parseInt64WithDefault(
+		r.URL.Query().Get("max"),
+		defaultMaxLogEntries)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "max could not be parsed:%s", err)
+		return
+	}
+	if maxEntries < 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "max must be set to a value greater than 0")
+		return
+	}
+
+	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries))
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	b, contentType, err := util.MarshalResponse(r, entries, []util.EncodingType{util.JSONEncoding})

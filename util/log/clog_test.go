@@ -58,7 +58,7 @@ func (f *flushBuffer) Sync() error {
 }
 
 // swap sets the log writers and returns the old array.
-func (l *loggingT) swap(writers [numSeverity]flushSyncWriter) (old [numSeverity]flushSyncWriter) {
+func (l *loggingT) swap(writers [NumSeverity]flushSyncWriter) (old [NumSeverity]flushSyncWriter) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	old = l.file
@@ -69,12 +69,12 @@ func (l *loggingT) swap(writers [numSeverity]flushSyncWriter) (old [numSeverity]
 }
 
 // newBuffers sets the log writers to all new byte buffers and returns the old array.
-func (l *loggingT) newBuffers() [numSeverity]flushSyncWriter {
-	return l.swap([numSeverity]flushSyncWriter{new(flushBuffer), new(flushBuffer), new(flushBuffer), new(flushBuffer)})
+func (l *loggingT) newBuffers() [NumSeverity]flushSyncWriter {
+	return l.swap([NumSeverity]flushSyncWriter{new(flushBuffer), new(flushBuffer), new(flushBuffer), new(flushBuffer)})
 }
 
 // contents returns the specified log value as a string.
-func contents(s severity) string {
+func contents(s Severity) string {
 	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
 	hr := NewTermEntryReader(buffer)
 	bytes, err := ioutil.ReadAll(hr)
@@ -85,7 +85,7 @@ func contents(s severity) string {
 }
 
 // jsonContents returns the specified log JSON-encoded.
-func jsonContents(s severity) []byte {
+func jsonContents(s Severity) []byte {
 	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
 	hr := NewJSONEntryReader(buffer)
 	bytes, err := ioutil.ReadAll(hr)
@@ -96,7 +96,7 @@ func jsonContents(s severity) []byte {
 }
 
 // contains reports whether the string is contained in the log.
-func contains(s severity, str string, t *testing.T) bool {
+func contains(s Severity, str string, t *testing.T) bool {
 	c := contents(s)
 	return strings.Contains(c, str)
 }
@@ -113,10 +113,10 @@ func TestInfo(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Info("test")
-	if !contains(infoLog, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(infoLog))
+	if !contains(InfoLog, "I", t) {
+		t.Errorf("Info has wrong character: %q", contents(InfoLog))
 	}
-	if !contains(infoLog, "test", t) {
+	if !contains(InfoLog, "test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -141,10 +141,10 @@ func TestStandardLog(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	stdLog.Print("test")
-	if !contains(infoLog, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(infoLog))
+	if !contains(InfoLog, "I", t) {
+		t.Errorf("Info has wrong character: %q", contents(InfoLog))
 	}
-	if !contains(infoLog, "test", t) {
+	if !contains(InfoLog, "test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -154,7 +154,7 @@ func TestJSONLogFormat(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	stdLog.Print("test")
-	json := jsonContents(infoLog)
+	json := jsonContents(InfoLog)
 	expPat := `{
   "severity": 0,
   "time": [\d]+,
@@ -178,17 +178,17 @@ func TestError(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Error("test")
-	if !contains(errorLog, "E", t) {
-		t.Errorf("Error has wrong character: %q", contents(errorLog))
+	if !contains(ErrorLog, "E", t) {
+		t.Errorf("Error has wrong character: %q", contents(ErrorLog))
 	}
-	if !contains(errorLog, "test", t) {
+	if !contains(ErrorLog, "test", t) {
 		t.Error("Error failed")
 	}
-	str := contents(errorLog)
-	if !contains(warningLog, str, t) {
+	str := contents(ErrorLog)
+	if !contains(WarningLog, str, t) {
 		t.Error("Warning failed")
 	}
-	if !contains(infoLog, str, t) {
+	if !contains(InfoLog, str, t) {
 		t.Error("Info failed")
 	}
 }
@@ -200,14 +200,14 @@ func TestWarning(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Warning("test")
-	if !contains(warningLog, "W", t) {
-		t.Errorf("Warning has wrong character: %q", contents(warningLog))
+	if !contains(WarningLog, "W", t) {
+		t.Errorf("Warning has wrong character: %q", contents(WarningLog))
 	}
-	if !contains(warningLog, "test", t) {
+	if !contains(WarningLog, "test", t) {
 		t.Error("Warning failed")
 	}
-	str := contents(warningLog)
-	if !contains(infoLog, str, t) {
+	str := contents(WarningLog)
+	if !contains(InfoLog, str, t) {
 		t.Error("Info failed")
 	}
 }
@@ -219,12 +219,12 @@ func TestV(t *testing.T) {
 	_ = logging.verbosity.Set("2")
 	defer func() { _ = logging.verbosity.Set("0") }()
 	if v(2) {
-		logging.print(infoLog, "test")
+		logging.print(InfoLog, "test")
 	}
-	if !contains(infoLog, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(infoLog))
+	if !contains(InfoLog, "I", t) {
+		t.Errorf("Info has wrong character: %q", contents(InfoLog))
 	}
-	if !contains(infoLog, "test", t) {
+	if !contains(InfoLog, "test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -245,12 +245,12 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if v(2) {
-		logging.print(infoLog, "test")
+		logging.print(InfoLog, "test")
 	}
-	if !contains(infoLog, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(infoLog))
+	if !contains(InfoLog, "I", t) {
+		t.Errorf("Info has wrong character: %q", contents(InfoLog))
 	}
-	if !contains(infoLog, "test", t) {
+	if !contains(InfoLog, "test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -267,9 +267,9 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if v(2) {
-		logging.print(infoLog, "test")
+		logging.print(InfoLog, "test")
 	}
-	if contents(infoLog) != "" {
+	if contents(InfoLog) != "" {
 		t.Error("V logged incorrectly")
 	}
 }
@@ -318,12 +318,12 @@ func TestListLogFiles(t *testing.T) {
 	Warning("x") // Be sure we have a file.
 	var info, warn *syncBuffer
 	var ok bool
-	info, ok = logging.file[infoLog].(*syncBuffer)
+	info, ok = logging.file[InfoLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
 	infoName := path.Base(info.file.Name())
-	warn, ok = logging.file[warningLog].(*syncBuffer)
+	warn, ok = logging.file[WarningLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("warning wasn't created")
 	}
@@ -334,6 +334,7 @@ func TestListLogFiles(t *testing.T) {
 	}
 	var foundInfo, foundWarn bool
 	for _, r := range results {
+		fmt.Printf("Results: Name:%v\n", r.Name)
 		if r.Name == infoName {
 			foundInfo = true
 		}
@@ -350,7 +351,7 @@ func TestGetLogReader(t *testing.T) {
 	setFlags()
 	*logDir = os.TempDir()
 	Warning("x")
-	warn, ok := logging.file[warningLog].(*syncBuffer)
+	warn, ok := logging.file[WarningLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("warning wasn't created")
 	}
@@ -400,7 +401,7 @@ func TestRollover(t *testing.T) {
 	MaxSize = 512
 
 	Info("x") // Be sure we have a file.
-	info, ok := logging.file[infoLog].(*syncBuffer)
+	info, ok := logging.file[InfoLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
@@ -460,7 +461,7 @@ func TestLogBacktraceAt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	numAppearances := strings.Count(contents(infoLog), infoLine)
+	numAppearances := strings.Count(contents(InfoLog), infoLine)
 	if numAppearances < 2 {
 		// Need 2 appearances, one in the log header and one in the trace:
 		//   log_test.go:281: I0511 16:36:06.952398 02238 log_test.go:280] we want a stack trace here
@@ -469,7 +470,7 @@ func TestLogBacktraceAt(t *testing.T) {
 		//   ...
 		// We could be more precise but that would require knowing the details
 		// of the traceback format, which may not be dependable.
-		t.Fatal("got no trace back; log is ", contents(infoLog))
+		t.Fatal("got no trace back; log is ", contents(InfoLog))
 	}
 }
 
@@ -518,7 +519,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer logging.swap(logging.newBuffers())
 
 	Fatalf("cinap")
-	cont := contents(fatalLog)
+	cont := contents(FatalLog)
 	msg := ""
 	if !strings.Contains(cont, "] cinap") {
 		msg = "panic output does not contain cinap"
@@ -529,14 +530,14 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	}
 
 	if msg != "" {
-		t.Fatalf("%s: %s", msg, contents(fatalLog))
+		t.Fatalf("%s: %s", msg, contents(FatalLog))
 	}
 
 }
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := formatHeader(infoLog, time.Now(), 1, "file.go", 100, nil)
+		buf := formatHeader(InfoLog, time.Now(), 1, "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
 }
