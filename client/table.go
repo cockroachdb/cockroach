@@ -18,101 +18,104 @@
 package client
 
 import (
-	"fmt"
+	"log"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 )
 
-// Row ...
-type Row []interface{}
-
-// IndexKey ...
-type IndexKey []interface{}
-
-// Index ...
-type Index struct {
-}
-
-// Scan retrieves 1 or more columns from the rows between start (inclusive) and
-// end (exclusive). If columns is empty all of the columns for the table are
-// retrieved.
-func (i *Index) Scan(txn *Txn, start, end Row, maxRows int, columns ...string) ([]Row, error) {
-	return nil, nil
-}
-
-// Key constructs an IndexKey from the specified column values.
-func (i *Index) Key(values ...interface{}) IndexKey {
-	// TODO(pmattis): Check that "values" contains the same number of elements as
-	// the index.
-	return IndexKey(values)
-}
-
-// Table ...
-type Table struct {
-	// Schema ...
-	Columns []string
-	PK      *Index
-	indexes map[string]*Index
-}
-
-// OpenTable ...
-func (db *DB) OpenTable(name string) (*Table, error) {
-	return nil, nil
-}
-
 // CreateTable ...
-func (db *DB) CreateTable(name string, schema proto.TableSchema) (*Table, error) {
-	return nil, nil
+func (db *DB) CreateTable(name string, schema proto.TableSchema) error {
+	return nil
 }
 
-// Index returns the specified index.
-func (t *Table) Index(name string) (*Index, error) {
-	i, ok := t.indexes[name]
-	if !ok {
-		return nil, fmt.Errorf("index \"%s\" not found", name)
+// RowBuilder ...
+type RowBuilder struct {
+	tableName string
+	columns   []string
+	values    []interface{}
+}
+
+// Values returns a new RowBuilder with the specified values replacing any
+// existing values.
+func (b RowBuilder) Values(values ...interface{}) RowBuilder {
+	b.values = values
+	return b
+}
+
+// Put adapts the RowBuilder for use in a {DB,Txn,Batch}.Put() call.
+func (b RowBuilder) Put(values ...interface{}) (RowBuilder, []interface{}) {
+	return b, values
+}
+
+// CPut adapts the RowBuilder for use in a {DB,Txn,Batch}.CPut() call.
+func (b RowBuilder) CPut(newValue, expValue interface{}) (RowBuilder, error, interface{}) {
+	return b, newValue, expValue
+}
+
+// TableBuilder facilitates the construction of RowBuilder objects which can be
+// passed to the various {DB,Txn,Batch} methods to operate on tables and rows
+// instead of raw keys and values.
+type TableBuilder struct {
+	Name string
+	PK   RowBuilder
+}
+
+// Columns returns a new RowBuilder for the table and the specified columns.
+func (b TableBuilder) Columns(columns ...string) RowBuilder {
+	return RowBuilder{
+		tableName: b.Name,
+		columns:   columns,
 	}
-	return i, nil
 }
 
-// Get retrieves 1 or more columns from the specified row. If columns is empty
-// all of the columns defined for the table are retrieved for the specified
-// row. The returned Row will contain the requested number of columns (either
-// len(columns) or len(t.Columns)).
-//
-//   r, err := t.Get(nil, t.PK.Key("user1"), "name")
-func (t *Table) Get(txn *Txn, primaryKey IndexKey, columns ...string) (Row, error) {
-	return nil, nil
-}
+func examples() {
+	db, err := client.Open("")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// Put sets the value for 1 or more columns for the specified row. Returns a
-// builder on which the values for the put must be specified:
-//
-//   t.Put(nil, t.PK.Key("user1"), "name").Values("Spencer Kimball")
-func (t *Table) Put(txn *Txn, primaryKey IndexKey, columns ...string) putBuilder {
-	return putBuilder{}
-}
+	// A builder for the "users" table. Not shown here is that the primary key is
+	// the "id" column.
+	users := client.TableBuilder{Name: "users"}
 
-// Del deletes 1 or more columns from the specified row. If columns is empty
-// all of the columns defined for the table are deleted from the specified row:
-//
-//   t.Del(nil, t.PK.Key("user1"), "name")  // Delete the "name" column
-//   t.Del(nil, t.PK.Key("user2"))          // Delete the entire row
-func (t *Table) Del(txn *Txn, primaryKey IndexKey, columns ...string) error {
-	return nil
-}
+	// Put columns "id" and "name". On a Put, the primary key columns must be
+	// specified. Note the "RowBuilder.Put()" call at the end which returns two
+	// arguments in order to adapt the RowBuilder to the {DB,Txn,Batch}.Put()
+	// signature.
+	if err := db.Put(
+		users.Columns("id", "name").Values(1).Put("Spencer Kimball")); err != nil {
+		log.Fatal(err)
+	}
 
-// DelRange deletes 1 or more columns from specified range of rows. If columns
-// is empty all of the columns defined for the table are deleted from the
-// specified range of rows.
-func (t *Table) DelRange(txn *Txn, start, end Row, columns ...string) error {
-	return nil
-}
+	// Conditionally put the "name" column.
+	if err := db.CPut(
+		users.Columns("id", "name").Values(1).CPut("Spencer W Kimball", "Spencer Kimball")); err != nil {
+		log.Fatal(err)
+	}
 
-// putBuilder ...
-type putBuilder struct {
-}
+	// Retrieve the "id" and "name" columns.
+	r, err := db.Get(users.Columns("id", "name").Values(1))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// Values specifies the values for a Put operation.
-func (b *putBuilder) Values(values ...interface{}) error {
-	return nil
+	// Increment the "absent" column.
+	r, err = db.Inc(users.Columns("id", "absent").Values(1), 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// The builder approach also works with batches and inside of transactions.
+	err := db.Txn(func(txn *client.Txn) error {
+		b := &client.Batch{}
+		// Delete the "absent" column.
+		b.Put(users.Columns("id", "absent").Values(1, nil))
+		return txn.Commit(b)
+	})
+
+	pk := users.Columns("id")
+	if err := db.DeleteRange(pk.Values(0), pk.Values(1000)); err != nil {
+		log.Fatal(err)
+	}
 }
