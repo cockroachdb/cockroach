@@ -226,6 +226,10 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	for _, opt := range opts {
 		opt(db)
 	}
+
+	if db.Sender == nil {
+		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
+	}
 	return db, nil
 }
 
