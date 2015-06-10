@@ -36,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -51,6 +51,8 @@ var testIdent = proto.StoreIdent{
 	NodeID:    1,
 	StoreID:   1,
 }
+
+var testBaseContext = testutils.NewTestBaseContext()
 
 // setTestRetryOptions sets aggressive retries with a limit on number
 // of attempts so we don't get stuck behind indefinite backoff/retry
@@ -148,7 +150,7 @@ func (db *testSender) sendOne(call client.Call) {
 // responsible for stopping the stopper upon completion.
 func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	stopper := util.NewStopper()
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
+	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	manual := hlc.NewManualClock(0)

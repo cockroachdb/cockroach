@@ -86,8 +86,8 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	if ctx.Insecure {
 		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
 	}
-	tlsConfig, err := ctx.GetServerTLSConfig()
-	if err != nil {
+	// Try loading the TLS config before anything else.
+	if _, err := ctx.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
 
@@ -99,7 +99,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	rpcContext := rpc.NewContext(s.clock, tlsConfig, stopper)
+	rpcContext := rpc.NewContext(&ctx.Context, s.clock, stopper)
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
 	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)

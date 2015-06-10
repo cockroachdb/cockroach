@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -119,7 +118,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.stopper = util.NewStopper()
 	}
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), tc.stopper)
+		rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if tc.manualClock == nil {

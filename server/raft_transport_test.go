@@ -39,13 +39,9 @@ func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 }
 
 func TestSendAndReceive(t *testing.T) {
-	tlsConfig, err := testContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
 	stopper := util.NewStopper()
 	defer stopper.Stop()
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, stopper)
+	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 
 	// Create several servers, each of which has two stores (A multiraft node ID addresses

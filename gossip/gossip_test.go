@@ -25,13 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
+var testBaseContext = testutils.NewTestBaseContext()
+
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), nil)
+	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 	if err := g.AddInfo("i", int64(1), time.Hour); err != nil {
 		t.Fatal(err)
@@ -65,7 +67,7 @@ func TestGossipInfoStore(t *testing.T) {
 // TestGossipGroupsInfoStore verifies gossiping of groups via the
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), nil)
+	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 
 	// For int64.

@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -38,9 +38,8 @@ const (
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
-	tlsConfig := security.LoadInsecureTLSConfig()
 	lclock := hlc.NewClock(hlc.UnixNano)
-	lRPCContext := rpc.NewContext(lclock, tlsConfig, nil)
+	lRPCContext := rpc.NewContext(testBaseContext, lclock, nil)
 
 	laddr := util.CreateTestAddr("unix")
 	lserver := rpc.NewServer(laddr, lRPCContext)
@@ -58,7 +57,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
-	rRPCContext := rpc.NewContext(rclock, tlsConfig, nil)
+	rRPCContext := rpc.NewContext(testBaseContext, rclock, nil)
 	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
@@ -94,7 +93,10 @@ func TestClientGossip(t *testing.T) {
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)
-	client.start(local, disconnected, local.RPCContext, stopper)
+	// Use an insecure context. We're talking to unix socket which are not in the certs.
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{}, lclock, nil)
+	client.start(local, disconnected, rpcContext, stopper)
 
 	if err := util.IsTrueWithin(func() bool {
 		_, lerr := remote.GetInfo("local-key")
@@ -123,8 +125,10 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Lock()
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
-	local.startClient(rAddr, local.RPCContext, stopper)
-	remote.startClient(lAddr, remote.RPCContext, stopper)
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{}, lclock, nil)
+	local.startClient(rAddr, rpcContext, stopper)
+	remote.startClient(lAddr, rpcContext, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage(stopper)

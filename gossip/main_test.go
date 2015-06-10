@@ -15,24 +15,12 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package rpc
+package gossip_test
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/hlc"
 )
-
-var testBaseContext = testutils.NewTestBaseContext()
-
-// NewTestContext returns a rpc.Context for testing.
-func NewTestContext(t *testing.T) *Context {
-	clock := hlc.NewClock(hlc.UnixNano)
-	return NewContext(testBaseContext, clock, nil)
-}
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)

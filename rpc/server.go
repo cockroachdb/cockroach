@@ -111,7 +111,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Listen() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ln, err := tlsListen(s.addr.Network(), s.addr.String(), s.context.tlsConfig)
+	tlsConfig, err := s.context.GetServerTLSConfig()
+	if err != nil {
+		return err
+	}
+	ln, err := tlsListen(s.addr.Network(), s.addr.String(), tlsConfig)
 	if err != nil {
 		return err
 	}
