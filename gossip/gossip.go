@@ -137,7 +137,7 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []reso
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
 		disconnected:  make(chan *client, MaxPeers),
-		stalled:       make(chan struct{}, 10),
+		stalled:       make(chan struct{}, 1),
 		resolvers:     resolvers,
 	}
 	// Create the bootstrapping RPC context. This context doesn't
@@ -454,61 +454,80 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 		// Loop until closed and there are no remaining outgoing connections.
 		for {
 			select {
-			case c := <-g.disconnected:
-				g.mu.Lock()
-				if c.err != nil {
-					log.Infof("client disconnected: %s", c.err)
-				}
-				g.removeClient(c)
-
-				// If the client was disconnected with a forwarding address, connect now.
-				if c.forwardAddr != nil {
-					g.startClient(c.forwardAddr, g.RPCContext, stopper)
-				}
-
-			case <-checkTimeout:
-				g.mu.Lock()
-				// Check whether the graph needs to be tightened to
-				// accommodate distant infos.
-				distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
-				if distant.len() > 0 {
-					// If we have space, start a client immediately.
-					if g.outgoing.hasSpace() {
-						nodeID := distant.selectRandom()
-						if nodeAddr, err := g.getNodeIDAddressLocked(nodeID); err != nil {
-							log.Errorf("node %d: %s", nodeID, err)
-						} else {
-							g.startClient(nodeAddr, g.RPCContext, stopper)
-						}
-					} else {
-						// Otherwise, find least useful peer and close it. Make sure
-						// here that we only consider outgoing clients which are
-						// connected.
-						nodeID := g.is.leastUseful(g.outgoing)
-						if nodeID != 0 {
-							log.Infof("closing least useful client %d to tighten network graph", nodeID)
-							g.closeClient(nodeID)
-						}
-					}
-				}
-
 			case <-stopper.ShouldStop():
 				return
+			case c := <-g.disconnected:
+				g.doDisconnected(stopper, c)
+			case <-checkTimeout:
+				g.doCheckTimeout(stopper)
 			}
-
-			// If there are no outgoing hosts or sentinel gossip is missing,
-			// and there are still unused bootstrap hosts, signal bootstrapper
-			// to try another.
-			if g.outgoing.len()+g.incoming.len() == 0 {
-				g.stalled <- struct{}{}
-			} else if g.is.getInfo(KeySentinel) == nil {
-				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID)
-				g.stalled <- struct{}{}
-			}
-
-			g.mu.Unlock()
 		}
 	})
+}
+
+func (g *Gossip) doCheckTimeout(stopper *util.Stopper) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	// Check whether the graph needs to be tightened to
+	// accommodate distant infos.
+	distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
+	if distant.len() > 0 {
+		// If we have space, start a client immediately.
+		if g.outgoing.hasSpace() {
+			nodeID := distant.selectRandom()
+			if nodeAddr, err := g.getNodeIDAddressLocked(nodeID); err != nil {
+				log.Errorf("node %d: %s", nodeID, err)
+			} else {
+				g.startClient(nodeAddr, g.RPCContext, stopper)
+			}
+		} else {
+			// Otherwise, find least useful peer and close it. Make sure
+			// here that we only consider outgoing clients which are
+			// connected.
+			nodeID := g.is.leastUseful(g.outgoing)
+			if nodeID != 0 {
+				log.Infof("closing least useful client %d to tighten network graph", nodeID)
+				g.closeClient(nodeID)
+			}
+		}
+	}
+	g.maybeSignalStalledLocked()
+}
+
+func (g *Gossip) doDisconnected(stopper *util.Stopper, c *client) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if c.err != nil {
+		log.Infof("client disconnected: %s", c.err)
+	}
+	g.removeClient(c)
+
+	// If the client was disconnected with a forwarding address, connect now.
+	if c.forwardAddr != nil {
+		g.startClient(c.forwardAddr, g.RPCContext, stopper)
+	}
+	g.maybeSignalStalledLocked()
+}
+
+func (g *Gossip) maybeSignalStalledLocked() {
+	// If there are no outgoing hosts or sentinel gossip is missing,
+	// and there are still unused bootstrap hosts, signal bootstrapper
+	// to try another.
+	if g.outgoing.len()+g.incoming.len() == 0 {
+		g.signalStalled()
+	} else if g.is.getInfo(KeySentinel) == nil {
+		log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID)
+		g.signalStalled()
+	}
+	return
+}
+
+func (g *Gossip) signalStalled() {
+	select {
+	case g.stalled <- struct{}{}:
+	default:
+	}
+	return
 }
 
 // maybeWarnAboutInit looks for signs indicating a cluster which
