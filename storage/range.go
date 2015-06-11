@@ -979,7 +979,7 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 				// time being, it will only fire the first range.
 				log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
 			}
-			configMap, hash, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+			configMap, hash, err := loadConfigMap(r.rm.Engine(), cd.keyPrefix, cd.configI)
 			if err != nil {
 				log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
 				continue
@@ -1002,8 +1002,8 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
 // configuration maps include accounting, permissions, and zones.
-func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, []byte, error) {
-	kvs, err := engine.MVCCScan(r.rm.Engine(), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true, nil)
+func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, []byte, error) {
+	kvs, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true, nil)
 	if err != nil {
 		return nil, nil, err
 	}
