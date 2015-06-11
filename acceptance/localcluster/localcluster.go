@@ -137,7 +137,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 		client:       newDockerClient(),
 		stopper:      stopper,
 		Nodes:        make([]*Container, numNodes),
-		UseTestCerts: true,
+		UseTestCerts: false,
 	}
 }
 
@@ -314,6 +314,7 @@ func (l *Cluster) createNodeCerts() {
 	}
 	args := []string{"cert", "--certs=/certs", "create-node", "--key-size=512"}
 	args = append(args, nodes...)
+	args = append(args, dockerIP().String())
 	c := l.createRoach(-1, args...)
 	defer c.mustRemove()
 	maybePanic(c.Start(nil, nil, l.vols))
