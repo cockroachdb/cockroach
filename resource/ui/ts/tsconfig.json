@@ -23,7 +23,6 @@
         "./pages/graph.ts",
         "./pages/nodes.ts",
         "./pages/stores.ts",
-        "./pages/monitor.ts",
-        "./pages/rest_explorer.ts"
+        "./pages/monitor.ts"
     ]
 }
