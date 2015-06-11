@@ -167,12 +167,33 @@ var Utils;
         Convert.NanoToMilli = NanoToMilli;
     })(Convert = Utils.Convert || (Utils.Convert = {}));
 })(Utils || (Utils = {}));
+// source: util/query.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Utils;
+(function (Utils) {
+    var Http;
+    (function (Http) {
+        function Get(url) {
+            return m.request({ url: url, method: "GET", extract: nonJsonErrors });
+        }
+        Http.Get = Get;
+        function Post(url, data) {
+            return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data });
+        }
+        Http.Post = Post;
+        function nonJsonErrors(xhr, opts) {
+            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
+        }
+    })(Http = Utils.Http || (Utils.Http = {}));
+})(Utils || (Utils = {}));
 // source: models/timeseries.ts
 // TODO(mrtracy): rename to metrics.ts.
 /// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
+/// <reference path="../util/http.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Models;
 (function (Models) {
@@ -250,8 +271,7 @@ var Models;
                 };
             }
             Query.dispatch_query = function (q) {
-                var url = "/ts/query";
-                return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: q })
+                return Utils.Http.Post("/ts/query", q)
                     .then(function (d) {
                     if (!d.results) {
                         d.results = [];
@@ -275,9 +295,6 @@ var Models;
             return new Query(selectors);
         }
         Metrics.NewQuery = NewQuery;
-        function nonJsonErrors(xhr, opts) {
-            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
-        }
     })(Metrics = Models.Metrics || (Models.Metrics = {}));
 })(Models || (Models = {}));
 // source: components/metrics.ts
@@ -715,6 +732,7 @@ var Models;
 // source: models/status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -743,8 +761,7 @@ var Models;
         var Stores = (function () {
             function Stores() {
                 this._data = new Utils.QueryCache(function () {
-                    var url = "/_status/stores/";
-                    return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                    return Utils.Http.Get("/_status/stores/")
                         .then(function (results) {
                         var data = {};
                         results.d.forEach(function (status) {
@@ -822,8 +839,7 @@ var Models;
         var Nodes = (function () {
             function Nodes() {
                 this._data = new Utils.QueryCache(function () {
-                    var url = "/_status/nodes/";
-                    return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                    return Utils.Http.Get("/_status/nodes/")
                         .then(function (results) {
                         var data = {};
                         results.d.forEach(function (status) {
@@ -903,9 +919,6 @@ var Models;
             return Nodes;
         })();
         Status.Nodes = Nodes;
-        function nonJsonErrors(xhr, opts) {
-            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
-        }
     })(Status = Models.Status || (Models.Status = {}));
 })(Models || (Models = {}));
 // source: pages/nodes.ts

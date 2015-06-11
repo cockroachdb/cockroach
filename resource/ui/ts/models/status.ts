@@ -1,6 +1,7 @@
 // source: models/status.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="stats.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -40,8 +41,7 @@ module Models {
 
         export class Stores {
             private _data = new Utils.QueryCache(():promise<StoreStatusMap> => {
-                var url = "/_status/stores/";
-                return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                return Utils.Http.Get("/_status/stores/")
                     .then((results: StoreStatusResponseSet) => {
                         var data:StoreStatusMap = {};
                         results.d.forEach((status) => {
@@ -101,7 +101,7 @@ module Models {
                 var data = this._data.result();
                 for (var storeId in data) {
                     var storeStatus = data[storeId];
-					Proto.AccumulateStatus(status, storeStatus);
+                    Proto.AccumulateStatus(status, storeStatus);
                 };
 
                 return m("div", [
@@ -130,13 +130,12 @@ module Models {
 
         export class Nodes {
             private _data = new Utils.QueryCache(():promise<NodeStatusMap> => {
-                var url = "/_status/nodes/";
-                return m.request({ url: url, method: "GET", extract: nonJsonErrors })
+                return Utils.Http.Get("/_status/nodes/")
                     .then((results: NodeStatusResponseSet) => {
                         var data:NodeStatusMap = {};
                         results.d.forEach((status) => {
                             var nodeId = status.desc.node_id;
-							data[nodeId] = status;
+                            data[nodeId] = status;
                         });
                         return data;
                     });
@@ -197,7 +196,7 @@ module Models {
                 var data = this._data.result();
                 for (var nodeId in data) {
                     var nodeStatus = data[nodeId];
-					Proto.AccumulateStatus(status, nodeStatus);
+                    Proto.AccumulateStatus(status, nodeStatus);
                 };
 
                 return m("div", [
@@ -214,14 +213,6 @@ module Models {
                     Stats.CreateStatsTable(status.stats)
                 ]);
             }
-        }
-
-        /**
-         * nonJsonErrors ensures that error messages returned from the server
-         * are parseable as JSON strings.
-         */
-        function nonJsonErrors(xhr: XMLHttpRequest, opts: _mithril.MithrilXHROptions): string {
-            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
         }
     }
 }

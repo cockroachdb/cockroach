@@ -4,6 +4,7 @@
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
+/// <reference path="../util/http.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 /**
@@ -163,8 +164,7 @@ module Models {
             }
 
             private static dispatch_query(q:Proto.QueryRequestSet):promise<Proto.QueryResultSet> {
-                var url = "/ts/query";
-                return m.request({url:url, method:"POST", extract:nonJsonErrors, data:q})
+                return Utils.Http.Post("/ts/query", q)
                     .then((d:Proto.QueryResultSet) => {
                         // Populate missing collection fields with empty arrays.
                         if (!d.results) {
@@ -187,14 +187,6 @@ module Models {
          */
         export function NewQuery(...selectors:select.Selector[]):Query {
             return new Query(selectors);
-        }
-
-        /**
-         * nonJsonErrors ensures that error messages returned from the server
-         * are parseable as JSON strings.
-         */
-        function nonJsonErrors(xhr: XMLHttpRequest, opts: _mithril.MithrilXHROptions):string {
-            return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
         }
     }
 }
