@@ -203,13 +203,14 @@ func (tc *testContext) Stop() {
 
 // initConfigs creates default configuration entries.
 func initConfigs(e engine.Engine, t testing.TB) {
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
+	timestamp := proto.MinTimestamp.Next()
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigAccountingPrefix, timestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigPermissionPrefix, timestamp, nil, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPutProto(e, nil, keys.ConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigZonePrefix, timestamp, nil, &testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 }
