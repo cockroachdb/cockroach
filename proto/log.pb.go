@@ -39,7 +39,7 @@ type LogEntry struct {
 	Method  *Method  `protobuf:"varint,11,opt,name=method,casttype=Method" json:"method,omitempty"`
 	Key     Key      `protobuf:"bytes,12,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// Stack traces if requested.
-	Stacks           []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks"`
+	Stacks           []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -108,7 +108,7 @@ type LogEntry_Arg struct {
 	Type string `protobuf:"bytes,1,opt,name=type" json:"type"`
 	Str  string `protobuf:"bytes,2,opt,name=str" json:"str"`
 	// Optional json representation.
-	Json             []byte `protobuf:"bytes,3,opt,name=json" json:"json"`
+	Json             []byte `protobuf:"bytes,3,opt,name=json" json:"json,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 

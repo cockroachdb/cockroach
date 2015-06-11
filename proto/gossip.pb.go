@@ -25,7 +25,7 @@ type GossipRequest struct {
 	// Maximum sequence number of gossip from this peer.
 	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq" json:"max_seq"`
 	// Reciprocal delta of new info since last gossip.
-	Delta            []byte `protobuf:"bytes,5,opt,name=delta" json:"delta"`
+	Delta            []byte `protobuf:"bytes,5,opt,name=delta" json:"delta,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -65,7 +65,7 @@ func (m *GossipRequest) GetDelta() []byte {
 // Delta will be nil in the event that Alternate is set.
 type GossipResponse struct {
 	// Requested delta of server's infostore.
-	Delta []byte `protobuf:"bytes,1,opt,name=delta" json:"delta"`
+	Delta []byte `protobuf:"bytes,1,opt,name=delta" json:"delta,omitempty"`
 	// Non-nil means client should retry with this address.
 	Alternate        *Addr  `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
 	XXX_unrecognized []byte `json:"-"`

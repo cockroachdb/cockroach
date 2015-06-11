@@ -142,7 +142,7 @@ type TableSchema_IndexByName struct {
 	Index `protobuf:"bytes,1,opt,name=index,embedded=index" json:"index"`
 	// An ordered list of column names of which the index is comprised. Each
 	// column_name refers to a column in the TableSchema's columns.
-	ColumnNames      []string `protobuf:"bytes,2,rep,name=column_names" json:"column_names"`
+	ColumnNames      []string `protobuf:"bytes,2,rep,name=column_names" json:"column_names,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -180,7 +180,7 @@ type IndexDescriptor struct {
 	// An ordered list of column ids of which the index is comprised. Each
 	// column_id refers to a column in the TableDescriptor's columns; special
 	// care is taken to update this when deleting columns.
-	ColumnIds        []uint32 `protobuf:"varint,3,rep,name=column_ids" json:"column_ids"`
+	ColumnIds        []uint32 `protobuf:"varint,3,rep,name=column_ids" json:"column_ids,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 

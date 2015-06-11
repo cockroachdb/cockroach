@@ -283,7 +283,7 @@ func (m *KeyValue) GetValue() Value {
 // RawKeyValue contains the raw bytes of the value for a key.
 type RawKeyValue struct {
 	Key              EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
-	Value            []byte     `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Value            []byte     `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 	XXX_unrecognized []byte     `json:"-"`
 }
 
@@ -467,7 +467,7 @@ type Transaction struct {
 	// record.
 	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// ID is a unique UUID value which identifies the transaction.
-	ID        []byte            `protobuf:"bytes,3,opt,name=id" json:"id"`
+	ID        []byte            `protobuf:"bytes,3,opt,name=id" json:"id,omitempty"`
 	Priority  int32             `protobuf:"varint,4,opt,name=priority" json:"priority"`
 	Isolation IsolationType     `protobuf:"varint,5,opt,name=isolation,enum=cockroach.proto.IsolationType" json:"isolation"`
 	Status    TransactionStatus `protobuf:"varint,6,opt,name=status,enum=cockroach.proto.TransactionStatus" json:"status"`

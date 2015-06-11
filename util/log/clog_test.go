@@ -162,8 +162,7 @@ func TestJSONLogFormat(t *testing.T) {
   "file": "clog_test.go",
   "line": [\d]+,
   "format": "test",
-  "args": null,
-  "stacks": null
+  "args": null
 }`
 	if ok, _ := regexp.Match(expPat, json); !ok {
 		t.Errorf("expected json match; got %s", json)

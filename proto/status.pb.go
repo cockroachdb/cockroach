@@ -96,7 +96,7 @@ func (m *StoreStatus) GetAvailableRangeCount() int32 {
 // node.
 type NodeStatus struct {
 	Desc                 NodeDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
-	StoreIDs             []StoreID      `protobuf:"varint,2,rep,name=store_ids,casttype=StoreID" json:"store_ids"`
+	StoreIDs             []StoreID      `protobuf:"varint,2,rep,name=store_ids,casttype=StoreID" json:"store_ids,omitempty"`
 	RangeCount           int32          `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
 	StartedAt            int64          `protobuf:"varint,4,opt,name=started_at" json:"started_at"`
 	UpdatedAt            int64          `protobuf:"varint,5,opt,name=updated_at" json:"updated_at"`

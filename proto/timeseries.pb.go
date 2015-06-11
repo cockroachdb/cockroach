@@ -223,7 +223,7 @@ type TimeSeriesQueryResponse_Result struct {
 	// measured.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// A list of sources from which the data was aggregated.
-	Sources []string `protobuf:"bytes,2,rep,name=sources" json:"sources"`
+	Sources []string `protobuf:"bytes,2,rep,name=sources" json:"sources,omitempty"`
 	// The aggregation function applied to points in the result.
 	Aggregator *TimeSeriesQueryAggregator `protobuf:"varint,3,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
 	// Datapoints describing the queried data.

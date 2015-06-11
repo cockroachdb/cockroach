@@ -44,7 +44,7 @@ message LogEntry {
     optional string type = 1 [(gogoproto.nullable) = false];
     optional string str = 2 [(gogoproto.nullable) = false];
     // Optional json representation.
-    optional bytes json = 3 [(gogoproto.nullable) = false];
+    optional bytes json = 3;
   }
   repeated Arg args = 7 [(gogoproto.nullable) = false];
   // Optional parameters which may be set with log entry.
@@ -54,5 +54,5 @@ message LogEntry {
   optional int32 method = 11 [(gogoproto.casttype) = "Method"];
   optional bytes key = 12 [(gogoproto.casttype) = "Key"];
   // Stack traces if requested.
-  optional bytes stacks = 13 [(gogoproto.nullable) = false];
+  optional bytes stacks = 13;
 }

@@ -46,8 +46,7 @@ message StoreStatus {
 // node.
 message NodeStatus {
   optional NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  repeated int32 store_ids = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
+  repeated int32 store_ids = 2 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];

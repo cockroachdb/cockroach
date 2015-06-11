@@ -36,14 +36,14 @@ message GossipRequest {
   // Maximum sequence number of gossip from this peer.
   optional int64 max_seq = 4 [(gogoproto.nullable) = false];
   // Reciprocal delta of new info since last gossip.
-  optional bytes delta = 5 [(gogoproto.nullable) = false];
+  optional bytes delta = 5;
 }
 
 // GossipResponse is returned from the Gossip.Gossip RPC.
 // Delta will be nil in the event that Alternate is set.
 message GossipResponse {
   // Requested delta of server's infostore.
-  optional bytes delta = 1 [(gogoproto.nullable) = false];
+  optional bytes delta = 1;
   // Non-nil means client should retry with this address.
   optional Addr alternate = 2;
 }

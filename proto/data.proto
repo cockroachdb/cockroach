@@ -88,7 +88,7 @@ message KeyValue {
 // RawKeyValue contains the raw bytes of the value for a key.
 message RawKeyValue {
   optional bytes key = 1 [(gogoproto.casttype) = "EncodedKey"];
-  optional bytes value = 2 [(gogoproto.nullable) = false];
+  optional bytes value = 2;
 }
 
 // A StoreIdent uniquely identifies a store in the cluster. The
@@ -206,7 +206,7 @@ message Transaction {
   // record.
   optional bytes key = 2 [(gogoproto.casttype) = "Key"];
   // ID is a unique UUID value which identifies the transaction.
-  optional bytes id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional bytes id = 3 [(gogoproto.customname) = "ID"];
   optional int32 priority = 4 [(gogoproto.nullable) = false];
   optional IsolationType isolation = 5 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 6 [(gogoproto.nullable) = false];

@@ -20,7 +20,7 @@ var _ = math.Inf
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 type Attributes struct {
-	Attrs            []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs" yaml:"attrs,flow"`
+	Attrs            []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -121,9 +121,9 @@ func (m *AcctConfig) GetClusterId() string {
 // PermConfig holds permission configuration, specifying read/write ACLs.
 type PermConfig struct {
 	// ACL lists users with read permissions.
-	Read []string `protobuf:"bytes,1,rep,name=read" json:"read" yaml:"read,omitempty"`
+	Read []string `protobuf:"bytes,1,rep,name=read" json:"read,omitempty" yaml:"read,omitempty"`
 	// ACL lists users with write permissions.
-	Write            []string `protobuf:"bytes,2,rep,name=write" json:"write" yaml:"write,omitempty"`
+	Write            []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 

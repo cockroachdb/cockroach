@@ -29,7 +29,7 @@ option (gogoproto.unmarshaler_all) = true;
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 message Attributes {
-  repeated string attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"attrs,flow\""];
+  repeated string attrs = 1 [(gogoproto.moretags) = "yaml:\"attrs,flow\""];
 }
 
 // Replica describes a replica location by node ID (corresponds to a
@@ -83,9 +83,9 @@ message AcctConfig {
 // PermConfig holds permission configuration, specifying read/write ACLs.
 message PermConfig {
   // ACL lists users with read permissions.
-  repeated string read = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"read,omitempty\""];
+  repeated string read = 1 [(gogoproto.moretags) = "yaml:\"read,omitempty\""];
   // ACL lists users with write permissions.
-  repeated string write = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"write,omitempty\""];
+  repeated string write = 2 [(gogoproto.moretags) = "yaml:\"write,omitempty\""];
 }
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.

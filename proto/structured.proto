@@ -50,7 +50,7 @@ message TableSchema {
     optional Index index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
     // An ordered list of column names of which the index is comprised. Each
     // column_name refers to a column in the TableSchema's columns.
-    repeated string column_names = 2 [(gogoproto.nullable) = false];
+    repeated string column_names = 2;
   }
   optional Table table = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated Column columns = 2 [(gogoproto.nullable) = false];
@@ -69,7 +69,7 @@ message IndexDescriptor {
   // An ordered list of column ids of which the index is comprised. Each
   // column_id refers to a column in the TableDescriptor's columns; special
   // care is taken to update this when deleting columns.
-  repeated uint32 column_ids = 3 [(gogoproto.nullable) = false];
+  repeated uint32 column_ids = 3;
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata

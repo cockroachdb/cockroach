@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Matt Tracy (matt@cockroachlabs.com) 
+// Author: Matt Tracy (matt@cockroachlabs.com)
 
 syntax = "proto2";
 package cockroach.proto;
@@ -47,7 +47,7 @@ message TimeSeriesData {
 }
 
 // TimeSeriesQueryAggregator describes a set of aggregation functions which are
-// applied to data points before returning them as part of a query. 
+// applied to data points before returning them as part of a query.
 //
 // Cockroach does not store data points at full fidelity, instead "downsampling"
 // data points into fixed-length sample periods. The value returned for each
@@ -95,7 +95,7 @@ message TimeSeriesQueryResponse {
         // measured.
         optional string name = 1 [(gogoproto.nullable) = false];
         // A list of sources from which the data was aggregated.
-        repeated string sources = 2 [(gogoproto.nullable) = false];
+        repeated string sources = 2;
         // The aggregation function applied to points in the result.
         optional TimeSeriesQueryAggregator aggregator = 3 [default = AVG];
         // Datapoints describing the queried data.
@@ -105,5 +105,5 @@ message TimeSeriesQueryResponse {
     // A set of Results; there will be one result for each Query in the matching
     // TimeSeriesQueryRequest, in the same order. A Result will be present for
     // each Query even if there are zero datapoints to return.
-    repeated Result results = 1; 
+    repeated Result results = 1;
 }
