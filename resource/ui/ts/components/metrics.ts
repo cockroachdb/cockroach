@@ -1,6 +1,7 @@
 // source: components/metrics.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../util/querycache.ts" />
 /// <reference path="../models/timeseries.ts" />
 
 
@@ -29,7 +30,7 @@ module Components {
              * display options.
              */
             interface ViewModel {
-                query:Models.Metrics.QueryManager;
+                query:Utils.QueryCache<Models.Proto.QueryResultSet>;
                 lastEpoch:number;
                 key?:number;
             }
@@ -134,7 +135,7 @@ module Components {
              *
              * @param key The key param is used by mithril to track objects in lists which can be rearranged.
              */
-            export function create(query:Models.Metrics.QueryManager, key?:number){
+            export function create(query:Utils.QueryCache<Models.Proto.QueryResultSet>, key?:number){
                 var vm:ViewModel = {lastEpoch:0, query:query}
                 if (key) {
                     vm.key = key;
