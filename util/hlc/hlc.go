@@ -152,12 +152,9 @@ func (c *Clock) timestamp() proto.Timestamp {
 // of the distributed network. This is the counterpart
 // of Update, which is passed a timestamp received from
 // another member of the distributed network.
-func (c *Clock) Now() (result proto.Timestamp) {
+func (c *Clock) Now() proto.Timestamp {
 	c.Lock()
 	defer c.Unlock()
-	defer func() {
-		result = c.timestamp()
-	}()
 
 	physicalClock := c.physicalClock()
 	if c.state.WallTime >= physicalClock {
@@ -168,7 +165,7 @@ func (c *Clock) Now() (result proto.Timestamp) {
 		c.state.WallTime = physicalClock
 		c.state.Logical = 0
 	}
-	return
+	return c.timestamp()
 }
 
 // PhysicalNow returns the local wall time. It corresponds to the physicalClock

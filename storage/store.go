@@ -1184,7 +1184,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	}
 	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
 		if s.Clock().MaxOffset() > 0 {
-			// Once a command is submitted to raft, all replica's logical
+			// Once a command is submitted to raft, all replicas' logical
 			// clocks will be ratcheted forward to match. If the command
 			// appears to come from a node with a bad clock, reject it now
 			// before we reach that point.

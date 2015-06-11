@@ -166,7 +166,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// Make sure to incorporate the logical component if the wall time
 			// hasn't changed (i=0). The logical component will change
 			// internally in a way we can't track, but we want to be just
-			// ahead.if
+			// ahead.
 			txnClock.Update(futureTS.Add(0, 999))
 			// The written values are spaced out in intervals of 5ns, so
 			// setting <5ns here should make do without any restarts while

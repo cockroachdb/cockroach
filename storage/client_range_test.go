@@ -117,11 +117,13 @@ func TestRejectFutureCommand(t *testing.T) {
 	// the "physical" clock to catch up.
 	manual.Increment(int64(maxOffset))
 
+	startTime := manual.UnixNano()
+
 	// Commands with a future timestamp that is within the MaxOffset
 	// bound will be accepted and will cause the clock to advance.
 	for i := int64(0); i < 3; i++ {
 		incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-		incArgs.Timestamp.WallTime = (130 + i*30) * int64(time.Millisecond)
+		incArgs.Timestamp.WallTime = startTime + ((i+1)*30)*int64(time.Millisecond)
 		if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
 			t.Fatal(err)
 		}
@@ -132,12 +134,12 @@ func TestRejectFutureCommand(t *testing.T) {
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs, incResp := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
-	incArgs.Timestamp.WallTime = int64(220 * time.Millisecond)
+	incArgs.Timestamp.WallTime = int64((time.Duration(startTime) + maxOffset + 1) * time.Millisecond)
 	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
-	// The clock remained at 90ms and the final command was not executed.
+	// The clock remained at 190ms and the final command was not executed.
 	if now := clock.Now(); now.WallTime != int64(190*time.Millisecond) {
 		t.Errorf("expected clock to advance to 190ms; got %s", now)
 	}
