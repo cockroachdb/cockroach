@@ -101,10 +101,14 @@ type multiTestContext struct {
 	transport    multiraft.Transport
 	db           *client.DB
 	feed         *util.Feed
-	engines      []engine.Engine
-	senders      []*kv.LocalSender
-	stores       []*storage.Store
-	idents       []proto.StoreIdent
+	// The per-store clocks slice normally contains aliases of
+	// multiTestContext.clock, but it may be populated before Start() to
+	// use distinct clocks per store.
+	clocks  []*hlc.Clock
+	engines []engine.Engine
+	senders []*kv.LocalSender
+	stores  []*storage.Store
+	idents  []proto.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
@@ -177,14 +181,14 @@ func (m *multiTestContext) Stop() {
 	}
 }
 
-func (m *multiTestContext) makeContext() storage.StoreContext {
+func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	var ctx storage.StoreContext
 	if m.storeContext != nil {
 		ctx = *m.storeContext
 	} else {
 		ctx = storage.TestStoreContext
 	}
-	ctx.Clock = m.clock
+	ctx.Clock = m.clocks[i]
 	ctx.DB = m.db
 	ctx.Gossip = m.gossip
 	ctx.Transport = m.transport
@@ -195,9 +199,16 @@ func (m *multiTestContext) makeContext() storage.StoreContext {
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
 func (m *multiTestContext) addStore() {
 	idx := len(m.stores)
+	var clock *hlc.Clock
+	if len(m.clocks) > idx {
+		clock = m.clocks[idx]
+	} else {
+		clock = m.clock
+		m.clocks = append(m.clocks, clock)
+	}
 	var eng engine.Engine
 	var needBootstrap bool
-	if len(m.engines) > len(m.stores) {
+	if len(m.engines) > idx {
 		eng = m.engines[idx]
 	} else {
 		eng = engine.NewInMem(proto.Attributes{}, 1<<20)
@@ -212,7 +223,7 @@ func (m *multiTestContext) addStore() {
 	}
 
 	stopper := util.NewStopper()
-	ctx := m.makeContext()
+	ctx := m.makeContext(idx)
 	store := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: proto.NodeID(idx + 1)})
 	if needBootstrap {
 		err := store.Bootstrap(proto.StoreIdent{
@@ -258,7 +269,7 @@ func (m *multiTestContext) stopStore(i int) {
 func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = util.NewStopper()
 
-	ctx := m.makeContext()
+	ctx := m.makeContext(i)
 	m.stores[i] = storage.NewStore(ctx, m.engines[i], &proto.NodeDescriptor{NodeID: proto.NodeID(i + 1)})
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)

@@ -571,7 +571,7 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 
 // TestStoreExecuteCmdWithClockOffset verifies that if the request
 // specifies a timestamp further into the future than the node's
-// maximum allowed clock offset, the cmd fails with an error.
+// maximum allowed clock offset, the cmd still succeeds.
 func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, mc, stopper := createTestStore(t)

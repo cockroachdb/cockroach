@@ -673,7 +673,7 @@ func TestRaftHeartbeats(t *testing.T) {
 	}
 
 	// Wait for several ticks to elapse.
-	time.Sleep(5 * mtc.makeContext().RaftTickInterval)
+	time.Sleep(5 * mtc.makeContext(0).RaftTickInterval)
 	status = mtc.stores[0].RaftStatus(1)
 	if status.SoftState.RaftState != raft.StateLeader {
 		t.Errorf("expected node 0 to be leader after sleeping but was %s", status.SoftState.RaftState)

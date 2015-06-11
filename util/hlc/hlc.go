@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TODO(Tobias): Figure out if it would make sense to save some
@@ -152,12 +152,9 @@ func (c *Clock) timestamp() proto.Timestamp {
 // of the distributed network. This is the counterpart
 // of Update, which is passed a timestamp received from
 // another member of the distributed network.
-func (c *Clock) Now() (result proto.Timestamp) {
+func (c *Clock) Now() proto.Timestamp {
 	c.Lock()
 	defer c.Unlock()
-	defer func() {
-		result = c.timestamp()
-	}()
 
 	physicalClock := c.physicalClock()
 	if c.state.WallTime >= physicalClock {
@@ -168,7 +165,7 @@ func (c *Clock) Now() (result proto.Timestamp) {
 		c.state.WallTime = physicalClock
 		c.state.Logical = 0
 	}
-	return
+	return c.timestamp()
 }
 
 // PhysicalNow returns the local wall time. It corresponds to the physicalClock
@@ -193,12 +190,9 @@ func (c *Clock) PhysicalTime() time.Time {
 // in which case the state of the clock will not have been
 // altered.
 // To timestamp events of local origin, use Now instead.
-func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
+func (c *Clock) Update(rt proto.Timestamp) proto.Timestamp {
 	c.Lock()
 	defer c.Unlock()
-	defer func() {
-		result = c.timestamp()
-	}()
 	physicalClock := c.physicalClock()
 
 	if physicalClock > c.state.WallTime && physicalClock > rt.WallTime {
@@ -206,7 +200,7 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 		// as the new wall time and the logical clock is reset.
 		c.state.WallTime = physicalClock
 		c.state.Logical = 0
-		return
+		return c.timestamp()
 	}
 
 	// In the remaining cases, our physical clock plays no role
@@ -216,9 +210,8 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 		if c.maxOffset.Nanoseconds() > 0 &&
 			rt.WallTime-physicalClock > c.maxOffset.Nanoseconds() {
 			// The remote wall time is too far ahead to be trustworthy.
-			err = util.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
+			log.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
 				rt.WallTime, rt.WallTime-physicalClock)
-			return
 		}
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.
@@ -236,7 +229,5 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 		}
 		c.state.Logical++
 	}
-	// The variable result will be updated via defer just
-	// before the object is unlocked.
-	return
+	return c.timestamp()
 }

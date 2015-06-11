@@ -98,10 +98,7 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	// high water mark for all ops serviced, so that received ops
 	// without a timestamp specified are guaranteed one higher than any
 	// op already executed for overlapping keys.
-	_, err := r.rm.Clock().Update(header.Timestamp)
-	if err != nil {
-		log.Errorf("executed a command with excessive future clock offset: %s", err)
-	}
+	r.rm.Clock().Update(header.Timestamp)
 
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = header.Timestamp
