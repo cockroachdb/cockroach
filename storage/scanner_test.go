@@ -204,10 +204,16 @@ func TestScannerAddToQueues(t *testing.T) {
 
 	// Remove first range and verify it does not exist in either range.
 	rng := ranges.remove(0, t)
-	s.RemoveRange(rng)
 	if err := util.IsTrueWithin(func() bool {
-		return q1.count() == count-1 && q2.count() == count-1
-	}, 10*time.Millisecond); err != nil {
+		// This is intentionally inside the loop, otherwise this test races as
+		// our removal of the range may be processed before a stray re-queue.
+		// Removing on each attempt makes sure we clean this up as we retry.
+		s.RemoveRange(rng)
+		c1 := q1.count()
+		c2 := q2.count()
+		log.Infof("q1: %d, q2: %d, wanted: %d", c1, c2, count-1)
+		return c1 == count-1 && c2 == count-1
+	}, time.Second); err != nil {
 		t.Error(err)
 	}
 
