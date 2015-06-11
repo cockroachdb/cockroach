@@ -81,7 +81,7 @@ message MVCCValue {
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 message KeyValue {
-  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
@@ -149,7 +149,7 @@ message InternalCommitTrigger {
   // List of intents to resolve on commit or abort. Note that keys
   // listed here will only be resolved if they fall on the same range
   // that the transaction was started on.
-  repeated bytes intents = 4 [(gogoproto.customtype) = "Key"];
+  repeated bytes intents = 4 [(gogoproto.casttype) = "Key"];
 }
 
 // IsolationType TODO(jiajia) Needs documentation.
@@ -204,7 +204,7 @@ message Transaction {
   // the first key read or written during the transaction and
   // determines which range in the cluster will hold the transaction
   // record.
-  optional bytes key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
   // ID is a unique UUID value which identifies the transaction.
   optional bytes id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional int32 priority = 4 [(gogoproto.nullable) = false];

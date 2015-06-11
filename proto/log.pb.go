@@ -37,7 +37,7 @@ type LogEntry struct {
 	StoreID *StoreID `protobuf:"varint,9,opt,name=store_id,casttype=StoreID" json:"store_id,omitempty"`
 	RaftID  *RaftID  `protobuf:"varint,10,opt,name=raft_id,casttype=RaftID" json:"raft_id,omitempty"`
 	Method  *Method  `protobuf:"varint,11,opt,name=method,casttype=Method" json:"method,omitempty"`
-	Key     Key      `protobuf:"bytes,12,opt,name=key,customtype=Key" json:"key"`
+	Key     Key      `protobuf:"bytes,12,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// Stack traces if requested.
 	Stacks           []byte `protobuf:"bytes,13,opt,name=stacks" json:"stacks"`
 	XXX_unrecognized []byte `json:"-"`
@@ -375,9 +375,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 13:
 			if wireType != 2 {
@@ -563,8 +561,10 @@ func (m *LogEntry) Size() (n int) {
 	if m.Method != nil {
 		n += 1 + sovLog(uint64(*m.Method))
 	}
-	l = m.Key.Size()
-	n += 1 + l + sovLog(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovLog(uint64(l))
+	}
 	if m.Stacks != nil {
 		l = len(m.Stacks)
 		n += 1 + l + sovLog(uint64(l))
@@ -672,14 +672,12 @@ func (m *LogEntry) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintLog(data, i, uint64(*m.Method))
 	}
-	data[i] = 0x62
-	i++
-	i = encodeVarintLog(data, i, uint64(m.Key.Size()))
-	n1, err := m.Key.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Key != nil {
+		data[i] = 0x62
+		i++
+		i = encodeVarintLog(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
 	}
-	i += n1
 	if m.Stacks != nil {
 		data[i] = 0x6a
 		i++

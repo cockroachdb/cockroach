@@ -46,8 +46,8 @@ message RangeNotFoundError {
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 message RangeKeyMismatchError {
-  optional bytes request_start_key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
-  optional bytes request_end_key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
+  optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
   optional RangeDescriptor range = 3;
 }
 
@@ -104,7 +104,7 @@ message TransactionStatusError {
 // retry.
 message WriteIntentError {
   message Intent {
-    optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
     optional Transaction txn = 2 [(gogoproto.nullable) = false];
   }
   repeated Intent intents = 1 [(gogoproto.nullable) = false];

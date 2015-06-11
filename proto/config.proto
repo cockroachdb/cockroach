@@ -52,11 +52,11 @@ message RangeDescriptor {
   optional int64 raft_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
   // StartKey is the first key which may be contained by this range.
-  optional bytes start_key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes start_key = 2 [(gogoproto.casttype) = "Key"];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not
   // contained in this range - it will be contained in the immediately
   // subsequent range.
-  optional bytes end_key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes end_key = 3 [(gogoproto.casttype) = "Key"];
   // Replicas is the set of replicas on which this range is stored, the
   // ordering being arbitrary and subject to permutation.
   repeated Replica replicas = 4 [(gogoproto.nullable) = false];
@@ -101,23 +101,22 @@ message ZoneConfig {
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
 }
 
+// TODO(bram): this comment has rotted, there is no size.
 // RangeTree holds the root node and size of the range tree.
 message RangeTree {
-  optional bytes root_key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes root_key = 1 [(gogoproto.casttype) = "Key"];
 }
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 message RangeTreeNode {
-  // Using gogoproto's marshaler is needed here as there is a bug in the default
-  // marshalling using reflection that does not handle the Key custom type as
-  // nullable correctly.
-  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
 
   // Color is black if true, red if false.
   optional bool black = 2 [(gogoproto.nullable) = false];
 
+  // TODO(bram): this comment has rotted, parent key is not nullable
   // If the parent key is null, this is the root node.
-  optional bytes parent_key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes parent_key = 3 [(gogoproto.casttype) = "Key"];
   optional bytes left_key = 4 [(gogoproto.customtype) = "Key"];
   optional bytes right_key = 5 [(gogoproto.customtype) = "Key"];
 }

@@ -54,11 +54,11 @@ func (*Replica) ProtoMessage() {}
 type RangeDescriptor struct {
 	RaftID RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 	// StartKey is the first key which may be contained by this range.
-	StartKey Key `protobuf:"bytes,2,opt,name=start_key,customtype=Key" json:"start_key"`
+	StartKey Key `protobuf:"bytes,2,opt,name=start_key,casttype=Key" json:"start_key,omitempty"`
 	// EndKey marks the end of the range's possible keys.  EndKey itself is not
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
-	EndKey Key `protobuf:"bytes,3,opt,name=end_key,customtype=Key" json:"end_key"`
+	EndKey Key `protobuf:"bytes,3,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
 	// Replicas is the set of replicas on which this range is stored, the
 	// ordering being arbitrary and subject to permutation.
 	Replicas         []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
@@ -191,9 +191,10 @@ func (m *ZoneConfig) GetGC() *GCPolicy {
 	return nil
 }
 
+// TODO(bram): this comment has rotted, there is no size.
 // RangeTree holds the root node and size of the range tree.
 type RangeTree struct {
-	RootKey          Key    `protobuf:"bytes,1,opt,name=root_key,customtype=Key" json:"root_key"`
+	RootKey          Key    `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -203,14 +204,12 @@ func (*RangeTree) ProtoMessage()    {}
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 type RangeTreeNode struct {
-	// Using gogoproto's marshaler is needed here as there is a bug in the default
-	// marshalling using reflection that does not handle the Key custom type as
-	// nullable correctly.
-	Key Key `protobuf:"bytes,1,opt,name=key,customtype=Key" json:"key"`
+	Key Key `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
+	// TODO(bram): this comment has rotted, parent key is not nullable
 	// If the parent key is null, this is the root node.
-	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,customtype=Key" json:"parent_key"`
+	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
 	LeftKey          *Key   `protobuf:"bytes,4,opt,name=left_key,customtype=Key" json:"left_key,omitempty"`
 	RightKey         *Key   `protobuf:"bytes,5,opt,name=right_key,customtype=Key" json:"right_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
@@ -541,9 +540,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.StartKey.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.StartKey = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 3:
 			if wireType != 2 {
@@ -565,9 +562,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.EndKey.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.EndKey = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 4:
 			if wireType != 2 {
@@ -992,9 +987,7 @@ func (m *RangeTree) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RootKey.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.RootKey = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -1059,9 +1052,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 2:
 			if wireType != 0 {
@@ -1100,9 +1091,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ParentKey.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.ParentKey = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1621,10 +1610,14 @@ func (m *RangeDescriptor) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovConfig(uint64(m.RaftID))
-	l = m.StartKey.Size()
-	n += 1 + l + sovConfig(uint64(l))
-	l = m.EndKey.Size()
-	n += 1 + l + sovConfig(uint64(l))
+	if m.StartKey != nil {
+		l = len(m.StartKey)
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovConfig(uint64(l))
+	}
 	if len(m.Replicas) > 0 {
 		for _, e := range m.Replicas {
 			l = e.Size()
@@ -1703,8 +1696,10 @@ func (m *ZoneConfig) Size() (n int) {
 func (m *RangeTree) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RootKey.Size()
-	n += 1 + l + sovConfig(uint64(l))
+	if m.RootKey != nil {
+		l = len(m.RootKey)
+		n += 1 + l + sovConfig(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1714,11 +1709,15 @@ func (m *RangeTree) Size() (n int) {
 func (m *RangeTreeNode) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Key.Size()
-	n += 1 + l + sovConfig(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovConfig(uint64(l))
+	}
 	n += 2
-	l = m.ParentKey.Size()
-	n += 1 + l + sovConfig(uint64(l))
+	if m.ParentKey != nil {
+		l = len(m.ParentKey)
+		n += 1 + l + sovConfig(uint64(l))
+	}
 	if m.LeftKey != nil {
 		l = m.LeftKey.Size()
 		n += 1 + l + sovConfig(uint64(l))
@@ -1882,22 +1881,18 @@ func (m *RangeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.RaftID))
-	data[i] = 0x12
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.StartKey.Size()))
-	n1, err := m.StartKey.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.StartKey != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.StartKey)))
+		i += copy(data[i:], m.StartKey)
 	}
-	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.EndKey.Size()))
-	n2, err := m.EndKey.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.EndKey != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
 	}
-	i += n2
 	if len(m.Replicas) > 0 {
 		for _, msg := range m.Replicas {
 			data[i] = 0x22
@@ -2053,11 +2048,11 @@ func (m *ZoneConfig) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x22
 		i++
 		i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
-		n3, err := m.GC.MarshalTo(data[i:])
+		n1, err := m.GC.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n3
+		i += n1
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -2080,14 +2075,12 @@ func (m *RangeTree) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.RootKey.Size()))
-	n4, err := m.RootKey.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.RootKey != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.RootKey)))
+		i += copy(data[i:], m.RootKey)
 	}
-	i += n4
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -2109,14 +2102,12 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.Key.Size()))
-	n5, err := m.Key.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
 	}
-	i += n5
 	data[i] = 0x10
 	i++
 	if m.Black {
@@ -2125,33 +2116,31 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x1a
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.ParentKey.Size()))
-	n6, err := m.ParentKey.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.ParentKey != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.ParentKey)))
+		i += copy(data[i:], m.ParentKey)
 	}
-	i += n6
 	if m.LeftKey != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintConfig(data, i, uint64(m.LeftKey.Size()))
-		n7, err := m.LeftKey.MarshalTo(data[i:])
+		n2, err := m.LeftKey.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n2
 	}
 	if m.RightKey != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintConfig(data, i, uint64(m.RightKey.Size()))
-		n8, err := m.RightKey.MarshalTo(data[i:])
+		n3, err := m.RightKey.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n3
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -2239,19 +2228,19 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Address.Size()))
-	n9, err := m.Address.MarshalTo(data[i:])
+	n4, err := m.Address.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n4
 	data[i] = 0x1a
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
-	n10, err := m.Attrs.MarshalTo(data[i:])
+	n5, err := m.Attrs.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n5
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -2279,27 +2268,27 @@ func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Attrs.Size()))
-	n11, err := m.Attrs.MarshalTo(data[i:])
+	n6, err := m.Attrs.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n11
+	i += n6
 	data[i] = 0x1a
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Node.Size()))
-	n12, err := m.Node.MarshalTo(data[i:])
+	n7, err := m.Node.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n12
+	i += n7
 	data[i] = 0x22
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.Capacity.Size()))
-	n13, err := m.Capacity.MarshalTo(data[i:])
+	n8, err := m.Capacity.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n13
+	i += n8
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

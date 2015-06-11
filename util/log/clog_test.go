@@ -163,7 +163,6 @@ func TestJSONLogFormat(t *testing.T) {
   "line": [\d]+,
   "format": "test",
   "args": null,
-  "key": "",
   "stacks": null
 }`
 	if ok, _ := regexp.Match(expPat, json); !ok {

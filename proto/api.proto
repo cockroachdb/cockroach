@@ -78,12 +78,12 @@ message RequestHeader {
   optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
-  optional bytes key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes key = 3 [(gogoproto.casttype) = "Key"];
   // The end key is empty if the request spans only a single key. Otherwise,
   // it must order strictly after Key. In such a case, the header indicates
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
-  optional bytes end_key = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
   // User is the originating user. Used to lookup priority when
   // scheduling queued operations at target node.
   optional string user = 5 [(gogoproto.nullable) = false];
@@ -270,7 +270,7 @@ message EndTransactionResponse {
   // Remaining time (ns).
   optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
   // List of intents resolved by EndTransaction call.
-  repeated bytes resolved = 3 [(gogoproto.customtype) = "Key"];
+  repeated bytes resolved = 3 [(gogoproto.casttype) = "Key"];
 }
 
 // A RequestUnion contains exactly one of the optional requests.
@@ -349,7 +349,7 @@ message BatchResponse {
 // recomputed).
 message AdminSplitRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional bytes split_key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes split_key = 2 [(gogoproto.casttype) = "Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

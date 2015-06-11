@@ -52,7 +52,7 @@ message LogEntry {
   optional int32 store_id = 9 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
   optional int64 raft_id = 10 [(gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
   optional int32 method = 11 [(gogoproto.casttype) = "Method"];
-  optional bytes key = 12 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes key = 12 [(gogoproto.casttype) = "Key"];
   // Stack traces if requested.
   optional bytes stacks = 13 [(gogoproto.nullable) = false];
 }

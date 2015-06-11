@@ -81,7 +81,7 @@ message InternalGCRequest {
   optional GCMetadata gc_meta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCMeta"];
 
   message GCKey {
-    optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
     optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];

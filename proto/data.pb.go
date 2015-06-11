@@ -264,7 +264,7 @@ func (m *MVCCValue) GetValue() *Value {
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 type KeyValue struct {
-	Key              Key    `protobuf:"bytes,1,opt,name=key,customtype=Key" json:"key"`
+	Key              Key    `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -404,7 +404,7 @@ type InternalCommitTrigger struct {
 	// List of intents to resolve on commit or abort. Note that keys
 	// listed here will only be resolved if they fall on the same range
 	// that the transaction was started on.
-	Intents          []Key  `protobuf:"bytes,4,rep,name=intents,customtype=Key" json:"intents,omitempty"`
+	Intents          []Key  `protobuf:"bytes,4,rep,name=intents,casttype=Key" json:"intents,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -465,7 +465,7 @@ type Transaction struct {
 	// the first key read or written during the transaction and
 	// determines which range in the cluster will hold the transaction
 	// record.
-	Key Key `protobuf:"bytes,2,opt,name=key,customtype=Key" json:"key"`
+	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// ID is a unique UUID value which identifies the transaction.
 	ID        []byte            `protobuf:"bytes,3,opt,name=id" json:"id"`
 	Priority  int32             `protobuf:"varint,4,opt,name=priority" json:"priority"`
@@ -1189,9 +1189,7 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 2:
 			if wireType != 2 {
@@ -1829,11 +1827,8 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			var v Key
-			m.Intents = append(m.Intents, v)
-			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Intents = append(m.Intents, make([]byte, postIndex-index))
+			copy(m.Intents[len(m.Intents)-1], data[index:postIndex])
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -2013,9 +2008,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 3:
 			if wireType != 2 {
@@ -2888,8 +2881,10 @@ func (m *MVCCValue) Size() (n int) {
 func (m *KeyValue) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Key.Size()
-	n += 1 + l + sovData(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
 	l = m.Value.Size()
 	n += 1 + l + sovData(uint64(l))
 	if m.XXX_unrecognized != nil {
@@ -2987,8 +2982,8 @@ func (m *InternalCommitTrigger) Size() (n int) {
 		n += 1 + l + sovData(uint64(l))
 	}
 	if len(m.Intents) > 0 {
-		for _, e := range m.Intents {
-			l = e.Size()
+		for _, b := range m.Intents {
+			l = len(b)
 			n += 1 + l + sovData(uint64(l))
 		}
 	}
@@ -3019,8 +3014,10 @@ func (m *Transaction) Size() (n int) {
 	_ = l
 	l = len(m.Name)
 	n += 1 + l + sovData(uint64(l))
-	l = m.Key.Size()
-	n += 1 + l + sovData(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
 	if m.ID != nil {
 		l = len(m.ID)
 		n += 1 + l + sovData(uint64(l))
@@ -3265,22 +3262,20 @@ func (m *KeyValue) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	data[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Key.Size()))
-	n3, err := m.Key.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.Value.Size()))
+	n3, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Value.Size()))
-	n4, err := m.Value.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3369,19 +3364,19 @@ func (m *SplitTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n5, err := m.UpdatedDesc.MarshalTo(data[i:])
+	n4, err := m.UpdatedDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
+	n5, err := m.NewDesc.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n5
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
-	n6, err := m.NewDesc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n6
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3406,11 +3401,11 @@ func (m *MergeTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n7, err := m.UpdatedDesc.MarshalTo(data[i:])
+	n6, err := m.UpdatedDesc.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n6
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.SubsumedRaftID))
@@ -3481,42 +3476,38 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.SplitTrigger.Size()))
-		n8, err := m.SplitTrigger.MarshalTo(data[i:])
+		n7, err := m.SplitTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n7
 	}
 	if m.MergeTrigger != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
-		n9, err := m.MergeTrigger.MarshalTo(data[i:])
+		n8, err := m.MergeTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n8
 	}
 	if m.ChangeReplicasTrigger != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
-		n10, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
+		n9, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n10
+		i += n9
 	}
 	if len(m.Intents) > 0 {
-		for _, msg := range m.Intents {
+		for _, b := range m.Intents {
 			data[i] = 0x22
 			i++
-			i = encodeVarintData(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
+			i = encodeVarintData(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
 		}
 	}
 	if m.XXX_unrecognized != nil {
@@ -3541,22 +3532,22 @@ func (m *NodeList) MarshalTo(data []byte) (n int, err error) {
 	var l int
 	_ = l
 	if len(m.Nodes) > 0 {
-		data12 := make([]byte, len(m.Nodes)*10)
-		var j11 int
+		data11 := make([]byte, len(m.Nodes)*10)
+		var j10 int
 		for _, num1 := range m.Nodes {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				data12[j11] = uint8(uint64(num)&0x7f | 0x80)
+				data11[j10] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j11++
+				j10++
 			}
-			data12[j11] = uint8(num)
-			j11++
+			data11[j10] = uint8(num)
+			j10++
 		}
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(j11))
-		i += copy(data[i:], data12[:j11])
+		i = encodeVarintData(data, i, uint64(j10))
+		i += copy(data[i:], data11[:j10])
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3583,14 +3574,12 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Name)))
 	i += copy(data[i:], m.Name)
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Key.Size()))
-	n13, err := m.Key.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Key != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
 	}
-	i += n13
 	if m.ID != nil {
 		data[i] = 0x1a
 		i++
@@ -3613,44 +3602,44 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x42
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n14, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n12, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n12
 	}
 	data[i] = 0x4a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n15, err := m.Timestamp.MarshalTo(data[i:])
+	n13, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	data[i] = 0x52
+	i++
+	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
+	n14, err := m.OrigTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
+	data[i] = 0x5a
+	i++
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n15, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n15
-	data[i] = 0x52
+	data[i] = 0x62
 	i++
-	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n16, err := m.OrigTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n16, err := m.CertainNodes.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n16
-	data[i] = 0x5a
-	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n17, err := m.MaxTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n17
-	data[i] = 0x62
-	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n18, err := m.CertainNodes.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3675,19 +3664,19 @@ func (m *Lease) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n19, err := m.Start.MarshalTo(data[i:])
+	n17, err := m.Start.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n17
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n20, err := m.Expiration.MarshalTo(data[i:])
+	n18, err := m.Expiration.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
+	i += n18
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
@@ -3716,20 +3705,20 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-		n21, err := m.Txn.MarshalTo(data[i:])
+		n19, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n21
+		i += n19
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n22, err := m.Timestamp.MarshalTo(data[i:])
+	n20, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n20
 	data[i] = 0x18
 	i++
 	if m.Deleted {
@@ -3748,11 +3737,11 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x32
 		i++
 		i = encodeVarintData(data, i, uint64(m.Value.Size()))
-		n23, err := m.Value.MarshalTo(data[i:])
+		n21, err := m.Value.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n23
+		i += n21
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)

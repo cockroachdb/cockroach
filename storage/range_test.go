@@ -2007,7 +2007,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
+	expMS = proto.MVCCStats{LiveBytes: 128, KeyBytes: 30, ValBytes: 98, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Resolve the 2nd value.
