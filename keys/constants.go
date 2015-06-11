@@ -175,4 +175,7 @@ var (
 	StatusStorePrefix = MakeKey(StatusPrefix, proto.Key("store-"))
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = MakeKey(StatusPrefix, proto.Key("node-"))
+	// TableDataPrefix prefixes all Table data to aid in transitioning
+	// key:value data to Table data, and for ease of debugging.
+	TableDataPrefix = proto.Key("table-")
 )

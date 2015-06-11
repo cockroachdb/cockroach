@@ -20,15 +20,12 @@ package keys
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-)
-
-const (
-	maxVarintSize = 10
 )
 
 // MakeKey makes a new key which is the concatenation of the
@@ -62,7 +59,7 @@ func NodeStatusKey(nodeID int32) proto.Key {
 
 // MakeNameMetadataKey returns the key for the namespace.
 func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
-	k := make([]byte, 0, len(NameMetadataPrefix)+maxVarintSize+len(name))
+	k := make([]byte, 0, len(NameMetadataPrefix)+binary.MaxVarintLen64+len(name))
 	k = append(k, NameMetadataPrefix...)
 	k = encoding.EncodeUvarint(k, uint64(parentID))
 	k = append(k, name...)
@@ -71,9 +68,55 @@ func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
 
 // MakeDescMetadataKey returns the key for the table in namespaceID.
 func MakeDescMetadataKey(descID uint32) proto.Key {
-	k := make([]byte, 0, len(DescMetadataPrefix)+maxVarintSize)
+	k := make([]byte, 0, len(DescMetadataPrefix)+binary.MaxVarintLen64)
 	k = append(k, DescMetadataPrefix...)
 	k = encoding.EncodeUvarint(k, uint64(descID))
+	return k
+}
+
+// indexKeyBufferWidth returns a likely cap on the width of the index key.
+// The buffer width can likely accomodate the encoded constant prefix, tableID,
+// indexID, and column values.
+//
+// This cap is inaccurate because the size of the encoding varies, depending
+// on the ints and the bytes being encoded. We really don't care, as long as
+// a value is chosen such that the  append() builtin used to populate the
+// buffer, infrequently reallocates more space.
+func indexKeyMaxBufferWidth(columnValues ...[]byte) (width int) {
+	// Accomodate the constant prefix, tableID, and indexID.
+	width += len(TableDataPrefix) + 2*binary.MaxVarintLen64
+	for _, value := range columnValues {
+		// Add 2 for encoding
+		width += len(value) + 2
+	}
+	return
+}
+
+// populateTableIndexKey populates the key passed in with the
+// order encoded values forming the index key.
+func populateTableIndexKey(key []byte, tableID, indexID uint32, columnValues ...[]byte) []byte {
+	key = append(key, TableDataPrefix...)
+	key = encoding.EncodeUvarint(key, uint64(tableID))
+	key = encoding.EncodeUvarint(key, uint64(indexID))
+	for _, value := range columnValues {
+		key = encoding.EncodeBytes(key, value)
+	}
+	return key
+}
+
+// MakeTableIndexKey returns a primary or a secondary index key.
+func MakeTableIndexKey(tableID, indexID uint32, columnValues ...[]byte) proto.Key {
+	k := make([]byte, 0, indexKeyMaxBufferWidth(columnValues...))
+	k = populateTableIndexKey(k, tableID, indexID, columnValues...)
+	return k
+}
+
+// MakeTableDataKey returns a key to a value at a specific row and column
+// in the table.
+func MakeTableDataKey(tableID, indexID, columnID uint32, columnValues ...[]byte) proto.Key {
+	k := make([]byte, 0, indexKeyMaxBufferWidth(columnValues...)+binary.MaxVarintLen64)
+	k = populateTableIndexKey(k, tableID, indexID, columnValues...)
+	k = encoding.EncodeUvarint(k, uint64(columnID))
 	return k
 }
 
