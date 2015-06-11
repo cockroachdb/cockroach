@@ -20,11 +20,11 @@ package simulation
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -54,10 +54,8 @@ type Network struct {
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
 func NewNetwork(nodeCount int, networkType string,
 	gossipInterval time.Duration) *Network {
-
-	tlsConfig := security.LoadInsecureTLSConfig()
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(clock, tlsConfig, nil)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, nil)
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
 

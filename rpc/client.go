@@ -128,7 +128,14 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 	retryOpts.Stopper = context.Stopper
 
 	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)
+		tlsConfig, err := context.GetClientTLSConfig()
+		if err != nil {
+			// Problem loading the TLS config. Retrying will not help.
+			log.Error(err)
+			return retry.Break, nil
+		}
+
+		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
 		// Could be many errors: bad host; bad certificate ...
 		if err != nil {
 			log.Error(err)

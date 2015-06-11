@@ -63,11 +63,7 @@ func newSender(server string, context *base.Context, retryOpts retry.Options) (*
 	if context.Insecure {
 		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
 	}
-	tlsConfig, err := context.GetClientTLSConfig()
-	if err != nil {
-		return nil, err
-	}
-	ctx := roachrpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
+	ctx := roachrpc.NewContext(context, hlc.NewClock(hlc.UnixNano), nil)
 	client := roachrpc.NewClient(addr, &retryOpts, ctx)
 	return &Sender{
 		client:    client,

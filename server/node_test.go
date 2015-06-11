@@ -48,17 +48,12 @@ import (
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *hlc.Clock, *Node, *util.Stopper) {
-	// Load the TLS config from our test certs. They're embedded in the
-	// test binary and calls to the file system have been mocked out.
-	tlsConfig, err := testContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
+	var err error
 	ctx := storage.StoreContext{}
 
 	stopper := util.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(ctx.Clock, tlsConfig, stopper)
+	rpcContext := rpc.NewContext(testBaseContext, ctx.Clock, stopper)
 	ctx.ScanInterval = 10 * time.Hour
 	rpcServer := rpc.NewServer(addr, rpcContext)
 	if err := rpcServer.Start(); err != nil {

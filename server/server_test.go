@@ -34,11 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var testContext = NewTestContext()
+var testBaseContext = testutils.NewTestBaseContext()
 
 // createTestConfigFile creates a temporary file and writes the
 // testConfig yaml data to it. The caller is responsible for
