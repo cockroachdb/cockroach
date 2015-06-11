@@ -44,7 +44,7 @@ import (
 // proceed in the event that a write intent is extant at the meta
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.ServingAddr())
 
@@ -85,7 +85,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // The caller is responsible for stopping the server and
 // closing the client.
 func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.DB) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	db := createTestClient(t, s.ServingAddr())
 
 	// Split the keyspace at "b".
@@ -164,7 +164,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 // TestStartEqualsEndKeyScan verifies that specifying start==end on scan
 // returns an empty set.
 func TestStartEqualsEndKeyScan(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	db := createTestClient(t, s.ServingAddr())
 	defer s.Stop()
 
@@ -181,7 +181,7 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 // TestSplitByMeta2KeyMax check range splitting at key Meta2KeyMax should
 // fail as Meta2KeyMax is not a valid split key.
 func TestSplitByMeta2KeyMax(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	db := createTestClient(t, s.ServingAddr())
 	defer s.Stop()
 

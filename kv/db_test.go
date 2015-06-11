@@ -19,17 +19,12 @@ package kv_test
 
 import (
 	"bytes"
-	"encoding/json"
-	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v1"
+	"github.com/cockroachdb/cockroach/server"
 )
 
 func createTestClient(t *testing.T, addr string) *client.DB {
@@ -43,7 +38,7 @@ func createTestClient(t *testing.T, addr string) *client.DB {
 // TestKVDBCoverage verifies that all methods may be invoked on the
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 
 	db := createTestClient(t, s.ServingAddr())
@@ -124,7 +119,7 @@ func TestKVDBCoverage(t *testing.T) {
 // TestKVDBInternalMethods verifies no internal methods are available
 // HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 
 	testCases := []struct {
@@ -161,7 +156,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 // TestKVDBEndTransactionWithTriggers verifies that triggers are
 // disallowed on call to EndTransaction.
 func TestKVDBEndTransactionWithTriggers(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 
 	db := createTestClient(t, s.ServingAddr())
@@ -189,82 +184,10 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	}
 }
 
-// TestKVDBContentTypes verifies all combinations of request /
-// response content encodings are supported.
-func TestKVDBContentType(t *testing.T) {
-	s := startServer(t)
-	defer s.Stop()
-
-	putReq := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: proto.Key("a"),
-		},
-		Value: proto.Value{Bytes: []byte("value")},
-	}
-
-	testCases := []struct {
-		cType, accept, expCType string
-		expErr                  bool
-	}{
-		{util.JSONContentType, util.JSONContentType, util.JSONContentType, false},
-		{util.ProtoContentType, util.JSONContentType, util.JSONContentType, false},
-		{util.YAMLContentType, util.JSONContentType, "", true},
-		{util.JSONContentType, util.ProtoContentType, util.ProtoContentType, false},
-		{util.ProtoContentType, util.ProtoContentType, util.ProtoContentType, false},
-		{util.YAMLContentType, util.ProtoContentType, "", true},
-		{util.JSONContentType, util.YAMLContentType, util.JSONContentType, false},
-		{util.ProtoContentType, util.YAMLContentType, util.ProtoContentType, false},
-		{util.YAMLContentType, util.YAMLContentType, "", true},
-		{util.JSONContentType, "", util.JSONContentType, false},
-		{util.ProtoContentType, "", util.ProtoContentType, false},
-		{util.YAMLContentType, "", "", true},
-	}
-	for i, test := range testCases {
-		var body []byte
-		var err error
-		switch test.cType {
-		case util.JSONContentType:
-			body, err = json.Marshal(putReq)
-		case util.ProtoContentType:
-			body, err = gogoproto.Marshal(putReq)
-		case util.YAMLContentType:
-			body, err = yaml.Marshal(putReq)
-		}
-		if err != nil {
-			t.Fatalf("%d: %s", i, err)
-		}
-		// Send a Put request but with non-canonical capitalization.
-		httpReq, err := http.NewRequest("POST", testContext.RequestScheme()+"://"+s.ServingAddr()+kv.DBPrefix+"Put",
-			bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("%d: %s", i, err)
-		}
-		httpReq.Header.Add(util.ContentTypeHeader, test.cType)
-		if test.accept != "" {
-			httpReq.Header.Add(util.AcceptHeader, test.accept)
-		}
-		resp, err := httpDoReq(testContext, httpReq)
-		if err != nil {
-			t.Fatalf("%d: %s", i, err)
-		}
-		if !test.expErr && resp.StatusCode != 200 {
-			t.Fatalf("%d: HTTP response status code != 200; got %d", i, resp.StatusCode)
-		} else if test.expErr {
-			if resp.StatusCode != 400 {
-				t.Fatalf("%d: expected client request error; got %d", i, resp.StatusCode)
-			}
-			continue
-		}
-		if cType := resp.Header.Get(util.ContentTypeHeader); cType != test.expCType {
-			t.Errorf("%d: expected content type %s; got %s", i, test.expCType, cType)
-		}
-	}
-}
-
 // TestKVDBTransaction verifies that transactions work properly over
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
-	s := startServer(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
 
 	db := createTestClient(t, s.ServingAddr())

@@ -57,9 +57,6 @@ func TestSSLEnforcement(t *testing.T) {
 		// /_status/: server.statusServer: no auth.
 		{"GET", statusKeyPrefix, http.StatusOK, http.StatusOK},
 
-		// /kv/rest/: kv.RESTServer. Key cannot be empty. Response is NotFound since the key does not exist.
-		{"GET", kv.EntryPrefix + "foo", http.StatusNotFound, http.StatusUnauthorized},
-
 		// /kv/db/: kv.DBServer. These are proto reqs, but we can at least get past auth.
 		{"GET", kv.DBPrefix + "Get", http.StatusBadRequest, http.StatusUnauthorized},
 
