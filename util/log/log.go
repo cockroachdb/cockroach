@@ -40,7 +40,7 @@ func FatalOnPanic() {
 func EnableLogFileOutput(dir string) {
 	*logDir = dir
 	logging.toStderr = false
-	logging.alsoToStderr = true
+	logging.alsoToStderr = false
 }
 
 // DisableLogFileOutput turns off logging. For unittesting only.
