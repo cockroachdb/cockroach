@@ -28,7 +28,7 @@ import (
 	"io"
 	"net/rpc"
 
-	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
+	"github.com/cockroachdb/cockroach/rpc/codec/wire"
 	"github.com/gogo/protobuf/proto"
 )
 

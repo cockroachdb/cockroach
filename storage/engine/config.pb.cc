@@ -1,1 +1,1 @@
-cockroach/proto/config.pb.cc
+./cockroach/proto/config.pb.cc

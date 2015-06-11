@@ -30,7 +30,7 @@ import (
 	"net/rpc"
 	"time"
 
-	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
+	"github.com/cockroachdb/cockroach/rpc/codec/wire"
 	"github.com/gogo/protobuf/proto"
 )
 

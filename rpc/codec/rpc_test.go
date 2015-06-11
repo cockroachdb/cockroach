@@ -36,7 +36,7 @@ import (
 	// can not import xxx.pb with rpc stub here,
 	// because it will cause import cycle.
 
-	msg "github.com/cockroachdb/cockroach/rpc/codec/message.pb"
+	"github.com/cockroachdb/cockroach/rpc/codec/message"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -44,18 +44,18 @@ import (
 
 type Arith int
 
-func (t *Arith) Add(args *msg.ArithRequest, reply *msg.ArithResponse) error {
+func (t *Arith) Add(args *message.ArithRequest, reply *message.ArithResponse) error {
 	reply.C = args.GetA() + args.GetB()
 	log.Infof("Arith.Add(%v, %v): %v", args.GetA(), args.GetB(), reply.GetC())
 	return nil
 }
 
-func (t *Arith) Mul(args *msg.ArithRequest, reply *msg.ArithResponse) error {
+func (t *Arith) Mul(args *message.ArithRequest, reply *message.ArithResponse) error {
 	reply.C = args.GetA() * args.GetB()
 	return nil
 }
 
-func (t *Arith) Div(args *msg.ArithRequest, reply *msg.ArithResponse) error {
+func (t *Arith) Div(args *message.ArithRequest, reply *message.ArithResponse) error {
 	if args.GetB() == 0 {
 		return errors.New("divide by zero")
 	}
@@ -63,13 +63,13 @@ func (t *Arith) Div(args *msg.ArithRequest, reply *msg.ArithResponse) error {
 	return nil
 }
 
-func (t *Arith) Error(args *msg.ArithRequest, reply *msg.ArithResponse) error {
+func (t *Arith) Error(args *message.ArithRequest, reply *message.ArithResponse) error {
 	return errors.New("ArithError")
 }
 
 type Echo int
 
-func (t *Echo) Echo(args *msg.EchoRequest, reply *msg.EchoResponse) error {
+func (t *Echo) Echo(args *message.EchoRequest, reply *message.EchoResponse) error {
 	reply.Msg = args.Msg
 	return nil
 }
@@ -119,8 +119,8 @@ func listenAndServeArithAndEchoService(network, addr string) (net.Addr, error) {
 }
 
 func testArithClient(t *testing.T, client *rpc.Client) {
-	var args msg.ArithRequest
-	var reply msg.ArithResponse
+	var args message.ArithRequest
+	var reply message.ArithResponse
 	var err error
 
 	// Add
@@ -172,38 +172,38 @@ func testArithClientAsync(t *testing.T, client *rpc.Client) {
 	done := make(chan *rpc.Call, 16)
 	callInfoList := []struct {
 		method string
-		args   *msg.ArithRequest
-		reply  *msg.ArithResponse
+		args   *message.ArithRequest
+		reply  *message.ArithResponse
 		err    error
 	}{
 		{
 			"ArithService.Add",
-			&msg.ArithRequest{A: 1, B: 2},
-			&msg.ArithResponse{C: 3},
+			&message.ArithRequest{A: 1, B: 2},
+			&message.ArithResponse{C: 3},
 			nil,
 		},
 		{
 			"ArithService.Mul",
-			&msg.ArithRequest{A: 2, B: 3},
-			&msg.ArithResponse{C: 6},
+			&message.ArithRequest{A: 2, B: 3},
+			&message.ArithResponse{C: 6},
 			nil,
 		},
 		{
 			"ArithService.Div",
-			&msg.ArithRequest{A: 13, B: 5},
-			&msg.ArithResponse{C: 2},
+			&message.ArithRequest{A: 13, B: 5},
+			&message.ArithResponse{C: 2},
 			nil,
 		},
 		{
 			"ArithService.Div",
-			&msg.ArithRequest{A: 1, B: 0},
-			&msg.ArithResponse{},
+			&message.ArithRequest{A: 1, B: 0},
+			&message.ArithResponse{},
 			errors.New("divide by zero"),
 		},
 		{
 			"ArithService.Error",
-			&msg.ArithRequest{A: 1, B: 2},
-			&msg.ArithResponse{},
+			&message.ArithRequest{A: 1, B: 2},
+			&message.ArithResponse{},
 			errors.New("ArithError"),
 		},
 	}
@@ -233,7 +233,7 @@ func testArithClientAsync(t *testing.T, client *rpc.Client) {
 			continue
 		}
 
-		got := calls[i].Reply.(*msg.ArithResponse).GetC()
+		got := calls[i].Reply.(*message.ArithResponse).GetC()
 		expected := callInfoList[i].reply.GetC()
 		if got != expected {
 			t.Fatalf(`%s: expected %v, Got = %v`,
@@ -244,8 +244,8 @@ func testArithClientAsync(t *testing.T, client *rpc.Client) {
 }
 
 func testEchoClient(t *testing.T, client *rpc.Client) {
-	var args msg.EchoRequest
-	var reply msg.EchoResponse
+	var args message.EchoRequest
+	var reply message.EchoResponse
 	var err error
 
 	// EchoService.Echo
@@ -260,8 +260,8 @@ func testEchoClient(t *testing.T, client *rpc.Client) {
 
 func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 	// EchoService.Echo
-	args := &msg.EchoRequest{Msg: "Hello, Protobuf-RPC"}
-	reply := &msg.EchoResponse{}
+	args := &message.EchoRequest{Msg: "Hello, Protobuf-RPC"}
+	reply := &message.EchoResponse{}
 	echoCall := client.Go("EchoService.Echo", args, reply, nil)
 
 	// EchoService.Echo reply
@@ -269,10 +269,10 @@ func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 	if echoCall.Error != nil {
 		t.Fatalf(`EchoService.Echo: %v`, echoCall.Error)
 	}
-	if echoCall.Reply.(*msg.EchoResponse).GetMsg() != args.GetMsg() {
+	if echoCall.Reply.(*message.EchoResponse).GetMsg() != args.GetMsg() {
 		t.Fatalf(`EchoService.Echo: expected = "%s", got = "%s"`,
 			args.GetMsg(),
-			echoCall.Reply.(*msg.EchoResponse).GetMsg(),
+			echoCall.Reply.(*message.EchoResponse).GetMsg(),
 		)
 	}
 }
@@ -321,8 +321,8 @@ func benchmarkEcho(b *testing.B, size int, newClient func() *rpc.Client) {
 		defer client.Close()
 
 		for pb.Next() {
-			args := &msg.EchoRequest{Msg: echoMsg}
-			reply := &msg.EchoResponse{}
+			args := &message.EchoRequest{Msg: echoMsg}
+			reply := &message.EchoResponse{}
 			if err := client.Call("EchoService.Echo", args, reply); err != nil {
 				b.Fatalf(`EchoService.Echo: %v`, err)
 			}
@@ -429,12 +429,12 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			req := &msg.EchoRequest{}
+			req := &message.EchoRequest{}
 			if err := proto.Unmarshal(reqBody, req); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			resp := &msg.EchoResponse{Msg: req.Msg}
+			resp := &message.EchoResponse{Msg: req.Msg}
 			body, err := proto.Marshal(resp)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -455,7 +455,7 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			args := &msg.EchoRequest{Msg: echoMsg}
+			args := &message.EchoRequest{Msg: echoMsg}
 			body, err := proto.Marshal(args)
 			if err != nil {
 				b.Fatal(err)
@@ -470,7 +470,7 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			reply := &msg.EchoResponse{}
+			reply := &message.EchoResponse{}
 			if err := proto.Unmarshal(body, reply); err != nil {
 				b.Fatal(err)
 			}

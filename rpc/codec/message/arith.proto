@@ -3,7 +3,8 @@
 // license that can be found in the LICENSE file.
 
 syntax = "proto2";
-package message;
+package cockroach.rpc.codec.message;
+option go_package = "message";
 
 import "gogoproto/gogo.proto";
 

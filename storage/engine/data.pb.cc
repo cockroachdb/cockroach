@@ -1,1 +1,1 @@
-cockroach/proto/data.pb.cc
+./cockroach/proto/data.pb.cc
