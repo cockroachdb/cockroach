@@ -2,8 +2,7 @@
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../util/querycache.ts" />
-/// <reference path="../models/timeseries.ts" />
-
+/// <reference path="../models/metrics.ts" />
 
 /** 
  * Components defines reusable components which may be used on multiple pages,

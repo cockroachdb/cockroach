@@ -2,7 +2,6 @@
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../util/querycache.ts" />
-/// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)

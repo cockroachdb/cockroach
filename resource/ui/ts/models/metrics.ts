@@ -1,5 +1,4 @@
-// source: models/timeseries.ts
-// TODO(mrtracy): rename to metrics.ts.
+// source: models/metrics.ts
 /// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />

@@ -187,8 +187,7 @@ var Utils;
         }
     })(Http = Utils.Http || (Utils.Http = {}));
 })(Utils || (Utils = {}));
-// source: models/timeseries.ts
-// TODO(mrtracy): rename to metrics.ts.
+// source: models/metrics.ts
 /// <reference path="proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
@@ -301,7 +300,7 @@ var Models;
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../util/querycache.ts" />
-/// <reference path="../models/timeseries.ts" />
+/// <reference path="../models/metrics.ts" />
 var Components;
 (function (Components) {
     var Metrics;
@@ -389,7 +388,6 @@ var Components;
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../util/querycache.ts" />
-/// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -924,7 +922,6 @@ var Models;
 // source: pages/nodes.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
-/// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -1034,7 +1031,6 @@ var AdminViews;
 // source: pages/stores.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
-/// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
