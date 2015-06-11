@@ -33,6 +33,11 @@ const (
 
 	// rangeGCQueueTimerDuration is the duration between GCs of queued ranges.
 	rangeGCQueueTimerDuration = 10 * time.Second
+
+	// RangeGCQueueUnleasedDuration is the default unlease duration threshold
+	// used for queuing decision. A range whose lease has been expired for
+	// longer than this duration will be queued. Exposed for testing.
+	RangeGCQueueUnleasedDuration = 1 * time.Hour
 )
 
 // rangeGCQueue manages a queue of ranges to be considered for garbage
@@ -70,8 +75,8 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Range) (bool, float
 		return false, 0
 	}
 
-	// Otherwise, continue to processing.
-	return true, 0
+	// Otherwise, check if long enough time has passed after the lease was expired.
+	return rng.getLease().Expiration.Add(int64(RangeGCQueueUnleasedDuration), 0).Less(now), 0
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are

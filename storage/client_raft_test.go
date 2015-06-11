@@ -646,8 +646,9 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		// the downed node removes the data from this range after coming
 		// back up.
 
-		// Wait out the leader lease to make the range GC'able.
-		mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
+		// Wait out the leader lease and the unleased duration to make the range GC'able.
+		mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) +
+			int64(storage.RangeGCQueueUnleasedDuration) + 1)
 		mtc.stores[1].ForceRangeGCScan(t)
 
 		// The removed store no longer has any of the data from the range.

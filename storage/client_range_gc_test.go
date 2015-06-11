@@ -41,6 +41,20 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 	// Increment the clock's timestamp to expire the leader lease.
 	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
 
+	// Make sure the range is not yet removed from the store.
+	numTrials := 3
+	for i := 0; i < numTrials; i++ {
+		store := mtc.stores[1]
+		store.ForceRangeGCScan(t)
+		if _, err := store.GetRange(raftID); err != nil {
+			t.Error("unexpected range removal")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Increment the clock's timestamp to make the range GC queue process the range.
+	mtc.manualClock.Increment(int64(storage.RangeGCQueueUnleasedDuration))
+
 	// Make sure the range is removed from the store.
 	util.SucceedsWithin(t, time.Second, func() error {
 		store := mtc.stores[1]
