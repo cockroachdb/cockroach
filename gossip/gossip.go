@@ -137,7 +137,7 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []reso
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
 		disconnected:  make(chan *client, MaxPeers),
-		stalled:       make(chan struct{}, 10),
+		stalled:       make(chan struct{}, 1),
 		resolvers:     resolvers,
 	}
 	// Create the bootstrapping RPC context. This context doesn't
@@ -500,15 +500,23 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 			// and there are still unused bootstrap hosts, signal bootstrapper
 			// to try another.
 			if g.outgoing.len()+g.incoming.len() == 0 {
-				g.stalled <- struct{}{}
+				g.signalStalled()
 			} else if g.is.getInfo(KeySentinel) == nil {
 				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID)
-				g.stalled <- struct{}{}
+				g.signalStalled()
 			}
 
 			g.mu.Unlock()
 		}
 	})
+}
+
+func (g *Gossip) signalStalled() {
+	select {
+	case g.stalled <- struct{}{}:
+	default:
+	}
+	return
 }
 
 // maybeWarnAboutInit looks for signs indicating a cluster which
