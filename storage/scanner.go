@@ -46,18 +46,16 @@ type rangeQueue interface {
 	MaybeRemove(*Range)
 }
 
-// A rangeIterator provides access to a sequence of ranges to consider
+// A rangeSet provides access to a sequence of ranges to consider
 // for inclusion in range queues. There are no requirements for the
 // ordering of the iteration.
-type rangeIterator interface {
-	// Next returns the next range in the iteration. Returns nil if
-	// there are no more ranges.
-	Next() *Range
+type rangeSet interface {
+	// Visit calls the given function for every range in the set btree
+	// until the function returns false.
+	Visit(func(*Range) bool)
 	// EstimatedCount returns the number of ranges estimated to remain
 	// in the iteration. This value does not need to be exact.
 	EstimatedCount() int
-	// Reset restarts the iterator at the beginning.
-	Reset()
 }
 
 // A storeStats holds statistics over the entire store. Stats is an
@@ -75,28 +73,29 @@ type storeStats struct {
 type rangeScanner struct {
 	targetInterval time.Duration  // Target duration interval for scan loop
 	maxIdleTime    time.Duration  // Max idle time for scan loop
-	iter           rangeIterator  // Iterator to implement scan of ranges
+	ranges         rangeSet       // Ranges to be scanned
 	queues         []rangeQueue   // Range queues managed by this scanner
 	removed        chan *Range    // Ranges to remove from queues
 	stats          unsafe.Pointer // Latest store stats object; updated atomically
 	scanFn         func()         // Function called at each complete scan iteration
-	// Count of times through the scanning loop but locked by the completedScan
+	// Count of times and total duration through the scanning loop but locked by the completedScan
 	// mutex.
 	completedScan *sync.Cond
 	count         int64
+	total         time.Duration
 }
 
 // newRangeScanner creates a new range scanner with the provided loop intervals,
-// range iterator, and range queues.  If scanFn is not nil, after a complete
+// range set, and range queues.  If scanFn is not nil, after a complete
 // loop that function will be called.
-func newRangeScanner(targetInterval, maxIdleTime time.Duration, iter rangeIterator,
+func newRangeScanner(targetInterval, maxIdleTime time.Duration, ranges rangeSet,
 	scanFn func()) *rangeScanner {
 	return &rangeScanner{
 		targetInterval: targetInterval,
 		maxIdleTime:    maxIdleTime,
-		iter:           iter,
+		ranges:         ranges,
 		removed:        make(chan *Range, 10),
-		stats:          unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
+		stats:          unsafe.Pointer(&storeStats{RangeCount: ranges.EstimatedCount()}),
 		scanFn:         scanFn,
 		completedScan:  sync.NewCond(&sync.Mutex{}),
 	}
@@ -132,6 +131,13 @@ func (rs *rangeScanner) Count() int64 {
 	return rs.count
 }
 
+// avgScan returns the average scan time of each scan cycle. Used in unittests.
+func (rs *rangeScanner) avgScan() time.Duration {
+	rs.completedScan.L.Lock()
+	defer rs.completedScan.L.Unlock()
+	return time.Duration(rs.total.Nanoseconds() / int64(rs.count))
+}
+
 // RemoveRange removes a range from any range queues the scanner may
 // have placed it in. This method should be called by the Store
 // when a range is removed (e.g. rebalanced or merged).
@@ -159,7 +165,7 @@ func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 	if remainingNanos < 0 {
 		remainingNanos = 0
 	}
-	count := rs.iter.EstimatedCount()
+	count := rs.ranges.EstimatedCount()
 	if count < 1 {
 		count = 1
 	}
@@ -170,8 +176,51 @@ func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 	return interval
 }
 
+// waitAndProcess waits for the pace interval and processes the range
+// if rng is not nil. The method returns true when the scanner needs
+// to be stopped. The method also removes a range from queues when it
+// is signaled via the removed channel.
+func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *util.Stopper,
+	stats *storeStats, rng *Range) bool {
+	waitInterval := rs.paceInterval(start, time.Now())
+	nextTime := time.After(waitInterval)
+	if log.V(6) {
+		log.Infof("Wait time interval set to %s", waitInterval)
+	}
+	for {
+		select {
+		case <-nextTime:
+			if rng == nil {
+				return false
+			}
+			if !stopper.StartTask() {
+				return true
+			}
+			// Try adding range to all queues.
+			for _, q := range rs.queues {
+				q.MaybeAdd(rng, clock.Now())
+			}
+			stats.RangeCount++
+			ms := rng.stats.GetMVCC()
+			stats.MVCC.Add(&ms)
+			stopper.FinishTask()
+			return false
+		case rng := <-rs.removed:
+			// Remove range from all queues as applicable.
+			for _, q := range rs.queues {
+				q.MaybeRemove(rng)
+			}
+			if log.V(6) {
+				log.Infof("removed range %s", rng)
+			}
+		case <-stopper.ShouldStop():
+			return true
+		}
+	}
+}
+
 // scanLoop loops endlessly, scanning through ranges available via
-// the range iterator, or until the scanner is stopped. The iteration
+// the range set, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 	stopper.RunWorker(func() {
@@ -179,58 +228,47 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 		stats := &storeStats{}
 
 		for {
-			waitInterval := rs.paceInterval(start, time.Now())
-			if log.V(6) {
-				log.Infof("Wait time interval set to %s", waitInterval)
+			if rs.ranges.EstimatedCount() == 0 {
+				// Just wait without processing any range.
+				if rs.waitAndProcess(start, clock, stopper, stats, nil) {
+					break
+				}
+			} else {
+				shouldStop := true
+				rs.ranges.Visit(func(rng *Range) bool {
+					shouldStop = rs.waitAndProcess(start, clock, stopper, stats, rng)
+					return !shouldStop
+				})
+				if shouldStop {
+					break
+				}
 			}
-			select {
-			case <-time.After(waitInterval):
-				if !stopper.StartTask() {
-					continue
-				}
-				rng := rs.iter.Next()
-				if rng != nil {
-					// Try adding range to all queues.
-					for _, q := range rs.queues {
-						q.MaybeAdd(rng, clock.Now())
-					}
-					stats.RangeCount++
-					ms := rng.stats.GetMVCC()
-					stats.MVCC.Add(&ms)
-				} else {
-					// Otherwise, we're done with the iteration. Reset iteration and start time.
-					rs.iter.Reset()
-					start = time.Now()
-					// Store the most recent scan results in the scanner's stats.
-					atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
-					stats = &storeStats{}
-					if rs.scanFn != nil {
-						rs.scanFn()
-					}
-					// Increment iteration count.
-					rs.completedScan.L.Lock()
-					rs.count++
-					rs.completedScan.Broadcast()
-					rs.completedScan.L.Unlock()
-					if log.V(6) {
-						log.Infof("reset range scan iteration")
-					}
-				}
-				stopper.FinishTask()
 
-			case rng := <-rs.removed:
-				// Remove range from all queues as applicable.
-				for _, q := range rs.queues {
-					q.MaybeRemove(rng)
-				}
-				if log.V(6) {
-					log.Infof("removed range %s", rng)
-				}
-
-			case <-stopper.ShouldStop():
+			if !stopper.StartTask() {
 				// Exit the loop.
-				return
+				break
 			}
+
+			// We're done with the iteration.
+			// Store the most recent scan results in the scanner's stats.
+			atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
+			stats = &storeStats{}
+			if rs.scanFn != nil {
+				rs.scanFn()
+			}
+			// Increment iteration count.
+			rs.completedScan.L.Lock()
+			rs.count++
+			rs.total += time.Now().Sub(start)
+			rs.completedScan.Broadcast()
+			rs.completedScan.L.Unlock()
+			if log.V(6) {
+				log.Infof("reset range scan iteration")
+			}
+
+			// Reset iteration and start time.
+			start = time.Now()
+			stopper.FinishTask()
 		}
 	})
 }

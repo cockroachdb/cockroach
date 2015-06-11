@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -27,81 +28,79 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/google/btree"
 )
 
-// Test implementation of a range iterator which cycles through
-// a slice of ranges.
-type testIterator struct {
-	index  int
-	ranges []Range
-	count  int
-	start  time.Time
-	total  time.Duration
+// Test implementation of a range set backed by btree.BTree.
+type testRangeSet struct {
 	sync.Mutex
+	rangesByKey *btree.BTree
+	visited     int
 }
 
-func newTestIterator(count int) *testIterator {
-	ti := &testIterator{
-		start: time.Now(),
-	}
-	ti.ranges = make([]Range, count)
-	// Initialize range stats for each range so the scanner can use them.
-	for i := range ti.ranges {
-		ti.ranges[i].stats = &rangeStats{
-			raftID: int64(i),
-			MVCCStats: proto.MVCCStats{
-				KeyBytes:  1,
-				ValBytes:  2,
-				KeyCount:  1,
-				LiveCount: 1,
+// newTestRangeSet creates a new range set that has the count number of ranges.
+func newTestRangeSet(count int, t *testing.T) *testRangeSet {
+	rs := &testRangeSet{rangesByKey: btree.New(64 /* degree */)}
+	for i := 0; i < count; i++ {
+		desc := &proto.RangeDescriptor{
+			RaftID:   int64(i),
+			StartKey: proto.Key(fmt.Sprintf("%03d", i)),
+			EndKey:   proto.Key(fmt.Sprintf("%03d", i+1)),
+		}
+		// Initialize the range stat so the scanner can use it.
+		rng := &Range{
+			stats: &rangeStats{
+				raftID: desc.RaftID,
+				MVCCStats: proto.MVCCStats{
+					KeyBytes:  1,
+					ValBytes:  2,
+					KeyCount:  1,
+					LiveCount: 1,
+				},
 			},
 		}
+		if err := rng.setDesc(desc); err != nil {
+			t.Fatal(err)
+		}
+		if exRngItem := rs.rangesByKey.ReplaceOrInsert(rng); exRngItem != nil {
+			t.Fatalf("failed to insert range %s", rng)
+		}
 	}
-	return ti
+	return rs
 }
 
-func (ti *testIterator) Next() *Range {
-	ti.Lock()
-	defer ti.Unlock()
-	if ti.index >= len(ti.ranges) {
-		return nil
+func (rs *testRangeSet) Visit(visitor func(*Range) bool) {
+	rs.Lock()
+	defer rs.Unlock()
+	rs.visited = 0
+	rs.rangesByKey.Ascend(func(i btree.Item) bool {
+		rs.visited++
+		rs.Unlock()
+		defer rs.Lock()
+		return visitor(i.(*Range))
+	})
+}
+
+func (rs *testRangeSet) EstimatedCount() int {
+	rs.Lock()
+	defer rs.Unlock()
+	count := rs.rangesByKey.Len() - rs.visited
+	if count < 1 {
+		count = 1
 	}
-	oldIndex := ti.index
-	ti.index++
-	return &ti.ranges[oldIndex]
+	return count
 }
 
-func (ti *testIterator) EstimatedCount() int {
-	ti.Lock()
-	defer ti.Unlock()
-	return len(ti.ranges) - ti.index
-}
-
-func (ti *testIterator) Reset() {
-	ti.Lock()
-	defer ti.Unlock()
-	ti.index = 0
-	now := time.Now()
-	ti.total += now.Sub(ti.start)
-	ti.start = now
-	ti.count++
-}
-
-func (ti *testIterator) remove(index int) *Range {
-	ti.Lock()
-	defer ti.Unlock()
-	var rng *Range
-	if index < len(ti.ranges) {
-		rng = &ti.ranges[index]
-		ti.ranges = append(ti.ranges[:index], ti.ranges[index+1:]...)
+// removeRange removes the i-th range from the range set.
+func (rs *testRangeSet) remove(index int, t *testing.T) *Range {
+	endKey := proto.Key(fmt.Sprintf("%03d", index+1))
+	rs.Lock()
+	defer rs.Unlock()
+	rng := rs.rangesByKey.Delete((rangeBTreeKey)(endKey))
+	if rng == nil {
+		t.Fatalf("failed to delete range of end key %s", endKey)
 	}
-	return rng
-}
-
-func (ti *testIterator) avgScan() time.Duration {
-	ti.Lock()
-	defer ti.Unlock()
-	return time.Duration(ti.total.Nanoseconds() / int64(ti.count))
+	return rng.(*Range)
 }
 
 // Test implementation of a range queue which adds range to an
@@ -184,12 +183,12 @@ func (tq *testQueue) isDone() bool {
 func TestScannerAddToQueues(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const count = 3
-	iter := newTestIterator(count)
+	ranges := newTestRangeSet(count, t)
 	q1, q2 := &testQueue{}, &testQueue{}
 	// We don't want to actually consume entries from the queues during this test.
 	q1.setDisabled(true)
 	q2.setDisabled(true)
-	s := newRangeScanner(1*time.Millisecond, 0, iter, nil)
+	s := newRangeScanner(1*time.Millisecond, 0, ranges, nil)
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -204,7 +203,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	}
 
 	// Remove first range and verify it does not exist in either range.
-	rng := iter.remove(0)
+	rng := ranges.remove(0, t)
 	s.RemoveRange(rng)
 	if err := util.IsTrueWithin(func() bool {
 		return q1.count() == count-1 && q2.count() == count-1
@@ -231,9 +230,9 @@ func TestScannerTiming(t *testing.T) {
 		25 * time.Millisecond,
 	}
 	for i, duration := range durations {
-		iter := newTestIterator(count)
+		ranges := newTestRangeSet(count, t)
 		q := &testQueue{}
-		s := newRangeScanner(duration, 0, iter, nil)
+		s := newRangeScanner(duration, 0, ranges, nil)
 		s.AddQueues(q)
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
@@ -242,7 +241,7 @@ func TestScannerTiming(t *testing.T) {
 		s.Start(clock, stopper)
 		time.Sleep(runTime)
 
-		avg := iter.avgScan()
+		avg := s.avgScan()
 		log.Infof("%d: average scan: %s\n", i, avg)
 		if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
 			duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
@@ -270,29 +269,29 @@ func TestScannerPaceInterval(t *testing.T) {
 	}
 	for _, duration := range durations {
 		startTime := time.Now()
-		iter := newTestIterator(count)
-		s := newRangeScanner(duration, 0, iter, nil)
+		ranges := newTestRangeSet(count, t)
+		s := newRangeScanner(duration, 0, ranges, nil)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
-		// The iterator is empty
-		iter = newTestIterator(0)
-		s = newRangeScanner(duration, 0, iter, nil)
+		// The range set is empty
+		ranges = newTestRangeSet(0, t)
+		s = newRangeScanner(duration, 0, ranges, nil)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
-		iter = newTestIterator(count)
-		s = newRangeScanner(duration, 0, iter, nil)
+		ranges = newTestRangeSet(count, t)
+		s = newRangeScanner(duration, 0, ranges, nil)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
 	}
 }
 
-// TestScannerEmptyIterator verifies that an empty iterator doesn't busy loop.
-func TestScannerEmptyIterator(t *testing.T) {
+// TestScannerEmptyRangeSet verifies that an empty range set doesn't busy loop.
+func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	iter := newTestIterator(0)
+	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
-	s := newRangeScanner(1*time.Millisecond, 0, iter, nil)
+	s := newRangeScanner(1*time.Millisecond, 0, ranges, nil)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -309,11 +308,11 @@ func TestScannerEmptyIterator(t *testing.T) {
 func TestScannerStats(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const count = 3
-	iter := newTestIterator(count)
+	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
 	stopper := util.NewStopper()
 	defer stopper.Stop()
-	s := newRangeScanner(1*time.Millisecond, 0, iter, nil)
+	s := newRangeScanner(1*time.Millisecond, 0, ranges, nil)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
