@@ -688,6 +688,93 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 }
 
+// TestMVCCGetProtoInconsistent verifies the behavior of GetProto with
+// consistent set to false.
+func TestMVCCGetProtoInconsistent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	value1, err := gogoproto.Marshal(&proto.RawKeyValue{Value: []byte("value1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value2, err := gogoproto.Marshal(&proto.RawKeyValue{Value: []byte("value2")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Put two values to key 1, the latest with a txn.
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), proto.Value{Bytes: value1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), proto.Value{Bytes: value2}, txn1); err != nil {
+		t.Fatal(err)
+	}
+
+	// A get with consistent=false should fail in a txn.
+	val := &proto.RawKeyValue{}
+	_, err = MVCCGetProto(engine, testKey1, makeTS(1, 0), false, txn1, val)
+	if err == nil {
+		t.Error("expected an error getting with consistent=false in txn")
+	} else if _, ok := err.(*proto.WriteIntentError); ok {
+		t.Error("expected non-WriteIntentError with inconsistent read in txn")
+	}
+
+	// Inconsistent get will fetch value1 for any timestamp.
+	for _, ts := range []proto.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
+		val.Reset()
+		found, err := MVCCGetProto(engine, testKey1, ts, false, nil, val)
+		if ts.Less(makeTS(2, 0)) {
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if wiErr, ok := err.(*proto.WriteIntentError); !ok || !wiErr.Intents[0].Key.Equal(testKey1) {
+				t.Fatal(err)
+			}
+		}
+		if !found {
+			t.Errorf("expected to find result with inconsistent read")
+		}
+		if !bytes.Equal(val.Value, []byte("value1")) {
+			t.Errorf("@%s expected %q; got %q", ts, []byte("value1"), val.Value)
+		}
+	}
+
+	// Write a single intent for key 2 and verify get returns empty.
+	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), proto.Value{Bytes: value1}, txn2); err != nil {
+		t.Fatal(err)
+	}
+	found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, val)
+	if wiErr, ok := err.(*proto.WriteIntentError); !ok || !wiErr.Intents[0].Key.Equal(testKey2) {
+		t.Fatal(err)
+	}
+	if found {
+		t.Errorf("expected no result; got %+v", val)
+	}
+
+	// Write a malformed value (not an encoded proto.RawKeyValue) and a
+	// write intent to key 3; the parse error is returned instead of the
+	// write intent.
+	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), proto.Value{Bytes: value2}, txn1); err != nil {
+		t.Fatal(err)
+	}
+	val.Reset()
+	found, err = MVCCGetProto(engine, testKey3, makeTS(1, 0), false, nil, val)
+	if err == nil {
+		t.Errorf("expected error reading malformed data")
+	} else if _, ok := err.(*proto.WriteIntentError); ok {
+		t.Errorf("expected non-WriteIntentError with malformed data")
+	}
+	if !found {
+		t.Errorf("expected to find result with malformed data")
+	}
+}
+
 func TestMVCCScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
