@@ -61,7 +61,6 @@ type Server struct {
 	gossip        *gossip.Gossip
 	db            *client.DB
 	kvDB          *kv.DBServer
-	kvREST        *kv.RESTServer
 	node          *Node
 	admin         *adminServer
 	status        *statusServer
@@ -124,7 +123,6 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 			return nil, err
 		}
 	}
-	s.kvREST = kv.NewRESTServer(s.db)
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Clock:           s.clock,
@@ -193,7 +191,6 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusKeyPrefix, s.status)
 
-	s.mux.HandleFunc(kv.RESTPrefix, s.authenticateRequest(s.kvREST))
 	s.mux.HandleFunc(kv.DBPrefix, s.authenticateRequest(s.kvDB))
 	s.mux.HandleFunc(ts.URLPrefix, s.authenticateRequest(s.tsServer))
 }

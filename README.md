@@ -19,19 +19,6 @@
 
 ## Status
 
-**ALPHA**
-
-* Gossip network
-* Distributed transactions
-* Cluster initialization and joining
-* Basic Key-Value REST API
-* Range splitting
-
-**Next Steps**
-
-* Raft consensus
-* Rebalancing
-
 See our
 [Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) and
 [Issues](https://github.com/cockroachdb/cockroach/issues)
@@ -119,40 +106,6 @@ Now let's talk to this node. The easiest way to do that is to use the `cockroach
 ```
 
 Check out `./cockroach help` to see all available commands.
-
-##### REST
-
-Cockroach also exposes a REST API. You can use the [REST Explorer at
-localhost:8080](https://localhost:8080/#rest-explorer) or talk directly to it.
-
-Note that if you're using the Docker container, you want to do this in a new shell
-and not inside the container, which does not have cURL installed. Note also that
-if you're using boot2docker, you don't want to curl `localhost` - find out
-the correct endpoint using `boot2docker ip`.
-
-```bash
-curl -k -X POST -d "Hello" https://localhost:8080/kv/rest/entry/Cockroach
-```
-```json
-{"header":{"timestamp":{"wall_time":1416616834949813367,"logical":0}}}
-```
-
-```bash
-curl -k https://localhost:8080/kv/rest/entry/Cockroach
-```
-```json
-{"header":{"timestamp":{"wall_time":1416616886486257568,"logical":0}},"value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}
-```
-Note that `SGVsbG8=` equals `base64("Hello")`.
-
-Among other things, you can also scan a key range:
-```bash
-curl -k "https://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
-```
-```json
-{"header":{"timestamp":{"wall_time":1416617120031733436,"logical":0}},"rows":[{"key":"Q29ja3JvYWNo","value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}]}
-```
-Note that `Q29ja3JvYWNo` equals `base64("Cockroach")`.
 
 #### Building the Docker images yourself
 See [build/README.md](build/) for more information on the available Docker
@@ -367,16 +320,14 @@ replicas.
 
 ## Client Architecture
 
-Cockroach nodes serve client traffic on two primary HTTP endpoints: a
-RESTful endpoint which treats key/value pairs and sequences of
-key/value pairs as resources; and a fully-featured key/value DB API
-which accepts requests as either application/x-protobuf or
+Cockroach nodes serve client traffic using a fully-featured key/value
+DB API which accepts requests as either application/x-protobuf or
 application/json. Client implementations consist of an HTTP sender
 (transport) and a transactional sender which implements a simple
 exponential backoff / retry protocol, depending on Cockroach error
 codes.
 
-The REST and DB client gateways accept incoming requests and send them
+The DB client gateway accepts incoming requests and sends them
 through a transaction coordinator, which handles transaction
 heartbeats on behalf of clients, provides optimization pathways, and
 resolves write intents on transaction commit or abort. The transaction
@@ -385,19 +336,17 @@ index metadata, caches the results, and routes internode RPC traffic
 based on where the index metadata indicates keys are located in the
 distributed cluster.
 
-In addition to the gateways for external REST and DB client traffic,
-each Cockroach node provides the full key/value API (including all
-internal methods) via a Go RPC server endpoint. The RPC server
-endpoint forwards requests to one or more local stores depending
-on the specified key range.
+In addition to the gateway for external DB client traffic, each Cockroach
+node provides the full key/value API (including all internal methods) via
+a Go RPC server endpoint. The RPC server endpoint forwards requests to one
+or more local stores depending on the specified key range.
 
 Internally, each Cockroach node uses the Go implementation of the
 Cockroach client in order to transactionally update system key/value
 data; for example during split and merge operations to update index
 metadata records. Unlike an external application, the internal client
 eschews the HTTP sender and instead directly shares the transaction
-coordinator and distributed sender used by the REST and DB client
-gateways.
+coordinator and distributed sender used by the DB client gateway.
 
 ![Client Architecture](/resource/doc/client-architecture.png?raw=true)
 
