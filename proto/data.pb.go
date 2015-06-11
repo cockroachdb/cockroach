@@ -282,7 +282,7 @@ func (m *KeyValue) GetValue() Value {
 
 // RawKeyValue contains the raw bytes of the value for a key.
 type RawKeyValue struct {
-	Key              EncodedKey `protobuf:"bytes,1,opt,name=key,customtype=EncodedKey" json:"key"`
+	Key              EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
 	Value            []byte     `protobuf:"bytes,2,opt,name=value" json:"value"`
 	XXX_unrecognized []byte     `json:"-"`
 }
@@ -1280,9 +1280,7 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2903,8 +2901,10 @@ func (m *KeyValue) Size() (n int) {
 func (m *RawKeyValue) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Key.Size()
-	n += 1 + l + sovData(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
 	if m.Value != nil {
 		l = len(m.Value)
 		n += 1 + l + sovData(uint64(l))
@@ -3302,14 +3302,12 @@ func (m *RawKeyValue) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintData(data, i, uint64(m.Key.Size()))
-	n5, err := m.Key.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
 	}
-	i += n5
 	if m.Value != nil {
 		data[i] = 0x12
 		i++
@@ -3371,19 +3369,19 @@ func (m *SplitTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n6, err := m.UpdatedDesc.MarshalTo(data[i:])
+	n5, err := m.UpdatedDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
+	n6, err := m.NewDesc.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n6
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
-	n7, err := m.NewDesc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n7
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3408,11 +3406,11 @@ func (m *MergeTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n8, err := m.UpdatedDesc.MarshalTo(data[i:])
+	n7, err := m.UpdatedDesc.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n7
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.SubsumedRaftID))
@@ -3483,31 +3481,31 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.SplitTrigger.Size()))
-		n9, err := m.SplitTrigger.MarshalTo(data[i:])
+		n8, err := m.SplitTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n8
 	}
 	if m.MergeTrigger != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
-		n10, err := m.MergeTrigger.MarshalTo(data[i:])
+		n9, err := m.MergeTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n10
+		i += n9
 	}
 	if m.ChangeReplicasTrigger != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
-		n11, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
+		n10, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n11
+		i += n10
 	}
 	if len(m.Intents) > 0 {
 		for _, msg := range m.Intents {
@@ -3543,22 +3541,22 @@ func (m *NodeList) MarshalTo(data []byte) (n int, err error) {
 	var l int
 	_ = l
 	if len(m.Nodes) > 0 {
-		data13 := make([]byte, len(m.Nodes)*10)
-		var j12 int
+		data12 := make([]byte, len(m.Nodes)*10)
+		var j11 int
 		for _, num1 := range m.Nodes {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				data13[j12] = uint8(uint64(num)&0x7f | 0x80)
+				data12[j11] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j12++
+				j11++
 			}
-			data13[j12] = uint8(num)
-			j12++
+			data12[j11] = uint8(num)
+			j11++
 		}
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(j12))
-		i += copy(data[i:], data13[:j12])
+		i = encodeVarintData(data, i, uint64(j11))
+		i += copy(data[i:], data12[:j11])
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3588,11 +3586,11 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Key.Size()))
-	n14, err := m.Key.MarshalTo(data[i:])
+	n13, err := m.Key.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n14
+	i += n13
 	if m.ID != nil {
 		data[i] = 0x1a
 		i++
@@ -3615,44 +3613,44 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x42
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n15, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n14, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n14
 	}
 	data[i] = 0x4a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n16, err := m.Timestamp.MarshalTo(data[i:])
+	n15, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n15
+	data[i] = 0x52
+	i++
+	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
+	n16, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n16
-	data[i] = 0x52
+	data[i] = 0x5a
 	i++
-	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n17, err := m.OrigTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n17, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n17
-	data[i] = 0x5a
+	data[i] = 0x62
 	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n18, err := m.MaxTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n18, err := m.CertainNodes.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n18
-	data[i] = 0x62
-	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n19, err := m.CertainNodes.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n19
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3677,19 +3675,19 @@ func (m *Lease) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n20, err := m.Start.MarshalTo(data[i:])
+	n19, err := m.Start.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n20, err := m.Expiration.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n20
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n21, err := m.Expiration.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n21
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
@@ -3718,20 +3716,20 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-		n22, err := m.Txn.MarshalTo(data[i:])
+		n21, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n22
+		i += n21
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n23, err := m.Timestamp.MarshalTo(data[i:])
+	n22, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n23
+	i += n22
 	data[i] = 0x18
 	i++
 	if m.Deleted {
@@ -3750,11 +3748,11 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x32
 		i++
 		i = encodeVarintData(data, i, uint64(m.Value.Size()))
-		n24, err := m.Value.MarshalTo(data[i:])
+		n23, err := m.Value.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n24
+		i += n23
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)

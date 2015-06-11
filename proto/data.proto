@@ -87,7 +87,7 @@ message KeyValue {
 
 // RawKeyValue contains the raw bytes of the value for a key.
 message RawKeyValue {
-  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "EncodedKey"];
+  optional bytes key = 1 [(gogoproto.casttype) = "EncodedKey"];
   optional bytes value = 2 [(gogoproto.nullable) = false];
 }
 
