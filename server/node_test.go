@@ -500,10 +500,10 @@ func (ts testSender) Send(ctx context.Context, c client.Call) {
 }
 
 func setAllocRetryBackoff(backoff time.Duration) func() {
-	savedBackoff := allocRetryOptions.Backoff
-	allocRetryOptions.Backoff = backoff
+	savedBackoff := allocRetryOptions.BackOff.InitialInterval
+	allocRetryOptions.BackOff.InitialInterval = backoff
 	return func() {
-		allocRetryOptions.Backoff = savedBackoff
+		allocRetryOptions.BackOff.InitialInterval = savedBackoff
 	}
 }
 

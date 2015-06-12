@@ -56,7 +56,7 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 			break
 		}
 		response = append(response, *(v.(testDescriptorNode).RangeDescriptor))
-		// Break to keep from skidding off the end of the available ranges.
+		// break to keep from skidding off the end of the available ranges.
 		if response[i].EndKey.Equal(proto.KeyMax) {
 			break
 		}

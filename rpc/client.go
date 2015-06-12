@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
@@ -50,10 +51,12 @@ var (
 // clientRetryOptions specifies exponential backoff starting
 // at 1s and ending at 30s with indefinite retries.
 var clientRetryOptions = retry.Options{
-	Backoff:     1 * time.Second,  // first backoff at 1s
-	MaxBackoff:  30 * time.Second, // max backoff is 30s
-	Constant:    2,                // doubles
-	MaxAttempts: 0,                // indefinite retries
+	BackOff: backoff.ExponentialBackOff{
+		Clock:           backoff.SystemClock,
+		InitialInterval: 1 * time.Second,
+		MaxInterval:     30 * time.Second,
+		Multiplier:      2,
+	},
 }
 
 // init creates a new client RPC cache.
@@ -127,17 +130,19 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
 	retryOpts.Stopper = context.Stopper
 
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 		tlsConfig, err := context.GetClientTLSConfig()
 		if err != nil {
 			// Problem loading the TLS config. Retrying will not help.
-			return retry.Break, err
+			r.Stop()
+			return err
 		}
 
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
 		// Could be many errors: bad host; bad certificate ...
 		if err != nil {
-			return retry.Break, err
+			r.Stop()
+			return err
 		}
 
 		c.mu.Lock()
@@ -149,7 +154,8 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		// retry loop. If it fails, don't retry: The node is probably
 		// dead.
 		if err = c.heartbeat(); err != nil {
-			return retry.Break, err
+			r.Stop()
+			return err
 		}
 
 		// Signal client is ready by closing Ready channel.
@@ -159,7 +165,7 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		// Launch periodic heartbeat.
 		go c.startHeartbeat()
 
-		return retry.Break, nil
+		return nil
 	})
 	if err != nil {
 		log.Errorf("client %s failed to connect: %v", c.addr, err)

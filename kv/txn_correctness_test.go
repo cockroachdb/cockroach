@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -42,9 +43,12 @@ import (
 // return retry error.
 func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	client.DefaultTxnRetryOptions = retry.Options{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  5 * time.Millisecond,
-		Constant:    2,
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: 1 * time.Millisecond,
+			MaxInterval:     5 * time.Millisecond,
+			Multiplier:      2,
+		},
 		MaxAttempts: 3,
 		UseV1Info:   true,
 	}

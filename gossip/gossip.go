@@ -58,11 +58,13 @@ package gossip
 import (
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -549,28 +551,33 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 		case <-time.After(5 * time.Second):
 		}
 		retryOptions := retry.Options{
-			Tag:         "check cluster initialization",
-			Backoff:     5 * time.Second,  // first backoff at 5s
-			MaxBackoff:  60 * time.Second, // max backoff is 60s
-			Constant:    2,                // doubles
-			MaxAttempts: 0,                // indefinite retries
-			Stopper:     stopper,          // stop no matter what on stopper
+			BackOff: backoff.ExponentialBackOff{
+				Clock:           backoff.SystemClock,
+				InitialInterval: 5 * time.Second,
+				MaxInterval:     60 * time.Second,
+				Multiplier:      2,
+			},
+			Tag:     "check cluster initialization",
+			Stopper: stopper,
 		}
 		// will never error because infinite retries
-		_ = retry.WithBackoff(retryOptions, func() (retry.Status, error) {
+		_ = retry.WithBackoff(retryOptions, func(r *retry.Retry) error {
 			g.mu.Lock()
 			hasSentinel := g.is.getInfo(KeySentinel) != nil
 			g.mu.Unlock()
 			// If we have the sentinel, exit the retry loop.
 			if hasSentinel {
-				return retry.Break, nil
+				return nil
 			}
 			// Otherwise, if all bootstrap hosts are connected, warn.
 			if g.triedAll {
-				log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
-					"Use \"cockroach init\" to initialize.")
+				err := fmt.Errorf(
+					"connected to gossip but missing sentinel. Has the cluster been initialized? Use 'cockroach init' to initialize",
+				)
+				log.Warning(err)
+				return err
 			}
-			return retry.Continue, nil
+			return fmt.Errorf("missing sentinel but possibly not connected to gossip")
 		})
 	})
 }

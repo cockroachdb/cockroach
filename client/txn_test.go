@@ -263,7 +263,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 				}
 			}
 		}))
-		db.txnRetryOptions.Backoff = 1 * time.Millisecond
+		db.txnRetryOptions.BackOff.InitialInterval = 1 * time.Millisecond
 		err := db.Txn(func(txn *Txn) error {
 			return txn.Put("a", "b")
 		})

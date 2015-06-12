@@ -19,12 +19,14 @@ package server
 
 import (
 	"container/list"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -54,11 +56,14 @@ const (
 )
 
 var allocRetryOptions = retry.Options{
-	Tag:        "ID allocation",
-	Backoff:    time.Second,
-	MaxBackoff: 30 * time.Second,
-	Constant:   2,
-	UseV1Info:  true,
+	Tag: "ID allocation",
+	BackOff: backoff.ExponentialBackOff{
+		Clock:           backoff.SystemClock,
+		InitialInterval: time.Second,
+		MaxInterval:     30 * time.Second,
+		Multiplier:      2,
+	},
+	UseV1Info: true,
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -93,17 +98,16 @@ type nodeServer Node
 // errors.
 func allocateNodeID(db *client.DB) (proto.NodeID, error) {
 	var id proto.NodeID
-	err := retry.WithBackoff(allocRetryOptions, func() (retry.Status, error) {
-		r, err := db.Inc(keys.NodeIDGenerator, 1)
+	err := retry.WithBackoff(allocRetryOptions, func(r *retry.Retry) error {
+		res, err := db.Inc(keys.NodeIDGenerator, 1)
 		if err != nil {
-			status := retry.Break
-			if _, ok := err.(util.Retryable); ok {
-				status = retry.Continue
+			if rErr, ok := err.(util.Retryable); !ok || !rErr.CanRetry() {
+				r.Stop()
 			}
-			return status, util.Errorf("unable to allocate node ID: %s", err)
+			return fmt.Errorf("unable to allocate node ID: %s", err)
 		}
-		id = proto.NodeID(r.ValueInt())
-		return retry.Break, nil
+		id = proto.NodeID(res.ValueInt())
+		return nil
 	})
 	return id, err
 }
@@ -114,17 +118,16 @@ func allocateNodeID(db *client.DB) (proto.NodeID, error) {
 // will retry indefinitely on retryable errors.
 func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.StoreID, error) {
 	var id proto.StoreID
-	err := retry.WithBackoff(allocRetryOptions, func() (retry.Status, error) {
-		r, err := db.Inc(keys.StoreIDGenerator, inc)
+	err := retry.WithBackoff(allocRetryOptions, func(r *retry.Retry) error {
+		res, err := db.Inc(keys.StoreIDGenerator, inc)
 		if err != nil {
-			status := retry.Break
-			if _, ok := err.(util.Retryable); ok {
-				status = retry.Continue
+			if rErr, ok := err.(util.Retryable); !ok || !rErr.CanRetry() {
+				r.Stop()
 			}
-			return status, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
+			return fmt.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 		}
-		id = proto.StoreID(r.ValueInt() - inc + 1)
-		return retry.Break, nil
+		id = proto.StoreID(res.ValueInt() - inc + 1)
+		return nil
 	})
 	return id, err
 }

@@ -98,7 +98,7 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 	retryOpts := s.retryOpts
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
-	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	if err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 		resp, err := s.post(call)
 		if err != nil {
 			if resp != nil {
@@ -109,10 +109,11 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 					// Retry on service unavailable and request timeout.
 					// TODO(spencer): consider respecting the Retry-After header for
 					// backoff / retry duration.
-					return retry.Continue, infoErr
+					return infoErr
 				default:
 					// Can't recover from all other errors.
-					return retry.Break, infoErr
+					r.Stop()
+					return infoErr
 				}
 			}
 			switch err.(type) {
@@ -125,14 +126,15 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 				// the errors we'll sweep up in this net shouldn't be retried,
 				// but we can't really know for sure which.
 				log.Warningf("failed to send HTTP request or read its response: %s", err)
-				return retry.Continue, nil
+				return err
 			default:
 				// Can't retry in order to recover from this error. Propagate.
-				return retry.Break, err
+				r.Stop()
+				return err
 			}
 		}
 		// On successful post, we're done with retry loop.
-		return retry.Break, nil
+		return nil
 	}); err != nil {
 		call.Reply.Header().SetGoError(err)
 	}

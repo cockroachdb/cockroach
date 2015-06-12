@@ -213,12 +213,12 @@ func TestTxnDBUncertainty(t *testing.T) {
 	// Make sure that we notice immediately if any kind of backing off is
 	// happening. Restore the previous options after this test is done to avoid
 	// interfering with other tests.
-	defaultRetryOptions := client.DefaultTxnRetryOptions
+	defaultRetryOptions := client.DefaultTxnRetryOptions.BackOff
 	defer func() {
-		client.DefaultTxnRetryOptions = defaultRetryOptions
+		client.DefaultTxnRetryOptions.BackOff = defaultRetryOptions
 	}()
-	client.DefaultTxnRetryOptions.Backoff = 100 * time.Second
-	client.DefaultTxnRetryOptions.MaxBackoff = 100 * time.Second
+	client.DefaultTxnRetryOptions.BackOff.InitialInterval = 100 * time.Second
+	client.DefaultTxnRetryOptions.BackOff.MaxInterval = 100 * time.Second
 
 	// < 5ns means no uncertainty & no restarts.
 	verifyUncertainty(1, 3*time.Nanosecond, t)

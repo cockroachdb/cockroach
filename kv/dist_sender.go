@@ -27,6 +27,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -59,11 +60,13 @@ const (
 )
 
 var defaultRPCRetryOptions = retry.Options{
-	Backoff:     retryBackoff,
-	MaxBackoff:  maxRetryBackoff,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-	UseV1Info:   true,
+	BackOff: backoff.ExponentialBackOff{
+		Clock:           backoff.SystemClock,
+		InitialInterval: retryBackoff,
+		MaxInterval:     maxRetryBackoff,
+		Multiplier:      2,
+	},
+	UseV1Info: true,
 }
 
 // A firstRangeMissingError indicates that the first range has not yet
@@ -473,13 +476,13 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 }
 
 // sendAttempt is invoked by Send and handles retry logic and cache eviction
-// for a call sent to a single range. It returns a retry status, which is Break
-// on success and either Break, Continue or Reset depending on error condition.
-// This method is expected to be invoked from within a backoff / retry loop to
-// retry the send repeatedly (e.g. to continue processing after a critical node
-// becomes available after downtime or the range descriptor is refreshed via
-// lookup).
-func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call) (retry.Status, error) {
+// for a call sent to a single range. It returns a retry status, which is
+// Succeed on success and either Abort, Continue or Reset depending on error
+// condition. This method is expected to be invoked from within a backoff /
+// retry loop to retry the send repeatedly (e.g. to continue processing after
+// a critical node becomes available after downtime or the range descriptor is
+// refreshed via lookup).
+func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call, r *retry.Retry) error {
 	leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
 
 	// Try to send the call.
@@ -531,7 +534,8 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 			// Range descriptor might be out of date - evict it.
 			ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 			// On addressing errors, don't backoff; retry immediately.
-			return retry.Reset, err
+			r.Reset()
+			return err
 		case *proto.NotLeaderError:
 			newLeader := tErr.GetLeader()
 			// Verify that leader is a known replica according to the
@@ -548,15 +552,17 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 				newLeader = &proto.Replica{}
 			}
 			ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
-			return retry.Reset, err
+			r.Reset()
+			return err
 		case util.Retryable:
 			if tErr.CanRetry() {
-				return retry.Continue, err
+				return err
 			}
 		}
-		return retry.Break, err
+		r.Stop()
+		return err
 	}
-	return retry.Break, nil
+	return nil
 }
 
 // getDescriptors takes a call and looks up the corresponding range descriptors
@@ -654,7 +660,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 		curReply.Header().Reset()
 
 		var desc, descNext *proto.RangeDescriptor
-		err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+		err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 			var descErr error
 			// Get range descriptor (or, when spanning range, descriptors).
 			// sendAttempt below may clear them on certain errors, so we
@@ -662,7 +668,8 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			desc, descNext, descErr = ds.getDescriptors(call)
 			// If getDescriptors fails, we don't fish for retryable errors.
 			if descErr != nil {
-				return retry.Break, descErr
+				r.Stop()
+				return descErr
 			}
 			// Truncate the request to our current range, making sure not to
 			// touch it unless we have to (it is illegal to send EndKey on
@@ -674,7 +681,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 					args.Header().EndKey = endKey
 				}()
 			}
-			return ds.sendAttempt(desc, call)
+			return ds.sendAttempt(desc, call, r)
 		})
 
 		// Immediately return if querying a range failed non-retryably.

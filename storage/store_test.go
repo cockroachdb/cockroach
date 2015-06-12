@@ -29,6 +29,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -58,9 +59,12 @@ var testBaseContext = testutils.NewTestBaseContext()
 // loops.
 func setTestRetryOptions(s *Store) {
 	s.SetRangeRetryOptions(retry.Options{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  2 * time.Millisecond,
-		Constant:    2,
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: 1 * time.Millisecond,
+			MaxInterval:     2 * time.Millisecond,
+			Multiplier:      2,
+		},
 		MaxAttempts: 2,
 	})
 }

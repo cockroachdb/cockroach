@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -33,11 +34,13 @@ import (
 // defaultRetryOptions sets the retry options for handling retryable errors and
 // connection I/O errors.
 var defaultRetryOptions = retry.Options{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-	UseV1Info:   true,
+	BackOff: backoff.ExponentialBackOff{
+		Clock:           backoff.SystemClock,
+		InitialInterval: 50 * time.Millisecond,
+		MaxInterval:     5 * time.Second,
+		Multiplier:      2,
+	},
+	UseV1Info: true,
 }
 
 // Sender is an interface for sending a request to a Key-Value
