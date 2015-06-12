@@ -21,23 +21,39 @@ module AdminViews {
        * displaying the same data set as retrieved by a QueryManager.
        */
       export module Page {
+          import property = _mithril.MithrilProperty;
           import metrics = Models.Metrics;
+
           class Controller implements _mithril.MithrilController {
-              manager:Utils.QueryCache<Models.Proto.QueryResultSet>;
+              manager:metrics.Executor;
+              axis:metrics.Axis;
               showRates:boolean;
               interval:number;
 
               timespan = metrics.time.Recent(10 * 60 * 1000);
-              sumquery = metrics.NewQuery(
-					  metrics.select.Avg("cr.node.calls.success.1").title("Successful calls"),
-					  metrics.select.Avg("cr.node.calls.error.1").title("Error calls")
-					)
-				  .timespan(this.timespan);
-              ratequery = metrics.NewQuery(metrics.select.AvgRate("cr.node.calls.success.1"))
-				  .timespan(this.timespan);
-						  
+
+              // Define selectors.
+              private successCount = metrics.select.Avg("cr.node.calls.success.1")
+                .title("Successful calls");
+              private errorCount = metrics.select.Avg("cr.node.calls.error.1")
+                .title("Error calls");
+              private successRate = metrics.select.AvgRate("cr.node.calls.success.1")
+                .title("Successful call rate");
+              private errorRate = metrics.select.AvgRate("cr.node.calls.error.1")
+                .title("Error call rate");
+
+              // Define query.
+              private query = metrics.NewQuery(
+                      this.successCount, 
+                      this.errorCount, 
+                      this.successRate, 
+                      this.errorRate)
+                  .timespan(this.timespan);
+                          
               constructor(){
-                  this.manager = new Utils.QueryCache(this.sumquery.execute);
+                  this.manager = new metrics.Executor(this.query);
+                  this.axis = metrics.NewAxis(this.successCount, this.errorCount)
+                      .label("Count");
                   this.manager.refresh();
                   this.interval = setInterval(() => this.manager.refresh(), 10000);
               }
@@ -49,11 +65,12 @@ module AdminViews {
               toggleGraph = () => {
                   this.showRates = !this.showRates;
                   if (this.showRates) {
-                      this.manager.setQuery(this.ratequery.execute);
+                      this.axis.selectors([this.successRate, this.errorRate])
+                          .label("Count / 10sec");
                   } else {
-                      this.manager.setQuery(this.sumquery.execute);
+                      this.axis.selectors([this.successCount, this.errorCount])
+                          .label("Count");
                   }
-                  this.manager.refresh();
               }
           }
 
@@ -70,8 +87,8 @@ module AdminViews {
               }
               return m(".graphPage", [
                       m("H3", "Graph Demo"),
-                      Components.Metrics.LineGraph.create(ctrl.manager),
-                      Components.Metrics.LineGraph.create(ctrl.manager),
+                      Components.Metrics.LineGraph.create(ctrl.manager, ctrl.axis),
+                      Components.Metrics.LineGraph.create(ctrl.manager, ctrl.axis),
                       m("",
                           m("input[type=button]", {
                               value: buttonText,

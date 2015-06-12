@@ -18,19 +18,22 @@ module Components {
      * Metrics contains components used to display metrics data.
      */
     export module Metrics {
+
         /**
          * LineGraph displays a line graph of the data returned from a time
          * series query.
          */
         export module LineGraph {
+            import property = _mithril.MithrilProperty;
+
             /**
              * ViewModel is the model for a specific LineGraph - in addition to
              * the backing Query object, it also maintains other per-component
              * display options.
              */
             interface ViewModel {
-                query:Utils.QueryCache<Models.Proto.QueryResultSet>;
-                lastEpoch:number;
+                query:Models.Metrics.Executor;
+                axis:Models.Metrics.Axis;
                 key?:number;
             }
 
@@ -57,18 +60,13 @@ module Components {
                     this.chart.xAxis
                         .tickFormat(d3.time.format('%I:%M:%S'))
                         .showMaxMin(false);
-                }
+                    this.chart.yAxis
+                        .axisLabel(vm.axis.label())
+                        .showMaxMin(false);
 
-                /**
-                 * shouldRenderData returns true if there is new data to render.
-                 */
-                shouldRenderData():boolean {
-                    var epoch = this.vm.query.epoch()
-                    if (epoch > this.vm.lastEpoch) {
-                        this.vm.lastEpoch = epoch
-                        return true;
+                    if (vm.axis.format()) {
+                        this.chart.yAxis.tickFormat(vm.axis.format());
                     }
-                    return false;
                 }
 
                 /** 
@@ -88,21 +86,37 @@ module Components {
                         nv.addGraph(this.chart);
                     } 
 
-                    if (this.shouldRenderData()) {
+                    // TODO(mrtracy): Update if axis changes. NVD3 unfortunately
+                    // breaks mithril's assumption that everything is rendering
+                    // after every change, so we need to figure out the best way
+                    // to signal to components like this.
+                    var shouldRender = false;
+                    shouldRender = shouldRender || !context.epoch || context.epoch < this.vm.query.epoch();
+
+                    if (shouldRender) {
+                        this.chart.showLegend(this.vm.axis.selectors().length > 1);
                         var formattedData = []
                         // The result() property will be empty if an error
                         // occured. For now, we will just display the "No Data"
                         // message until we decided on the proper way to display
                         // error messages.
-                        if (this.vm.query.result()) {
-                            formattedData = this.vm.query.result().results.map((d) => {
-                                return {
-                                    values: d.datapoints,
-                                    key: d.name,
-                                    color: Controller.colors(d.name),
-                                    area:true,
-                                    fillOpacity:.1,
-                                };
+                        var qresult = this.vm.query.result();
+                        if (qresult) {
+                            // Iterate through each selector on the axis,
+                            // allowing each to select the necessary data from
+                            // the result.
+                            this.vm.axis.selectors().forEach((s:Models.Metrics.select.Selector) => {
+                                var key = Models.Metrics.QueryInfoKey(s.request());
+                                var result = qresult.get(key);
+                                if (result) {
+                                    formattedData.push({
+                                        values: result.datapoints,
+                                        key: s.title(),
+                                        color: Controller.colors(s.series()),
+                                        area:true,
+                                        fillOpacity:.1,
+                                    });
+                                }
                             });
                         }
                         d3.select(element)
@@ -110,6 +124,8 @@ module Components {
                         .transition().duration(500)
                             .call(this.chart);
                     }
+
+                    context.epoch = this.vm.query.epoch();
                 }
             }
 
@@ -134,8 +150,8 @@ module Components {
              *
              * @param key The key param is used by mithril to track objects in lists which can be rearranged.
              */
-            export function create(query:Utils.QueryCache<Models.Proto.QueryResultSet>, key?:number){
-                var vm:ViewModel = {lastEpoch:0, query:query}
+            export function create(query:Models.Metrics.Executor, axis:Models.Metrics.Axis, key?:number){
+                var vm:ViewModel = {query:query, axis:axis}
                 if (key) {
                     vm.key = key;
                 }

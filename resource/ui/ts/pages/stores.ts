@@ -17,11 +17,6 @@ module AdminViews {
         import metrics = Models.Metrics;
         var storeStatuses = new Models.Status.Stores();
 
-        interface QueryHolder {
-            Result: Utils.QueryCache<Models.Proto.QueryResultSet>;
-            Query: metrics.Query;
-        }
-
         function _storeMetric(storeId: string, metric:string):string {
             return "cr.store." + metric + "." + storeId;
         }
@@ -78,48 +73,71 @@ module AdminViews {
          */
         export module StorePage {
             class Controller {
-                charts: QueryHolder[] = [];
+                exec:metrics.Executor;
+                axes: metrics.Axis[] = [];
+                private _query:metrics.Query;
                 private static _queryEveryMS = 10000;
                 private _interval: number;
                 private _storeId: string;
 
                 private _refresh():void {
                     storeStatuses.refresh();
-                    for (var i = 0; i < this.charts.length; i++) {
-                        this.charts[i].Result.refresh();
-                    }
+                    this.exec.refresh();
                 }
 
-                private _addChart(q:metrics.Query):void {
-                    this.charts.push({
-                        Query: q, 
-                        Result: new Utils.QueryCache(q.execute),
-                    });
+                private _addChart(axis:metrics.Axis):void {
+                    axis.selectors().forEach((s) => this._query.selectors().push(s));
+                    this.axes.push(axis);
                 }
 
                 public constructor(storeId:string) {
                     this._storeId = storeId;
+                    this._query = metrics.NewQuery();
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.Avg(_storeMetric(storeId, "keycount")))
-                        .title("Key Count"));
+                        metrics.NewAxis(
+                            metrics.select.Avg(_storeMetric(storeId, "keycount")) 
+                                .title("Key Count")
+                        )
+                        .label("Count")
+                    );
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.Avg(_storeMetric(storeId, "valcount")))
-                        .title("Value Count"));
+                        metrics.NewAxis(
+                            metrics.select.Avg(_storeMetric(storeId, "livecount"))
+                                .title("Live Value Count")
+                        )
+                        .label("Count")
+                    );
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.Avg(_storeMetric(storeId, "livecount")))
-                        .title("Live Value Count"));
+                        metrics.NewAxis(
+                            metrics.select.Avg(_storeMetric(storeId, "valcount"))
+                                .title("Total Value Count")
+                        )
+                        .label("Count")
+                    );
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.Avg(_storeMetric(storeId, "intentcount")))
-                        .title("Intent Count"));
+                        metrics.NewAxis(
+                            metrics.select.Avg(_storeMetric(storeId, "intentcount"))
+                                .title("Intent Count")
+                        )
+                        .label("Count")
+                    );
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.Avg(_storeMetric(storeId, "ranges")))
-                        .title("Range Count"));
+                        metrics.NewAxis(
+                            metrics.select.Avg(_storeMetric(storeId, "ranges"))
+                                .title("Range Count")
+                        )
+                        .label("Count")
+                    );
+                    this._addChart(
+                        metrics.NewAxis(
+                            metrics.select.Avg(_storeMetric(storeId, "livebytes"))
+                                .title("Live Bytes")
+                        )
+                        .label("Bytes")
+                        .format(Utils.Format.Bytes)
+                    );
 
+                    this.exec = new metrics.Executor(this._query);
                     this._refresh();
                     this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
                 }
@@ -142,10 +160,10 @@ module AdminViews {
                         m("h3", "Store: " + storeId),
                         storeStatuses.Details(storeId)
                     ]),
-                    m(".charts", ctrl.charts.map((chart:QueryHolder) => {
+                    m(".charts", ctrl.axes.map((axis:metrics.Axis) => {
                         return m("", { style: "float:left" },  [
-                            m("h4", chart.Query.title()),
-                            Components.Metrics.LineGraph.create(chart.Result)
+                            m("h4", axis.title()),
+                            Components.Metrics.LineGraph.create(ctrl.exec, axis)
                         ]);
                     }))
                 ]);

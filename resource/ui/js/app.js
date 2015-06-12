@@ -43,9 +43,6 @@ var Utils;
                 this._outstanding.result.then(null, this._outstanding.error);
             }
         };
-        QueryCache.prototype.setQuery = function (q) {
-            this._query = q;
-        };
         QueryCache.prototype.hasData = function () {
             this.processOutstanding();
             return this._epoch > 0;
@@ -193,11 +190,40 @@ var Utils;
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/convert.ts" />
 /// <reference path="../util/http.ts" />
+/// <reference path="../util/querycache.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
+var __extends = this.__extends || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+    function __() { this.constructor = d; }
+    __.prototype = b.prototype;
+    d.prototype = new __();
+};
 var Models;
 (function (Models) {
     var Metrics;
     (function (Metrics) {
+        function QueryInfoKey(qi) {
+            return Models.Proto.QueryAggregator[qi.aggregator] + ":" + qi.name;
+        }
+        Metrics.QueryInfoKey = QueryInfoKey;
+        var QueryInfoSet = (function () {
+            function QueryInfoSet() {
+                this._set = {};
+            }
+            QueryInfoSet.prototype.add = function (qi) {
+                var key = QueryInfoKey(qi);
+                this._set[key] = qi;
+            };
+            QueryInfoSet.prototype.get = function (key) {
+                return this._set[key];
+            };
+            QueryInfoSet.prototype.forEach = function (fn) {
+                for (var k in this._set) {
+                    fn(this._set[k]);
+                }
+            };
+            return QueryInfoSet;
+        })();
         var select;
         (function (select) {
             var AvgSelector = (function () {
@@ -205,6 +231,7 @@ var Models;
                     var _this = this;
                     this.series_name = series_name;
                     this.title = Utils.chainProp(this, this.series_name);
+                    this.series = function () { return _this.series_name; };
                     this.request = function () {
                         return {
                             name: _this.series_name,
@@ -219,6 +246,7 @@ var Models;
                     var _this = this;
                     this.series_name = series_name;
                     this.title = Utils.chainProp(this, this.series_name);
+                    this.series = function () { return _this.series_name; };
                     this.request = function () {
                         return {
                             name: _this.series_name,
@@ -250,12 +278,36 @@ var Models;
             }
             time.Recent = Recent;
         })(time = Metrics.time || (Metrics.time = {}));
+        var Axis = (function () {
+            function Axis() {
+                this.label = Utils.chainProp(this, null);
+                this.format = Utils.chainProp(this, null);
+                this.selectors = Utils.chainProp(this, []);
+            }
+            Axis.prototype.title = function () {
+                var selectors = this.selectors();
+                if (selectors.length == 0) {
+                    return "No series selected.";
+                }
+                return selectors.map(function (s) { return s.title(); }).join(" vs. ");
+            };
+            return Axis;
+        })();
+        Metrics.Axis = Axis;
+        function NewAxis() {
+            var selectors = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                selectors[_i - 0] = arguments[_i];
+            }
+            return new Axis().selectors(selectors);
+        }
+        Metrics.NewAxis = NewAxis;
         var Query = (function () {
-            function Query(_selectors) {
+            function Query() {
                 var _this = this;
-                this._selectors = _selectors;
                 this.timespan = Utils.chainProp(this, time.Recent(10 * 60 * 1000));
                 this.title = Utils.chainProp(this, "Query Title");
+                this.selectors = Utils.chainProp(this, []);
                 this.execute = function () {
                     var s = _this.timespan().timespan();
                     var req = {
@@ -263,9 +315,13 @@ var Models;
                         end_nanos: Utils.Convert.MilliToNano(s[1]),
                         queries: [],
                     };
-                    for (var i = 0; i < _this._selectors.length; i++) {
-                        req.queries.push(_this._selectors[i].request());
-                    }
+                    var requestSet = new QueryInfoSet();
+                    _this.selectors().forEach(function (s) {
+                        requestSet.add(s.request());
+                    });
+                    requestSet.forEach(function (qr) {
+                        req.queries.push(qr);
+                    });
                     return Query.dispatch_query(req);
                 };
             }
@@ -275,12 +331,14 @@ var Models;
                     if (!d.results) {
                         d.results = [];
                     }
+                    var result = new QueryInfoSet();
                     d.results.forEach(function (r) {
                         if (!r.datapoints) {
                             r.datapoints = [];
                         }
+                        result.add(r);
                     });
-                    return d;
+                    return result;
                 });
             };
             return Query;
@@ -291,9 +349,22 @@ var Models;
             for (var _i = 0; _i < arguments.length; _i++) {
                 selectors[_i - 0] = arguments[_i];
             }
-            return new Query(selectors);
+            return new Query().selectors(selectors);
         }
         Metrics.NewQuery = NewQuery;
+        var Executor = (function (_super) {
+            __extends(Executor, _super);
+            function Executor(q) {
+                var _this = this;
+                _super.call(this, q.execute);
+                this.query = function () {
+                    return _this._metricquery;
+                };
+                this._metricquery = q;
+            }
+            return Executor;
+        })(Utils.QueryCache);
+        Metrics.Executor = Executor;
     })(Metrics = Models.Metrics || (Models.Metrics = {}));
 })(Models || (Models = {}));
 // source: components/metrics.ts
@@ -323,17 +394,25 @@ var Components;
                         if (!isInitialized) {
                             nv.addGraph(_this.chart);
                         }
-                        if (_this.shouldRenderData()) {
+                        var shouldRender = false;
+                        shouldRender = shouldRender || !context.epoch || context.epoch < _this.vm.query.epoch();
+                        if (shouldRender) {
+                            _this.chart.showLegend(_this.vm.axis.selectors().length > 1);
                             var formattedData = [];
-                            if (_this.vm.query.result()) {
-                                formattedData = _this.vm.query.result().results.map(function (d) {
-                                    return {
-                                        values: d.datapoints,
-                                        key: d.name,
-                                        color: Controller.colors(d.name),
-                                        area: true,
-                                        fillOpacity: .1,
-                                    };
+                            var qresult = _this.vm.query.result();
+                            if (qresult) {
+                                _this.vm.axis.selectors().forEach(function (s) {
+                                    var key = Models.Metrics.QueryInfoKey(s.request());
+                                    var result = qresult.get(key);
+                                    if (result) {
+                                        formattedData.push({
+                                            values: result.datapoints,
+                                            key: s.title(),
+                                            color: Controller.colors(s.series()),
+                                            area: true,
+                                            fillOpacity: .1,
+                                        });
+                                    }
                                 });
                             }
                             d3.select(element)
@@ -341,19 +420,18 @@ var Components;
                                 .transition().duration(500)
                                 .call(_this.chart);
                         }
+                        context.epoch = _this.vm.query.epoch();
                     };
                     this.chart.xAxis
                         .tickFormat(d3.time.format('%I:%M:%S'))
                         .showMaxMin(false);
-                }
-                Controller.prototype.shouldRenderData = function () {
-                    var epoch = this.vm.query.epoch();
-                    if (epoch > this.vm.lastEpoch) {
-                        this.vm.lastEpoch = epoch;
-                        return true;
+                    this.chart.yAxis
+                        .axisLabel(vm.axis.label())
+                        .showMaxMin(false);
+                    if (vm.axis.format()) {
+                        this.chart.yAxis.tickFormat(vm.axis.format());
                     }
-                    return false;
-                };
+                }
                 Controller.prototype.hasData = function () {
                     return this.vm.query.epoch() > 0;
                 };
@@ -373,8 +451,8 @@ var Components;
                 }
             }
             LineGraph.view = view;
-            function create(query, key) {
-                var vm = { lastEpoch: 0, query: query };
+            function create(query, axis, key) {
+                var vm = { query: query, axis: axis };
                 if (key) {
                     vm.key = key;
                 }
@@ -400,21 +478,30 @@ var AdminViews;
                 function Controller() {
                     var _this = this;
                     this.timespan = metrics.time.Recent(10 * 60 * 1000);
-                    this.sumquery = metrics.NewQuery(metrics.select.Avg("cr.node.calls.success.1").title("Successful calls"), metrics.select.Avg("cr.node.calls.error.1").title("Error calls"))
-                        .timespan(this.timespan);
-                    this.ratequery = metrics.NewQuery(metrics.select.AvgRate("cr.node.calls.success.1"))
+                    this.successCount = metrics.select.Avg("cr.node.calls.success.1")
+                        .title("Successful calls");
+                    this.errorCount = metrics.select.Avg("cr.node.calls.error.1")
+                        .title("Error calls");
+                    this.successRate = metrics.select.AvgRate("cr.node.calls.success.1")
+                        .title("Successful call rate");
+                    this.errorRate = metrics.select.AvgRate("cr.node.calls.error.1")
+                        .title("Error call rate");
+                    this.query = metrics.NewQuery(this.successCount, this.errorCount, this.successRate, this.errorRate)
                         .timespan(this.timespan);
                     this.toggleGraph = function () {
                         _this.showRates = !_this.showRates;
                         if (_this.showRates) {
-                            _this.manager.setQuery(_this.ratequery.execute);
+                            _this.axis.selectors([_this.successRate, _this.errorRate])
+                                .label("Count / 10sec");
                         }
                         else {
-                            _this.manager.setQuery(_this.sumquery.execute);
+                            _this.axis.selectors([_this.successCount, _this.errorCount])
+                                .label("Count");
                         }
-                        _this.manager.refresh();
                     };
-                    this.manager = new Utils.QueryCache(this.sumquery.execute);
+                    this.manager = new metrics.Executor(this.query);
+                    this.axis = metrics.NewAxis(this.successCount, this.errorCount)
+                        .label("Count");
                     this.manager.refresh();
                     this.interval = setInterval(function () { return _this.manager.refresh(); }, 10000);
                 }
@@ -437,8 +524,8 @@ var AdminViews;
                 }
                 return m(".graphPage", [
                     m("H3", "Graph Demo"),
-                    Components.Metrics.LineGraph.create(ctrl.manager),
-                    Components.Metrics.LineGraph.create(ctrl.manager),
+                    Components.Metrics.LineGraph.create(ctrl.manager, ctrl.axis),
+                    Components.Metrics.LineGraph.create(ctrl.manager, ctrl.axis),
                     m("", m("input[type=button]", {
                         value: buttonText,
                         onclick: ctrl.toggleGraph,
@@ -453,6 +540,7 @@ var AdminViews;
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
 (function (Utils) {
     var Format;
@@ -491,6 +579,20 @@ var Utils;
         }
         Format.LogEntryMessage = LogEntryMessage;
         ;
+        var kibi = 1024;
+        var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+        function Bytes(bytes) {
+            if (Math.abs(bytes) < kibi) {
+                return bytes + ' B';
+            }
+            var u = -1;
+            do {
+                bytes /= kibi;
+                ++u;
+            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
+            return bytes.toFixed(1) + ' ' + units[u];
+        }
+        Format.Bytes = Bytes;
     })(Format = Utils.Format || (Utils.Format = {}));
 })(Utils || (Utils = {}));
 // source: models/log.ts
@@ -668,25 +770,12 @@ var AdminViews;
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="proto.ts" />
+/// <reference path="../util/format.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
     var Stats;
     (function (Stats) {
-        var kibi = 1024;
-        var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
-        function FormatBytes(bytes) {
-            if (Math.abs(bytes) < kibi) {
-                return bytes + ' B';
-            }
-            var u = -1;
-            do {
-                bytes /= kibi;
-                ++u;
-            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
-            return bytes.toFixed(1) + ' ' + units[u];
-        }
-        Stats.FormatBytes = FormatBytes;
         var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
         var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
         var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
@@ -715,11 +804,11 @@ var Models;
                     ]),
                     m("tr", [
                         m("td", { style: tdStyleEvenFirst }, "Size"),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.key_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.val_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.live_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.intent_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.sys_bytes))
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.key_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.val_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.live_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.intent_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.sys_bytes))
                     ])
                 ])
             ]);
@@ -976,26 +1065,27 @@ var AdminViews;
             var Controller = (function () {
                 function Controller(nodeId) {
                     var _this = this;
-                    this.charts = [];
+                    this.axes = [];
                     this._nodeId = nodeId;
-                    this._addChart(metrics.NewQuery(metrics.select.AvgRate(_nodeMetric(nodeId, "calls.success")))
-                        .title("Successful Calls Rate"));
-                    this._addChart(metrics.NewQuery(metrics.select.AvgRate(_nodeMetric(nodeId, "calls.error")))
-                        .title("Error Calls Rate"));
+                    this._query = metrics.NewQuery();
+                    this._addChart(metrics.NewAxis(metrics.select.AvgRate(_nodeMetric(nodeId, "calls.success"))
+                        .title("Successful Calls"))
+                        .label("Count / 10 sec."));
+                    this._addChart(metrics.NewAxis(metrics.select.AvgRate(_nodeMetric(nodeId, "calls.error"))
+                        .title("Error Calls"))
+                        .label("Count / 10 sec."));
+                    this.exec = new metrics.Executor(this._query);
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
-                    for (var i = 0; i < this.charts.length; i++) {
-                        this.charts[i].Result.refresh();
-                    }
+                    this.exec.refresh();
                 };
-                Controller.prototype._addChart = function (q) {
-                    this.charts.push({
-                        Query: q,
-                        Result: new Utils.QueryCache(q.execute),
-                    });
+                Controller.prototype._addChart = function (axis) {
+                    var _this = this;
+                    axis.selectors().forEach(function (s) { return _this._query.selectors().push(s); });
+                    this.axes.push(axis);
                 };
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
@@ -1016,10 +1106,10 @@ var AdminViews;
                         m("h3", "Node: " + nodeId),
                         nodeStatuses.Details(nodeId)
                     ]),
-                    m(".charts", ctrl.charts.map(function (chart) {
+                    m(".charts", ctrl.axes.map(function (axis) {
                         return m("", { style: "float:left" }, [
-                            m("h4", chart.Query.title()),
-                            Components.Metrics.LineGraph.create(chart.Result)
+                            m("h4", axis.title()),
+                            Components.Metrics.LineGraph.create(ctrl.exec, axis)
                         ]);
                     }))
                 ]);
@@ -1087,32 +1177,40 @@ var AdminViews;
             var Controller = (function () {
                 function Controller(storeId) {
                     var _this = this;
-                    this.charts = [];
+                    this.axes = [];
                     this._storeId = storeId;
-                    this._addChart(metrics.NewQuery(metrics.select.Avg(_storeMetric(storeId, "keycount")))
-                        .title("Key Count"));
-                    this._addChart(metrics.NewQuery(metrics.select.Avg(_storeMetric(storeId, "valcount")))
-                        .title("Value Count"));
-                    this._addChart(metrics.NewQuery(metrics.select.Avg(_storeMetric(storeId, "livecount")))
-                        .title("Live Value Count"));
-                    this._addChart(metrics.NewQuery(metrics.select.Avg(_storeMetric(storeId, "intentcount")))
-                        .title("Intent Count"));
-                    this._addChart(metrics.NewQuery(metrics.select.Avg(_storeMetric(storeId, "ranges")))
-                        .title("Range Count"));
+                    this._query = metrics.NewQuery();
+                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "keycount"))
+                        .title("Key Count"))
+                        .label("Count"));
+                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "livecount"))
+                        .title("Live Value Count"))
+                        .label("Count"));
+                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "valcount"))
+                        .title("Total Value Count"))
+                        .label("Count"));
+                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "intentcount"))
+                        .title("Intent Count"))
+                        .label("Count"));
+                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "ranges"))
+                        .title("Range Count"))
+                        .label("Count"));
+                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "livebytes"))
+                        .title("Live Bytes"))
+                        .label("Bytes")
+                        .format(Utils.Format.Bytes));
+                    this.exec = new metrics.Executor(this._query);
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
-                    for (var i = 0; i < this.charts.length; i++) {
-                        this.charts[i].Result.refresh();
-                    }
+                    this.exec.refresh();
                 };
-                Controller.prototype._addChart = function (q) {
-                    this.charts.push({
-                        Query: q,
-                        Result: new Utils.QueryCache(q.execute),
-                    });
+                Controller.prototype._addChart = function (axis) {
+                    var _this = this;
+                    axis.selectors().forEach(function (s) { return _this._query.selectors().push(s); });
+                    this.axes.push(axis);
                 };
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
@@ -1133,10 +1231,10 @@ var AdminViews;
                         m("h3", "Store: " + storeId),
                         storeStatuses.Details(storeId)
                     ]),
-                    m(".charts", ctrl.charts.map(function (chart) {
+                    m(".charts", ctrl.axes.map(function (axis) {
                         return m("", { style: "float:left" }, [
-                            m("h4", chart.Query.title()),
-                            Components.Metrics.LineGraph.create(chart.Result)
+                            m("h4", axis.title()),
+                            Components.Metrics.LineGraph.create(ctrl.exec, axis)
                         ]);
                     }))
                 ]);
