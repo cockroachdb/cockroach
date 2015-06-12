@@ -110,16 +110,16 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	_, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext)
-	if err == nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext); err != nil {
+		retryErr, ok := err.(util.Retryable)
+		if !ok {
+			t.Fatalf("Unexpected error type: %v", err)
+		}
+		if !retryErr.CanRetry() {
+			t.Errorf("Expected retryable error: %v", retryErr)
+		}
+	} else {
 		t.Fatalf("Unexpected success")
-	}
-	retryErr, ok := err.(util.Retryable)
-	if !ok {
-		t.Fatalf("Unexpected error type: %v", err)
-	}
-	if !retryErr.CanRetry() {
-		t.Errorf("Expected retryable error: %v", retryErr)
 	}
 }
 
@@ -168,17 +168,18 @@ func TestClientNotReady(t *testing.T) {
 		SendNextTimeout: 1 * time.Nanosecond,
 		Timeout:         1 * time.Nanosecond,
 	}
+
 	// Send RPC to an address where no server is running.
-	_, err := sendPing(opts, []net.Addr{addr}, rpcContext)
-	if err == nil {
+	if _, err := sendPing(opts, []net.Addr{addr}, rpcContext); err != nil {
+		retryErr, ok := err.(util.Retryable)
+		if !ok {
+			t.Fatalf("Unexpected error type: %v", err)
+		}
+		if !retryErr.CanRetry() {
+			t.Errorf("Expected retryable error: %v", retryErr)
+		}
+	} else {
 		t.Fatalf("Unexpected success")
-	}
-	retryErr, ok := err.(util.Retryable)
-	if !ok {
-		t.Fatalf("Unexpected error type: %v", err)
-	}
-	if !retryErr.CanRetry() {
-		t.Errorf("Expected retryable error: %v", retryErr)
 	}
 
 	// Send the RPC again with no timeout.
