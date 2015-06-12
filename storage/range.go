@@ -775,14 +775,13 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 		err := r.applyRaftCommand(cmd.ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, cmd.Reply)
 		cmd.done <- err
 		return err
-	} else {
-		// This command originated elsewhere so we must create a new reply buffer.
-		err := r.applyRaftCommand(r.context(), index, proto.RaftNodeID(raftCmd.OriginNodeID), args, args.CreateReply())
-		if err != nil && log.V(1) {
-			log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
-		}
-		return err
 	}
+	// This command originated elsewhere so we must create a new reply buffer.
+	err := r.applyRaftCommand(r.context(), index, proto.RaftNodeID(raftCmd.OriginNodeID), args, args.CreateReply())
+	if err != nil && log.V(1) {
+		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
+	}
+	return err
 }
 
 // applyRaftCommand applies a raft command from the replicated log to
