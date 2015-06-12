@@ -18,7 +18,7 @@ module Models {
         import promise = _mithril.MithrilPromise;
 
         /**
-         * select contains time series selectors for use in metrics queries. 
+         * select contains time series selectors for use in metrics queries.
          * Each selector defines a dataset on the server which should be
          * queried, along with additional information about how to process the
          * data (e.g. aggregation functions, transformations) and displayed (e.g.
@@ -152,8 +152,8 @@ module Models {
             execute = ():promise<Proto.QueryResultSet> => {
                 var s = this.timespan().timespan();
                 var req:Proto.QueryRequestSet = {
-                    start_nanos: Utils.milliToNanos(s[0]),
-                    end_nanos: Utils.milliToNanos(s[1]),
+                    start_nanos: Utils.Convert.MilliToNanos(s[0]),
+                    end_nanos: Utils.Convert.MilliToNanos(s[1]),
                     queries:[],
                 }
                 for (var i = 0; i < this._selectors.length; i++) {

@@ -1,7 +1,7 @@
 {
     "version": "1.4.1",
     "compilerOptions": {
-        "target": "es5",
+        "target": "ES5",
         "module": "commonjs",
         "declaration": false,
         "noImplicitAny": false,
@@ -14,15 +14,24 @@
     "files": [
         "./header.ts",
         "./app.ts",
-        "./util/chainprop.ts",
-        "./models/proto.ts",
-        "./models/status.ts",
-        "./models/stats.ts",
-        "./models/timeseries.ts",
+
         "./components/metrics.ts",
+
+        "./models/log.ts",
+        "./models/proto.ts",
+        "./models/stats.ts",
+        "./models/status.ts",
+        "./models/timeseries.ts",
+
         "./pages/graph.ts",
+        "./pages/log.ts",
+        "./pages/monitor.ts",
         "./pages/nodes.ts",
         "./pages/stores.ts",
-        "./pages/monitor.ts"
+
+        "./util/chainprop.ts",
+        "./util/convert.ts",
+        "./util/format.ts",
+        "./util/querycache.ts"
     ]
 }

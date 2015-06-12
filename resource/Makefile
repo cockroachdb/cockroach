@@ -42,7 +42,7 @@ debug: $(GOBINDATA_DEBUG_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 $(TYPESCRIPT_TARGET): $(shell find ui/ts)
-	tsc -p $^
+	tsc -p ui/ts
 
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg resource -o $@ $^
