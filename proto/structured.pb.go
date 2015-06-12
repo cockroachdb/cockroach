@@ -297,6 +297,710 @@ func (m *CreateTableResponse) GetTableId() uint32 {
 	return 0
 }
 
+// TableRequestHeader is supplied with every structured API request.
+type TableRequestHeader struct {
+	// The name of the table this request references.
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	// The name of the index. Defaults to the primary index when empty.
+	Index string `protobuf:"bytes,2,opt,name=index" json:"index"`
+	// Timestamp specifies time at which read or writes should be
+	// performed. If the timestamp is set to zero value, its value
+	// is initialized to the wall time of the receiving gateway node.
+	Timestamp Timestamp `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
+	// CmdID is optionally specified for request idempotence
+	// (i.e. replay protection).
+	CmdID ClientCmdID `protobuf:"bytes,4,opt,name=cmd_id" json:"cmd_id"`
+	// User is the originating user. Used to lookup priority when
+	// scheduling queued operations at target node.
+	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
+	// UserPriority specifies priority multiple for non-transactional
+	// commands. This value should be a positive integer [1, 2^31-1).
+	// It's properly viewed as a multiple for how likely this
+	// transaction will be to prevail if a write conflict occurs.
+	// Commands with UserPriority=100 will be 100x less likely to be
+	// aborted as conflicting transactions or non-transactional commands
+	// with UserPriority=1. This value is ignored if Txn is
+	// specified. If neither this value nor Txn is specified, the value
+	// defaults to 1.
+	UserPriority *int32 `protobuf:"varint,6,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
+	// Txn is set non-nil if a transaction is underway. To start a txn,
+	// the first request should set this field to non-nil with name and
+	// isolation level set as desired. The response will contain the
+	// fully-initialized transaction with txn ID, priority, initial
+	// timestamp, and maximum timestamp. The transaction returned in a
+	// response is feed to the next request.
+	Txn *Transaction `protobuf:"bytes,7,opt,name=txn" json:"txn,omitempty"`
+	// ReadConsistency specifies the consistency for read
+	// operations. The default is CONSISTENT. This value is ignored for
+	// write operations.
+	ReadConsistency  ReadConsistencyType `protobuf:"varint,8,opt,name=read_consistency,enum=cockroach.proto.ReadConsistencyType" json:"read_consistency"`
+	XXX_unrecognized []byte              `json:"-"`
+}
+
+func (m *TableRequestHeader) Reset()         { *m = TableRequestHeader{} }
+func (m *TableRequestHeader) String() string { return proto1.CompactTextString(m) }
+func (*TableRequestHeader) ProtoMessage()    {}
+
+const Default_TableRequestHeader_UserPriority int32 = 1
+
+func (m *TableRequestHeader) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *TableRequestHeader) GetIndex() string {
+	if m != nil {
+		return m.Index
+	}
+	return ""
+}
+
+func (m *TableRequestHeader) GetTimestamp() Timestamp {
+	if m != nil {
+		return m.Timestamp
+	}
+	return Timestamp{}
+}
+
+func (m *TableRequestHeader) GetCmdID() ClientCmdID {
+	if m != nil {
+		return m.CmdID
+	}
+	return ClientCmdID{}
+}
+
+func (m *TableRequestHeader) GetUser() string {
+	if m != nil {
+		return m.User
+	}
+	return ""
+}
+
+func (m *TableRequestHeader) GetUserPriority() int32 {
+	if m != nil && m.UserPriority != nil {
+		return *m.UserPriority
+	}
+	return Default_TableRequestHeader_UserPriority
+}
+
+func (m *TableRequestHeader) GetTxn() *Transaction {
+	if m != nil {
+		return m.Txn
+	}
+	return nil
+}
+
+func (m *TableRequestHeader) GetReadConsistency() ReadConsistencyType {
+	if m != nil {
+		return m.ReadConsistency
+	}
+	return CONSISTENT
+}
+
+// TableResponseHeader is returned with every structured API response.
+type TableResponseHeader struct {
+	// Error is non-nil if an error occurred.
+	Error *Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	// Timestamp specifies time at which read or write actually was
+	// performed. In the case of both reads and writes, if the timestamp
+	// supplied to the request was 0, the wall time of the node
+	// servicing the request will be set here. Additionally, in the case
+	// of writes, this value may be increased from the timestamp passed
+	// with the RequestHeader if the key being written was either read
+	// or written more recently.
+	//
+	// TODO(vivek): Is this only relevant in the non-transactional case?
+	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	// Transaction is non-nil if the request specified a non-nil
+	// transaction. The transaction timestamp and/or priority may have
+	// been updated, depending on the outcome of the request.
+	Txn              *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+	XXX_unrecognized []byte       `json:"-"`
+}
+
+func (m *TableResponseHeader) Reset()         { *m = TableResponseHeader{} }
+func (m *TableResponseHeader) String() string { return proto1.CompactTextString(m) }
+func (*TableResponseHeader) ProtoMessage()    {}
+
+func (m *TableResponseHeader) GetError() *Error {
+	if m != nil {
+		return m.Error
+	}
+	return nil
+}
+
+func (m *TableResponseHeader) GetTimestamp() Timestamp {
+	if m != nil {
+		return m.Timestamp
+	}
+	return Timestamp{}
+}
+
+func (m *TableResponseHeader) GetTxn() *Transaction {
+	if m != nil {
+		return m.Txn
+	}
+	return nil
+}
+
+// A ColumnCollection represents a collection of columns as name:value pairs.
+type ColumnCollection struct {
+	Columns          []*ColumnCollection_ColumnNameValue `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
+	XXX_unrecognized []byte                              `json:"-"`
+}
+
+func (m *ColumnCollection) Reset()         { *m = ColumnCollection{} }
+func (m *ColumnCollection) String() string { return proto1.CompactTextString(m) }
+func (*ColumnCollection) ProtoMessage()    {}
+
+func (m *ColumnCollection) GetColumns() []*ColumnCollection_ColumnNameValue {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+type ColumnCollection_ColumnNameValue struct {
+	// Column name.
+	Name *string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	// A Nil Value indicates non-existence of the value.
+	Value            *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *ColumnCollection_ColumnNameValue) Reset()         { *m = ColumnCollection_ColumnNameValue{} }
+func (m *ColumnCollection_ColumnNameValue) String() string { return proto1.CompactTextString(m) }
+func (*ColumnCollection_ColumnNameValue) ProtoMessage()    {}
+
+func (m *ColumnCollection_ColumnNameValue) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+func (m *ColumnCollection_ColumnNameValue) GetValue() *Value {
+	if m != nil {
+		return m.Value
+	}
+	return nil
+}
+
+// A ValueCollection is a collection of values. A non-existent value
+// is to be represented by Nil Bytes.
+type ValueCollection struct {
+	Values           []*Value `protobuf:"bytes,1,rep,name=values" json:"values,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ValueCollection) Reset()         { *m = ValueCollection{} }
+func (m *ValueCollection) String() string { return proto1.CompactTextString(m) }
+func (*ValueCollection) ProtoMessage()    {}
+
+func (m *ValueCollection) GetValues() []*Value {
+	if m != nil {
+		return m.Values
+	}
+	return nil
+}
+
+// A GetTableRowRequest is used to read a table row.
+type GetTableRowRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Key                ColumnCollection `protobuf:"bytes,2,opt,name=key" json:"key"`
+	// Get specified columns from the row.
+	Columns          []string `protobuf:"bytes,3,rep,name=columns" json:"columns,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *GetTableRowRequest) Reset()         { *m = GetTableRowRequest{} }
+func (m *GetTableRowRequest) String() string { return proto1.CompactTextString(m) }
+func (*GetTableRowRequest) ProtoMessage()    {}
+
+func (m *GetTableRowRequest) GetKey() ColumnCollection {
+	if m != nil {
+		return m.Key
+	}
+	return ColumnCollection{}
+}
+
+func (m *GetTableRowRequest) GetColumns() []string {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+// A GetTableRowResponse returns a row.
+// If the key doesn't exist, it returns an empty row.
+type GetTableRowResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Row                 ValueCollection `protobuf:"bytes,2,opt,name=row" json:"row"`
+	XXX_unrecognized    []byte          `json:"-"`
+}
+
+func (m *GetTableRowResponse) Reset()         { *m = GetTableRowResponse{} }
+func (m *GetTableRowResponse) String() string { return proto1.CompactTextString(m) }
+func (*GetTableRowResponse) ProtoMessage()    {}
+
+func (m *GetTableRowResponse) GetRow() ValueCollection {
+	if m != nil {
+		return m.Row
+	}
+	return ValueCollection{}
+}
+
+// A PutTableRowRequest inserts/updates a row in the table. To write
+// an empty value in a cell specify an empty Bytes in the Value. To Delete
+// a column specify Nil Bytes.
+type PutTableRowRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// The columns forming the primary key columns must be part of the ColumnCollection.
+	Row              ColumnCollection `protobuf:"bytes,3,opt,name=row" json:"row"`
+	XXX_unrecognized []byte           `json:"-"`
+}
+
+func (m *PutTableRowRequest) Reset()         { *m = PutTableRowRequest{} }
+func (m *PutTableRowRequest) String() string { return proto1.CompactTextString(m) }
+func (*PutTableRowRequest) ProtoMessage()    {}
+
+func (m *PutTableRowRequest) GetRow() ColumnCollection {
+	if m != nil {
+		return m.Row
+	}
+	return ColumnCollection{}
+}
+
+// A PutTableRowResponse is the response.
+type PutTableRowResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	XXX_unrecognized    []byte `json:"-"`
+}
+
+func (m *PutTableRowResponse) Reset()         { *m = PutTableRowResponse{} }
+func (m *PutTableRowResponse) String() string { return proto1.CompactTextString(m) }
+func (*PutTableRowResponse) ProtoMessage()    {}
+
+// A ConditionalPutTableRowRequest.
+//
+// Puts row if exp_row equals an existing row in the DB. Returns error
+// and the actual value of the row in the response if exp_row doesn't
+// match the full row in the DB. Both exp_row and row are not allowed
+// to contain any of the primary key columns.
+type ConditionalPutTableRowRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Key                ColumnCollection `protobuf:"bytes,2,opt,name=key" json:"key"`
+	ExpRow             ColumnCollection `protobuf:"bytes,3,opt,name=exp_row" json:"exp_row"`
+	Row                ColumnCollection `protobuf:"bytes,4,opt,name=row" json:"row"`
+	XXX_unrecognized   []byte           `json:"-"`
+}
+
+func (m *ConditionalPutTableRowRequest) Reset()         { *m = ConditionalPutTableRowRequest{} }
+func (m *ConditionalPutTableRowRequest) String() string { return proto1.CompactTextString(m) }
+func (*ConditionalPutTableRowRequest) ProtoMessage()    {}
+
+func (m *ConditionalPutTableRowRequest) GetKey() ColumnCollection {
+	if m != nil {
+		return m.Key
+	}
+	return ColumnCollection{}
+}
+
+func (m *ConditionalPutTableRowRequest) GetExpRow() ColumnCollection {
+	if m != nil {
+		return m.ExpRow
+	}
+	return ColumnCollection{}
+}
+
+func (m *ConditionalPutTableRowRequest) GetRow() ColumnCollection {
+	if m != nil {
+		return m.Row
+	}
+	return ColumnCollection{}
+}
+
+// A ConditionalPutTableRowResponse. The row returned is the actual row in
+// the DB that doesn't full match exp_row in the request. Only the columns
+// forming the index key match up with those in exp_row.
+type ConditionalPutTableRowResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Row                 ValueCollection `protobuf:"bytes,2,opt,name=row" json:"row"`
+	XXX_unrecognized    []byte          `json:"-"`
+}
+
+func (m *ConditionalPutTableRowResponse) Reset()         { *m = ConditionalPutTableRowResponse{} }
+func (m *ConditionalPutTableRowResponse) String() string { return proto1.CompactTextString(m) }
+func (*ConditionalPutTableRowResponse) ProtoMessage()    {}
+
+func (m *ConditionalPutTableRowResponse) GetRow() ValueCollection {
+	if m != nil {
+		return m.Row
+	}
+	return ValueCollection{}
+}
+
+// An IncrementTableRequest increments the value of the columns in row.
+// row can only contain the columns forming the index key and columns
+// of type integer. Incrementing by 0 is not a noop, and creates a zero value.
+type IncrementTableRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Row                ColumnCollection `protobuf:"bytes,2,opt,name=row" json:"row"`
+	XXX_unrecognized   []byte           `json:"-"`
+}
+
+func (m *IncrementTableRequest) Reset()         { *m = IncrementTableRequest{} }
+func (m *IncrementTableRequest) String() string { return proto1.CompactTextString(m) }
+func (*IncrementTableRequest) ProtoMessage()    {}
+
+func (m *IncrementTableRequest) GetRow() ColumnCollection {
+	if m != nil {
+		return m.Row
+	}
+	return ColumnCollection{}
+}
+
+// An IncrementTableResponse returns the row with the new column values.
+type IncrementTableResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Row                 ValueCollection `protobuf:"bytes,2,opt,name=row" json:"row"`
+	XXX_unrecognized    []byte          `json:"-"`
+}
+
+func (m *IncrementTableResponse) Reset()         { *m = IncrementTableResponse{} }
+func (m *IncrementTableResponse) String() string { return proto1.CompactTextString(m) }
+func (*IncrementTableResponse) ProtoMessage()    {}
+
+func (m *IncrementTableResponse) GetRow() ValueCollection {
+	if m != nil {
+		return m.Row
+	}
+	return ValueCollection{}
+}
+
+// A DeleteTableRowRequest deletes the entire row. key contains the columns
+// forming the index key.
+type DeleteTableRowRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Key                ColumnCollection `protobuf:"bytes,2,opt,name=key" json:"key"`
+	XXX_unrecognized   []byte           `json:"-"`
+}
+
+func (m *DeleteTableRowRequest) Reset()         { *m = DeleteTableRowRequest{} }
+func (m *DeleteTableRowRequest) String() string { return proto1.CompactTextString(m) }
+func (*DeleteTableRowRequest) ProtoMessage()    {}
+
+func (m *DeleteTableRowRequest) GetKey() ColumnCollection {
+	if m != nil {
+		return m.Key
+	}
+	return ColumnCollection{}
+}
+
+// A DeleteTableRowResponse.
+type DeleteTableRowResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	XXX_unrecognized    []byte `json:"-"`
+}
+
+func (m *DeleteTableRowResponse) Reset()         { *m = DeleteTableRowResponse{} }
+func (m *DeleteTableRowResponse) String() string { return proto1.CompactTextString(m) }
+func (*DeleteTableRowResponse) ProtoMessage()    {}
+
+// A DeleteTableRowRangeRequest deletes the specified rows. Both key and end_key
+// must only contain the columns forming the index key.
+type DeleteTableRowRangeRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Delete *all* entries between Key (inclusive) and EndKey
+	// (exclusive).
+	Key    ColumnCollection `protobuf:"bytes,2,opt,name=key" json:"key"`
+	EndKey ColumnCollection `protobuf:"bytes,3,opt,name=end_key" json:"end_key"`
+	// Must be > 0.
+	MaxEntriesToDelete int64  `protobuf:"varint,4,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
+	XXX_unrecognized   []byte `json:"-"`
+}
+
+func (m *DeleteTableRowRangeRequest) Reset()         { *m = DeleteTableRowRangeRequest{} }
+func (m *DeleteTableRowRangeRequest) String() string { return proto1.CompactTextString(m) }
+func (*DeleteTableRowRangeRequest) ProtoMessage()    {}
+
+func (m *DeleteTableRowRangeRequest) GetKey() ColumnCollection {
+	if m != nil {
+		return m.Key
+	}
+	return ColumnCollection{}
+}
+
+func (m *DeleteTableRowRangeRequest) GetEndKey() ColumnCollection {
+	if m != nil {
+		return m.EndKey
+	}
+	return ColumnCollection{}
+}
+
+func (m *DeleteTableRowRangeRequest) GetMaxEntriesToDelete() int64 {
+	if m != nil {
+		return m.MaxEntriesToDelete
+	}
+	return 0
+}
+
+// A DeleteTableRowRangeResponse.
+type DeleteTableRowRangeResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Number of entries deleted.
+	NumDeleted       int64  `protobuf:"varint,2,opt,name=num_deleted" json:"num_deleted"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *DeleteTableRowRangeResponse) Reset()         { *m = DeleteTableRowRangeResponse{} }
+func (m *DeleteTableRowRangeResponse) String() string { return proto1.CompactTextString(m) }
+func (*DeleteTableRowRangeResponse) ProtoMessage()    {}
+
+func (m *DeleteTableRowRangeResponse) GetNumDeleted() int64 {
+	if m != nil {
+		return m.NumDeleted
+	}
+	return 0
+}
+
+// A ScanTableRequest. It specifies the start and end keys for the scan
+// and the maximum number of results.
+type ScanTableRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Both key and end_key must only contain the columns forming the index key.
+	Key        ColumnCollection `protobuf:"bytes,3,opt,name=key" json:"key"`
+	EndKey     ColumnCollection `protobuf:"bytes,4,opt,name=end_key" json:"end_key"`
+	MaxResults int64            `protobuf:"varint,5,opt,name=max_results" json:"max_results"`
+	// Get the specified columns from the scanned rows.
+	Columns          []string `protobuf:"bytes,6,rep,name=columns" json:"columns,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ScanTableRequest) Reset()         { *m = ScanTableRequest{} }
+func (m *ScanTableRequest) String() string { return proto1.CompactTextString(m) }
+func (*ScanTableRequest) ProtoMessage()    {}
+
+func (m *ScanTableRequest) GetKey() ColumnCollection {
+	if m != nil {
+		return m.Key
+	}
+	return ColumnCollection{}
+}
+
+func (m *ScanTableRequest) GetEndKey() ColumnCollection {
+	if m != nil {
+		return m.EndKey
+	}
+	return ColumnCollection{}
+}
+
+func (m *ScanTableRequest) GetMaxResults() int64 {
+	if m != nil {
+		return m.MaxResults
+	}
+	return 0
+}
+
+func (m *ScanTableRequest) GetColumns() []string {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+// A ScanTableResponse is the response.
+type ScanTableResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// Empty in case of error.
+	Rows             []*ValueCollection `protobuf:"bytes,2,rep,name=rows" json:"rows,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
+}
+
+func (m *ScanTableResponse) Reset()         { *m = ScanTableResponse{} }
+func (m *ScanTableResponse) String() string { return proto1.CompactTextString(m) }
+func (*ScanTableResponse) ProtoMessage()    {}
+
+func (m *ScanTableResponse) GetRows() []*ValueCollection {
+	if m != nil {
+		return m.Rows
+	}
+	return nil
+}
+
+// A BatchTableRequest contains one or more requests to be executed in
+// parallel, or if applicable (based on write-only commands and
+// range-locality), as a single update.
+type BatchTableRequest struct {
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Requests           []*BatchTableRequest_TableRequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests,omitempty"`
+	XXX_unrecognized   []byte                                 `json:"-"`
+}
+
+func (m *BatchTableRequest) Reset()         { *m = BatchTableRequest{} }
+func (m *BatchTableRequest) String() string { return proto1.CompactTextString(m) }
+func (*BatchTableRequest) ProtoMessage()    {}
+
+func (m *BatchTableRequest) GetRequests() []*BatchTableRequest_TableRequestUnion {
+	if m != nil {
+		return m.Requests
+	}
+	return nil
+}
+
+// A TableRequestUnion contains exactly one of the optional requests.
+type BatchTableRequest_TableRequestUnion struct {
+	Get              *GetTableRowRequest            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
+	Put              *PutTableRowRequest            `protobuf:"bytes,3,opt,name=put" json:"put,omitempty"`
+	ConditionalPut   *ConditionalPutTableRowRequest `protobuf:"bytes,4,opt,name=conditional_put" json:"conditional_put,omitempty"`
+	Delete           *DeleteTableRowRequest         `protobuf:"bytes,6,opt,name=delete" json:"delete,omitempty"`
+	DeleteRange      *DeleteTableRowRangeRequest    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
+	Scan             *ScanTableRequest              `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
+	EndTransaction   *EndTransactionRequest         `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
+	XXX_unrecognized []byte                         `json:"-"`
+}
+
+func (m *BatchTableRequest_TableRequestUnion) Reset()         { *m = BatchTableRequest_TableRequestUnion{} }
+func (m *BatchTableRequest_TableRequestUnion) String() string { return proto1.CompactTextString(m) }
+func (*BatchTableRequest_TableRequestUnion) ProtoMessage()    {}
+
+func (m *BatchTableRequest_TableRequestUnion) GetGet() *GetTableRowRequest {
+	if m != nil {
+		return m.Get
+	}
+	return nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) GetPut() *PutTableRowRequest {
+	if m != nil {
+		return m.Put
+	}
+	return nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) GetConditionalPut() *ConditionalPutTableRowRequest {
+	if m != nil {
+		return m.ConditionalPut
+	}
+	return nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) GetDelete() *DeleteTableRowRequest {
+	if m != nil {
+		return m.Delete
+	}
+	return nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) GetDeleteRange() *DeleteTableRowRangeRequest {
+	if m != nil {
+		return m.DeleteRange
+	}
+	return nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) GetScan() *ScanTableRequest {
+	if m != nil {
+		return m.Scan
+	}
+	return nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) GetEndTransaction() *EndTransactionRequest {
+	if m != nil {
+		return m.EndTransaction
+	}
+	return nil
+}
+
+// A BatchTableResponse contains one or more responses, one per request
+// corresponding to the requests in the matching BatchRequest. The
+// error in the response header is set to the first error from the
+// slice of responses, if applicable.
+type BatchTableResponse struct {
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Responses           []*BatchTableResponse_TableResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses,omitempty"`
+	XXX_unrecognized    []byte                                   `json:"-"`
+}
+
+func (m *BatchTableResponse) Reset()         { *m = BatchTableResponse{} }
+func (m *BatchTableResponse) String() string { return proto1.CompactTextString(m) }
+func (*BatchTableResponse) ProtoMessage()    {}
+
+func (m *BatchTableResponse) GetResponses() []*BatchTableResponse_TableResponseUnion {
+	if m != nil {
+		return m.Responses
+	}
+	return nil
+}
+
+// A TableResponseUnion contains exactly one of the optional responses.
+type BatchTableResponse_TableResponseUnion struct {
+	Get              *GetTableRowResponse            `protobuf:"bytes,2,opt,name=get" json:"get,omitempty"`
+	Put              *PutTableRowResponse            `protobuf:"bytes,3,opt,name=put" json:"put,omitempty"`
+	ConditionalPut   *ConditionalPutTableRowResponse `protobuf:"bytes,4,opt,name=conditional_put" json:"conditional_put,omitempty"`
+	Delete           *DeleteTableRowResponse         `protobuf:"bytes,6,opt,name=delete" json:"delete,omitempty"`
+	DeleteRange      *DeleteTableRowRangeResponse    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
+	Scan             *ScanTableResponse              `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
+	EndTransaction   *EndTransactionResponse         `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
+	XXX_unrecognized []byte                          `json:"-"`
+}
+
+func (m *BatchTableResponse_TableResponseUnion) Reset()         { *m = BatchTableResponse_TableResponseUnion{} }
+func (m *BatchTableResponse_TableResponseUnion) String() string { return proto1.CompactTextString(m) }
+func (*BatchTableResponse_TableResponseUnion) ProtoMessage()    {}
+
+func (m *BatchTableResponse_TableResponseUnion) GetGet() *GetTableRowResponse {
+	if m != nil {
+		return m.Get
+	}
+	return nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) GetPut() *PutTableRowResponse {
+	if m != nil {
+		return m.Put
+	}
+	return nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) GetConditionalPut() *ConditionalPutTableRowResponse {
+	if m != nil {
+		return m.ConditionalPut
+	}
+	return nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) GetDelete() *DeleteTableRowResponse {
+	if m != nil {
+		return m.Delete
+	}
+	return nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) GetDeleteRange() *DeleteTableRowRangeResponse {
+	if m != nil {
+		return m.DeleteRange
+	}
+	return nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) GetScan() *ScanTableResponse {
+	if m != nil {
+		return m.Scan
+	}
+	return nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) GetEndTransaction() *EndTransactionResponse {
+	if m != nil {
+		return m.EndTransaction
+	}
+	return nil
+}
+
 func init() {
 	proto1.RegisterEnum("cockroach.proto.Column_ColumnType", Column_ColumnType_name, Column_ColumnType_value)
 }
@@ -1249,6 +1953,2700 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *TableRequestHeader) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[index:postIndex])
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Index = string(data[index:postIndex])
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CmdID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CmdID.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.User = string(data[index:postIndex])
+			index = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
+			}
+			var v int32
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				v |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.UserPriority = &v
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Txn == nil {
+				m.Txn = &Transaction{}
+			}
+			if err := m.Txn.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReadConsistency", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.ReadConsistency |= (ReadConsistencyType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TableResponseHeader) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Error == nil {
+				m.Error = &Error{}
+			}
+			if err := m.Error.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Txn == nil {
+				m.Txn = &Transaction{}
+			}
+			if err := m.Txn.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ColumnCollection) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, &ColumnCollection_ColumnNameValue{})
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ColumnCollection_ColumnNameValue) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[index:postIndex])
+			m.Name = &s
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Value == nil {
+				m.Value = &Value{}
+			}
+			if err := m.Value.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ValueCollection) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Values", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Values = append(m.Values, &Value{})
+			if err := m.Values[len(m.Values)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *GetTableRowRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, string(data[index:postIndex]))
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *GetTableRowResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *PutTableRowRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *PutTableRowResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ConditionalPutTableRowRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExpRow", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ExpRow.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ConditionalPutTableRowResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *IncrementTableRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *IncrementTableResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Row", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Row.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *DeleteTableRowRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *DeleteTableRowResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *DeleteTableRowRangeRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.EndKey.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxEntriesToDelete", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.MaxEntriesToDelete |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *DeleteTableRowRangeResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NumDeleted", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.NumDeleted |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ScanTableRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Key.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.EndKey.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxResults", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.MaxResults |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, string(data[index:postIndex]))
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ScanTableResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Rows = append(m.Rows, &ValueCollection{})
+			if err := m.Rows[len(m.Rows)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *BatchTableRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Requests", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Requests = append(m.Requests, &BatchTableRequest_TableRequestUnion{})
+			if err := m.Requests[len(m.Requests)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *BatchTableRequest_TableRequestUnion) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Get", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Get == nil {
+				m.Get = &GetTableRowRequest{}
+			}
+			if err := m.Get.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Put", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Put == nil {
+				m.Put = &PutTableRowRequest{}
+			}
+			if err := m.Put.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ConditionalPut", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ConditionalPut == nil {
+				m.ConditionalPut = &ConditionalPutTableRowRequest{}
+			}
+			if err := m.ConditionalPut.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Delete", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Delete == nil {
+				m.Delete = &DeleteTableRowRequest{}
+			}
+			if err := m.Delete.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DeleteRange", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DeleteRange == nil {
+				m.DeleteRange = &DeleteTableRowRangeRequest{}
+			}
+			if err := m.DeleteRange.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Scan", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Scan == nil {
+				m.Scan = &ScanTableRequest{}
+			}
+			if err := m.Scan.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndTransaction", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.EndTransaction == nil {
+				m.EndTransaction = &EndTransactionRequest{}
+			}
+			if err := m.EndTransaction.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *BatchTableResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Responses", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Responses = append(m.Responses, &BatchTableResponse_TableResponseUnion{})
+			if err := m.Responses[len(m.Responses)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *BatchTableResponse_TableResponseUnion) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Get", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Get == nil {
+				m.Get = &GetTableRowResponse{}
+			}
+			if err := m.Get.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Put", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Put == nil {
+				m.Put = &PutTableRowResponse{}
+			}
+			if err := m.Put.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ConditionalPut", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ConditionalPut == nil {
+				m.ConditionalPut = &ConditionalPutTableRowResponse{}
+			}
+			if err := m.ConditionalPut.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Delete", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Delete == nil {
+				m.Delete = &DeleteTableRowResponse{}
+			}
+			if err := m.Delete.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DeleteRange", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DeleteRange == nil {
+				m.DeleteRange = &DeleteTableRowRangeResponse{}
+			}
+			if err := m.DeleteRange.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Scan", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Scan == nil {
+				m.Scan = &ScanTableResponse{}
+			}
+			if err := m.Scan.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndTransaction", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.EndTransaction == nil {
+				m.EndTransaction = &EndTransactionResponse{}
+			}
+			if err := m.EndTransaction.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (this *BatchTableRequest_TableRequestUnion) GetValue() interface{} {
+	if this.Get != nil {
+		return this.Get
+	}
+	if this.Put != nil {
+		return this.Put
+	}
+	if this.ConditionalPut != nil {
+		return this.ConditionalPut
+	}
+	if this.Delete != nil {
+		return this.Delete
+	}
+	if this.DeleteRange != nil {
+		return this.DeleteRange
+	}
+	if this.Scan != nil {
+		return this.Scan
+	}
+	if this.EndTransaction != nil {
+		return this.EndTransaction
+	}
+	return nil
+}
+
+func (this *BatchTableRequest_TableRequestUnion) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *GetTableRowRequest:
+		this.Get = vt
+	case *PutTableRowRequest:
+		this.Put = vt
+	case *ConditionalPutTableRowRequest:
+		this.ConditionalPut = vt
+	case *DeleteTableRowRequest:
+		this.Delete = vt
+	case *DeleteTableRowRangeRequest:
+		this.DeleteRange = vt
+	case *ScanTableRequest:
+		this.Scan = vt
+	case *EndTransactionRequest:
+		this.EndTransaction = vt
+	default:
+		return false
+	}
+	return true
+}
+func (this *BatchTableResponse_TableResponseUnion) GetValue() interface{} {
+	if this.Get != nil {
+		return this.Get
+	}
+	if this.Put != nil {
+		return this.Put
+	}
+	if this.ConditionalPut != nil {
+		return this.ConditionalPut
+	}
+	if this.Delete != nil {
+		return this.Delete
+	}
+	if this.DeleteRange != nil {
+		return this.DeleteRange
+	}
+	if this.Scan != nil {
+		return this.Scan
+	}
+	if this.EndTransaction != nil {
+		return this.EndTransaction
+	}
+	return nil
+}
+
+func (this *BatchTableResponse_TableResponseUnion) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *GetTableRowResponse:
+		this.Get = vt
+	case *PutTableRowResponse:
+		this.Put = vt
+	case *ConditionalPutTableRowResponse:
+		this.ConditionalPut = vt
+	case *DeleteTableRowResponse:
+		this.Delete = vt
+	case *DeleteTableRowRangeResponse:
+		this.DeleteRange = vt
+	case *ScanTableResponse:
+		this.Scan = vt
+	case *EndTransactionResponse:
+		this.EndTransaction = vt
+	default:
+		return false
+	}
+	return true
+}
 func (m *Table) Size() (n int) {
 	var l int
 	_ = l
@@ -1398,6 +4796,410 @@ func (m *CreateTableResponse) Size() (n int) {
 	l = m.Error.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.TableId))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *TableRequestHeader) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovStructured(uint64(l))
+	l = len(m.Index)
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Timestamp.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.CmdID.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = len(m.User)
+	n += 1 + l + sovStructured(uint64(l))
+	if m.UserPriority != nil {
+		n += 1 + sovStructured(uint64(*m.UserPriority))
+	}
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	n += 1 + sovStructured(uint64(m.ReadConsistency))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *TableResponseHeader) Size() (n int) {
+	var l int
+	_ = l
+	if m.Error != nil {
+		l = m.Error.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ColumnCollection) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, e := range m.Columns {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ColumnCollection_ColumnNameValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.Name != nil {
+		l = len(*m.Name)
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Value != nil {
+		l = m.Value.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ValueCollection) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, e := range m.Values {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetTableRowRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Key.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetTableRowResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Row.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PutTableRowRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Row.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PutTableRowResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ConditionalPutTableRowRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Key.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.ExpRow.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Row.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ConditionalPutTableRowResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Row.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *IncrementTableRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Row.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *IncrementTableResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Row.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DeleteTableRowRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Key.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DeleteTableRowResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DeleteTableRowRangeRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Key.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.EndKey.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.MaxEntriesToDelete))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DeleteTableRowRangeResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.NumDeleted))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ScanTableRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.Key.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = m.EndKey.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.MaxResults))
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ScanTableResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if len(m.Rows) > 0 {
+		for _, e := range m.Rows {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchTableRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableRequestHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if len(m.Requests) > 0 {
+		for _, e := range m.Requests {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchTableRequest_TableRequestUnion) Size() (n int) {
+	var l int
+	_ = l
+	if m.Get != nil {
+		l = m.Get.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Put != nil {
+		l = m.Put.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.ConditionalPut != nil {
+		l = m.ConditionalPut.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Delete != nil {
+		l = m.Delete.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.DeleteRange != nil {
+		l = m.DeleteRange.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Scan != nil {
+		l = m.Scan.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.EndTransaction != nil {
+		l = m.EndTransaction.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchTableResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TableResponseHeader.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if len(m.Responses) > 0 {
+		for _, e := range m.Responses {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchTableResponse_TableResponseUnion) Size() (n int) {
+	var l int
+	_ = l
+	if m.Get != nil {
+		l = m.Get.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Put != nil {
+		l = m.Put.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.ConditionalPut != nil {
+		l = m.ConditionalPut.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Delete != nil {
+		l = m.Delete.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.DeleteRange != nil {
+		l = m.DeleteRange.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.Scan != nil {
+		l = m.Scan.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	if m.EndTransaction != nil {
+		l = m.EndTransaction.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1796,6 +5598,1058 @@ func (m *CreateTableResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.TableId))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TableRequestHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableRequestHeader) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Index)))
+	i += copy(data[i:], m.Index)
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Timestamp.Size()))
+	n9, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n9
+	data[i] = 0x22
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.CmdID.Size()))
+	n10, err := m.CmdID.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n10
+	data[i] = 0x2a
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.User)))
+	i += copy(data[i:], m.User)
+	if m.UserPriority != nil {
+		data[i] = 0x30
+		i++
+		i = encodeVarintStructured(data, i, uint64(*m.UserPriority))
+	}
+	if m.Txn != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Txn.Size()))
+		n11, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n11
+	}
+	data[i] = 0x40
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ReadConsistency))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TableResponseHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableResponseHeader) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Error != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Error.Size()))
+		n12, err := m.Error.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Timestamp.Size()))
+	n13, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	if m.Txn != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Txn.Size()))
+		n14, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n14
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ColumnCollection) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ColumnCollection) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, msg := range m.Columns {
+			data[i] = 0xa
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ColumnCollection_ColumnNameValue) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ColumnCollection_ColumnNameValue) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Name != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintStructured(data, i, uint64(len(*m.Name)))
+		i += copy(data[i:], *m.Name)
+	}
+	if m.Value != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Value.Size()))
+		n15, err := m.Value.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ValueCollection) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ValueCollection) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, msg := range m.Values {
+			data[i] = 0xa
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *GetTableRowRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *GetTableRowRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n16, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n16
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Key.Size()))
+	n17, err := m.Key.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			data[i] = 0x1a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *GetTableRowResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *GetTableRowResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n18, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Row.Size()))
+	n19, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *PutTableRowRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PutTableRowRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n20, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n20
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Row.Size()))
+	n21, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *PutTableRowResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PutTableRowResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n22, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n22
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ConditionalPutTableRowRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ConditionalPutTableRowRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n23, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Key.Size()))
+	n24, err := m.Key.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n24
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ExpRow.Size()))
+	n25, err := m.ExpRow.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n25
+	data[i] = 0x22
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Row.Size()))
+	n26, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n26
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ConditionalPutTableRowResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ConditionalPutTableRowResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n27, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n27
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Row.Size()))
+	n28, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n28
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *IncrementTableRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *IncrementTableRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n29, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n29
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Row.Size()))
+	n30, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n30
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *IncrementTableResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *IncrementTableResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n31, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n31
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Row.Size()))
+	n32, err := m.Row.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n32
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DeleteTableRowRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DeleteTableRowRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n33, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n33
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Key.Size()))
+	n34, err := m.Key.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n34
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DeleteTableRowResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DeleteTableRowResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n35, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n35
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DeleteTableRowRangeRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DeleteTableRowRangeRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n36, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n36
+	data[i] = 0x12
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Key.Size()))
+	n37, err := m.Key.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n37
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.EndKey.Size()))
+	n38, err := m.EndKey.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n38
+	data[i] = 0x20
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.MaxEntriesToDelete))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DeleteTableRowRangeResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DeleteTableRowRangeResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n39, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n39
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.NumDeleted))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ScanTableRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ScanTableRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n40, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n40
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Key.Size()))
+	n41, err := m.Key.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n41
+	data[i] = 0x22
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.EndKey.Size()))
+	n42, err := m.EndKey.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n42
+	data[i] = 0x28
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.MaxResults))
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			data[i] = 0x32
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ScanTableResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ScanTableResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n43, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n43
+	if len(m.Rows) > 0 {
+		for _, msg := range m.Rows {
+			data[i] = 0x12
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *BatchTableRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BatchTableRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n44, err := m.TableRequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n44
+	if len(m.Requests) > 0 {
+		for _, msg := range m.Requests {
+			data[i] = 0x12
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BatchTableRequest_TableRequestUnion) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Get != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Get.Size()))
+		n45, err := m.Get.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n45
+	}
+	if m.Put != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Put.Size()))
+		n46, err := m.Put.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n46
+	}
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.ConditionalPut.Size()))
+		n47, err := m.ConditionalPut.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n47
+	}
+	if m.Delete != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Delete.Size()))
+		n48, err := m.Delete.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n48
+	}
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.DeleteRange.Size()))
+		n49, err := m.DeleteRange.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n49
+	}
+	if m.Scan != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Scan.Size()))
+		n50, err := m.Scan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n50
+	}
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.EndTransaction.Size()))
+		n51, err := m.EndTransaction.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n51
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *BatchTableResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BatchTableResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n52, err := m.TableResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n52
+	if len(m.Responses) > 0 {
+		for _, msg := range m.Responses {
+			data[i] = 0x12
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BatchTableResponse_TableResponseUnion) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Get != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Get.Size()))
+		n53, err := m.Get.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n53
+	}
+	if m.Put != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Put.Size()))
+		n54, err := m.Put.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n54
+	}
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.ConditionalPut.Size()))
+		n55, err := m.ConditionalPut.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n55
+	}
+	if m.Delete != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Delete.Size()))
+		n56, err := m.Delete.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n56
+	}
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.DeleteRange.Size()))
+		n57, err := m.DeleteRange.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n57
+	}
+	if m.Scan != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Scan.Size()))
+		n58, err := m.Scan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n58
+	}
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.EndTransaction.Size()))
+		n59, err := m.EndTransaction.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n59
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

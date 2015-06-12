@@ -196,6 +196,7 @@ message NodeList {
 // transaction is assigned a random priority. This priority will be
 // used to decide whether a transaction will be aborted during
 // contention.
+// TODO(vivek): Remove parts of Transaction that expose internals.
 message Transaction {
   option (gogoproto.goproto_stringer) = false;
 
