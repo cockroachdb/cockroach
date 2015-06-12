@@ -274,10 +274,10 @@ func TestRangeContains(t *testing.T) {
 func setLeaderLease(t *testing.T, r *Range, l *proto.Lease) {
 	args := &proto.InternalLeaderLeaseRequest{Lease: *l}
 	reply := &proto.InternalLeaderLeaseResponse{}
-	errChan, pendingCmd := r.proposeRaftCommand(args, reply)
+	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args, reply)
 	var err error
 	if err = <-errChan; err == nil {
-		// Next if the command was commited, wait for the range to apply it.
+		// Next if the command was committed, wait for the range to apply it.
 		err = <-pendingCmd.done
 	}
 	if err != nil {

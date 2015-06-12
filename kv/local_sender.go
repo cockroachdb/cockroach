@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A LocalSender provides methods to access a collection of local stores.
@@ -134,6 +135,11 @@ func (ls *LocalSender) Send(ctx context.Context, call client.Call) {
 			header.Replica = *repl
 		}
 	}
+	ctx = log.Add(ctx,
+		log.Method, call.Method(),
+		log.Key, header.Key,
+		log.RaftID, header.RaftID)
+
 	if err == nil {
 		store, err = ls.GetStore(header.Replica.StoreID)
 	}
