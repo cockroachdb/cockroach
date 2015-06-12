@@ -19,6 +19,8 @@ package rpc
 
 import (
 	"net"
+	"net/rpc"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,21 +158,42 @@ func TestUnretryableError(t *testing.T) {
 	}
 }
 
+type Heartbeat struct{}
+
+func (h *Heartbeat) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+	time.Sleep(50 * time.Millisecond)
+	return nil
+}
+
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
 	rpcContext := NewTestContext(t)
 	addr := util.CreateTestAddr("tcp")
 
+	// Construct a server that listens but doesn't do anything.
+	s := &Server{
+		Server:  rpc.NewServer(),
+		context: rpcContext,
+		addr:    addr,
+	}
+	if err := s.Register(&Heartbeat{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
 	opts := Options{
 		N:               1,
 		Ordering:        OrderStable,
-		SendNextTimeout: 1 * time.Nanosecond,
-		Timeout:         1 * time.Nanosecond,
+		SendNextTimeout: 100 * time.Nanosecond,
+		Timeout:         100 * time.Nanosecond,
 	}
 
 	// Send RPC to an address where no server is running.
-	if _, err := sendPing(opts, []net.Addr{addr}, rpcContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext); err != nil {
 		retryErr, ok := err.(util.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -187,8 +210,10 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0 * time.Nanosecond
 	c := make(chan interface{})
 	go func() {
-		if _, err := sendPing(opts, []net.Addr{addr}, rpcContext); err == nil {
+		if _, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext); err == nil {
 			t.Fatalf("expected error when client is closed")
+		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
+			t.Fatal(err)
 		}
 		close(c)
 	}()
@@ -200,7 +225,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will
 	// cause the blocked ping RPC to finish.
-	client := NewClient(addr, nil, rpcContext)
+	client := NewClient(s.Addr(), nil, rpcContext)
 	client.Close()
 	select {
 	case <-c:
