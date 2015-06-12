@@ -94,6 +94,7 @@ func TestSendToMultipleClients(t *testing.T) {
 func TestRetryableError(t *testing.T) {
 	rpcContext := NewTestContext(t)
 	s := createAndStartNewServer(rpcContext, t)
+	defer s.Close()
 
 	// Wait until the server becomes ready and shut down the server.
 	c := NewClient(s.Addr(), nil, rpcContext)
