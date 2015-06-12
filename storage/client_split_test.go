@@ -415,10 +415,6 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // TestStoreRangeSplitWithMaxBytesUpdate tests a scenario where a new
 // zone config that updates the max bytes is set and triggers a range
 // split.
-//
-// TODO(kkaneda): Fix this test once Issue #1355 is addressed and a
-// new range can get a new value of max bytes without another zone
-// config change.
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
@@ -442,28 +438,12 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify that the range is split, but the max bytes has not yet been updated.
+	// Verify that the range is split and the new range has the correct max bytes.
 	util.SucceedsWithin(t, time.Second, func() error {
 		newRng := store.LookupRange(proto.Key("db1"), nil)
 		if newRng.Desc().RaftID == origRng.Desc().RaftID {
 			return util.Error("expected new range created by split")
 		}
-		if newRng.GetMaxBytes() != 0 {
-			return util.Errorf("expected zero max bytes for the new range, but got %d",
-				newRng.GetMaxBytes())
-		}
-		return nil
-	})
-
-	// Update the zone config to trigger the range max bytes change.
-	maxBytes *= 2
-	zoneConfig.RangeMaxBytes = maxBytes
-	if err := store.DB().Put(key, zoneConfig); err != nil {
-		t.Fatal(err)
-	}
-
-	util.SucceedsWithin(t, time.Second, func() error {
-		newRng := store.LookupRange(proto.Key("db1"), nil)
 		if newRng.GetMaxBytes() != maxBytes {
 			return util.Errorf("expected %d max bytes for the new range, but got %d",
 				maxBytes, newRng.GetMaxBytes())
