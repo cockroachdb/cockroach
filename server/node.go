@@ -206,8 +206,7 @@ func NewNode(ctx storage.StoreContext) *Node {
 	}
 }
 
-// context returns a context encapsulating the NodeID and ClusterID (or the
-// respective zero values, until that information is known).
+// context returns a context encapsulating the NodeID.
 func (n *Node) context() context.Context {
 	return log.Add(context.Background(), log.NodeID, n.Descriptor.NodeID)
 }
@@ -287,7 +286,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	n.startedAt = n.ctx.Clock.Now().WallTime
 	n.startStoresScanner(stopper)
 	n.startGossip(stopper)
-	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
+	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
 
@@ -554,8 +553,8 @@ func (n *Node) waitForScanCompletion() int64 {
 
 // executeCmd creates a client.Call struct and sends it via our local sender.
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
-	// TODO(tschottdorf) get a hold on the client's ip and add it to the
-	// context before dispatching.
+	// TODO(tschottdorf) get a hold of the client's ID, add it to the
+	// context before dispatching, and create an ID for tracing the request.
 	n.lSender.Send((*Node)(n).context(), client.Call{Args: args, Reply: reply})
 	n.feed.CallComplete(args, reply)
 	return nil

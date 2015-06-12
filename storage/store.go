@@ -563,13 +563,14 @@ func (s *Store) WaitForInit() {
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
 func (s *Store) startGossip() error {
+	ctx := s.Context(nil)
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
 	s.initComplete.Add(1)
 	s.stopper.RunWorker(func() {
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
-			log.Warningf("error gossiping first range data: %s", err)
+			log.Warningc(ctx, "error gossiping first range data: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(clusterIDGossipInterval)
@@ -578,7 +579,7 @@ func (s *Store) startGossip() error {
 			select {
 			case <-ticker.C:
 				if err := s.maybeGossipFirstRange(); err != nil {
-					log.Warningf("error gossiping first range data: %s", err)
+					log.Warningc(ctx, "error gossiping first range data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -589,7 +590,7 @@ func (s *Store) startGossip() error {
 	s.initComplete.Add(1)
 	s.stopper.RunWorker(func() {
 		if err := s.maybeGossipConfigs(); err != nil {
-			log.Warningf("error gossiping configs: %s", err)
+			log.Warningc(ctx, "error gossiping configs: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
@@ -598,7 +599,7 @@ func (s *Store) startGossip() error {
 			select {
 			case <-ticker.C:
 				if err := s.maybeGossipConfigs(); err != nil {
-					log.Warningf("error gossiping configs: %s", err)
+					log.Warningc(ctx, "error gossiping configs: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -658,14 +659,15 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 	if !contentsChanged {
 		return // Skip update if it's just a newer timestamp or fewer hops to info
 	}
+	ctx := s.Context(nil)
 	info, err := s.ctx.Gossip.GetInfo(key)
 	if err != nil {
-		log.Errorf("unable to fetch %s config from gossip: %s", key, err)
+		log.Errorc(ctx, "unable to fetch %s config from gossip: %s", key, err)
 		return
 	}
 	configMap, ok := info.(PrefixConfigMap)
 	if !ok {
-		log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", info)
 		return
 	}
 	s.maybeSplitRangesByConfigs(configMap)
@@ -679,8 +681,9 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 // GossipCapacity broadcasts the node's capacity on the gossip network.
 func (s *Store) GossipCapacity() {
 	storeDesc, err := s.Descriptor()
+	ctx := s.Context(nil)
 	if err != nil {
-		log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
+		log.Warningc(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
 		return
 	}
 	// Unique gossip key per store.
@@ -688,7 +691,7 @@ func (s *Store) GossipCapacity() {
 	// Gossip store descriptor.
 	err = s.ctx.Gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
 	if err != nil {
-		log.Warning(err)
+		log.Warningc(ctx, "%s", err)
 	}
 }
 
@@ -1175,7 +1178,7 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 // command using the fetched range.
 func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	args, reply := call.Args, call.Reply
-	ctx = log.Add(s.Context(ctx), log.Method, args.Method())
+	ctx = s.Context(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(call.Args)); err != nil {
@@ -1215,7 +1218,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			reply.Header().SetGoError(err)
 			return retry.Break, err
 		}
-		ctx = log.Add(ctx, log.RaftID, header.RaftID)
 
 		if err = rng.AddCmd(ctx, client.Call{Args: args, Reply: reply}, true); err == nil {
 			return retry.Break, nil
@@ -1288,8 +1290,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 // false so that the client backs off before reissuing the command.
 func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
 	pushType proto.PushTxnType, wait bool) error {
-	// TODO set key upstream.
-	ctx = log.Add(ctx, log.Key, args.Header().Key)
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}

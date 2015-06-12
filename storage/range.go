@@ -151,6 +151,7 @@ func usesTimestampCache(r proto.Request) bool {
 // executed and the result returned via the done channel.
 type pendingCmd struct {
 	Reply proto.Response
+	ctx   context.Context
 	done  chan error // Used to signal waiting RPC handler
 }
 
@@ -339,7 +340,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	}
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).
-	errChan, pendingCmd := r.proposeRaftCommand(args, &proto.InternalLeaderLeaseResponse{})
+	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args, &proto.InternalLeaderLeaseResponse{})
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
@@ -683,7 +684,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 		}
 	}
 
-	errChan, pendingCmd := r.proposeRaftCommand(args, reply)
+	errChan, pendingCmd := r.proposeRaftCommand(ctx, args, reply)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
@@ -723,8 +724,9 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Range) proposeRaftCommand(args proto.Request, reply proto.Response) (<-chan error, *pendingCmd) {
+func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request, reply proto.Response) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
+		ctx:   ctx,
 		Reply: reply,
 		done:  make(chan error, 1),
 	}
@@ -735,7 +737,7 @@ func (r *Range) proposeRaftCommand(args proto.Request, reply proto.Response) (<-
 	cmdID := args.Header().GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
 	ok := raftCmd.Cmd.SetValue(args)
 	if !ok {
-		log.Fatalf("unknown command type %T", args)
+		log.Fatalc(ctx, "unknown command type %T", args)
 	}
 	idKey := makeCmdIDKey(cmdID)
 	r.Lock()
@@ -760,7 +762,7 @@ func (r *Range) proposeRaftCommand(args proto.Request, reply proto.Response) (<-
 // Raft replica would need to stall itself.
 func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.InternalRaftCommand) error {
 	if index == 0 {
-		log.Fatal("processRaftCommand requires a non-zero index")
+		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
 	r.Lock()
 	cmd := r.pendingCmds[idKey]
@@ -769,21 +771,24 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 
 	args := raftCmd.Cmd.GetValue().(proto.Request)
 	var reply proto.Response
+	var ctx context.Context
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied reply.
 		reply = cmd.Reply
+		ctx = cmd.ctx
 	} else {
 		// This command originated elsewhere so we must create a new reply buffer.
 		reply = args.CreateReply()
+		ctx = r.context()
 	}
 
-	err := r.applyRaftCommand(index, proto.RaftNodeID(raftCmd.OriginNodeID), args, reply)
+	err := r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, reply)
 
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
 		if log.V(1) {
-			log.Errorf("error executing raft command %s: %s", args.Method(), err)
+			log.Errorc(ctx, "error executing raft command %s: %s", args.Method(), err)
 		}
 	}
 	return err
@@ -792,9 +797,9 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 // applyRaftCommand applies a raft command from the replicated log to
 // the underlying state machine (i.e. the engine).
 // The caller needs to hold the range lock.
-func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, args proto.Request, reply proto.Response) error {
+func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID proto.RaftNodeID, args proto.Request, reply proto.Response) error {
 	if index <= 0 {
-		log.Fatalf("raft command index is <= 0")
+		log.Fatalc(ctx, "raft command index is <= 0")
 	}
 
 	committed := false
@@ -802,7 +807,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 		if !committed {
 			// We didn't commit the batch, but advance the last applied index nonetheless.
 			if err := setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
-				log.Fatalf("could not advance applied index: %s", err)
+				log.Fatalc(ctx, "could not advance applied index: %s", err)
 			}
 			atomic.StoreUint64(&r.appliedIndex, index)
 		}
@@ -814,7 +819,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 	if proto.IsWrite(args) {
 		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok && err == nil {
 			if log.V(1) {
-				log.Infof("found response cache entry for %+v", args.Header().CmdID)
+				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
 			return reply.Header().GoError()
 		} else if ok && err != nil {
@@ -845,7 +850,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 	err := r.executeCmd(batch, &ms, args, reply)
 
 	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-		log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
+		log.Fatalc(ctx, "applied index moved backwards: %d >= %d", oldIndex, index)
 	}
 
 	// Advance the applied index atomically within the batch.
@@ -859,10 +864,10 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 	if err == nil && proto.IsWrite(args) {
 		// On success, flush the MVCC stats to the batch and commit.
 		if err := r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime); err != nil {
-			log.Fatal(err) // should never fail writing to a batch
+			log.Fatalc(ctx, "%s", err) // should never fail writing to a batch
 		}
 		if err := batch.Commit(); err != nil {
-			log.Fatalf("failed to commit batch from Raft command execution: %s", err)
+			log.Fatalc(ctx, "failed to commit batch from Raft command execution: %s", err)
 		}
 		committed = true
 		// Publish update to event feed.
@@ -889,7 +894,7 @@ func (r *Range) applyRaftCommand(index uint64, originNodeID proto.RaftNodeID, ar
 	// to continue request idempotence when leadership changes.
 	if proto.IsWrite(args) {
 		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
-			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
+			log.Errorc(ctx, "unable to write result of %+v: %+v to the response cache: %s",
 				args, reply, putErr)
 		}
 	}
@@ -933,7 +938,7 @@ func (r *Range) maybeGossipFirstRange() error {
 	ctx := r.context()
 
 	// Gossip the cluster ID from all replicas of the first range.
-	log.Infof("gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
+	log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
 		r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
@@ -942,11 +947,11 @@ func (r *Range) maybeGossipFirstRange() error {
 	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
 		return err
 	}
-	log.Infof("gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
-	log.Infof("gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
@@ -974,6 +979,7 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}
+	ctx := r.context()
 	for i, cd := range configDescriptors {
 		if match(cd.keyPrefix) {
 			// Check for a bad range split. This should never happen as ranges
@@ -982,11 +988,11 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 				// If we ever implement configs that span multiple ranges,
 				// we must update store.startGossip accordingly. For the
 				// time being, it will only fire the first range.
-				log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
+				log.Fatalc(ctx, "range splits configuration values for %s", cd.keyPrefix)
 			}
 			configMap, hash, err := loadConfigMap(r.rm.Engine(), cd.keyPrefix, cd.configI)
 			if err != nil {
-				log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
+				log.Errorc(ctx, "failed loading %s config map: %s", cd.gossipKey, err)
 				continue
 			}
 			if r.configHashes == nil {
@@ -994,9 +1000,9 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 			}
 			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
 				r.configHashes[i] = hash
-				log.Infof("gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
+				log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
 				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
-					log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
+					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
 					continue
 				}
 			}
