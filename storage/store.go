@@ -1232,7 +1232,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		}
 
 		if err = rng.AddCmd(ctx, client.Call{Args: args, Reply: reply}, true); err == nil {
-			return retry.Break, nil
+			return retry.Break, err
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1264,12 +1264,12 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			// Update request timestamp and retry immediately.
 			header.Timestamp = t.ExistingTimestamp
 			header.Timestamp.Logical++
-			return retry.Reset, nil
+			return retry.Reset, err
 		case *proto.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
-				return retry.Reset, nil
+				return retry.Reset, err
 			}
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
@@ -1278,7 +1278,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 					header.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
-			return retry.Continue, nil
+			return retry.Continue, err
 		}
 		return retry.Break, err
 	})

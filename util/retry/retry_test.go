@@ -30,7 +30,7 @@ func TestRetry(t *testing.T) {
 	var retries int
 	err := WithBackoff(opts, func() (Status, error) {
 		retries++
-		if retries >= 3 {
+		if retries == 3 {
 			return Break, nil
 		}
 		return Continue, nil

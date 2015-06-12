@@ -19,6 +19,7 @@ package kv_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -147,7 +148,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
-		} else if err.Error() != "404 Not Found" {
+		} else if !strings.Contains(err.Error(), "404 Not Found") {
 			t.Errorf("%d: expected 404; got %s", i, err)
 		}
 	}

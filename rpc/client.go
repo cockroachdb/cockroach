@@ -131,8 +131,7 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		tlsConfig, err := context.GetClientTLSConfig()
 		if err != nil {
 			// Problem loading the TLS config. Retrying will not help.
-			log.Error(err)
-			return retry.Break, nil
+			return retry.Break, err
 		}
 
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
