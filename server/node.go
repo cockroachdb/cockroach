@@ -96,14 +96,14 @@ func allocateNodeID(db *client.DB) (proto.NodeID, error) {
 	err := retry.WithBackoff(allocRetryOptions, func() (retry.Status, error) {
 		r, err := db.Inc(keys.NodeIDGenerator, 1)
 		if err != nil {
-			status := retry.Break
+			status := retry.Abort
 			if _, ok := err.(util.Retryable); ok {
 				status = retry.Continue
 			}
 			return status, util.Errorf("unable to allocate node ID: %s", err)
 		}
 		id = proto.NodeID(r.ValueInt())
-		return retry.Break, nil
+		return retry.Succeed, nil
 	})
 	return id, err
 }
@@ -117,14 +117,14 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.Stor
 	err := retry.WithBackoff(allocRetryOptions, func() (retry.Status, error) {
 		r, err := db.Inc(keys.StoreIDGenerator, inc)
 		if err != nil {
-			status := retry.Break
+			status := retry.Abort
 			if _, ok := err.(util.Retryable); ok {
 				status = retry.Continue
 			}
 			return status, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 		}
 		id = proto.StoreID(r.ValueInt() - inc + 1)
-		return retry.Break, nil
+		return retry.Succeed, nil
 	})
 	return id, err
 }

@@ -112,7 +112,7 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 					return retry.Continue, infoErr
 				default:
 					// Can't recover from all other errors.
-					return retry.Break, infoErr
+					return retry.Abort, infoErr
 				}
 			}
 			switch err.(type) {
@@ -124,15 +124,16 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 				// warning so there's visiblity that this is happening. Some of
 				// the errors we'll sweep up in this net shouldn't be retried,
 				// but we can't really know for sure which.
-				log.Warningf("failed to send HTTP request or read its response: %s", err)
-				return retry.Continue, nil
+				httpErr := fmt.Errorf("failed to send HTTP request or read its response: %s", err)
+				log.Warning(httpErr)
+				return retry.Continue, httpErr
 			default:
 				// Can't retry in order to recover from this error. Propagate.
-				return retry.Break, err
+				return retry.Abort, err
 			}
 		}
 		// On successful post, we're done with retry loop.
-		return retry.Break, nil
+		return retry.Succeed, nil
 	}); err != nil {
 		call.Reply.Header().SetGoError(err)
 	}

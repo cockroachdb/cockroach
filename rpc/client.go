@@ -131,13 +131,13 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		tlsConfig, err := context.GetClientTLSConfig()
 		if err != nil {
 			// Problem loading the TLS config. Retrying will not help.
-			return retry.Break, err
+			return retry.Abort, err
 		}
 
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
 		// Could be many errors: bad host; bad certificate ...
 		if err != nil {
-			return retry.Break, err
+			return retry.Abort, err
 		}
 
 		c.mu.Lock()
@@ -149,7 +149,7 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		// retry loop. If it fails, don't retry: The node is probably
 		// dead.
 		if err = c.heartbeat(); err != nil {
-			return retry.Break, err
+			return retry.Abort, err
 		}
 
 		// Signal client is ready by closing Ready channel.
@@ -159,7 +159,7 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		// Launch periodic heartbeat.
 		go c.startHeartbeat()
 
-		return retry.Break, nil
+		return retry.Succeed, nil
 	})
 	if err != nil {
 		log.Errorf("client %s failed to connect: %v", c.addr, err)

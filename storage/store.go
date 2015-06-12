@@ -1228,11 +1228,11 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		rng, err := s.GetRange(header.RaftID)
 		if err != nil {
 			reply.Header().SetGoError(err)
-			return retry.Break, err
+			return retry.Abort, err
 		}
 
 		if err = rng.AddCmd(ctx, client.Call{Args: args, Reply: reply}, true); err == nil {
-			return retry.Break, err
+			return retry.Succeed, nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1249,7 +1249,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 					s.stopper.FinishTask()
 				}()
 				reply.Header().Error = nil
-				return retry.Break, nil
+				return retry.Succeed, nil
 			}
 			pushType := proto.PUSH_TIMESTAMP
 			if proto.IsWrite(args) {
@@ -1280,7 +1280,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			}
 			return retry.Continue, err
 		}
-		return retry.Break, err
+		return retry.Abort, err
 	})
 
 	// By default, retries are indefinite. However, some unittests set a

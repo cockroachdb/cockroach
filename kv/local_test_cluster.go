@@ -78,7 +78,7 @@ func (rls *retryableLocalSender) Send(_ context.Context, call client.Call) {
 				return retry.Continue, err
 			}
 		}
-		return retry.Break, nil
+		return retry.Succeed, nil
 	})
 	if err != nil {
 		panic(fmt.Sprintf("local sender did not succeed: %s", err))

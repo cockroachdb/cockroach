@@ -282,15 +282,17 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 				err = txn.send(Call{Args: etArgs, Reply: etReply})
 			}
 		}
+		if err == nil {
+			return retry.Succeed, nil
+		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
 				return retry.Reset, err
 			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
 				return retry.Continue, err
 			}
-			// By default, fall through and return Break.
 		}
-		return retry.Break, err
+		return retry.Abort, err
 	})
 	if err != nil && txn.haveTxnWrite {
 		if replyErr := txn.send(Call{

@@ -58,6 +58,7 @@ package gossip
 import (
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
 	"sync"
@@ -563,14 +564,18 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 			g.mu.Unlock()
 			// If we have the sentinel, exit the retry loop.
 			if hasSentinel {
-				return retry.Break, nil
+				return retry.Succeed, nil
 			}
 			// Otherwise, if all bootstrap hosts are connected, warn.
+			var err error
 			if g.triedAll {
-				log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
-					"Use \"cockroach init\" to initialize.")
+				err = fmt.Errorf("connected to gossip but missing sentinel. Has " +
+					"the cluster been initialized? Use 'cockroach init' to initialize.")
+			} else {
+				err = fmt.Errorf("missing sentinel but possibly not connected to " +
+					"gossip. retrying.")
 			}
-			return retry.Continue, nil
+			return retry.Continue, err
 		})
 	})
 }
