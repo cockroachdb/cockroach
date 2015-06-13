@@ -18,6 +18,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -728,5 +729,45 @@ func TestReplicateAfterSplit(t *testing.T) {
 		return getResp.Value.GetInteger() == 11
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
+// transactions are performed on the range descriptor.
+func TestRangeDescriptorSnapshotRace(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 1)
+	defer mtc.Stop()
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+	// Call Snapshot() in a loop and ensure it never fails.
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case <-stopper.ShouldStop():
+				return
+			default:
+				_, err := rng.Snapshot()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	})
+
+	// Split the range 100 times (carving chunks off the end of the initial range).
+	for i := 100; i > 0; i-- {
+		args, reply := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("%03d", i)), 1, mtc.stores[0].StoreID())
+		rng.AdminSplit(args, reply)
+		if reply.GoError() != nil {
+			t.Fatal(reply.GoError())
+		}
 	}
 }

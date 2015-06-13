@@ -312,21 +312,24 @@ func MVCCSetRangeStats(engine Engine, raftID proto.RaftID, ms *proto.MVCCStats) 
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
 // it using a protobuf decoder. Returns true on success or false if
-// the key was not found.
+// the key was not found. In the event of a WriteIntentError when
+// consistent=false, we return the error and the decoded result; for
+// all other errors (or when consistent=true) the decoded value is
+// invalid.
 func MVCCGetProto(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent bool, txn *proto.Transaction, msg gogoproto.Message) (bool, error) {
 	value, err := MVCCGet(engine, key, timestamp, consistent, txn)
-	if err != nil {
-		return false, err
-	}
-	if value == nil || len(value.Bytes) == 0 {
-		return false, nil
-	}
-	if msg != nil {
-		if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
-			return true, err
+	found := value != nil && len(value.Bytes) > 0
+	// If we found a result, parse it regardless of the error returned by MVCCGet.
+	if found && msg != nil {
+		unmarshalErr := gogoproto.Unmarshal(value.Bytes, msg)
+		// If the unmarshal failed, return its result. Otherwise, pass
+		// through the underlying error (which may be a WriteIntentError
+		// to be handled specially alongside the returned value).
+		if unmarshalErr != nil {
+			err = unmarshalErr
 		}
 	}
-	return true, nil
+	return found, err
 }
 
 // MVCCPutProto sets the given key to the protobuf-serialized byte
@@ -369,9 +372,9 @@ var getBufferPool = sync.Pool{
 // keyB : MVCCMetadata of keyB
 // ...
 //
-// The consistent parameter indicates that intents should cause
-// WriteIntentErrors. If set to false, intents are ignored; keys with
-// an intent but no earlier committed versions, will be skipped.
+// The consistent parameter indicates how write intents should be
+// handled. In inconsistent mode, we return a valid value if one was
+// found in addition to the WriteIntentError.
 func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent bool, txn *proto.Transaction) (*proto.Value, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
