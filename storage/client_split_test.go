@@ -412,6 +412,46 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 }
 
+// TestStoreRangeSplitWithMaxBytesUpdate tests a scenario where a new
+// zone config that updates the max bytes is set and triggers a range
+// split.
+func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	origRng := store.LookupRange(proto.KeyMin, nil)
+
+	// Set the maxBytes and trigger a range split.
+	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("db1"))
+	maxBytes := int64(1 << 16)
+	zoneConfig := &proto.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			{},
+			{},
+			{},
+		},
+		RangeMinBytes: 1 << 8,
+		RangeMaxBytes: maxBytes,
+	}
+	if err := store.DB().Put(key, zoneConfig); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the range is split and the new range has the correct max bytes.
+	util.SucceedsWithin(t, time.Second, func() error {
+		newRng := store.LookupRange(proto.Key("db1"), nil)
+		if newRng.Desc().RaftID == origRng.Desc().RaftID {
+			return util.Error("expected new range created by split")
+		}
+		if newRng.GetMaxBytes() != maxBytes {
+			return util.Errorf("expected %d max bytes for the new range, but got %d",
+				maxBytes, newRng.GetMaxBytes())
+		}
+		return nil
+	})
+}
+
 // TestStoreRangeSplitOnConfigs verifies that config changes to both
 // accounting and zone configs cause ranges to be split along prefix
 // boundaries.
