@@ -682,3 +682,51 @@ func TestRaftHeartbeats(t *testing.T) {
 		t.Errorf("while sleeping, term changed from %d to %d", initialTerm, status.Term)
 	}
 }
+
+// TestReplicateAfterSplit verifies that a new replica whose start key
+// is not KeyMin replicating to a fresh store can apply snapshots correctly.
+func TestReplicateAfterSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := multiTestContext{}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	raftID := proto.RaftID(1)
+	splitKey := proto.Key("m")
+	key := proto.Key("z")
+
+	store0 := mtc.stores[0]
+	// Make the split
+	splitArgs, splitResp := adminSplitArgs(proto.KeyMin, splitKey, raftID, store0.StoreID())
+	if err := store0.ExecuteCmd(context.Background(), client.Call{Args: splitArgs, Reply: splitResp}); err != nil {
+		t.Fatal(err)
+	}
+
+	raftID2 := store0.LookupRange(key, nil).Desc().RaftID
+	if raftID2 == raftID {
+		t.Errorf("got same raft id after split")
+	}
+	// Issue an increment for later check.
+	incArgs, incResp := incrementArgs(key, 11, raftID2, store0.StoreID())
+	if err := store0.ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+		t.Fatal(err)
+	}
+	// Now add the second replica.
+	mtc.replicateRange(raftID2, 0, 1)
+
+	// Once it catches up, the effects of increment commands can be seen.
+	if err := util.IsTrueWithin(func() bool {
+		getArgs, getResp := getArgs(key, raftID2, mtc.stores[1].StoreID())
+		// Reading on non-leader replica should use inconsistent read
+		getArgs.ReadConsistency = proto.INCONSISTENT
+		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
+			return false
+		}
+		if log.V(1) {
+			log.Infof("read value %d", getResp.Value.GetInteger())
+		}
+		return getResp.Value.GetInteger() == 11
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+}

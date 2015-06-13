@@ -456,5 +456,7 @@ message RaftSnapshotData {
     optional bytes key = 1;
     optional bytes value = 2;
   }
-  repeated KeyValue KV = 1 [(gogoproto.customname) = "KV"];
+  // The latest RangeDescriptor
+  optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+  repeated KeyValue KV = 2 [(gogoproto.customname) = "KV"];
 }

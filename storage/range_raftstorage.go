@@ -247,6 +247,9 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 		return raftpb.Snapshot{}, util.Errorf("couldn't find range descriptor")
 	}
 
+	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
+	snapData.RangeDescriptor = desc
+
 	// Iterate over all the data in the range, including local-only data like
 	// the response cache.
 	for iter := newRangeDataIterator(r.Desc(), snap); iter.Valid(); iter.Next() {
@@ -323,7 +326,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	snapData := proto.RaftSnapshotData{}
 	err := gogoproto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// First, save the HardState.  The HardState must not be changed
@@ -331,14 +334,17 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	hardStateKey := keys.RaftHardStateKey(r.Desc().RaftID)
 	hardState, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true, nil)
 	if err != nil {
-		return nil
+		return err
 	}
+
+	// Extract the updated range descriptor.
+	desc := snapData.RangeDescriptor
 
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()
 
 	// Delete everything in the range and recreate it from the snapshot.
-	for iter := newRangeDataIterator(r.Desc(), r.rm.Engine()); iter.Valid(); iter.Next() {
+	for iter := newRangeDataIterator(&desc, r.rm.Engine()); iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
 			return err
 		}
@@ -362,13 +368,6 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 		if err != nil {
 			return err
 		}
-	}
-
-	// Read the updated range descriptor.
-	var desc proto.RangeDescriptor
-	if _, err := engine.MVCCGetProto(batch, keys.RangeDescriptorKey(r.Desc().StartKey),
-		r.rm.Clock().Now(), false, nil, &desc); err != nil {
-		return err
 	}
 
 	// Read the leader lease.

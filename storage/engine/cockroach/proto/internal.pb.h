@@ -4059,10 +4059,19 @@ class RaftSnapshotData : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+  // optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
+  bool has_range_descriptor() const;
+  void clear_range_descriptor();
+  static const int kRangeDescriptorFieldNumber = 1;
+  const ::cockroach::proto::RangeDescriptor& range_descriptor() const;
+  ::cockroach::proto::RangeDescriptor* mutable_range_descriptor();
+  ::cockroach::proto::RangeDescriptor* release_range_descriptor();
+  void set_allocated_range_descriptor(::cockroach::proto::RangeDescriptor* range_descriptor);
+
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
   int kv_size() const;
   void clear_kv();
-  static const int kKVFieldNumber = 1;
+  static const int kKVFieldNumber = 2;
   const ::cockroach::proto::RaftSnapshotData_KeyValue& kv(int index) const;
   ::cockroach::proto::RaftSnapshotData_KeyValue* mutable_kv(int index);
   ::cockroach::proto::RaftSnapshotData_KeyValue* add_kv();
@@ -4073,10 +4082,13 @@ class RaftSnapshotData : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.RaftSnapshotData)
  private:
+  inline void set_has_range_descriptor();
+  inline void clear_has_range_descriptor();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  ::cockroach::proto::RangeDescriptor* range_descriptor_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KeyValue > kv_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
@@ -8762,7 +8774,50 @@ inline void RaftSnapshotData_KeyValue::set_allocated_value(::std::string* value)
 
 // RaftSnapshotData
 
-// repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+// optional .cockroach.proto.RangeDescriptor range_descriptor = 1;
+inline bool RaftSnapshotData::has_range_descriptor() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void RaftSnapshotData::set_has_range_descriptor() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void RaftSnapshotData::clear_has_range_descriptor() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void RaftSnapshotData::clear_range_descriptor() {
+  if (range_descriptor_ != NULL) range_descriptor_->::cockroach::proto::RangeDescriptor::Clear();
+  clear_has_range_descriptor();
+}
+inline const ::cockroach::proto::RangeDescriptor& RaftSnapshotData::range_descriptor() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.range_descriptor)
+  return range_descriptor_ != NULL ? *range_descriptor_ : *default_instance_->range_descriptor_;
+}
+inline ::cockroach::proto::RangeDescriptor* RaftSnapshotData::mutable_range_descriptor() {
+  set_has_range_descriptor();
+  if (range_descriptor_ == NULL) {
+    range_descriptor_ = new ::cockroach::proto::RangeDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.range_descriptor)
+  return range_descriptor_;
+}
+inline ::cockroach::proto::RangeDescriptor* RaftSnapshotData::release_range_descriptor() {
+  clear_has_range_descriptor();
+  ::cockroach::proto::RangeDescriptor* temp = range_descriptor_;
+  range_descriptor_ = NULL;
+  return temp;
+}
+inline void RaftSnapshotData::set_allocated_range_descriptor(::cockroach::proto::RangeDescriptor* range_descriptor) {
+  delete range_descriptor_;
+  range_descriptor_ = range_descriptor;
+  if (range_descriptor) {
+    set_has_range_descriptor();
+  } else {
+    clear_has_range_descriptor();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.range_descriptor)
+}
+
+// repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 2;
 inline int RaftSnapshotData::kv_size() const {
   return kv_.size();
 }
