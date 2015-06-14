@@ -102,20 +102,20 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 		resp, err := s.post(call)
 		if err != nil {
 			if resp != nil {
-				log.Warningf("failed to send HTTP request with status code %d, %s", resp.StatusCode, resp.Status)
+				infoErr := util.Errorf("failed to send HTTP request with %s", err)
 				// See if we can retry based on HTTP response code.
 				switch resp.StatusCode {
 				case http.StatusServiceUnavailable, http.StatusGatewayTimeout, StatusTooManyRequests:
 					// Retry on service unavailable and request timeout.
 					// TODO(spencer): consider respecting the Retry-After header for
 					// backoff / retry duration.
-					return retry.Continue, nil
+					return retry.Continue, infoErr
 				default:
 					// Can't recover from all other errors.
-					return retry.Break, err
+					return retry.Break, infoErr
 				}
 			}
-			switch t := err.(type) {
+			switch err.(type) {
 			case *httpSendError:
 				// Assume all errors sending request are retryable. The actual
 				// number of things that could go wrong is vast, but we don't
@@ -124,7 +124,7 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 				// warning so there's visiblity that this is happening. Some of
 				// the errors we'll sweep up in this net shouldn't be retried,
 				// but we can't really know for sure which.
-				log.Warningf("failed to send HTTP request or read its response: %s", t)
+				log.Warningf("failed to send HTTP request or read its response: %s", err)
 				return retry.Continue, nil
 			default:
 				// Can't retry in order to recover from this error. Propagate.

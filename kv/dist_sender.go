@@ -531,7 +531,7 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 			// Range descriptor might be out of date - evict it.
 			ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 			// On addressing errors, don't backoff; retry immediately.
-			return retry.Reset, nil
+			return retry.Reset, err
 		case *proto.NotLeaderError:
 			newLeader := tErr.GetLeader()
 			// Verify that leader is a known replica according to the
@@ -548,10 +548,10 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 				newLeader = &proto.Replica{}
 			}
 			ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
-			return retry.Reset, nil
+			return retry.Reset, err
 		case util.Retryable:
 			if tErr.CanRetry() {
-				return retry.Continue, nil
+				return retry.Continue, err
 			}
 		}
 		return retry.Break, err

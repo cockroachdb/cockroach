@@ -284,9 +284,9 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
-				return retry.Reset, nil
+				return retry.Reset, err
 			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
-				return retry.Continue, nil
+				return retry.Continue, err
 			}
 			// By default, fall through and return Break.
 		}

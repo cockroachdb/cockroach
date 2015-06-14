@@ -19,6 +19,8 @@ package rpc
 
 import (
 	"net"
+	"net/rpc"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +96,7 @@ func TestSendToMultipleClients(t *testing.T) {
 func TestRetryableError(t *testing.T) {
 	rpcContext := NewTestContext(t)
 	s := createAndStartNewServer(rpcContext, t)
+	defer s.Close()
 
 	// Wait until the server becomes ready and shut down the server.
 	c := NewClient(s.Addr(), nil, rpcContext)
@@ -109,16 +112,16 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	_, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext)
-	if err == nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext); err != nil {
+		retryErr, ok := err.(util.Retryable)
+		if !ok {
+			t.Fatalf("Unexpected error type: %v", err)
+		}
+		if !retryErr.CanRetry() {
+			t.Errorf("Expected retryable error: %v", retryErr)
+		}
+	} else {
 		t.Fatalf("Unexpected success")
-	}
-	retryErr, ok := err.(util.Retryable)
-	if !ok {
-		t.Fatalf("Unexpected error type: %v", err)
-	}
-	if !retryErr.CanRetry() {
-		t.Errorf("Expected retryable error: %v", retryErr)
 	}
 }
 
@@ -155,29 +158,51 @@ func TestUnretryableError(t *testing.T) {
 	}
 }
 
+type Heartbeat struct{}
+
+func (h *Heartbeat) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+	time.Sleep(50 * time.Millisecond)
+	return nil
+}
+
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
 	rpcContext := NewTestContext(t)
 	addr := util.CreateTestAddr("tcp")
 
+	// Construct a server that listens but doesn't do anything.
+	s := &Server{
+		Server:  rpc.NewServer(),
+		context: rpcContext,
+		addr:    addr,
+	}
+	if err := s.Register(&Heartbeat{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
 	opts := Options{
 		N:               1,
 		Ordering:        OrderStable,
-		SendNextTimeout: 1 * time.Nanosecond,
-		Timeout:         1 * time.Nanosecond,
+		SendNextTimeout: 100 * time.Nanosecond,
+		Timeout:         100 * time.Nanosecond,
 	}
+
 	// Send RPC to an address where no server is running.
-	_, err := sendPing(opts, []net.Addr{addr}, rpcContext)
-	if err == nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext); err != nil {
+		retryErr, ok := err.(util.Retryable)
+		if !ok {
+			t.Fatalf("Unexpected error type: %v", err)
+		}
+		if !retryErr.CanRetry() {
+			t.Errorf("Expected retryable error: %v", retryErr)
+		}
+	} else {
 		t.Fatalf("Unexpected success")
-	}
-	retryErr, ok := err.(util.Retryable)
-	if !ok {
-		t.Fatalf("Unexpected error type: %v", err)
-	}
-	if !retryErr.CanRetry() {
-		t.Errorf("Expected retryable error: %v", retryErr)
 	}
 
 	// Send the RPC again with no timeout.
@@ -185,8 +210,10 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0 * time.Nanosecond
 	c := make(chan interface{})
 	go func() {
-		if _, err := sendPing(opts, []net.Addr{addr}, rpcContext); err == nil {
+		if _, err := sendPing(opts, []net.Addr{s.Addr()}, rpcContext); err == nil {
 			t.Fatalf("expected error when client is closed")
+		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
+			t.Fatal(err)
 		}
 		close(c)
 	}()
@@ -198,7 +225,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will
 	// cause the blocked ping RPC to finish.
-	client := NewClient(addr, nil, rpcContext)
+	client := NewClient(s.Addr(), nil, rpcContext)
 	client.Close()
 	select {
 	case <-c:
