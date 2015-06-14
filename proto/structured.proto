@@ -61,30 +61,33 @@ message TableSchema {
 }
 
 message ColumnDescriptor {
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional Column column = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
+
 message IndexDescriptor {
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional Index index = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // An ordered list of column ids of which the index is comprised. Each
   // column_id refers to a column in the TableDescriptor's columns; special
   // care is taken to update this when deleting columns.
-  repeated uint32 column_ids = 3;
+  repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs"];
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
 message TableDescriptor {
-  optional uint32 id = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional Table table = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ColumnDescriptor columns = 3 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused
-  optional uint32 next_column_id = 4 [(gogoproto.nullable) = false];
+  optional uint32 next_column_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextColumnID"];
   repeated IndexDescriptor indexes = 5 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused
-  optional uint32 next_index_id = 6 [(gogoproto.nullable) = false];
+  optional uint32 next_index_id = 6 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextIndexID"];
 }
 
 message CreateTableRequest {
@@ -94,7 +97,7 @@ message CreateTableRequest {
 
 message CreateTableResponse {
   optional Error error = 1 [(gogoproto.nullable) = false];
-  optional uint32 table_id = 2 [(gogoproto.nullable) = false];
+  optional uint32 table_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID"];
 }
 
 // TODO(tamird): Investigate generating code from this. For now, it is useful
