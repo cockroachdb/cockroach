@@ -770,26 +770,16 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	r.Unlock()
 
 	args := raftCmd.Cmd.GetValue().(proto.Request)
-	var reply proto.Response
-	var ctx context.Context
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied reply.
-		reply = cmd.Reply
-		ctx = cmd.ctx
-	} else {
-		// This command originated elsewhere so we must create a new reply buffer.
-		reply = args.CreateReply()
-		ctx = r.context()
-	}
-
-	err := r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, reply)
-
-	if cmd != nil {
+		err := r.applyRaftCommand(cmd.ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, cmd.Reply)
 		cmd.done <- err
-	} else if err != nil {
-		if log.V(1) {
-			log.Errorc(ctx, "error executing raft command %s: %s", args.Method(), err)
-		}
+		return err
+	}
+	// This command originated elsewhere so we must create a new reply buffer.
+	err := r.applyRaftCommand(r.context(), index, proto.RaftNodeID(raftCmd.OriginNodeID), args, args.CreateReply())
+	if err != nil && log.V(1) {
+		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
 	}
 	return err
 }
