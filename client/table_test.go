@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 )
@@ -154,15 +155,24 @@ func TestStruct(t *testing.T) {
 	defer s.Stop()
 
 	type User struct {
-		ID         int    `db:"id"`
+		ID         int    `db:"id" roach:"primary key"`
 		Name       string `db:"name"`
 		Title      string
 		Delinquent int
 	}
 
+	schema, err := client.SchemaFromModel(User{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema.Name = "users"
+	if err := db.CreateTable(schema); err != nil {
+		t.Fatal(err)
+	}
+
 	// Bind our User model to the "users" table, specifying the "id" column as
 	// the primary key.
-	if err := db.BindModel("users", User{}, "id"); err != nil {
+	if err := db.BindModel("users", User{}); err != nil {
 		t.Fatal(err)
 	}
 

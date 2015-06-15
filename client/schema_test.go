@@ -29,6 +29,7 @@ func TestSchemaFromModel(t *testing.T) {
 		A int `roach:"primary key(a,b)"`
 		B int `roach:"unique index"` // equivalent to: unique index(b)
 		C int `roach:"index(c,b)"`
+		D int // 0 options should not be an error
 	}
 	schema, err := SchemaFromModel(Foo{})
 	if err != nil {
@@ -41,6 +42,7 @@ func TestSchemaFromModel(t *testing.T) {
 			{Name: "a"},
 			{Name: "b"},
 			{Name: "c"},
+			{Name: "d"},
 		},
 		Indexes: []proto.TableSchema_IndexByName{
 			{Index: proto.Index{Name: "primary", Unique: true},

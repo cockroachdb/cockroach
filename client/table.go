@@ -40,30 +40,45 @@ import (
 //   eventually wind up on the server using new table-based requests to perform
 //   operations.
 //
-// - Create tables and schemas. Lookup table schema in BindModel.
-//
-// - Use table ID in primary key.
-//
 // - Enhance DelRange to handle model types? Or add a DelStructRange?
 //
 // - Naming? PutStruct vs StructPut vs TablePut?
 //
 // - Need appropriate locking for the DB.experimentalModels map.
 //
-// - Normalize column names to lowercase.
-//
 // - Allow usage of `map[string]interface{}` in place of a struct. Probably
 //   need table schemas first so we know which columns exist.
 //
 // - Add support for namespaces. Currently namespace ID 0 is hardcoded.
 
+var (
+	// TODO(pmattis): Use the appropriate constant in keys.go when it appears.
+	tableDataPrefix = []byte("tbl-")
+)
+
+func lowerStrings(s []string) []string {
+	for i := range s {
+		s[i] = strings.ToLower(s[i])
+	}
+	return s
+}
+
+// column holds information about a particular column and the field that column
+// is mapped to.
+type column struct {
+	proto.ColumnDescriptor
+	field reflect.StructField
+}
+
 // model holds information about a particular type that has been bound to a
 // table using DB.BindModel.
 type model struct {
-	name         string   // Table name.
-	fields       fieldMap // The fields of the model type.
-	primaryKey   []string // The columns that compose the primary key.
-	otherColumns []string // All non-primary key columns.
+	name             string // Table name.
+	desc             *proto.TableDescriptor
+	columnsByName    map[string]*column
+	columnsByID      map[uint32]*column
+	primaryKey       []*column // The columns that compose the primary key.
+	otherColumnNames []string  // All non-primary key columns.
 }
 
 // encodeTableKey encodes a single element of a table key, appending the
@@ -152,15 +167,12 @@ func decodeTableKey(b []byte, v reflect.Value) ([]byte, error) {
 // v. It returns the encoded primary key.
 func (m *model) encodePrimaryKey(v reflect.Value) ([]byte, error) {
 	var key []byte
-	key = roachencoding.EncodeBytes(key, []byte(m.name))
+	key = append(key, tableDataPrefix...)
+	key = roachencoding.EncodeUvarint(key, uint64(m.desc.ID))
 
 	for _, col := range m.primaryKey {
-		f, ok := m.fields[col]
-		if !ok {
-			return nil, fmt.Errorf("%s: unable to find field %s", m.name, col)
-		}
 		var err error
-		key, err = encodeTableKey(key, v.FieldByIndex(f.Index))
+		key, err = encodeTableKey(key, v.FieldByIndex(col.field.Index))
 		if err != nil {
 			return nil, err
 		}
@@ -172,19 +184,20 @@ func (m *model) encodePrimaryKey(v reflect.Value) ([]byte, error) {
 // decodePrimaryKey decodes a primary key for the table into the model object
 // v. It returns the remaining (undecoded) bytes.
 func (m *model) decodePrimaryKey(key []byte, v reflect.Value) ([]byte, error) {
-	var name []byte
-	key, name = roachencoding.DecodeBytes(key, nil)
-	if string(name) != m.name {
-		return nil, fmt.Errorf("%s: unexpected table name: %s", m.name, name)
+	if !bytes.HasPrefix(key, tableDataPrefix) {
+		return nil, fmt.Errorf("%s: invalid key prefix: %q", m.name, key)
+	}
+	key = bytes.TrimPrefix(key, tableDataPrefix)
+
+	var tableID uint64
+	key, tableID = roachencoding.DecodeUvarint(key)
+	if uint32(tableID) != m.desc.ID {
+		return nil, fmt.Errorf("%s: unexpected table ID: %d != %d", m.name, m.desc.ID, tableID)
 	}
 
 	for _, col := range m.primaryKey {
-		f, ok := m.fields[col]
-		if !ok {
-			return nil, fmt.Errorf("%s: unable to find field %s", m.name, col)
-		}
 		var err error
-		key, err = decodeTableKey(key, v.FieldByIndex(f.Index))
+		key, err = decodeTableKey(key, v.FieldByIndex(col.field.Index))
 		if err != nil {
 			return nil, err
 		}
@@ -194,10 +207,10 @@ func (m *model) decodePrimaryKey(key []byte, v reflect.Value) ([]byte, error) {
 }
 
 // encodeColumnKey encodes the column and appends it to primaryKey.
-func (m *model) encodeColumnKey(primaryKey []byte, column string) []byte {
+func (m *model) encodeColumnKey(primaryKey []byte, colID uint32) []byte {
 	var key []byte
 	key = append(key, primaryKey...)
-	return append(key, column...)
+	return roachencoding.EncodeUvarint(key, uint64(colID))
 }
 
 // CreateTable creates a table from the specified schema. Table creation will
@@ -239,22 +252,11 @@ func (db *DB) CreateTable(schema proto.TableSchema) error {
 
 // DescribeTable retrieves the table schema for the specified table.
 func (db *DB) DescribeTable(name string) (*proto.TableSchema, error) {
-	gr, err := db.Get(keys.MakeNameMetadataKey(0, strings.ToLower(name)))
+	desc, err := db.getTableDesc(name)
 	if err != nil {
 		return nil, err
 	}
-	if !gr.Exists() {
-		return nil, fmt.Errorf("unable to find table \"%s\"", name)
-	}
-	descKey := gr.ValueBytes()
-	desc := proto.TableDescriptor{}
-	if err := db.GetProto(descKey, &desc); err != nil {
-		return nil, err
-	}
-	if err := proto.ValidateTableDesc(desc); err != nil {
-		return nil, err
-	}
-	schema := proto.TableSchemaFromDesc(desc)
+	schema := proto.TableSchemaFromDesc(*desc)
 	return &schema, nil
 }
 
@@ -336,10 +338,7 @@ func (db *DB) ListTables() ([]string, error) {
 // bind the same model type more than once and a single model type can only be
 // bound to a single table. The primaryKey arguments specify the columns that
 // make up the primary key.
-//
-// TODO(pmattis): Once we have a table schema we can use it to determine the
-// primary key columns.
-func (db *DB) BindModel(name string, obj interface{}, primaryKey ...string) error {
+func (db *DB) BindModel(name string, obj interface{}) error {
 	t := deref(reflect.TypeOf(obj))
 	if db.experimentalModels == nil {
 		db.experimentalModels = make(map[reflect.Type]*model)
@@ -351,25 +350,77 @@ func (db *DB) BindModel(name string, obj interface{}, primaryKey ...string) erro
 	if err != nil {
 		return err
 	}
-	m := &model{
-		name:       name,
-		fields:     fields,
-		primaryKey: primaryKey,
+
+	desc, err := db.getTableDesc(name)
+	if err != nil {
+		return err
 	}
-	isPrimaryKey := make(map[string]struct{})
-	for _, k := range primaryKey {
-		isPrimaryKey[k] = struct{}{}
-	}
-	for col := range m.fields {
-		if _, ok := isPrimaryKey[col]; !ok {
-			m.otherColumns = append(m.otherColumns, col)
+
+	columnsByName := map[string]*column{}
+	columnsByID := map[uint32]*column{}
+	for _, col := range desc.Columns {
+		f, ok := fields[col.Name]
+		if !ok {
+			continue
 		}
+		c := &column{
+			ColumnDescriptor: col,
+			field:            f,
+		}
+		columnsByName[c.Name] = c
+		columnsByID[c.ID] = c
+	}
+
+	var primaryKey []*column
+	isPrimaryKey := make(map[string]struct{})
+	for _, colID := range desc.Indexes[0].ColumnIDs {
+		col := columnsByID[colID]
+		primaryKey = append(primaryKey, col)
+		isPrimaryKey[col.Name] = struct{}{}
+	}
+
+	var otherColumnNames []string
+	for _, col := range desc.Columns {
+		if _, ok := isPrimaryKey[col.Name]; ok {
+			if _, ok2 := columnsByName[col.Name]; !ok2 {
+				return fmt.Errorf("primary key column \"%s\" not mapped", col.Name)
+			}
+		}
+		otherColumnNames = append(otherColumnNames, col.Name)
+	}
+
+	m := &model{
+		name:             name,
+		desc:             desc,
+		columnsByName:    columnsByName,
+		columnsByID:      columnsByID,
+		primaryKey:       primaryKey,
+		otherColumnNames: otherColumnNames,
 	}
 	db.experimentalModels[t] = m
 
 	// TODO(pmattis): Check that all of the primary key columns are compatible
 	// with {encode,decode}PrimaryKey.
 	return nil
+}
+
+func (db *DB) getTableDesc(name string) (*proto.TableDescriptor, error) {
+	gr, err := db.Get(keys.MakeNameMetadataKey(0, strings.ToLower(name)))
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		return nil, fmt.Errorf("unable to find table \"%s\"", name)
+	}
+	descKey := gr.ValueBytes()
+	desc := proto.TableDescriptor{}
+	if err := db.GetProto(descKey, &desc); err != nil {
+		return nil, err
+	}
+	if err := proto.ValidateTableDesc(desc); err != nil {
+		return nil, err
+	}
+	return &desc, nil
 }
 
 func (db *DB) getModel(t reflect.Type, mustBePointer bool) (*model, error) {
@@ -487,25 +538,27 @@ func (b *Batch) GetStruct(obj interface{}, columns ...string) {
 	}
 
 	if len(columns) == 0 {
-		columns = m.otherColumns
+		columns = m.otherColumnNames
+	} else {
+		lowerStrings(columns)
 	}
 
 	var calls []Call
-	for _, col := range columns {
-		f, ok := m.fields[col]
+	for _, colName := range columns {
+		col, ok := m.columnsByName[colName]
 		if !ok {
-			b.initResult(0, 0, fmt.Errorf("%s: unable to find field %s", m.name, col))
+			b.initResult(0, 0, fmt.Errorf("%s: unable to find column %s", m.name, colName))
 			return
 		}
 
-		key := m.encodeColumnKey(primaryKey, col)
+		key := m.encodeColumnKey(primaryKey, col.ID)
 		if log.V(2) {
 			log.Infof("Get %q", key)
 		}
 		c := Get(proto.Key(key))
 		c.Post = func() error {
 			reply := c.Reply.(*proto.GetResponse)
-			return unmarshalTableValue(reply.Value, v.FieldByIndex(f.Index))
+			return unmarshalTableValue(reply.Value, v.FieldByIndex(col.field.Index))
 		}
 		calls = append(calls, c)
 	}
@@ -533,19 +586,21 @@ func (b *Batch) PutStruct(obj interface{}, columns ...string) {
 	}
 
 	if len(columns) == 0 {
-		columns = m.otherColumns
+		columns = m.otherColumnNames
+	} else {
+		lowerStrings(columns)
 	}
 
 	var calls []Call
-	for _, col := range columns {
-		f, ok := m.fields[col]
+	for _, colName := range columns {
+		col, ok := m.columnsByName[colName]
 		if !ok {
-			b.initResult(0, 0, fmt.Errorf("%s: unable to find field %s", m.name, col))
+			b.initResult(0, 0, fmt.Errorf("%s: unable to find column %s", m.name, colName))
 			return
 		}
 
-		key := m.encodeColumnKey(primaryKey, col)
-		value := v.FieldByIndex(f.Index)
+		key := m.encodeColumnKey(primaryKey, col.ID)
+		value := v.FieldByIndex(col.field.Index)
 		if log.V(2) {
 			log.Infof("Put %q -> %v", key, value.Interface())
 		}
@@ -591,13 +646,13 @@ func (b *Batch) IncStruct(obj interface{}, value int64, column string) {
 		return
 	}
 
-	f, ok := m.fields[column]
+	col, ok := m.columnsByName[strings.ToLower(column)]
 	if !ok {
-		b.initResult(0, 0, fmt.Errorf("%s: unable to find field %s", m.name, column))
+		b.initResult(0, 0, fmt.Errorf("%s: unable to find column %s", m.name, column))
 		return
 	}
 
-	key := m.encodeColumnKey(primaryKey, column)
+	key := m.encodeColumnKey(primaryKey, col.ID)
 	if log.V(2) {
 		log.Infof("Inc %q", key)
 	}
@@ -605,7 +660,7 @@ func (b *Batch) IncStruct(obj interface{}, value int64, column string) {
 	c.Post = func() error {
 		reply := c.Reply.(*proto.IncrementResponse)
 		pv := &proto.Value{Integer: gogoproto.Int64(reply.NewValue)}
-		return unmarshalTableValue(pv, v.FieldByIndex(f.Index))
+		return unmarshalTableValue(pv, v.FieldByIndex(col.field.Index))
 	}
 
 	b.calls = append(b.calls, c)
@@ -643,6 +698,20 @@ func (b *Batch) ScanStruct(dest, start, end interface{}, maxRows int64, columns 
 		return
 	}
 
+	var scanColIDs map[uint32]bool
+	if len(columns) > 0 {
+		lowerStrings(columns)
+		scanColIDs = make(map[uint32]bool, len(columns))
+		for _, colName := range columns {
+			col, ok := m.columnsByName[colName]
+			if !ok {
+				b.initResult(0, 0, fmt.Errorf("%s: unable to find column %s", m.name, colName))
+				return
+			}
+			scanColIDs[col.ID] = true
+		}
+	}
+
 	startV := reflect.Indirect(reflect.ValueOf(start))
 	if modelT != startV.Type() {
 		b.initResult(0, 0, fmt.Errorf("incompatible start key type: %s != %s", modelT, startV.Type()))
@@ -676,14 +745,6 @@ func (b *Batch) ScanStruct(dest, start, end interface{}, maxRows int64, columns 
 			return nil
 		}
 
-		var scanCols map[string]bool
-		if len(columns) > 0 {
-			scanCols = make(map[string]bool, len(columns))
-			for _, col := range columns {
-				scanCols[col] = true
-			}
-		}
-
 		var primaryKey []byte
 		resultPtr := reflect.New(modelT)
 		result := resultPtr.Elem()
@@ -705,21 +766,24 @@ func (b *Batch) ScanStruct(dest, start, end interface{}, maxRows int64, columns 
 				}
 			}
 
-			col, err := m.decodePrimaryKey([]byte(row.Key), result)
+			remaining, err := m.decodePrimaryKey([]byte(row.Key), result)
 			if err != nil {
 				return err
 			}
-			primaryKey = []byte(row.Key[:len(row.Key)-len(col)])
+			primaryKey = []byte(row.Key[:len(row.Key)-len(remaining)])
 
-			colStr := string(col)
-			if scanCols != nil && !scanCols[colStr] {
+			_, colID := roachencoding.DecodeUvarint(remaining)
+			if err != nil {
+				return err
+			}
+			if scanColIDs != nil && !scanColIDs[uint32(colID)] {
 				continue
 			}
-			f, ok := m.fields[colStr]
+			col, ok := m.columnsByID[uint32(colID)]
 			if !ok {
-				return fmt.Errorf("%s: unable to find field %s", m.name, col)
+				return fmt.Errorf("%s: unable to find column %d", m.name, colID)
 			}
-			if err := unmarshalTableValue(&row.Value, result.FieldByIndex(f.Index)); err != nil {
+			if err := unmarshalTableValue(&row.Value, result.FieldByIndex(col.field.Index)); err != nil {
 				return err
 			}
 		}
@@ -759,16 +823,19 @@ func (b *Batch) DelStruct(obj interface{}, columns ...string) {
 	}
 
 	if len(columns) == 0 {
-		columns = m.otherColumns
+		columns = m.otherColumnNames
+	} else {
+		lowerStrings(columns)
 	}
 
 	var calls []Call
-	for _, col := range columns {
-		if _, ok := m.fields[col]; !ok {
-			b.initResult(0, 0, fmt.Errorf("%s: unable to find field %s", m.name, col))
+	for _, colName := range columns {
+		col, ok := m.columnsByName[colName]
+		if !ok {
+			b.initResult(0, 0, fmt.Errorf("%s: unable to find field %s", m.name, colName))
 			return
 		}
-		key := m.encodeColumnKey(primaryKey, col)
+		key := m.encodeColumnKey(primaryKey, col.ID)
 		if log.V(2) {
 			log.Infof("Del %q", key)
 		}

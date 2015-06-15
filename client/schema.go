@@ -96,7 +96,11 @@ func SchemaFromModel(obj interface{}) (proto.TableSchema, error) {
 
 	// Create the indexes for the table.
 	for name, f := range m {
-		for _, opt := range strings.Split(f.Tag.Get("roach"), ";") {
+		tag := f.Tag.Get("roach")
+		if tag == "" {
+			continue
+		}
+		for _, opt := range strings.Split(tag, ";") {
 			match := schemaOptRE.FindStringSubmatch(opt)
 			if match == nil {
 				return s, fmt.Errorf("invalid schema option: %s", opt)
