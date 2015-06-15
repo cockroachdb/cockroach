@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -52,6 +54,8 @@ import (
 //
 // - Allow usage of `map[string]interface{}` in place of a struct. Probably
 //   need table schemas first so we know which columns exist.
+//
+// - Add support for namespaces. Currently namespace ID 0 is hardcoded.
 
 // model holds information about a particular type that has been bound to a
 // table using DB.BindModel.
@@ -194,6 +198,137 @@ func (m *model) encodeColumnKey(primaryKey []byte, column string) []byte {
 	var key []byte
 	key = append(key, primaryKey...)
 	return append(key, column...)
+}
+
+// CreateTable creates a table from the specified schema. Table creation will
+// fail if the table name is already in use.
+func (db *DB) CreateTable(schema proto.TableSchema) error {
+	desc := proto.TableDescFromSchema(schema)
+	if err := proto.ValidateTableDesc(desc); err != nil {
+		return err
+	}
+
+	nameKey := keys.MakeNameMetadataKey(0, desc.Name)
+
+	// This isn't strictly necessary as the conditional put below will fail if
+	// the key already exists, but it seems good to avoid the table ID allocation
+	// in most cases when the table already exists.
+	if gr, err := db.Get(nameKey); err != nil {
+		return err
+	} else if gr.Exists() {
+		return fmt.Errorf("table \"%s\" already exists", desc.Name)
+	}
+
+	ir, err := db.Inc(keys.DescIDGenerator, 1)
+	if err != nil {
+		return err
+	}
+	desc.ID = uint32(ir.ValueInt() - 1)
+
+	// TODO(pmattis): Be cognizant of error messages when this is ported to the
+	// server. The error currently returned below is likely going to be difficult
+	// to interpret.
+	return db.Txn(func(txn *Txn) error {
+		descKey := keys.MakeDescMetadataKey(desc.ID)
+		b := &Batch{}
+		b.CPut(nameKey, descKey, nil)
+		b.Put(descKey, &desc)
+		return txn.Commit(b)
+	})
+}
+
+// DescribeTable retrieves the table schema for the specified table.
+func (db *DB) DescribeTable(name string) (*proto.TableSchema, error) {
+	gr, err := db.Get(keys.MakeNameMetadataKey(0, strings.ToLower(name)))
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		return nil, fmt.Errorf("unable to find table \"%s\"", name)
+	}
+	descKey := gr.ValueBytes()
+	desc := proto.TableDescriptor{}
+	if err := db.GetProto(descKey, &desc); err != nil {
+		return nil, err
+	}
+	if err := proto.ValidateTableDesc(desc); err != nil {
+		return nil, err
+	}
+	schema := proto.TableSchemaFromDesc(desc)
+	return &schema, nil
+}
+
+// RenameTable renames a table.
+func (db *DB) RenameTable(oldName, newName string) error {
+	// TODO(pmattis): Should we allow both the old and new name to exist
+	// simultaneously for a period of time? The thought is to allow an
+	// application to access the table via either name while the application is
+	// being upgraded. Alternatively, instead of a rename table operation perhaps
+	// there should be a link table operation which adds a "hard link" to the
+	// table. Similar to a file, a table would not be removed until all of the
+	// hard links are removed.
+
+	return db.Txn(func(txn *Txn) error {
+		oldNameKey := keys.MakeNameMetadataKey(0, strings.ToLower(oldName))
+		gr, err := txn.Get(oldNameKey)
+		if err != nil {
+			return err
+		}
+		if !gr.Exists() {
+			return fmt.Errorf("unable to find table \"%s\"", oldName)
+		}
+		descKey := gr.ValueBytes()
+		desc := proto.TableDescriptor{}
+		if err := txn.GetProto(descKey, &desc); err != nil {
+			return err
+		}
+		desc.Name = strings.ToLower(newName)
+		if err := proto.ValidateTableDesc(desc); err != nil {
+			return err
+		}
+		newNameKey := keys.MakeNameMetadataKey(0, desc.Name)
+		b := &Batch{}
+		b.Put(descKey, &desc)
+		// If the new name already exists the conditional put will fail causing the
+		// transaction to fail.
+		b.CPut(newNameKey, descKey, nil)
+		b.Del(oldNameKey)
+		return txn.Commit(b)
+	})
+}
+
+// DeleteTable deletes the specified table.
+func (db *DB) DeleteTable(name string) error {
+	nameKey := keys.MakeNameMetadataKey(0, strings.ToLower(name))
+	gr, err := db.Get(nameKey)
+	if err != nil {
+		return err
+	}
+	if !gr.Exists() {
+		return fmt.Errorf("unable to find table \"%s\"", name)
+	}
+	descKey := gr.ValueBytes()
+	desc := proto.TableDescriptor{}
+	if err := db.GetProto(descKey, &desc); err != nil {
+		return err
+	}
+
+	panic("TODO(pmattis): delete all of the tables rows")
+	// return db.Del(descKey)
+}
+
+// ListTables lists the tables.
+func (db *DB) ListTables() ([]string, error) {
+	tableNamePrefix := keys.MakeNameMetadataKey(0, "")
+	rows, err := db.Scan(tableNamePrefix, tableNamePrefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
+	tableNames := make([]string, len(rows))
+	for i, row := range rows {
+		tableNames[i] = string(bytes.TrimPrefix(row.Key, tableNamePrefix))
+	}
+	return tableNames, nil
 }
 
 // BindModel binds the supplied interface with the named table. You must bind

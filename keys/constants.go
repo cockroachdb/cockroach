@@ -151,16 +151,19 @@ var (
 	// ConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
 	ConfigZonePrefix = MakeKey(SystemPrefix, proto.Key("zone"))
+	// DescIDGenerator is the global descriptor ID generator sequence used for
+	// table and namespace IDs.
+	DescIDGenerator = MakeKey(SystemPrefix, proto.Key("desc-idgen"))
+	// DescMetadataPrefix is the key prefix for all descriptor metadata.
+	DescMetadataPrefix = MakeKey(SystemPrefix, proto.Key("desc-"))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = MakeKey(SystemPrefix, proto.Key("node-idgen"))
 	// RaftIDGenerator is the global Raft consensus group ID generator sequence.
 	RaftIDGenerator = MakeKey(SystemPrefix, proto.Key("raft-idgen"))
 	// SchemaPrefix specifies key prefixes for schema definitions.
 	SchemaPrefix = MakeKey(SystemPrefix, proto.Key("schema"))
-	// NamespaceMetadataPrefix is the key prefix for all namespace metadata.
-	NamespaceMetadataPrefix = MakeKey(SystemPrefix, proto.Key("ns-"))
-	// TableMetadataPrefix is the key prefix for all table metadata.
-	TableMetadataPrefix = MakeKey(SystemPrefix, proto.Key("tbl-"))
+	// NameMetadataPrefix is the key prefix for all name metadata.
+	NameMetadataPrefix = MakeKey(SystemPrefix, proto.Key("name-"))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = MakeKey(SystemPrefix, proto.Key("store-idgen"))
 	// RangeTreeRoot specifies the root range in the range tree.

@@ -487,6 +487,8 @@ func marshalValue(v interface{}) ([]byte, error) {
 		return nil, nil
 	case string:
 		return []byte(t), nil
+	case proto.Key:
+		return []byte(t), nil
 	case []byte:
 		return t, nil
 	case gogoproto.Message:
