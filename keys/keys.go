@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	maxVarintSize = 10
+)
+
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
 func MakeKey(keys ...proto.Key) proto.Key {
@@ -56,17 +60,20 @@ func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
 }
 
-// MakeNamespaceMetadataKey returns the key for the namespace.
-func MakeNamespaceMetadataKey(namespace string) proto.Key {
-	return MakeKey(NamespaceMetadataPrefix, proto.Key(namespace))
+// MakeNameMetadataKey returns the key for the namespace.
+func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
+	k := make([]byte, 0, len(NameMetadataPrefix)+maxVarintSize+len(name))
+	k = append(k, NameMetadataPrefix...)
+	k = encoding.EncodeUvarint(k, uint64(parentID))
+	k = append(k, name...)
+	return k
 }
 
-// MakeTableMetadataKey returns the key for the table in namespaceID.
-func MakeTableMetadataKey(namespaceID uint32, tableName string) proto.Key {
-	k := make([]byte, 0, len(TableMetadataPrefix)+10+len(tableName))
-	k = append(k, TableMetadataPrefix...)
-	k = encoding.EncodeUvarint(k, uint64(namespaceID))
-	k = append(k, tableName...)
+// MakeDescMetadataKey returns the key for the table in namespaceID.
+func MakeDescMetadataKey(descID uint32) proto.Key {
+	k := make([]byte, 0, len(DescMetadataPrefix)+maxVarintSize)
+	k = append(k, DescMetadataPrefix...)
+	k = encoding.EncodeUvarint(k, uint64(descID))
 	return k
 }
 

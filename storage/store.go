@@ -909,6 +909,15 @@ func (s *Store) BootstrapRange() error {
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
 		return err
 	}
+
+	// We reserve the first 1000 descriptor IDs.
+	key = keys.DescIDGenerator
+	value := proto.Value{Integer: gogoproto.Int64(proto.MaxReservedDescID + 1)}
+	value.InitChecksum(key)
+	if err := engine.MVCCPut(batch, nil, key, now, value, nil); err != nil {
+		return err
+	}
+
 	// Range Tree setup.
 	if err := SetupRangeTree(batch, ms, now, desc.StartKey); err != nil {
 		return err

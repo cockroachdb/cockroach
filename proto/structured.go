@@ -25,6 +25,8 @@ import (
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
+	// MaxReservedDescID is the maximum reserved descriptor ID.
+	MaxReservedDescID = 999
 )
 
 func validateName(name, typ string) error {
