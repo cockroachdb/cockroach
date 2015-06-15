@@ -158,7 +158,7 @@ func (m *TableSchema_IndexByName) GetColumnNames() []string {
 }
 
 type ColumnDescriptor struct {
-	Id               uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
+	ID               uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
 	Column           `protobuf:"bytes,2,opt,name=column,embedded=column" json:"column"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -167,20 +167,20 @@ func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
 func (m *ColumnDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*ColumnDescriptor) ProtoMessage()    {}
 
-func (m *ColumnDescriptor) GetId() uint32 {
+func (m *ColumnDescriptor) GetID() uint32 {
 	if m != nil {
-		return m.Id
+		return m.ID
 	}
 	return 0
 }
 
 type IndexDescriptor struct {
-	Id    uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
+	ID    uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
 	Index `protobuf:"bytes,2,opt,name=index,embedded=index" json:"index"`
 	// An ordered list of column ids of which the index is comprised. Each
 	// column_id refers to a column in the TableDescriptor's columns; special
 	// care is taken to update this when deleting columns.
-	ColumnIds        []uint32 `protobuf:"varint,3,rep,name=column_ids" json:"column_ids,omitempty"`
+	ColumnIDs        []uint32 `protobuf:"varint,3,rep,name=column_ids" json:"column_ids,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -188,16 +188,16 @@ func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
 func (m *IndexDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*IndexDescriptor) ProtoMessage()    {}
 
-func (m *IndexDescriptor) GetId() uint32 {
+func (m *IndexDescriptor) GetID() uint32 {
 	if m != nil {
-		return m.Id
+		return m.ID
 	}
 	return 0
 }
 
-func (m *IndexDescriptor) GetColumnIds() []uint32 {
+func (m *IndexDescriptor) GetColumnIDs() []uint32 {
 	if m != nil {
-		return m.ColumnIds
+		return m.ColumnIDs
 	}
 	return nil
 }
@@ -206,14 +206,14 @@ func (m *IndexDescriptor) GetColumnIds() []uint32 {
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
 type TableDescriptor struct {
-	Id      uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
+	ID      uint32 `protobuf:"varint,1,opt,name=id" json:"id"`
 	Table   `protobuf:"bytes,2,opt,name=table,embedded=table" json:"table"`
 	Columns []ColumnDescriptor `protobuf:"bytes,3,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused
-	NextColumnId uint32            `protobuf:"varint,4,opt,name=next_column_id" json:"next_column_id"`
+	NextColumnID uint32            `protobuf:"varint,4,opt,name=next_column_id" json:"next_column_id"`
 	Indexes      []IndexDescriptor `protobuf:"bytes,5,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused
-	NextIndexId      uint32 `protobuf:"varint,6,opt,name=next_index_id" json:"next_index_id"`
+	NextIndexID      uint32 `protobuf:"varint,6,opt,name=next_index_id" json:"next_index_id"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -221,9 +221,9 @@ func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
 func (m *TableDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*TableDescriptor) ProtoMessage()    {}
 
-func (m *TableDescriptor) GetId() uint32 {
+func (m *TableDescriptor) GetID() uint32 {
 	if m != nil {
-		return m.Id
+		return m.ID
 	}
 	return 0
 }
@@ -235,9 +235,9 @@ func (m *TableDescriptor) GetColumns() []ColumnDescriptor {
 	return nil
 }
 
-func (m *TableDescriptor) GetNextColumnId() uint32 {
+func (m *TableDescriptor) GetNextColumnID() uint32 {
 	if m != nil {
-		return m.NextColumnId
+		return m.NextColumnID
 	}
 	return 0
 }
@@ -249,9 +249,9 @@ func (m *TableDescriptor) GetIndexes() []IndexDescriptor {
 	return nil
 }
 
-func (m *TableDescriptor) GetNextIndexId() uint32 {
+func (m *TableDescriptor) GetNextIndexID() uint32 {
 	if m != nil {
-		return m.NextIndexId
+		return m.NextIndexID
 	}
 	return 0
 }
@@ -275,7 +275,7 @@ func (m *CreateTableRequest) GetSchema() TableSchema {
 
 type CreateTableResponse struct {
 	Error            Error  `protobuf:"bytes,1,opt,name=error" json:"error"`
-	TableId          uint32 `protobuf:"varint,2,opt,name=table_id" json:"table_id"`
+	TableID          uint32 `protobuf:"varint,2,opt,name=table_id" json:"table_id"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -290,9 +290,9 @@ func (m *CreateTableResponse) GetError() Error {
 	return Error{}
 }
 
-func (m *CreateTableResponse) GetTableId() uint32 {
+func (m *CreateTableResponse) GetTableID() uint32 {
 	if m != nil {
-		return m.TableId
+		return m.TableID
 	}
 	return 0
 }
@@ -1458,7 +1458,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -1466,7 +1466,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.Id |= (uint32(b) & 0x7F) << shift
+				m.ID |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1540,7 +1540,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -1548,7 +1548,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.Id |= (uint32(b) & 0x7F) << shift
+				m.ID |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1579,7 +1579,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			index = postIndex
 		case 3:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ColumnIds", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ColumnIDs", wireType)
 			}
 			var v uint32
 			for shift := uint(0); ; shift += 7 {
@@ -1593,7 +1593,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.ColumnIds = append(m.ColumnIds, v)
+			m.ColumnIDs = append(m.ColumnIDs, v)
 		default:
 			var sizeOfWire int
 			for {
@@ -1639,7 +1639,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -1647,7 +1647,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.Id |= (uint32(b) & 0x7F) << shift
+				m.ID |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1703,7 +1703,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			index = postIndex
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextColumnId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field NextColumnID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -1711,7 +1711,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.NextColumnId |= (uint32(b) & 0x7F) << shift
+				m.NextColumnID |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1743,7 +1743,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			index = postIndex
 		case 6:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextIndexId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field NextIndexID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -1751,7 +1751,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.NextIndexId |= (uint32(b) & 0x7F) << shift
+				m.NextIndexID |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1916,7 +1916,7 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 			index = postIndex
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TableId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
@@ -1924,7 +1924,7 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 				}
 				b := data[index]
 				index++
-				m.TableId |= (uint32(b) & 0x7F) << shift
+				m.TableID |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4725,7 +4725,7 @@ func (m *TableSchema_IndexByName) Size() (n int) {
 func (m *ColumnDescriptor) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovStructured(uint64(m.Id))
+	n += 1 + sovStructured(uint64(m.ID))
 	l = m.Column.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	if m.XXX_unrecognized != nil {
@@ -4737,11 +4737,11 @@ func (m *ColumnDescriptor) Size() (n int) {
 func (m *IndexDescriptor) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovStructured(uint64(m.Id))
+	n += 1 + sovStructured(uint64(m.ID))
 	l = m.Index.Size()
 	n += 1 + l + sovStructured(uint64(l))
-	if len(m.ColumnIds) > 0 {
-		for _, e := range m.ColumnIds {
+	if len(m.ColumnIDs) > 0 {
+		for _, e := range m.ColumnIDs {
 			n += 1 + sovStructured(uint64(e))
 		}
 	}
@@ -4754,7 +4754,7 @@ func (m *IndexDescriptor) Size() (n int) {
 func (m *TableDescriptor) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovStructured(uint64(m.Id))
+	n += 1 + sovStructured(uint64(m.ID))
 	l = m.Table.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	if len(m.Columns) > 0 {
@@ -4763,14 +4763,14 @@ func (m *TableDescriptor) Size() (n int) {
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
-	n += 1 + sovStructured(uint64(m.NextColumnId))
+	n += 1 + sovStructured(uint64(m.NextColumnID))
 	if len(m.Indexes) > 0 {
 		for _, e := range m.Indexes {
 			l = e.Size()
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
-	n += 1 + sovStructured(uint64(m.NextIndexId))
+	n += 1 + sovStructured(uint64(m.NextIndexID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -4795,7 +4795,7 @@ func (m *CreateTableResponse) Size() (n int) {
 	_ = l
 	l = m.Error.Size()
 	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.TableId))
+	n += 1 + sovStructured(uint64(m.TableID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -5419,7 +5419,7 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Id))
+	i = encodeVarintStructured(data, i, uint64(m.ID))
 	data[i] = 0x12
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Column.Size()))
@@ -5451,7 +5451,7 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Id))
+	i = encodeVarintStructured(data, i, uint64(m.ID))
 	data[i] = 0x12
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Index.Size()))
@@ -5460,8 +5460,8 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n4
-	if len(m.ColumnIds) > 0 {
-		for _, num := range m.ColumnIds {
+	if len(m.ColumnIDs) > 0 {
+		for _, num := range m.ColumnIDs {
 			data[i] = 0x18
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
@@ -5490,7 +5490,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Id))
+	i = encodeVarintStructured(data, i, uint64(m.ID))
 	data[i] = 0x12
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
@@ -5513,7 +5513,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	}
 	data[i] = 0x20
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextColumnId))
+	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
 	if len(m.Indexes) > 0 {
 		for _, msg := range m.Indexes {
 			data[i] = 0x2a
@@ -5528,7 +5528,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	}
 	data[i] = 0x30
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextIndexId))
+	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -5597,7 +5597,7 @@ func (m *CreateTableResponse) MarshalTo(data []byte) (n int, err error) {
 	i += n8
 	data[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.TableId))
+	i = encodeVarintStructured(data, i, uint64(m.TableID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
