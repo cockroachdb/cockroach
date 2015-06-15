@@ -58,7 +58,7 @@ var createNodeCertCmd = &cobra.Command{
 	Use:   "create-node [options] <host 1> <host 2> ... <host N>",
 	Short: "create node cert and key",
 	Long: `
-Generates a new key pair and node certificate, writing them to
+Generates server and client certificates and keys for a given node, writing them to
 individual files in the directory specified by --certs (required).
 The certs directory should contain a CA cert and key.
 At least one host should be passed in (either IP address of dns name).

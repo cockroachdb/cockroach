@@ -60,11 +60,11 @@ func ResetReadFileFn() {
 // - node.key -- the private key of this node
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadTLSConfigFromDir(certDir string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, "node.crt"))
+	certPEM, err := readFileFn(path.Join(certDir, "node.server.crt"))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, "node.key"))
+	keyPEM, err := readFileFn(path.Join(certDir, "node.server.key"))
 	if err != nil {
 		return nil, err
 	}

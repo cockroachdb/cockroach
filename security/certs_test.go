@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -128,14 +129,32 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Endpoint that does not enforce client auth (see: server/authentication_test.go)
 	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+"/_admin/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
 	resp, err = httpClient.Do(req)
 	if err != nil {
-		resp.Body.Close()
 		t.Fatalf("Expected success, got %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected OK, got: %d", resp.StatusCode)
+	}
+
+	// Endpoint that enforces client auth (see: server/authentication_test.go)
+	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+kv.DBPrefix+"Get", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected status code %d, got: %d", http.StatusUnauthorized, resp.StatusCode)
 	}
 
 	// New client. With certs this time.
@@ -153,5 +172,8 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected OK, got: %d", resp.StatusCode)
+	}
 }

@@ -37,8 +37,10 @@ import (
 // Most fields and settings are hard-coded. TODO(marc): allow customization.
 
 const (
-	validFor      = time.Hour * 24 * 365
-	maxPathLength = 2
+	validFor       = time.Hour * 24 * 365
+	maxPathLength  = 1
+	caCommonName   = "Cockroach CA"
+	nodeCommonName = "node"
 )
 
 // generateKeyPair returns a random 'keySize' bit RSA key pair.
@@ -84,7 +86,6 @@ func newTemplate(commonName string) (*x509.Certificate, error) {
 
 	notBefore := time.Now()
 
-	// TODO(marc): figure out what else we should set. eg: more Subject fields, MaxPathLen, etc...
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
@@ -94,10 +95,7 @@ func newTemplate(commonName string) (*x509.Certificate, error) {
 		NotBefore: notBefore,
 		NotAfter:  notBefore.Add(validFor),
 
-		KeyUsage: x509.KeyUsageKeyEncipherment |
-			x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: true,
-		MaxPathLen:            maxPathLength,
+		KeyUsage: x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	}
 
 	return cert, nil
@@ -111,13 +109,15 @@ func GenerateCA(keySize int) ([]byte, crypto.PrivateKey, error) {
 		return nil, nil, err
 	}
 
-	template, err := newTemplate("Cockroach CA")
+	template, err := newTemplate(caCommonName)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Set CA-specific fields.
+	template.BasicConstraintsValid = true
 	template.IsCA = true
+	template.MaxPathLen = maxPathLength
 	template.KeyUsage |= x509.KeyUsageCertSign
 	template.KeyUsage |= x509.KeyUsageContentCommitment
 
@@ -129,24 +129,24 @@ func GenerateCA(keySize int) ([]byte, crypto.PrivateKey, error) {
 	return certBytes, privateKey, nil
 }
 
-// GenerateNodeCert generates a node certificate and returns the cert bytes as
+// GenerateServerCert generates a server certificate and returns the cert bytes as
 // well as the private key used to generate the certificate.
-// The CA cert and private key should be passed in.
-func GenerateNodeCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, hosts []string) (
+// Takes in the CA cert and key, the size of the key to generate, and the list
+// of hosts/ip addresses this certificate applies to.
+func GenerateServerCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, hosts []string) (
 	[]byte, crypto.PrivateKey, error) {
 	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	template, err := newTemplate("Cockroach Node")
+	template, err := newTemplate(nodeCommonName)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Set node-specific fields.
-	// Nodes needs SSL for both server and client authentication.
-	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
+	// Only server authentication is allowed.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	if hosts != nil {
 		for _, h := range hosts {
 			if ip := net.ParseIP(h); ip != nil {
