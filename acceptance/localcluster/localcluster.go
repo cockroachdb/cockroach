@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
 )
@@ -43,7 +44,6 @@ var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if i
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var logDirectory = flag.String("l", "", "the directory to store log files, relative to where the test source")
-var testCertsDir = filepath.Clean(os.ExpandEnv("${PWD}/../resource/test_certs"))
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 
 func prettyJSON(v interface{}) string {
@@ -113,7 +113,6 @@ type Cluster struct {
 	Nodes          []*Container
 	Events         chan Event
 	CertsDir       string
-	UseTestCerts   bool
 	monitorStopper chan struct{}
 	LogDir         string
 }
@@ -134,10 +133,9 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 	}
 
 	return &Cluster{
-		client:       newDockerClient(),
-		stopper:      stopper,
-		Nodes:        make([]*Container, numNodes),
-		UseTestCerts: false,
+		client:  newDockerClient(),
+		stopper: stopper,
+		Nodes:   make([]*Container, numNodes),
 	}
 }
 
@@ -235,21 +233,15 @@ func (l *Cluster) initCluster() {
 		panic(err)
 	}
 
-	// Use pre-created test-certs when possible: cert creation takes ~5
-	// seconds.
-	if l.UseTestCerts {
-		l.CertsDir = testCertsDir
-	} else {
-		// Create the temporary certs directory in the current working
-		// directory. Boot2docker's handling of binding local directories
-		// into the container is very confusing. If the directory being
-		// bound has a parent directory that exists in the boot2docker VM
-		// then that directory is bound into the container. In particular,
-		// that means that binds of /tmp and /var will be problematic.
-		l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
-		if err != nil {
-			panic(err)
-		}
+	// Create the temporary certs directory in the current working
+	// directory. Boot2docker's handling of binding local directories
+	// into the container is very confusing. If the directory being
+	// bound has a parent directory that exists in the boot2docker VM
+	// then that directory is bound into the container. In particular,
+	// that means that binds of /tmp and /var will be problematic.
+	l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
+	if err != nil {
+		panic(err)
 	}
 
 	binds := []string{l.CertsDir + ":/certs"}
@@ -300,25 +292,16 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 
 func (l *Cluster) createCACert() {
 	log.Infof("creating ca")
-	c := l.createRoach(-1, "cert", "--certs=/certs", "create-ca", "--key-size=512")
-	defer c.mustRemove()
-	maybePanic(c.Start(nil, nil, l.vols))
-	maybePanic(c.Wait())
+	maybePanic(security.RunCreateCACert(l.CertsDir, 512))
 }
 
 func (l *Cluster) createNodeCerts() {
 	log.Infof("creating node certs")
-	var nodes []string
+	nodes := []string{dockerIP().String()}
 	for i := range l.Nodes {
 		nodes = append(nodes, node(i))
 	}
-	args := []string{"cert", "--certs=/certs", "create-node", "--key-size=512"}
-	args = append(args, nodes...)
-	args = append(args, dockerIP().String())
-	c := l.createRoach(-1, args...)
-	defer c.mustRemove()
-	maybePanic(c.Start(nil, nil, l.vols))
-	maybePanic(c.Wait())
+	maybePanic(security.RunCreateNodeCert(l.CertsDir, 512, nodes))
 }
 
 func (l *Cluster) startNode(i int) *Container {
@@ -424,10 +407,8 @@ func (l *Cluster) Start() {
 
 	l.runDockerSpy()
 	l.initCluster()
-	if l.CertsDir != testCertsDir {
-		l.createCACert()
-		l.createNodeCerts()
-	}
+	l.createCACert()
+	l.createNodeCerts()
 
 	l.monitorStopper = make(chan struct{})
 	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
@@ -468,7 +449,7 @@ func (l *Cluster) Stop() {
 		maybePanic(l.vols.Kill())
 		l.vols = nil
 	}
-	if l.CertsDir != "" && l.CertsDir != testCertsDir {
+	if l.CertsDir != "" {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}
