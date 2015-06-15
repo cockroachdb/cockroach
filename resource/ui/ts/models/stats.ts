@@ -1,6 +1,7 @@
 // source: models/stats.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="proto.ts" />
+/// <reference path="../util/format.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 /**
@@ -8,22 +9,6 @@
  */
 module Models {
     export module Stats {
-        // This function was adapted from
-        // https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
-        var kibi = 1024
-        var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
-        export function FormatBytes(bytes: number): string {
-            if (Math.abs(bytes) < kibi) {
-                return bytes + ' B';
-            }
-            var u = -1;
-            do {
-                bytes /= kibi;
-                ++u;
-            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
-            return bytes.toFixed(1) + ' ' + units[u];
-        }
-
         // TODO(bram): Move these into css classes.
         var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
         var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
@@ -54,11 +39,11 @@ module Models {
                     ]),
                     m("tr", [
                         m("td", { style: tdStyleEvenFirst }, "Size"),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.key_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.val_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.live_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.intent_bytes)),
-                        m("td", { style: tdStyleEven }, FormatBytes(stats.sys_bytes))
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.key_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.val_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.live_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.intent_bytes)),
+                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.sys_bytes))
                     ])
                 ])
             ]);

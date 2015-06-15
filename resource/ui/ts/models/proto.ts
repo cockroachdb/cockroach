@@ -111,7 +111,6 @@ module Models {
             attrs: any;
         }
 
-
         /**
          * StoreDescriptor contains identifying characteristics of a store.
          */
@@ -213,6 +212,7 @@ module Models {
          */
         export interface QueryResult {
             name: string;
+            aggregator: QueryAggregator;
             datapoints: Datapoint[]
         }
 

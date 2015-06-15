@@ -21,7 +21,7 @@
         "./models/proto.ts",
         "./models/stats.ts",
         "./models/status.ts",
-        "./models/timeseries.ts",
+        "./models/metrics.ts",
 
         "./pages/graph.ts",
         "./pages/log.ts",

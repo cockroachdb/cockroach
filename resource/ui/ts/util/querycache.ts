@@ -53,13 +53,6 @@ module Utils {
         }
 
         /**
-         * setQuery replaces the query function underlying this QueryCache.
-         */
-        setQuery(q:() => promise<T>) {
-            this._query = q;
-        }
-
-        /**
          * hasData returns true if at least one query has completed. This
          * indicates that either the result() or error() functions will return
          * non-null.

@@ -1,7 +1,6 @@
 // source: pages/nodes.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
-/// <reference path="../models/timeseries.ts" />
 /// <reference path="../components/metrics.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -17,11 +16,6 @@ module AdminViews {
     export module Nodes {
         import metrics = Models.Metrics;
         var nodeStatuses = new Models.Status.Nodes();
-
-        interface QueryHolder {
-            Result: Utils.QueryCache<Models.Proto.QueryResultSet>;
-            Query: metrics.Query;
-        }
 
         function _nodeMetric(nodeId: string, metric:string):string {
             return "cr.node." + metric + "." + nodeId;
@@ -77,36 +71,40 @@ module AdminViews {
          */
         export module NodePage {
             class Controller {
-                charts: QueryHolder[] = [];
+                exec:metrics.Executor;
+                axes: metrics.Axis[] = [];
+                private _query:metrics.Query;
                 private static _queryEveryMS = 10000;
                 private _interval: number;
-                private _nodeId: string;
+                private _nodeId: string
 
                 private _refresh():void {
                     nodeStatuses.refresh();
-                    for (var i = 0; i < this.charts.length; i++) {
-                        this.charts[i].Result.refresh();
-                    }
+                    this.exec.refresh();
                 }
 
-                private _addChart(q:metrics.Query):void {
-                    this.charts.push({
-                        Query: q, 
-                        Result: new Utils.QueryCache(q.execute),
-                    });
+                private _addChart(axis:metrics.Axis):void {
+                    axis.selectors().forEach((s) => this._query.selectors().push(s));
+                    this.axes.push(axis);
                 }
 
                 public constructor(nodeId:string) {
                     this._nodeId = nodeId;
+                    this._query = metrics.NewQuery();
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.AvgRate(_nodeMetric(nodeId, "calls.success")))
-                        .title("Successful Calls Rate"));
+                        metrics.NewAxis(
+                            metrics.select.AvgRate(_nodeMetric(nodeId, "calls.success"))
+                                .title("Successful Calls")
+                            )
+                        .label("Count / 10 sec."));
                     this._addChart(
-                        metrics.NewQuery(
-                            metrics.select.AvgRate(_nodeMetric(nodeId, "calls.error")))
-                        .title("Error Calls Rate"));
+                        metrics.NewAxis(
+                            metrics.select.AvgRate(_nodeMetric(nodeId, "calls.error"))
+                                .title("Error Calls")
+                            )
+                        .label("Count / 10 sec."));
 
+                    this.exec = new metrics.Executor(this._query);
                     this._refresh();
                     this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
                 }
@@ -129,10 +127,10 @@ module AdminViews {
                         m("h3", "Node: " + nodeId),
                         nodeStatuses.Details(nodeId)
                     ]),
-                    m(".charts", ctrl.charts.map((chart:QueryHolder) => {
+                    m(".charts", ctrl.axes.map((axis:metrics.Axis) => {
                         return m("", { style : "float:left" }, [
-                            m("h4", chart.Query.title()),
-                            Components.Metrics.LineGraph.create(chart.Result)
+                            m("h4", axis.title()),
+                            Components.Metrics.LineGraph.create(ctrl.exec, axis)
                         ]);
                     }))
                 ]);
