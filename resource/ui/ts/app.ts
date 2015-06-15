@@ -2,16 +2,17 @@
 /// <reference path="typings/mithriljs/mithril.d.ts" />
 
 /// <reference path="pages/graph.ts" />
+/// <reference path="pages/log.ts" />
 /// <reference path="pages/monitor.ts" />
 /// <reference path="pages/nodes.ts" />
 /// <reference path="pages/stores.ts" />
 
-// Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/nodes", {
     "/graph": AdminViews.Graph.Page,
+    "/log": AdminViews.Log.Page,
     "/monitor": AdminViews.Monitor.Page,
     "/node": AdminViews.Nodes.NodesPage,
     "/nodes": AdminViews.Nodes.NodesPage,
