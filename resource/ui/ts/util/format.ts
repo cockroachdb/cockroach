@@ -1,4 +1,5 @@
 // source: util/format.ts
+/// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -12,35 +13,41 @@ module Utils {
      */
     export module Format {
         /**
-         * DateFromDate formats a Date object into a human readable date
-         * string.
+         * Date formats a Date object into a human readable date string.
          */
         var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
-        export function DateFromDate(datetime: Date): string {
+        export function Date(datetime: Date): string {
             return _datetimeFormatter(datetime);
-        }
+        };
 
         /**
-         * DateFromTimestamp formats a timestamp (nano) into a human readable
-         * date string.
-         */
-        export function DateFromTimestamp(timestamp: number): string {
-            var datetime = Convert.TimestampToDate(timestamp);
-            return DateFromDate(datetime);
-        }
-
-        /**
-         * SeverityFromNumber formats a numerical severity into its string
+         * Severity formats a numerical severity into its string
          * representation.
          */
-        var _severities = {
-            0 : "INFO",
-            1 : "WARNING",
-            2 : "ERROR",
-            3 : "FATAL"
+        enum Severities {
+            INFO = 0,
+            WARNING = 1,
+            ERROR = 2,
+            FATAL = 3
         };
-        export function SeverityFromNumber(severity: number): string {
-            return _severities[severity];
-        }
+        export function Severity(severity: number): string {
+            return Severities[severity];
+        };
+
+        /**
+         * LogEntryMessage formats a single log entry into a human readable format.
+         */
+        var _messageTags = new RegExp("%s|%d|%v|%+v", "gi")
+        export function LogEntryMessage(entry: Models.Proto.LogEntry): string {
+            var i = -1;
+            return entry.format.replace(_messageTags, function(tag) {
+                i++;
+                if (entry.args.length > i) {
+                    return entry.args[i].str;
+                } else {
+                    return "";
+                }
+            });
+        };
     }
 }

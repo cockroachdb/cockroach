@@ -157,14 +157,14 @@ var Utils;
 (function (Utils) {
     var Convert;
     (function (Convert) {
-        function MilliToNanos(millis) {
+        function MilliToNano(millis) {
             return millis * 1.0e6;
         }
-        Convert.MilliToNanos = MilliToNanos;
-        function TimestampToDate(timestamp) {
-            return new Date(timestamp / 1.0e6);
+        Convert.MilliToNano = MilliToNano;
+        function NanoToMilli(nano) {
+            return nano / 1.0e6;
         }
-        Convert.TimestampToDate = TimestampToDate;
+        Convert.NanoToMilli = NanoToMilli;
     })(Convert = Utils.Convert || (Utils.Convert = {}));
 })(Utils || (Utils = {}));
 // source: models/timeseries.ts
@@ -239,8 +239,8 @@ var Models;
                 this.execute = function () {
                     var s = _this.timespan().timespan();
                     var req = {
-                        start_nanos: Utils.Convert.MilliToNanos(s[0]),
-                        end_nanos: Utils.Convert.MilliToNanos(s[1]),
+                        start_nanos: Utils.Convert.MilliToNano(s[0]),
+                        end_nanos: Utils.Convert.MilliToNano(s[1]),
                         queries: [],
                     };
                     for (var i = 0; i < _this._selectors.length; i++) {
@@ -435,6 +435,7 @@ var AdminViews;
     })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
 })(AdminViews || (AdminViews = {}));
 // source: util/format.ts
+/// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Utils;
@@ -442,25 +443,39 @@ var Utils;
     var Format;
     (function (Format) {
         var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
-        function DateFromDate(datetime) {
+        function Date(datetime) {
             return _datetimeFormatter(datetime);
         }
-        Format.DateFromDate = DateFromDate;
-        function DateFromTimestamp(timestamp) {
-            var datetime = Utils.Convert.TimestampToDate(timestamp);
-            return DateFromDate(datetime);
+        Format.Date = Date;
+        ;
+        var Severities;
+        (function (Severities) {
+            Severities[Severities["INFO"] = 0] = "INFO";
+            Severities[Severities["WARNING"] = 1] = "WARNING";
+            Severities[Severities["ERROR"] = 2] = "ERROR";
+            Severities[Severities["FATAL"] = 3] = "FATAL";
+        })(Severities || (Severities = {}));
+        ;
+        function Severity(severity) {
+            return Severities[severity];
         }
-        Format.DateFromTimestamp = DateFromTimestamp;
-        var _severities = {
-            0: "INFO",
-            1: "WARNING",
-            2: "ERROR",
-            3: "FATAL"
-        };
-        function SeverityFromNumber(severity) {
-            return _severities[severity];
+        Format.Severity = Severity;
+        ;
+        var _messageTags = new RegExp("%s|%d|%v|%+v", "gi");
+        function LogEntryMessage(entry) {
+            var i = -1;
+            return entry.format.replace(_messageTags, function (tag) {
+                i++;
+                if (entry.args.length > i) {
+                    return entry.args[i].str;
+                }
+                else {
+                    return "";
+                }
+            });
         }
-        Format.SeverityFromNumber = SeverityFromNumber;
+        Format.LogEntryMessage = LogEntryMessage;
+        ;
     })(Format = Utils.Format || (Utils.Format = {}));
 })(Utils || (Utils = {}));
 // source: models/log.ts
@@ -475,12 +490,6 @@ var Models;
 (function (Models) {
     var Log;
     (function (Log) {
-        var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-        var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
-        var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
         var Entries = (function () {
             function Entries() {
                 var _this = this;
@@ -488,6 +497,12 @@ var Models;
                 this.endTime = Utils.chainProp(this, null);
                 this.max = Utils.chainProp(this, null);
                 this.level = Utils.chainProp(this, null);
+                this._innerQuery = function () {
+                    return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
+                        .then(function (results) {
+                        return results.d;
+                    });
+                };
                 this._data = new Utils.QueryCache(function () {
                     return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
                         .then(function (results) {
@@ -512,79 +527,12 @@ var Models;
                 }
                 return url;
             };
-            Entries.prototype.Refresh = function () {
+            Entries.prototype.refresh = function () {
                 this._data.refresh();
             };
-            Entries.prototype.Entries = function () {
+            Entries.prototype.result = function () {
                 return this._data.result();
             };
-            Entries._FormatMessage = function (entry) {
-                var i = -1;
-                return entry.format.replace(Entries._formatTags, function (tag) {
-                    i++;
-                    if (entry.args.length > i) {
-                        return entry.args[i].str;
-                    }
-                    else {
-                        return "";
-                    }
-                });
-            };
-            Entries._EntryRow = function (entry, count) {
-                var dstyle, countStyle;
-                if (count % 2 == 0) {
-                    countStyle = tdStyleEvenFirst;
-                    dstyle = tdStyleEven;
-                }
-                else {
-                    countStyle = tdStyleOddFirst;
-                    dstyle = tdStyleOdd;
-                }
-                return m("tr", [
-                    m("td", { style: countStyle }, (count + 1).toString()),
-                    m("td", { style: dstyle }, Utils.Format.DateFromTimestamp(entry.time)),
-                    m("td", { style: dstyle }, Utils.Format.SeverityFromNumber(entry.severity)),
-                    m("td", { style: dstyle }, Entries._FormatMessage(entry)),
-                    m("td", { style: dstyle }, entry.node_id),
-                    m("td", { style: dstyle }, entry.store_id),
-                    m("td", { style: dstyle }, entry.raft_id),
-                    m("td", { style: dstyle }, entry.key),
-                    m("td", { style: dstyle }, entry.file + ":" + entry.line),
-                    m("td", { style: dstyle }, entry.method),
-                    m("td", { style: dstyle }, entry.thread_id)
-                ]);
-            };
-            Entries.prototype.EntryRows = function () {
-                var entries = this.Entries();
-                var rows = [];
-                if (entries != null) {
-                    var rows = [];
-                    for (var i = 0; i < entries.length; i++) {
-                        rows.push(Entries._EntryRow(entries[i], i));
-                    }
-                    ;
-                }
-                return m("div", [
-                    m("p", rows.length + " log entries retrieved"),
-                    m("table", { style: tableStyle }, [
-                        m("tr", [
-                            m("th", { style: thStyle }, "#"),
-                            m("th", { style: thStyle }, "Time"),
-                            m("th", { style: thStyle }, "Severity"),
-                            m("th", { style: thStyle }, "Message"),
-                            m("th", { style: thStyle }, "Node"),
-                            m("th", { style: thStyle }, "Store"),
-                            m("th", { style: thStyle }, "Raft"),
-                            m("th", { style: thStyle }, "Key"),
-                            m("th", { style: thStyle }, "File:Line"),
-                            m("th", { style: thStyle }, "Method"),
-                            m("th", { style: thStyle }, "Thread")
-                        ]),
-                        rows
-                    ])
-                ]);
-            };
-            Entries._formatTags = new RegExp("%s|%d|%v|%+v", "gi");
             return Entries;
         })();
         Log.Entries = Entries;
@@ -594,8 +542,9 @@ var Models;
     })(Log = Models.Log || (Models.Log = {}));
 })(Models || (Models = {}));
 // source: pages/log.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/log.ts" />
+/// <reference path="../models/proto.ts" />
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
 var AdminViews;
 (function (AdminViews) {
     var Log;
@@ -610,7 +559,7 @@ var AdminViews;
                     this._interval = setInterval(function () { return _this._Refresh(); }, Controller._queryEveryMS);
                 }
                 Controller.prototype._Refresh = function () {
-                    entries.Refresh();
+                    entries.refresh();
                 };
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
@@ -622,8 +571,63 @@ var AdminViews;
                 return new Controller();
             }
             Page.controller = controller;
+            var _tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
+            var _thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
+            var _tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
+            var _tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
+            var _tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
+            var _tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
+            function _EntryRow(entry, count) {
+                var dstyle, countStyle;
+                if (count % 2 == 0) {
+                    countStyle = _tdStyleEvenFirst;
+                    dstyle = _tdStyleEven;
+                }
+                else {
+                    countStyle = _tdStyleOddFirst;
+                    dstyle = _tdStyleOdd;
+                }
+                var date = new Date(Utils.Convert.NanoToMilli(entry.time));
+                return m("tr", [
+                    m("td", { style: countStyle }, (count + 1).toString()),
+                    m("td", { style: dstyle }, Utils.Format.Date(date)),
+                    m("td", { style: dstyle }, Utils.Format.Severity(entry.severity)),
+                    m("td", { style: dstyle }, Utils.Format.LogEntryMessage(entry)),
+                    m("td", { style: dstyle }, entry.node_id),
+                    m("td", { style: dstyle }, entry.store_id),
+                    m("td", { style: dstyle }, entry.raft_id),
+                    m("td", { style: dstyle }, entry.key),
+                    m("td", { style: dstyle }, entry.file + ":" + entry.line),
+                    m("td", { style: dstyle }, entry.method)
+                ]);
+            }
             function view(ctrl) {
-                return entries.EntryRows();
+                var rows = [];
+                if (entries.result() != null) {
+                    var rows = [];
+                    for (var i = 0; i < entries.result().length; i++) {
+                        rows.push(_EntryRow(entries.result()[i], i));
+                    }
+                    ;
+                }
+                return m("div", [
+                    m("p", rows.length + " log entries retrieved"),
+                    m("table", { style: _tableStyle }, [
+                        m("tr", [
+                            m("th", { style: _thStyle }, "#"),
+                            m("th", { style: _thStyle }, "Time"),
+                            m("th", { style: _thStyle }, "Severity"),
+                            m("th", { style: _thStyle }, "Message"),
+                            m("th", { style: _thStyle }, "Node"),
+                            m("th", { style: _thStyle }, "Store"),
+                            m("th", { style: _thStyle }, "Raft"),
+                            m("th", { style: _thStyle }, "Key"),
+                            m("th", { style: _thStyle }, "File:Line"),
+                            m("th", { style: _thStyle }, "Method")
+                        ]),
+                        rows
+                    ])
+                ]);
             }
             Page.view = view;
         })(Page = Log.Page || (Log.Page = {}));

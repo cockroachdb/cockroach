@@ -152,8 +152,8 @@ module Models {
             execute = ():promise<Proto.QueryResultSet> => {
                 var s = this.timespan().timespan();
                 var req:Proto.QueryRequestSet = {
-                    start_nanos: Utils.Convert.MilliToNanos(s[0]),
-                    end_nanos: Utils.Convert.MilliToNanos(s[1]),
+                    start_nanos: Utils.Convert.MilliToNano(s[0]),
+                    end_nanos: Utils.Convert.MilliToNano(s[1]),
                     queries:[],
                 }
                 for (var i = 0; i < this._selectors.length; i++) {

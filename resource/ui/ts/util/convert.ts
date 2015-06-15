@@ -8,18 +8,19 @@
 module Utils {
 	export module Convert {
 		/**
-		 * microToNanos is intended to convert milliseconds (used by Java time
+		 * MilliToNano is intended to convert milliseconds (used by Java time
 		 * methods) to nanoseconds, which are used by the cockroach server.
 		 */
-		export function MilliToNanos(millis: number): number {
+		export function MilliToNano(millis: number): number {
 			return millis * 1.0e6;
 		}
 
 		/**
-		 * TimestampToDate converts a timestamp (nanos) into a Date.
+		 * NanosToMilli converts a nanoseconds to milliseconds, for use in Java
+		 * time methods.
 		 */
-		export function TimestampToDate(timestamp: number): Date {
-			return new Date(timestamp / 1.0e6);
+		export function NanoToMilli(nano: number): number {
+			return nano / 1.0e6;
 		}
 	}
 }
