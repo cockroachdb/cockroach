@@ -57,20 +57,20 @@ We support high level entities like Namespace, Table, Index, and Column.
 
 ```proto
 NamespaceDescriptor {
-  NamespaceID = ...,
-  Permissions = ...,
+  NamespaceID = ...;
+  Permissions = ...;
   ...
 }
 ```
 
 ```proto
 TableDescriptor {
-  TableID = ...,
-  Columns = [{ ColumnID = ..., Name = ... }, ...],
-  Indexes = [{ IndexID = ..., Name = ..., ColumnIDs = [ ... ]}, ...],
-  Permissions = ...,
-  NextFreeColumnId = ...,
-  NextFreeIndexID = ...,
+  TableID = ...;
+  Columns = [{ ColumnID = ..., Name = ... }, ...];
+  Indexes = [{ IndexID = ..., Name = ..., ColumnIDs = [ ... ]}, ...];
+  Permissions = ...;
+  NextFreeColumnId = ...;
+  NextFreeIndexID = ...;
   ...
 }
 ```
@@ -92,22 +92,42 @@ be taken to not expose these implementation details to the user.
 
 ##Addressing: Anatomy of a key##
 
-The "/" separator is used below to disambiguate the components forming each
-key, and to stress an order to the way the components line up to form the key.
+The "/" separator is used below to disambiguate the components forming
+each key, and to stress an order to the way the components line up to
+form the key. The actual code does not use a "/" to separate key
+components, but instead uses the encodings founding in
+[util/encoding](https://github.com/cockroachdb/cockroach/tree/master/util/encoding).
 
 ###Global metadata key###
 
 The metadata addressing will use the following key:Descriptor mappings:
 
-`\x00ns<NamespaceName>` : `NamespaceDescriptor`
+`\x00name-<Parent-DescriptorID><Name>` : `<DescriptorID>`
 
-`\x00tbl<NamespaceID><TableName>` : `TableDescriptor`
+`\x00desc-<DescriptorID>` : `{Namespace,Table}Descriptor`
+
+The root namespace has the fixed ID of `1`. The initial implementation will
+support only a single level of namespaces, though the key design allows for
+arbitrarily many levels. The namespace table, mapping name to descriptor ID,
+allows lookup of a descriptor proto from a `<namespace>/<table>` path. The
+descriptor table allows for the reverse lookup of a descriptor proto from a
+descriptor ID.
+
+As an example, lookup of the `<TableID>` for the table path `"foo/bar"`
+(`<namespace>/<table>`) is performed by first looking up the `<NamespaceID>`
+using the key:
+
+  `\x00name-<1>"foo"` : `<NamespaceID>`
+
+The resulting `<NamespaceID>` is used to lookup the `<TableID>`:
+
+  `\x00name-<NamespaceID>"bar"` : `<TableID>`
 
 Creating/Renaming/Deleting: Creating a new Namespace or Table involves
 allocating a new ID, initializing the {Namespace,Table}Descriptor, and storing
-the descriptor at its key defined above. Renaming involves deleting the old
-key and creating a new one. A namespace can only be deleted if it does not
-contain any children. A table is deleted by marking it deleted in its table
+the descriptor at its key defined above. Renaming involves deleting the old key
+and creating a new one. A namespace can only be deleted if it does not contain
+any children. A table is deleted by marking it deleted in its table
 descriptor. This will allow folks to recover their data for a few days/weeks
 before we garbage collect the table in the background.
 
