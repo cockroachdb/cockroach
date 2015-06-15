@@ -75,7 +75,7 @@ func (tm *testModel) getActualData() map[string]*proto.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keyDataPrefix
 	endKey := keyDataPrefix.PrefixEnd()
-	keyValues, err := engine.MVCCScan(tm.Eng, startKey, endKey, 0, tm.Clock.Now(), true, nil)
+	keyValues, _, err := engine.MVCCScan(tm.Eng, startKey, endKey, 0, tm.Clock.Now(), true, nil)
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())
 	}

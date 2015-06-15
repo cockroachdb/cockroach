@@ -111,7 +111,7 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	actualKVs, err := MVCCScan(rocksdb, proto.KeyMin, proto.KeyMax,
+	actualKVs, _, err := MVCCScan(rocksdb, proto.KeyMin, proto.KeyMax,
 		0, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
@@ -233,7 +233,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
-			kvs, err := MVCCScan(rocksdb, startKey, proto.KeyMax, int64(numRows), ts, true, nil)
+			kvs, _, err := MVCCScan(rocksdb, startKey, proto.KeyMax, int64(numRows), ts, true, nil)
 			if err != nil {
 				b.Fatalf("failed scan: %s", err)
 			}
@@ -322,7 +322,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 			key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
-			if v, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
+			if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
 				b.Fatalf("failed get: %s", err)
 			} else if len(v.Bytes) != 1024 {
 				b.Fatalf("unexpected value size: %d", len(v.Bytes))
@@ -461,7 +461,7 @@ func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
 
 	// Read values out to force merge.
 	for _, key := range keys {
-		val, err := MVCCGet(rocksdb, key, proto.ZeroTimestamp, true, nil)
+		val, _, err := MVCCGet(rocksdb, key, proto.ZeroTimestamp, true, nil)
 		if err != nil {
 			b.Fatal(err)
 		} else if val == nil {

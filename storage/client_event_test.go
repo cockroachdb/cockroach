@@ -213,7 +213,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
 		for _, eng := range mtc.engines {
-			val, err := engine.MVCCGet(eng, proto.Key("aa"), mtc.clock.Now(), true, nil)
+			val, _, err := engine.MVCCGet(eng, proto.Key("aa"), mtc.clock.Now(), true, nil)
 			if err != nil {
 				return err
 			}

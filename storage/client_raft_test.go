@@ -556,7 +556,7 @@ func TestProgressWithDownNode(t *testing.T) {
 		util.SucceedsWithin(t, time.Second, func() error {
 			values := []int64{}
 			for _, eng := range mtc.engines {
-				val, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
+				val, _, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
 				if err != nil {
 					return err
 				}
@@ -607,7 +607,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 			util.SucceedsWithin(t, time.Second, func() error {
 				values := []int64{}
 				for _, eng := range mtc.engines {
-					val, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
+					val, _, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
 					if err != nil {
 						return err
 					}

@@ -2355,8 +2355,8 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 
 	err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply}, true)
 
-	if wiErr, ok := err.(*proto.WriteIntentError); !ok || len(wiErr.Intents) != 1 {
-		t.Errorf("expected write intent error with 1 key; got %s", err)
+	if err != nil {
+		t.Errorf("unexpected lookup error: %s", err)
 	}
 	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
 		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])

@@ -103,10 +103,6 @@ message TransactionStatusError {
 // immediately. If Resolved is false, the client should back off and
 // retry.
 message WriteIntentError {
-  message Intent {
-    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-    optional Transaction txn = 2 [(gogoproto.nullable) = false];
-  }
   repeated Intent intents = 1 [(gogoproto.nullable) = false];
   optional bool resolved = 2 [(gogoproto.nullable) = false];
 }

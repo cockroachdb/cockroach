@@ -472,7 +472,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
 	s.feed.beginScanRanges()
-	if err := engine.MVCCIterate(s.engine, start, end, now, false, nil, func(kv proto.KeyValue) (bool, error) {
+	if _, err := engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, func(kv proto.KeyValue) (bool, error) {
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _ := keys.DecodeRangeKey(kv.Key)
 		if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
@@ -1250,30 +1250,18 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it in Range.executeCmd.
 		if wiErr, ok := err.(*proto.WriteIntentError); ok {
-			// If inconsistent, return results and resolve asynchronously.
-			if header.ReadConsistency == proto.INCONSISTENT && s.stopper.StartTask() {
-				go func() {
-					if err := s.resolveWriteIntentError(ctx, wiErr, rng, args, proto.CLEANUP_TXN, true); err != nil {
-						log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
-					}
-					s.stopper.FinishTask()
-				}()
-				reply.Header().Error = nil
-				return retry.Break, nil
-			}
 			pushType := proto.PUSH_TIMESTAMP
 			if proto.IsWrite(args) {
 				pushType = proto.ABORT_TXN
 			}
-			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType, false)
+			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType, false /* wait */)
 			reply.Header().SetGoError(err)
 		}
 
 		switch t := err.(type) {
 		case *proto.WriteTooOldError:
 			// Update request timestamp and retry immediately.
-			header.Timestamp = t.ExistingTimestamp
-			header.Timestamp.Logical++
+			header.Timestamp = t.ExistingTimestamp.Next()
 			return retry.Reset, err
 		case *proto.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
@@ -1318,18 +1306,19 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
+	header := args.Header()
 	bArgs := &proto.InternalBatchRequest{
 		RequestHeader: proto.RequestHeader{
-			Txn:          args.Header().Txn,
-			User:         args.Header().User,
-			UserPriority: args.Header().UserPriority,
+			Txn:          header.Txn,
+			User:         header.User,
+			UserPriority: header.UserPriority,
 		},
 	}
 	bReply := &proto.InternalBatchResponse{}
 	for _, intent := range wiErr.Intents {
 		pushArgs := &proto.InternalPushTxnRequest{
 			RequestHeader: proto.RequestHeader{
-				Timestamp: args.Header().Timestamp,
+				Timestamp: header.Timestamp,
 				Key:       intent.Txn.Key,
 				// TODO(tschottdorf):
 				// The following fields should not be supplied here, but store
@@ -1337,9 +1326,9 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				// go through TxnCoordSender rely on them being specified on
 				// the individual calls (and TxnCoordSender is in charge of
 				// filling them in here later).
-				Txn:          args.Header().Txn,
-				User:         args.Header().User,
-				UserPriority: args.Header().UserPriority,
+				Txn:          header.Txn,
+				User:         header.User,
+				UserPriority: header.UserPriority,
 			},
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by InternalPushTxn for figuring out
@@ -1366,7 +1355,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
-		if args.Header().Txn != nil && proto.IsWrite(args) {
+		if header.Txn != nil && proto.IsWrite(args) {
 			return pushErr
 		}
 		// For read/write conflicts, return the write intent error which

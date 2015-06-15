@@ -53,6 +53,7 @@ class InternalCommitTrigger;
 class NodeList;
 class Transaction;
 class Lease;
+class Intent;
 class MVCCMetadata;
 class GCMetadata;
 class MVCCStats;
@@ -1662,6 +1663,112 @@ class Lease : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static Lease* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class Intent : public ::google::protobuf::Message {
+ public:
+  Intent();
+  virtual ~Intent();
+
+  Intent(const Intent& from);
+
+  inline Intent& operator=(const Intent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const Intent& default_instance();
+
+  void Swap(Intent* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Intent* New() const { return New(NULL); }
+
+  Intent* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const Intent& from);
+  void MergeFrom(const Intent& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Intent* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes key = 1;
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // optional .cockroach.proto.Transaction txn = 2;
+  bool has_txn() const;
+  void clear_txn();
+  static const int kTxnFieldNumber = 2;
+  const ::cockroach::proto::Transaction& txn() const;
+  ::cockroach::proto::Transaction* mutable_txn();
+  ::cockroach::proto::Transaction* release_txn();
+  void set_allocated_txn(::cockroach::proto::Transaction* txn);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.Intent)
+ private:
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_txn();
+  inline void clear_has_txn();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::cockroach::proto::Transaction* txn_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
+
+  void InitAsDefaultInstance();
+  static Intent* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -3816,6 +3923,106 @@ inline void Lease::set_raft_node_id(::google::protobuf::uint64 value) {
 
 // -------------------------------------------------------------------
 
+// Intent
+
+// optional bytes key = 1;
+inline bool Intent::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Intent::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Intent::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Intent::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+inline const ::std::string& Intent::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Intent.key)
+  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Intent::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.Intent.key)
+}
+inline void Intent::set_key(const char* value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.Intent.key)
+}
+inline void Intent::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Intent.key)
+}
+inline ::std::string* Intent::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Intent.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* Intent::release_key() {
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Intent::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Intent.key)
+}
+
+// optional .cockroach.proto.Transaction txn = 2;
+inline bool Intent::has_txn() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Intent::set_has_txn() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Intent::clear_has_txn() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Intent::clear_txn() {
+  if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
+  clear_has_txn();
+}
+inline const ::cockroach::proto::Transaction& Intent::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Intent.txn)
+  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
+}
+inline ::cockroach::proto::Transaction* Intent::mutable_txn() {
+  set_has_txn();
+  if (txn_ == NULL) {
+    txn_ = new ::cockroach::proto::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Intent.txn)
+  return txn_;
+}
+inline ::cockroach::proto::Transaction* Intent::release_txn() {
+  clear_has_txn();
+  ::cockroach::proto::Transaction* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+inline void Intent::set_allocated_txn(::cockroach::proto::Transaction* txn) {
+  delete txn_;
+  txn_ = txn;
+  if (txn) {
+    set_has_txn();
+  } else {
+    clear_has_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Intent.txn)
+}
+
+// -------------------------------------------------------------------
+
 // MVCCMetadata
 
 // optional .cockroach.proto.Transaction txn = 1;
@@ -4388,6 +4595,8 @@ inline void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
