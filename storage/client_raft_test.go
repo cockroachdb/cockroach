@@ -740,11 +740,6 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	mtc := startMultiTestContext(t, 1)
 	defer mtc.Stop()
 
-	rng, err := mtc.stores[0].GetRange(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 	// Call Snapshot() in a loop and ensure it never fails.
@@ -754,17 +749,51 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			case <-stopper.ShouldStop():
 				return
 			default:
+				rng := mtc.stores[0].LookupRange(proto.KeyMin, nil)
+				if rng == nil {
+					t.Fatal("failed to look up min range")
+				}
 				_, err := rng.Snapshot()
 				if err != nil {
-					t.Fatal(err)
+					t.Fatalf("failed to snapshot min range: %s", err)
+				}
+
+				rng = mtc.stores[0].LookupRange(proto.Key("Z"), nil)
+				if rng == nil {
+					t.Fatal("failed to look up max range")
+				}
+				_, err = rng.Snapshot()
+				if err != nil {
+					t.Fatalf("failed to snapshot max range: %s", err)
 				}
 			}
 		}
 	})
 
-	// Split the range 100 times (carving chunks off the end of the initial range).
-	for i := 100; i > 0; i-- {
-		args, reply := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("%03d", i)), 1, mtc.stores[0].StoreID())
+	// Split the range repeatedly, carving chunks off the end of the
+	// initial range.  The bug that this test was designed to find
+	// usually occurred within the first 5 iterations.
+	for i := 20; i > 0; i-- {
+		rng := mtc.stores[0].LookupRange(proto.KeyMin, nil)
+		if rng == nil {
+			t.Fatal("failed to look up min range")
+		}
+		args, reply := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RaftID,
+			mtc.stores[0].StoreID())
+		rng.AdminSplit(args, reply)
+		if reply.GoError() != nil {
+			t.Fatal(reply.GoError())
+		}
+	}
+
+	// Split again, carving chunks off the beginning of the final range.
+	for i := 0; i < 20; i++ {
+		rng := mtc.stores[0].LookupRange(proto.Key("Z"), nil)
+		if rng == nil {
+			t.Fatal("failed to look up max range")
+		}
+		args, reply := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RaftID,
+			mtc.stores[0].StoreID())
 		rng.AdminSplit(args, reply)
 		if reply.GoError() != nil {
 			t.Fatal(reply.GoError())

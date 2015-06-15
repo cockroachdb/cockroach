@@ -169,7 +169,12 @@ func (r *Range) FirstIndex() (uint64, error) {
 
 // loadAppliedIndex retrieves the applied index from the supplied engine.
 func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
-	appliedIndex := uint64(0)
+	var appliedIndex uint64
+	if r.isInitialized() {
+		appliedIndex = raftInitialLogIndex
+	} else {
+		appliedIndex = 0
+	}
 	v, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil)
 	if err != nil {
@@ -275,7 +280,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 
 	term, err := r.Term(appliedIndex)
 	if err != nil {
-		return raftpb.Snapshot{}, err
+		return raftpb.Snapshot{}, util.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
 	return raftpb.Snapshot{
