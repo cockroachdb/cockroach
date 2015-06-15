@@ -22,6 +22,11 @@ import (
 	"strings"
 )
 
+const (
+	// PrimaryKeyIndexName is the name of the index for the primary key.
+	PrimaryKeyIndexName = "primary"
+)
+
 func validateName(name, typ string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("empty %s name", typ)
