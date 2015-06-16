@@ -925,19 +925,35 @@ func unmarshalTableValue(src *proto.Value, dest reflect.Value) error {
 
 	switch dest.Kind() {
 	case reflect.Bool:
-		dest.SetBool(src.GetInteger() != 0)
+		i, err := src.GetInteger()
+		if err != nil {
+			return err
+		}
+		dest.SetBool(i != 0)
 		return nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		dest.SetInt(src.GetInteger())
+		i, err := src.GetInteger()
+		if err != nil {
+			return err
+		}
+		dest.SetInt(i)
 		return nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		dest.SetUint(uint64(src.GetInteger()))
+		i, err := src.GetInteger()
+		if err != nil {
+			return err
+		}
+		dest.SetUint(uint64(i))
 		return nil
 
 	case reflect.Float32, reflect.Float64:
-		dest.SetFloat(math.Float64frombits(uint64(src.GetInteger())))
+		i, err := src.GetInteger()
+		if err != nil {
+			return err
+		}
+		dest.SetFloat(math.Float64frombits(uint64(i)))
 		return nil
 
 	case reflect.String:

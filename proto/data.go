@@ -301,8 +301,7 @@ func (t *Timestamp) GoTime() time.Time {
 
 // InitChecksum initializes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
-// checksum includes it directly; if the value contains an integer,
-// the checksum includes the integer as 8 bytes in big-endian order.
+// checksum includes it directly.
 func (v *Value) InitChecksum(key []byte) {
 	if v.Checksum == nil {
 		v.Checksum = gogoproto.Uint32(v.computeChecksum(key))
@@ -311,8 +310,7 @@ func (v *Value) InitChecksum(key []byte) {
 
 // Verify verifies the value's Checksum matches a newly-computed
 // checksum of the value's contents. If the value's Checksum is not
-// set the verification is a noop. It also ensures that both Bytes
-// and Integer are not both set.
+// set the verification is a noop.
 func (v *Value) Verify(key []byte) error {
 	if v.Checksum != nil {
 		cksum := v.computeChecksum(key)
@@ -330,19 +328,22 @@ func (v *Value) SetInteger(i int64) {
 	v.Bytes = encoding.EncodeUint64(nil, uint64(i))
 }
 
-// GetInteger decodes an int64 value from the bytes field of the receiver.
-func (v *Value) GetInteger() int64 {
-	if v == nil || v.Bytes == nil {
-		return 0
+// GetInteger decodes an int64 value from the bytes field of the receiver. If
+// the bytes field is not 0 or 8 bytes in length an error will be returned.
+func (v *Value) GetInteger() (int64, error) {
+	if v == nil || len(v.Bytes) == 0 {
+		return 0, nil
+	}
+	if len(v.Bytes) != 8 {
+		return 0, fmt.Errorf("uint64 value should be exactly 8 bytes: %d", len(v.Bytes))
 	}
 	_, u := encoding.DecodeUint64(v.Bytes)
-	return int64(u)
+	return int64(u), nil
 }
 
 // computeChecksum computes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
-// checksum includes it directly; if the value contains an integer,
-// the checksum includes the integer as 8 bytes in big-endian order.
+// checksum includes it directly.
 func (v *Value) computeChecksum(key []byte) uint32 {
 	c := encoding.NewCRC32Checksum(key)
 	if v.Bytes != nil {

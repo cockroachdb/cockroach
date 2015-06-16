@@ -69,7 +69,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			values = append(values, val.GetInteger())
+			values = append(values, mustGetInteger(val))
 		}
 		if !reflect.DeepEqual(values, []int64{5, 5, 5}) {
 			return util.Errorf("expected (5, 5, 5), got %v", values)
@@ -146,7 +146,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := val.GetInteger(); v != 15 {
+	if v := mustGetInteger(val); v != 15 {
 		t.Errorf("expected 15, got %v", v)
 	}
 }

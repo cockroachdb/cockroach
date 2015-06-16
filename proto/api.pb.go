@@ -298,7 +298,7 @@ func (m *ResponseHeader) GetTxn() *Transaction {
 	return nil
 }
 
-// A GetRequest is arguments to the Get() method.
+// A GetRequest is the argument for the Get() method.
 type GetRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	XXX_unrecognized []byte `json:"-"`
@@ -327,9 +327,7 @@ func (m *GetResponse) GetValue() *Value {
 	return nil
 }
 
-// A PutRequest is arguments to the Put() method. Note that to write
-// an empty value, the value parameter is still specified, but Bytes
-// is set to nil.
+// A PutRequest is the argument to the Put() method.
 type PutRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
@@ -357,7 +355,7 @@ func (m *PutResponse) Reset()         { *m = PutResponse{} }
 func (m *PutResponse) String() string { return proto1.CompactTextString(m) }
 func (*PutResponse) ProtoMessage()    {}
 
-// A ConditionalPutRequest is arguments to the ConditionalPut() method.
+// A ConditionalPutRequest is the argument to the ConditionalPut() method.
 //
 // - Returns true and sets value if ExpValue equals existing value.
 // - If key doesn't exist and ExpValue is nil, sets value.
@@ -403,7 +401,7 @@ func (m *ConditionalPutResponse) Reset()         { *m = ConditionalPutResponse{}
 func (m *ConditionalPutResponse) String() string { return proto1.CompactTextString(m) }
 func (*ConditionalPutResponse) ProtoMessage()    {}
 
-// An IncrementRequest is arguments to the Increment() method. It
+// An IncrementRequest is the argument to the Increment() method. It
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
 // create a zero value. IncrementRequest cannot be called on a key set
@@ -446,7 +444,7 @@ func (m *IncrementResponse) GetNewValue() int64 {
 	return 0
 }
 
-// A DeleteRequest is arguments to the Delete() method.
+// A DeleteRequest is the argument to the Delete() method.
 type DeleteRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	XXX_unrecognized []byte `json:"-"`
@@ -466,7 +464,7 @@ func (m *DeleteResponse) Reset()         { *m = DeleteResponse{} }
 func (m *DeleteResponse) String() string { return proto1.CompactTextString(m) }
 func (*DeleteResponse) ProtoMessage()    {}
 
-// A DeleteRangeRequest is arguments to the DeleteRange method. It
+// A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
 type DeleteRangeRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -507,7 +505,7 @@ func (m *DeleteRangeResponse) GetNumDeleted() int64 {
 	return 0
 }
 
-// A ScanRequest is arguments to the Scan() method. It specifies the
+// A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for the scan and the maximum number of results.
 type ScanRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -546,8 +544,8 @@ func (m *ScanResponse) GetRows() []KeyValue {
 	return nil
 }
 
-// An EndTransactionRequest is arguments to the EndTransaction() method.
-// It specifies whether to commit or roll back an extant transaction.
+// An EndTransactionRequest is the argument to the EndTransaction() method. It
+// specifies whether to commit or roll back an extant transaction.
 type EndTransactionRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// False to abort and rollback.
@@ -801,7 +799,7 @@ func (m *BatchResponse) GetResponses() []ResponseUnion {
 	return nil
 }
 
-// An AdminSplitRequest is arguments to the AdminSplit() method. The
+// An AdminSplitRequest is the argument to the AdminSplit() method. The
 // existing range which contains RequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
@@ -842,7 +840,7 @@ func (m *AdminSplitResponse) Reset()         { *m = AdminSplitResponse{} }
 func (m *AdminSplitResponse) String() string { return proto1.CompactTextString(m) }
 func (*AdminSplitResponse) ProtoMessage()    {}
 
-// An AdminMergeRequest is arguments to the AdminMerge() method. A
+// An AdminMergeRequest is the argument to the AdminMerge() method. A
 // merge is performed by calling AdminMerge on the left-hand range of
 // two consecutive ranges (i.e. the range which contains keys which
 // sort first). This range will be the subsuming range and the right
