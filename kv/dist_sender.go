@@ -473,12 +473,12 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 }
 
 // sendAttempt is invoked by Send and handles retry logic and cache eviction
-// for a call sent to a single range. It returns a retry status, which is Break
-// on success and either Break, Continue or Reset depending on error condition.
-// This method is expected to be invoked from within a backoff / retry loop to
-// retry the send repeatedly (e.g. to continue processing after a critical node
-// becomes available after downtime or the range descriptor is refreshed via
-// lookup).
+// for a call sent to a single range. It returns a retry status, which is
+// Succeed on success and either Abort, Continue or Reset depending on error
+// condition. This method is expected to be invoked from within a backoff /
+// retry loop to retry the send repeatedly (e.g. to continue processing after
+// a critical node becomes available after downtime or the range descriptor is
+// refreshed via lookup).
 func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call) (retry.Status, error) {
 	leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
 
@@ -554,9 +554,9 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 				return retry.Continue, err
 			}
 		}
-		return retry.Break, err
+		return retry.Abort, err
 	}
-	return retry.Break, nil
+	return retry.Succeed, nil
 }
 
 // getDescriptors takes a call and looks up the corresponding range descriptors
@@ -662,7 +662,7 @@ func (ds *DistSender) Send(_ context.Context, call client.Call) {
 			desc, descNext, descErr = ds.getDescriptors(call)
 			// If getDescriptors fails, we don't fish for retryable errors.
 			if descErr != nil {
-				return retry.Break, descErr
+				return retry.Abort, descErr
 			}
 			// Truncate the request to our current range, making sure not to
 			// touch it unless we have to (it is illegal to send EndKey on

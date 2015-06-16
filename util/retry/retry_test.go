@@ -31,9 +31,9 @@ func TestRetry(t *testing.T) {
 	err := WithBackoff(opts, func() (Status, error) {
 		retries++
 		if retries == 3 {
-			return Break, nil
+			return Succeed, nil
 		}
-		return Continue, nil
+		return Continue, fmt.Errorf("try again")
 	})
 	if err != nil || retries != 3 {
 		t.Error("expected 3 retries, got", retries, ":", err)
@@ -46,7 +46,7 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	})
 	opts := Options{"test", time.Microsecond * 10, time.Microsecond * 10, 1000, 3, false, nil}
 	err := WithBackoff(opts, func() (Status, error) {
-		return Continue, nil
+		return Continue, fmt.Errorf("try again")
 	})
 	if _, ok := err.(*MaxAttemptsError); !ok {
 		t.Errorf("should receive max attempts error on retry: %s", err)
@@ -59,7 +59,7 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 3, false, nil}
 	err := WithBackoff(opts, func() (Status, error) {
 		retries++
-		return Continue, nil
+		return Continue, fmt.Errorf("try again")
 	})
 	if _, ok := err.(*MaxAttemptsError); !ok {
 		t.Errorf("should receive max attempts error on retry: %s", err)
@@ -72,7 +72,7 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 func TestRetryFunctionReturnsError(t *testing.T) {
 	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0 /* indefinite */, false, nil}
 	err := WithBackoff(opts, func() (Status, error) {
-		return Break, fmt.Errorf("something went wrong")
+		return Abort, fmt.Errorf("something went wrong")
 	})
 	if err == nil {
 		t.Error("expected an error")
@@ -87,9 +87,9 @@ func TestRetryReset(t *testing.T) {
 	if err := WithBackoff(opts, func() (Status, error) {
 		count++
 		if count == 2 {
-			return Break, nil
+			return Succeed, nil
 		}
-		return Reset, nil
+		return Reset, fmt.Errorf("try again immediately")
 	}); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -104,7 +104,7 @@ func TestRetryStop(t *testing.T) {
 	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0, false, stopper}
 	if err := WithBackoff(opts, func() (Status, error) {
 		go stopper.Stop()
-		return Continue, nil
+		return Continue, fmt.Errorf("try again")
 	}); err == nil {
 		t.Errorf("expected retry loop to exit from being stopped")
 	}

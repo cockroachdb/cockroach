@@ -17,6 +17,8 @@
 
 package retry
 
+//go:generate stringer -type=Status
+
 import (
 	"fmt"
 	"math/rand"
@@ -45,9 +47,11 @@ func (re *MaxAttemptsError) Error() string {
 }
 
 const (
-	// Break indicates the retry loop is finished and should return
-	// the result of the retry worker function.
-	Break Status = iota
+	// Succeed indicates the retry loop has succeeded and should return nil.
+	Succeed Status = iota
+	// Abort indicates the retry loop has failed and should return the error
+	// return from the retry worker function.
+	Abort
 	// Reset indicates that the retry loop should be reset with
 	// no backoff for an immediate retry.
 	Reset
@@ -68,14 +72,13 @@ type Options struct {
 	Stopper     *util.Stopper // Optionally end retry loop on stopper signal
 }
 
-// WithBackoff implements retry with exponential backoff using
-// the supplied options as parameters. When fn returns Continue
-// and the number of retry attempts haven't been exhausted, fn is
-// retried. When fn returns Break, retry ends. As a special case,
-// if fn returns Reset, the backoff and retry count are reset to
-// starting values and the next retry occurs immediately. Returns an
-// error if the maximum number of retries is exceeded or if the fn
-// returns an error.
+// WithBackoff implements retry with exponential backoff using the supplied
+// options as parameters. When fn returns Continue and the number of retry
+// attempts haven't been exhausted, fn is retried. When fn returns Abort or
+// Succeed, retry ends. As a special case, if fn returns Reset, the backoff
+// and retry count are reset to starting values and the next retry occurs
+// immediately. Returns an error if the maximum number of retries is exceeded
+// or if the fn returns an error.
 func WithBackoff(opts Options, fn func() (Status, error)) error {
 	backoff := opts.Backoff
 	tag := opts.Tag
@@ -84,9 +87,21 @@ func WithBackoff(opts Options, fn func() (Status, error)) error {
 	}
 	for count := 1; true; count++ {
 		status, err := fn()
-		if status == Break {
+		if status == Succeed {
+			if err == nil {
+				return nil
+			}
+			panic(fmt.Sprintf("%s passed with a non-nil error: %s", status, err))
+		} else {
+			if err == nil {
+				panic(fmt.Sprintf("%s passed with a nil error", status))
+			}
+		}
+
+		if status == Abort {
 			return err
 		}
+
 		if err != nil && (!opts.UseV1Info || log.V(1) == true) {
 			log.InfoDepth(1, tag, " failed an iteration: ", err)
 		}

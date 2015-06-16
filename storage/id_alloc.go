@@ -114,7 +114,7 @@ func (ia *idAllocator) allocateBlock(incr int64) {
 			return retry.Continue, err
 		}
 		newValue = r.ValueInt()
-		return retry.Break, nil
+		return retry.Succeed, nil
 	})
 	if err != nil {
 		panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
