@@ -47,7 +47,8 @@ type Context struct {
 	// Required unless Insecure is true.
 	Certs string
 
-	// User under which the operation is being performed.
+	// User running this process. It could be the user under which
+	// the server is running ("node"), or the user passed in client calls.
 	User string
 
 	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.

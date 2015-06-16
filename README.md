@@ -129,6 +129,8 @@ docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
   cert create-ca --certs=/certs
 docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
   cert create-node --certs=/certs 127.0.0.1 localhost roachnode
+docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
+  cert create-client root
 docker run -p 8080:8080 -h roachnode --volumes-from=$(docker ps -q -n 1) \
   cockroachdb/cockroach start --certs=/certs --stores=ssd=/data --gossip=self=
 ```

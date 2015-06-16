@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/rpc/codec"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -89,6 +90,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// TODO(marc): figure out the right way to do authentication,
 	// and how to pass verified credentials.
+	security.LogRequestCertificates(r)
 
 	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
 	if r.Method != "CONNECT" {
