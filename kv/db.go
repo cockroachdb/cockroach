@@ -158,7 +158,7 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(body)
 }
 

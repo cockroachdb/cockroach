@@ -156,9 +156,9 @@ func (s *httpSender) post(call Call) (*http.Response, error) {
 	if err != nil {
 		return nil, util.Errorf("unable to create request: %s", err)
 	}
-	req.Header.Add("Content-Type", "application/x-protobuf")
-	req.Header.Add("Accept", "application/x-protobuf")
-	req.Header.Add("Accept-Encoding", "snappy")
+	req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
+	req.Header.Add(util.AcceptHeader, util.ProtoContentType)
+	req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
 	resp, err := s.client.Do(req)
 	if resp == nil {
 		return nil, &httpSendError{util.Errorf("http client was closed: %s", err)}
@@ -167,7 +167,7 @@ func (s *httpSender) post(call Call) (*http.Response, error) {
 	if err != nil {
 		return nil, &httpSendError{err}
 	}
-	if resp.Header.Get("Content-Encoding") == "snappy" {
+	if resp.Header.Get(util.ContentEncodingHeader) == util.SnappyEncoding {
 		resp.Body = &snappyReader{body: resp.Body}
 	}
 	b, err := ioutil.ReadAll(resp.Body)

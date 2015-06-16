@@ -241,15 +241,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
 
-	ae := r.Header.Get("Accept-Encoding")
+	ae := r.Header.Get(util.AcceptEncodingHeader)
 	switch {
-	case strings.Contains(ae, "snappy"):
-		w.Header().Set("Content-Encoding", "snappy")
+	case strings.Contains(ae, util.SnappyEncoding):
+		w.Header().Set(util.ContentEncodingHeader, util.SnappyEncoding)
 		s := newSnappyResponseWriter(w)
 		defer s.Close()
 		w = s
-	case strings.Contains(ae, "gzip"):
-		w.Header().Set("Content-Encoding", "gzip")
+	case strings.Contains(ae, util.GzipEncoding):
+		w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
 		gzw := newGzipResponseWriter(w)
 		defer gzw.Close()
 		w = gzw

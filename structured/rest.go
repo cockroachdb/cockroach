@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -243,7 +244,7 @@ func (s *RESTServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func writeResourceResponse(w http.ResponseWriter, statusCode int, data []interface{}, err error) {
 	resp := newResourceResponse(statusCode, data, err)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set(util.ContentTypeHeader, "application/json; charset=utf-8")
 	w.WriteHeader(resp.Meta.StatusCode)
 	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
 		log.Warningf("unable to encode response: %v", encErr)

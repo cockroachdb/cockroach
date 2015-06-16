@@ -30,10 +30,14 @@ import (
 )
 
 const (
-	// ContentTypeHeader is the canonical header name for content type.
-	ContentTypeHeader = "Content-Type"
 	// AcceptHeader is the canonical header name for accept.
 	AcceptHeader = "Accept"
+	// AcceptEncodingHeader is the canonical header name for accept encoding.
+	AcceptEncodingHeader = "Accept-Encoding"
+	// ContentEncodingHeader is the canonical header name for content type.
+	ContentEncodingHeader = "Content-Encoding"
+	// ContentTypeHeader is the canonical header name for content type.
+	ContentTypeHeader = "Content-Type"
 	// JSONContentType is the JSON content type.
 	JSONContentType = "application/json"
 	// AltJSONContentType is the alternate JSON content type.
@@ -46,6 +50,12 @@ const (
 	YAMLContentType = "text/yaml"
 	// AltYAMLContentType is the alternate YAML content type.
 	AltYAMLContentType = "application/x-yaml"
+	// PlaintextContentType is the plaintext content type.
+	PlaintextContentType = "text/plain"
+	// SnappyEncoding is the snappy encoding.
+	SnappyEncoding = "snappy"
+	// GzipEncoding is the gzip encoding.
+	GzipEncoding = "gzip"
 )
 
 // EncodingType is an enum describing available encodings.

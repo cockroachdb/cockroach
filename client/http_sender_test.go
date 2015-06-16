@@ -85,7 +85,7 @@ func TestHTTPSenderSend(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to marshal response: %s", err)
 		}
-		w.Header().Set("Content-Type", contentType)
+		w.Header().Set(util.ContentTypeHeader, contentType)
 		w.Write(body)
 	}))
 	defer server.Close()
@@ -142,7 +142,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			if err != nil {
 				t.Errorf("%d: failed to marshal response: %s", i, err)
 			}
-			w.Header().Set("Content-Type", contentType)
+			w.Header().Set(util.ContentTypeHeader, contentType)
 			w.Write(body)
 		}))
 
@@ -203,7 +203,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 			if err != nil {
 				t.Errorf("%d: failed to marshal response: %s", i, err)
 			}
-			w.Header().Set("Content-Type", contentType)
+			w.Header().Set(util.ContentTypeHeader, contentType)
 			w.Write(body)
 		}))
 

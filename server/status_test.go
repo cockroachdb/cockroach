@@ -79,7 +79,7 @@ func TestStatusLocalStacks(t *testing.T) {
 
 // TestStatusJson verifies that status endpoints return expected
 // Json results. The content type of the responses is always
-// "application/json".
+// util.JSONContentType.
 func TestStatusJson(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
@@ -124,7 +124,7 @@ func TestStatusJson(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, spec := range testCases {
-		contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
+		contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 		for _, contentType := range contentTypes {
 			req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+spec.keyPrefix, nil)
 			if err != nil {
@@ -140,7 +140,7 @@ func TestStatusJson(t *testing.T) {
 				t.Errorf("unexpected status code: %v", resp.StatusCode)
 			}
 			returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-			if returnedContentType != "application/json" {
+			if returnedContentType != util.JSONContentType {
 				t.Errorf("unexpected content type: %v", returnedContentType)
 			}
 			body, err := ioutil.ReadAll(resp.Body)
@@ -195,7 +195,7 @@ func TestStatusGossipJson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
+	contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 	for _, contentType := range contentTypes {
 		req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+statusGossipKeyPrefix, nil)
 		if err != nil {
@@ -212,7 +212,7 @@ func TestStatusGossipJson(t *testing.T) {
 			t.Errorf("unexpected status code: %v", resp.StatusCode)
 		}
 		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-		if returnedContentType != "application/json" {
+		if returnedContentType != util.JSONContentType {
 			t.Errorf("unexpected content type: %v", returnedContentType)
 		}
 		body, err := ioutil.ReadAll(resp.Body)
@@ -255,7 +255,7 @@ func getRequest(t *testing.T, ts *TestServer, path string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", util.JSONContentType)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +265,7 @@ func getRequest(t *testing.T, ts *TestServer, path string) []byte {
 		t.Errorf("unexpected status code: %v", resp.StatusCode)
 	}
 	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-	if returnedContentType != "application/json" {
+	if returnedContentType != util.JSONContentType {
 		t.Errorf("unexpected content type: %v", returnedContentType)
 	}
 	body, err := ioutil.ReadAll(resp.Body)

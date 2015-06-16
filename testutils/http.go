@@ -68,8 +68,8 @@ func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
 	}
 
 	// All requests currently accept JSON.
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set(util.ContentTypeHeader, util.JSONContentType)
+	req.Header.Set("Accept", util.JSONContentType)
 	resp, err := ths.client.Do(req)
 	if err != nil {
 		ths.t.Fatal(err)
@@ -81,7 +81,7 @@ func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
 		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, body)
 	}
 	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-	if returnedContentType != "application/json" {
+	if returnedContentType != util.JSONContentType {
 		ths.t.Fatalf("unexpected content type: %v", returnedContentType)
 	}
 	respBody, err := ioutil.ReadAll(resp.Body)
@@ -114,7 +114,7 @@ func (ths *TestHTTPSession) Get(relative string) []byte {
 	}
 
 	// All requests currently accept JSON.
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", util.JSONContentType)
 	resp, err := ths.client.Do(req)
 	if err != nil {
 		ths.t.Fatal(err)
@@ -126,7 +126,7 @@ func (ths *TestHTTPSession) Get(relative string) []byte {
 		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, body)
 	}
 	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-	if returnedContentType != "application/json" {
+	if returnedContentType != util.JSONContentType {
 		ths.t.Fatalf("unexpected content type: %v", returnedContentType)
 	}
 	body, err := ioutil.ReadAll(resp.Body)
