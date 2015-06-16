@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 
 	"github.com/spf13/cobra"
 )
@@ -41,7 +40,7 @@ func makeDBClient() *client.DB {
 	// TODO(pmattis): Initialize the user to something more
 	// reasonable. Perhaps Context.Addr should be considered a URL.
 	db, err := client.Open(Context.RequestScheme() +
-		"://root@" + util.EnsureHost(Context.Addr) +
+		"://root@" + Context.Addr +
 		"?certs=" + Context.Certs)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
