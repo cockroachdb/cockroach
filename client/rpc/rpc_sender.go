@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
 	roachrpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -77,7 +78,7 @@ func newSender(server string, context *base.Context, retryOpts retry.Options) (*
 // command ID to avoid reporting failure when in fact the command may have gone
 // through and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached response.
-func (s *Sender) Send(_ context.Context, call client.Call) {
+func (s *Sender) Send(_ context.Context, call proto.Call) {
 	retryOpts := s.retryOpts
 	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
 

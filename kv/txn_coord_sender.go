@@ -146,7 +146,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 	}
 	for _, o := range tm.keys.GetOverlaps(proto.KeyMin, proto.KeyMax) {
 		// If the op was range based, end key != start key: resolve a range.
-		var call client.Call
+		var call proto.Call
 		key := o.Key.Start().(proto.Key)
 		endKey := o.Key.End().(proto.Key)
 		if !key.Next().Equal(endKey) {
@@ -305,7 +305,7 @@ func (tc *TxnCoordSender) startStats() {
 // Send implements the client.Sender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
-func (tc *TxnCoordSender) Send(_ context.Context, call client.Call) {
+func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
 	header := call.Args.Header()
 	tc.maybeBeginTxn(header)
 
@@ -364,7 +364,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 // key range is recorded as live intents for eventual cleanup upon
 // transaction commit. Upon successful txn commit, initiates cleanup
 // of intents.
-func (tc *TxnCoordSender) sendOne(call client.Call) {
+func (tc *TxnCoordSender) sendOne(call proto.Call) {
 	var startNS int64
 	header := call.Args.Header()
 	// If this call is part of a transaction...
@@ -505,7 +505,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batch
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		call := client.Call{Args: args}
+		call := proto.Call{Args: args}
 		// Disallow transaction, user and priority on individual calls, unless
 		// equal.
 		if args.Header().User != "" && args.Header().User != batchArgs.User {
@@ -697,7 +697,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 
 				request.Header().Timestamp = tc.clock.Now()
 				reply := &proto.InternalHeartbeatTxnResponse{}
-				call := client.Call{
+				call := proto.Call{
 					Args:  request,
 					Reply: reply,
 				}

@@ -51,7 +51,7 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 	}
 }
 
-func sendCall(coord *TxnCoordSender, call client.Call) error {
+func sendCall(coord *TxnCoordSender, call proto.Call) error {
 	coord.Send(context.TODO(), call)
 	return call.Reply.Header().GoError()
 }
@@ -96,7 +96,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	call := client.Call{Args: putReq, Reply: &proto.PutResponse{}}
+	call := proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Sender.Lock()
 	s.Manual.Set(1)
 	s.Sender.Unlock()
-	call = client.Call{Args: putReq, Reply: &proto.PutResponse{}}
+	call = proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	s.Sender.Send(context.Background(), client.Call{
+	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
@@ -170,7 +170,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 
 	reply := &proto.PutResponse{}
-	s.Sender.Send(context.Background(), client.Call{
+	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -215,13 +215,13 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	for _, rng := range ranges {
 		if rng.end != nil {
 			delRangeReq := createDeleteRangeRequest(rng.start, rng.end, txn)
-			call := client.Call{Args: delRangeReq, Reply: &proto.DeleteRangeResponse{}}
+			call := proto.Call{Args: delRangeReq, Reply: &proto.DeleteRangeResponse{}}
 			if err := sendCall(s.Sender, call); err != nil {
 				t.Fatal(err)
 			}
 		} else {
 			putReq := createPutRequest(rng.start, []byte("value"), txn)
-			call := client.Call{Args: putReq, Reply: &proto.PutResponse{}}
+			call := proto.Call{Args: putReq, Reply: &proto.PutResponse{}}
 			if err := sendCall(s.Sender, call); err != nil {
 				t.Fatal(err)
 			}
@@ -247,13 +247,13 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 
 	txn1 := newTxn(s.Clock, proto.Key("a"))
 	txn2 := newTxn(s.Clock, proto.Key("b"))
-	call := client.Call{
+	call := proto.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn1),
 		Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
 	}
-	call = client.Call{
+	call = proto.Call{
 		Args:  createPutRequest(proto.Key("b"), []byte("value"), txn2),
 		Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
@@ -275,7 +275,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	call := client.Call{
+	call := proto.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
 		Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
@@ -309,7 +309,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transaction, error) {
 	hr := &proto.InternalHeartbeatTxnResponse{}
-	call := client.Call{
+	call := proto.Call{
 		Args: &proto.InternalHeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: txn.Key,
@@ -352,7 +352,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	txn := newTxn(s.Clock, proto.Key("a"))
 	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
-	call := client.Call{
+	call := proto.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
 		Reply: pReply,
 	}
@@ -363,7 +363,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		t.Fatal(pReply.GoError())
 	}
 	etReply := &proto.EndTransactionResponse{}
-	s.Sender.Send(context.Background(), client.Call{
+	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
@@ -390,7 +390,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	key := proto.Key("a")
 	txn := newTxn(s.Clock, key)
 	txn.Priority = 1
-	call := client.Call{
+	call := proto.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
 		Reply: &proto.PutResponse{},
 	}
@@ -410,7 +410,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	call = client.Call{
+	call = proto.Call{
 		Args:  pushArgs,
 		Reply: &proto.InternalPushTxnResponse{},
 	}
@@ -428,7 +428,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		},
 		Commit: true,
 	}
-	call = client.Call{
+	call = proto.Call{
 		Args:  etArgs,
 		Reply: &proto.EndTransactionResponse{},
 	}
@@ -454,7 +454,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.Clock, proto.Key("a"))
-	call := client.Call{
+	call := proto.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
 		Reply: &proto.PutResponse{},
 	}
@@ -480,18 +480,18 @@ func TestTxnCoordSenderGC(t *testing.T) {
 }
 
 type testSender struct {
-	handler func(call client.Call)
+	handler func(call proto.Call)
 }
 
 var _ client.Sender = &testSender{}
 
-func newTestSender(handler func(client.Call)) *testSender {
+func newTestSender(handler func(proto.Call)) *testSender {
 	return &testSender{
 		handler: handler,
 	}
 }
 
-func (ts *testSender) Send(_ context.Context, call client.Call) {
+func (ts *testSender) Send(_ context.Context, call proto.Call) {
 	ts.handler(call)
 }
 
@@ -545,11 +545,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	for i, test := range testCases {
 		stopper := util.NewStopper()
 		defer stopper.Stop()
-		ts := NewTxnCoordSender(newTestSender(func(call client.Call) {
+		ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 			call.Reply.Header().SetGoError(test.err)
 		}), clock, false, stopper)
 		reply := &proto.PutResponse{}
-		ts.Send(context.Background(), client.Call{Args: testPutReq, Reply: reply})
+		ts.Send(context.Background(), proto.Call{Args: testPutReq, Reply: reply})
 
 		if reflect.TypeOf(test.err) != reflect.TypeOf(reply.GoError()) {
 			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())
@@ -585,7 +585,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	defer stopper.Stop()
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool
-	ts := NewTxnCoordSender(newTestSender(func(call client.Call) {
+	ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 		called = true
 		return
 	}), clock, false, stopper)
@@ -615,7 +615,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 			bArgs.Txn = txn2
 		}
 		called = false
-		ts.Send(context.Background(), client.Call{Args: bArgs, Reply: bReply})
+		ts.Send(context.Background(), proto.Call{Args: bArgs, Reply: bReply})
 		if !tc.ok && bReply.GoError() == nil {
 			t.Fatalf("%d: expected error", i)
 		} else if tc.ok != called {

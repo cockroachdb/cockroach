@@ -62,7 +62,7 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(ctx context.Context, call client.Call) {
+func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
 	ss.wrapped.Send(ctx, call)
 	if ss.waiter != nil {
 		ss.waiter.Done()

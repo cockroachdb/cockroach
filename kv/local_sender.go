@@ -119,7 +119,7 @@ func (ls *LocalSender) GetStoreIDs() []proto.StoreID {
 // up from the store map if specified by header.Replica; otherwise,
 // the command is being executed locally, and the replica is
 // determined via lookup through each store's LookupRange method.
-func (ls *LocalSender) Send(ctx context.Context, call client.Call) {
+func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	var err error
 	var store *storage.Store
 

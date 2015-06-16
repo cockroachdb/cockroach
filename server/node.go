@@ -551,11 +551,11 @@ func (n *Node) waitForScanCompletion() int64 {
 	return n.scanCount
 }
 
-// executeCmd creates a client.Call struct and sends it via our local sender.
+// executeCmd creates a proto.Call struct and sends it via our local sender.
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
-	n.lSender.Send((*Node)(n).context(), client.Call{Args: args, Reply: reply})
+	n.lSender.Send((*Node)(n).context(), proto.Call{Args: args, Reply: reply})
 	n.feed.CallComplete(args, reply)
 	return nil
 }

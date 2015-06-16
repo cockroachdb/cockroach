@@ -45,7 +45,7 @@ type Batch struct {
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
 	Results    []Result
-	calls      []Call
+	calls      []proto.Call
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue
 	rowsIdx    int
@@ -166,7 +166,7 @@ func (b *Batch) fillResults() error {
 
 // InternalAddCall adds the specified call to the batch. It is intended for
 // internal use only.
-func (b *Batch) InternalAddCall(call Call) {
+func (b *Batch) InternalAddCall(call proto.Call) {
 	numRows := 0
 	switch call.Args.(type) {
 	case *proto.GetRequest,
@@ -194,7 +194,7 @@ func (b *Batch) Get(key interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, Get(proto.Key(k)))
+	b.calls = append(b.calls, proto.GetCall(proto.Key(k)))
 	b.initResult(1, 1, nil)
 }
 
@@ -211,7 +211,7 @@ func (b *Batch) GetProto(key interface{}, msg gogoproto.Message) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, GetProto(proto.Key(k), msg))
+	b.calls = append(b.calls, proto.GetProtoCall(proto.Key(k), msg))
 	b.initResult(1, 1, nil)
 }
 
@@ -233,7 +233,7 @@ func (b *Batch) Put(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, Put(proto.Key(k), v))
+	b.calls = append(b.calls, proto.PutCall(proto.Key(k), v))
 	b.initResult(1, 1, nil)
 }
 
@@ -262,7 +262,7 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, ConditionalPut(proto.Key(k), v, ev))
+	b.calls = append(b.calls, proto.ConditionalPutCall(proto.Key(k), v, ev))
 	b.initResult(1, 1, nil)
 }
 
@@ -281,7 +281,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, Increment(proto.Key(k), value))
+	b.calls = append(b.calls, proto.IncrementCall(proto.Key(k), value))
 	b.initResult(1, 1, nil)
 }
 
@@ -303,7 +303,7 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.calls = append(b.calls, Scan(proto.Key(begin), proto.Key(end), maxRows))
+	b.calls = append(b.calls, proto.ScanCall(proto.Key(begin), proto.Key(end), maxRows))
 	b.initResult(1, 0, nil)
 }
 
@@ -315,14 +315,14 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 // key can be either a byte slice, a string, a fmt.Stringer or an
 // encoding.BinaryMarshaler.
 func (b *Batch) Del(keys ...interface{}) {
-	var calls []Call
+	var calls []proto.Call
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
 			b.initResult(0, len(keys), err)
 			return
 		}
-		calls = append(calls, Delete(proto.Key(k)))
+		calls = append(calls, proto.DeleteCall(proto.Key(k)))
 	}
 	b.calls = append(b.calls, calls...)
 	b.initResult(len(calls), len(calls), nil)
@@ -346,7 +346,7 @@ func (b *Batch) DelRange(s, e interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.calls = append(b.calls, DeleteRange(proto.Key(begin), proto.Key(end)))
+	b.calls = append(b.calls, proto.DeleteRangeCall(proto.Key(begin), proto.Key(end)))
 	b.initResult(1, 0, nil)
 }
 
@@ -364,7 +364,7 @@ func (b *Batch) adminMerge(key interface{}) {
 		},
 	}
 	resp := &proto.AdminMergeResponse{}
-	b.calls = append(b.calls, Call{Args: req, Reply: resp})
+	b.calls = append(b.calls, proto.Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)
 }
 
@@ -383,6 +383,6 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 	}
 	req.SplitKey = proto.Key(k)
 	resp := &proto.AdminSplitResponse{}
-	b.calls = append(b.calls, Call{Args: req, Reply: resp})
+	b.calls = append(b.calls, proto.Call{Args: req, Reply: resp})
 	b.initResult(1, 0, nil)
 }

@@ -1198,7 +1198,7 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
+func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 	args, reply := call.Args, call.Reply
 	ctx = s.Context(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
@@ -1241,7 +1241,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			return retry.Break, err
 		}
 
-		if err = rng.AddCmd(ctx, client.Call{Args: args, Reply: reply}, true); err == nil {
+		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}, true); err == nil {
 			return retry.Break, err
 		}
 
@@ -1354,7 +1354,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		bArgs.Add(pushArgs)
 	}
 	b := &client.Batch{}
-	b.InternalAddCall(client.Call{Args: bArgs, Reply: bReply})
+	b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
 
 	// Run all pushes in parallel.
 	if pushErr := s.db.Run(b); pushErr != nil {
@@ -1393,7 +1393,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		resolveReply := &proto.InternalResolveIntentResponse{}
 		// Add resolve command with wait=false to add to Raft but not wait for completion.
 		waitForResolve := wait && i == len(wiErr.Intents)-1
-		if resolveErr := rng.AddCmd(ctx, client.Call{Args: resolveArgs, Reply: resolveReply}, waitForResolve); resolveErr != nil {
+		if resolveErr := rng.AddCmd(ctx, proto.Call{Args: resolveArgs, Reply: resolveReply}, waitForResolve); resolveErr != nil {
 			if log.V(1) {
 				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, resolveErr)
 			}

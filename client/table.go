@@ -543,7 +543,7 @@ func (b *Batch) GetStruct(obj interface{}, columns ...string) {
 		lowerStrings(columns)
 	}
 
-	var calls []Call
+	var calls []proto.Call
 	for _, colName := range columns {
 		col, ok := m.columnsByName[colName]
 		if !ok {
@@ -555,7 +555,7 @@ func (b *Batch) GetStruct(obj interface{}, columns ...string) {
 		if log.V(2) {
 			log.Infof("Get %q", key)
 		}
-		c := Get(proto.Key(key))
+		c := proto.GetCall(proto.Key(key))
 		c.Post = func() error {
 			reply := c.Reply.(*proto.GetResponse)
 			return unmarshalTableValue(reply.Value, v.FieldByIndex(col.field.Index))
@@ -591,7 +591,7 @@ func (b *Batch) PutStruct(obj interface{}, columns ...string) {
 		lowerStrings(columns)
 	}
 
-	var calls []Call
+	var calls []proto.Call
 	for _, colName := range columns {
 		col, ok := m.columnsByName[colName]
 		if !ok {
@@ -612,7 +612,7 @@ func (b *Batch) PutStruct(obj interface{}, columns ...string) {
 		}
 
 		v.InitChecksum(key)
-		calls = append(calls, Call{
+		calls = append(calls, proto.Call{
 			Args: &proto.PutRequest{
 				RequestHeader: proto.RequestHeader{
 					Key: key,
@@ -656,7 +656,7 @@ func (b *Batch) IncStruct(obj interface{}, value int64, column string) {
 	if log.V(2) {
 		log.Infof("Inc %q", key)
 	}
-	c := Increment(proto.Key(key), value)
+	c := proto.IncrementCall(proto.Key(key), value)
 	c.Post = func() error {
 		reply := c.Reply.(*proto.IncrementResponse)
 		// TODO(pmattis): This isn't very efficient. Should be able to pass the
@@ -741,7 +741,7 @@ func (b *Batch) ScanStruct(dest, start, end interface{}, maxRows int64, columns 
 		log.Infof("Scan %q %q", startKey, endKey)
 	}
 
-	c := Scan(proto.Key(startKey), proto.Key(endKey), maxRows)
+	c := proto.ScanCall(proto.Key(startKey), proto.Key(endKey), maxRows)
 	c.Post = func() error {
 		reply := c.Reply.(*proto.ScanResponse)
 		if len(reply.Rows) == 0 {
@@ -831,7 +831,7 @@ func (b *Batch) DelStruct(obj interface{}, columns ...string) {
 		lowerStrings(columns)
 	}
 
-	var calls []Call
+	var calls []proto.Call
 	for _, colName := range columns {
 		col, ok := m.columnsByName[colName]
 		if !ok {
@@ -842,7 +842,7 @@ func (b *Batch) DelStruct(obj interface{}, columns ...string) {
 		if log.V(2) {
 			log.Infof("Del %q", key)
 		}
-		calls = append(calls, Delete(key))
+		calls = append(calls, proto.DeleteCall(key))
 	}
 
 	b.calls = append(b.calls, calls...)

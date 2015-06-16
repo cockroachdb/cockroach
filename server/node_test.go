@@ -494,9 +494,9 @@ func TestNodeStatus(t *testing.T) {
 	compareStoreStatus(t, ts.node, expectedNodeStatus, 3)
 }
 
-type testSender func(context.Context, client.Call)
+type testSender func(context.Context, proto.Call)
 
-func (ts testSender) Send(ctx context.Context, c client.Call) {
+func (ts testSender) Send(ctx context.Context, c proto.Call) {
 	ts(ctx, c)
 }
 
@@ -511,7 +511,7 @@ func setAllocRetryBackoff(backoff time.Duration) func() {
 func TestIDAllocationRetry(t *testing.T) {
 	defer setAllocRetryBackoff(0)()
 	i := 98
-	sender := func(_ context.Context, c client.Call) {
+	sender := func(_ context.Context, c proto.Call) {
 		if i%2 == 0 {
 			c.Reply.Header().Error = &proto.Error{Retryable: true}
 		}
