@@ -75,10 +75,8 @@ func IncrementCall(key Key, increment int64) Call {
 	}
 }
 
-// PutCall returns a Call object initialized to put value as a byte slice at
-// key.
-func PutCall(key Key, valueBytes []byte) Call {
-	value := Value{Bytes: valueBytes}
+// PutCall returns a Call object initialized to put the value at key.
+func PutCall(key Key, value Value) Call {
 	value.InitChecksum(key)
 	return Call{
 		Args: &PutRequest{
@@ -120,17 +118,7 @@ func PutProtoCall(key Key, msg gogoproto.Message) Call {
 	if err != nil {
 		return Call{Err: err}
 	}
-	value := Value{Bytes: data}
-	value.InitChecksum(key)
-	return Call{
-		Args: &PutRequest{
-			RequestHeader: RequestHeader{
-				Key: key,
-			},
-			Value: value,
-		},
-		Reply: &PutResponse{},
-	}
+	return PutCall(key, Value{Bytes: data})
 }
 
 // DeleteCall returns a Call object initialized to delete the value at key.

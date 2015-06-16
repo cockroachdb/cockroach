@@ -606,16 +606,7 @@ func (b *Batch) PutStruct(obj interface{}, columns ...string) {
 			return
 		}
 
-		v.InitChecksum(key)
-		calls = append(calls, proto.Call{
-			Args: &proto.PutRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: key,
-				},
-				Value: v,
-			},
-			Reply: &proto.PutResponse{},
-		})
+		calls = append(calls, proto.PutCall(key, v))
 	}
 
 	b.calls = append(b.calls, calls...)

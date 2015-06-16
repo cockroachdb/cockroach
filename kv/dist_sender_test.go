@@ -330,7 +330,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := proto.PutCall(proto.Key("a"), []byte("value"))
+	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 	reply := call.Reply.(*proto.PutResponse)
 	ds.Send(context.Background(), call)
 	if err := reply.GoError(); err != nil {
@@ -390,7 +390,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds := NewDistSender(ctx, g)
 		ds.updateLeaderCache(1, leader)
 
-		call := proto.PutCall(proto.Key("a"), []byte("value"))
+		call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
 		reply := call.Reply.(*proto.PutResponse)
 		ds.Send(context.Background(), call)
 		if err := reply.GoError(); err != nil && err.Error() != "boom" {

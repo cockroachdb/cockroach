@@ -100,7 +100,7 @@ func TestNodeEventFeed(t *testing.T) {
 		{
 			name: "Put",
 			publishTo: func(nef status.NodeEventFeed) {
-				call := proto.PutCall(proto.Key("abc"), []byte("def"))
+				call := proto.PutCall(proto.Key("abc"), proto.Value{Bytes: []byte("def")})
 				nef.CallComplete(call.Args, call.Reply)
 			},
 			expected: &status.CallSuccessEvent{
