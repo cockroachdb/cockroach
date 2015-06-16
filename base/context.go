@@ -140,7 +140,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	if log.V(1) {
 		log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
 	}
-	cfg, err := security.LoadServerTLSConfig(ctx.Certs)
+	cfg, err := security.LoadServerTLSConfig(ctx.Certs, ctx.User)
 	if err != nil {
 		return nil, util.Errorf("error setting up server TLS config: %s", err)
 	}

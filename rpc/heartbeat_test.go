@@ -88,7 +88,7 @@ func TestManualHeartbeat(t *testing.T) {
 }
 
 func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	sContext := NewTestContext(t)
+	sContext := serverTestBaseContext
 	serverAddr := util.CreateTestAddr("tcp")
 	// Start heartbeat.
 	s := NewServer(serverAddr, sContext)

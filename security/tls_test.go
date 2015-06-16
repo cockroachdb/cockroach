@@ -25,7 +25,7 @@ import (
 )
 
 func TestLoadTLSConfig(t *testing.T) {
-	config, err := security.LoadServerTLSConfig(security.EmbeddedCertsDir)
+	config, err := security.LoadServerTLSConfig(security.EmbeddedCertsDir, "node")
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)
 	}

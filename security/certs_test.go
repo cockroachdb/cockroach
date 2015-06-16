@@ -90,7 +90,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
-	_, err = security.LoadServerTLSConfig(certsDir)
+	_, err = security.LoadServerTLSConfig(certsDir, "node")
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

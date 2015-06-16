@@ -41,6 +41,7 @@ import (
 
 var testContext = NewTestContext()
 var testBaseContext = testutils.NewTestBaseContext()
+var serverTestBaseContext = testutils.NewServerTestBaseContext()
 
 // createTestConfigFile creates a temporary file and writes the
 // testConfig yaml data to it. The caller is responsible for

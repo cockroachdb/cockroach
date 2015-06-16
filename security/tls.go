@@ -59,12 +59,14 @@ func ResetReadFileFn() {
 // - node.server.crt -- the server certificate of this node; should be signed by the CA
 // - node.server.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadServerTLSConfig(certDir string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, serverCertFile))
+// We should never have username != "node", but this is a good way to
+// catch tests that use the wrong users.
+func LoadServerTLSConfig(certDir, username string) (*tls.Config, error) {
+	certPEM, err := readFileFn(path.Join(certDir, username+".server.crt"))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, serverKeyFile))
+	keyPEM, err := readFileFn(path.Join(certDir, username+".server.key"))
 	if err != nil {
 		return nil, err
 	}

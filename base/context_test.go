@@ -89,7 +89,7 @@ func TestServerSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs}
+		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs, User: security.NodeUser}
 		if ctx.RequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected RequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.RequestScheme())
 		}

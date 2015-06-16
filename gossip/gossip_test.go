@@ -30,6 +30,7 @@ import (
 )
 
 var testBaseContext = testutils.NewTestBaseContext()
+var serverTestBaseContext = testutils.NewServerTestBaseContext()
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
