@@ -57,7 +57,7 @@ func runGetConfig(ctx *Context, prefix, keyPrefix string) {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
-	req.Header.Add("Accept", "text/yaml")
+	req.Header.Add("Accept", util.YAMLContentType)
 	b, err := sendAdminRequest(ctx, req)
 	if err != nil {
 		log.Errorf("admin REST request failed: %s", err)
@@ -194,7 +194,7 @@ func runSetConfig(ctx *Context, prefix, keyPrefix, configFileName string) {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
-	req.Header.Add("Content-Type", "text/yaml")
+	req.Header.Add(util.ContentTypeHeader, util.YAMLContentType)
 	_, err = sendAdminRequest(ctx, req)
 	if err != nil {
 		log.Errorf("admin REST request failed: %s", err)

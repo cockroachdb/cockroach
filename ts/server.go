@@ -103,6 +103,6 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }

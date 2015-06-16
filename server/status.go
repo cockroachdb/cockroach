@@ -145,13 +145,13 @@ func (s *statusServer) handleClusterStatus(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
 // handleGossipStatus handles GET requests for gossip network status.
 func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
 	b, err := s.gossip.GetInfosAsJSON()
 	if err != nil {
 		log.Error(err)
@@ -177,7 +177,7 @@ func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request,
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -197,7 +197,7 @@ func (s *statusServer) handleLocalLogFiles(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -236,7 +236,7 @@ func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -329,7 +329,7 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -345,7 +345,7 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request,
 			bufSize = bufSize * 2
 			continue
 		}
-		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 		w.Write(buf[:length])
 		return
 	}
@@ -379,7 +379,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -407,7 +407,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -439,7 +439,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
@@ -467,12 +467,12 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
 }
 
 // handleTransactionStatus handles GET requests for transaction status.
 func (s *statusServer) handleTransactionStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
 	w.Write([]byte(`{"transactions": []}`))
 }

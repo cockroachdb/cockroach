@@ -37,6 +37,7 @@ import (
 	// because it will cause import cycle.
 
 	msg "github.com/cockroachdb/cockroach/rpc/codec/message.pb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
 )
@@ -439,7 +440,7 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			w.Header().Set("Content-Type", "application/x-protobuf")
+			w.Header().Set(util.ContentTypeHeader, util.ProtoContentType)
 			w.Write(body)
 		})); err != nil {
 			b.Fatal(err)
@@ -459,7 +460,7 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp, err := http.Post(url, "application/x-protobuf", bytes.NewReader(body))
+			resp, err := http.Post(url, util.ProtoContentType, bytes.NewReader(body))
 			if err != nil {
 				b.Fatalf("%s: %v", url, err)
 			}

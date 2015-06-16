@@ -182,17 +182,17 @@ func ExampleAcctContentTypes() {
 	testCases := []struct {
 		contentType, accept string
 	}{
-		{"application/json", "application/json"},
-		{"text/yaml", "application/json"},
-		{"application/json", "text/yaml"},
-		{"text/yaml", "text/yaml"},
+		{util.JSONContentType, util.JSONContentType},
+		{util.YAMLContentType, util.JSONContentType},
+		{util.JSONContentType, util.YAMLContentType},
+		{util.YAMLContentType, util.YAMLContentType},
 	}
 
 	for i, test := range testCases {
 		key := fmt.Sprintf("/test%d", i)
 
 		var body []byte
-		if test.contentType == "application/json" {
+		if test.contentType == util.JSONContentType {
 			if body, err = json.MarshalIndent(config, "", "  "); err != nil {
 				fmt.Println(err)
 			}
@@ -203,7 +203,7 @@ func ExampleAcctContentTypes() {
 		}
 		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
 			acctPathPrefix, key), bytes.NewReader(body))
-		req.Header.Add("Content-Type", test.contentType)
+		req.Header.Add(util.ContentTypeHeader, test.contentType)
 		if _, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}

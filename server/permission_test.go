@@ -206,16 +206,16 @@ func ExamplePermContentTypes() {
 	testCases := []struct {
 		contentType, accept string
 	}{
-		{"application/json", "application/json"},
-		{"text/yaml", "application/json"},
-		{"application/json", "text/yaml"},
-		{"text/yaml", "text/yaml"},
+		{util.JSONContentType, util.JSONContentType},
+		{util.YAMLContentType, util.JSONContentType},
+		{util.JSONContentType, util.YAMLContentType},
+		{util.YAMLContentType, util.YAMLContentType},
 	}
 	for i, test := range testCases {
 		key := fmt.Sprintf("/test%d", i)
 
 		var body []byte
-		if test.contentType == "application/json" {
+		if test.contentType == util.JSONContentType {
 			if body, err = json.MarshalIndent(config, "", "  "); err != nil {
 				fmt.Println(err)
 			}
@@ -226,7 +226,7 @@ func ExamplePermContentTypes() {
 		}
 		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
 			permPathPrefix, key), bytes.NewReader(body))
-		req.Header.Add("Content-Type", test.contentType)
+		req.Header.Add(util.ContentTypeHeader, test.contentType)
 		if _, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}
@@ -295,7 +295,7 @@ func TestPermEmptyKey(t *testing.T) {
 	for _, key := range keys {
 		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", testContext.RequestScheme(), testContext.Addr,
 			permPathPrefix, key), bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(util.ContentTypeHeader, util.JSONContentType)
 		if _, err = sendAdminRequest(testContext, req); err != nil {
 			t.Fatal(err)
 		}
@@ -304,18 +304,18 @@ func TestPermEmptyKey(t *testing.T) {
 	testCases := []struct {
 		accept, expBody string
 	}{
-		{"application/json", `{
+		{util.JSONContentType, `{
   "d": [
     "",
     "key0",
     "key1"
   ]
 }`},
-		{"text/yaml", `- ""
+		{util.YAMLContentType, `- ""
 - key0
 - key1
 `},
-		{"application/x-protobuf", `{
+		{util.ProtoContentType, `{
   "d": [
     "",
     "key0",

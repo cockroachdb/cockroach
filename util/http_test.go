@@ -93,7 +93,7 @@ func TestGetContentType(t *testing.T) {
 	testCases := []struct {
 		header, expType string
 	}{
-		{"application/json", "application/json"},
+		{util.JSONContentType, util.JSONContentType},
 		{"text/html; charset=ISO-8859-4", "text/html"},
 	}
 	for i, test := range testCases {
@@ -101,7 +101,7 @@ func TestGetContentType(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Add("Content-Type", test.header)
+		req.Header.Add(util.ContentTypeHeader, test.header)
 		if typ := util.GetContentType(req); typ != test.expType {
 			t.Errorf("%d: expected content type %s; got %s", i, test.expType, typ)
 		}
@@ -154,25 +154,25 @@ func TestMarshalResponse(t *testing.T) {
 		expCType      string
 		expBody       []byte
 	}{
-		{"", "application/json", "application/json", jsonConfig},
-		{"", "application/x-json", "application/json", jsonConfig},
-		{"application/json", "", "application/json", jsonConfig},
-		{"application/json", "foo", "application/json", jsonConfig},
-		{"", "application/x-google-protobuf", "application/x-protobuf", protobufConfig},
-		{"", "application/x-protobuf", "application/x-protobuf", protobufConfig},
-		{"application/x-protobuf", "", "application/x-protobuf", protobufConfig},
-		{"application/x-protobuf", "foo", "application/x-protobuf", protobufConfig},
-		{"", "text/yaml", "text/yaml", yamlConfig},
-		{"", "application/x-yaml", "text/yaml", yamlConfig},
-		{"text/yaml", "", "text/yaml", yamlConfig},
-		{"text/yaml", "foo", "text/yaml", yamlConfig},
+		{"", util.JSONContentType, util.JSONContentType, jsonConfig},
+		{"", util.AltJSONContentType, util.JSONContentType, jsonConfig},
+		{util.JSONContentType, "", util.JSONContentType, jsonConfig},
+		{util.JSONContentType, "foo", util.JSONContentType, jsonConfig},
+		{"", util.AltProtoContentType, util.ProtoContentType, protobufConfig},
+		{"", util.ProtoContentType, util.ProtoContentType, protobufConfig},
+		{util.ProtoContentType, "", util.ProtoContentType, protobufConfig},
+		{util.ProtoContentType, "foo", util.ProtoContentType, protobufConfig},
+		{"", util.YAMLContentType, util.YAMLContentType, yamlConfig},
+		{"", util.AltYAMLContentType, util.YAMLContentType, yamlConfig},
+		{util.YAMLContentType, "", util.YAMLContentType, yamlConfig},
+		{util.YAMLContentType, "foo", util.YAMLContentType, yamlConfig},
 		// Test mixed accept headers; but we ignore quality.
-		{"", "application/json, application/x-protobuf; q=0.8", "application/json", jsonConfig},
-		{"", "application/json, application/x-protobuf; q=0.8, text/yaml; q=0.5", "application/json", jsonConfig},
-		{"", "application/x-protobuf; q=0.8, text/yaml; q=0.5, application/json", "application/x-protobuf", protobufConfig},
-		{"", "text/yaml; q=0.5, application/x-protobuf; q=0.8, application/json", "text/yaml", yamlConfig},
+		{"", "application/json, application/x-protobuf; q=0.8", util.JSONContentType, jsonConfig},
+		{"", "application/json, application/x-protobuf; q=0.8, text/yaml; q=0.5", util.JSONContentType, jsonConfig},
+		{"", "application/x-protobuf; q=0.8, text/yaml; q=0.5, application/json", util.ProtoContentType, protobufConfig},
+		{"", "text/yaml; q=0.5, application/x-protobuf; q=0.8, application/json", util.YAMLContentType, yamlConfig},
 		// Test default encoding is JSON.
-		{"foo", "foo", "application/json", jsonConfig},
+		{"foo", "foo", util.JSONContentType, jsonConfig},
 	}
 	for i, test := range testCases {
 		req, err := http.NewRequest("GET", "http://foo.com", nil)
@@ -211,8 +211,8 @@ func TestMarshalResponseSlice(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Add(util.ContentTypeHeader, "application/json")
-		req.Header.Add(util.AcceptHeader, "application/json")
+		req.Header.Add(util.ContentTypeHeader, util.JSONContentType)
+		req.Header.Add(util.AcceptHeader, util.JSONContentType)
 		body, _, err := util.MarshalResponse(req, value, util.AllEncodings)
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
@@ -230,7 +230,7 @@ func TestProtoEncodingError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Add(util.ContentTypeHeader, "application/x-protobuf")
+	req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
 	reqBody := []byte("foo")
 	var value string
 	err = util.UnmarshalRequest(req, reqBody, value, []util.EncodingType{util.ProtoEncoding})
@@ -238,12 +238,12 @@ func TestProtoEncodingError(t *testing.T) {
 		t.Errorf("unexpected success")
 	}
 
-	req.Header.Add(util.AcceptHeader, "application/x-protobuf")
+	req.Header.Add(util.AcceptHeader, util.ProtoContentType)
 	body, cType, err := util.MarshalResponse(req, value, []util.EncodingType{util.ProtoEncoding})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cType != "application/json" {
+	if cType != util.JSONContentType {
 		t.Errorf("unexpected content type; got %s", cType)
 	}
 	if !bytes.Equal(body, body) {

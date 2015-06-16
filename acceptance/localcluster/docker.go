@@ -33,6 +33,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
 )
@@ -217,7 +218,7 @@ func (c *Container) Wait() error {
 	// support is added to dockerclient.
 	dc := c.client.(*dockerclient.DockerClient)
 	resp, err := dc.HTTPClient.Post(
-		fmt.Sprintf("%s/containers/%s/wait", dc.URL, c.ID), "application/json", nil)
+		fmt.Sprintf("%s/containers/%s/wait", dc.URL, c.ID), util.JSONContentType, nil)
 	if err != nil {
 		return err
 	}

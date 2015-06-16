@@ -23,6 +23,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // TestSetZoneInvalid sets invalid zone configs and verifies error
@@ -59,7 +61,7 @@ range_max_bytes: 67108864
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Add("Content-Type", "text/yaml")
+		req.Header.Add(util.ContentTypeHeader, util.YAMLContentType)
 		_, err = sendAdminRequest(testContext, req)
 		if err == nil {
 			t.Errorf("%d: expected error", i)

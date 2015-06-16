@@ -106,14 +106,14 @@ func (s *adminServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleHealth responds to health requests from monitoring services.
 func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	fmt.Fprintln(w, "ok")
 }
 
 // handleQuit is the shutdown hook. The server is first placed into a
 // draining mode, followed by exit.
 func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	fmt.Fprintln(w, "ok")
 	go s.stopper.Stop()
 }
@@ -193,7 +193,7 @@ func (s *adminServer) handleGetAction(handler actionHandler, w http.ResponseWrit
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(util.ContentTypeHeader, contentType)
 	fmt.Fprintf(w, "%s", string(b))
 }
 

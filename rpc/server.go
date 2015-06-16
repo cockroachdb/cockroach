@@ -92,7 +92,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
 	if r.Method != "CONNECT" {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(util.ContentTypeHeader, "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		io.WriteString(w, "405 must CONNECT\n")
 		return
