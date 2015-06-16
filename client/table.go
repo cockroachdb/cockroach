@@ -51,11 +51,6 @@ import (
 //
 // - Add support for namespaces. Currently namespace ID 0 is hardcoded.
 
-var (
-	// TODO(pmattis): Use the appropriate constant in keys.go when it appears.
-	tableDataPrefix = []byte("tbl-")
-)
-
 func lowerStrings(s []string) []string {
 	for i := range s {
 		s[i] = strings.ToLower(s[i])
@@ -167,7 +162,7 @@ func decodeTableKey(b []byte, v reflect.Value) ([]byte, error) {
 // v. It returns the encoded primary key.
 func (m *model) encodePrimaryKey(v reflect.Value) ([]byte, error) {
 	var key []byte
-	key = append(key, tableDataPrefix...)
+	key = append(key, keys.TableDataPrefix...)
 	key = roachencoding.EncodeUvarint(key, uint64(m.desc.ID))
 
 	for _, col := range m.primaryKey {
@@ -184,10 +179,10 @@ func (m *model) encodePrimaryKey(v reflect.Value) ([]byte, error) {
 // decodePrimaryKey decodes a primary key for the table into the model object
 // v. It returns the remaining (undecoded) bytes.
 func (m *model) decodePrimaryKey(key []byte, v reflect.Value) ([]byte, error) {
-	if !bytes.HasPrefix(key, tableDataPrefix) {
+	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", m.name, key)
 	}
-	key = bytes.TrimPrefix(key, tableDataPrefix)
+	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
 
 	var tableID uint64
 	key, tableID = roachencoding.DecodeUvarint(key)
