@@ -36,7 +36,7 @@
 */
 package wire
 
-import proto1 "github.com/gogo/protobuf/proto"
+import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
 // discarding unused import gogoproto "gogoproto/gogo.pb"
@@ -46,7 +46,7 @@ import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ = proto1.Marshal
+var _ = proto.Marshal
 var _ = math.Inf
 
 type CompressionType int32
@@ -74,10 +74,10 @@ func (x CompressionType) Enum() *CompressionType {
 	return p
 }
 func (x CompressionType) String() string {
-	return proto1.EnumName(CompressionType_name, int32(x))
+	return proto.EnumName(CompressionType_name, int32(x))
 }
 func (x *CompressionType) UnmarshalJSON(data []byte) error {
-	value, err := proto1.UnmarshalJSONEnum(CompressionType_value, data, "CompressionType")
+	value, err := proto.UnmarshalJSONEnum(CompressionType_value, data, "CompressionType")
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ type RequestHeader struct {
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
-func (m *RequestHeader) String() string { return proto1.CompactTextString(m) }
+func (m *RequestHeader) String() string { return proto.CompactTextString(m) }
 func (*RequestHeader) ProtoMessage()    {}
 
 func (m *RequestHeader) GetId() uint64 {
@@ -143,7 +143,7 @@ type ResponseHeader struct {
 }
 
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
-func (m *ResponseHeader) String() string { return proto1.CompactTextString(m) }
+func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
 func (*ResponseHeader) ProtoMessage()    {}
 
 func (m *ResponseHeader) GetId() uint64 {
@@ -182,7 +182,7 @@ func (m *ResponseHeader) GetUncompressedSize() uint32 {
 }
 
 func init() {
-	proto1.RegisterEnum("cockroach.rpc.codec.wire.CompressionType", CompressionType_name, CompressionType_value)
+	proto.RegisterEnum("cockroach.rpc.codec.wire.CompressionType", CompressionType_name, CompressionType_value)
 }
 func (m *RequestHeader) Unmarshal(data []byte) error {
 	l := len(data)

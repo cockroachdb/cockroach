@@ -19,7 +19,7 @@ github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/coreos/etcd e0d5116683fff864a8452709f4ff30d902ac50df
 github.com/docker/docker b099eb796a54276ea6585d9647b274d296a83aed
 github.com/elazarl/go-bindata-assetfs bea323321994103859d60197d229f1a94699dde3
-github.com/gogo/protobuf 0674ba79c9b8fdbb24b7f272cc84e33712bfd64a
+github.com/gogo/protobuf fc8a6f73d3345eeceb47608c782bf9419f567721
 github.com/golang/lint f42f5c1c440621302702cb0741e9d2ca547ae80f
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75

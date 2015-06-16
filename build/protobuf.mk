@@ -49,11 +49,14 @@ protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES)
 
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.go | xargs rm
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(ORG_ROOT) $(GO_PROTOS)
+	for dir in $(sort $(dir $(GO_PROTOS))); do \
+	  $(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(ORG_ROOT) $$dir/*.proto; \
+	done
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.h -o -name *.pb.cc | xargs rm
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ENGINE_ROOT) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ENGINE_ROOT) $(CPP_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ENGINE_ROOT) $(GOGOPROTO_PROTO)
 	# For c++, protoc generates a directory structure mirroring the package
 	# structure (and these directories must be in the include path), but cgo can
 	# only compile a single directory so we symlink the generated pb.cc files

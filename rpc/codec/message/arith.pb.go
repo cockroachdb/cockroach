@@ -3,25 +3,25 @@
 // DO NOT EDIT!
 
 /*
-	Package message is a generated protocol buffer package.
+Package message is a generated protocol buffer package.
 
-	It is generated from these files:
-		cockroach/rpc/codec/message/arith.proto
-		cockroach/rpc/codec/message/echo.proto
+It is generated from these files:
+	cockroach/rpc/codec/message/arith.proto
+	cockroach/rpc/codec/message/echo.proto
 
-	It has these top-level messages:
-		ArithRequest
-		ArithResponse
+It has these top-level messages:
+	ArithRequest
+	ArithResponse
 */
 package message
 
-import proto1 "github.com/gogo/protobuf/proto"
+import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
 // discarding unused import gogoproto "gogoproto/gogo.pb"
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ = proto1.Marshal
+var _ = proto.Marshal
 var _ = math.Inf
 
 type ArithRequest struct {
@@ -31,7 +31,7 @@ type ArithRequest struct {
 }
 
 func (m *ArithRequest) Reset()         { *m = ArithRequest{} }
-func (m *ArithRequest) String() string { return proto1.CompactTextString(m) }
+func (m *ArithRequest) String() string { return proto.CompactTextString(m) }
 func (*ArithRequest) ProtoMessage()    {}
 
 func (m *ArithRequest) GetA() int32 {
@@ -54,7 +54,7 @@ type ArithResponse struct {
 }
 
 func (m *ArithResponse) Reset()         { *m = ArithResponse{} }
-func (m *ArithResponse) String() string { return proto1.CompactTextString(m) }
+func (m *ArithResponse) String() string { return proto.CompactTextString(m) }
 func (*ArithResponse) ProtoMessage()    {}
 
 func (m *ArithResponse) GetC() int32 {
