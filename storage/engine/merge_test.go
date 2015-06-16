@@ -55,15 +55,6 @@ func mustMarshal(m gogoproto.Message) []byte {
 	return b
 }
 
-func counter(n int64) []byte {
-	v := &proto.MVCCMetadata{
-		Value: &proto.Value{
-			Integer: gogoproto.Int64(n),
-		},
-	}
-	return mustMarshal(v)
-}
-
 func appender(s string) []byte {
 	v := &proto.MVCCMetadata{
 		Value: &proto.Value{
@@ -107,9 +98,6 @@ func TestGoMerge(t *testing.T) {
 	badCombinations := []struct {
 		existing, update []byte
 	}{
-		{counter(0), appender("")},
-		{appender(""), counter(0)},
-		{counter(0), nil},
 		{appender(""), nil},
 		{
 			timeSeries(testtime, 1000, []tsSample{
@@ -150,42 +138,6 @@ func TestGoMerge(t *testing.T) {
 		_, err := goMerge(c.existing, c.update)
 		if err == nil {
 			t.Errorf("goMerge: %d: expected error", i)
-		}
-	}
-
-	testCasesCounter := []struct {
-		existing, update, expected int64
-		wantError                  bool
-	}{
-		{0, 10, 10, false},
-		{10, 20, 30, false},
-		{595, -600, -5, false},
-		// Close to overflow, but not quite there.
-		{math.MinInt64 + 3, -3, math.MinInt64, false},
-		{math.MaxInt64, 0, math.MaxInt64, false},
-		// Overflows.
-		{math.MaxInt64, 1, 0, true},
-		{-1, math.MinInt64, 0, true},
-	}
-	for i, c := range testCasesCounter {
-		result, err := goMerge(counter(c.existing), counter(c.update))
-		if c.wantError {
-			if err == nil {
-				t.Errorf("goMerge: %d: wanted error but got success", i)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("goMerge error: %d: %v", i, err)
-			continue
-		}
-		var v proto.MVCCMetadata
-		if err := gogoproto.Unmarshal(result, &v); err != nil {
-			t.Errorf("goMerge error unmarshalling: %s", err)
-			continue
-		}
-		if v.Value.GetInteger() != c.expected {
-			t.Errorf("goMerge error: %d: want %v, got %v", i, c.expected, v.Value.GetInteger())
 		}
 	}
 

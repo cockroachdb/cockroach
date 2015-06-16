@@ -70,9 +70,6 @@ func GetProto(key proto.Key, msg gogoproto.Message) Call {
 		if reply.Value == nil {
 			return util.Errorf("%s: no value present", key)
 		}
-		if reply.Value.Integer != nil {
-			return util.Errorf("%s: unexpected integer value: %+v", key, reply.Value)
-		}
 		return gogoproto.Unmarshal(reply.Value.Bytes, msg)
 	}
 	return c

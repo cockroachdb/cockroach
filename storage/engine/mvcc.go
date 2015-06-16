@@ -626,9 +626,6 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	if value.Value != nil && value.Value.Bytes != nil && value.Value.Integer != nil {
-		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
-	}
 
 	metaKey := mvccEncodeKey(buf.key[0:0], key)
 	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, &buf.meta)
@@ -741,14 +738,14 @@ func MVCCIncrement(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp 
 		return 0, err
 	}
 
-	var int64Val int64
-	// If the value exists, verify it's an integer type not a byte slice.
 	if value != nil {
-		if value.Bytes != nil || value.Integer == nil {
-			return 0, util.Errorf("cannot increment key %q which already has a generic byte value: %+v", key, *value)
+		if n := len(value.Bytes); n != 0 && n != 8 {
+			return 0, util.Errorf("cannot increment key %q which does not contain an integer value: %+v",
+				key, *value)
 		}
-		int64Val = value.GetInteger()
 	}
+
+	int64Val := value.GetInteger()
 
 	// Check for overflow and underflow.
 	if encoding.WillOverflow(int64Val, inc) {
@@ -761,7 +758,8 @@ func MVCCIncrement(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp 
 	}
 
 	r := int64Val + inc
-	newValue := proto.Value{Integer: gogoproto.Int64(r)}
+	newValue := proto.Value{}
+	newValue.SetInteger(r)
 	newValue.InitChecksum(key)
 	return r, MVCCPut(engine, ms, key, timestamp, newValue, txn)
 }
@@ -789,10 +787,6 @@ func MVCCConditionalPut(engine Engine, ms *proto.MVCCStats, key proto.Key, times
 		if existVal == nil {
 			return &proto.ConditionFailedError{}
 		} else if expValue.Bytes != nil && !bytes.Equal(expValue.Bytes, existVal.Bytes) {
-			return &proto.ConditionFailedError{
-				ActualValue: existVal,
-			}
-		} else if expValue.Integer != nil && (existVal.Integer == nil || expValue.GetInteger() != existVal.GetInteger()) {
 			return &proto.ConditionFailedError{
 				ActualValue: existVal,
 			}

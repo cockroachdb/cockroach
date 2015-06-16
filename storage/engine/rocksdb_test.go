@@ -468,20 +468,11 @@ func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
 			continue
 		}
 		if testing.Verbose() {
-			if val.Integer != nil {
-				fmt.Printf("%q: %d\n", key, val.GetInteger())
-			} else {
-				fmt.Printf("%q: [%d]byte\n", key, len(val.Bytes))
-			}
+			fmt.Printf("%q: [%d]byte\n", key, len(val.Bytes))
 		}
 	}
 
 	b.StopTimer()
-}
-
-// BenchmarkMVCCMergeInteger computes performance of merging integers.
-func BenchmarkMVCCMergeInteger(b *testing.B) {
-	runMVCCMerge(&proto.Value{Integer: gogoproto.Int64(1)}, 1024, b)
 }
 
 // BenchmarkMVCCMergeTimeSeries computes performance of merging time series data.

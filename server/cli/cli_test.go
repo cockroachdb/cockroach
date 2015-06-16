@@ -89,7 +89,7 @@ func ExampleBasic() {
 	// kv get a
 	// "a" not found
 	// kv get b
-	// 2
+	// "2"
 	// kv inc c 1
 	// 1
 	// kv inc c 10
@@ -98,7 +98,7 @@ func ExampleBasic() {
 	// 111
 	// kv scan
 	// "b"	"2"
-	// "c"	111
+	// "c"	"\x00\x00\x00\x00\x00\x00\x00o"
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
@@ -130,12 +130,12 @@ func ExampleQuoted() {
 	// "a\x02"	"日本語"
 	// "a\x03"	"日本語"
 	// kv get a\x00
-	// 日本語
+	// "日本語"
 	// kv del a\x00
 	// kv inc 1\x01
 	// 1
 	// kv get 1\x01
-	// 1
+	// "\x00\x00\x00\x00\x00\x00\x00\x01"
 	// quit
 	// node drained and shutdown: ok
 }

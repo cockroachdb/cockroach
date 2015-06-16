@@ -321,11 +321,22 @@ func (v *Value) Verify(key []byte) error {
 				cksum, Key(key), v)
 		}
 	}
-	if v.Bytes != nil && v.Integer != nil {
-		return util.Errorf("both the value byte slice and integer fields are set for key %s: [% x]",
-			Key(key), v)
-	}
 	return nil
+}
+
+// SetInteger encodes the specified int64 value into the bytes field of the
+// receiver.
+func (v *Value) SetInteger(i int64) {
+	v.Bytes = encoding.EncodeUint64(nil, uint64(i))
+}
+
+// GetInteger decodes an int64 value from the bytes field of the receiver.
+func (v *Value) GetInteger() int64 {
+	if v == nil || v.Bytes == nil {
+		return 0
+	}
+	_, u := encoding.DecodeUint64(v.Bytes)
+	return int64(u)
 }
 
 // computeChecksum computes a checksum based on the provided key and
@@ -336,8 +347,6 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 	c := encoding.NewCRC32Checksum(key)
 	if v.Bytes != nil {
 		c.Write(v.Bytes)
-	} else if v.Integer != nil {
-		c.Write(encoding.EncodeUint64(nil, uint64(v.GetInteger())))
 	}
 	sum := c.Sum32()
 	encoding.ReleaseCRC32Checksum(c)

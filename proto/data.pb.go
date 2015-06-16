@@ -174,9 +174,6 @@ func (m *Timestamp) GetLogical() int32 {
 type Value struct {
 	// Bytes is the byte slice value.
 	Bytes []byte `protobuf:"bytes,1,opt,name=bytes" json:"bytes,omitempty"`
-	// Integer is an integer value type. Only Integer values may exist at a key
-	// when making the Increment API call.
-	Integer *int64 `protobuf:"varint,2,opt,name=integer" json:"integer,omitempty"`
 	// Checksum is a CRC-32-IEEE checksum of the key + value, in that order.
 	// If this is an integer value, then the value is interpreted as an 8
 	// byte, big-endian encoded value. This value is set by the client on
@@ -202,13 +199,6 @@ func (m *Value) GetBytes() []byte {
 		return m.Bytes
 	}
 	return nil
-}
-
-func (m *Value) GetInteger() int64 {
-	if m != nil && m.Integer != nil {
-		return *m.Integer
-	}
-	return 0
 }
 
 func (m *Value) GetChecksum() uint32 {
@@ -959,23 +949,6 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			m.Bytes = append([]byte{}, data[index:postIndex]...)
 			index = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Integer", wireType)
-			}
-			var v int64
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.Integer = &v
 		case 3:
 			if wireType != 5 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Checksum", wireType)
@@ -2845,9 +2818,6 @@ func (m *Value) Size() (n int) {
 		l = len(m.Bytes)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.Integer != nil {
-		n += 1 + sovData(uint64(*m.Integer))
-	}
 	if m.Checksum != nil {
 		n += 5
 	}
@@ -3176,11 +3146,6 @@ func (m *Value) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintData(data, i, uint64(len(m.Bytes)))
 		i += copy(data[i:], m.Bytes)
-	}
-	if m.Integer != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintData(data, i, uint64(*m.Integer))
 	}
 	if m.Checksum != nil {
 		data[i] = 0x1d
