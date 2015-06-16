@@ -579,7 +579,7 @@ func TestStoreRangeManySplits(t *testing.T) {
 			keys = append(keys, r.Key)
 		}
 		return reflect.DeepEqual(keys, expKeys)
-	}, 1*time.Second); err != nil {
+	}, 5*time.Second); err != nil {
 		t.Errorf("expected splits not found: %s", err)
 	}
 }
