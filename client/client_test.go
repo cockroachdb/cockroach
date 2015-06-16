@@ -32,6 +32,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
@@ -98,9 +99,12 @@ func TestClientRetryNonTxn(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	s.SetRangeRetryOptions(retry.Options{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  5 * time.Millisecond,
-		Constant:    2,
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: 1 * time.Millisecond,
+			MaxInterval:     1 * time.Millisecond,
+			Multiplier:      2,
+		},
 		MaxAttempts: 2,
 	})
 
@@ -211,10 +215,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 }
 
 func setTxnRetryBackoff(backoff time.Duration) func() {
-	savedBackoff := client.DefaultTxnRetryOptions.Backoff
-	client.DefaultTxnRetryOptions.Backoff = backoff
+	savedBackoff := client.DefaultTxnRetryOptions.BackOff.InitialInterval
+	client.DefaultTxnRetryOptions.BackOff.InitialInterval = backoff
 	return func() {
-		client.DefaultTxnRetryOptions.Backoff = savedBackoff
+		client.DefaultTxnRetryOptions.BackOff.InitialInterval = savedBackoff
 	}
 }
 

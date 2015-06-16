@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -61,11 +62,13 @@ var (
 	// defaultRangeRetryOptions are default retry options for retrying commands
 	// sent to the store's ranges, for WriteTooOld and WriteIntent errors.
 	defaultRangeRetryOptions = retry.Options{
-		Backoff:     50 * time.Millisecond,
-		MaxBackoff:  5 * time.Second,
-		Constant:    2,
-		MaxAttempts: 0, // retry indefinitely
-		UseV1Info:   true,
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: 50 * time.Millisecond,
+			MaxInterval:     5 * time.Second,
+			Multiplier:      2,
+		},
+		UseV1Info: true,
 	}
 
 	// TestStoreContext has some fields initialized with values relevant
@@ -1229,7 +1232,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 	// Backoff and retry loop for handling errors.
 	retryOpts := *s.ctx.RangeRetryOptions
 	retryOpts.Tag = fmt.Sprintf("store: %s", args.Method())
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 		// Add the command to the range for execution; exit retry loop on success.
 		reply.Reset()
 
@@ -1237,11 +1240,12 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 		rng, err := s.GetRange(header.RaftID)
 		if err != nil {
 			reply.Header().SetGoError(err)
-			return retry.Break, err
+			r.Stop()
+			return err
 		}
 
 		if err = rng.AddCmd(ctx, client.Call{Args: args, Reply: reply}, true); err == nil {
-			return retry.Break, err
+			return nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1258,7 +1262,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 					s.stopper.FinishTask()
 				}()
 				reply.Header().Error = nil
-				return retry.Break, nil
+				return nil
 			}
 			pushType := proto.PUSH_TIMESTAMP
 			if proto.IsWrite(args) {
@@ -1273,12 +1277,14 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 			// Update request timestamp and retry immediately.
 			header.Timestamp = t.ExistingTimestamp
 			header.Timestamp.Logical++
-			return retry.Reset, err
+			r.Reset()
+			return err
 		case *proto.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
-				return retry.Reset, err
+				r.Reset()
+				return err
 			}
 
 			// Otherwise, update timestamp on read/write and backoff / retry.
@@ -1287,9 +1293,10 @@ func (s *Store) ExecuteCmd(ctx context.Context, call client.Call) error {
 					header.Timestamp = intent.Txn.Timestamp.Next()
 				}
 			}
-			return retry.Continue, err
+			return err
 		}
-		return retry.Break, err
+		r.Stop()
+		return err
 	})
 
 	// By default, retries are indefinite. However, some unittests set a

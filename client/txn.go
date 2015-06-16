@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -35,11 +36,13 @@ var (
 	// for transactions.
 	// This is exported for testing purposes only.
 	DefaultTxnRetryOptions = retry.Options{
-		Backoff:     50 * time.Millisecond,
-		MaxBackoff:  5 * time.Second,
-		Constant:    2,
-		MaxAttempts: 0, // retry indefinitely
-		UseV1Info:   true,
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: 50 * time.Millisecond,
+			MaxInterval:     5 * time.Second,
+			Multiplier:      2,
+		},
+		UseV1Info: true,
 	}
 )
 
@@ -273,7 +276,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 	// error condition this loop isn't capable of handling.
 	retryOpts := txn.db.txnRetryOptions
 	retryOpts.Tag = txn.txn.Name
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
 		err := retryable(txn)
 		if err == nil {
@@ -287,15 +290,19 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 				err = txn.send(Call{Args: etArgs, Reply: etReply})
 			}
 		}
+		if err == nil {
+			return nil
+		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
-				return retry.Reset, err
+				r.Reset()
+				return err
 			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
-				return retry.Continue, err
+				return err
 			}
-			// By default, fall through and return Break.
 		}
-		return retry.Break, err
+		r.Stop()
+		return err
 	})
 	if err != nil && txn.haveTxnWrite {
 		if replyErr := txn.send(Call{

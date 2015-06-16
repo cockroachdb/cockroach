@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -36,10 +37,12 @@ const allocationTrigger = 0
 // idAllocationRetryOpts sets the retry options for handling RaftID
 // allocation errors.
 var idAllocationRetryOpts = retry.Options{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0,
+	BackOff: backoff.ExponentialBackOff{
+		Clock:           backoff.SystemClock,
+		InitialInterval: 50 * time.Millisecond,
+		MaxInterval:     2 * time.Second,
+		Multiplier:      2,
+	},
 }
 
 // An idAllocator is used to increment a key in allocation blocks
@@ -106,15 +109,15 @@ func (ia *idAllocator) Allocate() (int64, error) {
 func (ia *idAllocator) allocateBlock(incr int64) {
 	var newValue int64
 	retryOpts := idAllocationRetryOpts
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 		idKey := ia.idKey.Load().(proto.Key)
-		r, err := ia.db.Inc(idKey, incr)
+		res, err := ia.db.Inc(idKey, incr)
 		if err != nil {
 			log.Warningf("unable to allocate %d ids from %s: %s", incr, idKey, err)
-			return retry.Continue, err
+			return err
 		}
-		newValue = r.ValueInt()
-		return retry.Break, nil
+		newValue = res.ValueInt()
+		return nil
 	})
 	if err != nil {
 		panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))

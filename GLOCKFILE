@@ -12,6 +12,7 @@ bitbucket.org/tebeka/go2xunit 77968f802fb3
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/barakmich/go-nyet fba7607fa3f727680833b0c44f35b448dbe5c5a8
 github.com/biogo/store e1f74b3c58befe661feed7fa4cf52436de753128
+github.com/cenkalti/backoff 6c45d6bc1e78d94431dff8fc28a99f20bafa355a
 github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 0f9ab7b988ca7474cf76b9a961ab03c0552abcb3
 github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3

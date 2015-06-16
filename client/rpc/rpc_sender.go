@@ -81,9 +81,9 @@ func (s *Sender) Send(_ context.Context, call client.Call) {
 	retryOpts := s.retryOpts
 	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
 
-	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	if err := retry.WithBackoff(retryOpts, func(r *retry.Retry) error {
 		if !s.client.IsHealthy() {
-			return retry.Continue, nil
+			return fmt.Errorf("client unhealthy")
 		}
 
 		method := call.Args.Method().String()
@@ -97,12 +97,13 @@ func (s *Sender) Send(_ context.Context, call client.Call) {
 			// there's visiblity that this is happening. Some of the errors
 			// we'll sweep up in this net shouldn't be retried, but we can't
 			// really know for sure which.
-			log.Warningf("failed to send RPC request %s: %v", method, c.Error)
-			return retry.Continue, nil
+			rpcErr := fmt.Errorf("failed to send RPC request %s: %v", method, c.Error)
+			log.Warning(rpcErr)
+			return rpcErr
 		}
 
 		// On successful post, we're done with retry loop.
-		return retry.Break, nil
+		return nil
 	}); err != nil {
 		call.Reply.Header().SetGoError(err)
 	}

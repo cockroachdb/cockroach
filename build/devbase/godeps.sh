@@ -32,6 +32,7 @@ ${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
 pkgs="
 github.com/biogo/store/interval
 github.com/biogo/store/llrb
+github.com/cenkalti/backoff
 github.com/cockroachdb/c-lz4
 github.com/cockroachdb/c-protobuf
 github.com/cockroachdb/c-rocksdb
@@ -40,11 +41,14 @@ github.com/coreos/etcd/Godeps/_workspace/src/github.com/gogo/protobuf/proto
 github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context
 github.com/coreos/etcd/raft
 github.com/coreos/etcd/raft/raftpb
+github.com/docker/docker/pkg/units
 github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
 github.com/google/btree
 github.com/inconshreveable/mousetrap
 github.com/julienschmidt/httprouter
+github.com/montanaflynn/stats
+github.com/samalba/dockerclient
 github.com/spf13/cobra
 github.com/spf13/pflag
 golang.org/x/net/context

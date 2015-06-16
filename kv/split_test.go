@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -36,9 +37,12 @@ import (
 // setTestRetryOptions sets client retry options for speedier testing.
 func setTestRetryOptions() {
 	client.DefaultTxnRetryOptions = retry.Options{
-		Backoff:    1 * time.Millisecond,
-		MaxBackoff: 10 * time.Millisecond,
-		Constant:   2,
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: 1 * time.Millisecond,
+			MaxInterval:     10 * time.Millisecond,
+			Multiplier:      2,
+		},
 	}
 }
 

@@ -22,18 +22,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestRetry(t *testing.T) {
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 10, false, nil}
-	var retries int
-	err := WithBackoff(opts, func() (Status, error) {
+	opts := Options{
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: time.Microsecond * 10,
+			MaxInterval:     time.Second,
+			Multiplier:      2,
+		},
+		Tag:         "test",
+		MaxAttempts: 10,
+	}
+
+	var retries uint
+	err := WithBackoff(opts, func(r *Retry) error {
 		retries++
 		if retries == 3 {
-			return Break, nil
+			return nil
 		}
-		return Continue, nil
+		return fmt.Errorf("try again")
 	})
 	if err != nil || retries != 3 {
 		t.Error("expected 3 retries, got", retries, ":", err)
@@ -44,9 +55,18 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	timer := time.AfterFunc(time.Second, func() {
 		t.Error("max backoff not respected")
 	})
-	opts := Options{"test", time.Microsecond * 10, time.Microsecond * 10, 1000, 3, false, nil}
-	err := WithBackoff(opts, func() (Status, error) {
-		return Continue, nil
+	opts := Options{
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: time.Microsecond * 10,
+			MaxInterval:     time.Microsecond * 10,
+			Multiplier:      1000,
+		},
+		Tag:         "test",
+		MaxAttempts: 3,
+	}
+	err := WithBackoff(opts, func(r *Retry) error {
+		return fmt.Errorf("try again")
 	})
 	if _, ok := err.(*MaxAttemptsError); !ok {
 		t.Errorf("should receive max attempts error on retry: %s", err)
@@ -55,11 +75,20 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 }
 
 func TestRetryExceedsMaxAttempts(t *testing.T) {
-	var retries int
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 3, false, nil}
-	err := WithBackoff(opts, func() (Status, error) {
+	var retries uint
+	opts := Options{
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: time.Microsecond * 10,
+			MaxInterval:     time.Second,
+			Multiplier:      2,
+		},
+		Tag:         "test",
+		MaxAttempts: 3,
+	}
+	err := WithBackoff(opts, func(r *Retry) error {
 		retries++
-		return Continue, nil
+		return fmt.Errorf("try again")
 	})
 	if _, ok := err.(*MaxAttemptsError); !ok {
 		t.Errorf("should receive max attempts error on retry: %s", err)
@@ -70,9 +99,18 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 }
 
 func TestRetryFunctionReturnsError(t *testing.T) {
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0 /* indefinite */, false, nil}
-	err := WithBackoff(opts, func() (Status, error) {
-		return Break, fmt.Errorf("something went wrong")
+	opts := Options{
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: time.Microsecond * 10,
+			MaxInterval:     time.Second,
+			Multiplier:      2,
+		},
+		Tag: "test",
+	}
+	err := WithBackoff(opts, func(r *Retry) error {
+		r.Stop()
+		return fmt.Errorf("something went wrong")
 	})
 	if err == nil {
 		t.Error("expected an error")
@@ -80,16 +118,26 @@ func TestRetryFunctionReturnsError(t *testing.T) {
 }
 
 func TestRetryReset(t *testing.T) {
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 1, false, nil}
-	var count int
+	opts := Options{
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: time.Microsecond * 10,
+			MaxInterval:     time.Second,
+			Multiplier:      2,
+		},
+		MaxAttempts: 1,
+		Tag:         "test",
+	}
+	var count uint
 	// Backoff loop has 1 allowed retry; we always return Reset, so
 	// just make sure we get to 2 retries and then break.
-	if err := WithBackoff(opts, func() (Status, error) {
+	if err := WithBackoff(opts, func(r *Retry) error {
 		count++
 		if count == 2 {
-			return Break, nil
+			return nil
 		}
-		return Reset, nil
+		r.Reset()
+		return fmt.Errorf("try again immediately")
 	}); err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -101,10 +149,19 @@ func TestRetryReset(t *testing.T) {
 func TestRetryStop(t *testing.T) {
 	stopper := util.NewStopper()
 	// Create a retry loop which will never stop without stopper.
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0, false, stopper}
-	if err := WithBackoff(opts, func() (Status, error) {
+	opts := Options{
+		BackOff: backoff.ExponentialBackOff{
+			Clock:           backoff.SystemClock,
+			InitialInterval: time.Microsecond * 10,
+			MaxInterval:     time.Second,
+			Multiplier:      2,
+		},
+		Tag:     "test",
+		Stopper: stopper,
+	}
+	if err := WithBackoff(opts, func(r *Retry) error {
 		go stopper.Stop()
-		return Continue, nil
+		return fmt.Errorf("try again")
 	}); err == nil {
 		t.Errorf("expected retry loop to exit from being stopped")
 	}
