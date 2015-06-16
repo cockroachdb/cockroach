@@ -53,7 +53,7 @@ func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
 }
 
 // Send implements the client.Sender interface.
-func (rls *retryableLocalSender) Send(_ context.Context, call client.Call) {
+func (rls *retryableLocalSender) Send(_ context.Context, call proto.Call) {
 	// Instant retry to handle the case of a range split, which is
 	// exposed here as a RangeKeyMismatchError.
 	retryOpts := retry.Options{

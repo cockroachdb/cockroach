@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"encoding"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -402,7 +403,7 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (db *DB) send(calls ...Call) (err error) {
+func (db *DB) send(calls ...proto.Call) (err error) {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -424,7 +425,7 @@ func (db *DB) send(calls ...Call) (err error) {
 		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
 			c.Args.Header().UserPriority = gogoproto.Int32(db.userPriority)
 		}
-		c.resetClientCmdID()
+		resetClientCmdID(c.Args)
 		db.Sender.Send(context.TODO(), c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
@@ -441,7 +442,7 @@ func (db *DB) send(calls ...Call) (err error) {
 	for _, call := range calls {
 		bArgs.Add(call.Args)
 	}
-	err = db.send(Call{Args: bArgs, Reply: bReply})
+	err = db.send(proto.Call{Args: bArgs, Reply: bReply})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -526,4 +527,14 @@ func runOneRow(r Runner, b *Batch) (KeyValue, error) {
 	}
 	res := b.Results[0]
 	return res.Rows[0], res.Err
+}
+
+// resetClientCmdID sets the client command ID if the call is for a
+// read-write method. The client command ID provides idempotency
+// protection in conjunction with the server.
+func resetClientCmdID(args proto.Request) {
+	args.Header().CmdID = proto.ClientCmdID{
+		WallTime: time.Now().UnixNano(),
+		Random:   rand.Int63(),
+	}
 }

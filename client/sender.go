@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -45,15 +46,15 @@ var defaultRetryOptions = retry.Options{
 type Sender interface {
 	// Send invokes the Call.Method with Call.Args and sets the result
 	// in Call.Reply.
-	Send(context.Context, Call)
+	Send(context.Context, proto.Call)
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions
 // as Senders.
-type SenderFunc func(context.Context, Call)
+type SenderFunc func(context.Context, proto.Call)
 
 // Send calls f(ctx, c).
-func (f SenderFunc) Send(ctx context.Context, c Call) {
+func (f SenderFunc) Send(ctx context.Context, c proto.Call) {
 	f(ctx, c)
 }
 

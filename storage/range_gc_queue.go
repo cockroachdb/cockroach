@@ -88,7 +88,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 	// lookup in our own copy of the range.
 	reply := proto.InternalRangeLookupResponse{}
 	b := &client.Batch{}
-	b.InternalAddCall(client.Call{
+	b.InternalAddCall(proto.Call{
 		Args: &proto.InternalRangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: keys.RangeMetaKey(rng.Desc().StartKey),

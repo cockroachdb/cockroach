@@ -227,7 +227,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 
 	// Send GC request through range.
 	gcArgs.GCMeta = *gcMeta
-	if err := rng.AddCmd(rng.context(), client.Call{Args: gcArgs, Reply: &proto.InternalGCResponse{}}, true); err != nil {
+	if err := rng.AddCmd(rng.context(), proto.Call{Args: gcArgs, Reply: &proto.InternalGCResponse{}}, true); err != nil {
 		return err
 	}
 
@@ -273,7 +273,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
 	b := &client.Batch{}
-	b.InternalAddCall(client.Call{Args: pushArgs, Reply: pushReply})
+	b.InternalAddCall(proto.Call{Args: pushArgs, Reply: pushReply})
 	if err := rng.rm.DB().Run(b); err != nil {
 		log.Warningf("push of txn %s failed: %s", meta.Txn, err)
 		updateOldestIntent(meta.Timestamp.WallTime)
@@ -289,7 +289,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 			Txn:       pushReply.PusheeTxn,
 		},
 	}
-	if err := rng.AddCmd(rng.context(), client.Call{Args: resolveArgs, Reply: &proto.InternalResolveIntentResponse{}}, true); err != nil {
+	if err := rng.AddCmd(rng.context(), proto.Call{Args: resolveArgs, Reply: &proto.InternalResolveIntentResponse{}}, true); err != nil {
 		log.Warningf("resolve of key %q failed: %s", key, err)
 		updateOldestIntent(meta.Timestamp.WallTime)
 	}

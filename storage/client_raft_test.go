@@ -27,7 +27,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -56,7 +55,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	get := func(store *storage.Store, raftID proto.RaftID, key proto.Key) int64 {
 		args, resp := getArgs(key, raftID, store.StoreID())
-		err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: resp})
+		err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: resp})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +78,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 		increment := func(raftID proto.RaftID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args, resp := incrementArgs(key, value, raftID, store.StoreID())
-			err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: resp})
+			err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: resp})
 			return resp, err
 		}
 
@@ -90,7 +89,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			t.Fatal(err)
 		}
 		splitArgs, splitResp := adminSplitArgs(proto.KeyMin, splitKey, raftID, store.StoreID())
-		if err := store.ExecuteCmd(context.Background(), client.Call{Args: splitArgs, Reply: splitResp}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: splitArgs, Reply: splitResp}); err != nil {
 			t.Fatal(err)
 		}
 		raftID2 = store.LookupRange(key2, nil).Desc().RaftID
@@ -115,11 +114,11 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
 	incArgs, incReply := incrementArgs(key1, 0, raftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incReply}); err != nil {
 		t.Fatal(err)
 	}
 	incArgs, incReply = incrementArgs(key2, 0, raftID2, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incReply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -152,14 +151,14 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 		// Write a bytes value so the increment will fail.
 		putArgs, putReply := putArgs(proto.Key("a"), []byte("asdf"), 1, store.StoreID())
-		if err := store.ExecuteCmd(context.Background(), client.Call{Args: putArgs, Reply: putReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: putArgs, Reply: putReply}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Try and fail to increment the key. It is important for this test that the
 		// failure be the last thing in the raft log when the store is stopped.
 		incArgs, incReply := incrementArgs(proto.Key("a"), 42, 1, store.StoreID())
-		if err := store.ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incReply}); err == nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incReply}); err == nil {
 			t.Fatal("did not get expected error")
 		}
 	}()
@@ -174,7 +173,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs, incReply := incrementArgs(proto.Key("b"), 0, 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incReply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +193,7 @@ func TestReplicateRange(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -237,7 +236,7 @@ func TestReplicateRange(t *testing.T) {
 	util.SucceedsWithin(t, 1*time.Second, func() error {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
 			return util.Errorf("failed to read data")
 		}
 		if v := getResp.Value.GetInteger(); v != 5 {
@@ -263,7 +262,7 @@ func TestRestoreReplicas(t *testing.T) {
 	// Perform an increment before replication to ensure that commands are not
 	// repeated on restarts.
 	incArgs, incResp := incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -290,25 +289,25 @@ func TestRestoreReplicas(t *testing.T) {
 	// Send a command on each store. The original store (the leader still)
 	// will succeed.
 	incArgs, incResp = incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 	// The follower will return a not leader error, indicating the command
 	// should be forwarded to the leader.
 	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
-	err = mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp})
+	err = mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp})
 	if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Fatalf("expected not leader error; got %s", err)
 	}
 	incArgs.Replica.StoreID = mtc.stores[0].StoreID()
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
 			return false
 		}
 		return getResp.Value.GetInteger() == 39
@@ -416,7 +415,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -429,13 +428,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
 	truncArgs, truncResp := internalTruncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: truncArgs, Reply: truncResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: truncArgs, Reply: truncResp}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Issue a second command post-truncation.
 	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 	mvcc := rng.GetMVCCStats()
@@ -453,7 +452,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
 			return false
 		}
 		if log.V(1) {
@@ -475,14 +474,14 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
 	incArgs, incResp = incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
 			return false
 		}
 		log.Infof("read value %d", getResp.Value.GetInteger())
@@ -538,7 +537,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -564,7 +563,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	// Stop one of the replicas and issue a new increment.
 	mtc.stopStore(1)
 	incArgs, incResp = incrementArgs([]byte("a"), 11, raftID, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -590,7 +589,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		mtc.replicateRange(raftID, 0, 3, 1)
 
 		incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
-		if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+		if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -627,7 +626,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 
 		// Ensure that the rest of the group can make progress.
 		incArgs, incResp = incrementArgs([]byte("a"), 11, raftID, mtc.stores[0].StoreID())
-		if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+		if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 			t.Fatal(err)
 		}
 		verify([]int64{16, 5, 16, 16})
@@ -638,7 +637,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		// Node 1 never sees the increment that was added while it was
 		// down. Perform another increment on the live nodes to verify.
 		incArgs, incResp = incrementArgs([]byte("a"), 23, raftID, mtc.stores[0].StoreID())
-		if err := mtc.stores[0].ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+		if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 			t.Fatal(err)
 		}
 		verify([]int64{39, 5, 39, 39})
@@ -699,7 +698,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	store0 := mtc.stores[0]
 	// Make the split
 	splitArgs, splitResp := adminSplitArgs(proto.KeyMin, splitKey, raftID, store0.StoreID())
-	if err := store0.ExecuteCmd(context.Background(), client.Call{Args: splitArgs, Reply: splitResp}); err != nil {
+	if err := store0.ExecuteCmd(context.Background(), proto.Call{Args: splitArgs, Reply: splitResp}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -709,7 +708,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	}
 	// Issue an increment for later check.
 	incArgs, incResp := incrementArgs(key, 11, raftID2, store0.StoreID())
-	if err := store0.ExecuteCmd(context.Background(), client.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if err := store0.ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
 		t.Fatal(err)
 	}
 	// Now add the second replica.
@@ -720,7 +719,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 		getArgs, getResp := getArgs(key, raftID2, mtc.stores[1].StoreID())
 		// Reading on non-leader replica should use inconsistent read
 		getArgs.ReadConsistency = proto.INCONSISTENT
-		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
 			return false
 		}
 		if log.V(1) {

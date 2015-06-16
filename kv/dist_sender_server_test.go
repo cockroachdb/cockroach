@@ -144,7 +144,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	manual := hlc.NewManualClock(ts[1].UnixNano() - 1)
 	clock := hlc.NewClock(manual.UnixNano)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
-	call := client.Scan(proto.Key("a"), proto.Key("c"), 0)
+	call := proto.ScanCall(proto.Key("a"), proto.Key("c"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
 	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT

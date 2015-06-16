@@ -28,7 +28,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
@@ -289,7 +288,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		call := client.Call{Args: args, Reply: args.CreateReply()}
+		call := proto.Call{Args: args, Reply: args.CreateReply()}
 		ds.Send(context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Errorf("%d: %s", n, err)
@@ -331,7 +330,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := client.Put(proto.Key("a"), []byte("value"))
+	call := proto.PutCall(proto.Key("a"), []byte("value"))
 	reply := call.Reply.(*proto.PutResponse)
 	ds.Send(context.Background(), call)
 	if err := reply.GoError(); err != nil {
@@ -391,7 +390,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds := NewDistSender(ctx, g)
 		ds.updateLeaderCache(1, leader)
 
-		call := client.Put(proto.Key("a"), []byte("value"))
+		call := proto.PutCall(proto.Key("a"), []byte("value"))
 		reply := call.Reply.(*proto.PutResponse)
 		ds.Send(context.Background(), call)
 		if err := reply.GoError(); err != nil && err.Error() != "boom" {
@@ -428,7 +427,7 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 			}),
 		}
 		ds := NewDistSender(ctx, g)
-		call := client.Call{
+		call := proto.Call{
 			Args: &proto.InternalPushTxnRequest{
 				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
 				RangeLookup:   rangeLookup,
@@ -483,7 +482,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		rpcSend: testFn,
 	}
 	ds := NewDistSender(ctx, g)
-	call := client.Scan(proto.Key("a"), proto.Key("d"), 0)
+	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
 	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {
@@ -709,7 +708,7 @@ func TestSendRPCRetry(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	call := client.Scan(proto.Key("a"), proto.Key("d"), 1)
+	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 1)
 	sr := call.Reply.(*proto.ScanResponse)
 	ds.Send(context.Background(), call)
 	if err := sr.GoError(); err != nil {

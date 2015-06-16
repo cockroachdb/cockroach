@@ -30,6 +30,7 @@ import (
 
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -94,7 +95,7 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 // and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached
 // response.
-func (s *httpSender) Send(_ context.Context, call Call) {
+func (s *httpSender) Send(_ context.Context, call proto.Call) {
 	retryOpts := s.retryOpts
 	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
@@ -144,7 +145,7 @@ func (s *httpSender) Send(_ context.Context, call Call) {
 // type is set to application/x-protobuf.
 //
 // On success, the response body is unmarshalled into call.Reply.
-func (s *httpSender) post(call Call) (*http.Response, error) {
+func (s *httpSender) post(call proto.Call) (*http.Response, error) {
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(call.Args)
 	if err != nil {

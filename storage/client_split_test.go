@@ -82,7 +82,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.MakeKey(keys.ConfigZonePrefix, []byte("a")),
 	} {
 		args, reply := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
-		err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
+		err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
 		if err == nil {
 			t.Fatalf("%q: split succeeded unexpectedly", key)
 		}
@@ -100,16 +100,16 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer stopper.Stop()
 
 	args, reply := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 	// This second split will try to split at end of first split range.
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
 	args, reply = adminSplitArgs(proto.KeyMin, []byte("a"), 2, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 }
@@ -129,7 +129,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
 			args, reply := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
-			err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply})
+			err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
 			if err != nil {
 				if matched, regexpErr := regexp.MatchString("range is already split at key", err.Error()); !matched || regexpErr != nil {
 					t.Errorf("error %s didn't match regex %v", err, regexpErr)
@@ -159,11 +159,11 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// First, write some values left and right of the proposed split key.
 	pArgs, pReply := putArgs([]byte("c"), content, raftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 	pArgs, pReply = putArgs([]byte("x"), content, raftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -172,12 +172,12 @@ func TestStoreRangeSplit(t *testing.T) {
 	// the key.
 	lIncArgs, lIncReply := incrementArgs([]byte("apoptosis"), 100, raftID, store.StoreID())
 	lIncArgs.CmdID = proto.ClientCmdID{WallTime: 123, Random: 423}
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: lIncArgs, Reply: lIncReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: lIncArgs, Reply: lIncReply}); err != nil {
 		t.Fatal(err)
 	}
 	rIncArgs, rIncReply := incrementArgs([]byte("wobble"), 10, raftID, store.StoreID())
 	rIncArgs.CmdID = proto.ClientCmdID{WallTime: 12, Random: 42}
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: rIncArgs, Reply: rIncReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: rIncArgs, Reply: rIncReply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -190,7 +190,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Split the range.
 	args, reply := adminSplitArgs(proto.KeyMin, splitKey, 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -212,12 +212,12 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Try to get values from both left and right of where the split happened.
 	gArgs, gReply := getArgs([]byte("c"), raftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err != nil ||
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
 	gArgs, gReply = getArgs([]byte("x"), newRng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: gArgs, Reply: gReply}); err != nil ||
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Send out an increment request copied from above (same ClientCmdID) which
 	// remains in the old range.
 	lIncReply = &proto.IncrementResponse{}
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: lIncArgs, Reply: lIncReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: lIncArgs, Reply: lIncReply}); err != nil {
 		t.Fatal(err)
 	}
 	if lIncReply.NewValue != 100 {
@@ -236,7 +236,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// now to the newly created range (which should hold that key).
 	rIncArgs.RequestHeader.RaftID = newRng.Desc().RaftID
 	rIncReply = &proto.IncrementResponse{}
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: rIncArgs, Reply: rIncReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: rIncArgs, Reply: rIncReply}); err != nil {
 		t.Fatal(err)
 	}
 	if rIncReply.NewValue != 10 {
@@ -281,7 +281,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range at the first user key.
 	args, reply := adminSplitArgs(proto.KeyMin, proto.Key("\x01"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 	// Verify empty range has empty stats.
@@ -299,7 +299,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		val := util.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs, pReply := putArgs(key, val, rng.Desc().RaftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
-		if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -311,7 +311,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	args, reply = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), client.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -358,7 +358,7 @@ func fillRange(store *storage.Store, raftID proto.RaftID, prefix proto.Key, byte
 		val := util.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs, pReply := putArgs(key, val, raftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
-		if err := store.ExecuteCmd(context.Background(), client.Call{Args: pArgs, Reply: pReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 			t.Fatal(err)
 		}
 	}

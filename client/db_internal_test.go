@@ -20,16 +20,18 @@ package client
 import (
 	"errors"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 func TestCallError(t *testing.T) {
 	count := 0
-	db := newDB(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call proto.Call) {
 		count++
 	}))
 
 	testError := "test error"
-	if err := db.send(Call{Err: errors.New(testError)}); err == nil {
+	if err := db.send(proto.Call{Err: errors.New(testError)}); err == nil {
 		t.Fatalf("expected error, but found success")
 	} else if err.Error() != testError {
 		t.Fatalf("expected %s, but got %s", testError, err)
@@ -40,7 +42,7 @@ func TestCallError(t *testing.T) {
 // on call.
 func TestClientCommandID(t *testing.T) {
 	count := 0
-	db := newDB(newTestSender(func(call Call) {
+	db := newDB(newTestSender(func(call proto.Call) {
 		count++
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")

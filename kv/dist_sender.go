@@ -479,7 +479,7 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 // retry the send repeatedly (e.g. to continue processing after a critical node
 // becomes available after downtime or the range descriptor is refreshed via
 // lookup).
-func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call) (retry.Status, error) {
+func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call proto.Call) (retry.Status, error) {
 	leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
 
 	// Try to send the call.
@@ -563,7 +563,7 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call client.Call)
 // associated to it. First, the range descriptor for call.Args.Key is looked up;
 // second, if call.Args.EndKey exceeds that of the returned descriptor, the
 // next descriptor is obtained as well.
-func (ds *DistSender) getDescriptors(call client.Call) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
+func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
 	// If this is an InternalPushTxn, set ignoreIntents option as
 	// necessary. This prevents a potential infinite loop; see the
 	// comments in proto.InternalRangeLookupRequest.
@@ -611,9 +611,9 @@ func (ds *DistSender) getDescriptors(call client.Call) (*proto.RangeDescriptor, 
 // DeleteRange requests), Send sends requests to the individual ranges
 // sequentially and combines the results transparently.
 //
-// This may temporarily adjust the request headers, so the client.Call
+// This may temporarily adjust the request headers, so the proto.Call
 // must not be used concurrently until Send has returned.
-func (ds *DistSender) Send(_ context.Context, call client.Call) {
+func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 	args := call.Args
 	finalReply := call.Reply
 	endKey := args.Header().EndKey

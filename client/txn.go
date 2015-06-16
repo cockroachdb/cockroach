@@ -47,7 +47,7 @@ var (
 // method out of the Txn method set.
 type txnSender Txn
 
-func (ts *txnSender) Send(ctx context.Context, call Call) {
+func (ts *txnSender) Send(ctx context.Context, call proto.Call) {
 	// Send call through wrapped sender.
 	call.Args.Header().Txn = &ts.txn
 	ts.wrapped.Send(ctx, call)
@@ -263,7 +263,7 @@ func (txn *Txn) Run(b *Batch) error {
 func (txn *Txn) Commit(b *Batch) error {
 	args := &proto.EndTransactionRequest{Commit: true}
 	reply := &proto.EndTransactionResponse{}
-	b.calls = append(b.calls, Call{Args: args, Reply: reply})
+	b.calls = append(b.calls, proto.Call{Args: args, Reply: reply})
 	b.initResult(1, 0, nil)
 	return txn.Run(b)
 }
@@ -284,7 +284,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 				// timestamps in order to commit.
 				etArgs := &proto.EndTransactionRequest{Commit: true}
 				etReply := &proto.EndTransactionResponse{}
-				err = txn.send(Call{Args: etArgs, Reply: etReply})
+				err = txn.send(proto.Call{Args: etArgs, Reply: etReply})
 			}
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -298,7 +298,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 		return retry.Break, err
 	})
 	if err != nil && txn.haveTxnWrite {
-		if replyErr := txn.send(Call{
+		if replyErr := txn.send(proto.Call{
 			Args:  &proto.EndTransactionRequest{Commit: false},
 			Reply: &proto.EndTransactionResponse{},
 		}); replyErr != nil {
@@ -311,7 +311,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 
 // send runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (txn *Txn) send(calls ...Call) error {
+func (txn *Txn) send(calls ...proto.Call) error {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -319,7 +319,7 @@ func (txn *Txn) send(calls ...Call) error {
 	return txn.db.send(calls...)
 }
 
-func (txn *Txn) updateState(calls []Call) {
+func (txn *Txn) updateState(calls []proto.Call) {
 	for _, c := range calls {
 		if b, ok := c.Args.(*proto.BatchRequest); ok {
 			for _, br := range b.Requests {

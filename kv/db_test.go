@@ -144,7 +144,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 			test.args.Header().EndKey = test.args.Header().Key.Next()
 		}
 		b := &client.Batch{}
-		b.InternalAddCall(client.Call{Args: test.args, Reply: test.reply})
+		b.InternalAddCall(proto.Call{Args: test.args, Reply: test.reply})
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
@@ -166,7 +166,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 		// stripped. In this case, we set the start key to "bar" for a
 		// split of the default range; start key must be "" in this case.
 		b := &client.Batch{}
-		b.InternalAddCall(client.Call{
+		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
 				Commit:        true,
