@@ -233,7 +233,7 @@ func (b *Batch) Put(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.PutCall(proto.Key(k), v))
+	b.calls = append(b.calls, proto.PutCall(proto.Key(k), proto.Value{Bytes: v}))
 	b.initResult(1, 1, nil)
 }
 

@@ -328,7 +328,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	var call proto.Call
 	for i, k := range writes {
-		call = proto.PutCall(k, k)
+		call = proto.PutCall(k, proto.Value{Bytes: k})
 		call.Args.Header().User = storage.UserRoot
 		tds.Send(context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
@@ -417,7 +417,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 		var call proto.Call
 		for _, k := range tc.keys {
-			call = proto.PutCall(k, k)
+			call = proto.PutCall(k, proto.Value{Bytes: k})
 			call.Args.Header().User = storage.UserRoot
 			tds.Send(context.Background(), call)
 			if err := call.Reply.Header().GoError(); err != nil {
