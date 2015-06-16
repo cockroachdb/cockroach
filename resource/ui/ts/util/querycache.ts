@@ -34,7 +34,7 @@ module Utils {
         constructor(private _query:() => promise<T>) {
             this.refresh()
         }
-            
+
         /**
          * Refresh invokes the underlying query function, unless another
          * invocation is already in progress. The currently cached results (if
@@ -46,7 +46,7 @@ module Utils {
             if (!this._outstanding) {
                 this._outstanding = {
                     result:this._query(),
-                    error:m.prop(<Error> null), 
+                    error:m.prop(<Error> null),
                 }
                 this._outstanding.result.then(null, this._outstanding.error);
             }
@@ -92,8 +92,8 @@ module Utils {
             return this._epoch;
         }
 
-        /** 
-         * This structure will be non-null when a query is in-flight, or has 
+        /**
+         * This structure will be non-null when a query is in-flight, or has
          * completed but not been processed. When an in-flight query
          * completes, one and only one of these fields will contain a value.
          */
@@ -108,7 +108,7 @@ module Utils {
          */
         private processOutstanding() {
             if (this._outstanding) {
-                var completed = 
+                var completed =
                     (this._outstanding.error() != null || this._outstanding.result() != null);
 
                 if (completed) {

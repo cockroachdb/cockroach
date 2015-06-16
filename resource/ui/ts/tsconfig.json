@@ -16,6 +16,7 @@
         "./app.ts",
 
         "./components/metrics.ts",
+        "./components/select.ts",
 
         "./models/log.ts",
         "./models/proto.ts",

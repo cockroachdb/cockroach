@@ -1,7 +1,9 @@
 // source: pages/log.ts
+/// <reference path="../components/select.ts" />
 /// <reference path="../models/log.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -14,6 +16,8 @@ module AdminViews {
      * Log is the view for exploring the logs from nodes.
      */
     export module Log {
+        import property = _mithril.MithrilProperty;
+
         var entries = new Models.Log.Entries();
 
         /**
@@ -28,20 +32,19 @@ module AdminViews {
                     entries.refresh();
                 }
 
-                public constructor() {
+                constructor() {
                     this._Refresh();
                     this._interval = setInterval(() => this._Refresh(), Controller._queryEveryMS);
                 }
 
-                public onunload() {
+                onunload() {
                     clearInterval(this._interval);
                 }
-            }
+            };
 
             export function controller(): Controller {
                 return new Controller();
-            }
-
+            };
 
             // TODO(bram): Move these into css classes.
             var _tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
@@ -73,7 +76,19 @@ module AdminViews {
                     m("td", { style: dstyle }, entry.file + ":" + entry.line),
                     m("td", { style: dstyle }, entry.method)
                 ]);
-            }
+            };
+
+            var _severitySelectOptions: Components.Select.Item[] = [
+                { value: Utils.Format.Severity(0), text: ">= " + Utils.Format.Severity(0) },
+                { value: Utils.Format.Severity(1), text: ">= " + Utils.Format.Severity(1) },
+                { value: Utils.Format.Severity(2), text: ">= " + Utils.Format.Severity(2) },
+                { value: Utils.Format.Severity(3), text: Utils.Format.Severity(3) },
+            ];
+
+            function onChangeSeverity(val: string):void {
+                entries.level(val);
+                entries.refresh();
+            };
 
             export function view(ctrl: Controller) {
                 var rows: _mithril.MithrilVirtualElement[] = []
@@ -85,6 +100,13 @@ module AdminViews {
                 }
 
                 return m("div", [
+                    m("p", [
+                        m.component(Components.Select, {
+                            items: _severitySelectOptions,
+                            value: entries.level,
+                            onChange: onChangeSeverity
+                        })
+                    ]),
                     m("p", rows.length + " log entries retrieved"),
                     m("table", { style: _tableStyle }, [
                         m("tr", [
@@ -102,7 +124,7 @@ module AdminViews {
                         rows
                     ])
                 ]);
-            }
+            };
         }
     }
 }

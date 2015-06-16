@@ -536,6 +536,28 @@ var AdminViews;
         })(Page = Graph.Page || (Graph.Page = {}));
     })(Graph = AdminViews.Graph || (AdminViews.Graph = {}));
 })(AdminViews || (AdminViews = {}));
+// source: components/select.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
+//
+var Components;
+(function (Components) {
+    var Select;
+    (function (Select) {
+        function controller(options) {
+            return options;
+        }
+        Select.controller = controller;
+        function view(ctrl) {
+            return m("select", { onchange: m.withAttr("value", ctrl.onChange) }, [
+                ctrl.items.map(function (item) {
+                    return m('option', { value: item.value, selected: (item.value == ctrl.value()) }, item.text);
+                })
+            ]);
+        }
+        Select.view = view;
+    })(Select = Components.Select || (Components.Select = {}));
+})(Components || (Components = {}));
 // source: util/format.ts
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
@@ -610,10 +632,10 @@ var Models;
         var Entries = (function () {
             function Entries() {
                 var _this = this;
-                this.startTime = Utils.chainProp(this, null);
-                this.endTime = Utils.chainProp(this, null);
-                this.max = Utils.chainProp(this, null);
-                this.level = Utils.chainProp(this, null);
+                this.startTime = m.prop(null);
+                this.endTime = m.prop(null);
+                this.max = m.prop(null);
+                this.level = m.prop(null);
                 this._innerQuery = function () {
                     return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
                         .then(function (results) {
@@ -626,6 +648,16 @@ var Models;
                         return results.d;
                     });
                 });
+                this.refresh = function () {
+                    _this._data.refresh();
+                };
+                this.result = function () {
+                    return _this._data.result();
+                };
+                this.level(Utils.Format.Severity(2));
+                this.max(null);
+                this.startTime(null);
+                this.endTime(null);
             }
             Entries.prototype._url = function () {
                 var url = "/_status/local/log";
@@ -644,12 +676,6 @@ var Models;
                 }
                 return url;
             };
-            Entries.prototype.refresh = function () {
-                this._data.refresh();
-            };
-            Entries.prototype.result = function () {
-                return this._data.result();
-            };
             return Entries;
         })();
         Log.Entries = Entries;
@@ -659,9 +685,11 @@ var Models;
     })(Log = Models.Log || (Models.Log = {}));
 })(Models || (Models = {}));
 // source: pages/log.ts
+/// <reference path="../components/select.ts" />
 /// <reference path="../models/log.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
     var Log;
@@ -684,10 +712,12 @@ var AdminViews;
                 Controller._queryEveryMS = 10000;
                 return Controller;
             })();
+            ;
             function controller() {
                 return new Controller();
             }
             Page.controller = controller;
+            ;
             var _tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
             var _thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
             var _tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
@@ -718,6 +748,18 @@ var AdminViews;
                     m("td", { style: dstyle }, entry.method)
                 ]);
             }
+            ;
+            var _severitySelectOptions = [
+                { value: Utils.Format.Severity(0), text: ">= " + Utils.Format.Severity(0) },
+                { value: Utils.Format.Severity(1), text: ">= " + Utils.Format.Severity(1) },
+                { value: Utils.Format.Severity(2), text: ">= " + Utils.Format.Severity(2) },
+                { value: Utils.Format.Severity(3), text: Utils.Format.Severity(3) },
+            ];
+            function onChangeSeverity(val) {
+                entries.level(val);
+                entries.refresh();
+            }
+            ;
             function view(ctrl) {
                 var rows = [];
                 if (entries.result() != null) {
@@ -728,6 +770,13 @@ var AdminViews;
                     ;
                 }
                 return m("div", [
+                    m("p", [
+                        m.component(Components.Select, {
+                            items: _severitySelectOptions,
+                            value: entries.level,
+                            onChange: onChangeSeverity
+                        })
+                    ]),
                     m("p", rows.length + " log entries retrieved"),
                     m("table", { style: _tableStyle }, [
                         m("tr", [
@@ -747,6 +796,7 @@ var AdminViews;
                 ]);
             }
             Page.view = view;
+            ;
         })(Page = Log.Page || (Log.Page = {}));
     })(Log = AdminViews.Log || (AdminViews.Log = {}));
 })(AdminViews || (AdminViews = {}));
