@@ -20,7 +20,6 @@ package keys
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -59,7 +58,7 @@ func NodeStatusKey(nodeID int32) proto.Key {
 
 // MakeNameMetadataKey returns the key for the namespace.
 func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
-	k := make([]byte, 0, len(NameMetadataPrefix)+binary.MaxVarintLen64+len(name))
+	k := make([]byte, 0, len(NameMetadataPrefix)+encoding.MaxUvarintSize+len(name))
 	k = append(k, NameMetadataPrefix...)
 	k = encoding.EncodeUvarint(k, uint64(parentID))
 	k = append(k, name...)
@@ -68,7 +67,7 @@ func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
 
 // MakeDescMetadataKey returns the key for the table in namespaceID.
 func MakeDescMetadataKey(descID uint32) proto.Key {
-	k := make([]byte, 0, len(DescMetadataPrefix)+binary.MaxVarintLen64)
+	k := make([]byte, 0, len(DescMetadataPrefix)+encoding.MaxUvarintSize)
 	k = append(k, DescMetadataPrefix...)
 	k = encoding.EncodeUvarint(k, uint64(descID))
 	return k
@@ -84,7 +83,7 @@ func MakeDescMetadataKey(descID uint32) proto.Key {
 // buffer, infrequently reallocates more space.
 func indexKeyMaxBufferWidth(columnValues ...[]byte) (width int) {
 	// Accomodate the constant prefix, tableID, and indexID.
-	width += len(TableDataPrefix) + 2*binary.MaxVarintLen64
+	width += len(TableDataPrefix) + 2*encoding.MaxUvarintSize
 	for _, value := range columnValues {
 		// Add 2 for encoding
 		width += len(value) + 2
@@ -114,7 +113,7 @@ func MakeTableIndexKey(tableID, indexID uint32, columnValues ...[]byte) proto.Ke
 // MakeTableDataKey returns a key to a value at a specific row and column
 // in the table.
 func MakeTableDataKey(tableID, indexID, columnID uint32, columnValues ...[]byte) proto.Key {
-	k := make([]byte, 0, indexKeyMaxBufferWidth(columnValues...)+binary.MaxVarintLen64)
+	k := make([]byte, 0, indexKeyMaxBufferWidth(columnValues...)+encoding.MaxUvarintSize)
 	k = populateTableIndexKey(k, tableID, indexID, columnValues...)
 	k = encoding.EncodeUvarint(k, uint64(columnID))
 	return k
