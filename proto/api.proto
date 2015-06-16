@@ -135,7 +135,7 @@ message ResponseHeader {
   optional Transaction txn = 3;
 }
 
-// A GetRequest is arguments to the Get() method.
+// A GetRequest is the argument for the Get() method.
 message GetRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
@@ -147,9 +147,7 @@ message GetResponse {
   optional Value value = 2;
 }
 
-// A PutRequest is arguments to the Put() method. Note that to write
-// an empty value, the value parameter is still specified, but Bytes
-// is set to nil.
+// A PutRequest is the argument to the Put() method.
 message PutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
@@ -160,7 +158,7 @@ message PutResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A ConditionalPutRequest is arguments to the ConditionalPut() method.
+// A ConditionalPutRequest is the argument to the ConditionalPut() method.
 //
 // - Returns true and sets value if ExpValue equals existing value.
 // - If key doesn't exist and ExpValue is nil, sets value.
@@ -182,7 +180,7 @@ message ConditionalPutResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// An IncrementRequest is arguments to the Increment() method. It
+// An IncrementRequest is the argument to the Increment() method. It
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
 // create a zero value. IncrementRequest cannot be called on a key set
@@ -201,7 +199,7 @@ message IncrementResponse {
   optional int64 new_value = 2 [(gogoproto.nullable) = false];
 }
 
-// A DeleteRequest is arguments to the Delete() method.
+// A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
@@ -211,7 +209,7 @@ message DeleteResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A DeleteRangeRequest is arguments to the DeleteRange method. It
+// A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
 message DeleteRangeRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -228,7 +226,7 @@ message DeleteRangeResponse {
   optional int64 num_deleted = 2 [(gogoproto.nullable) = false];
 }
 
-// A ScanRequest is arguments to the Scan() method. It specifies the
+// A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for the scan and the maximum number of results.
 message ScanRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -243,8 +241,8 @@ message ScanResponse {
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
 }
 
-// An EndTransactionRequest is arguments to the EndTransaction() method.
-// It specifies whether to commit or roll back an extant transaction.
+// An EndTransactionRequest is the argument to the EndTransaction() method. It
+// specifies whether to commit or roll back an extant transaction.
 message EndTransactionRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
@@ -327,7 +325,7 @@ message BatchResponse {
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
-// An AdminSplitRequest is arguments to the AdminSplit() method. The
+// An AdminSplitRequest is the argument to the AdminSplit() method. The
 // existing range which contains RequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
@@ -358,7 +356,7 @@ message AdminSplitResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// An AdminMergeRequest is arguments to the AdminMerge() method. A
+// An AdminMergeRequest is the argument to the AdminMerge() method. A
 // merge is performed by calling AdminMerge on the left-hand range of
 // two consecutive ranges (i.e. the range which contains keys which
 // sort first). This range will be the subsuming range and the right

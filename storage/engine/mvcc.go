@@ -738,14 +738,10 @@ func MVCCIncrement(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp 
 		return 0, err
 	}
 
-	if value != nil {
-		if n := len(value.Bytes); n != 0 && n != 8 {
-			return 0, util.Errorf("cannot increment key %q which does not contain an integer value: %+v",
-				key, *value)
-		}
+	int64Val, err := value.GetInteger()
+	if err != nil {
+		return 0, util.Errorf("key %q does not contain an integer value", key)
 	}
-
-	int64Val := value.GetInteger()
 
 	// Check for overflow and underflow.
 	if encoding.WillOverflow(int64Val, inc) {

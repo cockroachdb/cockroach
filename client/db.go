@@ -87,8 +87,8 @@ func (kv *KeyValue) ValueBytes() []byte {
 	return kv.Value.([]byte)
 }
 
-// ValueInt returns the value as an int64. This method will panic if the
-// value's type is not an int64.
+// ValueInt returns the value decoded as an int64. This method will panic if
+// the value cannot be decoded as an int64.
 func (kv *KeyValue) ValueInt() int64 {
 	if kv.Value == nil {
 		return 0
@@ -96,7 +96,11 @@ func (kv *KeyValue) ValueInt() int64 {
 	if i, ok := kv.Value.(*int64); ok {
 		return *i
 	}
-	_, uint64val := roachencoding.DecodeUint64(kv.ValueBytes())
+	b := kv.ValueBytes()
+	if len(b) == 0 {
+		return 0
+	}
+	_, uint64val := roachencoding.DecodeUint64(b)
 	return int64(uint64val)
 }
 
