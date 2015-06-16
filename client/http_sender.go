@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -53,12 +52,6 @@ func init() {
 	}
 	RegisterSender("http", f)
 	RegisterSender("https", f)
-}
-
-// httpSendError wraps any error returned when sending an HTTP request
-// in order to signal the retry loop that it should backoff and retry.
-type httpSendError struct {
-	error
 }
 
 // httpSender is an implementation of Sender which exposes the
@@ -96,45 +89,7 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 // through with the same client command ID and be given the cached
 // response.
 func (s *httpSender) Send(_ context.Context, call proto.Call) {
-	retryOpts := s.retryOpts
-	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
-
-	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-		resp, err := s.post(call)
-		if err != nil {
-			if resp != nil {
-				infoErr := util.Errorf("failed to send HTTP request with %s", err)
-				// See if we can retry based on HTTP response code.
-				switch resp.StatusCode {
-				case http.StatusServiceUnavailable, http.StatusGatewayTimeout, StatusTooManyRequests:
-					// Retry on service unavailable and request timeout.
-					// TODO(spencer): consider respecting the Retry-After header for
-					// backoff / retry duration.
-					return retry.Continue, infoErr
-				default:
-					// Can't recover from all other errors.
-					return retry.Break, infoErr
-				}
-			}
-			switch err.(type) {
-			case *httpSendError:
-				// Assume all errors sending request are retryable. The actual
-				// number of things that could go wrong is vast, but we don't
-				// want to miss any which should in theory be retried with
-				// the same client command ID. We log the error here as a
-				// warning so there's visiblity that this is happening. Some of
-				// the errors we'll sweep up in this net shouldn't be retried,
-				// but we can't really know for sure which.
-				log.Warningf("failed to send HTTP request or read its response: %s", err)
-				return retry.Continue, nil
-			default:
-				// Can't retry in order to recover from this error. Propagate.
-				return retry.Break, err
-			}
-		}
-		// On successful post, we're done with retry loop.
-		return retry.Break, nil
-	}); err != nil {
+	if err := s.post(call); err != nil {
 		call.Reply.Header().SetGoError(err)
 	}
 }
@@ -145,44 +100,62 @@ func (s *httpSender) Send(_ context.Context, call proto.Call) {
 // type is set to application/x-protobuf.
 //
 // On success, the response body is unmarshalled into call.Reply.
-func (s *httpSender) post(call proto.Call) (*http.Response, error) {
+func (s *httpSender) post(call proto.Call) error {
+	retryOpts := s.retryOpts
+	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
+
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(call.Args)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	url := s.context.RequestScheme() + "://" + s.server + KVDBEndpoint + call.Method().String()
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return nil, util.Errorf("unable to create request: %s", err)
-	}
-	req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
-	req.Header.Add(util.AcceptHeader, util.ProtoContentType)
-	req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
-	resp, err := s.client.Do(req)
-	if resp == nil {
-		return nil, &httpSendError{util.Errorf("http client was closed: %s", err)}
-	}
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, &httpSendError{err}
-	}
-	if resp.Header.Get(util.ContentEncodingHeader) == util.SnappyEncoding {
-		resp.Body = &snappyReader{body: resp.Body}
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &httpSendError{err}
-	}
-	if resp.StatusCode != 200 {
-		return resp, errors.New(resp.Status)
-	}
-	if err := gogoproto.Unmarshal(b, call.Reply); err != nil {
-		log.Errorf("request completed, but unable to unmarshal response from server: %s; body=%q", err, b)
-		return nil, &httpSendError{err}
-	}
-	return resp, nil
+
+	return retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+		req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			return retry.Break, err
+		}
+		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
+		req.Header.Add(util.AcceptHeader, util.ProtoContentType)
+		req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return retry.Continue, err
+		}
+
+		defer resp.Body.Close()
+
+		switch resp.StatusCode {
+		case http.StatusOK:
+			// We're cool.
+		case http.StatusServiceUnavailable, http.StatusGatewayTimeout, StatusTooManyRequests:
+			// Retry on service unavailable and request timeout.
+			// TODO(spencer): consider respecting the Retry-After header for
+			// backoff / retry duration.
+			return retry.Continue, errors.New(resp.Status)
+		default:
+			// Can't recover from all other errors.
+			return retry.Break, errors.New(resp.Status)
+		}
+
+		if resp.Header.Get(util.ContentEncodingHeader) == util.SnappyEncoding {
+			resp.Body = &snappyReader{body: resp.Body}
+		}
+
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return retry.Continue, err
+		}
+
+		if err := gogoproto.Unmarshal(b, call.Reply); err != nil {
+			return retry.Continue, err
+		}
+
+		return retry.Break, nil
+	})
 }
 
 // snappyReader wraps a response body so it can lazily
