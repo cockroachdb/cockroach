@@ -75,6 +75,7 @@ func startServer(t *testing.T) {
 	ctx := &base.Context{
 		Insecure: false,
 		Certs:    security.EmbeddedCertsDir,
+		User:     security.NodeUser,
 	}
 
 	httpServer := httptest.NewUnstartedServer(NewRESTServer(newTestDB()))

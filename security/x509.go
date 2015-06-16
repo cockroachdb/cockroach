@@ -37,10 +37,9 @@ import (
 // Most fields and settings are hard-coded. TODO(marc): allow customization.
 
 const (
-	validFor       = time.Hour * 24 * 365
-	maxPathLength  = 1
-	caCommonName   = "Cockroach CA"
-	nodeCommonName = "node"
+	validFor      = time.Hour * 24 * 365
+	maxPathLength = 1
+	caCommonName  = "Cockroach CA"
 )
 
 // generateKeyPair returns a random 'keySize' bit RSA key pair.
@@ -140,7 +139,7 @@ func GenerateServerCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySi
 		return nil, nil, err
 	}
 
-	template, err := newTemplate(nodeCommonName)
+	template, err := newTemplate(NodeUser)
 	if err != nil {
 		return nil, nil, err
 	}

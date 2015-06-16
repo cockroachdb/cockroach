@@ -25,10 +25,24 @@ import (
 )
 
 // NewTestBaseContext creates a base context for testing.
+// This uses embedded certs and the "root" user (default client user).
 // The certs file loader is overriden in individual main_test files.
+// This is meant to be used by external clients (as opposed to nodes).
 func NewTestBaseContext() *base.Context {
 	return &base.Context{
 		Certs: security.EmbeddedCertsDir,
+		User:  security.RootUser,
+	}
+}
+
+// NewServerTestBaseContext creates a base context for testing.
+// This uses embedded certs and the "node" user (default node user).
+// The certs file loader is overriden in individual main_test files.
+// This is meant to be used by nodes and node-clients (node-node requests).
+func NewServerTestBaseContext() *base.Context {
+	return &base.Context{
+		Certs: security.EmbeddedCertsDir,
+		User:  security.NodeUser,
 	}
 }
 

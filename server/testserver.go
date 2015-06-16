@@ -65,6 +65,8 @@ func NewTestContext() *Context {
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).
 	ctx.Addr = "127.0.0.1:0"
+	// Set standard "node" user for intra-cluster traffic.
+	ctx.User = security.NodeUser
 	return ctx
 }
 

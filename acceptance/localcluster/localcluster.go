@@ -304,6 +304,11 @@ func (l *Cluster) createNodeCerts() {
 	maybePanic(security.RunCreateNodeCert(l.CertsDir, 512, nodes))
 }
 
+func (l *Cluster) createClientCerts() {
+	log.Infof("creating client certs")
+	maybePanic(security.RunCreateClientCert(l.CertsDir, 512, security.RootUser))
+}
+
 func (l *Cluster) startNode(i int) *Container {
 	gossipNodes := []string{}
 	for i := range l.Nodes {
@@ -409,6 +414,7 @@ func (l *Cluster) Start() {
 	l.initCluster()
 	l.createCACert()
 	l.createNodeCerts()
+	l.createClientCerts()
 
 	l.monitorStopper = make(chan struct{})
 	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)

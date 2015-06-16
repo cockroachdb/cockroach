@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -52,6 +53,8 @@ are already part of a pre-existing cluster, the bootstrap will fail.
 // runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
 func runInit(cmd *cobra.Command, args []string) {
+	// Default user for servers.
+	Context.User = security.NodeUser
 	// First initialize the Context as it is used in other places.
 	err := Context.Init("init")
 	if err != nil {
@@ -103,6 +106,8 @@ func runStart(cmd *cobra.Command, args []string) {
 	log.Infof("build Time: %s", info.Time)
 	log.Infof("build Deps: %s", info.Deps)
 
+	// Default user for servers.
+	Context.User = security.NodeUser
 	// First initialize the Context as it is used in other places.
 	err := Context.Init("start")
 	if err != nil {

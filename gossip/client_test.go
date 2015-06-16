@@ -39,7 +39,7 @@ const (
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
-	lRPCContext := rpc.NewContext(testBaseContext, lclock, nil)
+	lRPCContext := rpc.NewContext(serverTestBaseContext, lclock, nil)
 
 	laddr := util.CreateTestAddr("unix")
 	lserver := rpc.NewServer(laddr, lRPCContext)
@@ -57,7 +57,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
-	rRPCContext := rpc.NewContext(testBaseContext, rclock, nil)
+	rRPCContext := rpc.NewContext(serverTestBaseContext, rclock, nil)
 	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)

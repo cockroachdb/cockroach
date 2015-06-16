@@ -34,16 +34,15 @@ func init() {
 }
 
 func TestClientHeartbeat(t *testing.T) {
-	rpcContext := NewTestContext(t)
 	addr := util.CreateTestAddr("tcp")
 
-	s := NewServer(addr, rpcContext)
+	s := NewServer(addr, serverTestBaseContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	c := NewClient(s.Addr(), nil, rpcContext)
+	c := NewClient(s.Addr(), nil, clientTestBaseContext)
 	<-c.Ready
-	if c != NewClient(s.Addr(), nil, rpcContext) {
+	if c != NewClient(s.Addr(), nil, clientTestBaseContext) {
 		t.Fatal("expected cached client to be returned while healthy")
 	}
 	<-c.Ready
@@ -51,7 +50,7 @@ func TestClientHeartbeat(t *testing.T) {
 }
 
 func TestClientNoCache(t *testing.T) {
-	rpcContext := NewTestContext(t)
+	rpcContext := serverTestBaseContext
 	rpcContext.DisableCache = true
 	addr := util.CreateTestAddr("tcp")
 
@@ -117,7 +116,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Create a client that is 10 nanoseconds behind the server.
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewContext(testBaseContext, clientClock, nil)
+	context := NewTestContext(clientClock)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -163,7 +162,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
 	}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewContext(testBaseContext, clientClock, nil)
+	context := NewTestContext(clientClock)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -205,7 +204,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
-	context := NewContext(testBaseContext, clientClock, nil)
+	context := NewTestContext(clientClock)
 	c := NewClient(s.Addr(), nil, context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Ready
@@ -238,8 +237,7 @@ func (ac *AdvancingClock) UnixNano() int64 {
 // like this allows for manual registration of the heartbeat service.
 func createTestServer(serverClock *hlc.Clock, t *testing.T) *Server {
 	// Create a test context, but override the clock.
-	serverContext := NewTestContext(t)
-	serverContext.localClock = serverClock
+	serverContext := NewServerTestContext(serverClock)
 
 	// Create the server so that we can register a manual clock.
 	addr := util.CreateTestAddr("tcp")
