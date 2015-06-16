@@ -56,8 +56,8 @@ func ResetReadFileFn() {
 // LoadTLSConfigFromDir creates a TLSConfig by loading our keys and certs from the
 // specified directory. The directory must contain the following files:
 // - ca.crt   -- the certificate of the cluster CA
-// - node.crt -- the certificate of this node; should be signed by the CA
-// - node.key -- the private key of this node
+// - node.server.crt -- the server certificate of this node; should be signed by the CA
+// - node.server.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadTLSConfigFromDir(certDir string) (*tls.Config, error) {
 	certPEM, err := readFileFn(path.Join(certDir, "node.server.crt"))
@@ -119,15 +119,15 @@ func LoadInsecureTLSConfig() *tls.Config {
 // LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
 // specified directory. The directory must contain the following files:
 // - ca.crt   -- the certificate of the cluster CA
-// - node.crt -- the certificate of this node; should be signed by the CA
-// - node.key -- the private key of this node
+// - node.client.crt -- the client certificate of this node; should be signed by the CA
+// - node.client.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadClientTLSConfigFromDir(certDir string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, "node.crt"))
+	certPEM, err := readFileFn(path.Join(certDir, "node.client.crt"))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, "node.key"))
+	keyPEM, err := readFileFn(path.Join(certDir, "node.client.key"))
 	if err != nil {
 		return nil, err
 	}

@@ -160,7 +160,7 @@ func RunCreateNodeCert(certsDir string, keySize int, hosts []string) error {
 	if err != nil {
 		return err
 	}
-	return writeCertificateAndKey(certsDir, nodeCommonName, clientCert, clientKey)
+	return writeCertificateAndKey(certsDir, nodeCommonName+".client", clientCert, clientKey)
 }
 
 // RunCreateClientCert is the entry-point from the command-line interface
