@@ -56,7 +56,8 @@ func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) 
 	if nef.f == nil {
 		return
 	}
-	if err := reply.Header().GoError(); err != nil {
+	if err := reply.Header().Error; err != nil &&
+		err.CanRestartTransaction() == proto.TransactionRestart_ABORT {
 		nef.f.Publish(&CallErrorEvent{
 			NodeID: nef.id,
 			Method: args.Method(),

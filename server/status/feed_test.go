@@ -273,3 +273,60 @@ func TestServerNodeEventFeed(t *testing.T) {
 		t.Logf("Event feed information:\n%s", ner.eventFeedString())
 	}
 }
+
+// TestNodeEventFeedTransactionRestart verifies that calls which indicate a
+// transaction restart are counted as successful.
+func TestNodeEventFeedTransactionRestart(t *testing.T) {
+	stopper, feed, consumers := startConsumerSet(1)
+	nodefeed := status.NewNodeEventFeed(proto.NodeID(1), feed)
+	ner := &nodeEventReader{}
+	sub := feed.Subscribe()
+	stopper.RunWorker(func() {
+		ner.readEvents(sub)
+	})
+	nodeID := proto.NodeID(1)
+
+	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
+		ResponseHeader: proto.ResponseHeader{
+			Error: &proto.Error{
+				TransactionRestart: proto.TransactionRestart_BACKOFF,
+			},
+		},
+	})
+	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
+		ResponseHeader: proto.ResponseHeader{
+			Error: &proto.Error{
+				TransactionRestart: proto.TransactionRestart_IMMEDIATE,
+			},
+		},
+	})
+	nodefeed.CallComplete(&proto.PutRequest{}, &proto.PutResponse{
+		ResponseHeader: proto.ResponseHeader{
+			Error: &proto.Error{
+				TransactionRestart: proto.TransactionRestart_ABORT,
+			},
+		},
+	})
+	feed.Close()
+	stopper.Stop()
+
+	c := consumers[0]
+	exp := []interface{}{
+		&status.CallSuccessEvent{
+			NodeID: nodeID,
+			Method: proto.Get,
+		},
+		&status.CallSuccessEvent{
+			NodeID: nodeID,
+			Method: proto.Get,
+		},
+		&status.CallErrorEvent{
+			NodeID: nodeID,
+			Method: proto.Put,
+		},
+	}
+
+	if !reflect.DeepEqual(exp, c.received) {
+		t.Fatalf("received unexpected events: %s", ner.eventFeedString())
+	}
+}
