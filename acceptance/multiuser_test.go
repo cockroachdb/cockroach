@@ -63,7 +63,7 @@ func TestMultiuser(t *testing.T) {
 	// Write some data. The value is just the key.
 	writes := []struct {
 		key     string
-		client  *client.DB
+		db      *client.DB
 		success bool
 	}{
 		{"some-file", rootClient, true}, {"some-file", fooClient, false}, {"some-file", otherClient, false},
@@ -73,7 +73,7 @@ func TestMultiuser(t *testing.T) {
 	}
 
 	for i, w := range writes {
-		err := w.client.Put(w.key, w.key)
+		err := w.db.Put(w.key, w.key)
 		if (err == nil) != w.success {
 			t.Errorf("test case #%d: %+v, got err=%v", i, w, err)
 		}
@@ -82,7 +82,7 @@ func TestMultiuser(t *testing.T) {
 	// Read the previously-written files. They all succeeded at least once.
 	reads := []struct {
 		key     string
-		client  *client.DB
+		db      *client.DB
 		success bool
 	}{
 		{"some-file", rootClient, true}, {"some-file", fooClient, false}, {"some-file", otherClient, false},
@@ -92,7 +92,7 @@ func TestMultiuser(t *testing.T) {
 	}
 
 	for i, r := range reads {
-		_, err := r.client.Get(r.key)
+		_, err := r.db.Get(r.key)
 		if (err == nil) != r.success {
 			t.Errorf("test case #%d: %+v, got err=%v", i, r, err)
 		}
