@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func countRangeReplicas(client *client.DB) (int, error) {
+func countRangeReplicas(db *client.DB) (int, error) {
 	desc := &proto.RangeDescriptor{}
-	if err := client.GetProto(keys.RangeDescriptorKey(proto.KeyMin), desc); err != nil {
+	if err := db.GetProto(keys.RangeDescriptorKey(proto.KeyMin), desc); err != nil {
 		return 0, err
 	}
 	return len(desc.Replicas), nil

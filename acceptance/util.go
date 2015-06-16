@@ -39,35 +39,35 @@ func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user strin
 	// We need to run with "InsecureSkipVerify" (set when Certs="" inside the http sender).
 	// This is due to the fact that we're running outside docker, so we cannot use a fixed hostname
 	// to reach the cluster. This in turn means that we do not have a verified server name in the certs.
-	c, err := client.Open("https://" + user + "@" +
+	db, err := client.Open("https://" + user + "@" +
 		cluster.Nodes[node].Addr("").String() +
 		"?certs=" + cluster.CertsDir)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return c
+	return db
 }
 
 // setDefaultRangeMaxBytes sets the range-max-bytes value for the default zone.
-func setDefaultRangeMaxBytes(t *testing.T, c *client.DB, maxBytes int64) {
+func setDefaultRangeMaxBytes(t *testing.T, db *client.DB, maxBytes int64) {
 	zone := &proto.ZoneConfig{}
-	if err := c.GetProto(keys.ConfigZonePrefix, zone); err != nil {
+	if err := db.GetProto(keys.ConfigZonePrefix, zone); err != nil {
 		t.Fatal(err)
 	}
 	if zone.RangeMaxBytes == maxBytes {
 		return
 	}
 	zone.RangeMaxBytes = maxBytes
-	if err := c.Put(keys.ConfigZonePrefix, zone); err != nil {
+	if err := db.Put(keys.ConfigZonePrefix, zone); err != nil {
 		t.Fatal(err)
 	}
 }
 
 // getPermConfig fetches the permissions config for 'prefix'.
-func getPermConfig(client *client.DB, prefix string) (*proto.PermConfig, error) {
+func getPermConfig(db *client.DB, prefix string) (*proto.PermConfig, error) {
 	config := &proto.PermConfig{}
-	if err := client.GetProto(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config); err != nil {
+	if err := db.GetProto(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config); err != nil {
 		return nil, err
 	}
 
@@ -75,6 +75,6 @@ func getPermConfig(client *client.DB, prefix string) (*proto.PermConfig, error) 
 }
 
 // putPermConfig writes the permissions config for 'prefix'.
-func putPermConfig(client *client.DB, prefix string, config *proto.PermConfig) error {
-	return client.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config)
+func putPermConfig(db *client.DB, prefix string, config *proto.PermConfig) error {
+	return db.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config)
 }

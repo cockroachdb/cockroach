@@ -37,8 +37,8 @@ func TestPut(t *testing.T) {
 	l.Start()
 	defer l.Stop()
 
-	c := makeDBClient(t, l, 0)
-	setDefaultRangeMaxBytes(t, c, *rangeMaxBytes)
+	db := makeDBClient(t, l, 0)
+	setDefaultRangeMaxBytes(t, db, *rangeMaxBytes)
 	checkRangeReplication(t, l, 20*time.Second)
 
 	errs := make(chan error, *numNodes)
@@ -53,7 +53,7 @@ func TestPut(t *testing.T) {
 			for time.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)
 				v := value[:r.Intn(len(value))]
-				if err := c.Put(fmt.Sprintf("%08d", k), v); err != nil {
+				if err := db.Put(fmt.Sprintf("%08d", k), v); err != nil {
 					errs <- err
 					return
 				}
