@@ -42,7 +42,8 @@ syntax = "proto2";
 //	4. Client Recv Response
 //	Recv ResponseHeader: recvFrame(conn, hdr, max_hdr_len, 0)
 //	Recv Response: recvFrame(conn, body)
-package wire;
+package cockroach.rpc.codec.wire;
+option go_package = "wire";
 
 import "gogoproto/gogo.proto";
 

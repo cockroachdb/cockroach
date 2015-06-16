@@ -17,5 +17,4 @@
 
 package proto
 
-//go:generate make all
 //go:generate stringer -type=Method

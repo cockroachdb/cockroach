@@ -17,6 +17,8 @@
 
 package main
 
+//go:generate make -C .. -f cockroach/build/protobuf.mk
+
 import (
 	"fmt"
 	"math/rand"
