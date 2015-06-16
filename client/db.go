@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -66,8 +67,6 @@ func (kv *KeyValue) setValue(v *proto.Value) {
 	}
 	if v.Bytes != nil {
 		kv.Value = v.Bytes
-	} else if v.Integer != nil {
-		kv.Value = v.Integer
 	}
 	if v.Timestamp != nil {
 		kv.Timestamp = v.Timestamp.GoTime()
@@ -90,7 +89,14 @@ func (kv *KeyValue) ValueBytes() []byte {
 // ValueInt returns the value as an int64. This method will panic if the
 // value's type is not an int64.
 func (kv *KeyValue) ValueInt() int64 {
-	return *kv.Value.(*int64)
+	if kv.Value == nil {
+		return 0
+	}
+	if i, ok := kv.Value.(*int64); ok {
+		return *i
+	}
+	_, uint64val := roachencoding.DecodeUint64(kv.ValueBytes())
+	return int64(uint64val)
 }
 
 // ValueProto parses the byte slice value as a proto message.

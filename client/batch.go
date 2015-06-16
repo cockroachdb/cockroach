@@ -115,9 +115,10 @@ func (b *Batch) fillResults() error {
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.IncrementRequest).Key)
 				if result.Err == nil {
-					// TODO(pmattis): Should IncrementResponse contain a
-					// proto.Value so that the timestamp can be returned?
+					// TODO(pmattis): This is odd. KeyValue.Value is otherwise always a
+					// []byte except for setting it to a *int64 here.
 					row.Value = &t.NewValue
+					row.setTimestamp(t.Timestamp)
 				}
 			case *proto.ScanResponse:
 				result.Rows = make([]KeyValue, len(t.Rows))

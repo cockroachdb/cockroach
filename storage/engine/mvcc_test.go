@@ -150,18 +150,6 @@ func TestMVCCGetNotExist(t *testing.T) {
 	}
 }
 
-func TestMVCCPutWithBadValue(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	engine := createTestEngine()
-	defer engine.Close()
-
-	badValue := proto.Value{Bytes: []byte("a"), Integer: gogoproto.Int64(1)}
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), badValue, nil)
-	if err == nil {
-		t.Fatal("expected an error putting a value with both byte slice and integer components")
-	}
-}
-
 func TestMVCCPutWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()

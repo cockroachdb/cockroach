@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -235,14 +234,6 @@ func TestTimestampPrev(t *testing.T) {
 	}
 }
 
-func TestValueBothBytesAndIntegerSet(t *testing.T) {
-	k := []byte("key")
-	v := Value{Bytes: []byte("a"), Integer: gogoproto.Int64(0)}
-	if err := v.Verify(k); err == nil {
-		t.Error("expected error with both byte slice and integer fields set")
-	}
-}
-
 // TestUnmarshal expects key unmarshaling to never return nil.
 func TestUnmarshal(t *testing.T) {
 	testCases := []struct {
@@ -261,36 +252,6 @@ func TestUnmarshal(t *testing.T) {
 		if (key == nil) != c.expectedNil {
 			t.Errorf("%d: Expect result to not to be %v.", i, c.expectedNil)
 		}
-	}
-}
-
-// TestValueZeroIntegerSerialization verifies that a value with
-// integer=0 set can be marshalled and unmarshalled successfully.
-// This tests exists because gob serialization treats integers
-// and pointers to integers as the same and so loses a proto.Value
-// which encodes integer=0.
-//
-// TODO(spencer): change Value type to switch between integer and
-//   []byte value types using a mechanism other than nil pointers.
-func TestValueZeroIntegerSerialization(t *testing.T) {
-	k := Key("key 00")
-	v := Value{Integer: gogoproto.Int64(0)}
-	v.InitChecksum(k)
-
-	data, err := gogoproto.Marshal(&v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v2 := &Value{}
-	if err = gogoproto.Unmarshal(data, v2); err != nil {
-		t.Fatal(err)
-	}
-	if v2.Integer == nil {
-		t.Errorf("expected non-nil integer value; got %s", v2)
-	} else if v2.GetInteger() != 0 {
-		t.Errorf("expected zero integer value; got %d", v2.GetInteger())
-	} else if err = v2.Verify(k); err != nil {
-		t.Errorf("failed value verification: %s", err)
 	}
 }
 
@@ -325,27 +286,6 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	v.Bytes = []byte("abcd")
 	if err := v.Verify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
-	}
-}
-
-func TestValueChecksumWithInteger(t *testing.T) {
-	k := []byte("key")
-	testValues := []int64{0, 1, -1, math.MinInt64, math.MaxInt64}
-	for _, i := range testValues {
-		v := Value{Integer: gogoproto.Int64(i)}
-		v.InitChecksum(k)
-		if err := v.Verify(k); err != nil {
-			t.Error(err)
-		}
-		// Try a different key; should fail.
-		if err := v.Verify([]byte("key2")); err == nil {
-			t.Error("expected checksum verification failure on different key")
-		}
-		// Mess with value.
-		v.Integer = gogoproto.Int64(i + 1)
-		if err := v.Verify(k); err == nil {
-			t.Error("expected checksum verification failure on different value")
-		}
 	}
 }
 

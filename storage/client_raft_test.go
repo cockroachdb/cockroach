@@ -240,8 +240,8 @@ func TestReplicateRange(t *testing.T) {
 		if err := mtc.stores[1].ExecuteCmd(context.Background(), client.Call{Args: getArgs, Reply: getResp}); err != nil {
 			return util.Errorf("failed to read data")
 		}
-		if getResp.Value.GetInteger() != 5 {
-			return util.Errorf("failed to read correct data: %d", getResp.Value.GetInteger())
+		if v := getResp.Value.GetInteger(); v != 5 {
+			return util.Errorf("failed to read correct data: %d", v)
 		}
 		return nil
 	})

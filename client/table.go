@@ -659,7 +659,10 @@ func (b *Batch) IncStruct(obj interface{}, value int64, column string) {
 	c := Increment(proto.Key(key), value)
 	c.Post = func() error {
 		reply := c.Reply.(*proto.IncrementResponse)
-		pv := &proto.Value{Integer: gogoproto.Int64(reply.NewValue)}
+		// TODO(pmattis): This isn't very efficient. Should be able to pass the
+		// integer value directly instead of encoding it into a []byte.
+		pv := &proto.Value{}
+		pv.SetInteger(reply.NewValue)
 		return unmarshalTableValue(pv, v.FieldByIndex(col.field.Index))
 	}
 
@@ -879,20 +882,19 @@ func marshalTableValue(v reflect.Value) (proto.Value, error) {
 		if v.Bool() {
 			i = 1
 		}
-		r.Integer = &i
+		r.SetInteger(i)
 		return r, nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		r.Integer = gogoproto.Int64(v.Int())
+		r.SetInteger(v.Int())
 		return r, nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		r.Integer = gogoproto.Int64(int64(v.Uint()))
+		r.SetInteger(int64(v.Uint()))
 		return r, nil
 
 	case reflect.Float32, reflect.Float64:
-		// TODO(pmattis): Should we have a separate float field?
-		r.Integer = gogoproto.Int64(int64(math.Float64bits(v.Float())))
+		r.SetInteger(int64(math.Float64bits(v.Float())))
 		return r, nil
 
 	case reflect.String:
@@ -913,9 +915,6 @@ func unmarshalTableValue(src *proto.Value, dest reflect.Value) error {
 
 	switch d := dest.Addr().Interface().(type) {
 	case *string:
-		if src.Integer != nil {
-			return fmt.Errorf("unable to unmarshal integer value: %s", dest)
-		}
 		if src.Bytes != nil {
 			*d = string(src.Bytes)
 		} else {
@@ -924,9 +923,6 @@ func unmarshalTableValue(src *proto.Value, dest reflect.Value) error {
 		return nil
 
 	case *[]byte:
-		if src.Integer != nil {
-			return fmt.Errorf("unable to unmarshal integer value: %s", dest)
-		}
 		if src.Bytes != nil {
 			*d = src.Bytes
 		} else {
@@ -943,40 +939,25 @@ func unmarshalTableValue(src *proto.Value, dest reflect.Value) error {
 
 	switch dest.Kind() {
 	case reflect.Bool:
-		if src.Bytes != nil {
-			return fmt.Errorf("unable to unmarshal byts value: %s", dest)
-		}
 		dest.SetBool(src.GetInteger() != 0)
 		return nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if src.Bytes != nil {
-			return fmt.Errorf("unable to unmarshal byts value: %s", dest)
-		}
 		dest.SetInt(src.GetInteger())
 		return nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		if src.Bytes != nil {
-			return fmt.Errorf("unable to unmarshal byts value: %s", dest)
-		}
 		dest.SetUint(uint64(src.GetInteger()))
 		return nil
 
 	case reflect.Float32, reflect.Float64:
-		if src.Bytes != nil {
-			return fmt.Errorf("unable to unmarshal byts value: %s", dest)
-		}
 		dest.SetFloat(math.Float64frombits(uint64(src.GetInteger())))
 		return nil
 
 	case reflect.String:
-		if src == nil {
+		if src == nil || src.Bytes == nil {
 			dest.SetString("")
 			return nil
-		}
-		if src.Integer != nil {
-			return fmt.Errorf("unable to unmarshal integer value: %s", dest)
 		}
 		dest.SetString(string(src.Bytes))
 		return nil

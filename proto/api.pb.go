@@ -328,8 +328,8 @@ func (m *GetResponse) GetValue() *Value {
 }
 
 // A PutRequest is arguments to the Put() method. Note that to write
-// an empty value, the value parameter is still specified, but both
-// Bytes and Integer are set to nil.
+// an empty value, the value parameter is still specified, but Bytes
+// is set to nil.
 type PutRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`

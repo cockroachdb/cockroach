@@ -148,8 +148,8 @@ message GetResponse {
 }
 
 // A PutRequest is arguments to the Put() method. Note that to write
-// an empty value, the value parameter is still specified, but both
-// Bytes and Integer are set to nil.
+// an empty value, the value parameter is still specified, but Bytes
+// is set to nil.
 message PutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];

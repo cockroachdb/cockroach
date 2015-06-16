@@ -147,7 +147,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if val.GetInteger() != 15 {
-		t.Errorf("expected 15, got %v", val.GetInteger())
+	if v := val.GetInteger(); v != 15 {
+		t.Errorf("expected 15, got %v", v)
 	}
 }

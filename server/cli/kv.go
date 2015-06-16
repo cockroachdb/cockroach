@@ -96,11 +96,7 @@ func runGet(cmd *cobra.Command, args []string) {
 		osExit(1)
 		return
 	}
-	if i, ok := r.Value.(*int64); ok {
-		fmt.Printf("%d\n", *i)
-	} else {
-		fmt.Printf("%s\n", r.Value)
-	}
+	fmt.Printf("%q\n", r.Value)
 }
 
 // A putCmd command sets the value for one or more keys.
@@ -274,11 +270,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		}
 
 		key := proto.Key(row.Key)
-		if i, ok := row.Value.(*int64); ok {
-			fmt.Printf("%s\t%d\n", key, *i)
-		} else {
-			fmt.Printf("%s\t%q\n", key, row.Value)
-		}
+		fmt.Printf("%s\t%q\n", key, row.Value)
 	}
 }
 

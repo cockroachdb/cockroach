@@ -548,18 +548,6 @@ bool MergeValues(cockroach::proto::Value *left, const cockroach::proto::Value &r
             *left->mutable_bytes() += right.bytes();
         }
         return true;
-    } else if (left->has_integer()) {
-        if (!right.has_integer()) {
-            rocksdb::Warn(logger,
-                    "inconsistent value types for merge (left = integer, right = ?)");
-            return false;
-        }
-        if (WillOverflow(left->integer(), right.integer())) {
-            rocksdb::Warn(logger, "merge would result in integer overflow.");
-            return false;
-        }
-        left->set_integer(left->integer() + right.integer());
-        return true;
     } else {
         *left = right;
         if (full_merge && IsTimeSeriesData(left)) {
