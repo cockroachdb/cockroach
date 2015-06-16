@@ -135,8 +135,11 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		}
 
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
-		// Could be many errors: bad host; bad certificate ...
 		if err != nil {
+			// Retry if the error is temporary, otherwise fail fast.
+			if t, ok := err.(net.Error); ok && t.Temporary() {
+				return retry.Continue, err
+			}
 			return retry.Break, err
 		}
 
