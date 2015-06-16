@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 )
 
 // TestMultiuser starts up an N node cluster and performs various ops
@@ -34,6 +35,14 @@ func TestMultiuser(t *testing.T) {
 	l := localcluster.Create(*numNodes, stopper)
 	l.Start()
 	defer l.Stop()
+
+	// Create client certificates for "foo" and "other".
+	if err := security.RunCreateClientCert(l.CertsDir, 512, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := security.RunCreateClientCert(l.CertsDir, 512, "other"); err != nil {
+		t.Fatal(err)
+	}
 
 	checkRangeReplication(t, l, 20*time.Second)
 

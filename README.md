@@ -65,9 +65,10 @@ Now we're in an environment that has everything set up, and we start by first in
 
 ```bash
 DIR=$(mktemp -d /tmp/dbXXX)
-# Initialize CA and server certificates. Default directory is --certs=certs
+# Initialize CA, server, and client certificates. Default directory is --certs=certs
 ./cockroach cert create-ca
 ./cockroach cert create-node 127.0.0.1 localhost $(hostname)
+./cockroach cert create-client root
 # Initialize data directories.
 ./cockroach init --stores=ssd=$DIR
 # Start the server.

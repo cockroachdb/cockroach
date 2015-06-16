@@ -8,6 +8,8 @@ Contains the following files:
 * node.client.key: node client private key
 * node.server.crt: node server certificate
 * node.server.key: node server private key
+* root.client.crt: admin client certificate
+* root.client.key: admin client private key
 
 For a human-readable version of the certificate, run:
 ```bash
@@ -19,5 +21,6 @@ To regenerate:
 rm -f resource/test_certs/*.{crt,key}
 cockroach cert --certs=resource/test_certs create-ca --key-size=512
 cockroach cert --certs=resource/test_certs create-node --key-size=512 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+cockroach cert --certs=resource/test_certs create-client --key-size=512 root
 go generate security/securitytest/securitytest.go
 ```

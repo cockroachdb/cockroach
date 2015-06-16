@@ -31,6 +31,7 @@ import (
 const (
 	defaultInsecure = false
 	defaultCertsDir = "certs"
+	defaultUser     = security.RootUser
 	plainScheme     = "http"
 	sslScheme       = "https"
 )
@@ -45,6 +46,9 @@ type Context struct {
 	// Certs specifies a directory containing RSA key and x509 certs.
 	// Required unless Insecure is true.
 	Certs string
+
+	// User under which the operation is being performed.
+	User string
 
 	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
 	clientTLSConfig *tls.Config
@@ -65,6 +69,7 @@ type Context struct {
 func (ctx *Context) InitDefaults() {
 	ctx.Insecure = defaultInsecure
 	ctx.Certs = defaultCertsDir
+	ctx.User = defaultUser
 }
 
 // RequestScheme returns "http" or "https" based on the value of Insecure.
@@ -96,7 +101,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 		if log.V(1) {
 			log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
 		}
-		cfg, err := security.LoadClientTLSConfigFromDir(ctx.Certs)
+		cfg, err := security.LoadClientTLSConfig(ctx.Certs, ctx.User)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)
 		}
@@ -134,7 +139,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	if log.V(1) {
 		log.Infof("setting up TLS from certificates directory: %s", ctx.Certs)
 	}
-	cfg, err := security.LoadTLSConfigFromDir(ctx.Certs)
+	cfg, err := security.LoadServerTLSConfig(ctx.Certs)
 	if err != nil {
 		return nil, util.Errorf("error setting up server TLS config: %s", err)
 	}

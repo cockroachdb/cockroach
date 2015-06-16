@@ -15,27 +15,11 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package testutils
+package security
 
-import (
-	"net/http"
-
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
+const (
+	// NodeUser is used by nodes for intra-cluster traffic.
+	NodeUser = "node"
+	// RootUser is the default cluster administrator.
+	RootUser = "root"
 )
-
-// NewTestBaseContext creates a base context for testing.
-// This uses embedded certs and the "root" user (default client user).
-// The certs file loader is overriden in individual main_test files.
-func NewTestBaseContext() *base.Context {
-	return &base.Context{
-		Certs: security.EmbeddedCertsDir,
-		User:  security.RootUser,
-	}
-}
-
-// NewTestHTTPClient creates a HTTP client on the fly using a test context.
-// Useful when contexts don't need to be reused.
-func NewTestHTTPClient() (*http.Client, error) {
-	return NewTestBaseContext().GetHTTPClient()
-}

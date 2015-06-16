@@ -31,20 +31,23 @@ func TestClientSSLSettings(t *testing.T) {
 		// args
 		insecure bool
 		certs    string
+		user     string
 		// output
 		requestScheme string
 		configSuccess bool
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, "foobar", "http", true, true, false},
-		{false, "", "https", true, false, true},
-		{false, certsDir, "https", true, false, false},
-		{false, "/dev/null", "https", false, false, false},
+		{true, "foobar", "node", "http", true, true, false},
+		{true, certsDir, "not-a-user", "http", true, true, false},
+		{false, certsDir, "not-a-user", "https", false, true, false},
+		{false, "", "node", "https", true, false, true},
+		{false, certsDir, "node", "https", true, false, false},
+		{false, "/dev/null", "node", "https", false, false, false},
 	}
 
 	for tcNum, tc := range testCases {
-		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs}
+		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs, User: tc.user}
 		if ctx.RequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected RequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.RequestScheme())
 		}

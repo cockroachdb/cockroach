@@ -192,12 +192,12 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if u.User == nil {
-		u.User = url.User("root")
-	}
-
 	ctx := &base.Context{}
 	ctx.InitDefaults()
+	if u.User != nil {
+		ctx.User = u.User.Username()
+	}
+
 	q := u.Query()
 	if dir := q["certs"]; len(dir) > 0 {
 		ctx.Certs = dir[0]
@@ -210,7 +210,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 
 	db := &DB{
 		Sender:          sender,
-		user:            u.User.Username(),
+		user:            ctx.User,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 

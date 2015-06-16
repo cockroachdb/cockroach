@@ -84,12 +84,17 @@ func TestUseCerts(t *testing.T) {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
-	_, err = security.LoadTLSConfigFromDir(certsDir)
+	err = security.RunCreateClientCert(certsDir, 512, security.RootUser)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	_, err = security.LoadClientTLSConfigFromDir(certsDir)
+
+	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
+	_, err = security.LoadServerTLSConfig(certsDir)
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	_, err = security.LoadClientTLSConfig(certsDir, security.NodeUser)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -98,6 +103,7 @@ func TestUseCerts(t *testing.T) {
 	// We use a real context since we want generated certs.
 	testCtx := server.NewContext()
 	testCtx.Certs = certsDir
+	testCtx.User = security.NodeUser
 	testCtx.Addr = "127.0.0.1:0"
 	s := &server.TestServer{Ctx: testCtx}
 	if err := s.Start(); err != nil {

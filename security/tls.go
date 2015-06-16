@@ -53,18 +53,18 @@ func ResetReadFileFn() {
 	readFileFn = ioutil.ReadFile
 }
 
-// LoadTLSConfigFromDir creates a TLSConfig by loading our keys and certs from the
+// LoadServerTLSConfig creates a server TLSConfig by loading our keys and certs from the
 // specified directory. The directory must contain the following files:
 // - ca.crt   -- the certificate of the cluster CA
 // - node.server.crt -- the server certificate of this node; should be signed by the CA
 // - node.server.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadTLSConfigFromDir(certDir string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, "node.server.crt"))
+func LoadServerTLSConfig(certDir string) (*tls.Config, error) {
+	certPEM, err := readFileFn(path.Join(certDir, serverCertFile))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, "node.server.key"))
+	keyPEM, err := readFileFn(path.Join(certDir, serverKeyFile))
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +72,14 @@ func LoadTLSConfigFromDir(certDir string) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return LoadTLSConfig(certPEM, keyPEM, caPEM)
+	return newServerTLSConfig(certPEM, keyPEM, caPEM)
 }
 
-// LoadTLSConfig creates a TLSConfig from the supplied byte strings containing
+// newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
 // - the private key of this node.
 // - the certificate of the cluster CA,
-func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
@@ -116,18 +116,18 @@ func LoadInsecureTLSConfig() *tls.Config {
 	return nil
 }
 
-// LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
-// specified directory. The directory must contain the following files:
+// LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs
+// from the specified directory. The directory must contain the following files:
 // - ca.crt   -- the certificate of the cluster CA
-// - node.client.crt -- the client certificate of this node; should be signed by the CA
-// - node.client.key -- the certificate key
+// - <username>.client.crt -- the client certificate of this client; should be signed by the CA
+// - <username>.client.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadClientTLSConfigFromDir(certDir string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, "node.client.crt"))
+func LoadClientTLSConfig(certDir, username string) (*tls.Config, error) {
+	certPEM, err := readFileFn(path.Join(certDir, clientCertFile(username)))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, "node.client.key"))
+	keyPEM, err := readFileFn(path.Join(certDir, clientKeyFile(username)))
 	if err != nil {
 		return nil, err
 	}
@@ -136,14 +136,14 @@ func LoadClientTLSConfigFromDir(certDir string) (*tls.Config, error) {
 		return nil, err
 	}
 
-	return LoadClientTLSConfig(certPEM, keyPEM, caPEM)
+	return newClientTLSConfig(certPEM, keyPEM, caPEM)
 }
 
-// LoadClientTLSConfig creates a client TLSConfig from the supplied byte strings containing:
+// newClientTLSConfig creates a client TLSConfig from the supplied byte strings containing:
 // - the certificate of this client (should be signed by the CA),
 // - the private key of this client.
 // - the certificate of the cluster CA,
-func LoadClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
