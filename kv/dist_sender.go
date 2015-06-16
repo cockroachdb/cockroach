@@ -59,11 +59,9 @@ const (
 )
 
 var defaultRPCRetryOptions = retry.Options{
-	Backoff:     retryBackoff,
-	MaxBackoff:  maxRetryBackoff,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-	UseV1Info:   true,
+	InitialBackoff: retryBackoff,
+	MaxBackoff:     maxRetryBackoff,
+	Multiplier:     2,
 }
 
 // A firstRangeMissingError indicates that the first range has not yet
@@ -472,93 +470,6 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 	return err
 }
 
-// sendAttempt is invoked by Send and handles retry logic and cache eviction
-// for a call sent to a single range. It returns a retry status, which is Break
-// on success and either Break, Continue or Reset depending on error condition.
-// This method is expected to be invoked from within a backoff / retry loop to
-// retry the send repeatedly (e.g. to continue processing after a critical node
-// becomes available after downtime or the range descriptor is refreshed via
-// lookup).
-func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call proto.Call) (retry.Status, error) {
-	leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
-
-	// Try to send the call.
-	replicas := newReplicaSlice(ds.gossip, desc)
-
-	// Rearrange the replicas so that those replicas with long common
-	// prefix of attributes end up first. If there's no prefix, this is a
-	// no-op.
-	order := ds.optimizeReplicaOrder(replicas)
-
-	args := call.Args
-	reply := call.Reply
-
-	// If this request needs to go to a leader and we know who that is, move
-	// it to the front.
-	if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
-		leader.StoreID > 0 {
-		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
-			replicas.MoveToFront(i)
-			order = rpc.OrderStable
-		}
-	}
-
-	err := ds.sendRPC(desc.RaftID, replicas, order, args, reply)
-	if err != nil {
-		// For an RPC error to occur, we must've been unable to contact any
-		// replicas. In this case, likely all nodes are down (or not getting back
-		// to us within a reasonable amount of time).
-		// We may simply not be trying to talk to the up-to-date replicas, so
-		// clearing the descriptor here should be a good idea.
-		// TODO(tschottdorf): If a replica group goes dead, this will cause clients
-		// to put high read pressure on the first range, so there should be some
-		// rate limiting here.
-		ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
-	} else {
-		err = reply.Header().GoError()
-	}
-
-	if err != nil {
-		if log.V(1) {
-			log.Warningf("failed to invoke %s: %s", call.Method(), err)
-		}
-
-		// If retryable, allow retry. For range not found or range
-		// key mismatch errors, we don't backoff on the retry,
-		// but reset the backoff loop so we can retry immediately.
-		switch tErr := err.(type) {
-		case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
-			// Range descriptor might be out of date - evict it.
-			ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
-			// On addressing errors, don't backoff; retry immediately.
-			return retry.Reset, err
-		case *proto.NotLeaderError:
-			newLeader := tErr.GetLeader()
-			// Verify that leader is a known replica according to the
-			// descriptor. If not, we've got a stale replica; evict cache.
-			// Next, cache the new leader.
-			if newLeader != nil {
-				if i, _ := desc.FindReplica(newLeader.StoreID); i == -1 {
-					if log.V(1) {
-						log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
-					}
-					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
-				}
-			} else {
-				newLeader = &proto.Replica{}
-			}
-			ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
-			return retry.Reset, err
-		case util.Retryable:
-			if tErr.CanRetry() {
-				return retry.Continue, err
-			}
-		}
-		return retry.Break, err
-	}
-	return retry.Break, nil
-}
-
 // getDescriptors takes a call and looks up the corresponding range
 // descriptors associated with it. First, the range descriptor for
 // call.Args.Key is looked up. If call.Args.EndKey exceeds that of the
@@ -648,17 +559,14 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 	}(args.Header().Key)
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
-	retryOpts := ds.rpcRetryOptions
-	retryOpts.Tag = "routing " + call.Method().String() + " rpc"
-
 	curReply := finalReply
 	for {
 		call.Reply = curReply
 		curReply.Header().Reset()
 
 		var desc, descNext *proto.RangeDescriptor
-		err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-			var err error
+		var err error
+		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
 			// Get range descriptor (or, when spanning range, descriptors).
 			// sendAttempt below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
@@ -667,21 +575,109 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// available via Gossip.
 			if err != nil {
 				if rErr, ok := err.(util.Retryable); ok && rErr.CanRetry() {
-					return retry.Continue, err
+					if log.V(1) {
+						log.Warning(err)
+					}
+					continue
 				}
-				return retry.Break, err
+				break
 			}
-			// Truncate the request to our current range, making sure not to
-			// touch it unless we have to (it is illegal to send EndKey on
-			// commands which do not operate on ranges).
-			if descNext != nil {
-				defer func(endKey proto.Key) {
-					args.Header().EndKey = endKey
-				}(args.Header().EndKey)
-				args.Header().EndKey = desc.EndKey
+			err = func() error {
+				// Truncate the request to our current range, making sure not to
+				// touch it unless we have to (it is illegal to send EndKey on
+				// commands which do not operate on ranges).
+				if descNext != nil {
+					defer func(endKey proto.Key) {
+						args.Header().EndKey = endKey
+					}(args.Header().EndKey)
+					args.Header().EndKey = desc.EndKey
+				}
+				leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
+
+				// Try to send the call.
+				replicas := newReplicaSlice(ds.gossip, desc)
+
+				// Rearrange the replicas so that those replicas with long common
+				// prefix of attributes end up first. If there's no prefix, this is a
+				// no-op.
+				order := ds.optimizeReplicaOrder(replicas)
+
+				// If this request needs to go to a leader and we know who that is, move
+				// it to the front.
+				if !(proto.IsRead(args) && args.Header().ReadConsistency == proto.INCONSISTENT) &&
+					leader.StoreID > 0 {
+					if i := replicas.FindReplica(leader.StoreID); i >= 0 {
+						replicas.MoveToFront(i)
+						order = rpc.OrderStable
+					}
+				}
+
+				return ds.sendRPC(desc.RaftID, replicas, order, args, curReply)
+			}()
+			if err != nil {
+				// For an RPC error to occur, we must've been unable to contact any
+				// replicas. In this case, likely all nodes are down (or not getting back
+				// to us within a reasonable amount of time).
+				// We may simply not be trying to talk to the up-to-date replicas, so
+				// clearing the descriptor here should be a good idea.
+				// TODO(tschottdorf): If a replica group goes dead, this will cause clients
+				// to put high read pressure on the first range, so there should be some
+				// rate limiting here.
+				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+			} else {
+				err = curReply.Header().GoError()
 			}
-			return ds.sendAttempt(desc, call)
-		})
+
+			if err != nil {
+				if log.V(1) {
+					log.Warningf("failed to invoke %s: %s", call.Method(), err)
+				}
+
+				// If retryable, allow retry. For range not found or range
+				// key mismatch errors, we don't backoff on the retry,
+				// but reset the backoff loop so we can retry immediately.
+				switch tErr := err.(type) {
+				case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
+					// Range descriptor might be out of date - evict it.
+					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+					// On addressing errors, don't backoff; retry immediately.
+					r.Reset()
+					if log.V(1) {
+						log.Warning(err)
+					}
+					continue
+				case *proto.NotLeaderError:
+					newLeader := tErr.GetLeader()
+					// Verify that leader is a known replica according to the
+					// descriptor. If not, we've got a stale replica; evict cache.
+					// Next, cache the new leader.
+					if newLeader != nil {
+						if i, _ := desc.FindReplica(newLeader.StoreID); i == -1 {
+							if log.V(1) {
+								log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
+							}
+							ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+						}
+					} else {
+						newLeader = &proto.Replica{}
+					}
+					ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
+					if log.V(1) {
+						log.Warning(err)
+					}
+					r.Reset()
+					continue
+				case util.Retryable:
+					if tErr.CanRetry() {
+						if log.V(1) {
+							log.Warning(err)
+						}
+						continue
+					}
+				}
+			}
+			break
+		}
 
 		// Immediately return if querying a range failed non-retryably.
 		// For multi-range requests, we return the failing range's reply.

@@ -18,7 +18,6 @@
 package rpc
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 
@@ -79,18 +78,18 @@ func newSender(server string, context *base.Context, retryOpts retry.Options) (*
 // through and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached response.
 func (s *Sender) Send(_ context.Context, call proto.Call) {
-	retryOpts := s.retryOpts
-	retryOpts.Tag = fmt.Sprintf("rpc %s", call.Method())
-
-	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	var err error
+	for r := retry.Start(s.retryOpts); r.Next(); {
 		if !s.client.IsHealthy() {
-			return retry.Continue, nil
+			log.Warningf("client %s is unhealthy; retrying", s.client)
+			continue
 		}
 
 		method := call.Args.Method().String()
 		c := s.client.Go("Server."+method, call.Args, call.Reply, nil)
 		<-c.Done
-		if c.Error != nil {
+		err = c.Error
+		if err != nil {
 			// Assume all errors sending request are retryable. The actual
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the
@@ -98,13 +97,14 @@ func (s *Sender) Send(_ context.Context, call proto.Call) {
 			// there's visiblity that this is happening. Some of the errors
 			// we'll sweep up in this net shouldn't be retried, but we can't
 			// really know for sure which.
-			log.Warningf("failed to send RPC request %s: %v", method, c.Error)
-			return retry.Continue, nil
+			log.Warningf("failed to send RPC request %s: %v", method, err)
+			continue
 		}
 
 		// On successful post, we're done with retry loop.
-		return retry.Break, nil
-	}); err != nil {
+		break
+	}
+	if err != nil {
 		call.Reply.Header().SetGoError(err)
 	}
 }

@@ -43,11 +43,10 @@ import (
 // return retry error.
 func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	client.DefaultTxnRetryOptions = retry.Options{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  5 * time.Millisecond,
-		Constant:    2,
-		MaxAttempts: 3,
-		UseV1Info:   true,
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     5 * time.Millisecond,
+		Multiplier:     2,
+		MaxRetries:     2,
 	}
 
 	// will never error because `return nil` below

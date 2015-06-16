@@ -35,11 +35,9 @@ var (
 	// for transactions.
 	// This is exported for testing purposes only.
 	DefaultTxnRetryOptions = retry.Options{
-		Backoff:     50 * time.Millisecond,
-		MaxBackoff:  5 * time.Second,
-		Constant:    2,
-		MaxAttempts: 0, // retry indefinitely
-		UseV1Info:   true,
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     2,
 	}
 )
 
@@ -268,15 +266,12 @@ func (txn *Txn) Commit(b *Batch) error {
 	return txn.Run(b)
 }
 
-func (txn *Txn) exec(retryable func(txn *Txn) error) error {
+func (txn *Txn) exec(retryable func(txn *Txn) error) (err error) {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	retryOpts := txn.db.txnRetryOptions
-	retryOpts.Tag = txn.txn.Name
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
 		txn.haveTxnWrite, txn.haveEndTxn = false, false // always reset before [re]starting txn
-		err := retryable(txn)
-		if err == nil {
+		if err = retryable(txn); err == nil {
 			if !txn.haveEndTxn && txn.haveTxnWrite {
 				// If there were no errors running retryable, commit the txn. This
 				// may block waiting for outstanding writes to complete in case
@@ -288,15 +283,19 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 			}
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
-			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
-				return retry.Reset, err
-			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
-				return retry.Continue, err
+			if log.V(2) {
+				log.Warning(err)
 			}
-			// By default, fall through and return Break.
+			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
+				r.Reset()
+				continue
+			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
+				continue
+			}
+			// By default, fall through and break.
 		}
-		return retry.Break, err
-	})
+		break
+	}
 	if err != nil && txn.haveTxnWrite {
 		if replyErr := txn.send(proto.Call{
 			Args:  &proto.EndTransactionRequest{Commit: false},
@@ -304,9 +303,8 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 		}); replyErr != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
-		return err
 	}
-	return err
+	return
 }
 
 // send runs the specified calls synchronously in a single batch and

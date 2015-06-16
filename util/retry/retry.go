@@ -18,107 +18,93 @@
 package retry
 
 import (
-	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// retryJitter specifies random jitter to add to backoff
-// durations. Specified as a percentage of the backoff.
-const retryJitter = 0.15
-
-// Status is an enum describing the possible statuses of a
-// backoff / retry worker function.
-type Status int32
-
-// MaxAttemptsError indicates max attempts were exceeded.
-type MaxAttemptsError struct {
-	MaxAttempts int
-}
-
-// Error implements error interface.
-func (re *MaxAttemptsError) Error() string {
-	return fmt.Sprintf("maximum number of attempts exceeded %d", re.MaxAttempts)
-}
-
-const (
-	// Break indicates the retry loop is finished and should return
-	// the result of the retry worker function.
-	Break Status = iota
-	// Reset indicates that the retry loop should be reset with
-	// no backoff for an immediate retry.
-	Reset
-	// Continue indicates that the retry loop should continue with
-	// another iteration of backoff / retry.
-	Continue
-)
-
-// Options provides control of retry loop logic via the
-// WithBackoffOptions method.
+// Options provides reusable configuration of Retry objects.
 type Options struct {
-	Tag         string        // Tag for helpful logging of backoffs
-	Backoff     time.Duration // Default retry backoff interval
-	MaxBackoff  time.Duration // Maximum retry backoff interval
-	Constant    float64       // Default backoff constant
-	MaxAttempts int           // Maximum number of attempts (0 for infinite)
-	UseV1Info   bool          // Use verbose V(1) level for log messages
-	Stopper     *util.Stopper // Optionally end retry loop on stopper signal
+	InitialBackoff      time.Duration // Default retry backoff interval
+	MaxBackoff          time.Duration // Maximum retry backoff interval
+	Multiplier          float64       // Default backoff constant
+	MaxRetries          int           // Maximum number of attempts (0 for infinite)
+	RandomizationFactor float64       // Randomize the backoff interval by constant
+	Stopper             *util.Stopper // Optionally end retry loop on stopper signal
 }
 
-// WithBackoff implements retry with exponential backoff using
-// the supplied options as parameters. When fn returns Continue
-// and the number of retry attempts haven't been exhausted, fn is
-// retried. When fn returns Break, retry ends. As a special case,
-// if fn returns Reset, the backoff and retry count are reset to
-// starting values and the next retry occurs immediately. Returns an
-// error if the maximum number of retries is exceeded or if the fn
-// returns an error.
-func WithBackoff(opts Options, fn func() (Status, error)) error {
-	backoff := opts.Backoff
-	tag := opts.Tag
-	if tag == "" {
-		tag = "invocation"
+// Retry implements the public methods necessary to control an exponential-
+// backoff retry loop.
+type Retry struct {
+	opts           Options
+	currentAttempt int
+	isReset        bool
+}
+
+// Start returns a new Retry initialized to some default values. The Retry can
+// then be used in an exponential-backoff retry loop.
+func Start(opts Options) Retry {
+	if opts.InitialBackoff == 0 {
+		opts.InitialBackoff = 50 * time.Millisecond
 	}
-	for count := 1; true; count++ {
-		status, err := fn()
-		if status == Break {
-			return err
-		}
-		if err != nil && (!opts.UseV1Info || log.V(1) == true) {
-			log.InfoDepth(1, tag, " failed an iteration: ", err)
-		}
-		var wait time.Duration
-		if status == Reset {
-			backoff = opts.Backoff
-			wait = 0
-			count = 0
-			if !opts.UseV1Info || log.V(1) == true {
-				log.InfoDepth(1, tag, " failed; retrying immediately")
-			}
-		} else {
-			if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
-				return &MaxAttemptsError{opts.MaxAttempts}
-			}
-			if !opts.UseV1Info || log.V(1) == true {
-				log.InfoDepth(1, tag, " failed; retrying in ", backoff)
-			}
-			wait = backoff + time.Duration(rand.Float64()*float64(backoff.Nanoseconds())*retryJitter)
-			// Increase backoff for next iteration.
-			backoff = time.Duration(float64(backoff) * opts.Constant)
-			if backoff > opts.MaxBackoff {
-				backoff = opts.MaxBackoff
-			}
-		}
-		// Wait before retry.
-		select {
-		case <-time.After(wait):
-			// Continue retrying.
-		case <-opts.Stopper.ShouldStop():
-			return util.Errorf("%s retry loop stopped", tag)
-		}
+	if opts.MaxBackoff == 0 {
+		opts.MaxBackoff = 2 * time.Second
 	}
-	return nil
+	if opts.RandomizationFactor == 0 {
+		opts.RandomizationFactor = 0.15
+	}
+	if opts.Multiplier == 0 {
+		opts.Multiplier = 2
+	}
+
+	r := Retry{opts: opts}
+	r.Reset()
+	return r
+}
+
+// Reset resets the Retry to its initial state, meaning that the next call to
+// Next will return true immediately and subsequent calls will behave as if
+// they had followed the very first attempt (i.e. their backoffs will be
+// short).
+func (r *Retry) Reset() {
+	r.currentAttempt = 0
+	r.isReset = true
+}
+
+func (r Retry) retryIn() time.Duration {
+	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
+	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
+		backoff = maxBackoff
+	}
+
+	var delta = r.opts.RandomizationFactor * backoff
+	// Get a random value from the range [backoff - delta, backoff + delta].
+	// The formula used below has a +1 because time.Duration is an int64, and the
+	// conversion floors the float64.
+	return time.Duration(backoff - delta + rand.Float64()*(2*delta+1))
+}
+
+// Next returns whether the retry loop should continue, and blocks for the
+// appropriate length of time before yielding back to the caller. If a stopper
+// is present, Next will eagerly return false when the stopper is stopped.
+func (r *Retry) Next() bool {
+	if r.isReset {
+		r.isReset = false
+		return true
+	}
+
+	if r.opts.MaxRetries > 0 && r.currentAttempt == r.opts.MaxRetries {
+		return false
+	}
+
+	// Wait before retry.
+	select {
+	case <-time.After(r.retryIn()):
+		r.currentAttempt++
+		return true
+	case <-r.opts.Stopper.ShouldStop():
+		return false
+	}
 }

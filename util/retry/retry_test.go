@@ -18,96 +18,99 @@
 package retry
 
 import (
-	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 )
 
-func TestRetry(t *testing.T) {
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 10, false, nil}
-	var retries int
-	err := WithBackoff(opts, func() (Status, error) {
-		retries++
-		if retries == 3 {
-			return Break, nil
-		}
-		return Continue, nil
-	})
-	if err != nil || retries != 3 {
-		t.Error("expected 3 retries, got", retries, ":", err)
-	}
-}
-
 func TestRetryExceedsMaxBackoff(t *testing.T) {
-	timer := time.AfterFunc(time.Second, func() {
-		t.Error("max backoff not respected")
-	})
-	opts := Options{"test", time.Microsecond * 10, time.Microsecond * 10, 1000, 3, false, nil}
-	err := WithBackoff(opts, func() (Status, error) {
-		return Continue, nil
-	})
-	if _, ok := err.(*MaxAttemptsError); !ok {
-		t.Errorf("should receive max attempts error on retry: %s", err)
+	opts := Options{
+		InitialBackoff: time.Microsecond * 10,
+		MaxBackoff:     time.Microsecond * 10,
+		Multiplier:     10e4,
+		MaxRetries:     1,
 	}
-	timer.Stop()
+
+	// tolerate a duration two orders of magnitude lower than if MaxBackoff is
+	// not respected.
+	fudgeFactor := opts.Multiplier / 10e2
+
+	attempts := 0
+	start := time.Now()
+	for r := Start(opts); r.Next(); attempts++ {
+	}
+
+	duration := time.Since(start)
+
+	if expDuration := time.Duration(fudgeFactor) * time.Duration(opts.MaxRetries+1) * opts.MaxBackoff; duration > expDuration {
+		t.Errorf("expected retry loop to run for %s, actually ran for %s", expDuration, duration)
+	}
+
+	if expAttempts := opts.MaxRetries + 1; attempts != expAttempts {
+		t.Errorf("expected %d attempts, got %d attempts", expAttempts, attempts)
+	}
 }
 
 func TestRetryExceedsMaxAttempts(t *testing.T) {
-	var retries int
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 3, false, nil}
-	err := WithBackoff(opts, func() (Status, error) {
-		retries++
-		return Continue, nil
-	})
-	if _, ok := err.(*MaxAttemptsError); !ok {
-		t.Errorf("should receive max attempts error on retry: %s", err)
+	opts := Options{
+		InitialBackoff: time.Microsecond * 10,
+		MaxBackoff:     time.Second,
+		Multiplier:     2,
+		MaxRetries:     1,
 	}
-	if retries != 3 {
-		t.Error("expected 3 retries, got", retries)
-	}
-}
 
-func TestRetryFunctionReturnsError(t *testing.T) {
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0 /* indefinite */, false, nil}
-	err := WithBackoff(opts, func() (Status, error) {
-		return Break, fmt.Errorf("something went wrong")
-	})
-	if err == nil {
-		t.Error("expected an error")
+	attempts := 0
+	for r := Start(opts); r.Next(); attempts++ {
+	}
+
+	if expAttempts := opts.MaxRetries + 1; attempts != expAttempts {
+		t.Errorf("expected %d attempts, got %d attempts", expAttempts, attempts)
 	}
 }
 
 func TestRetryReset(t *testing.T) {
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 1, false, nil}
-	var count int
-	// Backoff loop has 1 allowed retry; we always return Reset, so
-	// just make sure we get to 2 retries and then break.
-	if err := WithBackoff(opts, func() (Status, error) {
-		count++
-		if count == 2 {
-			return Break, nil
-		}
-		return Reset, nil
-	}); err != nil {
-		t.Errorf("unexpected error: %s", err)
+	opts := Options{
+		InitialBackoff: time.Microsecond * 10,
+		MaxBackoff:     time.Second,
+		Multiplier:     2,
+		MaxRetries:     1,
 	}
-	if count != 2 {
-		t.Errorf("expected 2 retries; got %d", count)
+
+	expAttempts := opts.MaxRetries + 1
+
+	attempts := 0
+	// Backoff loop has 1 allowed retry; we always call Reset, so
+	// just make sure we get to 2 attempts and then break.
+	for r := Start(opts); r.Next(); attempts++ {
+		if attempts == expAttempts {
+			break
+		}
+		r.Reset()
+	}
+	if attempts != expAttempts {
+		t.Errorf("expected %d attempts, got %d", expAttempts, attempts)
 	}
 }
 
 func TestRetryStop(t *testing.T) {
-	stopper := util.NewStopper()
-	var once sync.Once
+	opts := Options{
+		InitialBackoff: time.Microsecond * 10,
+		MaxBackoff:     time.Second,
+		Multiplier:     2,
+		Stopper:        util.NewStopper(),
+	}
+
+	var attempts int
+
 	// Create a retry loop which will never stop without stopper.
-	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0, false, stopper}
-	if err := WithBackoff(opts, func() (Status, error) {
-		go once.Do(stopper.Stop)
-		return Continue, nil
-	}); err == nil {
-		t.Errorf("expected retry loop to exit from being stopped")
+	for r := Start(opts); r.Next(); attempts++ {
+		go opts.Stopper.Stop()
+		// Don't race the stopper, just wait for it to do its thing.
+		<-opts.Stopper.ShouldStop()
+	}
+
+	if expAttempts := 1; attempts != expAttempts {
+		t.Errorf("expected %d attempts, got %d", expAttempts, attempts)
 	}
 }
