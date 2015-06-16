@@ -19,9 +19,7 @@ package client
 
 import (
 	"bytes"
-	"encoding"
 	"fmt"
-	"math"
 	"reflect"
 	"strings"
 
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TODO(pmattis):
@@ -553,7 +550,7 @@ func (b *Batch) GetStruct(obj interface{}, columns ...string) {
 		c := proto.GetCall(proto.Key(key))
 		c.Post = func() error {
 			reply := c.Reply.(*proto.GetResponse)
-			return unmarshalTableValue(reply.Value, v.FieldByIndex(col.field.Index))
+			return unmarshalValue(reply.Value, v.FieldByIndex(col.field.Index))
 		}
 		calls = append(calls, c)
 	}
@@ -600,7 +597,7 @@ func (b *Batch) PutStruct(obj interface{}, columns ...string) {
 			log.Infof("Put %q -> %v", key, value.Interface())
 		}
 
-		v, err := marshalTableValue(value)
+		v, err := marshalValue(value)
 		if err != nil {
 			b.initResult(0, 0, err)
 			return
@@ -649,7 +646,7 @@ func (b *Batch) IncStruct(obj interface{}, value int64, column string) {
 		// integer value directly instead of encoding it into a []byte.
 		pv := &proto.Value{}
 		pv.SetInteger(reply.NewValue)
-		return unmarshalTableValue(pv, v.FieldByIndex(col.field.Index))
+		return unmarshalValue(pv, v.FieldByIndex(col.field.Index))
 	}
 
 	b.calls = append(b.calls, c)
@@ -772,7 +769,7 @@ func (b *Batch) ScanStruct(dest, start, end interface{}, maxRows int64, columns 
 			if !ok {
 				return fmt.Errorf("%s: unable to find column %d", m.name, colID)
 			}
-			if err := unmarshalTableValue(&row.Value, result.FieldByIndex(col.field.Index)); err != nil {
+			if err := unmarshalValue(&row.Value, result.FieldByIndex(col.field.Index)); err != nil {
 				return err
 			}
 		}
@@ -833,137 +830,4 @@ func (b *Batch) DelStruct(obj interface{}, columns ...string) {
 
 	b.calls = append(b.calls, calls...)
 	b.initResult(len(calls), len(calls), nil)
-}
-
-// marshalTableValue returns a proto.Value initialized from the source
-// reflect.Value, returning an error if the types are not compatible.
-func marshalTableValue(v reflect.Value) (proto.Value, error) {
-	var r proto.Value
-	switch t := v.Interface().(type) {
-	case nil:
-		return r, nil
-
-	case string:
-		r.Bytes = []byte(t)
-		return r, nil
-
-	case []byte:
-		r.Bytes = t
-		return r, nil
-
-	case gogoproto.Message:
-		var err error
-		r.Bytes, err = gogoproto.Marshal(t)
-		return r, err
-
-	case encoding.BinaryMarshaler:
-		var err error
-		r.Bytes, err = t.MarshalBinary()
-		return r, err
-	}
-
-	switch v.Kind() {
-	case reflect.Bool:
-		i := int64(0)
-		if v.Bool() {
-			i = 1
-		}
-		r.SetInteger(i)
-		return r, nil
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		r.SetInteger(v.Int())
-		return r, nil
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		r.SetInteger(int64(v.Uint()))
-		return r, nil
-
-	case reflect.Float32, reflect.Float64:
-		r.SetInteger(int64(math.Float64bits(v.Float())))
-		return r, nil
-
-	case reflect.String:
-		r.Bytes = []byte(v.String())
-		return r, nil
-	}
-
-	return r, fmt.Errorf("unable to marshal value: %s", v)
-}
-
-// unmarshalTableValue sets the destination reflect.Value contents from the
-// source proto.Value, returning an error if the types are not compatible.
-func unmarshalTableValue(src *proto.Value, dest reflect.Value) error {
-	if src == nil {
-		dest.Set(reflect.Zero(dest.Type()))
-		return nil
-	}
-
-	switch d := dest.Addr().Interface().(type) {
-	case *string:
-		if src.Bytes != nil {
-			*d = string(src.Bytes)
-		} else {
-			*d = ""
-		}
-		return nil
-
-	case *[]byte:
-		if src.Bytes != nil {
-			*d = src.Bytes
-		} else {
-			*d = nil
-		}
-		return nil
-
-	case *gogoproto.Message:
-		panic("TODO(pmattis): unimplemented")
-
-	case *encoding.BinaryMarshaler:
-		panic("TODO(pmattis): unimplemented")
-	}
-
-	switch dest.Kind() {
-	case reflect.Bool:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetBool(i != 0)
-		return nil
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetInt(i)
-		return nil
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetUint(uint64(i))
-		return nil
-
-	case reflect.Float32, reflect.Float64:
-		i, err := src.GetInteger()
-		if err != nil {
-			return err
-		}
-		dest.SetFloat(math.Float64frombits(uint64(i)))
-		return nil
-
-	case reflect.String:
-		if src == nil || src.Bytes == nil {
-			dest.SetString("")
-			return nil
-		}
-		dest.SetString(string(src.Bytes))
-		return nil
-	}
-
-	return fmt.Errorf("unable to unmarshal value: %s", dest.Type())
 }

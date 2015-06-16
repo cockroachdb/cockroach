@@ -19,7 +19,6 @@ package client
 
 import (
 	"bytes"
-	"encoding"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -472,44 +471,6 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 		}
 	}
 	return
-}
-
-func marshalKey(k interface{}) ([]byte, error) {
-	// Note that the ordering here is important. In particular, proto.Key is also
-	// a fmt.Stringer.
-	switch t := k.(type) {
-	case string:
-		return []byte(t), nil
-	case proto.Key:
-		return []byte(t), nil
-	case []byte:
-		return t, nil
-	case encoding.BinaryMarshaler:
-		return t.MarshalBinary()
-	case fmt.Stringer:
-		return []byte(t.String()), nil
-	}
-	return nil, fmt.Errorf("unable to marshal key: %T", k)
-}
-
-func marshalValue(v interface{}) ([]byte, error) {
-	switch t := v.(type) {
-	case nil:
-		return nil, nil
-	case string:
-		return []byte(t), nil
-	case proto.Key:
-		return []byte(t), nil
-	case []byte:
-		return t, nil
-	case gogoproto.Message:
-		return gogoproto.Marshal(t)
-	case encoding.BinaryMarshaler:
-		return t.MarshalBinary()
-	case fmt.Stringer:
-		return []byte(t.String()), nil
-	}
-	return nil, fmt.Errorf("unable to marshal value: %T", v)
 }
 
 // Runner only exports the Run method on a batch of operations.

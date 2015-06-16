@@ -19,6 +19,7 @@ package client
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/proto"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -228,12 +229,12 @@ func (b *Batch) Put(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	v, err := marshalValue(value)
+	v, err := marshalValue(reflect.ValueOf(value))
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.PutCall(proto.Key(k), proto.Value{Bytes: v}))
+	b.calls = append(b.calls, proto.PutCall(proto.Key(k), v))
 	b.initResult(1, 1, nil)
 }
 
@@ -252,17 +253,17 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	v, err := marshalValue(value)
+	v, err := marshalValue(reflect.ValueOf(value))
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	ev, err := marshalValue(expValue)
+	ev, err := marshalValue(reflect.ValueOf(expValue))
 	if err != nil {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.calls = append(b.calls, proto.ConditionalPutCall(proto.Key(k), v, ev))
+	b.calls = append(b.calls, proto.ConditionalPutCall(proto.Key(k), v.Bytes, ev.Bytes))
 	b.initResult(1, 1, nil)
 }
 
