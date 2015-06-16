@@ -289,7 +289,7 @@ func DecodeVarintDecreasing(b []byte) ([]byte, int64) {
 
 const (
 	// MaxUvarintSize is the maximum size in bytes of an encoded uvarint.
-	MaxUvarintSize = 10
+	MaxUvarintSize = 9
 )
 
 // EncodeUvarint encodes the uint64 value using a variable length
