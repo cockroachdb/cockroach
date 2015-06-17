@@ -37,25 +37,27 @@ import (
 )
 
 // executeCmd switches over the method and multiplexes to execute the
-// appropriate storage API command.
-func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.Request, reply proto.Response) error {
+// appropriate storage API command. It returns an error and, for some calls
+// such as inconsistent reads, the intents they skipped.
+func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.Request, reply proto.Response) ([]proto.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil && TestingCommandFilter(args, reply) {
-		return reply.Header().GoError()
+		return nil, reply.Header().GoError()
 	}
 
+	var intents []proto.Intent
 	switch tArgs := args.(type) {
 	case *proto.GetRequest:
-		r.Get(batch, tArgs, reply.(*proto.GetResponse))
+		intents = r.Get(batch, tArgs, reply.(*proto.GetResponse))
 	case *proto.PutRequest:
 		r.Put(batch, ms, tArgs, reply.(*proto.PutResponse))
 	case *proto.ConditionalPutRequest:
@@ -67,11 +69,11 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	case *proto.DeleteRangeRequest:
 		r.DeleteRange(batch, ms, tArgs, reply.(*proto.DeleteRangeResponse))
 	case *proto.ScanRequest:
-		r.Scan(batch, tArgs, reply.(*proto.ScanResponse))
+		intents = r.Scan(batch, tArgs, reply.(*proto.ScanResponse))
 	case *proto.EndTransactionRequest:
 		r.EndTransaction(batch, ms, tArgs, reply.(*proto.EndTransactionResponse))
 	case *proto.InternalRangeLookupRequest:
-		r.InternalRangeLookup(batch, tArgs, reply.(*proto.InternalRangeLookupResponse))
+		intents = r.InternalRangeLookup(batch, tArgs, reply.(*proto.InternalRangeLookupResponse))
 	case *proto.InternalHeartbeatTxnRequest:
 		r.InternalHeartbeatTxn(batch, ms, tArgs, reply.(*proto.InternalHeartbeatTxnResponse))
 	case *proto.InternalGCRequest:
@@ -87,7 +89,7 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	case *proto.InternalLeaderLeaseRequest:
 		r.InternalLeaderLease(batch, ms, tArgs, reply.(*proto.InternalLeaderLeaseResponse))
 	default:
-		return util.Errorf("unrecognized command %s", args.Method())
+		return nil, util.Errorf("unrecognized command %s", args.Method())
 	}
 
 	if log.V(2) {
@@ -103,6 +105,8 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = header.Timestamp
 
+	err := reply.Header().GoError()
+
 	// A ReadWithinUncertaintyIntervalError contains the timestamp of the value
 	// that provoked the conflict. However, we forward the timestamp to the
 	// node's time here. The reason is that the caller (which is always
@@ -112,22 +116,23 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 	// the node to be classified as without further uncertain reads for the
 	// remainder of the transaction.
 	// See the comment on proto.Transaction.CertainNodes.
-	if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
+	if tErr, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok && tErr != nil {
 		// Note that we can use this node's clock (which may be different from
 		// other replicas') because this error attaches the existing timestamp
 		// to the node itself when retrying.
-		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
+		tErr.ExistingTimestamp.Forward(r.rm.Clock().Now())
 	}
 
 	// Return the error (if any) set in the reply.
-	return reply.Header().GoError()
+	return intents, err
 }
 
 // Get returns the value for a specified key.
-func (r *Range) Get(batch engine.Engine, args *proto.GetRequest, reply *proto.GetResponse) {
-	val, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
+func (r *Range) Get(batch engine.Engine, args *proto.GetRequest, reply *proto.GetResponse) []proto.Intent {
+	val, intents, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	reply.Value = val
 	reply.SetGoError(err)
+	return intents
 }
 
 // Put sets the value for a specified key.
@@ -169,10 +174,11 @@ func (r *Range) DeleteRange(batch engine.Engine, ms *proto.MVCCStats, args *prot
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
-func (r *Range) Scan(batch engine.Engine, args *proto.ScanRequest, reply *proto.ScanResponse) {
-	kvs, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
+func (r *Range) Scan(batch engine.Engine, args *proto.ScanRequest, reply *proto.ScanResponse) []proto.Intent {
+	kvs, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	reply.Rows = kvs
 	reply.SetGoError(err)
+	return intents
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
@@ -317,17 +323,17 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 // intended to serve as a sort of caching pre-fetch, so that the requesting
 // nodes can aggressively cache RangeDescriptors which are likely to be desired
 // by their current workload.
-func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) {
+func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) []proto.Intent {
 	if err := keys.ValidateRangeMetaKey(args.Key); err != nil {
 		reply.SetGoError(err)
-		return
+		return nil
 	}
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
 		reply.SetGoError(util.Errorf(
 			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount))
-		return
+		return nil
 	}
 	if args.IgnoreIntents {
 		rangeCount = 1 // simplify lookup because we may have to retry to read new
@@ -337,60 +343,72 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
 	startKey, endKey := keys.MetaScanBounds(args.Key)
-	kvs, err := engine.MVCCScan(batch, startKey, endKey, rangeCount, args.Timestamp, false, args.Txn)
+	// Scan inconsistently. Any intents encountered are bundled up, but other-
+	// wise ignored.
+	kvs, intents, err := engine.MVCCScan(batch, startKey, endKey, rangeCount,
+		args.Timestamp, false /* !consistent */, args.Txn)
 	if err != nil {
-		if wiErr, ok := err.(*proto.WriteIntentError); ok && args.IgnoreIntents {
-			// NOTE (subtle): in general, we want to try to clean up dangling
-			// intents on meta records. However, if we're in the process of
-			// cleaning up a dangling intent on a meta record by pushing the
-			// transaction, we don't want to create an infinite loop:
-			//
-			// intent! -> push-txn -> range-lookup -> intent! -> etc...
-			//
-			// Instead we want:
-			//
-			// intent! -> push-txn -> range-lookup -> ignore intent, return old/new ranges
-			//
-			// On the range-lookup from a push transaction, we therefore
-			// want to suppress WriteIntentErrors and return a value
-			// anyway. But which value? We don't know whether the range
-			// update succeeded or failed, but if we don't return the
-			// correct range descriptor we may not be able to find the
-			// transaction to push. Since we cannot know the correct answer,
-			// we choose randomly between the pre- and post- transaction
-			// values. If we guess wrong, the client will try again and get
-			// the other value (within a few tries).
-			if rand.Intn(2) == 0 {
-				key, txn := wiErr.Intents[0].Key, &wiErr.Intents[0].Txn
-				val, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
+		// An error here would likely amount to something seriously going
+		// wrong.
+		reply.SetGoError(err)
+		return nil
+	}
+	if args.IgnoreIntents && len(intents) > 0 {
+		// NOTE (subtle): in general, we want to try to clean up dangling
+		// intents on meta records. However, if we're in the process of
+		// cleaning up a dangling intent on a meta record by pushing the
+		// transaction, we don't want to create an infinite loop:
+		//
+		// intent! -> push-txn -> range-lookup -> intent! -> etc...
+		//
+		// Instead we want:
+		//
+		// intent! -> push-txn -> range-lookup -> ignore intent, return old/new ranges
+		//
+		// On the range-lookup from a push transaction, we therefore
+		// want to suppress WriteIntentErrors and return a value
+		// anyway. But which value? We don't know whether the range
+		// update succeeded or failed, but if we don't return the
+		// correct range descriptor we may not be able to find the
+		// transaction to push. Since we cannot know the correct answer,
+		// we choose randomly between the pre- and post- transaction
+		// values. If we guess wrong, the client will try again and get
+		// the other value (within a few tries).
+		if rand.Intn(2) == 0 {
+			key, txn := intents[0].Key, &intents[0].Txn
+			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
+			if err != nil {
 				reply.SetGoError(err)
-				kvs = []proto.KeyValue{{Key: key, Value: *val}}
+				return nil
 			}
-		} else {
-			reply.SetGoError(err)
+			kvs = []proto.KeyValue{{Key: key, Value: *val}}
 		}
-	} else if len(kvs) == 0 {
+	}
+
+	if len(kvs) == 0 {
 		// No matching results were returned from the scan. This could
 		// indicate a very bad system error, but for now we will just
 		// treat it as a retryable Key Mismatch error.
 		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc())
 		reply.SetGoError(err)
 		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
-		return
+		return nil
 	}
 
 	// Decode all scanned range descriptors, stopping if a range is encountered
 	// which does not have the same metadata prefix as the queried key.
 	rds := make([]proto.RangeDescriptor, len(kvs))
 	for i := range kvs {
+		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError, once we
+		// introduce that.
 		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
 			reply.SetGoError(err)
-			return
+			return nil
 		}
 	}
 
 	reply.Ranges = rds
-	return
+	return intents
 }
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat

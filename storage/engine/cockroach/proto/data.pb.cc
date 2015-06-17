@@ -60,6 +60,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* Lease_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   Lease_reflection_ = NULL;
+const ::google::protobuf::Descriptor* Intent_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  Intent_reflection_ = NULL;
 const ::google::protobuf::Descriptor* MVCCMetadata_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   MVCCMetadata_reflection_ = NULL;
@@ -307,7 +310,23 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(Lease),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, _internal_metadata_),
       -1);
-  MVCCMetadata_descriptor_ = file->message_type(13);
+  Intent_descriptor_ = file->message_type(13);
+  static const int Intent_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, key_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, txn_),
+  };
+  Intent_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      Intent_descriptor_,
+      Intent::default_instance_,
+      Intent_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(Intent),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, _internal_metadata_),
+      -1);
+  MVCCMetadata_descriptor_ = file->message_type(14);
   static const int MVCCMetadata_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, timestamp_),
@@ -327,7 +346,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(MVCCMetadata),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, _internal_metadata_),
       -1);
-  GCMetadata_descriptor_ = file->message_type(14);
+  GCMetadata_descriptor_ = file->message_type(15);
   static const int GCMetadata_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, last_scan_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, oldest_intent_nanos_),
@@ -343,7 +362,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       sizeof(GCMetadata),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, _internal_metadata_),
       -1);
-  MVCCStats_descriptor_ = file->message_type(15);
+  MVCCStats_descriptor_ = file->message_type(16);
   static const int MVCCStats_offsets_[13] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, live_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCStats, key_bytes_),
@@ -412,6 +431,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       Lease_descriptor_, &Lease::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      Intent_descriptor_, &Intent::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       MVCCMetadata_descriptor_, &MVCCMetadata::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       GCMetadata_descriptor_, &GCMetadata::default_instance());
@@ -448,6 +469,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto() {
   delete Transaction_reflection_;
   delete Lease::default_instance_;
   delete Lease_reflection_;
+  delete Intent::default_instance_;
+  delete Intent_reflection_;
   delete MVCCMetadata::default_instance_;
   delete MVCCMetadata_reflection_;
   delete GCMetadata::default_instance_;
@@ -517,29 +540,31 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "o.TimestampB\004\310\336\037\000\0224\n\nexpiration\030\002 \001(\0132\032."
     "cockroach.proto.TimestampB\004\310\336\037\000\0226\n\014raft_"
     "node_id\030\003 \001(\004B \310\336\037\000\342\336\037\nRaftNodeID\372\336\037\nRaf"
-    "tNodeID:\004\230\240\037\000\"\336\001\n\014MVCCMetadata\022)\n\003txn\030\001 "
-    "\001(\0132\034.cockroach.proto.Transaction\0223\n\ttim"
-    "estamp\030\002 \001(\0132\032.cockroach.proto.Timestamp"
-    "B\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_byt"
-    "es\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022"
-    "%\n\005value\030\006 \001(\0132\026.cockroach.proto.Value\"H"
-    "\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310"
-    "\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003\"\362\002\n\tMVC"
-    "CStats\022\030\n\nlive_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey_"
-    "bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004\310\336"
-    "\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive_c"
-    "ount\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310\336\037"
-    "\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_cou"
-    "nt\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_age\030\t \001(\003B\004\310\336\037\000"
-    "\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCBytesA"
-    "ge\022\027\n\tsys_bytes\030\014 \001(\003B\004\310\336\037\000\022\027\n\tsys_count"
-    "\030\r \001(\003B\004\310\336\037\000\022\037\n\021last_update_nanos\030\036 \001(\003B"
-    "\004\310\336\037\000*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLIC"
-    "A\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolati"
-    "onType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004"
-    "\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r"
-    "\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005prot"
-    "o\340\342\036\001\310\342\036\001\320\342\036\001", 2973);
+    "tNodeID:\004\230\240\037\000\"O\n\006Intent\022\024\n\003key\030\001 \001(\014B\007\372\336"
+    "\037\003Key\022/\n\003txn\030\002 \001(\0132\034.cockroach.proto.Tra"
+    "nsactionB\004\310\336\037\000\"\336\001\n\014MVCCMetadata\022)\n\003txn\030\001"
+    " \001(\0132\034.cockroach.proto.Transaction\0223\n\tti"
+    "mestamp\030\002 \001(\0132\032.cockroach.proto.Timestam"
+    "pB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_by"
+    "tes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000"
+    "\022%\n\005value\030\006 \001(\0132\026.cockroach.proto.Value\""
+    "H\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001(\003B\004"
+    "\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003\"\362\002\n\tMV"
+    "CCStats\022\030\n\nlive_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey"
+    "_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004\310"
+    "\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive_"
+    "count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310\336"
+    "\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_co"
+    "unt\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_age\030\t \001(\003B\004\310\336\037"
+    "\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCBytes"
+    "Age\022\027\n\tsys_bytes\030\014 \001(\003B\004\310\336\037\000\022\027\n\tsys_coun"
+    "t\030\r \001(\003B\004\310\336\037\000\022\037\n\021last_update_nanos\030\036 \001(\003"
+    "B\004\310\336\037\000*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLI"
+    "CA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolat"
+    "ionType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032"
+    "\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022"
+    "\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005pro"
+    "to\340\342\036\001\310\342\036\001\320\342\036\001", 3054);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -555,6 +580,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   NodeList::default_instance_ = new NodeList();
   Transaction::default_instance_ = new Transaction();
   Lease::default_instance_ = new Lease();
+  Intent::default_instance_ = new Intent();
   MVCCMetadata::default_instance_ = new MVCCMetadata();
   GCMetadata::default_instance_ = new GCMetadata();
   MVCCStats::default_instance_ = new MVCCStats();
@@ -571,6 +597,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   NodeList::default_instance_->InitAsDefaultInstance();
   Transaction::default_instance_->InitAsDefaultInstance();
   Lease::default_instance_->InitAsDefaultInstance();
+  Intent::default_instance_->InitAsDefaultInstance();
   MVCCMetadata::default_instance_->InitAsDefaultInstance();
   GCMetadata::default_instance_->InitAsDefaultInstance();
   MVCCStats::default_instance_->InitAsDefaultInstance();
@@ -6798,6 +6825,391 @@ void Lease::clear_raft_node_id() {
   set_has_raft_node_id();
   raft_node_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.Lease.raft_node_id)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int Intent::kKeyFieldNumber;
+const int Intent::kTxnFieldNumber;
+#endif  // !_MSC_VER
+
+Intent::Intent()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.Intent)
+}
+
+void Intent::InitAsDefaultInstance() {
+  txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
+}
+
+Intent::Intent(const Intent& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.Intent)
+}
+
+void Intent::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  txn_ = NULL;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+Intent::~Intent() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.Intent)
+  SharedDtor();
+}
+
+void Intent::SharedDtor() {
+  key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != default_instance_) {
+    delete txn_;
+  }
+}
+
+void Intent::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* Intent::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return Intent_descriptor_;
+}
+
+const Intent& Intent::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  return *default_instance_;
+}
+
+Intent* Intent::default_instance_ = NULL;
+
+Intent* Intent::New(::google::protobuf::Arena* arena) const {
+  Intent* n = new Intent;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void Intent::Clear() {
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_key()) {
+      key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
+    if (has_txn()) {
+      if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool Intent::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.Intent)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional bytes key = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_key()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_txn;
+        break;
+      }
+
+      // optional .cockroach.proto.Transaction txn = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_txn:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_txn()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.Intent)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.Intent)
+  return false;
+#undef DO_
+}
+
+void Intent::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.Intent)
+  // optional bytes key = 1;
+  if (has_key()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      1, this->key(), output);
+  }
+
+  // optional .cockroach.proto.Transaction txn = 2;
+  if (has_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->txn_, output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.Intent)
+}
+
+::google::protobuf::uint8* Intent::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.Intent)
+  // optional bytes key = 1;
+  if (has_key()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        1, this->key(), target);
+  }
+
+  // optional .cockroach.proto.Transaction txn = 2;
+  if (has_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, *this->txn_, target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.Intent)
+  return target;
+}
+
+int Intent::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & 3) {
+    // optional bytes key = 1;
+    if (has_key()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->key());
+    }
+
+    // optional .cockroach.proto.Transaction txn = 2;
+    if (has_txn()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->txn_);
+    }
+
+  }
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void Intent::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const Intent* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const Intent>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void Intent::MergeFrom(const Intent& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_key()) {
+      set_has_key();
+      key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+    }
+    if (from.has_txn()) {
+      mutable_txn()->::cockroach::proto::Transaction::MergeFrom(from.txn());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void Intent::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void Intent::CopyFrom(const Intent& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool Intent::IsInitialized() const {
+
+  return true;
+}
+
+void Intent::Swap(Intent* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void Intent::InternalSwap(Intent* other) {
+  key_.Swap(&other->key_);
+  std::swap(txn_, other->txn_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata Intent::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = Intent_descriptor_;
+  metadata.reflection = Intent_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// Intent
+
+// optional bytes key = 1;
+bool Intent::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void Intent::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void Intent::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void Intent::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+ const ::std::string& Intent::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Intent.key)
+  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void Intent::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.Intent.key)
+}
+ void Intent::set_key(const char* value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.Intent.key)
+}
+ void Intent::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Intent.key)
+}
+ ::std::string* Intent::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Intent.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* Intent::release_key() {
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void Intent::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Intent.key)
+}
+
+// optional .cockroach.proto.Transaction txn = 2;
+bool Intent::has_txn() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void Intent::set_has_txn() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void Intent::clear_has_txn() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void Intent::clear_txn() {
+  if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
+  clear_has_txn();
+}
+ const ::cockroach::proto::Transaction& Intent::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Intent.txn)
+  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
+}
+ ::cockroach::proto::Transaction* Intent::mutable_txn() {
+  set_has_txn();
+  if (txn_ == NULL) {
+    txn_ = new ::cockroach::proto::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Intent.txn)
+  return txn_;
+}
+ ::cockroach::proto::Transaction* Intent::release_txn() {
+  clear_has_txn();
+  ::cockroach::proto::Transaction* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+ void Intent::set_allocated_txn(::cockroach::proto::Transaction* txn) {
+  delete txn_;
+  txn_ = txn;
+  if (txn) {
+    set_has_txn();
+  } else {
+    clear_has_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Intent.txn)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

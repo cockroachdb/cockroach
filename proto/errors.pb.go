@@ -243,15 +243,15 @@ func (m *TransactionStatusError) GetMsg() string {
 // immediately. If Resolved is false, the client should back off and
 // retry.
 type WriteIntentError struct {
-	Intents          []WriteIntentError_Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
-	Resolved         bool                      `protobuf:"varint,2,opt,name=resolved" json:"resolved"`
-	XXX_unrecognized []byte                    `json:"-"`
+	Intents          []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
+	Resolved         bool     `protobuf:"varint,2,opt,name=resolved" json:"resolved"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *WriteIntentError) Reset()      { *m = WriteIntentError{} }
 func (*WriteIntentError) ProtoMessage() {}
 
-func (m *WriteIntentError) GetIntents() []WriteIntentError_Intent {
+func (m *WriteIntentError) GetIntents() []Intent {
 	if m != nil {
 		return m.Intents
 	}
@@ -263,22 +263,6 @@ func (m *WriteIntentError) GetResolved() bool {
 		return m.Resolved
 	}
 	return false
-}
-
-type WriteIntentError_Intent struct {
-	Key              Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Txn              Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn"`
-	XXX_unrecognized []byte      `json:"-"`
-}
-
-func (m *WriteIntentError_Intent) Reset()      { *m = WriteIntentError_Intent{} }
-func (*WriteIntentError_Intent) ProtoMessage() {}
-
-func (m *WriteIntentError_Intent) GetTxn() Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return Transaction{}
 }
 
 // A WriteTooOldError indicates that a write encountered a versioned
@@ -1241,7 +1225,7 @@ func (m *WriteIntentError) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Intents = append(m.Intents, WriteIntentError_Intent{})
+			m.Intents = append(m.Intents, Intent{})
 			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
@@ -1263,95 +1247,6 @@ func (m *WriteIntentError) Unmarshal(data []byte) error {
 				}
 			}
 			m.Resolved = bool(v != 0)
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-
-	return nil
-}
-func (m *WriteIntentError_Intent) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Key = append([]byte{}, data[index:postIndex]...)
-			index = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Txn.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -2391,21 +2286,6 @@ func (m *WriteIntentError) Size() (n int) {
 	return n
 }
 
-func (m *WriteIntentError_Intent) Size() (n int) {
-	var l int
-	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	l = m.Txn.Size()
-	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *WriteTooOldError) Size() (n int) {
 	var l int
 	_ = l
@@ -2861,41 +2741,6 @@ func (m *WriteIntentError) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
-func (m *WriteIntentError_Intent) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *WriteIntentError_Intent) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Key != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintErrors(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
-	n11, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n11
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
 func (m *WriteTooOldError) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -2914,19 +2759,19 @@ func (m *WriteTooOldError) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
-	n12, err := m.Timestamp.MarshalTo(data[i:])
+	n11, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
+	n12, err := m.ExistingTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n12
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
-	n13, err := m.ExistingTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n13
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -2973,11 +2818,11 @@ func (m *ConditionFailedError) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ActualValue.Size()))
-		n14, err := m.ActualValue.MarshalTo(data[i:])
+		n13, err := m.ActualValue.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n13
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3003,19 +2848,19 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
-	n15, err := m.Requested.MarshalTo(data[i:])
+	n14, err := m.Requested.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
+	n15, err := m.Existing.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n15
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
-	n16, err := m.Existing.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n16
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3041,131 +2886,131 @@ func (m *ErrorDetail) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
-		n17, err := m.NotLeader.MarshalTo(data[i:])
+		n16, err := m.NotLeader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n17
+		i += n16
 	}
 	if m.RangeNotFound != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
-		n18, err := m.RangeNotFound.MarshalTo(data[i:])
+		n17, err := m.RangeNotFound.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n18
+		i += n17
 	}
 	if m.RangeKeyMismatch != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
-		n19, err := m.RangeKeyMismatch.MarshalTo(data[i:])
+		n18, err := m.RangeKeyMismatch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n19
+		i += n18
 	}
 	if m.ReadWithinUncertaintyInterval != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
-		n20, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
+		n19, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n20
+		i += n19
 	}
 	if m.TransactionAborted != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
-		n21, err := m.TransactionAborted.MarshalTo(data[i:])
+		n20, err := m.TransactionAborted.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n21
+		i += n20
 	}
 	if m.TransactionPush != nil {
 		data[i] = 0x32
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
-		n22, err := m.TransactionPush.MarshalTo(data[i:])
+		n21, err := m.TransactionPush.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n22
+		i += n21
 	}
 	if m.TransactionRetry != nil {
 		data[i] = 0x3a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
-		n23, err := m.TransactionRetry.MarshalTo(data[i:])
+		n22, err := m.TransactionRetry.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n23
+		i += n22
 	}
 	if m.TransactionStatus != nil {
 		data[i] = 0x42
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
-		n24, err := m.TransactionStatus.MarshalTo(data[i:])
+		n23, err := m.TransactionStatus.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n24
+		i += n23
 	}
 	if m.WriteIntent != nil {
 		data[i] = 0x4a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
-		n25, err := m.WriteIntent.MarshalTo(data[i:])
+		n24, err := m.WriteIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n25
+		i += n24
 	}
 	if m.WriteTooOld != nil {
 		data[i] = 0x52
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
-		n26, err := m.WriteTooOld.MarshalTo(data[i:])
+		n25, err := m.WriteTooOld.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n26
+		i += n25
 	}
 	if m.OpRequiresTxn != nil {
 		data[i] = 0x5a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
-		n27, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		n26, err := m.OpRequiresTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n27
+		i += n26
 	}
 	if m.ConditionFailed != nil {
 		data[i] = 0x62
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
-		n28, err := m.ConditionFailed.MarshalTo(data[i:])
+		n27, err := m.ConditionFailed.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n28
+		i += n27
 	}
 	if m.LeaseRejected != nil {
 		data[i] = 0x6a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
-		n29, err := m.LeaseRejected.MarshalTo(data[i:])
+		n28, err := m.LeaseRejected.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n28
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3204,11 +3049,11 @@ func (m *Error) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n30, err := m.Detail.MarshalTo(data[i:])
+		n29, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n29
 	}
 	data[i] = 0x20
 	i++

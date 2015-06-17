@@ -129,7 +129,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, err := engine.MVCCScan(store.Engine(), keys.MetaPrefix, keys.MetaMax, 0, proto.MaxTimestamp, true, nil)
+		kvs, _, err := engine.MVCCScan(store.Engine(), keys.MetaPrefix, keys.MetaMax, 0, proto.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -171,6 +171,7 @@ type rangeManager interface {
 	Stopper() *util.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
+	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Range, proto.Request, proto.PushTxnType, bool) error
 
 	// Range manipulation methods.
 	LookupRange(start, end proto.Key) *Range
@@ -595,7 +596,11 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
 			header.Timestamp = r.rm.Clock().Now()
 		}
-		return r.executeCmd(r.rm.Engine(), nil, args, reply)
+		intents, err := r.executeCmd(r.rm.Engine(), nil, args, reply)
+		if err == nil {
+			r.handleSkippedIntents(args, intents)
+		}
+		return err
 	} else if header.ReadConsistency == proto.CONSENSUS {
 		reply.Header().SetGoError(util.Error("consensus reads not implemented"))
 		return reply.Header().GoError()
@@ -613,11 +618,14 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	}
 
 	// Execute read-only command.
-	err := r.executeCmd(r.rm.Engine(), nil, args, reply)
+	intents, err := r.executeCmd(r.rm.Engine(), nil, args, reply)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.endCmd(cmdKey, args, err, true /* readOnly */)
 
+	if err == nil {
+		r.handleSkippedIntents(args, intents)
+	}
 	return err
 }
 
@@ -837,7 +845,7 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 	ms := proto.MVCCStats{}
 
 	// Execute the command; the error will also be set in the reply header.
-	err := r.executeCmd(batch, &ms, args, reply)
+	intents, err := r.executeCmd(batch, &ms, args, reply)
 
 	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
 		log.Fatalc(ctx, "applied index moved backwards: %d >= %d", oldIndex, index)
@@ -889,7 +897,16 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 		}
 	}
 
-	return reply.Header().GoError()
+	if err := reply.Header().GoError(); err != nil {
+		return err
+	}
+
+	// Only resolve skipped intents asynchronously on one of the replicas.
+	if originNodeID == r.rm.RaftNodeID() && err == nil {
+		r.handleSkippedIntents(args, intents)
+	}
+
+	return nil
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
@@ -1000,11 +1017,30 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 	}
 }
 
+func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent) {
+	ctx := r.context()
+	if len(intents) == 0 {
+		return
+	}
+	if stopper := r.rm.Stopper(); stopper.StartTask() {
+		go func() {
+			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
+				Intents: intents,
+			}, r, args, proto.CLEANUP_TXN, true /* wait */)
+			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
+				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
+			}
+			stopper.FinishTask()
+		}()
+	}
+}
+
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
 // configuration maps include accounting, permissions, and zones.
 func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, []byte, error) {
-	kvs, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true, nil)
+	// TODO(tschottdorf): Currently this does not handle intents well.
+	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return nil, nil, err
 	}

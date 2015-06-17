@@ -260,6 +260,12 @@ message Lease {
       (gogoproto.customname) = "RaftNodeID", (gogoproto.casttype) = "RaftNodeID"];
 }
 
+// Intent groups a key and a transaction.
+message Intent {
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  optional Transaction txn = 2 [(gogoproto.nullable) = false];
+}
+
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
   optional Transaction txn = 1;

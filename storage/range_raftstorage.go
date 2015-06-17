@@ -89,7 +89,7 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 		return maxBytes > 0 && size > maxBytes, nil
 	}
 
-	err := engine.MVCCIterate(r.rm.Engine(),
+	_, err := engine.MVCCIterate(r.rm.Engine(),
 		keys.RaftLogKey(r.Desc().RaftID, lo),
 		keys.RaftLogKey(r.Desc().RaftID, hi),
 		proto.ZeroTimestamp, true /* consistent */, nil /* txn */, scanFunc)
@@ -175,7 +175,7 @@ func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 	} else {
 		appliedIndex = 0
 	}
-	v, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.Desc().RaftID),
+	v, _, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
@@ -198,9 +198,9 @@ func setAppliedIndex(eng engine.Engine, raftID proto.RaftID, appliedIndex uint64
 // loadLastIndex retrieves the last index from storage.
 func (r *Range) loadLastIndex() (uint64, error) {
 	lastIndex := uint64(0)
-	v, err := engine.MVCCGet(r.rm.Engine(),
+	v, _, err := engine.MVCCGet(r.rm.Engine(),
 		keys.RaftLastIndexKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, true, nil)
+		proto.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -342,7 +342,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	// First, save the HardState.  The HardState must not be changed
 	// because it may record a previous vote cast by this node.
 	hardStateKey := keys.RaftHardStateKey(r.Desc().RaftID)
-	hardState, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true, nil)
+	hardState, _, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return err
 	}
