@@ -787,109 +787,6 @@ clients will be high. Clients may end up with stale cache entries. If on a
 lookup, the range consulted does not match the client’s expectations, the
 client evicts the stale entries and possibly does a new lookup.
 
-# Range-Spanning Binary Tree
-
-A crucial enhancement to the organization of range metadata is to
-augment the bi-level range metadata lookup with a minimum spanning tree,
-implemented as a left-leaning red-black tree over all ranges in the map.
-This tree structure allows the system to start at any key prefix and
-efficiently traverse an arbitrary key range with minimal RPC traffic,
-minimal fan-in and fan-out, and with bounded time complexity equal to
-`2*log N` steps, where `N` is the total number of ranges in the system.
-
-Unlike the range metadata rows prefixed with `\0\0meta[1|2]`, the
-metadata for the range-spanning tree (e.g. parent range and left / right
-child ranges) is stored directly at the ranges as non-map metadata. The
-metadata for each node of the tree (e.g. links to parent range, left
-child range, and right child range) is stored with the range metadata.
-In effect, the tree metadata is stored implicitly. In order to traverse
-the tree, for example, you’d need to query each range in turn for its
-metadata.
-
-Any time a range is split or merged, both the bi-level range lookup
-metadata and the per-range binary tree metadata are updated as part of
-the same distributed transaction. The total number of nodes involved in
-the update is bounded by 2 + log N (i.e. 2 updates for meta1 and
-meta2, and up to log N updates to balance the range-spanning tree).
-The range corresponding to the root node of the tree is stored in
-*\0tree_root*.
-
-As an example, consider the following set of nine ranges and their
-associated range-spanning tree:
-
-R0: `aa - cc`, R1: `*cc - lll`, R2: `*lll - llr`, R3: `*llr - nn`, R4: `*nn - rr`, R5: `*rr - ssss`, R6: `*ssss - sst`, R7: `*sst - vvv`, R8: `*vvv - zzzz`.
-
-![Range Tree](media/rangetree.png)
-
-The range-spanning tree has many beneficial uses in Cockroach. It makes
-the problem of efficiently aggregating accounting information of
-potentially vast ranges of data tractable. Imagine a subrange of data
-over which accounting is being kept. For example, the *photos* table in
-a public photo sharing site. To efficiently keep track of data about the
-table (e.g. total size, number of rows, etc.), messages can be passed
-first up the tree and then down to the left until updates arrive at the
-key prefix under which accounting is aggregated. This makes worst case
-number of hops for an update to propagate into the accounting totals
-2 \* log N. A 64T database will require 1M ranges, meaning 40 hops
-worst case. In our experience, accounting tasks over vast ranges of data
-are most often map/reduce jobs scheduled with coarse-grained
-periodicity. By contrast, we expect Cockroach to maintain statistics
-with sub 10s accuracy and with minimal cycles and minimal IOPs.
-
-Another use for the range-spanning tree is to push accounting, zones and
-permissions configurations to all ranges. In the case of zones and
-permissions, this is an efficient way to pass updated configuration
-information with exponential fan-out. When adding accounting
-configurations (i.e. specifying a new key prefix to track), the
-implicated ranges are transactionally scanned and zero-state accounting
-information is computed as well. Deleting accounting configurations is
-similar, except accounting records are deleted.
-
-Last but *not* least, the range-spanning tree provides a convenient
-mechanism for planning and executing parallel queries. These provide the
-basis for
-[Dremel](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36632.pdf)-like
-query execution trees and it’s easy to imagine supporting a subset of
-SQL or even javascript-based user functions for complex data analysis
-tasks.
-
-# Raft - Consistency of Range Replicas
-
-Each range is configured to consist of three or more replicas. The
-replicas in a range maintain their own instance of a distributed
-consensus algorithm. We use the [*Raft consensus
-algorithm*](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf)
-as it is simpler to reason about and includes a reference implementation
-covering important details. Every write to replicas is logged twice.
-Once to RocksDB’s internal log and once to levedb itself as part of the
-Raft consensus log.
-[ePaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) has
-promising performance characteristics for WAN-distributed replicas, but
-it does not guarantee a consistent ordering between replicas.
-
-Raft elects a relatively long-lived leader which must be involved to
-propose writes. It heartbeats followers periodically to keep their logs
-replicated. In the absence of heartbeats, followers become candidates
-after randomized election timeouts and proceed to hold new leader
-elections. Cockroach weights random timeouts such that the replicas with
-shorter round trip times to peers are more likely to hold elections
-first. Although only the leader can propose a new write, and as such
-must be involved in any write to the consensus log, any replica can
-service reads if the read is for a timestamp which the replica knows is
-safe based on the last committed consensus write and the state of any
-pending transactions.
-
-Only the leader can propose a new write, but Cockroach accepts writes at
-any replica. The replica merely forwards the write to the leader.
-Instead of resending the write, the leader has only to acknowledge the
-write to the forwarding replica using a log sequence number, as though
-it were proposing it in the first place. The other replicas receive the
-full write as though the leader were the originator.
-
-Having a stable leader provides the choice of replica to handle
-range-specific maintenance and processing tasks, such as delivering
-pending message queues, handling splits and merges, rebalancing, etc.
-
 # Splitting / Merging Ranges
 
 RoachNodes split or merge ranges based on whether they exceed maximum or
@@ -966,6 +863,43 @@ of the worst in the cluster based on gossipped load stats. A node with
 spare capacity is chosen in the same datacenter and a special-case split
 is done which simply duplicates the data 1:1 and resets the range
 configuration metadata.
+
+# Raft - Consistency of Range Replicas
+
+Each range is configured to consist of three or more replicas. The
+replicas in a range maintain their own instance of a distributed
+consensus algorithm. We use the [*Raft consensus
+algorithm*](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf)
+as it is simpler to reason about and includes a reference implementation
+covering important details. Every write to replicas is logged twice.
+Once to RocksDB’s internal log and once to levedb itself as part of the
+Raft consensus log.
+[ePaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) has
+promising performance characteristics for WAN-distributed replicas, but
+it does not guarantee a consistent ordering between replicas.
+
+Raft elects a relatively long-lived leader which must be involved to
+propose writes. It heartbeats followers periodically to keep their logs
+replicated. In the absence of heartbeats, followers become candidates
+after randomized election timeouts and proceed to hold new leader
+elections. Cockroach weights random timeouts such that the replicas with
+shorter round trip times to peers are more likely to hold elections
+first. Although only the leader can propose a new write, and as such
+must be involved in any write to the consensus log, any replica can
+service reads if the read is for a timestamp which the replica knows is
+safe based on the last committed consensus write and the state of any
+pending transactions.
+
+Only the leader can propose a new write, but Cockroach accepts writes at
+any replica. The replica merely forwards the write to the leader.
+Instead of resending the write, the leader has only to acknowledge the
+write to the forwarding replica using a log sequence number, as though
+it were proposing it in the first place. The other replicas receive the
+full write as though the leader were the originator.
+
+Having a stable leader provides the choice of replica to handle
+range-specific maintenance and processing tasks, such as delivering
+pending message queues, handling splits and merges, rebalancing, etc.
 
 # Message Queues
 
@@ -1044,6 +978,74 @@ and a delay could cause insertion of messages at arbitrary points in the
 inbox queue. If clients require persistence, they should re-save read
 messages manually; the ReapQueue operation can be incorporated into
 normal transactional updates.
+
+# Range-Spanning Binary Tree
+
+A crucial enhancement to the organization of range metadata is to
+augment the bi-level range metadata lookup with a minimum spanning tree,
+implemented as a left-leaning red-black tree over all ranges in the map.
+This tree structure allows the system to start at any key prefix and
+efficiently traverse an arbitrary key range with minimal RPC traffic,
+minimal fan-in and fan-out, and with bounded time complexity equal to
+`2*log N` steps, where `N` is the total number of ranges in the system.
+
+Unlike the range metadata rows prefixed with `\0\0meta[1|2]`, the
+metadata for the range-spanning tree (e.g. parent range and left / right
+child ranges) is stored directly at the ranges as non-map metadata. The
+metadata for each node of the tree (e.g. links to parent range, left
+child range, and right child range) is stored with the range metadata.
+In effect, the tree metadata is stored implicitly. In order to traverse
+the tree, for example, you’d need to query each range in turn for its
+metadata.
+
+Any time a range is split or merged, both the bi-level range lookup
+metadata and the per-range binary tree metadata are updated as part of
+the same distributed transaction. The total number of nodes involved in
+the update is bounded by 2 + log N (i.e. 2 updates for meta1 and
+meta2, and up to log N updates to balance the range-spanning tree).
+The range corresponding to the root node of the tree is stored in
+*\0tree_root*.
+
+As an example, consider the following set of nine ranges and their
+associated range-spanning tree:
+
+R0: `aa - cc`, R1: `*cc - lll`, R2: `*lll - llr`, R3: `*llr - nn`, R4: `*nn - rr`, R5: `*rr - ssss`, R6: `*ssss - sst`, R7: `*sst - vvv`, R8: `*vvv - zzzz`.
+
+![Range Tree](media/rangetree.png)
+
+The range-spanning tree has many beneficial uses in Cockroach. It makes
+the problem of efficiently aggregating accounting information of
+potentially vast ranges of data tractable. Imagine a subrange of data
+over which accounting is being kept. For example, the *photos* table in
+a public photo sharing site. To efficiently keep track of data about the
+table (e.g. total size, number of rows, etc.), messages can be passed
+first up the tree and then down to the left until updates arrive at the
+key prefix under which accounting is aggregated. This makes worst case
+number of hops for an update to propagate into the accounting totals
+2 \* log N. A 64T database will require 1M ranges, meaning 40 hops
+worst case. In our experience, accounting tasks over vast ranges of data
+are most often map/reduce jobs scheduled with coarse-grained
+periodicity. By contrast, we expect Cockroach to maintain statistics
+with sub 10s accuracy and with minimal cycles and minimal IOPs.
+
+Another use for the range-spanning tree is to push accounting, zones and
+permissions configurations to all ranges. In the case of zones and
+permissions, this is an efficient way to pass updated configuration
+information with exponential fan-out. When adding accounting
+configurations (i.e. specifying a new key prefix to track), the
+implicated ranges are transactionally scanned and zero-state accounting
+information is computed as well. Deleting accounting configurations is
+similar, except accounting records are deleted.
+
+Last but *not* least, the range-spanning tree provides a convenient
+mechanism for planning and executing parallel queries. These provide the
+basis for
+[Dremel](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36632.pdf)-like
+query execution trees and it’s easy to imagine supporting a subset of
+SQL or even javascript-based user functions for complex data analysis
+tasks.
+
+
 
 # Node Allocation (via Gossip)
 
