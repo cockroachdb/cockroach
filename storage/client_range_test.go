@@ -57,7 +57,8 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 	incArgs.Timestamp = clocks[0].Now()
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
+	mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp})
+	if err := incResp.GoError(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,7 +107,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	// First do a write. The first write will advance the clock by MaxOffset
 	// because of the read cache's low water mark.
 	getArgs, getResp := putArgs([]byte("b"), []byte("b"), 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
+	mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp})
+	if err := getResp.GoError(); err != nil {
 		t.Fatal(err)
 	}
 	if now := clock.Now(); now.WallTime != int64(maxOffset) {
@@ -123,7 +125,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	for i := int64(0); i < 3; i++ {
 		incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 		incArgs.Timestamp.WallTime = startTime + ((i+1)*30)*int64(time.Millisecond)
-		if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
+		mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp})
+		if err := incResp.GoError(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -134,7 +137,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs, incResp := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
 	incArgs.Timestamp.WallTime = int64((time.Duration(startTime) + maxOffset + 1) * time.Millisecond)
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err == nil {
+	mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp})
+	if err := incResp.GoError(); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 

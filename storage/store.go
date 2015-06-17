@@ -1198,97 +1198,102 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
-	args, reply := call.Args, call.Reply
+func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) {
 	ctx = s.Context(ctx)
-	// If the request has a zero timestamp, initialize to this node's clock.
-	header := args.Header()
-	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(call.Args)); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+	args, reply := call.Args, call.Reply
+	argsHeader, replyHeader := args.Header(), reply.Header()
+
+	if err := verifyKeys(argsHeader.Key, argsHeader.EndKey, proto.IsRange(call.Args)); err != nil {
+		replyHeader.SetGoError(err)
+		return
 	}
-	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
+
+	if !argsHeader.Timestamp.Equal(proto.ZeroTimestamp) {
 		if s.Clock().MaxOffset() > 0 {
 			// Once a command is submitted to raft, all replicas' logical
 			// clocks will be ratcheted forward to match. If the command
 			// appears to come from a node with a bad clock, reject it now
 			// before we reach that point.
-			offset := time.Duration(header.Timestamp.WallTime - s.Clock().PhysicalNow())
+			offset := time.Duration(argsHeader.Timestamp.WallTime - s.Clock().PhysicalNow())
 			if offset > s.Clock().MaxOffset() {
-				err := util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
-					header.Timestamp.WallTime, offset)
-				reply.Header().SetGoError(err)
-				return err
+				replyHeader.SetGoError(
+					util.Errorf(
+						"Rejecting command with timestamp in the future: %d (%s ahead)",
+						argsHeader.Timestamp.WallTime,
+						offset,
+					),
+				)
+				return
 			}
 		}
 		// Update our clock with the incoming request timestamp. This
 		// advances the local node's clock to a high water mark from
 		// amongst all nodes with which it has interacted.
-		s.ctx.Clock.Update(header.Timestamp)
+		s.ctx.Clock.Update(argsHeader.Timestamp)
 	}
 
 	// Backoff and retry loop for handling errors.
 	retryOpts := *s.ctx.RangeRetryOptions
 	retryOpts.Tag = fmt.Sprintf("store: %s", args.Method())
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		// Add the command to the range for execution; exit retry loop on success.
 		reply.Reset()
 
 		// Get range and add command to the range for execution.
-		rng, err := s.GetRange(header.RaftID)
+		rng, err := s.GetRange(argsHeader.RaftID)
 		if err != nil {
-			reply.Header().SetGoError(err)
 			return retry.Break, err
 		}
 
-		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}, true); err == nil {
-			return retry.Break, err
-		}
-
-		// Maybe resolve a potential write intent error. We do this here
-		// because this is the code path with the requesting client
-		// waiting. We don't want every replica to attempt to resolve the
-		// intent independently, so we can't do it in Range.executeCmd.
-		if wiErr, ok := err.(*proto.WriteIntentError); ok {
-			pushType := proto.PUSH_TIMESTAMP
-			if proto.IsWrite(args) {
-				pushType = proto.ABORT_TXN
-			}
-			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType, false /* wait */)
-			reply.Header().SetGoError(err)
-		}
-
-		switch t := err.(type) {
-		case *proto.WriteTooOldError:
-			// Update request timestamp and retry immediately.
-			header.Timestamp = t.ExistingTimestamp.Next()
-			return retry.Reset, err
-		case *proto.WriteIntentError:
-			// If write intent error is resolved, exit retry/backoff loop to
-			// immediately retry.
-			if t.Resolved {
-				return retry.Reset, err
-			}
-
-			// Otherwise, update timestamp on read/write and backoff / retry.
-			for _, intent := range t.Intents {
-				if proto.IsWrite(args) && header.Timestamp.Less(intent.Txn.Timestamp) {
-					header.Timestamp = intent.Txn.Timestamp.Next()
+		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}, true); err != nil {
+			// Maybe resolve a potential write intent error. We do this here
+			// because this is the code path with the requesting client
+			// waiting. We don't want every replica to attempt to resolve the
+			// intent independently, so we can't do it in Range.executeCmd.
+			if wiErr, ok := err.(*proto.WriteIntentError); ok {
+				var pushType proto.PushTxnType
+				if proto.IsWrite(args) {
+					pushType = proto.ABORT_TXN
+				} else {
+					pushType = proto.PUSH_TIMESTAMP
 				}
+				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType, false /* wait */)
 			}
-			return retry.Continue, err
+
+			switch t := err.(type) {
+			case *proto.WriteTooOldError:
+				// Update request timestamp and retry immediately.
+				argsHeader.Timestamp = t.ExistingTimestamp.Next()
+				return retry.Reset, err
+			case *proto.WriteIntentError:
+				// If write intent error is resolved, exit retry/backoff loop to
+				// immediately retry.
+				if t.Resolved {
+					return retry.Reset, err
+				}
+
+				// Otherwise, update timestamp on read/write and backoff / retry.
+				for _, intent := range t.Intents {
+					if proto.IsWrite(args) && argsHeader.Timestamp.Less(intent.Txn.Timestamp) {
+						argsHeader.Timestamp = intent.Txn.Timestamp.Next()
+					}
+				}
+				return retry.Continue, err
+			default:
+				return retry.Break, err
+			}
 		}
-		return retry.Break, err
-	})
+		return retry.Break, nil
+	}); err != nil {
+		replyHeader.SetGoError(err)
+	}
 
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
-	if _, ok := err.(*retry.MaxAttemptsError); ok && header.Txn != nil {
-		reply.Header().SetGoError(proto.NewTransactionRetryError(header.Txn))
+	if _, ok := replyHeader.GoError().(*retry.MaxAttemptsError); ok && argsHeader.Txn != nil {
+		replyHeader.SetGoError(proto.NewTransactionRetryError(argsHeader.Txn))
 	}
-
-	return reply.Header().GoError()
 }
 
 // resolveWriteIntentError tries to push the conflicting transaction:
