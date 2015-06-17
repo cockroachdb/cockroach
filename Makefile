@@ -36,6 +36,7 @@ PKG          := ./...
 TAGS         :=
 TESTS        := ".*"
 TESTTIMEOUT  := 15s
+CPUS         := 1
 RACETIMEOUT  := 5m
 BENCHTIMEOUT := 5m
 TESTFLAGS    :=
@@ -80,7 +81,7 @@ install:
 .PHONY: test
 test:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -cpu $(CPUS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -89,11 +90,17 @@ test:
 .PHONY: testrace
 testrace:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) $(PKG) -timeout $(RACETIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) -cpu $(CPUS) $(PKG) -timeout $(RACETIMEOUT) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -cpu $(CPUS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+
+.PHONY: coverage
+coverage:
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) -cpu $(CPUS) $(PKG) $(TESTFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image which comes without the build environment. See ./build/deploy
@@ -103,10 +110,6 @@ testbuild:
 	for p in $(shell $(GO) list $(PKG)); do \
 	  $(GO) test -tags '$(TAGS)' $(GOFLAGS) -c -i $$p || exit $?; \
 	done
-
-.PHONY: coverage
-coverage: build
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 .PHONY: acceptance
 acceptance:
