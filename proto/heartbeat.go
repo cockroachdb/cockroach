@@ -33,3 +33,10 @@ func (r RemoteOffset) String() string {
 	t := time.Unix(r.MeasuredAt/1E9, 0).UTC()
 	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Uncertainty)/1E9, t)
 }
+
+// GetUser implements UserRequest.
+// Heartbeat messages are always sent by the node user.
+func (m *PingRequest) GetUser() string {
+	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
+	return "node"
+}

@@ -112,7 +112,7 @@ func listenAndServeArithAndEchoService(network, addr string) (net.Addr, error) {
 				log.Infof("clients.Accept(): %v\n", err)
 				continue
 			}
-			go srv.ServeCodec(NewServerCodec(conn))
+			go srv.ServeCodec(NewServerCodec(conn, true /* insecure */, "test"))
 		}
 	}()
 	return clients.Addr(), nil
@@ -122,6 +122,8 @@ func testArithClient(t *testing.T, client *rpc.Client) {
 	var args message.ArithRequest
 	var reply message.ArithResponse
 	var err error
+	// We need a user to implement proto.RequestWithUser.
+	args.User = "test"
 
 	// Add
 	args.A = 1
@@ -178,31 +180,31 @@ func testArithClientAsync(t *testing.T, client *rpc.Client) {
 	}{
 		{
 			"ArithService.Add",
-			&message.ArithRequest{A: 1, B: 2},
+			&message.ArithRequest{User: "test", A: 1, B: 2},
 			&message.ArithResponse{C: 3},
 			nil,
 		},
 		{
 			"ArithService.Mul",
-			&message.ArithRequest{A: 2, B: 3},
+			&message.ArithRequest{User: "test", A: 2, B: 3},
 			&message.ArithResponse{C: 6},
 			nil,
 		},
 		{
 			"ArithService.Div",
-			&message.ArithRequest{A: 13, B: 5},
+			&message.ArithRequest{User: "test", A: 13, B: 5},
 			&message.ArithResponse{C: 2},
 			nil,
 		},
 		{
 			"ArithService.Div",
-			&message.ArithRequest{A: 1, B: 0},
+			&message.ArithRequest{User: "test", A: 1, B: 0},
 			&message.ArithResponse{},
 			errors.New("divide by zero"),
 		},
 		{
 			"ArithService.Error",
-			&message.ArithRequest{A: 1, B: 2},
+			&message.ArithRequest{User: "test", A: 1, B: 2},
 			&message.ArithResponse{},
 			errors.New("ArithError"),
 		},
@@ -249,6 +251,7 @@ func testEchoClient(t *testing.T, client *rpc.Client) {
 	var err error
 
 	// EchoService.Echo
+	args.User = "test"
 	args.Msg = "Hello, Protobuf-RPC"
 	if err = client.Call("EchoService.Echo", &args, &reply); err != nil {
 		t.Fatalf(`EchoService.Echo: %v`, err)
@@ -260,7 +263,7 @@ func testEchoClient(t *testing.T, client *rpc.Client) {
 
 func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 	// EchoService.Echo
-	args := &message.EchoRequest{Msg: "Hello, Protobuf-RPC"}
+	args := &message.EchoRequest{User: "test", Msg: "Hello, Protobuf-RPC"}
 	reply := &message.EchoResponse{}
 	echoCall := client.Go("EchoService.Echo", args, reply, nil)
 
@@ -386,7 +389,7 @@ func benchmarkEchoProtoRPC(b *testing.B, size int) {
 	if *startEchoServer {
 		l, err := listenAndServeEchoService("tcp", *echoAddr,
 			func(srv *rpc.Server, conn io.ReadWriteCloser) {
-				go srv.ServeCodec(NewServerCodec(conn))
+				go srv.ServeCodec(NewServerCodec(conn, true /* insecure */, "test"))
 			})
 		if err != nil {
 			b.Fatal("could not start server")

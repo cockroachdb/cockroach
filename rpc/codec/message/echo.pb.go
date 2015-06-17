@@ -18,13 +18,21 @@ var _ = proto.Marshal
 var _ = math.Inf
 
 type EchoRequest struct {
-	Msg              string `protobuf:"bytes,1,opt,name=msg" json:"msg"`
+	User             string `protobuf:"bytes,1,opt,name=user" json:"user"`
+	Msg              string `protobuf:"bytes,2,opt,name=msg" json:"msg"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *EchoRequest) Reset()         { *m = EchoRequest{} }
 func (m *EchoRequest) String() string { return proto.CompactTextString(m) }
 func (*EchoRequest) ProtoMessage()    {}
+
+func (m *EchoRequest) GetUser() string {
+	if m != nil {
+		return m.User
+	}
+	return ""
+}
 
 func (m *EchoRequest) GetMsg() string {
 	if m != nil {
@@ -71,6 +79,28 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 		wireType := int(wire & 0x7)
 		switch fieldNum {
 		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.User = string(data[index:postIndex])
+			index = postIndex
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Msg", wireType)
 			}
@@ -184,6 +214,8 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 func (m *EchoRequest) Size() (n int) {
 	var l int
 	_ = l
+	l = len(m.User)
+	n += 1 + l + sovEcho(uint64(l))
 	l = len(m.Msg)
 	n += 1 + l + sovEcho(uint64(l))
 	if m.XXX_unrecognized != nil {
@@ -232,6 +264,10 @@ func (m *EchoRequest) MarshalTo(data []byte) (n int, err error) {
 	var l int
 	_ = l
 	data[i] = 0xa
+	i++
+	i = encodeVarintEcho(data, i, uint64(len(m.User)))
+	i += copy(data[i:], m.User)
+	data[i] = 0x12
 	i++
 	i = encodeVarintEcho(data, i, uint64(len(m.Msg)))
 	i += copy(data[i:], m.Msg)

@@ -52,7 +52,7 @@ func TestSendToOneClient(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	replies, err := sendPing(opts, []net.Addr{s.Addr()}, clientTestBaseContext)
+	replies, err := sendPing(opts, []net.Addr{s.Addr()}, serverTestBaseContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestSendToMultipleClients(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         1 * time.Second,
 		}
-		replies, err := sendPing(opts, addrs, clientTestBaseContext)
+		replies, err := sendPing(opts, addrs, serverTestBaseContext)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestRetryableError(t *testing.T) {
 	defer s.Close()
 
 	// Wait until the server becomes ready and shut down the server.
-	c := NewClient(s.Addr(), nil, clientTestBaseContext)
+	c := NewClient(s.Addr(), nil, serverTestBaseContext)
 	<-c.Ready
 	// Directly call Close() to close the connection without
 	// removing the client from the cache.
@@ -109,7 +109,7 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientTestBaseContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, serverTestBaseContext); err != nil {
 		retryErr, ok := err.(util.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -141,7 +141,7 @@ func TestUnretryableError(t *testing.T) {
 	getReply := func() interface{} {
 		return 0
 	}
-	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, clientTestBaseContext)
+	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, serverTestBaseContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
