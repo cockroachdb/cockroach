@@ -810,11 +810,9 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected pushee to be aborted; got %s", txn.Status)
 			}
 		} else {
-			rErr, ok := err.(*proto.TransactionPushError)
-			if !ok {
+			if rErr, ok := err.(*proto.TransactionPushError); !ok {
 				t.Errorf("expected txn push error; got %s", err)
-			}
-			if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
+			} else if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.
