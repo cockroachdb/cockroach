@@ -25,11 +25,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // TestUpdateOffset tests the three cases that UpdateOffset should or should
 // not update the offset for an addr.
 func TestUpdateOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	monitor := newRemoteClockMonitor(hlc.NewClock(hlc.UnixNano))
 
 	// Case 1: There is no prior offset for the address.
@@ -71,6 +73,7 @@ func TestUpdateOffset(t *testing.T) {
 
 // TestEndpointListSort tests the sort interface for endpointLists.
 func TestEndpointListSort(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	list := endpointList{
 		endpoint{offset: 5, endType: +1},
 		endpoint{offset: 3, endType: -1},
@@ -104,6 +107,7 @@ func TestEndpointListSort(t *testing.T) {
 // TestBuildEndpointList tests that the map of RemoteOffsets is correctly
 // manipulated into a list of endpoints used in Marzullo's algorithm.
 func TestBuildEndpointList(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Build the offsets we will turn into an endpoint list.
 	offsets := map[string]proto.RemoteOffset{
 		"0": {Offset: 0, Uncertainty: 10},
@@ -149,6 +153,7 @@ func TestBuildEndpointList(t *testing.T) {
 // TestBuildEndpointListRemoveStagnantClocks tests the side effect of removing
 // older offsets when we build an endpoint list.
 func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	offsets := map[string]proto.RemoteOffset{
 		"0":         {Offset: 0, Uncertainty: 10, MeasuredAt: 11},
 		"stagnant0": {Offset: 1, Uncertainty: 10, MeasuredAt: 0},
@@ -181,6 +186,7 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 // TestFindOffsetInterval tests that we correctly determine the interval that
 // a majority of remote offsets overlap.
 func TestFindOffsetInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
 	offsets := map[string]proto.RemoteOffset{
@@ -204,6 +210,7 @@ func TestFindOffsetInterval(t *testing.T) {
 // TestFindOffsetIntervalNoMajorityOverlap tests that, if a majority of offsets
 // do not overlap, an error is returned.
 func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
 	offsets := map[string]proto.RemoteOffset{
@@ -226,6 +233,7 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 // TestFindOffsetIntervalNoRemotes tests that we measure 0 offset if there are
 // no recent remote clock readings.
 func TestFindOffsetIntervalNoRemotes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	offsets := map[string]proto.RemoteOffset{}
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -241,6 +249,7 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 // TestFindOffsetIntervalOneClock tests that we return the entire remote offset
 // of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	offsets := map[string]proto.RemoteOffset{
 		"0": {Offset: 0, Uncertainty: 10},
 	}
@@ -260,6 +269,7 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 
 // TestFindOffsetIntervalTwoClocks tests the edge case of two remote clocks.
 func TestFindOffsetIntervalTwoClocks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	offsets := map[string]proto.RemoteOffset{}
 
 	manual := hlc.NewManualClock(0)
@@ -286,6 +296,7 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 // bigger than the max offset (e.g., a case where heartbeat messages
 // to the node are having high latency).
 func TestFindOffsetWithLargeError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	maxOffset := 100 * time.Nanosecond
 
 	manual := hlc.NewManualClock(0)
@@ -318,6 +329,7 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 // a ClusterOffsetInterval is healthy or not i.e. if it indicates that the
 // local clock has too great an offset or not.
 func TestIsHealthyOffsetInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	maxOffset := 10 * time.Nanosecond
 
 	interval := ClusterOffsetInterval{

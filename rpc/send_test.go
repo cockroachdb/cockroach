@@ -26,9 +26,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
+	defer leaktest.AfterTest(t)
 
 	// The provided addrs is nil, so its length will be always
 	// less than the specified response number
@@ -43,8 +45,14 @@ func TestInvalidAddrLength(t *testing.T) {
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
-	s := createAndStartNewServer(t)
-	defer s.Close()
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	ServerContext := NewServerTestContext(nil, stopper)
+	s := createAndStartNewServer(t, ServerContext)
 
 	opts := Options{
 		N:               1,
@@ -52,7 +60,7 @@ func TestSendToOneClient(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	replies, err := sendPing(opts, []net.Addr{s.Addr()}, clientTestBaseContext)
+	replies, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,11 +72,18 @@ func TestSendToOneClient(t *testing.T) {
 // TestSendToMultipleClients verifies that Send correctly sends
 // multiple requests to multiple server using the heartbeat RPC.
 func TestSendToMultipleClients(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	serverContext := NewServerTestContext(nil, stopper)
+
 	numServers := 4
 	var addrs []net.Addr
 	for i := 0; i < numServers; i++ {
-		s := createAndStartNewServer(t)
-		defer s.Close()
+		s := createAndStartNewServer(t, serverContext)
 		addrs = append(addrs, s.Addr())
 	}
 	for n := 1; n < numServers; n++ {
@@ -79,7 +94,7 @@ func TestSendToMultipleClients(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         1 * time.Second,
 		}
-		replies, err := sendPing(opts, addrs, clientTestBaseContext)
+		replies, err := sendPing(opts, addrs, clientContext)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,11 +107,17 @@ func TestSendToMultipleClients(t *testing.T) {
 // TestRetryableError verifies that Send returns a retryable error
 // when it hits an RPC error.
 func TestRetryableError(t *testing.T) {
-	s := createAndStartNewServer(t)
-	defer s.Close()
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	serverContext := NewServerTestContext(nil, stopper)
+	s := createAndStartNewServer(t, serverContext)
 
 	// Wait until the server becomes ready and shut down the server.
-	c := NewClient(s.Addr(), nil, clientTestBaseContext)
+	c := NewClient(s.Addr(), nil, clientContext)
 	<-c.Ready
 	// Directly call Close() to close the connection without
 	// removing the client from the cache.
@@ -109,7 +130,7 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientTestBaseContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext); err != nil {
 		retryErr, ok := err.(util.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -125,7 +146,14 @@ func TestRetryableError(t *testing.T) {
 // TestUnretryableError verifies that Send returns an unretryable
 // error when it hits a critical error.
 func TestUnretryableError(t *testing.T) {
-	s := createAndStartNewServer(t)
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	serverContext := NewServerTestContext(nil, stopper)
+	s := createAndStartNewServer(t, serverContext)
 
 	opts := Options{
 		N:               1,
@@ -141,7 +169,7 @@ func TestUnretryableError(t *testing.T) {
 	getReply := func() interface{} {
 		return 0
 	}
-	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, clientTestBaseContext)
+	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, clientContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -164,12 +192,20 @@ func (h *Heartbeat) Ping(args *proto.PingRequest, reply *proto.PingResponse) err
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	serverContext := NewServerTestContext(nil, stopper)
+
 	addr := util.CreateTestAddr("tcp")
 
 	// Construct a server that listens but doesn't do anything.
 	s := &Server{
 		Server:  rpc.NewServer(),
-		context: serverTestBaseContext,
+		context: serverContext,
 		addr:    addr,
 	}
 	if err := s.Register(&Heartbeat{}); err != nil {
@@ -178,7 +214,6 @@ func TestClientNotReady(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
 
 	opts := Options{
 		N:               1,
@@ -188,7 +223,7 @@ func TestClientNotReady(t *testing.T) {
 	}
 
 	// Send RPC to an address where no server is running.
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientTestBaseContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext); err != nil {
 		retryErr, ok := err.(util.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -205,7 +240,7 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0 * time.Nanosecond
 	c := make(chan interface{})
 	go func() {
-		if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientTestBaseContext); err == nil {
+		if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext); err == nil {
 			t.Fatalf("expected error when client is closed")
 		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
 			t.Fatal(err)
@@ -220,7 +255,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will
 	// cause the blocked ping RPC to finish.
-	client := NewClient(s.Addr(), nil, clientTestBaseContext)
+	client := NewClient(s.Addr(), nil, clientContext)
 	client.Close()
 	select {
 	case <-c:
@@ -232,6 +267,13 @@ func TestClientNotReady(t *testing.T) {
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	serverContext := NewServerTestContext(nil, stopper)
 
 	testCases := []struct {
 		numServers               int
@@ -272,8 +314,7 @@ func TestComplexScenarios(t *testing.T) {
 
 		var serverAddrs []net.Addr
 		for j := 0; j < test.numServers; j++ {
-			s := createAndStartNewServer(t)
-			defer s.Close()
+			s := createAndStartNewServer(t, serverContext)
 			serverAddrs = append(serverAddrs, s.Addr())
 		}
 
@@ -316,7 +357,7 @@ func TestComplexScenarios(t *testing.T) {
 		}
 		defer func() { sendOneFn = sendOne }()
 
-		replies, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, clientTestBaseContext)
+		replies, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, clientContext)
 		if test.success {
 			if len(replies) != test.numRequests {
 				t.Errorf("%d: %v replies are expected, but got %v", i, test.numRequests, len(replies))
@@ -335,8 +376,8 @@ func TestComplexScenarios(t *testing.T) {
 }
 
 // createAndStartNewServer creates and starts a new server with a test address.
-func createAndStartNewServer(t *testing.T) *Server {
-	s := NewServer(util.CreateTestAddr("tcp"), serverTestBaseContext)
+func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
+	s := NewServer(util.CreateTestAddr("tcp"), ctx)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}

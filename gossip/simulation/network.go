@@ -55,11 +55,12 @@ type Network struct {
 func NewNetwork(nodeCount int, networkType string,
 	gossipInterval time.Duration) *Network {
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, nil)
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
 
 	stopper := util.NewStopper()
+
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 
 	nodes := make([]*Node, nodeCount)
 	for i := range nodes {

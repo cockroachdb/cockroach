@@ -39,7 +39,8 @@ const (
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
-	lRPCContext := rpc.NewContext(serverTestBaseContext, lclock, nil)
+	stopper = util.NewStopper()
+	lRPCContext := rpc.NewContext(serverTestBaseContext, lclock, stopper)
 
 	laddr := util.CreateTestAddr("unix")
 	lserver := rpc.NewServer(laddr, lRPCContext)
@@ -57,7 +58,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
-	rRPCContext := rpc.NewContext(serverTestBaseContext, rclock, nil)
+	rRPCContext := rpc.NewContext(serverTestBaseContext, rclock, stopper)
 	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
@@ -72,9 +73,6 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	stopper = util.NewStopper()
-	stopper.AddCloser(lserver)
-	stopper.AddCloser(rserver)
 	local.start(lserver, stopper)
 	remote.start(rserver, stopper)
 	time.Sleep(time.Millisecond)
@@ -95,7 +93,7 @@ func TestClientGossip(t *testing.T) {
 	client := newClient(remote.is.NodeAddr)
 	// Use an insecure context. We're talking to unix socket which are not in the certs.
 	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, lclock, nil)
+	rpcContext := rpc.NewContext(&base.Context{}, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
 	if err := util.IsTrueWithin(func() bool {
@@ -126,7 +124,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
 	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, lclock, nil)
+	rpcContext := rpc.NewContext(&base.Context{}, lclock, stopper)
 	local.startClient(rAddr, rpcContext, stopper)
 	remote.startClient(lAddr, rpcContext, stopper)
 	local.mu.Unlock()

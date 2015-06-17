@@ -19,6 +19,7 @@ package rpc
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -54,12 +55,16 @@ type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
 	// Heartbeats are processed when a value is sent here.
-	ready chan struct{}
+	ready   chan struct{}
+	stopper *util.Stopper
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
 func (mhs *ManualHeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
-	<-mhs.ready
+	select {
+	case <-mhs.ready:
+	case <-mhs.stopper.ShouldStop():
+	}
 	hs := HeartbeatService{
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
