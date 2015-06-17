@@ -12,21 +12,25 @@
  * interface.
  */
 module AdminViews {
+    "use strict";
+
     /**
      * Log is the view for exploring the logs from nodes.
      */
     export module Log {
-        import property = _mithril.MithrilProperty;
-
-        var entries = new Models.Log.Entries();
+        let entries: Models.Log.Entries = new Models.Log.Entries();
 
         /**
          * Page displays log entries from the current node.
          */
         export module Page {
             class Controller {
-                private static _queryEveryMS = 10000;
+                private static _queryEveryMS: number = 10000;
                 private _interval: number;
+
+                onunload(): void {
+                    clearInterval(this._interval);
+                }
 
                 private _Refresh(): void {
                     entries.refresh();
@@ -36,10 +40,6 @@ module AdminViews {
                     this._Refresh();
                     this._interval = setInterval(() => this._Refresh(), Controller._queryEveryMS);
                 }
-
-                onunload() {
-                    clearInterval(this._interval);
-                }
             };
 
             export function controller(): Controller {
@@ -47,23 +47,34 @@ module AdminViews {
             };
 
             // TODO(bram): Move these into css classes.
-            var _tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-            var _thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-            var _tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-            var _tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
-            var _tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-            var _tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
+            const _tableStyle: string = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
+            const _thStyle: string = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;" +
+                "background-color:#efefef;text-align:center";
+            const _tdStyleOddFirst: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;" +
+                "background-color:#efefef;text-align:center";
+            const _tdStyleOdd: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+                "color:#333;background-color:#f9f9f9;text-align:center";
+            const _tdStyleEvenFirst: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+                "color:#333;background-color:#efefef;text-align:center";
+            const _tdStyleEven: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+                "color:#333;background-color:#fff;text-align:center";
 
             function _EntryRow(entry: Models.Proto.LogEntry, count: number): _mithril.MithrilVirtualElement {
-                var dstyle, countStyle: string;
-                if (count % 2 == 0) {
+                let dstyle: string;
+                let countStyle: string;
+                if (count % 2 === 0) {
                     countStyle = _tdStyleEvenFirst;
                     dstyle = _tdStyleEven;
                 } else {
                     countStyle = _tdStyleOddFirst;
                     dstyle = _tdStyleOdd;
                 }
-                var date = new Date(Utils.Convert.NanoToMilli(entry.time))
+                let date: Date = new Date(Utils.Convert.NanoToMilli(entry.time));
                 return m("tr", [
                     m("td", { style: countStyle }, (count + 1).toString()),
                     m("td", { style: dstyle }, Utils.Format.Date(date)),
@@ -78,20 +89,20 @@ module AdminViews {
                 ]);
             };
 
-            var _severitySelectOptions: Components.Select.Item[] = [
+            const _severitySelectOptions: Components.Select.Item[] = [
                 { value: Utils.Format.Severity(0), text: ">= " + Utils.Format.Severity(0) },
                 { value: Utils.Format.Severity(1), text: ">= " + Utils.Format.Severity(1) },
                 { value: Utils.Format.Severity(2), text: ">= " + Utils.Format.Severity(2) },
                 { value: Utils.Format.Severity(3), text: Utils.Format.Severity(3) },
             ];
 
-            function onChangeSeverity(val: string):void {
+            function onChangeSeverity(val: string): void {
                 entries.level(val);
                 entries.refresh();
             };
 
-            function onChangeMax(val: string):void {
-                var result = parseInt(val);
+            function onChangeMax(val: string): void {
+                let result: number = parseInt(val, 10);
                 if (result > 0) {
                     entries.max(result);
                 } else {
@@ -100,14 +111,12 @@ module AdminViews {
                 entries.refresh();
             }
 
-
-            export function view(ctrl: Controller) {
-                var rows: _mithril.MithrilVirtualElement[] = []
+            export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
+                let rows: _mithril.MithrilVirtualElement[] = [];
                 if (entries.result() != null) {
-                    var rows: _mithril.MithrilVirtualElement[] = [];
-                    for (var i = 0; i < entries.result().length; i++) {
+                    for (let i: number = 0; i < entries.result().length; i++) {
                         rows.push(_EntryRow(entries.result()[i], i));
-                    };
+                    }
                 }
 
                 return m("div", [
@@ -142,4 +151,3 @@ module AdminViews {
         }
     }
 }
-

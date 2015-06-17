@@ -2,7 +2,9 @@
 // Author: Matt Tracy (matt@cockroachlabs.com)
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
+/* tslint:disable:jsdoc-format */
 module Models {
+    "use strict";
     /**
      * The Proto package contains data interfaces which correspond to
      * protobuffer messages on the server; any message returned directly from
@@ -55,15 +57,15 @@ module Models {
                 gc_bytes_age: 0,
                 sys_bytes: 0,
                 sys_count: 0,
-                last_update_nanos: 0,
-            }
+                last_update_nanos: 0
+            };
         }
 
         /**
          * AccumulateMVCCStats accumulates values from a source MVCCStats into
          * the values of a destination MVCCStats value.
          */
-        export function AccumulateMVCCStats(dest: Proto.MVCCStats, src: Proto.MVCCStats) {
+        export function AccumulateMVCCStats(dest: Proto.MVCCStats, src: Proto.MVCCStats): void {
             dest.live_bytes += src.live_bytes;
             dest.key_bytes += src.key_bytes;
             dest.val_bytes += src.val_bytes;
@@ -171,7 +173,7 @@ module Models {
          * AccumulateStauts accumulates values from a source status into
          * the values of a destination status value.
          */
-        export function AccumulateStatus(dest: Status, src: Status) {
+        export function AccumulateStatus(dest: Status, src: Status): void {
             dest.range_count += src.range_count;
             dest.leader_range_count += src.leader_range_count;
             dest.replicated_range_count += src.replicated_range_count;
@@ -213,7 +215,7 @@ module Models {
         export interface QueryResult {
             name: string;
             aggregator: QueryAggregator;
-            datapoints: Datapoint[]
+            datapoints: Datapoint[];
         }
 
         /**
@@ -225,7 +227,6 @@ module Models {
         export interface QueryResultSet {
             results: QueryResult[];
         }
-
 
         /**
          * QueryRequest is a single query request as expected by the server.
@@ -247,7 +248,6 @@ module Models {
             end_nanos: number;
             queries: QueryRequest[];
         }
-
 
         /*****************************
          * /proto/log.proto

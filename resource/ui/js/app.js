@@ -8,7 +8,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,13 +18,14 @@
 // for names of contributors.
 //
 // Authors: Bram Gruneir (bram+code@cockroachlabs.com)
-//		    Andrew Bonventre (andybons@gmail.com)
-//		    Matt Tracy (matt@cockroachlabs.com)
+//          Andrew Bonventre (andybons@gmail.com)
+//          Matt Tracy (matt@cockroachlabs.com)
 //
-var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
+var headerDescription = "This file is designed to add the header to the top of the combined js file.";
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 var Utils;
 (function (Utils) {
+    "use strict";
     var QueryCache = (function () {
         function QueryCache(_query) {
             this._query = _query;
@@ -38,7 +39,7 @@ var Utils;
             if (!this._outstanding) {
                 this._outstanding = {
                     result: this._query(),
-                    error: m.prop(null),
+                    error: m.prop(null)
                 };
                 this._outstanding.result.then(null, this._outstanding.error);
             }
@@ -61,7 +62,7 @@ var Utils;
         };
         QueryCache.prototype.processOutstanding = function () {
             if (this._outstanding) {
-                var completed = (this._outstanding.error() != null || this._outstanding.result() != null);
+                var completed = (this._outstanding.error() != null) || (this._outstanding.result() != null);
                 if (completed) {
                     this._result = this._outstanding.result();
                     this._error = this._outstanding.error();
@@ -79,6 +80,7 @@ var Utils;
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
+    "use strict";
     var Proto;
     (function (Proto) {
         function NewMVCCStats() {
@@ -95,7 +97,7 @@ var Models;
                 gc_bytes_age: 0,
                 sys_bytes: 0,
                 sys_count: 0,
-                last_update_nanos: 0,
+                last_update_nanos: 0
             };
         }
         Proto.NewMVCCStats = NewMVCCStats;
@@ -135,6 +137,7 @@ var Models;
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
 (function (Utils) {
+    "use strict";
     function chainProp(_this, val) {
         var obj = val;
         return function (value) {
@@ -152,6 +155,7 @@ var Utils;
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Utils;
 (function (Utils) {
+    "use strict";
     var Convert;
     (function (Convert) {
         function MilliToNano(millis) {
@@ -169,6 +173,7 @@ var Utils;
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
 (function (Utils) {
+    "use strict";
     var Http;
     (function (Http) {
         function Get(url) {
@@ -200,6 +205,7 @@ var __extends = this.__extends || function (d, b) {
 };
 var Models;
 (function (Models) {
+    "use strict";
     var Metrics;
     (function (Metrics) {
         function QueryInfoKey(qi) {
@@ -218,39 +224,41 @@ var Models;
                 return this._set[key];
             };
             QueryInfoSet.prototype.forEach = function (fn) {
-                for (var k in this._set) {
-                    fn(this._set[k]);
+                var keys = Object.keys(this._set);
+                for (var i = 0; i < keys.length; i++) {
+                    fn(this._set[keys[i]]);
                 }
             };
             return QueryInfoSet;
         })();
-        var select;
-        (function (select) {
+        Metrics.QueryInfoSet = QueryInfoSet;
+        var Select;
+        (function (Select) {
             var AvgSelector = (function () {
-                function AvgSelector(series_name) {
+                function AvgSelector(seriesName) {
                     var _this = this;
-                    this.series_name = series_name;
-                    this.title = Utils.chainProp(this, this.series_name);
-                    this.series = function () { return _this.series_name; };
+                    this.seriesName = seriesName;
+                    this.title = Utils.chainProp(this, this.seriesName);
+                    this.series = function () { return _this.seriesName; };
                     this.request = function () {
                         return {
-                            name: _this.series_name,
-                            aggregator: Models.Proto.QueryAggregator.AVG,
+                            name: _this.seriesName,
+                            aggregator: Models.Proto.QueryAggregator.AVG
                         };
                     };
                 }
                 return AvgSelector;
             })();
             var AvgRateSelector = (function () {
-                function AvgRateSelector(series_name) {
+                function AvgRateSelector(seriesName) {
                     var _this = this;
-                    this.series_name = series_name;
-                    this.title = Utils.chainProp(this, this.series_name);
-                    this.series = function () { return _this.series_name; };
+                    this.seriesName = seriesName;
+                    this.title = Utils.chainProp(this, this.seriesName);
+                    this.series = function () { return _this.seriesName; };
                     this.request = function () {
                         return {
-                            name: _this.series_name,
-                            aggregator: Models.Proto.QueryAggregator.AVG_RATE,
+                            name: _this.seriesName,
+                            aggregator: Models.Proto.QueryAggregator.AVG_RATE
                         };
                     };
                 }
@@ -259,14 +267,14 @@ var Models;
             function Avg(series) {
                 return new AvgSelector(series);
             }
-            select.Avg = Avg;
+            Select.Avg = Avg;
             function AvgRate(series) {
                 return new AvgRateSelector(series);
             }
-            select.AvgRate = AvgRate;
-        })(select = Metrics.select || (Metrics.select = {}));
-        var time;
-        (function (time) {
+            Select.AvgRate = AvgRate;
+        })(Select = Metrics.Select || (Metrics.Select = {}));
+        var Time;
+        (function (Time) {
             function Recent(duration) {
                 return {
                     timespan: function () {
@@ -276,8 +284,8 @@ var Models;
                     }
                 };
             }
-            time.Recent = Recent;
-        })(time = Metrics.time || (Metrics.time = {}));
+            Time.Recent = Recent;
+        })(Time = Metrics.Time || (Metrics.Time = {}));
         var Axis = (function () {
             function Axis() {
                 this.label = Utils.chainProp(this, null);
@@ -286,7 +294,7 @@ var Models;
             }
             Axis.prototype.title = function () {
                 var selectors = this.selectors();
-                if (selectors.length == 0) {
+                if (selectors.length === 0) {
                     return "No series selected.";
                 }
                 return selectors.map(function (s) { return s.title(); }).join(" vs. ");
@@ -305,7 +313,7 @@ var Models;
         var Query = (function () {
             function Query() {
                 var _this = this;
-                this.timespan = Utils.chainProp(this, time.Recent(10 * 60 * 1000));
+                this.timespan = Utils.chainProp(this, Time.Recent(10 * 60 * 1000));
                 this.title = Utils.chainProp(this, "Query Title");
                 this.selectors = Utils.chainProp(this, []);
                 this.execute = function () {
@@ -313,7 +321,7 @@ var Models;
                     var req = {
                         start_nanos: Utils.Convert.MilliToNano(s[0]),
                         end_nanos: Utils.Convert.MilliToNano(s[1]),
-                        queries: [],
+                        queries: []
                     };
                     var requestSet = new QueryInfoSet();
                     _this.selectors().forEach(function (s) {
@@ -374,6 +382,7 @@ var Models;
 /// <reference path="../models/metrics.ts" />
 var Components;
 (function (Components) {
+    "use strict";
     var Metrics;
     (function (Metrics) {
         var LineGraph;
@@ -410,7 +419,7 @@ var Components;
                                             key: s.title(),
                                             color: Controller.colors(s.series()),
                                             area: true,
-                                            fillOpacity: .1,
+                                            fillOpacity: .1
                                         });
                                     }
                                 });
@@ -423,7 +432,7 @@ var Components;
                         context.epoch = _this.vm.query.epoch();
                     };
                     this.chart.xAxis
-                        .tickFormat(d3.time.format('%I:%M:%S'))
+                        .tickFormat(d3.time.format("%I:%M:%S"))
                         .showMaxMin(false);
                     this.chart.yAxis
                         .axisLabel(vm.axis.label())
@@ -469,25 +478,16 @@ var Components;
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
+    "use strict";
     var Graph;
     (function (Graph) {
         var Page;
         (function (Page) {
-            var metrics = Models.Metrics;
+            var Metrics = Models.Metrics;
             var Controller = (function () {
                 function Controller() {
                     var _this = this;
-                    this.timespan = metrics.time.Recent(10 * 60 * 1000);
-                    this.successCount = metrics.select.Avg("cr.node.calls.success.1")
-                        .title("Successful calls");
-                    this.errorCount = metrics.select.Avg("cr.node.calls.error.1")
-                        .title("Error calls");
-                    this.successRate = metrics.select.AvgRate("cr.node.calls.success.1")
-                        .title("Successful call rate");
-                    this.errorRate = metrics.select.AvgRate("cr.node.calls.error.1")
-                        .title("Error call rate");
-                    this.query = metrics.NewQuery(this.successCount, this.errorCount, this.successRate, this.errorRate)
-                        .timespan(this.timespan);
+                    this.timespan = Metrics.Time.Recent(10 * 60 * 1000);
                     this.toggleGraph = function () {
                         _this.showRates = !_this.showRates;
                         if (_this.showRates) {
@@ -499,8 +499,18 @@ var AdminViews;
                                 .label("Count");
                         }
                     };
-                    this.manager = new metrics.Executor(this.query);
-                    this.axis = metrics.NewAxis(this.successCount, this.errorCount)
+                    this.successCount = Metrics.Select.Avg("cr.node.calls.success.1")
+                        .title("Successful calls");
+                    this.errorCount = Metrics.Select.Avg("cr.node.calls.error.1")
+                        .title("Error calls");
+                    this.successRate = Metrics.Select.AvgRate("cr.node.calls.success.1")
+                        .title("Successful call rate");
+                    this.errorRate = Metrics.Select.AvgRate("cr.node.calls.error.1")
+                        .title("Error call rate");
+                    this.query = Metrics.NewQuery(this.successCount, this.errorCount, this.successRate, this.errorRate)
+                        .timespan(this.timespan);
+                    this.manager = new Metrics.Executor(this.query);
+                    this.axis = Metrics.NewAxis(this.successCount, this.errorCount)
                         .label("Count");
                     this.manager.refresh();
                     this.interval = setInterval(function () { return _this.manager.refresh(); }, 10000);
@@ -528,7 +538,7 @@ var AdminViews;
                     Components.Metrics.LineGraph.create(ctrl.manager, ctrl.axis),
                     m("", m("input[type=button]", {
                         value: buttonText,
-                        onclick: ctrl.toggleGraph,
+                        onclick: ctrl.toggleGraph
                     })),
                 ]);
             }
@@ -542,6 +552,7 @@ var AdminViews;
 //
 var Components;
 (function (Components) {
+    "use strict";
     var Select;
     (function (Select) {
         function controller(options) {
@@ -551,7 +562,7 @@ var Components;
         function view(ctrl) {
             return m("select", { onchange: m.withAttr("value", ctrl.onChange) }, [
                 ctrl.items.map(function (item) {
-                    return m('option', { value: item.value, selected: (item.value == ctrl.value()) }, item.text);
+                    return m("option", { value: item.value, selected: (item.value === ctrl.value()) }, item.text);
                 })
             ]);
         }
@@ -565,6 +576,7 @@ var Components;
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Utils;
 (function (Utils) {
+    "use strict";
     var Format;
     (function (Format) {
         var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
@@ -589,7 +601,7 @@ var Utils;
         var _messageTags = new RegExp("%s|%d|%v|%+v", "gi");
         function LogEntryMessage(entry) {
             var i = -1;
-            return entry.format.replace(_messageTags, function (tag) {
+            return entry.format.replace(_messageTags, function () {
                 i++;
                 if (entry.args.length > i) {
                     return entry.args[i].str;
@@ -602,17 +614,17 @@ var Utils;
         Format.LogEntryMessage = LogEntryMessage;
         ;
         var kibi = 1024;
-        var units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+        var units = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
         function Bytes(bytes) {
             if (Math.abs(bytes) < kibi) {
-                return bytes + ' B';
+                return bytes + " B";
             }
             var u = -1;
             do {
                 bytes /= kibi;
                 ++u;
             } while (Math.abs(bytes) >= kibi && u < units.length - 1);
-            return bytes.toFixed(1) + ' ' + units[u];
+            return bytes.toFixed(1) + " " + units[u];
         }
         Format.Bytes = Bytes;
     })(Format = Utils.Format || (Utils.Format = {}));
@@ -627,6 +639,7 @@ var Utils;
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
+    "use strict";
     var Log;
     (function (Log) {
         var Entries = (function () {
@@ -636,11 +649,11 @@ var Models;
                 this.endTime = m.prop(null);
                 this.max = m.prop(null);
                 this.level = m.prop(null);
-                this._innerQuery = function () {
-                    return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
-                        .then(function (results) {
-                        return results.d;
-                    });
+                this.refresh = function () {
+                    _this._data.refresh();
+                };
+                this.result = function () {
+                    return _this._data.result();
                 };
                 this._data = new Utils.QueryCache(function () {
                     return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
@@ -648,12 +661,6 @@ var Models;
                         return results.d;
                     });
                 });
-                this.refresh = function () {
-                    _this._data.refresh();
-                };
-                this.result = function () {
-                    return _this._data.result();
-                };
                 this.level(Utils.Format.Severity(2));
                 this.max(null);
                 this.startTime(null);
@@ -692,6 +699,7 @@ var Models;
 /// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
+    "use strict";
     var Log;
     (function (Log) {
         var entries = new Models.Log.Entries();
@@ -703,11 +711,11 @@ var AdminViews;
                     this._Refresh();
                     this._interval = setInterval(function () { return _this._Refresh(); }, Controller._queryEveryMS);
                 }
-                Controller.prototype._Refresh = function () {
-                    entries.refresh();
-                };
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
+                };
+                Controller.prototype._Refresh = function () {
+                    entries.refresh();
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;
@@ -719,14 +727,25 @@ var AdminViews;
             Page.controller = controller;
             ;
             var _tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-            var _thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-            var _tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-            var _tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
-            var _tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-            var _tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
+            var _thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;" +
+                "background-color:#efefef;text-align:center";
+            var _tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;" +
+                "background-color:#efefef;text-align:center";
+            var _tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+                "color:#333;background-color:#f9f9f9;text-align:center";
+            var _tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+                "color:#333;background-color:#efefef;text-align:center";
+            var _tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+                "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+                "color:#333;background-color:#fff;text-align:center";
             function _EntryRow(entry, count) {
-                var dstyle, countStyle;
-                if (count % 2 == 0) {
+                var dstyle;
+                var countStyle;
+                if (count % 2 === 0) {
                     countStyle = _tdStyleEvenFirst;
                     dstyle = _tdStyleEven;
                 }
@@ -761,7 +780,7 @@ var AdminViews;
             }
             ;
             function onChangeMax(val) {
-                var result = parseInt(val);
+                var result = parseInt(val, 10);
                 if (result > 0) {
                     entries.max(result);
                 }
@@ -773,11 +792,9 @@ var AdminViews;
             function view(ctrl) {
                 var rows = [];
                 if (entries.result() != null) {
-                    var rows = [];
                     for (var i = 0; i < entries.result().length; i++) {
                         rows.push(_EntryRow(entries.result()[i], i));
                     }
-                    ;
                 }
                 return m("div", [
                     m("form", [
@@ -817,6 +834,7 @@ var AdminViews;
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 var AdminViews;
 (function (AdminViews) {
+    "use strict";
     var Monitor;
     (function (Monitor) {
         var Page;
@@ -837,14 +855,25 @@ var AdminViews;
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 var Models;
 (function (Models) {
+    "use strict";
     var Stats;
     (function (Stats) {
         var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-        var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
-        var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
+        var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#efefef;text-align:center";
+        var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#efefef;text-align:center";
+        var tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#f9f9f9;text-align:center";
+        var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#efefef;text-align:center";
+        var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:" +
+            "#ccc;color:#333;background-color:#fff;text-align:center";
         function CreateStatsTable(stats) {
             return m("div", [
                 m("h3", "Statistics"),
@@ -889,16 +918,17 @@ var Models;
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Models;
 (function (Models) {
+    "use strict";
     var Status;
     (function (Status) {
         function _availability(status) {
-            if (status.leader_range_count == 0) {
+            if (status.leader_range_count === 0) {
                 return "100%";
             }
             return Math.floor(status.available_range_count / status.leader_range_count * 100).toString() + "%";
         }
         function _replicated(status) {
-            if (status.leader_range_count == 0) {
+            if (status.leader_range_count === 0) {
                 return "100%";
             }
             return Math.floor(status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
@@ -938,7 +968,10 @@ var Models;
                 }
                 return m("div", [
                     m("table", [
-                        m("tr", [m("td", "Node Id:"), m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))]),
+                        m("tr", [
+                            m("td", "Node Id:"),
+                            m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))
+                        ]),
                         m("tr", [m("td", "Node Network:"), m("td", store.desc.node.address.network)]),
                         m("tr", [m("td", "Node Address:"), m("td", store.desc.node.address.address)]),
                         m("tr", [m("td", "Started at:"), m("td", _formatDate(store.started_at))]),
@@ -964,11 +997,11 @@ var Models;
                     stats: Models.Proto.NewMVCCStats()
                 };
                 var data = this._data.result();
-                for (var storeId in data) {
-                    var storeStatus = data[storeId];
+                var keys = Object.keys(data);
+                for (var i = 0; i < keys.length; i++) {
+                    var storeStatus = data[keys[i]];
                     Models.Proto.AccumulateStatus(status, storeStatus);
                 }
-                ;
                 return m("div", [
                     m("h2", "Details"),
                     m("table", [
@@ -1044,14 +1077,14 @@ var Models;
                     leader_range_count: 0,
                     replicated_range_count: 0,
                     available_range_count: 0,
-                    stats: Models.Proto.NewMVCCStats(),
+                    stats: Models.Proto.NewMVCCStats()
                 };
                 var data = this._data.result();
-                for (var nodeId in data) {
-                    var nodeStatus = data[nodeId];
+                var keys = Object.keys(data);
+                for (var i = 0; i < keys.length; i++) {
+                    var nodeStatus = data[keys[i]];
                     Models.Proto.AccumulateStatus(status, nodeStatus);
                 }
-                ;
                 return m("div", [
                     m("h2", "Details"),
                     m("table", [
@@ -1077,9 +1110,10 @@ var Models;
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
+    "use strict";
     var Nodes;
     (function (Nodes) {
-        var metrics = Models.Metrics;
+        var Metrics = Models.Metrics;
         var nodeStatuses = new Models.Status.Nodes();
         function _nodeMetric(nodeId, metric) {
             return "cr.node." + metric + "." + nodeId;
@@ -1092,11 +1126,11 @@ var AdminViews;
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
-                Controller.prototype._refresh = function () {
-                    nodeStatuses.refresh();
-                };
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
+                };
+                Controller.prototype._refresh = function () {
+                    nodeStatuses.refresh();
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;
@@ -1105,19 +1139,18 @@ var AdminViews;
                 return new Controller();
             }
             NodesPage.controller = controller;
+            function _singleNodeView(nodeId) {
+                var desc = nodeStatuses.GetDesc(nodeId);
+                return m("li", { key: desc.node_id }, m("div", [
+                    m.trust("&nbsp;&bull;&nbsp;"),
+                    m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
+                    " with Address:" + desc.address.network + "-" + desc.address.address
+                ]));
+            }
             function view(ctrl) {
                 return m("div", [
                     m("h2", "Nodes List"),
-                    m("ul", [
-                        nodeStatuses.GetNodeIds().map(function (nodeId) {
-                            var desc = nodeStatuses.GetDesc(nodeId);
-                            return m("li", { key: desc.node_id }, m("div", [
-                                m.trust("&nbsp;&bull;&nbsp;"),
-                                m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
-                                " with Address:" + desc.address.network + "-" + desc.address.address
-                            ]));
-                        }),
-                    ]),
+                    m("ul", [nodeStatuses.GetNodeIds().map(_singleNodeView)]),
                     nodeStatuses.AllDetails()
                 ]);
             }
@@ -1130,17 +1163,20 @@ var AdminViews;
                     var _this = this;
                     this.axes = [];
                     this._nodeId = nodeId;
-                    this._query = metrics.NewQuery();
-                    this._addChart(metrics.NewAxis(metrics.select.AvgRate(_nodeMetric(nodeId, "calls.success"))
+                    this._query = Metrics.NewQuery();
+                    this._addChart(Metrics.NewAxis(Metrics.Select.AvgRate(_nodeMetric(nodeId, "calls.success"))
                         .title("Successful Calls"))
                         .label("Count / 10 sec."));
-                    this._addChart(metrics.NewAxis(metrics.select.AvgRate(_nodeMetric(nodeId, "calls.error"))
+                    this._addChart(Metrics.NewAxis(Metrics.Select.AvgRate(_nodeMetric(nodeId, "calls.error"))
                         .title("Error Calls"))
                         .label("Count / 10 sec."));
-                    this.exec = new metrics.Executor(this._query);
+                    this.exec = new Metrics.Executor(this._query);
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
+                Controller.prototype.onunload = function () {
+                    clearInterval(this._interval);
+                };
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
                     this.exec.refresh();
@@ -1149,9 +1185,6 @@ var AdminViews;
                     var _this = this;
                     axis.selectors().forEach(function (s) { return _this._query.selectors().push(s); });
                     this.axes.push(axis);
-                };
-                Controller.prototype.onunload = function () {
-                    clearInterval(this._interval);
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;
@@ -1187,9 +1220,10 @@ var AdminViews;
 /// <reference path="../components/metrics.ts" />
 var AdminViews;
 (function (AdminViews) {
+    "use strict";
     var Stores;
     (function (Stores) {
-        var metrics = Models.Metrics;
+        var Metrics = Models.Metrics;
         var storeStatuses = new Models.Status.Stores();
         function _storeMetric(storeId, metric) {
             return "cr.store." + metric + "." + storeId;
@@ -1202,11 +1236,11 @@ var AdminViews;
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
-                Controller.prototype._refresh = function () {
-                    storeStatuses.refresh();
-                };
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
+                };
+                Controller.prototype._refresh = function () {
+                    storeStatuses.refresh();
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;
@@ -1215,21 +1249,20 @@ var AdminViews;
                 return new Controller();
             }
             StoresPage.controller = controller;
+            function _singleStoreView(storeId) {
+                var desc = storeStatuses.GetDesc(storeId);
+                return m("li", { key: desc.store_id }, m("div", [
+                    m.trust("&nbsp;&bull;&nbsp;"),
+                    m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
+                    " on ",
+                    m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
+                    " with Address:" + desc.node.address.network + "-" + desc.node.address.address
+                ]));
+            }
             function view(ctrl) {
                 return m("div", [
                     m("h2", "Nodes List"),
-                    m("ul", [
-                        storeStatuses.GetStoreIds().map(function (storeId) {
-                            var desc = storeStatuses.GetDesc(storeId);
-                            return m("li", { key: desc.store_id }, m("div", [
-                                m.trust("&nbsp;&bull;&nbsp;"),
-                                m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
-                                " on ",
-                                m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
-                                " with Address:" + desc.node.address.network + "-" + desc.node.address.address
-                            ]));
-                        }),
-                    ]),
+                    m("ul", [storeStatuses.GetStoreIds().map(_singleStoreView)]),
                     storeStatuses.AllDetails()
                 ]);
             }
@@ -1242,30 +1275,33 @@ var AdminViews;
                     var _this = this;
                     this.axes = [];
                     this._storeId = storeId;
-                    this._query = metrics.NewQuery();
-                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "keycount"))
+                    this._query = Metrics.NewQuery();
+                    this._addChart(Metrics.NewAxis(Metrics.Select.Avg(_storeMetric(storeId, "keycount"))
                         .title("Key Count"))
                         .label("Count"));
-                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "livecount"))
+                    this._addChart(Metrics.NewAxis(Metrics.Select.Avg(_storeMetric(storeId, "livecount"))
                         .title("Live Value Count"))
                         .label("Count"));
-                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "valcount"))
+                    this._addChart(Metrics.NewAxis(Metrics.Select.Avg(_storeMetric(storeId, "valcount"))
                         .title("Total Value Count"))
                         .label("Count"));
-                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "intentcount"))
+                    this._addChart(Metrics.NewAxis(Metrics.Select.Avg(_storeMetric(storeId, "intentcount"))
                         .title("Intent Count"))
                         .label("Count"));
-                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "ranges"))
+                    this._addChart(Metrics.NewAxis(Metrics.Select.Avg(_storeMetric(storeId, "ranges"))
                         .title("Range Count"))
                         .label("Count"));
-                    this._addChart(metrics.NewAxis(metrics.select.Avg(_storeMetric(storeId, "livebytes"))
+                    this._addChart(Metrics.NewAxis(Metrics.Select.Avg(_storeMetric(storeId, "livebytes"))
                         .title("Live Bytes"))
                         .label("Bytes")
                         .format(Utils.Format.Bytes));
-                    this.exec = new metrics.Executor(this._query);
+                    this.exec = new Metrics.Executor(this._query);
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
+                Controller.prototype.onunload = function () {
+                    clearInterval(this._interval);
+                };
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
                     this.exec.refresh();
@@ -1274,9 +1310,6 @@ var AdminViews;
                     var _this = this;
                     axis.selectors().forEach(function (s) { return _this._query.selectors().push(s); });
                     this.axes.push(axis);
-                };
-                Controller.prototype.onunload = function () {
-                    clearInterval(this._interval);
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;

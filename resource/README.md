@@ -21,7 +21,7 @@ dependencies](####dependencies)
 While actively developing the user interface, use `make debug` in order to run
 go-bindata in debug mode.  This will instruct go-bindata to proxy your local
 files (rather than using embedded versions) so you'll be able to edit them live
-without recompiling or restarting the server.  
+without recompiling or restarting the server.
 
 Note that only those files that were present the last time you ran `make debug`
 will be proxied; if you add a new file, you must run recompile and restart the
@@ -33,8 +33,9 @@ will result in wasted time waiting for the build.
 
 #### Dependencies
 Our admin UI is written in Typescript, so compiling it depends on having the
-typescript compiler locally.
+typescript compiler locally. We also require a typescript linter (tslint).
 
 1. Install [nodejs](https://nodejs.org/)
-2. Install [typescript](http://www.typescriptlang.org/). This can be done via
-   the command line using npm: `npm install -g typescript`
+2. Install [typescript](http://www.typescriptlang.org/) and
+   [tslint](https://github.com/palantir/tslint). This can be done via the
+   command line using npm: `npm install -g typescript tslint`

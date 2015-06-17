@@ -43,6 +43,7 @@ debug: $(GOBINDATA_DEBUG_TARGET)
 
 $(TYPESCRIPT_TARGET): $(shell find ui/ts)
 	tsc -p ui/ts
+	tslint -c ui/ts/tslint.json $(addprefix -f ,$(shell find ui/ts -name *.ts -not -path *typings*))
 
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg resource -o $@ $^

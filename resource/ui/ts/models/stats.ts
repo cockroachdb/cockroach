@@ -8,14 +8,25 @@
  * Models contains data models pulled from cockroach.
  */
 module Models {
+    "use strict";
     export module Stats {
         // TODO(bram): Move these into css classes.
-        var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-        var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f9f9f9;text-align:center";
-        var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#efefef;text-align:center";
-        var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;text-align:center";
+        const tableStyle: string = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
+        const thStyle: string = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#efefef;text-align:center";
+        const tdStyleOddFirst: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#efefef;text-align:center";
+        const tdStyleOdd: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#f9f9f9;text-align:center";
+        const tdStyleEvenFirst: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
+            "color:#333;background-color:#efefef;text-align:center";
+        const tdStyleEven: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
+            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:" +
+            "#ccc;color:#333;background-color:#fff;text-align:center";
 
         export function CreateStatsTable(stats: Proto.MVCCStats): _mithril.MithrilVirtualElement {
             return m("div", [

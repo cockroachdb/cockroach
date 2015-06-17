@@ -9,15 +9,17 @@
  * interface.
  */
 module AdminViews {
+  "use strict";
+
   /**
    * Monitor is the view for exploring cluster status.
    */
   export module Monitor {
-      export module Page {
-          export function controller() {}
-          export function view() {
-              return m("h3", "Monitor Placeholder");
-          }
+    export module Page {
+      export function controller(): void {}
+      export function view(): _mithril.MithrilVirtualElement {
+        return m("h3", "Monitor Placeholder");
       }
+    }
   }
 }

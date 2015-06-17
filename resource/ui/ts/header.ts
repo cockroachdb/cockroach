@@ -8,7 +8,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +18,9 @@
 // for names of contributors.
 //
 // Authors: Bram Gruneir (bram+code@cockroachlabs.com)
-//		    Andrew Bonventre (andybons@gmail.com)
-//		    Matt Tracy (matt@cockroachlabs.com)
+//          Andrew Bonventre (andybons@gmail.com)
+//          Matt Tracy (matt@cockroachlabs.com)
 //
 
-var headerDescription = 'This file is designed to add the header to the top of the combined js file.';
+/* tslint:disable:no-unused-variable */
+const headerDescription: string = "This file is designed to add the header to the top of the combined js file.";

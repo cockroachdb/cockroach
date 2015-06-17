@@ -3,6 +3,8 @@
 // Author: Matt Tracy (matt@cockroachlabs.com)
 //
 module Utils {
+    "use strict";
+
     import promise = _mithril.MithrilPromise;
     import property = _mithril.MithrilProperty;
 
@@ -22,17 +24,27 @@ module Utils {
      * the value of QueryCache.epoch() is increased.
      */
     export class QueryCache<T> {
-        private _result:T = null;
-        private _error:Error = null;
-        private _epoch:number = 0;
+        private _result: T = null;
+        private _error: Error = null;
+        private _epoch: number = 0;
+
+        /**
+         * This structure will be non-null when a query is in-flight, or has
+         * completed but not been processed. When an in-flight query
+         * completes, one and only one of these fields will contain a value.
+         */
+        private _outstanding: {
+            result: promise<T>;
+            error: property<Error>;
+        };
 
         /**
          * Construct a new QueryCache which caches the ultimate results of the
          * given query function. It is expected that the query function returns
          * a promise for results.
          */
-        constructor(private _query:() => promise<T>) {
-            this.refresh()
+        constructor(private _query: () => promise<T>) {
+            this.refresh();
         }
 
         /**
@@ -40,14 +52,14 @@ module Utils {
          * invocation is already in progress. The currently cached results (if
          * any) are not replaced until the query invocation completes.
          */
-        refresh() {
+        refresh(): void {
             // Clear outstanding result if it has already returned.
             this.processOutstanding();
             if (!this._outstanding) {
                 this._outstanding = {
-                    result:this._query(),
-                    error:m.prop(<Error> null),
-                }
+                    result: this._query(),
+                    error: m.prop(<Error> null)
+                };
                 this._outstanding.result.then(null, this._outstanding.error);
             }
         }
@@ -57,7 +69,7 @@ module Utils {
          * indicates that either the result() or error() functions will return
          * non-null.
          */
-        hasData():boolean {
+        hasData(): boolean {
             this.processOutstanding();
             return this._epoch > 0;
         }
@@ -67,7 +79,7 @@ module Utils {
          * query. If the most recent invocation returned an error, this method will
          * return null.
          */
-        result():T {
+        result(): T {
             this.processOutstanding();
             return this._result;
         }
@@ -77,7 +89,7 @@ module Utils {
          * invocation of the underlying query. If the most recent invocation did
          * not return an error, this method will return null.
          */
-        error():Error {
+        error(): Error {
             this.processOutstanding();
             return this._error;
         }
@@ -87,29 +99,18 @@ module Utils {
          * incremented each time the cached result is refreshed; the first
          * result has an epoch of 1.
          */
-        epoch():number {
+        epoch(): number {
             this.processOutstanding();
             return this._epoch;
-        }
-
-        /**
-         * This structure will be non-null when a query is in-flight, or has
-         * completed but not been processed. When an in-flight query
-         * completes, one and only one of these fields will contain a value.
-         */
-        private _outstanding:{
-            result:promise<T>;
-            error:property<Error>;
         }
 
         /**
          * Check for a completed outstanding query, replacing cached results
          * with the result.
          */
-        private processOutstanding() {
+        private processOutstanding(): void {
             if (this._outstanding) {
-                var completed =
-                    (this._outstanding.error() != null || this._outstanding.result() != null);
+                const completed: boolean = (this._outstanding.error() != null) || (this._outstanding.result() != null);
 
                 if (completed) {
                     this._result = this._outstanding.result();

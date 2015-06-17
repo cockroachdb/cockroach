@@ -14,7 +14,7 @@ RUN apt-get update -y && \
  apt-get clean autoclean && \
  apt-get autoremove -y && \
  rm -rf /tmp/* /var/lib/{apt,dpkg,cache,log} && \
- npm -g install typescript && \
+ npm -g install typescript tslint && \
  ln -s /usr/bin/nodejs /usr/bin/node && \
  apt-get remove --auto-remove -y npm
 RUN go get golang.org/x/tools/cmd/vet

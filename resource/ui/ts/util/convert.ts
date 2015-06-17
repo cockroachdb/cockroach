@@ -6,6 +6,8 @@
  * Utils contains common utilities.
  */
 module Utils {
+	"use strict";
+
 	export module Convert {
 		/**
 		 * MilliToNano is intended to convert milliseconds (used by Java time

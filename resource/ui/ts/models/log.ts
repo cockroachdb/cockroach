@@ -11,25 +11,41 @@
  * Models contains data models pulled from cockroach.
  */
 module Models {
+    "use strict";
     /**
      * Log package represents the logs collected by each Cockroach node.
      */
     export module Log {
-        import promise = _mithril.MithrilPromise;
-        import property = _mithril.MithrilProperty;
+        import Promise = _mithril.MithrilPromise;
+        import Property = _mithril.MithrilProperty;
 
         export interface LogResponseSet {
-            d: Proto.LogEntry[]
+            d: Proto.LogEntry[];
         }
 
         export class Entries {
-            startTime = m.prop(<number>null);
-            endTime = m.prop(<number>null);
-            max = m.prop(<number>null);
-            level = m.prop(<string>null);
+            startTime: Property<number> = m.prop(<number>null);
+            endTime: Property<number> = m.prop(<number>null);
+            max: Property<number> = m.prop(<number>null);
+            level: Property<string> = m.prop(<string>null);
+
+            refresh: () => void = () => {
+                this._data.refresh();
+            };
+
+            result: () => Proto.LogEntry[] = () => {
+                return this._data.result();
+            };
+
+            private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache((): Promise<Proto.LogEntry[]> => {
+                return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
+                    .then((results: LogResponseSet) => {
+                        return results.d;
+                    });
+            });
 
             private _url(): string {
-                var url = "/_status/local/log";
+                let url: string = "/_status/local/log";
                 if (this.level() != null) {
                     url += "/" + this.level();
                 }
@@ -48,31 +64,9 @@ module Models {
 
             constructor() {
                 this.level(Utils.Format.Severity(2));
-                this.max(<number>null);
-                this.startTime(<number>null);
-                this.endTime(<number>null);
-            }
-
-            private _innerQuery = () => {
-                return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
-                    .then((results: LogResponseSet) => {
-                        return results.d;
-                    });
-            }
-
-            private _data = new Utils.QueryCache((): promise<Proto.LogEntry[]> => {
-                return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
-                    .then((results: LogResponseSet) => {
-                        return results.d;
-                    });
-            })
-
-            refresh = () => {
-                this._data.refresh();
-            }
-
-            result = () => {
-                return this._data.result();
+                this.max(null);
+                this.startTime(null);
+                this.endTime(null);
             }
         }
 
