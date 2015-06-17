@@ -194,6 +194,49 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 	}
 }
 
+// TestMVCCPutOutOfOrder tests a scenario where a put operation of an
+// older timestamp comes after a put operation of a newer timestamp.
+func TestMVCCPutOutOfOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	err := MVCCPut(engine, nil, testKey1, makeTS(2, 1), value1, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Put operation with earlier walltime. Will be ignored.
+	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(value.Bytes, value1.Bytes) {
+		t.Fatalf("the value should be %s, but got %s",
+			value1.Bytes, value.Bytes)
+	}
+
+	// Another put operation with earlier logical time. Will be ignored.
+	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, err = MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(value.Bytes, value1.Bytes) {
+		t.Fatalf("the value should be %s, but got %s",
+			value1.Bytes, value.Bytes)
+	}
+}
+
 // TestMVCCIncrement verifies increment behavior. In particular,
 // incrementing a non-existent key by 0 will create the value.
 func TestMVCCIncrement(t *testing.T) {
