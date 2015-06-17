@@ -217,11 +217,11 @@ func (c *Client) Close() {
 		c.mu.Lock()
 		c.healthy = false
 		c.closed = true
-		c.mu.Unlock()
-		close(c.Closed)
 		if c.Client != nil {
 			c.Client.Close()
 		}
+		c.mu.Unlock()
+		close(c.Closed)
 	}
 	clientMu.Unlock()
 }
