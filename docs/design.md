@@ -31,9 +31,8 @@ Japan, Australia }`).
 
 Single mutations to ranges are mediated via an instance of a distributed
 consensus algorithm to ensure consistency. We’ve chosen to use the
-[Raft consensus
-algorithm](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf).
-All consensus state is stored in RocksDB.
+[Raft consensus algorithm](https://raftconsensus.github.io); all consensus
+state is stored in RocksDB.
 
 A single logical mutation may affect multiple key/value pairs. Logical
 mutations have ACID transactional semantics. If all keys affected by a
@@ -868,11 +867,9 @@ configuration metadata.
 
 Each range is configured to consist of three or more replicas, as specified by
 their ZoneConfig. The replicas in a range maintain their own instance of a
-distributed consensus algorithm. We use the [*Raft consensus algorithm*](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf)
+distributed consensus algorithm. We use the [*Raft consensus algorithm*](https://raftconsensus.github.io)
 as it is simpler to reason about and includes a reference implementation
-covering important details. Every write to replicas is logged twice.
-Once to RocksDB’s internal log and once to levedb itself as part of the
-Raft consensus log.
+covering important details.
 [ePaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) has
 promising performance characteristics for WAN-distributed replicas, but
 it does not guarantee a consistent ordering between replicas.
@@ -885,6 +882,149 @@ elections. Cockroach weights random timeouts such that the replicas with
 shorter round trip times to peers are more likely to hold elections
 first (not implemented yet). Only the Raft leader may propose commands;
 followers will simply relay commands to the last known leader.
+
+Our Raft implementation was developed together with CoreOS, but adds an extra
+layer of optimization to account for the fact that a single Node may have
+millions of consensus groups (one for each Range). Areas of optimization
+are chiefly coalesced heartbeats (so that the number of nodes dictates the
+number of heartbeats as opposed to the much larger number of ranges) and
+batch processing of requests.
+Future optimizations may include two-phase elections and quiescent ranges
+(i.e. stopping traffic completely for inactive ranges).
+
+# Range Leadership (Leader Leases)
+
+As outlined in the Raft section, the replicas of a Range are organized as a
+Raft group and execute commands from their shared commit log. Going through
+Raft is an expensive operation though, and there are tasks which should only be
+carried out by a single replica at a time (as opposed to all of them).
+
+For these reasons, Cockroach introduces the concept of **Range Leadership**:
+This is a lease held for a slice of (database, i.e. hybrid logical) time and is
+established by committing a special log entry through Raft containing the
+interval the leadership is going to be active on, along with the Node:RaftID
+combination that uniquely describes the requesting replica. Reads and writes
+must generally be addressed to the replica holding the lease; if none does, any
+replica may be addressed, causing it to try to obtain the lease synchronously.
+Requests received by a non-leader (for the HLC timestamp specified in the
+request's header) fail with an error pointing at the replica's last known
+leader. These requests are retried transparently with the updated leader by the
+gateway node and never reach the client.
+
+The replica holding the lease is in charge or involved in handling
+Range-specific maintenance tasks such as
+
+* gossiping the sentinel and/or first range information
+* splitting, merging and rebalancing
+* handling message queues (see below)
+
+and, very importantly, may satisfy reads locally, without incurring the
+overhead of going through Raft.
+
+Since reads bypass Raft, a new lease holder will, among other things, ascertain
+that its timestamp cache does not report timestamps smaller than the previous
+lease holder's (so that it's compatible with reads which may have occurred on
+the former leader). This is accomplished by setting the low water mark of the
+timestamp cache to the expiration of the previous lease plus the maximum clock
+offset.
+
+## Relationship to Raft leadership
+
+Range leadership is completely separate from Raft leadership, and so without
+further efforts, Raft and Range leadership may not be represented by the same
+replica most of the time. This is convenient semantically since it decouples
+these two types of leadership and allows the use of Raft as a "black box", but
+for reasons of performance, it is desirable to have both on the same replica.
+Otherwise, sending a command through Raft always incurs the overhead of being
+proposed to the Range leader's Raft instance first, which must relay it to the
+Raft leader, which finally commits it into the log and updates its followers,
+including the Range leader. This yields correct results but wastes several
+round-trip delays, and so we will make sure that in the vast majority of cases
+Range and Raft leadership coincide. A fairly easy method for achieving this is
+to have each new lease period (extension or new) be accompanied by a
+stipulation to the lease holder's replica to start Raft elections (unless it's
+already leading), though some care should be taken that Range leadership is
+relatively stable and long-lived to avoid a large number of Raft leadership
+transitions.
+
+# Splitting / Merging Ranges
+
+RoachNodes split or merge ranges based on whether they exceed maximum or
+minimum thresholds for capacity or load. Ranges exceeding maximums for
+either capacity or load are split; ranges below minimums for *both*
+capacity and load are merged.
+
+Ranges maintain the same accounting statistics as accounting key
+prefixes. These boil down to a time series of data points with minute
+granularity. Everything from number of bytes to read/write queue sizes.
+Arbitrary distillations of the accounting stats can be determined as the
+basis for splitting / merging. Two sensical metrics for use with
+split/merge are range size in bytes and IOps. A good metric for
+rebalancing a replica from one node to another would be total read/write
+queue wait times. These metrics are gossipped, with each range / node
+passing along relevant metrics if they’re in the bottom or top of the
+range it’s aware of.
+
+A range finding itself exceeding either capacity or load threshold
+splits. To this end, the range leader computes an appropriate split key
+candidate and issues the split through Raft. In contrast to splitting,
+merging requires a range to be below the minimum threshold for both
+capacity *and* load. A range being merged chooses the smaller of the
+ranges immediately preceding and succeeding it.
+
+Splitting, merging, rebalancing and recovering all follow the same basic
+algorithm for moving data between roach nodes. New target replicas are
+created and added to the replica set of source range. Then each new
+replica is brought up to date by either replaying the log in full or
+copying a snapshot of the source replica data and then replaying the log
+from the timestamp of the snapshot to catch up fully. Once the new
+replicas are fully up to date, the range metadata is updated and old,
+source replica(s) deleted if applicable.
+
+**Coordinator** (leader replica)
+
+```
+if splitting
+  SplitRange(split_key): splits happen locally on range replicas and
+  only after being completed locally, are moved to new target replicas.
+else if merging
+  Choose new replicas on same servers as target range replicas;
+  add to replica set.
+else if rebalancing || recovering
+  Choose new replica(s) on least loaded servers; add to replica set.
+```
+
+**New Replica**
+
+*Bring replica up to date:*
+
+```
+if all info can be read from replicated log
+  copy replicated log
+else
+  snapshot source replica
+  send successive ReadRange requests to source replica
+  referencing snapshot
+
+if merging
+  combine ranges on all replicas
+else if rebalancing || recovering
+  remove old range replica(s)
+```
+
+RoachNodes split ranges when the total data in a range exceeds a
+configurable maximum threshold. Similarly, ranges are merged when the
+total data falls below a configurable minimum threshold.
+
+**TBD: flesh this out**: Especially for merges (but also rebalancing) we have a
+range disappearing from the local node; that range needs to disappear
+gracefully, with a smooth handoff of operation to the new owner of its data.
+
+Ranges are rebalanced if a node determines its load or capacity is one
+of the worst in the cluster based on gossipped load stats. A node with
+spare capacity is chosen in the same datacenter and a special-case split
+is done which simply duplicates the data 1:1 and resets the range
+configuration metadata.
 
 # Message Queues
 
