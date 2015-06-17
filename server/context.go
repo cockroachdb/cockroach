@@ -216,7 +216,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 		// the port for single-node clusters twice (once in --addr,
 		// once in --gossip).
 		if strings.HasPrefix(address, "self=") {
-			address = util.EnsureHost(ctx.Addr)
+			address = ctx.Addr
 		}
 		resolver, err := resolver.NewResolver(&ctx.Context, address)
 		if err != nil {

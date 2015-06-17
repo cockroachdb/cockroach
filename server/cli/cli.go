@@ -52,6 +52,9 @@ Output build version information.
 
 var cockroachCmd = &cobra.Command{
 	Use: "cockroach",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		Context.Addr = util.EnsureHost(Context.Addr)
+	},
 }
 
 func init() {
