@@ -42,7 +42,8 @@ import (
 func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
 	storeStatusKey := keys.StoreStatusKey(int32(store.Ident.StoreID))
 	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply})
+	if err := gReply.GoError(); err != nil {
 		t.Fatalf("%v: failure getting store status: %s", testNumber, err)
 	}
 	if gReply.Value == nil {
@@ -119,7 +120,8 @@ func TestStoreStatus(t *testing.T) {
 	// Perform a read from the range to ensure that the raft election has
 	// completed.  We do not expect a value to be present.
 	gArgs, gReply := getArgs([]byte("a"), rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply})
+	if err := gReply.GoError(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -146,11 +148,13 @@ func TestStoreStatus(t *testing.T) {
 
 	// Write some values left and right of the proposed split key.
 	pArgs, pReply := putArgs([]byte("a"), content, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply})
+	if err := pReply.GoError(); err != nil {
 		t.Fatal(err)
 	}
 	pArgs, pReply = putArgs([]byte("c"), content, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply})
+	if err := pReply.GoError(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,7 +180,8 @@ func TestStoreStatus(t *testing.T) {
 
 	// Split the range.
 	args, reply := adminSplitArgs(proto.KeyMin, splitKey, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
+	if err := reply.GoError(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -203,12 +208,14 @@ func TestStoreStatus(t *testing.T) {
 	// Write some values left and right of the split key.
 	rng = store.LookupRange([]byte("aa"), nil)
 	pArgs, pReply = putArgs([]byte("aa"), content, rng.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply})
+	if err := pReply.GoError(); err != nil {
 		t.Fatal(err)
 	}
 	rng2 := store.LookupRange([]byte("cc"), nil)
 	pArgs, pReply = putArgs([]byte("cc"), content, rng2.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply})
+	if err := pReply.GoError(); err != nil {
 		t.Fatal(err)
 	}
 

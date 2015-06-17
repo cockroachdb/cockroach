@@ -2401,7 +2401,7 @@ func TestInternalRangeLookup(t *testing.T) {
 		proto.MakeKey(keys.Meta1Prefix, proto.KeyMax),
 	} {
 		reply := proto.InternalRangeLookupResponse{}
-		if err := tc.store.ExecuteCmd(context.Background(), proto.Call{
+		tc.store.ExecuteCmd(context.Background(), proto.Call{
 			Args: &proto.InternalRangeLookupRequest{
 				RequestHeader: proto.RequestHeader{
 					RaftID: 1,
@@ -2410,7 +2410,8 @@ func TestInternalRangeLookup(t *testing.T) {
 				MaxRanges: 1,
 			},
 			Reply: &reply,
-		}); err != nil {
+		})
+		if err := reply.GoError(); err != nil {
 			t.Fatal(err)
 		}
 		expected := []proto.RangeDescriptor{*tc.rng.Desc()}

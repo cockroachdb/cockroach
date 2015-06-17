@@ -130,34 +130,36 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 		var repl *proto.Replica
 		var raftID proto.RaftID
 		raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
-		if err == nil {
-			header.RaftID = raftID
-			header.Replica = *repl
+		if err != nil {
+			call.Reply.Header().SetGoError(err)
+			return
 		}
+		header.RaftID = raftID
+		header.Replica = *repl
 	}
+
+	store, err = ls.GetStore(header.Replica.StoreID)
+	if err != nil {
+		call.Reply.Header().SetGoError(err)
+		return
+	}
+
 	ctx = log.Add(ctx,
 		log.Method, call.Method(),
 		log.Key, header.Key,
 		log.RaftID, header.RaftID)
 
-	if err == nil {
-		store, err = ls.GetStore(header.Replica.StoreID)
+	// For calls that read data within a txn, we can avoid uncertainty
+	// related retries in certain situations. If the node is in
+	// "CertainNodes", we need not worry about uncertain reads any
+	// more. Setting MaxTimestamp=Timestamp for the operation
+	// accomplishes that. See proto.Transaction.CertainNodes for details.
+	if header.Txn != nil && header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
+		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+		header.Txn.MaxTimestamp = header.Txn.Timestamp
 	}
-	if err == nil {
-		// For calls that read data within a txn, we can avoid uncertainty
-		// related retries in certain situations. If the node is in
-		// "CertainNodes", we need not worry about uncertain reads any
-		// more. Setting MaxTimestamp=Timestamp for the operation
-		// accomplishes that. See proto.Transaction.CertainNodes for details.
-		if header.Txn != nil && header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
-			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-			header.Txn.MaxTimestamp = header.Txn.Timestamp
-		}
-		err = store.ExecuteCmd(ctx, call)
-	}
-	if err != nil {
-		call.Reply.Header().SetGoError(err)
-	}
+
+	store.ExecuteCmd(ctx, call)
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done
