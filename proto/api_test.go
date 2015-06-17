@@ -43,7 +43,7 @@ func (t *testError) CanRetry() bool { return true }
 // TestResponseHeaderSetGoError verifies that a test error that
 // implements retryable is converted properly into a generic error.
 func TestResponseHeaderSetGoError(t *testing.T) {
-	rh := ResponseHeader{}
+	rh := KVResponseHeader{}
 	rh.SetGoError(&testError{})
 	err := rh.GoError()
 	if _, ok := err.(*Error); !ok {
@@ -57,7 +57,7 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 // TestResponseHeaderNilError verifies that a nil error can be set
 // and retrieved from a response header.
 func TestResponseHeaderNilError(t *testing.T) {
-	rh := ResponseHeader{}
+	rh := KVResponseHeader{}
 	rh.SetGoError(nil)
 	if err := rh.GoError(); err != nil {
 		t.Errorf("expected nil error; got %s", err)
@@ -83,7 +83,7 @@ func TestCombinable(t *testing.T) {
 	}
 	// Test that {Scan,DeleteRange}Response properly implement it.
 	sr1 := &ScanResponse{
-		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
+		KVResponseHeader: KVResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{
 			{Key: Key("A"), Value: Value{Bytes: []byte("V")}},
 		},
@@ -94,7 +94,7 @@ func TestCombinable(t *testing.T) {
 	}
 
 	sr2 := &ScanResponse{
-		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
+		KVResponseHeader: KVResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{
 			{Key: Key("B"), Value: Value{Bytes: []byte("W")}},
 		},
@@ -102,8 +102,8 @@ func TestCombinable(t *testing.T) {
 	sr2.Timestamp = MaxTimestamp
 
 	wantedSR := &ScanResponse{
-		ResponseHeader: ResponseHeader{Timestamp: MaxTimestamp},
-		Rows:           append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
+		KVResponseHeader: KVResponseHeader{Timestamp: MaxTimestamp},
+		Rows:             append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
 	}
 
 	sr1.Combine(sr2)
@@ -114,23 +114,23 @@ func TestCombinable(t *testing.T) {
 	}
 
 	dr1 := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 100}},
-		NumDeleted:     5,
+		KVResponseHeader: KVResponseHeader{Timestamp: Timestamp{Logical: 100}},
+		NumDeleted:       5,
 	}
 	if _, ok := interface{}(dr1).(Combinable); !ok {
 		t.Fatalf("DeleteRangeResponse does not implement Combinable")
 	}
 	dr2 := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 1}},
-		NumDeleted:     12,
+		KVResponseHeader: KVResponseHeader{Timestamp: Timestamp{Logical: 1}},
+		NumDeleted:       12,
 	}
 	dr3 := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
-		NumDeleted:     3,
+		KVResponseHeader: KVResponseHeader{Timestamp: Timestamp{Logical: 111}},
+		NumDeleted:       3,
 	}
 	wantedDR := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
-		NumDeleted:     20,
+		KVResponseHeader: KVResponseHeader{Timestamp: Timestamp{Logical: 111}},
+		NumDeleted:       20,
 	}
 	dr2.Combine(dr3)
 	dr1.Combine(dr2)
@@ -141,7 +141,7 @@ func TestCombinable(t *testing.T) {
 }
 
 func TestSetGoErrorCopy(t *testing.T) {
-	rh := ResponseHeader{}
+	rh := KVResponseHeader{}
 	err := &Error{Message: "test123"}
 	rh.SetGoError(err)
 	err.Message = "321tset"

@@ -35,7 +35,7 @@ import (
 
 func adminMergeArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.AdminMergeRequest, *proto.AdminMergeResponse) {
 	args := &proto.AdminMergeRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},

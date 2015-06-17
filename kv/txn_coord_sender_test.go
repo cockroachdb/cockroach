@@ -65,7 +65,7 @@ func newTxn(clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
 // specified key, value & txn ID.
 func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *proto.PutRequest {
 	return &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:       key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
@@ -76,7 +76,7 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 
 func createDeleteRangeRequest(key, endKey proto.Key, txn *proto.Transaction) *proto.DeleteRangeRequest {
 	return &proto.DeleteRangeRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:       key,
 			EndKey:    endKey,
 			Timestamp: txn.Timestamp,
@@ -134,7 +134,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	key := proto.Key("key")
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.PutRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Key:          key,
 				User:         storage.UserRoot,
 				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
@@ -172,7 +172,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	reply := &proto.PutResponse{}
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.PutRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Key:          proto.Key("key"),
 				User:         storage.UserRoot,
 				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
@@ -311,7 +311,7 @@ func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transac
 	hr := &proto.InternalHeartbeatTxnResponse{}
 	call := proto.Call{
 		Args: &proto.InternalHeartbeatTxnRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Key: txn.Key,
 				Txn: txn,
 			},
@@ -365,7 +365,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	etReply := &proto.EndTransactionResponse{}
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
@@ -402,7 +402,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn2 := newTxn(s.Clock, key)
 	txn2.Priority = 2
 	pushArgs := &proto.InternalPushTxnRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key: txn.Key,
 			Txn: txn2,
 		},
@@ -421,7 +421,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
 	etArgs := &proto.EndTransactionRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
@@ -499,7 +499,7 @@ func (ts *testSender) Close() {
 }
 
 var testPutReq = &proto.PutRequest{
-	RequestHeader: proto.RequestHeader{
+	KVRequestHeader: proto.KVRequestHeader{
 		Key:          proto.Key("test-key"),
 		User:         storage.UserRoot,
 		UserPriority: gogoproto.Int32(-1),
@@ -606,7 +606,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 
 		pushArgs := &proto.InternalPushTxnRequest{}
 		if tc.arg {
-			pushArgs.RequestHeader = proto.RequestHeader{
+			pushArgs.KVRequestHeader = proto.KVRequestHeader{
 				Txn: txn1,
 			}
 		}

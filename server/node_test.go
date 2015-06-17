@@ -263,7 +263,7 @@ func TestCorruptedClusterID(t *testing.T) {
 func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.NodeStatus, testNumber int) *proto.NodeStatus {
 	nodeStatusKey := keys.NodeStatusKey(int32(node.Descriptor.NodeID))
 	request := &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key: nodeStatusKey,
 		},
 	}
@@ -422,7 +422,7 @@ func TestNodeStatus(t *testing.T) {
 	// Split the range.
 	rng := s.LookupRange(splitKey, nil)
 	args := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     proto.KeyMin,
 			RaftID:  rng.Desc().RaftID,
 			Replica: proto.Replica{StoreID: s.Ident.StoreID},

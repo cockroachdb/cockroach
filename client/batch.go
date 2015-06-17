@@ -359,7 +359,7 @@ func (b *Batch) adminMerge(key interface{}) {
 		return
 	}
 	req := &proto.AdminMergeRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key: proto.Key(k),
 		},
 	}
@@ -377,7 +377,7 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 		return
 	}
 	req := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key: proto.Key(k),
 		},
 	}

@@ -168,8 +168,8 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
-				Commit:        true,
+				KVRequestHeader: proto.KVRequestHeader{Key: proto.Key("foo")},
+				Commit:          true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					SplitTrigger: &proto.SplitTrigger{
 						UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},

@@ -429,8 +429,8 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 		ds := NewDistSender(ctx, g)
 		call := proto.Call{
 			Args: &proto.InternalPushTxnRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
-				RangeLookup:   rangeLookup,
+				KVRequestHeader: proto.KVRequestHeader{Key: proto.Key("a")},
+				RangeLookup:     rangeLookup,
 			},
 			Reply: &proto.InternalPushTxnResponse{},
 		}
@@ -638,7 +638,7 @@ func TestVerifyPermissions(t *testing.T) {
 
 	for i, test := range testData {
 		for _, r := range test.requests {
-			*r.Header() = proto.RequestHeader{
+			*r.Header() = proto.KVRequestHeader{
 				User:   test.user,
 				Key:    test.startKey,
 				EndKey: test.endKey,

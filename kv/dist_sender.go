@@ -281,7 +281,7 @@ type lookupOptions struct {
 func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	desc *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:             key,
 			User:            storage.UserRoot,
 			ReadConsistency: proto.INCONSISTENT,

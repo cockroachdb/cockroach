@@ -106,7 +106,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 		if err = rng.AddCmd(rng.context(),
 			proto.Call{
 				Args: &proto.AdminSplitRequest{
-					RequestHeader: proto.RequestHeader{Key: rng.Desc().StartKey},
+					KVRequestHeader: proto.KVRequestHeader{Key: rng.Desc().StartKey},
 				},
 				Reply: &proto.AdminSplitResponse{},
 			}, true); err != nil {

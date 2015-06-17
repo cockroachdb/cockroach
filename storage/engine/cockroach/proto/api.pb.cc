@@ -24,12 +24,12 @@ namespace {
 const ::google::protobuf::Descriptor* ClientCmdID_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ClientCmdID_reflection_ = NULL;
-const ::google::protobuf::Descriptor* RequestHeader_descriptor_ = NULL;
+const ::google::protobuf::Descriptor* KVRequestHeader_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
-  RequestHeader_reflection_ = NULL;
-const ::google::protobuf::Descriptor* ResponseHeader_descriptor_ = NULL;
+  KVRequestHeader_reflection_ = NULL;
+const ::google::protobuf::Descriptor* KVResponseHeader_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
-  ResponseHeader_reflection_ = NULL;
+  KVResponseHeader_reflection_ = NULL;
 const ::google::protobuf::Descriptor* GetRequest_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   GetRequest_reflection_ = NULL;
@@ -149,46 +149,46 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       sizeof(ClientCmdID),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ClientCmdID, _internal_metadata_),
       -1);
-  RequestHeader_descriptor_ = file->message_type(1);
-  static const int RequestHeader_offsets_[10] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, timestamp_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, cmd_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, key_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, end_key_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, user_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, replica_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, raft_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, user_priority_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, txn_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, read_consistency_),
+  KVRequestHeader_descriptor_ = file->message_type(1);
+  static const int KVRequestHeader_offsets_[10] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, timestamp_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, cmd_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, key_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, end_key_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, user_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, replica_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, raft_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, user_priority_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, txn_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, read_consistency_),
   };
-  RequestHeader_reflection_ =
+  KVRequestHeader_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
-      RequestHeader_descriptor_,
-      RequestHeader::default_instance_,
-      RequestHeader_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, _has_bits_[0]),
+      KVRequestHeader_descriptor_,
+      KVRequestHeader::default_instance_,
+      KVRequestHeader_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, _has_bits_[0]),
       -1,
       -1,
-      sizeof(RequestHeader),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestHeader, _internal_metadata_),
+      sizeof(KVRequestHeader),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVRequestHeader, _internal_metadata_),
       -1);
-  ResponseHeader_descriptor_ = file->message_type(2);
-  static const int ResponseHeader_offsets_[3] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseHeader, error_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseHeader, timestamp_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseHeader, txn_),
+  KVResponseHeader_descriptor_ = file->message_type(2);
+  static const int KVResponseHeader_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVResponseHeader, error_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVResponseHeader, timestamp_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVResponseHeader, txn_),
   };
-  ResponseHeader_reflection_ =
+  KVResponseHeader_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
-      ResponseHeader_descriptor_,
-      ResponseHeader::default_instance_,
-      ResponseHeader_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseHeader, _has_bits_[0]),
+      KVResponseHeader_descriptor_,
+      KVResponseHeader::default_instance_,
+      KVResponseHeader_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVResponseHeader, _has_bits_[0]),
       -1,
       -1,
-      sizeof(ResponseHeader),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseHeader, _internal_metadata_),
+      sizeof(KVResponseHeader),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(KVResponseHeader, _internal_metadata_),
       -1);
   GetRequest_descriptor_ = file->message_type(3);
   static const int GetRequest_offsets_[1] = {
@@ -603,9 +603,9 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       ClientCmdID_descriptor_, &ClientCmdID::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-      RequestHeader_descriptor_, &RequestHeader::default_instance());
+      KVRequestHeader_descriptor_, &KVRequestHeader::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-      ResponseHeader_descriptor_, &ResponseHeader::default_instance());
+      KVResponseHeader_descriptor_, &KVResponseHeader::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       GetRequest_descriptor_, &GetRequest::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
@@ -661,10 +661,10 @@ void protobuf_RegisterTypes(const ::std::string&) {
 void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto() {
   delete ClientCmdID::default_instance_;
   delete ClientCmdID_reflection_;
-  delete RequestHeader::default_instance_;
-  delete RequestHeader_reflection_;
-  delete ResponseHeader::default_instance_;
-  delete ResponseHeader_reflection_;
+  delete KVRequestHeader::default_instance_;
+  delete KVRequestHeader_reflection_;
+  delete KVResponseHeader::default_instance_;
+  delete KVResponseHeader_reflection_;
   delete GetRequest::default_instance_;
   delete GetRequest_reflection_;
   delete GetResponse::default_instance_;
@@ -733,112 +733,113 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "roach/proto/data.proto\032\034cockroach/proto/"
     "errors.proto\032\024gogoproto/gogo.proto\"<\n\013Cl"
     "ientCmdID\022\027\n\twall_time\030\001 \001(\003B\004\310\336\037\000\022\024\n\006ra"
-    "ndom\030\002 \001(\003B\004\310\336\037\000\"\254\003\n\rRequestHeader\0223\n\tti"
-    "mestamp\030\001 \001(\0132\032.cockroach.proto.Timestam"
-    "pB\004\310\336\037\000\022;\n\006cmd_id\030\002 \001(\0132\034.cockroach.prot"
-    "o.ClientCmdIDB\r\310\336\037\000\342\336\037\005CmdID\022\024\n\003key\030\003 \001("
-    "\014B\007\372\336\037\003Key\022\030\n\007end_key\030\004 \001(\014B\007\372\336\037\003Key\022\022\n\004"
-    "user\030\005 \001(\tB\004\310\336\037\000\022/\n\007replica\030\006 \001(\0132\030.cock"
-    "roach.proto.ReplicaB\004\310\336\037\000\022)\n\007raft_id\030\007 \001"
-    "(\003B\030\310\336\037\000\342\336\037\006RaftID\372\336\037\006RaftID\022\030\n\ruser_pri"
-    "ority\030\010 \001(\005:\0011\022)\n\003txn\030\t \001(\0132\034.cockroach."
-    "proto.Transaction\022D\n\020read_consistency\030\n "
-    "\001(\0162$.cockroach.proto.ReadConsistencyTyp"
-    "eB\004\310\336\037\000\"\227\001\n\016ResponseHeader\022%\n\005error\030\001 \001("
-    "\0132\026.cockroach.proto.Error\0223\n\ttimestamp\030\002"
-    " \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\022)"
-    "\n\003txn\030\003 \001(\0132\034.cockroach.proto.Transactio"
-    "n\"F\n\nGetRequest\0228\n\006header\030\001 \001(\0132\036.cockro"
-    "ach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"o\n\013Get"
-    "Response\0229\n\006header\030\001 \001(\0132\037.cockroach.pro"
-    "to.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022%\n\005value\030\002 \001"
-    "(\0132\026.cockroach.proto.Value\"s\n\nPutRequest"
-    "\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Reque"
-    "stHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.cock"
-    "roach.proto.ValueB\004\310\336\037\000\"H\n\013PutResponse\0229"
-    "\n\006header\030\001 \001(\0132\037.cockroach.proto.Respons"
-    "eHeaderB\010\310\336\037\000\320\336\037\001\"\251\001\n\025ConditionalPutRequ"
-    "est\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Re"
-    "questHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 \001(\0132\026.c"
-    "ockroach.proto.ValueB\004\310\336\037\000\022)\n\texp_value\030"
-    "\003 \001(\0132\026.cockroach.proto.Value\"S\n\026Conditi"
-    "onalPutResponse\0229\n\006header\030\001 \001(\0132\037.cockro"
-    "ach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"e\n\020In"
-    "crementRequest\0228\n\006header\030\001 \001(\0132\036.cockroa"
-    "ch.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\027\n\tincr"
-    "ement\030\002 \001(\003B\004\310\336\037\000\"g\n\021IncrementResponse\0229"
-    "\n\006header\030\001 \001(\0132\037.cockroach.proto.Respons"
-    "eHeaderB\010\310\336\037\000\320\336\037\001\022\027\n\tnew_value\030\002 \001(\003B\004\310\336"
-    "\037\000\"I\n\rDeleteRequest\0228\n\006header\030\001 \001(\0132\036.co"
-    "ckroach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"K\n"
-    "\016DeleteResponse\0229\n\006header\030\001 \001(\0132\037.cockro"
-    "ach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"s\n\022De"
-    "leteRangeRequest\0228\n\006header\030\001 \001(\0132\036.cockr"
-    "oach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022#\n\025ma"
-    "x_entries_to_delete\030\002 \001(\003B\004\310\336\037\000\"k\n\023Delet"
-    "eRangeResponse\0229\n\006header\030\001 \001(\0132\037.cockroa"
-    "ch.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013num"
-    "_deleted\030\002 \001(\003B\004\310\336\037\000\"b\n\013ScanRequest\0228\n\006h"
-    "eader\030\001 \001(\0132\036.cockroach.proto.RequestHea"
-    "derB\010\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336\037\000"
-    "\"x\n\014ScanResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
-    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022-\n\004r"
-    "ows\030\002 \003(\0132\031.cockroach.proto.KeyValueB\004\310\336"
-    "\037\000\"\260\001\n\025EndTransactionRequest\0228\n\006header\030\001"
-    " \001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336"
-    "\037\000\320\336\037\001\022\024\n\006commit\030\002 \001(\010B\004\310\336\037\000\022G\n\027internal"
-    "_commit_trigger\030\003 \001(\0132&.cockroach.proto."
-    "InternalCommitTrigger\"\211\001\n\026EndTransaction"
-    "Response\0229\n\006header\030\001 \001(\0132\037.cockroach.pro"
-    "to.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wa"
-    "it\030\002 \001(\003B\004\310\336\037\000\022\031\n\010resolved\030\003 \003(\014B\007\372\336\037\003Ke"
-    "y\"\320\003\n\014RequestUnion\022*\n\003get\030\002 \001(\0132\033.cockro"
-    "ach.proto.GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.co"
-    "ckroach.proto.PutRequestH\000\022A\n\017conditiona"
-    "l_put\030\004 \001(\0132&.cockroach.proto.Conditiona"
-    "lPutRequestH\000\0226\n\tincrement\030\005 \001(\0132!.cockr"
-    "oach.proto.IncrementRequestH\000\0220\n\006delete\030"
-    "\006 \001(\0132\036.cockroach.proto.DeleteRequestH\000\022"
-    ";\n\014delete_range\030\007 \001(\0132#.cockroach.proto."
-    "DeleteRangeRequestH\000\022,\n\004scan\030\010 \001(\0132\034.coc"
-    "kroach.proto.ScanRequestH\000\022A\n\017end_transa"
-    "ction\030\t \001(\0132&.cockroach.proto.EndTransac"
-    "tionRequestH\000:\004\310\240\037\001B\007\n\005value\"\331\003\n\rRespons"
-    "eUnion\022+\n\003get\030\002 \001(\0132\034.cockroach.proto.Ge"
-    "tResponseH\000\022+\n\003put\030\003 \001(\0132\034.cockroach.pro"
-    "to.PutResponseH\000\022B\n\017conditional_put\030\004 \001("
-    "\0132\'.cockroach.proto.ConditionalPutRespon"
-    "seH\000\0227\n\tincrement\030\005 \001(\0132\".cockroach.prot"
-    "o.IncrementResponseH\000\0221\n\006delete\030\006 \001(\0132\037."
-    "cockroach.proto.DeleteResponseH\000\022<\n\014dele"
-    "te_range\030\007 \001(\0132$.cockroach.proto.DeleteR"
-    "angeResponseH\000\022-\n\004scan\030\010 \001(\0132\035.cockroach"
-    ".proto.ScanResponseH\000\022B\n\017end_transaction"
-    "\030\t \001(\0132\'.cockroach.proto.EndTransactionR"
-    "esponseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014BatchRequest"
-    "\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Reque"
-    "stHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003(\0132\035.c"
-    "ockroach.proto.RequestUnionB\004\310\336\037\000\"\203\001\n\rBa"
-    "tchResponse\0229\n\006header\030\001 \001(\0132\037.cockroach."
-    "proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\trespon"
-    "ses\030\002 \003(\0132\036.cockroach.proto.ResponseUnio"
-    "nB\004\310\336\037\000\"i\n\021AdminSplitRequest\0228\n\006header\030\001"
-    " \001(\0132\036.cockroach.proto.RequestHeaderB\010\310\336"
-    "\037\000\320\336\037\001\022\032\n\tsplit_key\030\002 \001(\014B\007\372\336\037\003Key\"O\n\022Ad"
-    "minSplitResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
-    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"M\n\021A"
-    "dminMergeRequest\0228\n\006header\030\001 \001(\0132\036.cockr"
-    "oach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"O\n\022Ad"
-    "minMergeResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
-    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001*L\n\023R"
-    "eadConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCO"
-    "NSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000B\023Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001", 4214);
+    "ndom\030\002 \001(\003B\004\310\336\037\000\"\256\003\n\017KVRequestHeader\0223\n\t"
+    "timestamp\030\001 \001(\0132\032.cockroach.proto.Timest"
+    "ampB\004\310\336\037\000\022;\n\006cmd_id\030\002 \001(\0132\034.cockroach.pr"
+    "oto.ClientCmdIDB\r\310\336\037\000\342\336\037\005CmdID\022\024\n\003key\030\003 "
+    "\001(\014B\007\372\336\037\003Key\022\030\n\007end_key\030\004 \001(\014B\007\372\336\037\003Key\022\022"
+    "\n\004user\030\005 \001(\tB\004\310\336\037\000\022/\n\007replica\030\006 \001(\0132\030.co"
+    "ckroach.proto.ReplicaB\004\310\336\037\000\022)\n\007raft_id\030\007"
+    " \001(\003B\030\310\336\037\000\342\336\037\006RaftID\372\336\037\006RaftID\022\030\n\ruser_p"
+    "riority\030\010 \001(\005:\0011\022)\n\003txn\030\t \001(\0132\034.cockroac"
+    "h.proto.Transaction\022D\n\020read_consistency\030"
+    "\n \001(\0162$.cockroach.proto.ReadConsistencyT"
+    "ypeB\004\310\336\037\000\"\231\001\n\020KVResponseHeader\022%\n\005error\030"
+    "\001 \001(\0132\026.cockroach.proto.Error\0223\n\ttimesta"
+    "mp\030\002 \001(\0132\032.cockroach.proto.TimestampB\004\310\336"
+    "\037\000\022)\n\003txn\030\003 \001(\0132\034.cockroach.proto.Transa"
+    "ction\"H\n\nGetRequest\022:\n\006header\030\001 \001(\0132 .co"
+    "ckroach.proto.KVRequestHeaderB\010\310\336\037\000\320\336\037\001\""
+    "q\n\013GetResponse\022;\n\006header\030\001 \001(\0132!.cockroa"
+    "ch.proto.KVResponseHeaderB\010\310\336\037\000\320\336\037\001\022%\n\005v"
+    "alue\030\002 \001(\0132\026.cockroach.proto.Value\"u\n\nPu"
+    "tRequest\022:\n\006header\030\001 \001(\0132 .cockroach.pro"
+    "to.KVRequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005value\030\002 "
+    "\001(\0132\026.cockroach.proto.ValueB\004\310\336\037\000\"J\n\013Put"
+    "Response\022;\n\006header\030\001 \001(\0132!.cockroach.pro"
+    "to.KVResponseHeaderB\010\310\336\037\000\320\336\037\001\"\253\001\n\025Condit"
+    "ionalPutRequest\022:\n\006header\030\001 \001(\0132 .cockro"
+    "ach.proto.KVRequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\005v"
+    "alue\030\002 \001(\0132\026.cockroach.proto.ValueB\004\310\336\037\000"
+    "\022)\n\texp_value\030\003 \001(\0132\026.cockroach.proto.Va"
+    "lue\"U\n\026ConditionalPutResponse\022;\n\006header\030"
+    "\001 \001(\0132!.cockroach.proto.KVResponseHeader"
+    "B\010\310\336\037\000\320\336\037\001\"g\n\020IncrementRequest\022:\n\006header"
+    "\030\001 \001(\0132 .cockroach.proto.KVRequestHeader"
+    "B\010\310\336\037\000\320\336\037\001\022\027\n\tincrement\030\002 \001(\003B\004\310\336\037\000\"i\n\021I"
+    "ncrementResponse\022;\n\006header\030\001 \001(\0132!.cockr"
+    "oach.proto.KVResponseHeaderB\010\310\336\037\000\320\336\037\001\022\027\n"
+    "\tnew_value\030\002 \001(\003B\004\310\336\037\000\"K\n\rDeleteRequest\022"
+    ":\n\006header\030\001 \001(\0132 .cockroach.proto.KVRequ"
+    "estHeaderB\010\310\336\037\000\320\336\037\001\"M\n\016DeleteResponse\022;\n"
+    "\006header\030\001 \001(\0132!.cockroach.proto.KVRespon"
+    "seHeaderB\010\310\336\037\000\320\336\037\001\"u\n\022DeleteRangeRequest"
+    "\022:\n\006header\030\001 \001(\0132 .cockroach.proto.KVReq"
+    "uestHeaderB\010\310\336\037\000\320\336\037\001\022#\n\025max_entries_to_d"
+    "elete\030\002 \001(\003B\004\310\336\037\000\"m\n\023DeleteRangeResponse"
+    "\022;\n\006header\030\001 \001(\0132!.cockroach.proto.KVRes"
+    "ponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013num_deleted\030\002 \001"
+    "(\003B\004\310\336\037\000\"d\n\013ScanRequest\022:\n\006header\030\001 \001(\0132"
+    " .cockroach.proto.KVRequestHeaderB\010\310\336\037\000\320"
+    "\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336\037\000\"z\n\014ScanRe"
+    "sponse\022;\n\006header\030\001 \001(\0132!.cockroach.proto"
+    ".KVResponseHeaderB\010\310\336\037\000\320\336\037\001\022-\n\004rows\030\002 \003("
+    "\0132\031.cockroach.proto.KeyValueB\004\310\336\037\000\"\262\001\n\025E"
+    "ndTransactionRequest\022:\n\006header\030\001 \001(\0132 .c"
+    "ockroach.proto.KVRequestHeaderB\010\310\336\037\000\320\336\037\001"
+    "\022\024\n\006commit\030\002 \001(\010B\004\310\336\037\000\022G\n\027internal_commi"
+    "t_trigger\030\003 \001(\0132&.cockroach.proto.Intern"
+    "alCommitTrigger\"\213\001\n\026EndTransactionRespon"
+    "se\022;\n\006header\030\001 \001(\0132!.cockroach.proto.KVR"
+    "esponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wait\030\002"
+    " \001(\003B\004\310\336\037\000\022\031\n\010resolved\030\003 \003(\014B\007\372\336\037\003Key\"\320\003"
+    "\n\014RequestUnion\022*\n\003get\030\002 \001(\0132\033.cockroach."
+    "proto.GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.cockro"
+    "ach.proto.PutRequestH\000\022A\n\017conditional_pu"
+    "t\030\004 \001(\0132&.cockroach.proto.ConditionalPut"
+    "RequestH\000\0226\n\tincrement\030\005 \001(\0132!.cockroach"
+    ".proto.IncrementRequestH\000\0220\n\006delete\030\006 \001("
+    "\0132\036.cockroach.proto.DeleteRequestH\000\022;\n\014d"
+    "elete_range\030\007 \001(\0132#.cockroach.proto.Dele"
+    "teRangeRequestH\000\022,\n\004scan\030\010 \001(\0132\034.cockroa"
+    "ch.proto.ScanRequestH\000\022A\n\017end_transactio"
+    "n\030\t \001(\0132&.cockroach.proto.EndTransaction"
+    "RequestH\000:\004\310\240\037\001B\007\n\005value\"\331\003\n\rResponseUni"
+    "on\022+\n\003get\030\002 \001(\0132\034.cockroach.proto.GetRes"
+    "ponseH\000\022+\n\003put\030\003 \001(\0132\034.cockroach.proto.P"
+    "utResponseH\000\022B\n\017conditional_put\030\004 \001(\0132\'."
+    "cockroach.proto.ConditionalPutResponseH\000"
+    "\0227\n\tincrement\030\005 \001(\0132\".cockroach.proto.In"
+    "crementResponseH\000\0221\n\006delete\030\006 \001(\0132\037.cock"
+    "roach.proto.DeleteResponseH\000\022<\n\014delete_r"
+    "ange\030\007 \001(\0132$.cockroach.proto.DeleteRange"
+    "ResponseH\000\022-\n\004scan\030\010 \001(\0132\035.cockroach.pro"
+    "to.ScanResponseH\000\022B\n\017end_transaction\030\t \001"
+    "(\0132\'.cockroach.proto.EndTransactionRespo"
+    "nseH\000:\004\310\240\037\001B\007\n\005value\"\201\001\n\014BatchRequest\022:\n"
+    "\006header\030\001 \001(\0132 .cockroach.proto.KVReques"
+    "tHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003(\0132\035.co"
+    "ckroach.proto.RequestUnionB\004\310\336\037\000\"\205\001\n\rBat"
+    "chResponse\022;\n\006header\030\001 \001(\0132!.cockroach.p"
+    "roto.KVResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\trespo"
+    "nses\030\002 \003(\0132\036.cockroach.proto.ResponseUni"
+    "onB\004\310\336\037\000\"k\n\021AdminSplitRequest\022:\n\006header\030"
+    "\001 \001(\0132 .cockroach.proto.KVRequestHeaderB"
+    "\010\310\336\037\000\320\336\037\001\022\032\n\tsplit_key\030\002 \001(\014B\007\372\336\037\003Key\"Q\n"
+    "\022AdminSplitResponse\022;\n\006header\030\001 \001(\0132!.co"
+    "ckroach.proto.KVResponseHeaderB\010\310\336\037\000\320\336\037\001"
+    "\"O\n\021AdminMergeRequest\022:\n\006header\030\001 \001(\0132 ."
+    "cockroach.proto.KVRequestHeaderB\010\310\336\037\000\320\336\037"
+    "\001\"Q\n\022AdminMergeResponse\022;\n\006header\030\001 \001(\0132"
+    "!.cockroach.proto.KVResponseHeaderB\010\310\336\037\000"
+    "\320\336\037\001*L\n\023ReadConsistencyType\022\016\n\nCONSISTEN"
+    "T\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243"
+    "\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 4263);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
-  RequestHeader::default_instance_ = new RequestHeader();
-  ResponseHeader::default_instance_ = new ResponseHeader();
+  KVRequestHeader::default_instance_ = new KVRequestHeader();
+  KVResponseHeader::default_instance_ = new KVResponseHeader();
   GetRequest::default_instance_ = new GetRequest();
   GetResponse::default_instance_ = new GetResponse();
   PutRequest::default_instance_ = new PutRequest();
@@ -866,8 +867,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
   AdminMergeRequest::default_instance_ = new AdminMergeRequest();
   AdminMergeResponse::default_instance_ = new AdminMergeResponse();
   ClientCmdID::default_instance_->InitAsDefaultInstance();
-  RequestHeader::default_instance_->InitAsDefaultInstance();
-  ResponseHeader::default_instance_->InitAsDefaultInstance();
+  KVRequestHeader::default_instance_->InitAsDefaultInstance();
+  KVResponseHeader::default_instance_->InitAsDefaultInstance();
   GetRequest::default_instance_->InitAsDefaultInstance();
   GetResponse::default_instance_->InitAsDefaultInstance();
   PutRequest::default_instance_->InitAsDefaultInstance();
@@ -1265,40 +1266,40 @@ void ClientCmdID::clear_random() {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int RequestHeader::kTimestampFieldNumber;
-const int RequestHeader::kCmdIdFieldNumber;
-const int RequestHeader::kKeyFieldNumber;
-const int RequestHeader::kEndKeyFieldNumber;
-const int RequestHeader::kUserFieldNumber;
-const int RequestHeader::kReplicaFieldNumber;
-const int RequestHeader::kRaftIdFieldNumber;
-const int RequestHeader::kUserPriorityFieldNumber;
-const int RequestHeader::kTxnFieldNumber;
-const int RequestHeader::kReadConsistencyFieldNumber;
+const int KVRequestHeader::kTimestampFieldNumber;
+const int KVRequestHeader::kCmdIdFieldNumber;
+const int KVRequestHeader::kKeyFieldNumber;
+const int KVRequestHeader::kEndKeyFieldNumber;
+const int KVRequestHeader::kUserFieldNumber;
+const int KVRequestHeader::kReplicaFieldNumber;
+const int KVRequestHeader::kRaftIdFieldNumber;
+const int KVRequestHeader::kUserPriorityFieldNumber;
+const int KVRequestHeader::kTxnFieldNumber;
+const int KVRequestHeader::kReadConsistencyFieldNumber;
 #endif  // !_MSC_VER
 
-RequestHeader::RequestHeader()
+KVRequestHeader::KVRequestHeader()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(constructor:cockroach.proto.KVRequestHeader)
 }
 
-void RequestHeader::InitAsDefaultInstance() {
+void KVRequestHeader::InitAsDefaultInstance() {
   timestamp_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
   cmd_id_ = const_cast< ::cockroach::proto::ClientCmdID*>(&::cockroach::proto::ClientCmdID::default_instance());
   replica_ = const_cast< ::cockroach::proto::Replica*>(&::cockroach::proto::Replica::default_instance());
   txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
 }
 
-RequestHeader::RequestHeader(const RequestHeader& from)
+KVRequestHeader::KVRequestHeader(const KVRequestHeader& from)
   : ::google::protobuf::Message(),
     _internal_metadata_(NULL) {
   SharedCtor();
   MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.KVRequestHeader)
 }
 
-void RequestHeader::SharedCtor() {
+void KVRequestHeader::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   timestamp_ = NULL;
@@ -1314,12 +1315,12 @@ void RequestHeader::SharedCtor() {
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
-RequestHeader::~RequestHeader() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.RequestHeader)
+KVRequestHeader::~KVRequestHeader() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.KVRequestHeader)
   SharedDtor();
 }
 
-void RequestHeader::SharedDtor() {
+void KVRequestHeader::SharedDtor() {
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   end_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   user_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -1331,32 +1332,32 @@ void RequestHeader::SharedDtor() {
   }
 }
 
-void RequestHeader::SetCachedSize(int size) const {
+void KVRequestHeader::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const ::google::protobuf::Descriptor* RequestHeader::descriptor() {
+const ::google::protobuf::Descriptor* KVRequestHeader::descriptor() {
   protobuf_AssignDescriptorsOnce();
-  return RequestHeader_descriptor_;
+  return KVRequestHeader_descriptor_;
 }
 
-const RequestHeader& RequestHeader::default_instance() {
+const KVRequestHeader& KVRequestHeader::default_instance() {
   if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   return *default_instance_;
 }
 
-RequestHeader* RequestHeader::default_instance_ = NULL;
+KVRequestHeader* KVRequestHeader::default_instance_ = NULL;
 
-RequestHeader* RequestHeader::New(::google::protobuf::Arena* arena) const {
-  RequestHeader* n = new RequestHeader;
+KVRequestHeader* KVRequestHeader::New(::google::protobuf::Arena* arena) const {
+  KVRequestHeader* n = new KVRequestHeader;
   if (arena != NULL) {
     arena->Own(n);
   }
   return n;
 }
 
-void RequestHeader::Clear() {
+void KVRequestHeader::Clear() {
   if (_has_bits_[0 / 32] & 255u) {
     if (has_timestamp()) {
       if (timestamp_ != NULL) timestamp_->::cockroach::proto::Timestamp::Clear();
@@ -1391,11 +1392,11 @@ void RequestHeader::Clear() {
   }
 }
 
-bool RequestHeader::MergePartialFromCodedStream(
+bool KVRequestHeader::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(parse_start:cockroach.proto.KVRequestHeader)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
     tag = p.first;
@@ -1461,7 +1462,7 @@ bool RequestHeader::MergePartialFromCodedStream(
           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
             this->user().data(), this->user().length(),
             ::google::protobuf::internal::WireFormat::PARSE,
-            "cockroach.proto.RequestHeader.user");
+            "cockroach.proto.KVRequestHeader.user");
         } else {
           goto handle_unusual;
         }
@@ -1559,17 +1560,17 @@ bool RequestHeader::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(parse_success:cockroach.proto.KVRequestHeader)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.KVRequestHeader)
   return false;
 #undef DO_
 }
 
-void RequestHeader::SerializeWithCachedSizes(
+void KVRequestHeader::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.KVRequestHeader)
   // optional .cockroach.proto.Timestamp timestamp = 1;
   if (has_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
@@ -1599,7 +1600,7 @@ void RequestHeader::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
       this->user().data(), this->user().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE,
-      "cockroach.proto.RequestHeader.user");
+      "cockroach.proto.KVRequestHeader.user");
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
       5, this->user(), output);
   }
@@ -1636,12 +1637,12 @@ void RequestHeader::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
   }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.KVRequestHeader)
 }
 
-::google::protobuf::uint8* RequestHeader::SerializeWithCachedSizesToArray(
+::google::protobuf::uint8* KVRequestHeader::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.KVRequestHeader)
   // optional .cockroach.proto.Timestamp timestamp = 1;
   if (has_timestamp()) {
     target = ::google::protobuf::internal::WireFormatLite::
@@ -1675,7 +1676,7 @@ void RequestHeader::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
       this->user().data(), this->user().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE,
-      "cockroach.proto.RequestHeader.user");
+      "cockroach.proto.KVRequestHeader.user");
     target =
       ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
         5, this->user(), target);
@@ -1715,11 +1716,11 @@ void RequestHeader::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
   }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RequestHeader)
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.KVRequestHeader)
   return target;
 }
 
-int RequestHeader::ByteSize() const {
+int KVRequestHeader::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 255) {
@@ -1806,10 +1807,10 @@ int RequestHeader::ByteSize() const {
   return total_size;
 }
 
-void RequestHeader::MergeFrom(const ::google::protobuf::Message& from) {
+void KVRequestHeader::MergeFrom(const ::google::protobuf::Message& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  const RequestHeader* source = 
-      ::google::protobuf::internal::DynamicCastToGenerated<const RequestHeader>(
+  const KVRequestHeader* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const KVRequestHeader>(
           &from);
   if (source == NULL) {
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
@@ -1818,7 +1819,7 @@ void RequestHeader::MergeFrom(const ::google::protobuf::Message& from) {
   }
 }
 
-void RequestHeader::MergeFrom(const RequestHeader& from) {
+void KVRequestHeader::MergeFrom(const KVRequestHeader& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_timestamp()) {
@@ -1862,28 +1863,28 @@ void RequestHeader::MergeFrom(const RequestHeader& from) {
   }
 }
 
-void RequestHeader::CopyFrom(const ::google::protobuf::Message& from) {
+void KVRequestHeader::CopyFrom(const ::google::protobuf::Message& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-void RequestHeader::CopyFrom(const RequestHeader& from) {
+void KVRequestHeader::CopyFrom(const KVRequestHeader& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool RequestHeader::IsInitialized() const {
+bool KVRequestHeader::IsInitialized() const {
 
   return true;
 }
 
-void RequestHeader::Swap(RequestHeader* other) {
+void KVRequestHeader::Swap(KVRequestHeader* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void RequestHeader::InternalSwap(RequestHeader* other) {
+void KVRequestHeader::InternalSwap(KVRequestHeader* other) {
   std::swap(timestamp_, other->timestamp_);
   std::swap(cmd_id_, other->cmd_id_);
   key_.Swap(&other->key_);
@@ -1899,50 +1900,50 @@ void RequestHeader::InternalSwap(RequestHeader* other) {
   std::swap(_cached_size_, other->_cached_size_);
 }
 
-::google::protobuf::Metadata RequestHeader::GetMetadata() const {
+::google::protobuf::Metadata KVRequestHeader::GetMetadata() const {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::Metadata metadata;
-  metadata.descriptor = RequestHeader_descriptor_;
-  metadata.reflection = RequestHeader_reflection_;
+  metadata.descriptor = KVRequestHeader_descriptor_;
+  metadata.reflection = KVRequestHeader_reflection_;
   return metadata;
 }
 
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
-// RequestHeader
+// KVRequestHeader
 
 // optional .cockroach.proto.Timestamp timestamp = 1;
-bool RequestHeader::has_timestamp() const {
+bool KVRequestHeader::has_timestamp() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void RequestHeader::set_has_timestamp() {
+void KVRequestHeader::set_has_timestamp() {
   _has_bits_[0] |= 0x00000001u;
 }
-void RequestHeader::clear_has_timestamp() {
+void KVRequestHeader::clear_has_timestamp() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void RequestHeader::clear_timestamp() {
+void KVRequestHeader::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::proto::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::proto::Timestamp& RequestHeader::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.timestamp)
+ const ::cockroach::proto::Timestamp& KVRequestHeader::timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::proto::Timestamp* RequestHeader::mutable_timestamp() {
+ ::cockroach::proto::Timestamp* KVRequestHeader::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::proto::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.timestamp)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.timestamp)
   return timestamp_;
 }
- ::cockroach::proto::Timestamp* RequestHeader::release_timestamp() {
+ ::cockroach::proto::Timestamp* KVRequestHeader::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::proto::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void RequestHeader::set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp) {
+ void KVRequestHeader::set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -1950,42 +1951,42 @@ void RequestHeader::clear_timestamp() {
   } else {
     clear_has_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.timestamp)
 }
 
 // optional .cockroach.proto.ClientCmdID cmd_id = 2;
-bool RequestHeader::has_cmd_id() const {
+bool KVRequestHeader::has_cmd_id() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void RequestHeader::set_has_cmd_id() {
+void KVRequestHeader::set_has_cmd_id() {
   _has_bits_[0] |= 0x00000002u;
 }
-void RequestHeader::clear_has_cmd_id() {
+void KVRequestHeader::clear_has_cmd_id() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void RequestHeader::clear_cmd_id() {
+void KVRequestHeader::clear_cmd_id() {
   if (cmd_id_ != NULL) cmd_id_->::cockroach::proto::ClientCmdID::Clear();
   clear_has_cmd_id();
 }
- const ::cockroach::proto::ClientCmdID& RequestHeader::cmd_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.cmd_id)
+ const ::cockroach::proto::ClientCmdID& KVRequestHeader::cmd_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.cmd_id)
   return cmd_id_ != NULL ? *cmd_id_ : *default_instance_->cmd_id_;
 }
- ::cockroach::proto::ClientCmdID* RequestHeader::mutable_cmd_id() {
+ ::cockroach::proto::ClientCmdID* KVRequestHeader::mutable_cmd_id() {
   set_has_cmd_id();
   if (cmd_id_ == NULL) {
     cmd_id_ = new ::cockroach::proto::ClientCmdID;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.cmd_id)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.cmd_id)
   return cmd_id_;
 }
- ::cockroach::proto::ClientCmdID* RequestHeader::release_cmd_id() {
+ ::cockroach::proto::ClientCmdID* KVRequestHeader::release_cmd_id() {
   clear_has_cmd_id();
   ::cockroach::proto::ClientCmdID* temp = cmd_id_;
   cmd_id_ = NULL;
   return temp;
 }
- void RequestHeader::set_allocated_cmd_id(::cockroach::proto::ClientCmdID* cmd_id) {
+ void KVRequestHeader::set_allocated_cmd_id(::cockroach::proto::ClientCmdID* cmd_id) {
   delete cmd_id_;
   cmd_id_ = cmd_id;
   if (cmd_id) {
@@ -1993,201 +1994,201 @@ void RequestHeader::clear_cmd_id() {
   } else {
     clear_has_cmd_id();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.cmd_id)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.cmd_id)
 }
 
 // optional bytes key = 3;
-bool RequestHeader::has_key() const {
+bool KVRequestHeader::has_key() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-void RequestHeader::set_has_key() {
+void KVRequestHeader::set_has_key() {
   _has_bits_[0] |= 0x00000004u;
 }
-void RequestHeader::clear_has_key() {
+void KVRequestHeader::clear_has_key() {
   _has_bits_[0] &= ~0x00000004u;
 }
-void RequestHeader::clear_key() {
+void KVRequestHeader::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_key();
 }
- const ::std::string& RequestHeader::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.key)
+ const ::std::string& KVRequestHeader::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.key)
   return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void RequestHeader::set_key(const ::std::string& value) {
+ void KVRequestHeader::set_key(const ::std::string& value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.key)
+  // @@protoc_insertion_point(field_set:cockroach.proto.KVRequestHeader.key)
 }
- void RequestHeader::set_key(const char* value) {
+ void KVRequestHeader::set_key(const char* value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RequestHeader.key)
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.KVRequestHeader.key)
 }
- void RequestHeader::set_key(const void* value, size_t size) {
+ void KVRequestHeader::set_key(const void* value, size_t size) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RequestHeader.key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.KVRequestHeader.key)
 }
- ::std::string* RequestHeader::mutable_key() {
+ ::std::string* KVRequestHeader::mutable_key() {
   set_has_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.key)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* RequestHeader::release_key() {
+ ::std::string* KVRequestHeader::release_key() {
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void RequestHeader::set_allocated_key(::std::string* key) {
+ void KVRequestHeader::set_allocated_key(::std::string* key) {
   if (key != NULL) {
     set_has_key();
   } else {
     clear_has_key();
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.key)
 }
 
 // optional bytes end_key = 4;
-bool RequestHeader::has_end_key() const {
+bool KVRequestHeader::has_end_key() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-void RequestHeader::set_has_end_key() {
+void KVRequestHeader::set_has_end_key() {
   _has_bits_[0] |= 0x00000008u;
 }
-void RequestHeader::clear_has_end_key() {
+void KVRequestHeader::clear_has_end_key() {
   _has_bits_[0] &= ~0x00000008u;
 }
-void RequestHeader::clear_end_key() {
+void KVRequestHeader::clear_end_key() {
   end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_end_key();
 }
- const ::std::string& RequestHeader::end_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.end_key)
+ const ::std::string& KVRequestHeader::end_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.end_key)
   return end_key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void RequestHeader::set_end_key(const ::std::string& value) {
+ void KVRequestHeader::set_end_key(const ::std::string& value) {
   set_has_end_key();
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.end_key)
+  // @@protoc_insertion_point(field_set:cockroach.proto.KVRequestHeader.end_key)
 }
- void RequestHeader::set_end_key(const char* value) {
+ void KVRequestHeader::set_end_key(const char* value) {
   set_has_end_key();
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RequestHeader.end_key)
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.KVRequestHeader.end_key)
 }
- void RequestHeader::set_end_key(const void* value, size_t size) {
+ void KVRequestHeader::set_end_key(const void* value, size_t size) {
   set_has_end_key();
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RequestHeader.end_key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.KVRequestHeader.end_key)
 }
- ::std::string* RequestHeader::mutable_end_key() {
+ ::std::string* KVRequestHeader::mutable_end_key() {
   set_has_end_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.end_key)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.end_key)
   return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* RequestHeader::release_end_key() {
+ ::std::string* KVRequestHeader::release_end_key() {
   clear_has_end_key();
   return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void RequestHeader::set_allocated_end_key(::std::string* end_key) {
+ void KVRequestHeader::set_allocated_end_key(::std::string* end_key) {
   if (end_key != NULL) {
     set_has_end_key();
   } else {
     clear_has_end_key();
   }
   end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.end_key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.end_key)
 }
 
 // optional string user = 5;
-bool RequestHeader::has_user() const {
+bool KVRequestHeader::has_user() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-void RequestHeader::set_has_user() {
+void KVRequestHeader::set_has_user() {
   _has_bits_[0] |= 0x00000010u;
 }
-void RequestHeader::clear_has_user() {
+void KVRequestHeader::clear_has_user() {
   _has_bits_[0] &= ~0x00000010u;
 }
-void RequestHeader::clear_user() {
+void KVRequestHeader::clear_user() {
   user_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_user();
 }
- const ::std::string& RequestHeader::user() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.user)
+ const ::std::string& KVRequestHeader::user() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.user)
   return user_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void RequestHeader::set_user(const ::std::string& value) {
+ void KVRequestHeader::set_user(const ::std::string& value) {
   set_has_user();
   user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.user)
+  // @@protoc_insertion_point(field_set:cockroach.proto.KVRequestHeader.user)
 }
- void RequestHeader::set_user(const char* value) {
+ void KVRequestHeader::set_user(const char* value) {
   set_has_user();
   user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RequestHeader.user)
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.KVRequestHeader.user)
 }
- void RequestHeader::set_user(const char* value, size_t size) {
+ void KVRequestHeader::set_user(const char* value, size_t size) {
   set_has_user();
   user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RequestHeader.user)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.KVRequestHeader.user)
 }
- ::std::string* RequestHeader::mutable_user() {
+ ::std::string* KVRequestHeader::mutable_user() {
   set_has_user();
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.user)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.user)
   return user_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* RequestHeader::release_user() {
+ ::std::string* KVRequestHeader::release_user() {
   clear_has_user();
   return user_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void RequestHeader::set_allocated_user(::std::string* user) {
+ void KVRequestHeader::set_allocated_user(::std::string* user) {
   if (user != NULL) {
     set_has_user();
   } else {
     clear_has_user();
   }
   user_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), user);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.user)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.user)
 }
 
 // optional .cockroach.proto.Replica replica = 6;
-bool RequestHeader::has_replica() const {
+bool KVRequestHeader::has_replica() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
-void RequestHeader::set_has_replica() {
+void KVRequestHeader::set_has_replica() {
   _has_bits_[0] |= 0x00000020u;
 }
-void RequestHeader::clear_has_replica() {
+void KVRequestHeader::clear_has_replica() {
   _has_bits_[0] &= ~0x00000020u;
 }
-void RequestHeader::clear_replica() {
+void KVRequestHeader::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
   clear_has_replica();
 }
- const ::cockroach::proto::Replica& RequestHeader::replica() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.replica)
+ const ::cockroach::proto::Replica& KVRequestHeader::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::proto::Replica* RequestHeader::mutable_replica() {
+ ::cockroach::proto::Replica* KVRequestHeader::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
     replica_ = new ::cockroach::proto::Replica;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.replica)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.replica)
   return replica_;
 }
- ::cockroach::proto::Replica* RequestHeader::release_replica() {
+ ::cockroach::proto::Replica* KVRequestHeader::release_replica() {
   clear_has_replica();
   ::cockroach::proto::Replica* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void RequestHeader::set_allocated_replica(::cockroach::proto::Replica* replica) {
+ void KVRequestHeader::set_allocated_replica(::cockroach::proto::Replica* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -2195,90 +2196,90 @@ void RequestHeader::clear_replica() {
   } else {
     clear_has_replica();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.replica)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.replica)
 }
 
 // optional int64 raft_id = 7;
-bool RequestHeader::has_raft_id() const {
+bool KVRequestHeader::has_raft_id() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
-void RequestHeader::set_has_raft_id() {
+void KVRequestHeader::set_has_raft_id() {
   _has_bits_[0] |= 0x00000040u;
 }
-void RequestHeader::clear_has_raft_id() {
+void KVRequestHeader::clear_has_raft_id() {
   _has_bits_[0] &= ~0x00000040u;
 }
-void RequestHeader::clear_raft_id() {
+void KVRequestHeader::clear_raft_id() {
   raft_id_ = GOOGLE_LONGLONG(0);
   clear_has_raft_id();
 }
- ::google::protobuf::int64 RequestHeader::raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.raft_id)
+ ::google::protobuf::int64 KVRequestHeader::raft_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.raft_id)
   return raft_id_;
 }
- void RequestHeader::set_raft_id(::google::protobuf::int64 value) {
+ void KVRequestHeader::set_raft_id(::google::protobuf::int64 value) {
   set_has_raft_id();
   raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.raft_id)
+  // @@protoc_insertion_point(field_set:cockroach.proto.KVRequestHeader.raft_id)
 }
 
 // optional int32 user_priority = 8 [default = 1];
-bool RequestHeader::has_user_priority() const {
+bool KVRequestHeader::has_user_priority() const {
   return (_has_bits_[0] & 0x00000080u) != 0;
 }
-void RequestHeader::set_has_user_priority() {
+void KVRequestHeader::set_has_user_priority() {
   _has_bits_[0] |= 0x00000080u;
 }
-void RequestHeader::clear_has_user_priority() {
+void KVRequestHeader::clear_has_user_priority() {
   _has_bits_[0] &= ~0x00000080u;
 }
-void RequestHeader::clear_user_priority() {
+void KVRequestHeader::clear_user_priority() {
   user_priority_ = 1;
   clear_has_user_priority();
 }
- ::google::protobuf::int32 RequestHeader::user_priority() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.user_priority)
+ ::google::protobuf::int32 KVRequestHeader::user_priority() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.user_priority)
   return user_priority_;
 }
- void RequestHeader::set_user_priority(::google::protobuf::int32 value) {
+ void KVRequestHeader::set_user_priority(::google::protobuf::int32 value) {
   set_has_user_priority();
   user_priority_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.user_priority)
+  // @@protoc_insertion_point(field_set:cockroach.proto.KVRequestHeader.user_priority)
 }
 
 // optional .cockroach.proto.Transaction txn = 9;
-bool RequestHeader::has_txn() const {
+bool KVRequestHeader::has_txn() const {
   return (_has_bits_[0] & 0x00000100u) != 0;
 }
-void RequestHeader::set_has_txn() {
+void KVRequestHeader::set_has_txn() {
   _has_bits_[0] |= 0x00000100u;
 }
-void RequestHeader::clear_has_txn() {
+void KVRequestHeader::clear_has_txn() {
   _has_bits_[0] &= ~0x00000100u;
 }
-void RequestHeader::clear_txn() {
+void KVRequestHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::proto::Transaction& RequestHeader::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.txn)
+ const ::cockroach::proto::Transaction& KVRequestHeader::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::proto::Transaction* RequestHeader::mutable_txn() {
+ ::cockroach::proto::Transaction* KVRequestHeader::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::proto::Transaction;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestHeader.txn)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVRequestHeader.txn)
   return txn_;
 }
- ::cockroach::proto::Transaction* RequestHeader::release_txn() {
+ ::cockroach::proto::Transaction* KVRequestHeader::release_txn() {
   clear_has_txn();
   ::cockroach::proto::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void RequestHeader::set_allocated_txn(::cockroach::proto::Transaction* txn) {
+ void KVRequestHeader::set_allocated_txn(::cockroach::proto::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -2286,32 +2287,32 @@ void RequestHeader::clear_txn() {
   } else {
     clear_has_txn();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.txn)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVRequestHeader.txn)
 }
 
 // optional .cockroach.proto.ReadConsistencyType read_consistency = 10;
-bool RequestHeader::has_read_consistency() const {
+bool KVRequestHeader::has_read_consistency() const {
   return (_has_bits_[0] & 0x00000200u) != 0;
 }
-void RequestHeader::set_has_read_consistency() {
+void KVRequestHeader::set_has_read_consistency() {
   _has_bits_[0] |= 0x00000200u;
 }
-void RequestHeader::clear_has_read_consistency() {
+void KVRequestHeader::clear_has_read_consistency() {
   _has_bits_[0] &= ~0x00000200u;
 }
-void RequestHeader::clear_read_consistency() {
+void KVRequestHeader::clear_read_consistency() {
   read_consistency_ = 0;
   clear_has_read_consistency();
 }
- ::cockroach::proto::ReadConsistencyType RequestHeader::read_consistency() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.read_consistency)
+ ::cockroach::proto::ReadConsistencyType KVRequestHeader::read_consistency() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVRequestHeader.read_consistency)
   return static_cast< ::cockroach::proto::ReadConsistencyType >(read_consistency_);
 }
- void RequestHeader::set_read_consistency(::cockroach::proto::ReadConsistencyType value) {
+ void KVRequestHeader::set_read_consistency(::cockroach::proto::ReadConsistencyType value) {
   assert(::cockroach::proto::ReadConsistencyType_IsValid(value));
   set_has_read_consistency();
   read_consistency_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.read_consistency)
+  // @@protoc_insertion_point(field_set:cockroach.proto.KVRequestHeader.read_consistency)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -2319,32 +2320,32 @@ void RequestHeader::clear_read_consistency() {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int ResponseHeader::kErrorFieldNumber;
-const int ResponseHeader::kTimestampFieldNumber;
-const int ResponseHeader::kTxnFieldNumber;
+const int KVResponseHeader::kErrorFieldNumber;
+const int KVResponseHeader::kTimestampFieldNumber;
+const int KVResponseHeader::kTxnFieldNumber;
 #endif  // !_MSC_VER
 
-ResponseHeader::ResponseHeader()
+KVResponseHeader::KVResponseHeader()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(constructor:cockroach.proto.KVResponseHeader)
 }
 
-void ResponseHeader::InitAsDefaultInstance() {
+void KVResponseHeader::InitAsDefaultInstance() {
   error_ = const_cast< ::cockroach::proto::Error*>(&::cockroach::proto::Error::default_instance());
   timestamp_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
   txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
 }
 
-ResponseHeader::ResponseHeader(const ResponseHeader& from)
+KVResponseHeader::KVResponseHeader(const KVResponseHeader& from)
   : ::google::protobuf::Message(),
     _internal_metadata_(NULL) {
   SharedCtor();
   MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.KVResponseHeader)
 }
 
-void ResponseHeader::SharedCtor() {
+void KVResponseHeader::SharedCtor() {
   _cached_size_ = 0;
   error_ = NULL;
   timestamp_ = NULL;
@@ -2352,12 +2353,12 @@ void ResponseHeader::SharedCtor() {
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
-ResponseHeader::~ResponseHeader() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.ResponseHeader)
+KVResponseHeader::~KVResponseHeader() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.KVResponseHeader)
   SharedDtor();
 }
 
-void ResponseHeader::SharedDtor() {
+void KVResponseHeader::SharedDtor() {
   if (this != default_instance_) {
     delete error_;
     delete timestamp_;
@@ -2365,32 +2366,32 @@ void ResponseHeader::SharedDtor() {
   }
 }
 
-void ResponseHeader::SetCachedSize(int size) const {
+void KVResponseHeader::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const ::google::protobuf::Descriptor* ResponseHeader::descriptor() {
+const ::google::protobuf::Descriptor* KVResponseHeader::descriptor() {
   protobuf_AssignDescriptorsOnce();
-  return ResponseHeader_descriptor_;
+  return KVResponseHeader_descriptor_;
 }
 
-const ResponseHeader& ResponseHeader::default_instance() {
+const KVResponseHeader& KVResponseHeader::default_instance() {
   if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   return *default_instance_;
 }
 
-ResponseHeader* ResponseHeader::default_instance_ = NULL;
+KVResponseHeader* KVResponseHeader::default_instance_ = NULL;
 
-ResponseHeader* ResponseHeader::New(::google::protobuf::Arena* arena) const {
-  ResponseHeader* n = new ResponseHeader;
+KVResponseHeader* KVResponseHeader::New(::google::protobuf::Arena* arena) const {
+  KVResponseHeader* n = new KVResponseHeader;
   if (arena != NULL) {
     arena->Own(n);
   }
   return n;
 }
 
-void ResponseHeader::Clear() {
+void KVResponseHeader::Clear() {
   if (_has_bits_[0 / 32] & 7u) {
     if (has_error()) {
       if (error_ != NULL) error_->::cockroach::proto::Error::Clear();
@@ -2408,11 +2409,11 @@ void ResponseHeader::Clear() {
   }
 }
 
-bool ResponseHeader::MergePartialFromCodedStream(
+bool KVResponseHeader::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(parse_start:cockroach.proto.KVResponseHeader)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
     tag = p.first;
@@ -2470,17 +2471,17 @@ bool ResponseHeader::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(parse_success:cockroach.proto.KVResponseHeader)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.KVResponseHeader)
   return false;
 #undef DO_
 }
 
-void ResponseHeader::SerializeWithCachedSizes(
+void KVResponseHeader::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.KVResponseHeader)
   // optional .cockroach.proto.Error error = 1;
   if (has_error()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
@@ -2503,12 +2504,12 @@ void ResponseHeader::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
   }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.KVResponseHeader)
 }
 
-::google::protobuf::uint8* ResponseHeader::SerializeWithCachedSizesToArray(
+::google::protobuf::uint8* KVResponseHeader::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.KVResponseHeader)
   // optional .cockroach.proto.Error error = 1;
   if (has_error()) {
     target = ::google::protobuf::internal::WireFormatLite::
@@ -2534,11 +2535,11 @@ void ResponseHeader::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
   }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.ResponseHeader)
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.KVResponseHeader)
   return target;
 }
 
-int ResponseHeader::ByteSize() const {
+int KVResponseHeader::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7) {
@@ -2575,10 +2576,10 @@ int ResponseHeader::ByteSize() const {
   return total_size;
 }
 
-void ResponseHeader::MergeFrom(const ::google::protobuf::Message& from) {
+void KVResponseHeader::MergeFrom(const ::google::protobuf::Message& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  const ResponseHeader* source = 
-      ::google::protobuf::internal::DynamicCastToGenerated<const ResponseHeader>(
+  const KVResponseHeader* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const KVResponseHeader>(
           &from);
   if (source == NULL) {
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
@@ -2587,7 +2588,7 @@ void ResponseHeader::MergeFrom(const ::google::protobuf::Message& from) {
   }
 }
 
-void ResponseHeader::MergeFrom(const ResponseHeader& from) {
+void KVResponseHeader::MergeFrom(const KVResponseHeader& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_error()) {
@@ -2605,28 +2606,28 @@ void ResponseHeader::MergeFrom(const ResponseHeader& from) {
   }
 }
 
-void ResponseHeader::CopyFrom(const ::google::protobuf::Message& from) {
+void KVResponseHeader::CopyFrom(const ::google::protobuf::Message& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-void ResponseHeader::CopyFrom(const ResponseHeader& from) {
+void KVResponseHeader::CopyFrom(const KVResponseHeader& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool ResponseHeader::IsInitialized() const {
+bool KVResponseHeader::IsInitialized() const {
 
   return true;
 }
 
-void ResponseHeader::Swap(ResponseHeader* other) {
+void KVResponseHeader::Swap(KVResponseHeader* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void ResponseHeader::InternalSwap(ResponseHeader* other) {
+void KVResponseHeader::InternalSwap(KVResponseHeader* other) {
   std::swap(error_, other->error_);
   std::swap(timestamp_, other->timestamp_);
   std::swap(txn_, other->txn_);
@@ -2635,50 +2636,50 @@ void ResponseHeader::InternalSwap(ResponseHeader* other) {
   std::swap(_cached_size_, other->_cached_size_);
 }
 
-::google::protobuf::Metadata ResponseHeader::GetMetadata() const {
+::google::protobuf::Metadata KVResponseHeader::GetMetadata() const {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::Metadata metadata;
-  metadata.descriptor = ResponseHeader_descriptor_;
-  metadata.reflection = ResponseHeader_reflection_;
+  metadata.descriptor = KVResponseHeader_descriptor_;
+  metadata.reflection = KVResponseHeader_reflection_;
   return metadata;
 }
 
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
-// ResponseHeader
+// KVResponseHeader
 
 // optional .cockroach.proto.Error error = 1;
-bool ResponseHeader::has_error() const {
+bool KVResponseHeader::has_error() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void ResponseHeader::set_has_error() {
+void KVResponseHeader::set_has_error() {
   _has_bits_[0] |= 0x00000001u;
 }
-void ResponseHeader::clear_has_error() {
+void KVResponseHeader::clear_has_error() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void ResponseHeader::clear_error() {
+void KVResponseHeader::clear_error() {
   if (error_ != NULL) error_->::cockroach::proto::Error::Clear();
   clear_has_error();
 }
- const ::cockroach::proto::Error& ResponseHeader::error() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseHeader.error)
+ const ::cockroach::proto::Error& KVResponseHeader::error() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVResponseHeader.error)
   return error_ != NULL ? *error_ : *default_instance_->error_;
 }
- ::cockroach::proto::Error* ResponseHeader::mutable_error() {
+ ::cockroach::proto::Error* KVResponseHeader::mutable_error() {
   set_has_error();
   if (error_ == NULL) {
     error_ = new ::cockroach::proto::Error;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseHeader.error)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVResponseHeader.error)
   return error_;
 }
- ::cockroach::proto::Error* ResponseHeader::release_error() {
+ ::cockroach::proto::Error* KVResponseHeader::release_error() {
   clear_has_error();
   ::cockroach::proto::Error* temp = error_;
   error_ = NULL;
   return temp;
 }
- void ResponseHeader::set_allocated_error(::cockroach::proto::Error* error) {
+ void KVResponseHeader::set_allocated_error(::cockroach::proto::Error* error) {
   delete error_;
   error_ = error;
   if (error) {
@@ -2686,42 +2687,42 @@ void ResponseHeader::clear_error() {
   } else {
     clear_has_error();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseHeader.error)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVResponseHeader.error)
 }
 
 // optional .cockroach.proto.Timestamp timestamp = 2;
-bool ResponseHeader::has_timestamp() const {
+bool KVResponseHeader::has_timestamp() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void ResponseHeader::set_has_timestamp() {
+void KVResponseHeader::set_has_timestamp() {
   _has_bits_[0] |= 0x00000002u;
 }
-void ResponseHeader::clear_has_timestamp() {
+void KVResponseHeader::clear_has_timestamp() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void ResponseHeader::clear_timestamp() {
+void KVResponseHeader::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::proto::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::proto::Timestamp& ResponseHeader::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseHeader.timestamp)
+ const ::cockroach::proto::Timestamp& KVResponseHeader::timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVResponseHeader.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::proto::Timestamp* ResponseHeader::mutable_timestamp() {
+ ::cockroach::proto::Timestamp* KVResponseHeader::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::proto::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseHeader.timestamp)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVResponseHeader.timestamp)
   return timestamp_;
 }
- ::cockroach::proto::Timestamp* ResponseHeader::release_timestamp() {
+ ::cockroach::proto::Timestamp* KVResponseHeader::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::proto::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void ResponseHeader::set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp) {
+ void KVResponseHeader::set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -2729,42 +2730,42 @@ void ResponseHeader::clear_timestamp() {
   } else {
     clear_has_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseHeader.timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVResponseHeader.timestamp)
 }
 
 // optional .cockroach.proto.Transaction txn = 3;
-bool ResponseHeader::has_txn() const {
+bool KVResponseHeader::has_txn() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-void ResponseHeader::set_has_txn() {
+void KVResponseHeader::set_has_txn() {
   _has_bits_[0] |= 0x00000004u;
 }
-void ResponseHeader::clear_has_txn() {
+void KVResponseHeader::clear_has_txn() {
   _has_bits_[0] &= ~0x00000004u;
 }
-void ResponseHeader::clear_txn() {
+void KVResponseHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::proto::Transaction& ResponseHeader::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseHeader.txn)
+ const ::cockroach::proto::Transaction& KVResponseHeader::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.KVResponseHeader.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::proto::Transaction* ResponseHeader::mutable_txn() {
+ ::cockroach::proto::Transaction* KVResponseHeader::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::proto::Transaction;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseHeader.txn)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.KVResponseHeader.txn)
   return txn_;
 }
- ::cockroach::proto::Transaction* ResponseHeader::release_txn() {
+ ::cockroach::proto::Transaction* KVResponseHeader::release_txn() {
   clear_has_txn();
   ::cockroach::proto::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void ResponseHeader::set_allocated_txn(::cockroach::proto::Transaction* txn) {
+ void KVResponseHeader::set_allocated_txn(::cockroach::proto::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -2772,7 +2773,7 @@ void ResponseHeader::clear_txn() {
   } else {
     clear_has_txn();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseHeader.txn)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.KVResponseHeader.txn)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -2790,7 +2791,7 @@ GetRequest::GetRequest()
 }
 
 void GetRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 GetRequest::GetRequest(const GetRequest& from)
@@ -2845,7 +2846,7 @@ GetRequest* GetRequest::New(::google::protobuf::Arena* arena) const {
 
 void GetRequest::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -2863,7 +2864,7 @@ bool GetRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -2900,7 +2901,7 @@ failure:
 void GetRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.GetRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -2916,7 +2917,7 @@ void GetRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* GetRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.GetRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -2934,7 +2935,7 @@ void GetRequest::SerializeWithCachedSizes(
 int GetRequest::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -2968,7 +2969,7 @@ void GetRequest::MergeFrom(const GetRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -3015,7 +3016,7 @@ void GetRequest::InternalSwap(GetRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // GetRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool GetRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -3026,28 +3027,28 @@ void GetRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void GetRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& GetRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& GetRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.GetRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* GetRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* GetRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.GetRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* GetRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* GetRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void GetRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void GetRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -3074,7 +3075,7 @@ GetResponse::GetResponse()
 }
 
 void GetResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
   value_ = const_cast< ::cockroach::proto::Value*>(&::cockroach::proto::Value::default_instance());
 }
 
@@ -3133,7 +3134,7 @@ GetResponse* GetResponse::New(::google::protobuf::Arena* arena) const {
 void GetResponse::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
     }
     if (has_value()) {
       if (value_ != NULL) value_->::cockroach::proto::Value::Clear();
@@ -3155,7 +3156,7 @@ bool GetResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -3205,7 +3206,7 @@ failure:
 void GetResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.GetResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -3227,7 +3228,7 @@ void GetResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* GetResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.GetResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -3253,7 +3254,7 @@ int GetResponse::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
+    // optional .cockroach.proto.KVResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -3295,7 +3296,7 @@ void GetResponse::MergeFrom(const GetResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
     if (from.has_value()) {
       mutable_value()->::cockroach::proto::Value::MergeFrom(from.value());
@@ -3346,7 +3347,7 @@ void GetResponse::InternalSwap(GetResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // GetResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool GetResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -3357,28 +3358,28 @@ void GetResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void GetResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& GetResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& GetResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.GetResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* GetResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* GetResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.GetResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* GetResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* GetResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void GetResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void GetResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -3448,7 +3449,7 @@ PutRequest::PutRequest()
 }
 
 void PutRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
   value_ = const_cast< ::cockroach::proto::Value*>(&::cockroach::proto::Value::default_instance());
 }
 
@@ -3507,7 +3508,7 @@ PutRequest* PutRequest::New(::google::protobuf::Arena* arena) const {
 void PutRequest::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     if (has_value()) {
       if (value_ != NULL) value_->::cockroach::proto::Value::Clear();
@@ -3529,7 +3530,7 @@ bool PutRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -3579,7 +3580,7 @@ failure:
 void PutRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.PutRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -3601,7 +3602,7 @@ void PutRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* PutRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.PutRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -3627,7 +3628,7 @@ int PutRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -3669,7 +3670,7 @@ void PutRequest::MergeFrom(const PutRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_value()) {
       mutable_value()->::cockroach::proto::Value::MergeFrom(from.value());
@@ -3720,7 +3721,7 @@ void PutRequest::InternalSwap(PutRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // PutRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool PutRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -3731,28 +3732,28 @@ void PutRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void PutRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& PutRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& PutRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.PutRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* PutRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* PutRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.PutRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* PutRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* PutRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void PutRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void PutRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -3821,7 +3822,7 @@ PutResponse::PutResponse()
 }
 
 void PutResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 PutResponse::PutResponse(const PutResponse& from)
@@ -3876,7 +3877,7 @@ PutResponse* PutResponse::New(::google::protobuf::Arena* arena) const {
 
 void PutResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3894,7 +3895,7 @@ bool PutResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -3931,7 +3932,7 @@ failure:
 void PutResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.PutResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -3947,7 +3948,7 @@ void PutResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* PutResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.PutResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -3965,7 +3966,7 @@ void PutResponse::SerializeWithCachedSizes(
 int PutResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -3999,7 +4000,7 @@ void PutResponse::MergeFrom(const PutResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -4046,7 +4047,7 @@ void PutResponse::InternalSwap(PutResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // PutResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool PutResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -4057,28 +4058,28 @@ void PutResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void PutResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& PutResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& PutResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.PutResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* PutResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* PutResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.PutResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* PutResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* PutResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void PutResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void PutResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -4106,7 +4107,7 @@ ConditionalPutRequest::ConditionalPutRequest()
 }
 
 void ConditionalPutRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
   value_ = const_cast< ::cockroach::proto::Value*>(&::cockroach::proto::Value::default_instance());
   exp_value_ = const_cast< ::cockroach::proto::Value*>(&::cockroach::proto::Value::default_instance());
 }
@@ -4168,7 +4169,7 @@ ConditionalPutRequest* ConditionalPutRequest::New(::google::protobuf::Arena* are
 void ConditionalPutRequest::Clear() {
   if (_has_bits_[0 / 32] & 7u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     if (has_value()) {
       if (value_ != NULL) value_->::cockroach::proto::Value::Clear();
@@ -4193,7 +4194,7 @@ bool ConditionalPutRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -4256,7 +4257,7 @@ failure:
 void ConditionalPutRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.ConditionalPutRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -4284,7 +4285,7 @@ void ConditionalPutRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* ConditionalPutRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ConditionalPutRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -4317,7 +4318,7 @@ int ConditionalPutRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -4366,7 +4367,7 @@ void ConditionalPutRequest::MergeFrom(const ConditionalPutRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_value()) {
       mutable_value()->::cockroach::proto::Value::MergeFrom(from.value());
@@ -4421,7 +4422,7 @@ void ConditionalPutRequest::InternalSwap(ConditionalPutRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // ConditionalPutRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool ConditionalPutRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -4432,28 +4433,28 @@ void ConditionalPutRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void ConditionalPutRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& ConditionalPutRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& ConditionalPutRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ConditionalPutRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* ConditionalPutRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* ConditionalPutRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ConditionalPutRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* ConditionalPutRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* ConditionalPutRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ConditionalPutRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void ConditionalPutRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -4565,7 +4566,7 @@ ConditionalPutResponse::ConditionalPutResponse()
 }
 
 void ConditionalPutResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 ConditionalPutResponse::ConditionalPutResponse(const ConditionalPutResponse& from)
@@ -4620,7 +4621,7 @@ ConditionalPutResponse* ConditionalPutResponse::New(::google::protobuf::Arena* a
 
 void ConditionalPutResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -4638,7 +4639,7 @@ bool ConditionalPutResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -4675,7 +4676,7 @@ failure:
 void ConditionalPutResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.ConditionalPutResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -4691,7 +4692,7 @@ void ConditionalPutResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* ConditionalPutResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ConditionalPutResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -4709,7 +4710,7 @@ void ConditionalPutResponse::SerializeWithCachedSizes(
 int ConditionalPutResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -4743,7 +4744,7 @@ void ConditionalPutResponse::MergeFrom(const ConditionalPutResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -4790,7 +4791,7 @@ void ConditionalPutResponse::InternalSwap(ConditionalPutResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // ConditionalPutResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool ConditionalPutResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -4801,28 +4802,28 @@ void ConditionalPutResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void ConditionalPutResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& ConditionalPutResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& ConditionalPutResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ConditionalPutResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* ConditionalPutResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* ConditionalPutResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ConditionalPutResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* ConditionalPutResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* ConditionalPutResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ConditionalPutResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void ConditionalPutResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -4849,7 +4850,7 @@ IncrementRequest::IncrementRequest()
 }
 
 void IncrementRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 IncrementRequest::IncrementRequest(const IncrementRequest& from)
@@ -4906,7 +4907,7 @@ IncrementRequest* IncrementRequest::New(::google::protobuf::Arena* arena) const 
 void IncrementRequest::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     increment_ = GOOGLE_LONGLONG(0);
   }
@@ -4926,7 +4927,7 @@ bool IncrementRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -4978,7 +4979,7 @@ failure:
 void IncrementRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.IncrementRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -4999,7 +5000,7 @@ void IncrementRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* IncrementRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.IncrementRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -5023,7 +5024,7 @@ int IncrementRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -5065,7 +5066,7 @@ void IncrementRequest::MergeFrom(const IncrementRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_increment()) {
       set_increment(from.increment());
@@ -5116,7 +5117,7 @@ void IncrementRequest::InternalSwap(IncrementRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // IncrementRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool IncrementRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -5127,28 +5128,28 @@ void IncrementRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void IncrementRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& IncrementRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& IncrementRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.IncrementRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* IncrementRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* IncrementRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.IncrementRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* IncrementRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* IncrementRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void IncrementRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void IncrementRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5199,7 +5200,7 @@ IncrementResponse::IncrementResponse()
 }
 
 void IncrementResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 IncrementResponse::IncrementResponse(const IncrementResponse& from)
@@ -5256,7 +5257,7 @@ IncrementResponse* IncrementResponse::New(::google::protobuf::Arena* arena) cons
 void IncrementResponse::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
     }
     new_value_ = GOOGLE_LONGLONG(0);
   }
@@ -5276,7 +5277,7 @@ bool IncrementResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -5328,7 +5329,7 @@ failure:
 void IncrementResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.IncrementResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -5349,7 +5350,7 @@ void IncrementResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* IncrementResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.IncrementResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -5373,7 +5374,7 @@ int IncrementResponse::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
+    // optional .cockroach.proto.KVResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -5415,7 +5416,7 @@ void IncrementResponse::MergeFrom(const IncrementResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
     if (from.has_new_value()) {
       set_new_value(from.new_value());
@@ -5466,7 +5467,7 @@ void IncrementResponse::InternalSwap(IncrementResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // IncrementResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool IncrementResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -5477,28 +5478,28 @@ void IncrementResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void IncrementResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& IncrementResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& IncrementResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.IncrementResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* IncrementResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* IncrementResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.IncrementResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* IncrementResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* IncrementResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void IncrementResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void IncrementResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5548,7 +5549,7 @@ DeleteRequest::DeleteRequest()
 }
 
 void DeleteRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 DeleteRequest::DeleteRequest(const DeleteRequest& from)
@@ -5603,7 +5604,7 @@ DeleteRequest* DeleteRequest::New(::google::protobuf::Arena* arena) const {
 
 void DeleteRequest::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5621,7 +5622,7 @@ bool DeleteRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -5658,7 +5659,7 @@ failure:
 void DeleteRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.DeleteRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -5674,7 +5675,7 @@ void DeleteRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* DeleteRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.DeleteRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -5692,7 +5693,7 @@ void DeleteRequest::SerializeWithCachedSizes(
 int DeleteRequest::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -5726,7 +5727,7 @@ void DeleteRequest::MergeFrom(const DeleteRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -5773,7 +5774,7 @@ void DeleteRequest::InternalSwap(DeleteRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // DeleteRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool DeleteRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -5784,28 +5785,28 @@ void DeleteRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void DeleteRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& DeleteRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& DeleteRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.DeleteRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* DeleteRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* DeleteRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.DeleteRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* DeleteRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* DeleteRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void DeleteRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5831,7 +5832,7 @@ DeleteResponse::DeleteResponse()
 }
 
 void DeleteResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 DeleteResponse::DeleteResponse(const DeleteResponse& from)
@@ -5886,7 +5887,7 @@ DeleteResponse* DeleteResponse::New(::google::protobuf::Arena* arena) const {
 
 void DeleteResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5904,7 +5905,7 @@ bool DeleteResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -5941,7 +5942,7 @@ failure:
 void DeleteResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.DeleteResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -5957,7 +5958,7 @@ void DeleteResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* DeleteResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.DeleteResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -5975,7 +5976,7 @@ void DeleteResponse::SerializeWithCachedSizes(
 int DeleteResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -6009,7 +6010,7 @@ void DeleteResponse::MergeFrom(const DeleteResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -6056,7 +6057,7 @@ void DeleteResponse::InternalSwap(DeleteResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // DeleteResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool DeleteResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -6067,28 +6068,28 @@ void DeleteResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void DeleteResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& DeleteResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& DeleteResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.DeleteResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* DeleteResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* DeleteResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.DeleteResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* DeleteResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* DeleteResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void DeleteResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -6115,7 +6116,7 @@ DeleteRangeRequest::DeleteRangeRequest()
 }
 
 void DeleteRangeRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 DeleteRangeRequest::DeleteRangeRequest(const DeleteRangeRequest& from)
@@ -6172,7 +6173,7 @@ DeleteRangeRequest* DeleteRangeRequest::New(::google::protobuf::Arena* arena) co
 void DeleteRangeRequest::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     max_entries_to_delete_ = GOOGLE_LONGLONG(0);
   }
@@ -6192,7 +6193,7 @@ bool DeleteRangeRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -6244,7 +6245,7 @@ failure:
 void DeleteRangeRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.DeleteRangeRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -6265,7 +6266,7 @@ void DeleteRangeRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* DeleteRangeRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.DeleteRangeRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -6289,7 +6290,7 @@ int DeleteRangeRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -6331,7 +6332,7 @@ void DeleteRangeRequest::MergeFrom(const DeleteRangeRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_max_entries_to_delete()) {
       set_max_entries_to_delete(from.max_entries_to_delete());
@@ -6382,7 +6383,7 @@ void DeleteRangeRequest::InternalSwap(DeleteRangeRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // DeleteRangeRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool DeleteRangeRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -6393,28 +6394,28 @@ void DeleteRangeRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void DeleteRangeRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& DeleteRangeRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& DeleteRangeRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.DeleteRangeRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* DeleteRangeRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* DeleteRangeRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.DeleteRangeRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* DeleteRangeRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* DeleteRangeRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteRangeRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void DeleteRangeRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -6465,7 +6466,7 @@ DeleteRangeResponse::DeleteRangeResponse()
 }
 
 void DeleteRangeResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 DeleteRangeResponse::DeleteRangeResponse(const DeleteRangeResponse& from)
@@ -6522,7 +6523,7 @@ DeleteRangeResponse* DeleteRangeResponse::New(::google::protobuf::Arena* arena) 
 void DeleteRangeResponse::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
     }
     num_deleted_ = GOOGLE_LONGLONG(0);
   }
@@ -6542,7 +6543,7 @@ bool DeleteRangeResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -6594,7 +6595,7 @@ failure:
 void DeleteRangeResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.DeleteRangeResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -6615,7 +6616,7 @@ void DeleteRangeResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* DeleteRangeResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.DeleteRangeResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -6639,7 +6640,7 @@ int DeleteRangeResponse::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
+    // optional .cockroach.proto.KVResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -6681,7 +6682,7 @@ void DeleteRangeResponse::MergeFrom(const DeleteRangeResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
     if (from.has_num_deleted()) {
       set_num_deleted(from.num_deleted());
@@ -6732,7 +6733,7 @@ void DeleteRangeResponse::InternalSwap(DeleteRangeResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // DeleteRangeResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool DeleteRangeResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -6743,28 +6744,28 @@ void DeleteRangeResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void DeleteRangeResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& DeleteRangeResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& DeleteRangeResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.DeleteRangeResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* DeleteRangeResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* DeleteRangeResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.DeleteRangeResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* DeleteRangeResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* DeleteRangeResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteRangeResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void DeleteRangeResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -6815,7 +6816,7 @@ ScanRequest::ScanRequest()
 }
 
 void ScanRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 ScanRequest::ScanRequest(const ScanRequest& from)
@@ -6872,7 +6873,7 @@ ScanRequest* ScanRequest::New(::google::protobuf::Arena* arena) const {
 void ScanRequest::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     max_results_ = GOOGLE_LONGLONG(0);
   }
@@ -6892,7 +6893,7 @@ bool ScanRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -6944,7 +6945,7 @@ failure:
 void ScanRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.ScanRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -6965,7 +6966,7 @@ void ScanRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* ScanRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ScanRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -6989,7 +6990,7 @@ int ScanRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -7031,7 +7032,7 @@ void ScanRequest::MergeFrom(const ScanRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_max_results()) {
       set_max_results(from.max_results());
@@ -7082,7 +7083,7 @@ void ScanRequest::InternalSwap(ScanRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // ScanRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool ScanRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -7093,28 +7094,28 @@ void ScanRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void ScanRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& ScanRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& ScanRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ScanRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* ScanRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* ScanRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ScanRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* ScanRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* ScanRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ScanRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void ScanRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -7165,7 +7166,7 @@ ScanResponse::ScanResponse()
 }
 
 void ScanResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 ScanResponse::ScanResponse(const ScanResponse& from)
@@ -7220,7 +7221,7 @@ ScanResponse* ScanResponse::New(::google::protobuf::Arena* arena) const {
 
 void ScanResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   rows_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -7239,7 +7240,7 @@ bool ScanResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -7293,7 +7294,7 @@ failure:
 void ScanResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.ScanResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -7315,7 +7316,7 @@ void ScanResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* ScanResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ScanResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -7340,7 +7341,7 @@ void ScanResponse::SerializeWithCachedSizes(
 int ScanResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -7383,7 +7384,7 @@ void ScanResponse::MergeFrom(const ScanResponse& from) {
   rows_.MergeFrom(from.rows_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -7431,7 +7432,7 @@ void ScanResponse::InternalSwap(ScanResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // ScanResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool ScanResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -7442,28 +7443,28 @@ void ScanResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void ScanResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& ScanResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& ScanResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.ScanResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* ScanResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* ScanResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.ScanResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* ScanResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* ScanResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ScanResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void ScanResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -7521,7 +7522,7 @@ EndTransactionRequest::EndTransactionRequest()
 }
 
 void EndTransactionRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
   internal_commit_trigger_ = const_cast< ::cockroach::proto::InternalCommitTrigger*>(&::cockroach::proto::InternalCommitTrigger::default_instance());
 }
 
@@ -7581,7 +7582,7 @@ EndTransactionRequest* EndTransactionRequest::New(::google::protobuf::Arena* are
 void EndTransactionRequest::Clear() {
   if (_has_bits_[0 / 32] & 7u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     commit_ = false;
     if (has_internal_commit_trigger()) {
@@ -7604,7 +7605,7 @@ bool EndTransactionRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -7669,7 +7670,7 @@ failure:
 void EndTransactionRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.EndTransactionRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -7696,7 +7697,7 @@ void EndTransactionRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* EndTransactionRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.EndTransactionRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -7727,7 +7728,7 @@ int EndTransactionRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -7774,7 +7775,7 @@ void EndTransactionRequest::MergeFrom(const EndTransactionRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_commit()) {
       set_commit(from.commit());
@@ -7829,7 +7830,7 @@ void EndTransactionRequest::InternalSwap(EndTransactionRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // EndTransactionRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool EndTransactionRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -7840,28 +7841,28 @@ void EndTransactionRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void EndTransactionRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& EndTransactionRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& EndTransactionRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.EndTransactionRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* EndTransactionRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* EndTransactionRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.EndTransactionRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* EndTransactionRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* EndTransactionRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void EndTransactionRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void EndTransactionRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -7956,7 +7957,7 @@ EndTransactionResponse::EndTransactionResponse()
 }
 
 void EndTransactionResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 EndTransactionResponse::EndTransactionResponse(const EndTransactionResponse& from)
@@ -8014,7 +8015,7 @@ EndTransactionResponse* EndTransactionResponse::New(::google::protobuf::Arena* a
 void EndTransactionResponse::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
     }
     commit_wait_ = GOOGLE_LONGLONG(0);
   }
@@ -8035,7 +8036,7 @@ bool EndTransactionResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -8101,7 +8102,7 @@ failure:
 void EndTransactionResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.EndTransactionResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -8128,7 +8129,7 @@ void EndTransactionResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* EndTransactionResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.EndTransactionResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -8158,7 +8159,7 @@ int EndTransactionResponse::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
+    // optional .cockroach.proto.KVResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -8208,7 +8209,7 @@ void EndTransactionResponse::MergeFrom(const EndTransactionResponse& from) {
   resolved_.MergeFrom(from.resolved_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
     if (from.has_commit_wait()) {
       set_commit_wait(from.commit_wait());
@@ -8260,7 +8261,7 @@ void EndTransactionResponse::InternalSwap(EndTransactionResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // EndTransactionResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool EndTransactionResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -8271,28 +8272,28 @@ void EndTransactionResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void EndTransactionResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& EndTransactionResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& EndTransactionResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.EndTransactionResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* EndTransactionResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* EndTransactionResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.EndTransactionResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* EndTransactionResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* EndTransactionResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void EndTransactionResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void EndTransactionResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -10281,7 +10282,7 @@ BatchRequest::BatchRequest()
 }
 
 void BatchRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 BatchRequest::BatchRequest(const BatchRequest& from)
@@ -10336,7 +10337,7 @@ BatchRequest* BatchRequest::New(::google::protobuf::Arena* arena) const {
 
 void BatchRequest::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   }
   requests_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -10355,7 +10356,7 @@ bool BatchRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -10409,7 +10410,7 @@ failure:
 void BatchRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.BatchRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -10431,7 +10432,7 @@ void BatchRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* BatchRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.BatchRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -10456,7 +10457,7 @@ void BatchRequest::SerializeWithCachedSizes(
 int BatchRequest::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -10499,7 +10500,7 @@ void BatchRequest::MergeFrom(const BatchRequest& from) {
   requests_.MergeFrom(from.requests_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -10547,7 +10548,7 @@ void BatchRequest::InternalSwap(BatchRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // BatchRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool BatchRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -10558,28 +10559,28 @@ void BatchRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void BatchRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& BatchRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& BatchRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.BatchRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* BatchRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* BatchRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.BatchRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* BatchRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* BatchRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void BatchRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void BatchRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -10636,7 +10637,7 @@ BatchResponse::BatchResponse()
 }
 
 void BatchResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 BatchResponse::BatchResponse(const BatchResponse& from)
@@ -10691,7 +10692,7 @@ BatchResponse* BatchResponse::New(::google::protobuf::Arena* arena) const {
 
 void BatchResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   responses_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -10710,7 +10711,7 @@ bool BatchResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -10764,7 +10765,7 @@ failure:
 void BatchResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.BatchResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -10786,7 +10787,7 @@ void BatchResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* BatchResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.BatchResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -10811,7 +10812,7 @@ void BatchResponse::SerializeWithCachedSizes(
 int BatchResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -10854,7 +10855,7 @@ void BatchResponse::MergeFrom(const BatchResponse& from) {
   responses_.MergeFrom(from.responses_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -10902,7 +10903,7 @@ void BatchResponse::InternalSwap(BatchResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // BatchResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool BatchResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -10913,28 +10914,28 @@ void BatchResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void BatchResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& BatchResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& BatchResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.BatchResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* BatchResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* BatchResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.BatchResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* BatchResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* BatchResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void BatchResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void BatchResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -10991,7 +10992,7 @@ AdminSplitRequest::AdminSplitRequest()
 }
 
 void AdminSplitRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 AdminSplitRequest::AdminSplitRequest(const AdminSplitRequest& from)
@@ -11050,7 +11051,7 @@ AdminSplitRequest* AdminSplitRequest::New(::google::protobuf::Arena* arena) cons
 void AdminSplitRequest::Clear() {
   if (_has_bits_[0 / 32] & 3u) {
     if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+      if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
     }
     if (has_split_key()) {
       split_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -11072,7 +11073,7 @@ bool AdminSplitRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -11122,7 +11123,7 @@ failure:
 void AdminSplitRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.AdminSplitRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -11144,7 +11145,7 @@ void AdminSplitRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* AdminSplitRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.AdminSplitRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -11170,7 +11171,7 @@ int AdminSplitRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 3) {
-    // optional .cockroach.proto.RequestHeader header = 1;
+    // optional .cockroach.proto.KVRequestHeader header = 1;
     if (has_header()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -11212,7 +11213,7 @@ void AdminSplitRequest::MergeFrom(const AdminSplitRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
     if (from.has_split_key()) {
       set_has_split_key();
@@ -11264,7 +11265,7 @@ void AdminSplitRequest::InternalSwap(AdminSplitRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // AdminSplitRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool AdminSplitRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -11275,28 +11276,28 @@ void AdminSplitRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void AdminSplitRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& AdminSplitRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& AdminSplitRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.AdminSplitRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* AdminSplitRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* AdminSplitRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.AdminSplitRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* AdminSplitRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* AdminSplitRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminSplitRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void AdminSplitRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11375,7 +11376,7 @@ AdminSplitResponse::AdminSplitResponse()
 }
 
 void AdminSplitResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 AdminSplitResponse::AdminSplitResponse(const AdminSplitResponse& from)
@@ -11430,7 +11431,7 @@ AdminSplitResponse* AdminSplitResponse::New(::google::protobuf::Arena* arena) co
 
 void AdminSplitResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -11448,7 +11449,7 @@ bool AdminSplitResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -11485,7 +11486,7 @@ failure:
 void AdminSplitResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.AdminSplitResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -11501,7 +11502,7 @@ void AdminSplitResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* AdminSplitResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.AdminSplitResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -11519,7 +11520,7 @@ void AdminSplitResponse::SerializeWithCachedSizes(
 int AdminSplitResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -11553,7 +11554,7 @@ void AdminSplitResponse::MergeFrom(const AdminSplitResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -11600,7 +11601,7 @@ void AdminSplitResponse::InternalSwap(AdminSplitResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // AdminSplitResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool AdminSplitResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -11611,28 +11612,28 @@ void AdminSplitResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void AdminSplitResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& AdminSplitResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& AdminSplitResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.AdminSplitResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* AdminSplitResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* AdminSplitResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.AdminSplitResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* AdminSplitResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* AdminSplitResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminSplitResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void AdminSplitResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11658,7 +11659,7 @@ AdminMergeRequest::AdminMergeRequest()
 }
 
 void AdminMergeRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVRequestHeader*>(&::cockroach::proto::KVRequestHeader::default_instance());
 }
 
 AdminMergeRequest::AdminMergeRequest(const AdminMergeRequest& from)
@@ -11713,7 +11714,7 @@ AdminMergeRequest* AdminMergeRequest::New(::google::protobuf::Arena* arena) cons
 
 void AdminMergeRequest::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -11731,7 +11732,7 @@ bool AdminMergeRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
+      // optional .cockroach.proto.KVRequestHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -11768,7 +11769,7 @@ failure:
 void AdminMergeRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.AdminMergeRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -11784,7 +11785,7 @@ void AdminMergeRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* AdminMergeRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.AdminMergeRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -11802,7 +11803,7 @@ void AdminMergeRequest::SerializeWithCachedSizes(
 int AdminMergeRequest::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.RequestHeader header = 1;
+  // optional .cockroach.proto.KVRequestHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -11836,7 +11837,7 @@ void AdminMergeRequest::MergeFrom(const AdminMergeRequest& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVRequestHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -11883,7 +11884,7 @@ void AdminMergeRequest::InternalSwap(AdminMergeRequest* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // AdminMergeRequest
 
-// optional .cockroach.proto.RequestHeader header = 1;
+// optional .cockroach.proto.KVRequestHeader header = 1;
 bool AdminMergeRequest::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -11894,28 +11895,28 @@ void AdminMergeRequest::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void AdminMergeRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVRequestHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::RequestHeader& AdminMergeRequest::header() const {
+ const ::cockroach::proto::KVRequestHeader& AdminMergeRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.AdminMergeRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::RequestHeader* AdminMergeRequest::mutable_header() {
+ ::cockroach::proto::KVRequestHeader* AdminMergeRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::RequestHeader;
+    header_ = new ::cockroach::proto::KVRequestHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.AdminMergeRequest.header)
   return header_;
 }
- ::cockroach::proto::RequestHeader* AdminMergeRequest::release_header() {
+ ::cockroach::proto::KVRequestHeader* AdminMergeRequest::release_header() {
   clear_has_header();
-  ::cockroach::proto::RequestHeader* temp = header_;
+  ::cockroach::proto::KVRequestHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminMergeRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+ void AdminMergeRequest::set_allocated_header(::cockroach::proto::KVRequestHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11941,7 +11942,7 @@ AdminMergeResponse::AdminMergeResponse()
 }
 
 void AdminMergeResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
+  header_ = const_cast< ::cockroach::proto::KVResponseHeader*>(&::cockroach::proto::KVResponseHeader::default_instance());
 }
 
 AdminMergeResponse::AdminMergeResponse(const AdminMergeResponse& from)
@@ -11996,7 +11997,7 @@ AdminMergeResponse* AdminMergeResponse::New(::google::protobuf::Arena* arena) co
 
 void AdminMergeResponse::Clear() {
   if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+    if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -12014,7 +12015,7 @@ bool AdminMergeResponse::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
+      // optional .cockroach.proto.KVResponseHeader header = 1;
       case 1: {
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -12051,7 +12052,7 @@ failure:
 void AdminMergeResponse::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.AdminMergeResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, *this->header_, output);
@@ -12067,7 +12068,7 @@ void AdminMergeResponse::SerializeWithCachedSizes(
 ::google::protobuf::uint8* AdminMergeResponse::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.AdminMergeResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -12085,7 +12086,7 @@ void AdminMergeResponse::SerializeWithCachedSizes(
 int AdminMergeResponse::ByteSize() const {
   int total_size = 0;
 
-  // optional .cockroach.proto.ResponseHeader header = 1;
+  // optional .cockroach.proto.KVResponseHeader header = 1;
   if (has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -12119,7 +12120,7 @@ void AdminMergeResponse::MergeFrom(const AdminMergeResponse& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
+      mutable_header()->::cockroach::proto::KVResponseHeader::MergeFrom(from.header());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -12166,7 +12167,7 @@ void AdminMergeResponse::InternalSwap(AdminMergeResponse* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // AdminMergeResponse
 
-// optional .cockroach.proto.ResponseHeader header = 1;
+// optional .cockroach.proto.KVResponseHeader header = 1;
 bool AdminMergeResponse::has_header() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -12177,28 +12178,28 @@ void AdminMergeResponse::clear_has_header() {
   _has_bits_[0] &= ~0x00000001u;
 }
 void AdminMergeResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  if (header_ != NULL) header_->::cockroach::proto::KVResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::proto::ResponseHeader& AdminMergeResponse::header() const {
+ const ::cockroach::proto::KVResponseHeader& AdminMergeResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.proto.AdminMergeResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::proto::ResponseHeader* AdminMergeResponse::mutable_header() {
+ ::cockroach::proto::KVResponseHeader* AdminMergeResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
-    header_ = new ::cockroach::proto::ResponseHeader;
+    header_ = new ::cockroach::proto::KVResponseHeader;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.proto.AdminMergeResponse.header)
   return header_;
 }
- ::cockroach::proto::ResponseHeader* AdminMergeResponse::release_header() {
+ ::cockroach::proto::KVResponseHeader* AdminMergeResponse::release_header() {
   clear_has_header();
-  ::cockroach::proto::ResponseHeader* temp = header_;
+  ::cockroach::proto::KVResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminMergeResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+ void AdminMergeResponse::set_allocated_header(::cockroach::proto::KVResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {

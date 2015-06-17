@@ -128,7 +128,7 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
 
 // GetResponseHeader extracts the response header for each type of
 // response in the ReadWriteCmdResponse union.
-const cockroach::proto::ResponseHeader* GetResponseHeader(const cockroach::proto::ReadWriteCmdResponse& rwResp) {
+const cockroach::proto::KVResponseHeader* GetResponseHeader(const cockroach::proto::ReadWriteCmdResponse& rwResp) {
   if (rwResp.has_put()) {
     return &rwResp.put().header();
   } else if (rwResp.has_conditional_put()) {
@@ -267,7 +267,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
         // *error_msg = (char*)"failed to parse response cache entry";
         return false;
       }
-      const cockroach::proto::ResponseHeader* header = GetResponseHeader(rwResp);
+      const cockroach::proto::KVResponseHeader* header = GetResponseHeader(rwResp);
       if (header == NULL) {
         // *error_msg = (char*)"failed to parse response cache header";
         return false;
