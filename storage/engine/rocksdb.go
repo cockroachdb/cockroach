@@ -417,6 +417,11 @@ func (r *RocksDB) Commit() error {
 	return nil
 }
 
+// Defer is not implemented for RocksDB engine.
+func (r *RocksDB) Defer(func()) {
+	panic("only implemented for rocksDBBatch")
+}
+
 type rocksDBSnapshot struct {
 	parent *RocksDB
 	handle *C.DBSnapshot
@@ -511,9 +516,15 @@ func (r *rocksDBSnapshot) Commit() error {
 	return util.Errorf("cannot Commit to a snapshot")
 }
 
+// Defer is not implemented for rocksDBSnapshot.
+func (r *rocksDBSnapshot) Defer(func()) {
+	panic("only implemented for rocksDBBatch")
+}
+
 type rocksDBBatch struct {
 	parent *RocksDB
 	batch  *C.DBBatch
+	defers []func()
 }
 
 func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
@@ -663,7 +674,18 @@ func (r *rocksDBBatch) Commit() error {
 	}
 	C.DBBatchDestroy(r.batch)
 	r.batch = nil
+
+	// On success, run the deferred functions in reverse order.
+	for i := len(r.defers) - 1; i >= 0; i-- {
+		r.defers[i]()
+	}
+	r.defers = nil
+
 	return nil
+}
+
+func (r *rocksDBBatch) Defer(fn func()) {
+	r.defers = append(r.defers, fn)
 }
 
 type rocksDBIterator struct {

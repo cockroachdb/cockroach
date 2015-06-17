@@ -130,6 +130,12 @@ type Engine interface {
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
+	// Defer adds a callback to be run after the batch commits
+	// successfully.  If Commit() fails (or if this engine was not
+	// created via NewBatch()), deferred callbacks are not called. As
+	// with the defer statement, the last callback to be deferred is the
+	// first to be executed.
+	Defer(fn func())
 }
 
 var bufferPool = sync.Pool{
