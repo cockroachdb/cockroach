@@ -130,13 +130,13 @@ func TestStatusJson(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req.Header.Set("Accept", contentType)
+			req.Header.Set(util.AcceptHeader, contentType)
 			resp, err := httpClient.Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
+			if resp.StatusCode != http.StatusOK {
 				t.Errorf("unexpected status code: %v", resp.StatusCode)
 			}
 			returnedContentType := resp.Header.Get(util.ContentTypeHeader)
@@ -201,14 +201,14 @@ func TestStatusGossipJson(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Set("Accept", contentType)
+		req.Header.Set(util.AcceptHeader, contentType)
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			t.Errorf("unexpected status code: %v", resp.StatusCode)
 		}
 		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
@@ -255,13 +255,13 @@ func getRequest(t *testing.T, ts *TestServer, path string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Accept", util.JSONContentType)
+	req.Header.Set(util.AcceptHeader, util.JSONContentType)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("unexpected status code: %v", resp.StatusCode)
 	}
 	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
