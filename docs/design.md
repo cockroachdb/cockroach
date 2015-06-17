@@ -873,22 +873,30 @@ replicated. In the absence of heartbeats, followers become candidates
 after randomized election timeouts and proceed to hold new leader
 elections. Cockroach weights random timeouts such that the replicas with
 shorter round trip times to peers are more likely to hold elections
-first. Although only the leader can propose a new write, and as such
-must be involved in any write to the consensus log, any replica can
-service reads if the read is for a timestamp which the replica knows is
-safe based on the last committed consensus write and the state of any
-pending transactions.
+first. 
 
-Only the leader can propose a new write, but Cockroach accepts writes at
-any replica. The replica merely forwards the write to the leader.
-Instead of resending the write, the leader has only to acknowledge the
-write to the forwarding replica using a log sequence number, as though
-it were proposing it in the first place. The other replicas receive the
-full write as though the leader were the originator.
+Only the leader can propose a consistent read or a new write, but
+Cockroach accepts read/write requests at any replica. The replica
+merely forwards the consistent read or the write to the leader.
+Instead of resending the request, the leader has only to acknowledge
+the request to the forwarding replica using a log sequence number, as
+though it were proposing it in the first place. When the request is a
+write, the other replicas receive the full write as though the leader
+were the originator. Any replica can service inconsistent reads if the
+read is for a timestamp which the replica knows is safe based on the
+last committed consensus write and the state of any pending
+transactions.
 
 Having a stable leader provides the choice of replica to handle
 range-specific maintenance and processing tasks, such as delivering
 pending message queues, handling splits and merges, rebalancing, etc.
+
+When a replica acquires the leader lease from other replica, it will
+reset the low water mark on the timestamp cache to (expiration time of
+the previous lease + `ε`). The new low water mark is higher than the
+timestamps of all operations that the previous leader had before the
+lease expiration, and it will force a transaction restart when a
+write-read conflict might happen.
 
 # Splitting / Merging Ranges
 
