@@ -1308,7 +1308,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	now := s.Clock().Now()
 	header := args.Header()
 	bArgs := &proto.InternalBatchRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Txn:          header.Txn,
 			User:         header.User,
 			UserPriority: header.UserPriority,
@@ -1317,7 +1317,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	bReply := &proto.InternalBatchResponse{}
 	for _, intent := range wiErr.Intents {
 		pushArgs := &proto.InternalPushTxnRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Timestamp: header.Timestamp,
 				Key:       intent.Txn.Key,
 				// TODO(tschottdorf):
@@ -1369,7 +1369,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	for i, intent := range wiErr.Intents {
 		pushReply := bReply.Responses[i].GetValue().(*proto.InternalPushTxnResponse)
 		resolveArgs := &proto.InternalResolveIntentRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				// Use the pushee's timestamp, which might be lower than the
 				// pusher's request timestamp. No need to push the intent higher
 				// than the pushee's txn!

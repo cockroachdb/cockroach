@@ -67,8 +67,8 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
-// RequestHeader is supplied with every storage node request.
-message RequestHeader {
+// KVRequestHeader is supplied with every storage node request.
+message KVRequestHeader {
   // Timestamp specifies time at which read or writes should be
   // performed. If the timestamp is set to zero value, its value
   // is initialized to the wall time of the receiving node.
@@ -117,8 +117,8 @@ message RequestHeader {
   optional ReadConsistencyType read_consistency = 10 [(gogoproto.nullable) = false];
 }
 
-// ResponseHeader is returned with every storage node response.
-message ResponseHeader {
+// KVResponseHeader is returned with every storage node response.
+message KVResponseHeader {
   // Error is non-nil if an error occurred.
   optional Error error = 1;
   // Timestamp specifies time at which read or write actually was
@@ -126,7 +126,7 @@ message ResponseHeader {
   // supplied to the request was 0, the wall time of the node
   // servicing the request will be set here. Additionally, in the case
   // of writes, this value may be increased from the timestamp passed
-  // with the RequestHeader if the key being written was either read
+  // with the KVRequestHeader if the key being written was either read
   // or written more recently.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Transaction is non-nil if the request specified a non-nil
@@ -137,25 +137,25 @@ message ResponseHeader {
 
 // A GetRequest is the argument for the Get() method.
 message GetRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
 message GetResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2;
 }
 
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
 // A PutResponse is the return value from the Put() method.
 message PutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
@@ -165,7 +165,7 @@ message PutResponse {
 // - If key exists, but value is empty and ExpValue is not nil but empty, sets value.
 // - Otherwise, returns error and the actual value of the key in the response.
 message ConditionalPutRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   optional Value value = 2 [(gogoproto.nullable) = false];
   // ExpValue.Bytes empty to test for non-existence. Specify as nil
@@ -177,7 +177,7 @@ message ConditionalPutRequest {
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 message ConditionalPutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An IncrementRequest is the argument to the Increment() method. It
@@ -187,7 +187,7 @@ message ConditionalPutResponse {
 // by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
 // cannot be invoked on an incremented key.
 message IncrementRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 increment = 2 [(gogoproto.nullable) = false];
 }
 
@@ -195,24 +195,24 @@ message IncrementRequest {
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
 message IncrementResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 new_value = 2 [(gogoproto.nullable) = false];
 }
 
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteResponse is the return value from the Delete() method.
 message DeleteResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
 message DeleteRangeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, *all* entries between Key (inclusive) and EndKey
   // (exclusive) are deleted. Must be >= 0
   optional int64 max_entries_to_delete = 2 [(gogoproto.nullable) = false];
@@ -221,7 +221,7 @@ message DeleteRangeRequest {
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
 message DeleteRangeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Number of entries removed.
   optional int64 num_deleted = 2 [(gogoproto.nullable) = false];
 }
@@ -229,14 +229,14 @@ message DeleteRangeResponse {
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for the scan and the maximum number of results.
 message ScanRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Must be > 0.
   optional int64 max_results = 2 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
 message ScanResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
 }
@@ -244,7 +244,7 @@ message ScanResponse {
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
 // specifies whether to commit or roll back an extant transaction.
 message EndTransactionRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   optional bool commit = 2 [(gogoproto.nullable) = false];
   // Optional commit triggers. Note that commit triggers are for
@@ -264,7 +264,7 @@ message EndTransactionRequest {
 // signalling completion of the transaction to another distributed
 // node to maintain consistency.
 message EndTransactionResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Remaining time (ns).
   optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
   // List of intents resolved by EndTransaction call.
@@ -307,12 +307,12 @@ message ResponseUnion {
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
 //
-// The RequestHeader should contain the Key of the first request
+// The KVRequestHeader should contain the Key of the first request
 // in the batch. It also contains the transaction itself; individual
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 message BatchRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }
 
@@ -321,12 +321,12 @@ message BatchRequest {
 // error in the response header is set to the first error from the
 // slice of responses, if applicable.
 message BatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
-// existing range which contains RequestHeader.Key is split by
+// existing range which contains KVRequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
 // range. The existing range is resized to cover only its start key to
@@ -346,14 +346,14 @@ message BatchResponse {
 // metadata (e.g. response cache and range stats must be copied or
 // recomputed).
 message AdminSplitRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional bytes split_key = 2 [(gogoproto.casttype) = "Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
 message AdminSplitResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeRequest is the argument to the AdminMerge() method. A
@@ -366,11 +366,11 @@ message AdminSplitResponse {
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
 message AdminMergeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
 message AdminMergeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

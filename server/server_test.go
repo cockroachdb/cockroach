@@ -315,7 +315,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
 	get := proto.Call{
 		Args: &proto.GetRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Key: writes[0],
 			},
 		},
@@ -354,7 +354,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	del := proto.Call{
 		Args: &proto.DeleteRangeRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				User:      storage.UserRoot,
 				Key:       writes[0],
 				EndKey:    proto.Key(writes[len(writes)-1]).Next(),

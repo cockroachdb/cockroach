@@ -325,7 +325,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
 	args := &proto.InternalLeaderLeaseRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:       r.Desc().StartKey,
 			Timestamp: timestamp,
 			CmdID: proto.ClientCmdID{
@@ -530,7 +530,7 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call, wait bool) error {
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
 // invocation of endCmd().
-func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{} {
+func (r *Range) beginCmd(header *proto.KVRequestHeader, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
 	r.cmdQ.GetWait(header.Key, header.EndKey, readOnly, &wg)

@@ -39,7 +39,7 @@ func (c *Call) Method() Method {
 func GetCall(key Key) Call {
 	return Call{
 		Args: &GetRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key: key,
 			},
 		},
@@ -66,7 +66,7 @@ func GetProtoCall(key Key, msg gogoproto.Message) Call {
 func IncrementCall(key Key, increment int64) Call {
 	return Call{
 		Args: &IncrementRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key: key,
 			},
 			Increment: increment,
@@ -80,7 +80,7 @@ func PutCall(key Key, value Value) Call {
 	value.InitChecksum(key)
 	return Call{
 		Args: &PutRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key: key,
 			},
 			Value: value,
@@ -101,7 +101,7 @@ func ConditionalPutCall(key Key, valueBytes, expValueBytes []byte) Call {
 	}
 	return Call{
 		Args: &ConditionalPutRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key: key,
 			},
 			Value:    value,
@@ -125,7 +125,7 @@ func PutProtoCall(key Key, msg gogoproto.Message) Call {
 func DeleteCall(key Key) Call {
 	return Call{
 		Args: &DeleteRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key: key,
 			},
 		},
@@ -138,7 +138,7 @@ func DeleteCall(key Key) Call {
 func DeleteRangeCall(startKey, endKey Key) Call {
 	return Call{
 		Args: &DeleteRangeRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key:    startKey,
 				EndKey: endKey,
 			},
@@ -152,7 +152,7 @@ func DeleteRangeCall(startKey, endKey Key) Call {
 func ScanCall(key, endKey Key, maxResults int64) Call {
 	return Call{
 		Args: &ScanRequest{
-			RequestHeader: RequestHeader{
+			KVRequestHeader: KVRequestHeader{
 				Key:    key,
 				EndKey: endKey,
 			},

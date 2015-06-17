@@ -257,9 +257,9 @@ func (m *TableDescriptor) GetNextIndexID() uint32 {
 }
 
 type CreateTableRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Schema           TableSchema `protobuf:"bytes,2,opt,name=schema" json:"schema"`
-	XXX_unrecognized []byte      `json:"-"`
+	TableRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Schema             TableSchema `protobuf:"bytes,2,opt,name=schema" json:"schema"`
+	XXX_unrecognized   []byte      `json:"-"`
 }
 
 func (m *CreateTableRequest) Reset()         { *m = CreateTableRequest{} }
@@ -274,21 +274,14 @@ func (m *CreateTableRequest) GetSchema() TableSchema {
 }
 
 type CreateTableResponse struct {
-	Error            Error  `protobuf:"bytes,1,opt,name=error" json:"error"`
-	TableID          uint32 `protobuf:"varint,2,opt,name=table_id" json:"table_id"`
-	XXX_unrecognized []byte `json:"-"`
+	TableResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	TableID             uint32 `protobuf:"varint,2,opt,name=table_id" json:"table_id"`
+	XXX_unrecognized    []byte `json:"-"`
 }
 
 func (m *CreateTableResponse) Reset()         { *m = CreateTableResponse{} }
 func (m *CreateTableResponse) String() string { return proto1.CompactTextString(m) }
 func (*CreateTableResponse) ProtoMessage()    {}
-
-func (m *CreateTableResponse) GetError() Error {
-	if m != nil {
-		return m.Error
-	}
-	return Error{}
-}
 
 func (m *CreateTableResponse) GetTableID() uint32 {
 	if m != nil {
@@ -1801,7 +1794,7 @@ func (m *CreateTableRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field TableRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1819,7 +1812,7 @@ func (m *CreateTableRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.TableRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1892,7 +1885,7 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field TableResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1910,7 +1903,7 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Error.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.TableResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -4780,7 +4773,7 @@ func (m *TableDescriptor) Size() (n int) {
 func (m *CreateTableRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.TableRequestHeader.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	l = m.Schema.Size()
 	n += 1 + l + sovStructured(uint64(l))
@@ -4793,7 +4786,7 @@ func (m *CreateTableRequest) Size() (n int) {
 func (m *CreateTableResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Error.Size()
+	l = m.TableResponseHeader.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.TableID))
 	if m.XXX_unrecognized != nil {
@@ -5552,8 +5545,8 @@ func (m *CreateTableRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.RequestHeader.Size()))
-	n6, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintStructured(data, i, uint64(m.TableRequestHeader.Size()))
+	n6, err := m.TableRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -5589,8 +5582,8 @@ func (m *CreateTableResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Error.Size()))
-	n8, err := m.Error.MarshalTo(data[i:])
+	i = encodeVarintStructured(data, i, uint64(m.TableResponseHeader.Size()))
+	n8, err := m.TableResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}

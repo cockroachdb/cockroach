@@ -42,7 +42,7 @@ const testCacheSize = 1 << 30 // GB.
 func encodePutResponse(timestamp proto.Timestamp, t *testing.T) []byte {
 	rwCmd := &proto.ReadWriteCmdResponse{
 		Put: &proto.PutResponse{
-			ResponseHeader: proto.ResponseHeader{
+			KVResponseHeader: proto.KVResponseHeader{
 				Timestamp: timestamp,
 			},
 		},

@@ -78,7 +78,7 @@ func IsRange(args Request) bool {
 type Request interface {
 	gogoproto.Message
 	// Header returns the request header.
-	Header() *RequestHeader
+	Header() *KVRequestHeader
 	// Method returns the request method.
 	Method() Method
 	// CreateReply creates a new response object.
@@ -90,7 +90,7 @@ type Request interface {
 type Response interface {
 	gogoproto.Message
 	// Header returns the response header.
-	Header() *ResponseHeader
+	Header() *KVResponseHeader
 	// Verify verifies response integrity, as applicable.
 	Verify(req Request) error
 }
@@ -108,7 +108,7 @@ type Combinable interface {
 // GetOrCreateCmdID returns the request header's command ID if available.
 // Otherwise, creates a new ClientCmdID, initialized with current time
 // and random salt.
-func (rh *RequestHeader) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
+func (rh *KVRequestHeader) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
 	if !rh.CmdID.IsEmpty() {
 		cmdID = rh.CmdID
 	} else {
@@ -122,7 +122,7 @@ func (rh *RequestHeader) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
 
 // Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
-func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) {
+func (rh *KVResponseHeader) Combine(otherRH *KVResponseHeader) {
 	if rh != nil {
 		if ts := otherRH.GetTimestamp(); rh.Timestamp.Less(ts) {
 			rh.Timestamp = ts
@@ -161,24 +161,24 @@ func (rr *InternalResolveIntentRangeResponse) Combine(c Response) {
 }
 
 // Header implements the Request interface for RequestHeader.
-func (rh *RequestHeader) Header() *RequestHeader {
+func (rh *KVRequestHeader) Header() *KVRequestHeader {
 	return rh
 }
 
 // Header implements the Response interface for ResponseHeader.
-func (rh *ResponseHeader) Header() *ResponseHeader {
+func (rh *KVResponseHeader) Header() *KVResponseHeader {
 	return rh
 }
 
 // Verify implements the Response interface for ResopnseHeader with a
 // default noop. Individual response types should override this method
 // if they contain checksummed data which can be verified.
-func (rh *ResponseHeader) Verify(req Request) error {
+func (rh *KVResponseHeader) Verify(req Request) error {
 	return nil
 }
 
 // GoError returns the non-nil error from the proto.Error union.
-func (rh *ResponseHeader) GoError() error {
+func (rh *KVResponseHeader) GoError() error {
 	if rh.Error == nil {
 		return nil
 	}
@@ -214,7 +214,7 @@ func (rh *ResponseHeader) GoError() error {
 
 // SetGoError converts the specified type into either one of the proto-
 // defined error types or into a Error for all other Go errors.
-func (rh *ResponseHeader) SetGoError(err error) {
+func (rh *KVResponseHeader) SetGoError(err error) {
 	if err == nil {
 		rh.Error = nil
 		return

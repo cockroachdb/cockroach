@@ -151,7 +151,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		endKey := o.Key.End().(proto.Key)
 		if !key.Next().Equal(endKey) {
 			call.Args = &proto.InternalResolveIntentRangeRequest{
-				RequestHeader: proto.RequestHeader{
+				KVRequestHeader: proto.KVRequestHeader{
 					Timestamp: txn.Timestamp,
 					Key:       key,
 					EndKey:    endKey,
@@ -172,7 +172,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 				continue
 			}
 			call.Args = &proto.InternalResolveIntentRequest{
-				RequestHeader: proto.RequestHeader{
+				KVRequestHeader: proto.KVRequestHeader{
 					Timestamp: txn.Timestamp,
 					Key:       key,
 					User:      storage.UserRoot,
@@ -315,14 +315,14 @@ func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
 		tc.sendBatch(args, call.Reply.(*proto.InternalBatchResponse))
 	case *proto.BatchRequest:
 		// Convert the batch request to internal-batch request.
-		internalArgs := &proto.InternalBatchRequest{RequestHeader: args.RequestHeader}
+		internalArgs := &proto.InternalBatchRequest{KVRequestHeader: args.KVRequestHeader}
 		internalReply := &proto.InternalBatchResponse{}
 		for i := range args.Requests {
 			internalArgs.Add(args.Requests[i].GetValue().(proto.Request))
 		}
 		tc.sendBatch(internalArgs, internalReply)
 		reply := call.Reply.(*proto.BatchResponse)
-		reply.ResponseHeader = internalReply.ResponseHeader
+		reply.KVResponseHeader = internalReply.KVResponseHeader
 		// Convert form internal-batch response to batch response.
 		for i := range internalReply.Responses {
 			reply.Add(internalReply.Responses[i].GetValue().(proto.Response))
@@ -336,7 +336,7 @@ func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
 // in the request but has a nil ID. The new transaction is initialized
 // using the name and isolation in the otherwise uninitialized txn.
 // The Priority, if non-zero is used as a minimum.
-func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
+func (tc *TxnCoordSender) maybeBeginTxn(header *proto.KVRequestHeader) {
 	if header.Txn != nil {
 		if len(header.Txn.ID) == 0 {
 			newTxn := proto.NewTransaction(header.Txn.Name, keys.KeyAddress(header.Key), header.GetUserPriority(),
@@ -548,7 +548,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batch
 // timestamp and error. The timestamp may have changed upon
 // encountering a newer write or read. Both the timestamp and the
 // priority may change depending on error conditions.
-func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
+func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.KVRequestHeader, replyHeader *proto.KVResponseHeader) {
 	// Move txn timestamp forward to response timestamp if applicable.
 	if replyHeader.Txn.Timestamp.Less(replyHeader.Timestamp) {
 		replyHeader.Txn.Timestamp = replyHeader.Timestamp
@@ -688,7 +688,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 				}
 
 				request := &proto.InternalHeartbeatTxnRequest{
-					RequestHeader: proto.RequestHeader{
+					KVRequestHeader: proto.KVRequestHeader{
 						Key:  txn.Key,
 						User: storage.UserRoot,
 						Txn:  &txn,

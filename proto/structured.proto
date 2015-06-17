@@ -91,12 +91,12 @@ message TableDescriptor {
 }
 
 message CreateTableRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional TableRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional TableSchema schema = 2 [(gogoproto.nullable) = false];
 }
 
 message CreateTableResponse {
-  optional Error error = 1 [(gogoproto.nullable) = false];
+  optional TableResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional uint32 table_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID"];
 }
 

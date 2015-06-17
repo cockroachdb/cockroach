@@ -138,7 +138,7 @@ func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{
 			Args: &proto.InternalMergeRequest{
-				RequestHeader: proto.RequestHeader{
+				KVRequestHeader: proto.KVRequestHeader{
 					Key: kv.Key,
 				},
 				Value: kv.Value,

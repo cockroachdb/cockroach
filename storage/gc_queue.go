@@ -127,7 +127,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 
 	gcArgs := &proto.InternalGCRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Timestamp: now,
 			RaftID:    rng.Desc().RaftID,
 		},
@@ -260,7 +260,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 	// Attempt to push the transaction which created the intent.
 	now := rng.rm.Clock().Now()
 	pushArgs := &proto.InternalPushTxnRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Timestamp:    now,
 			Key:          meta.Txn.Key,
 			User:         UserRoot,
@@ -282,7 +282,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 
 	// We pushed the transaction successfully, so resolve the intent.
 	resolveArgs := &proto.InternalResolveIntentRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Timestamp: now,
 			Key:       key,
 			User:      UserRoot,

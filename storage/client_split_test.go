@@ -42,7 +42,7 @@ import (
 
 func adminSplitArgs(key, splitKey []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
 	args := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
@@ -234,7 +234,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out the same increment copied from above (same ClientCmdID), but
 	// now to the newly created range (which should hold that key).
-	rIncArgs.RequestHeader.RaftID = newRng.Desc().RaftID
+	rIncArgs.KVRequestHeader.RaftID = newRng.Desc().RaftID
 	rIncReply = &proto.IncrementResponse{}
 	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: rIncArgs, Reply: rIncReply}); err != nil {
 		t.Fatal(err)
