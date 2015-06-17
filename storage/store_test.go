@@ -127,7 +127,7 @@ func (db *testSender) sendOne(call proto.Call) {
 		return
 	}
 	// Lookup range and direct request.
-	header := call.Args.Header()
+	header := call.Args.KVHeader()
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
 		header.RaftID = rng.Desc().RaftID
 		replica := rng.GetReplica()

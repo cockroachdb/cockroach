@@ -22,6 +22,8 @@
 		ClientCmdID
 		RequestHeader
 		ResponseHeader
+		KVRequestHeader
+		KVResponseHeader
 		GetRequest
 		GetResponse
 		PutRequest
@@ -158,24 +160,9 @@ type RequestHeader struct {
 	// CmdID is optionally specified for request idempotence
 	// (i.e. replay protection).
 	CmdID ClientCmdID `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
-	// The key for request. If the request operates on a range, this
-	// represents the starting key for the range.
-	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
-	// The end key is empty if the request spans only a single key. Otherwise,
-	// it must order strictly after Key. In such a case, the header indicates
-	// that the operation takes place on the key range from Key to EndKey,
-	// including Key and excluding EndKey.
-	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
 	// User is the originating user. Used to lookup priority when
 	// scheduling queued operations at target node.
 	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
-	// Replica specifies the destination for the request. This is a specific
-	// instance of the available replicas belonging to RangeID.
-	Replica Replica `protobuf:"bytes,6,opt,name=replica" json:"replica"`
-	// RaftID specifies the ID of the Raft consensus group which the key
-	// range belongs to. This is used by the receiving node to route the
-	// request to the correct range.
-	RaftID RaftID `protobuf:"varint,7,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 	// UserPriority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
@@ -224,13 +211,6 @@ func (m *RequestHeader) GetUser() string {
 		return m.User
 	}
 	return ""
-}
-
-func (m *RequestHeader) GetReplica() Replica {
-	if m != nil {
-		return m.Replica
-	}
-	return Replica{}
 }
 
 func (m *RequestHeader) GetUserPriority() int32 {
@@ -298,9 +278,51 @@ func (m *ResponseHeader) GetTxn() *Transaction {
 	return nil
 }
 
+// KVRequestHeader is supplied with every KV node request.
+type KVRequestHeader struct {
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// The key for request. If the request operates on a range, this
+	// represents the starting key for the range.
+	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
+	// The end key is empty if the request spans only a single key. Otherwise,
+	// it must order strictly after Key. In such a case, the header indicates
+	// that the operation takes place on the key range from Key to EndKey,
+	// including Key and excluding EndKey.
+	EndKey Key `protobuf:"bytes,4,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
+	// Replica specifies the destination for the request. This is a specific
+	// instance of the available replicas belonging to RangeID.
+	Replica Replica `protobuf:"bytes,6,opt,name=replica" json:"replica"`
+	// RaftID specifies the ID of the Raft consensus group which the key
+	// range belongs to. This is used by the receiving node to route the
+	// request to the correct range.
+	RaftID           RaftID `protobuf:"varint,7,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *KVRequestHeader) Reset()         { *m = KVRequestHeader{} }
+func (m *KVRequestHeader) String() string { return proto1.CompactTextString(m) }
+func (*KVRequestHeader) ProtoMessage()    {}
+
+func (m *KVRequestHeader) GetReplica() Replica {
+	if m != nil {
+		return m.Replica
+	}
+	return Replica{}
+}
+
+// KVResponseHeader is supplied with every KV node request.
+type KVResponseHeader struct {
+	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *KVResponseHeader) Reset()         { *m = KVResponseHeader{} }
+func (m *KVResponseHeader) String() string { return proto1.CompactTextString(m) }
+func (*KVResponseHeader) ProtoMessage()    {}
+
 // A GetRequest is the argument for the Get() method.
 type GetRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -311,7 +333,7 @@ func (*GetRequest) ProtoMessage()    {}
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
 type GetResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Value            *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -329,7 +351,7 @@ func (m *GetResponse) GetValue() *Value {
 
 // A PutRequest is the argument to the Put() method.
 type PutRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -347,7 +369,7 @@ func (m *PutRequest) GetValue() Value {
 
 // A PutResponse is the return value from the Put() method.
 type PutResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -362,7 +384,7 @@ func (*PutResponse) ProtoMessage()    {}
 // - If key exists, but value is empty and ExpValue is not nil but empty, sets value.
 // - Otherwise, returns error and the actual value of the key in the response.
 type ConditionalPutRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// The value to put.
 	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 	// ExpValue.Bytes empty to test for non-existence. Specify as nil
@@ -393,7 +415,7 @@ func (m *ConditionalPutRequest) GetExpValue() *Value {
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 type ConditionalPutResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -408,7 +430,7 @@ func (*ConditionalPutResponse) ProtoMessage()    {}
 // by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
 // cannot be invoked on an incremented key.
 type IncrementRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Increment        int64  `protobuf:"varint,2,opt,name=increment" json:"increment"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -428,7 +450,7 @@ func (m *IncrementRequest) GetIncrement() int64 {
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
 type IncrementResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	NewValue         int64  `protobuf:"varint,2,opt,name=new_value" json:"new_value"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -446,7 +468,7 @@ func (m *IncrementResponse) GetNewValue() int64 {
 
 // A DeleteRequest is the argument to the Delete() method.
 type DeleteRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -456,7 +478,7 @@ func (*DeleteRequest) ProtoMessage()    {}
 
 // A DeleteResponse is the return value from the Delete() method.
 type DeleteResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -467,7 +489,7 @@ func (*DeleteResponse) ProtoMessage()    {}
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
 type DeleteRangeRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// If 0, *all* entries between Key (inclusive) and EndKey
 	// (exclusive) are deleted. Must be >= 0
 	MaxEntriesToDelete int64  `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
@@ -488,7 +510,7 @@ func (m *DeleteRangeRequest) GetMaxEntriesToDelete() int64 {
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
 type DeleteRangeResponse struct {
-	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// Number of entries removed.
 	NumDeleted       int64  `protobuf:"varint,2,opt,name=num_deleted" json:"num_deleted"`
 	XXX_unrecognized []byte `json:"-"`
@@ -508,7 +530,7 @@ func (m *DeleteRangeResponse) GetNumDeleted() int64 {
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for the scan and the maximum number of results.
 type ScanRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// Must be > 0.
 	MaxResults       int64  `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
 	XXX_unrecognized []byte `json:"-"`
@@ -527,7 +549,7 @@ func (m *ScanRequest) GetMaxResults() int64 {
 
 // A ScanResponse is the return value from the Scan() method.
 type ScanResponse struct {
-	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// Empty if no rows were scanned.
 	Rows             []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
 	XXX_unrecognized []byte     `json:"-"`
@@ -547,7 +569,7 @@ func (m *ScanResponse) GetRows() []KeyValue {
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
 // specifies whether to commit or roll back an extant transaction.
 type EndTransactionRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// False to abort and rollback.
 	Commit bool `protobuf:"varint,2,opt,name=commit" json:"commit"`
 	// Optional commit triggers. Note that commit triggers are for
@@ -577,7 +599,7 @@ func (m *EndTransactionRequest) GetInternalCommitTrigger() *InternalCommitTrigge
 
 // An EndTransactionResponse is the return value from the
 // EndTransaction() method. The final transaction record is returned
-// as part of the response header. In particular, transaction status
+// as part of the response kvheader. In particular, transaction status
 // and timestamp will be updated to reflect final committed
 // values. Clients may propagate the transaction timestamp as the
 // final txn commit timestamp in order to preserve causal ordering
@@ -586,7 +608,7 @@ func (m *EndTransactionRequest) GetInternalCommitTrigger() *InternalCommitTrigge
 // signalling completion of the transaction to another distributed
 // node to maintain consistency.
 type EndTransactionResponse struct {
-	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// Remaining time (ns).
 	CommitWait int64 `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
 	// List of intents resolved by EndTransaction call.
@@ -757,12 +779,12 @@ func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
 //
-// The RequestHeader should contain the Key of the first request
+// The KVRequestHeader should contain the Key of the first request
 // in the batch. It also contains the transaction itself; individual
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 type BatchRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Requests         []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 	XXX_unrecognized []byte         `json:"-"`
 }
@@ -780,10 +802,10 @@ func (m *BatchRequest) GetRequests() []RequestUnion {
 
 // A BatchResponse contains one or more responses, one per request
 // corresponding to the requests in the matching BatchRequest. The
-// error in the response header is set to the first error from the
+// error in the response kvheader is set to the first error from the
 // slice of responses, if applicable.
 type BatchResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Responses        []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 	XXX_unrecognized []byte          `json:"-"`
 }
@@ -800,13 +822,13 @@ func (m *BatchResponse) GetResponses() []ResponseUnion {
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
-// existing range which contains RequestHeader.Key is split by
+// existing range which contains KVRequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
 // range. The existing range is resized to cover only its start key to
 // the split key. The new range created by the split starts at the
 // split key and extends to the original range's end key. If split_key
-// is known, header.key should also be set to split_key.
+// is known, kvheader.key should also be set to split_key.
 //
 // New range IDs for each of the split range's replica and a new Raft
 // ID are generated by the operation. Split requests are done in the
@@ -820,7 +842,7 @@ func (m *BatchResponse) GetResponses() []ResponseUnion {
 // metadata (e.g. response cache and range stats must be copied or
 // recomputed).
 type AdminSplitRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	SplitKey         Key    `protobuf:"bytes,2,opt,name=split_key,casttype=Key" json:"split_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -832,7 +854,7 @@ func (*AdminSplitRequest) ProtoMessage()    {}
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
 type AdminSplitResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -850,7 +872,7 @@ func (*AdminSplitResponse) ProtoMessage()    {}
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
 type AdminMergeRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -861,7 +883,7 @@ func (*AdminMergeRequest) ProtoMessage()    {}
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
 type AdminMergeResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -1012,50 +1034,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Key = append([]byte{}, data[index:postIndex]...)
-			index = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.EndKey = append([]byte{}, data[index:postIndex]...)
-			index = postIndex
 		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
@@ -1078,45 +1056,6 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			}
 			m.User = string(data[index:postIndex])
 			index = postIndex
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Replica.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		case 8:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
@@ -1321,7 +1260,7 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 
 	return nil
 }
-func (m *GetRequest) Unmarshal(data []byte) error {
+func (m *KVRequestHeader) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
 	for index < l {
@@ -1361,6 +1300,223 @@ func (m *GetRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append([]byte{}, data[index:postIndex]...)
+			index = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndKey = append([]byte{}, data[index:postIndex]...)
+			index = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Replica.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *KVResponseHeader) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *GetRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1409,7 +1565,7 @@ func (m *GetResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1427,7 +1583,7 @@ func (m *GetResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1503,7 +1659,7 @@ func (m *PutRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1521,7 +1677,7 @@ func (m *PutRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1594,7 +1750,7 @@ func (m *PutResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1612,7 +1768,7 @@ func (m *PutResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1661,7 +1817,7 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1679,7 +1835,7 @@ func (m *ConditionalPutRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1779,7 +1935,7 @@ func (m *ConditionalPutResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1797,7 +1953,7 @@ func (m *ConditionalPutResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1846,7 +2002,7 @@ func (m *IncrementRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1864,7 +2020,7 @@ func (m *IncrementRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1928,7 +2084,7 @@ func (m *IncrementResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1946,7 +2102,7 @@ func (m *IncrementResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2010,7 +2166,7 @@ func (m *DeleteRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2028,7 +2184,7 @@ func (m *DeleteRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2077,7 +2233,7 @@ func (m *DeleteResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2095,7 +2251,7 @@ func (m *DeleteResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2144,7 +2300,7 @@ func (m *DeleteRangeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2162,7 +2318,7 @@ func (m *DeleteRangeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2226,7 +2382,7 @@ func (m *DeleteRangeResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2244,7 +2400,7 @@ func (m *DeleteRangeResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2308,7 +2464,7 @@ func (m *ScanRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2326,7 +2482,7 @@ func (m *ScanRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2390,7 +2546,7 @@ func (m *ScanResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2408,7 +2564,7 @@ func (m *ScanResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2482,7 +2638,7 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2500,7 +2656,7 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2593,7 +2749,7 @@ func (m *EndTransactionResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2611,7 +2767,7 @@ func (m *EndTransactionResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3216,7 +3372,7 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3234,7 +3390,7 @@ func (m *BatchRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3308,7 +3464,7 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3326,7 +3482,7 @@ func (m *BatchResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3400,7 +3556,7 @@ func (m *AdminSplitRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3418,7 +3574,7 @@ func (m *AdminSplitRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3489,7 +3645,7 @@ func (m *AdminSplitResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3507,7 +3663,7 @@ func (m *AdminSplitResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3556,7 +3712,7 @@ func (m *AdminMergeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3574,7 +3730,7 @@ func (m *AdminMergeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3623,7 +3779,7 @@ func (m *AdminMergeResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3641,7 +3797,7 @@ func (m *AdminMergeResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3789,19 +3945,8 @@ func (m *RequestHeader) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.CmdID.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.EndKey != nil {
-		l = len(m.EndKey)
-		n += 1 + l + sovApi(uint64(l))
-	}
 	l = len(m.User)
 	n += 1 + l + sovApi(uint64(l))
-	l = m.Replica.Size()
-	n += 1 + l + sovApi(uint64(l))
-	n += 1 + sovApi(uint64(m.RaftID))
 	if m.UserPriority != nil {
 		n += 1 + sovApi(uint64(*m.UserPriority))
 	}
@@ -3835,10 +3980,43 @@ func (m *ResponseHeader) Size() (n int) {
 	return n
 }
 
-func (m *GetRequest) Size() (n int) {
+func (m *KVRequestHeader) Size() (n int) {
 	var l int
 	_ = l
 	l = m.RequestHeader.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovApi(uint64(l))
+	}
+	l = m.Replica.Size()
+	n += 1 + l + sovApi(uint64(l))
+	n += 1 + sovApi(uint64(m.RaftID))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *KVResponseHeader) Size() (n int) {
+	var l int
+	_ = l
+	l = m.ResponseHeader.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3849,7 +4027,7 @@ func (m *GetRequest) Size() (n int) {
 func (m *GetResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.Value != nil {
 		l = m.Value.Size()
@@ -3864,7 +4042,7 @@ func (m *GetResponse) Size() (n int) {
 func (m *PutRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -3877,7 +4055,7 @@ func (m *PutRequest) Size() (n int) {
 func (m *PutResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3888,7 +4066,7 @@ func (m *PutResponse) Size() (n int) {
 func (m *ConditionalPutRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovApi(uint64(l))
@@ -3905,7 +4083,7 @@ func (m *ConditionalPutRequest) Size() (n int) {
 func (m *ConditionalPutResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3916,7 +4094,7 @@ func (m *ConditionalPutResponse) Size() (n int) {
 func (m *IncrementRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.Increment))
 	if m.XXX_unrecognized != nil {
@@ -3928,7 +4106,7 @@ func (m *IncrementRequest) Size() (n int) {
 func (m *IncrementResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.NewValue))
 	if m.XXX_unrecognized != nil {
@@ -3940,7 +4118,7 @@ func (m *IncrementResponse) Size() (n int) {
 func (m *DeleteRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3951,7 +4129,7 @@ func (m *DeleteRequest) Size() (n int) {
 func (m *DeleteResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3962,7 +4140,7 @@ func (m *DeleteResponse) Size() (n int) {
 func (m *DeleteRangeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxEntriesToDelete))
 	if m.XXX_unrecognized != nil {
@@ -3974,7 +4152,7 @@ func (m *DeleteRangeRequest) Size() (n int) {
 func (m *DeleteRangeResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.NumDeleted))
 	if m.XXX_unrecognized != nil {
@@ -3986,7 +4164,7 @@ func (m *DeleteRangeResponse) Size() (n int) {
 func (m *ScanRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxResults))
 	if m.XXX_unrecognized != nil {
@@ -3998,7 +4176,7 @@ func (m *ScanRequest) Size() (n int) {
 func (m *ScanResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if len(m.Rows) > 0 {
 		for _, e := range m.Rows {
@@ -4015,7 +4193,7 @@ func (m *ScanResponse) Size() (n int) {
 func (m *EndTransactionRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 2
 	if m.InternalCommitTrigger != nil {
@@ -4031,7 +4209,7 @@ func (m *EndTransactionRequest) Size() (n int) {
 func (m *EndTransactionResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.CommitWait))
 	if len(m.Resolved) > 0 {
@@ -4131,7 +4309,7 @@ func (m *ResponseUnion) Size() (n int) {
 func (m *BatchRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if len(m.Requests) > 0 {
 		for _, e := range m.Requests {
@@ -4148,7 +4326,7 @@ func (m *BatchRequest) Size() (n int) {
 func (m *BatchResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if len(m.Responses) > 0 {
 		for _, e := range m.Responses {
@@ -4165,7 +4343,7 @@ func (m *BatchResponse) Size() (n int) {
 func (m *AdminSplitRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.SplitKey != nil {
 		l = len(m.SplitKey)
@@ -4180,7 +4358,7 @@ func (m *AdminSplitRequest) Size() (n int) {
 func (m *AdminSplitResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -4191,7 +4369,7 @@ func (m *AdminSplitResponse) Size() (n int) {
 func (m *AdminMergeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -4202,7 +4380,7 @@ func (m *AdminMergeRequest) Size() (n int) {
 func (m *AdminMergeResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -4281,33 +4459,10 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n2
-	if m.Key != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.EndKey != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
-		i += copy(data[i:], m.EndKey)
-	}
 	data[i] = 0x2a
 	i++
 	i = encodeVarintApi(data, i, uint64(len(m.User)))
 	i += copy(data[i:], m.User)
-	data[i] = 0x32
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
-	n3, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	data[i] = 0x38
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RaftID))
 	if m.UserPriority != nil {
 		data[i] = 0x40
 		i++
@@ -4317,11 +4472,11 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x4a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n4, err := m.Txn.MarshalTo(data[i:])
+		n3, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n3
 	}
 	data[i] = 0x50
 	i++
@@ -4351,30 +4506,111 @@ func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Error.Size()))
-		n5, err := m.Error.MarshalTo(data[i:])
+		n4, err := m.Error.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n4
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n6, err := m.Timestamp.MarshalTo(data[i:])
+	n5, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n5
 	if m.Txn != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n7, err := m.Txn.MarshalTo(data[i:])
+		n6, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n6
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *KVRequestHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *KVRequestHeader) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
+	n7, err := m.RequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n7
+	if m.Key != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.EndKey != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintApi(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
+	}
+	data[i] = 0x32
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
+	n8, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n8
+	data[i] = 0x38
+	i++
+	i = encodeVarintApi(data, i, uint64(m.RaftID))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *KVResponseHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *KVResponseHeader) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
+	n9, err := m.ResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n9
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4398,12 +4634,12 @@ func (m *GetRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n8, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n10, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n10
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4427,21 +4663,21 @@ func (m *GetResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n9, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n11, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n11
 	if m.Value != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-		n10, err := m.Value.MarshalTo(data[i:])
+		n12, err := m.Value.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n10
+		i += n12
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -4466,20 +4702,20 @@ func (m *PutRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n11, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n13, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n11
+	i += n13
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-	n12, err := m.Value.MarshalTo(data[i:])
+	n14, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n12
+	i += n14
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4503,12 +4739,12 @@ func (m *PutResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n13, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n15, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n13
+	i += n15
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4532,29 +4768,29 @@ func (m *ConditionalPutRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n14, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n16, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n14
+	i += n16
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Value.Size()))
-	n15, err := m.Value.MarshalTo(data[i:])
+	n17, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n15
+	i += n17
 	if m.ExpValue != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.ExpValue.Size()))
-		n16, err := m.ExpValue.MarshalTo(data[i:])
+		n18, err := m.ExpValue.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n16
+		i += n18
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -4579,12 +4815,12 @@ func (m *ConditionalPutResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n17, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n19, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n19
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4608,12 +4844,12 @@ func (m *IncrementRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n18, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n20, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n18
+	i += n20
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Increment))
@@ -4640,12 +4876,12 @@ func (m *IncrementResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n19, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n21, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n21
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NewValue))
@@ -4672,12 +4908,12 @@ func (m *DeleteRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n20, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n22, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
+	i += n22
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4701,12 +4937,12 @@ func (m *DeleteResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n21, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n23, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n21
+	i += n23
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -4730,12 +4966,12 @@ func (m *DeleteRangeRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n22, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n24, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n24
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxEntriesToDelete))
@@ -4762,12 +4998,12 @@ func (m *DeleteRangeResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n23, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n25, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n23
+	i += n25
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NumDeleted))
@@ -4794,12 +5030,12 @@ func (m *ScanRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n24, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n26, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n24
+	i += n26
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxResults))
@@ -4826,12 +5062,12 @@ func (m *ScanResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n25, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n27, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n25
+	i += n27
 	if len(m.Rows) > 0 {
 		for _, msg := range m.Rows {
 			data[i] = 0x12
@@ -4867,12 +5103,12 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n26, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n28, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n26
+	i += n28
 	data[i] = 0x10
 	i++
 	if m.Commit {
@@ -4885,11 +5121,11 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.InternalCommitTrigger.Size()))
-		n27, err := m.InternalCommitTrigger.MarshalTo(data[i:])
+		n29, err := m.InternalCommitTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n27
+		i += n29
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -4914,12 +5150,12 @@ func (m *EndTransactionResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n28, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n30, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n28
+	i += n30
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.CommitWait))
@@ -4956,81 +5192,81 @@ func (m *RequestUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n29, err := m.Get.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n29
-	}
-	if m.Put != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n30, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n30
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n31, err := m.ConditionalPut.MarshalTo(data[i:])
+		n31, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n31
 	}
-	if m.Increment != nil {
-		data[i] = 0x2a
+	if m.Put != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n32, err := m.Increment.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
+		n32, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n32
 	}
-	if m.Delete != nil {
-		data[i] = 0x32
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n33, err := m.Delete.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
+		n33, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n33
 	}
-	if m.DeleteRange != nil {
-		data[i] = 0x3a
+	if m.Increment != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n34, err := m.DeleteRange.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
+		n34, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n34
 	}
-	if m.Scan != nil {
-		data[i] = 0x42
+	if m.Delete != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n35, err := m.Scan.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
+		n35, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n35
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x4a
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n36, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
+		n36, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n36
+	}
+	if m.Scan != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
+		n37, err := m.Scan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n37
+	}
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
+		n38, err := m.EndTransaction.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n38
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -5057,81 +5293,81 @@ func (m *ResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n37, err := m.Get.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n37
-	}
-	if m.Put != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n38, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n38
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n39, err := m.ConditionalPut.MarshalTo(data[i:])
+		n39, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n39
 	}
-	if m.Increment != nil {
-		data[i] = 0x2a
+	if m.Put != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n40, err := m.Increment.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
+		n40, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n40
 	}
-	if m.Delete != nil {
-		data[i] = 0x32
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n41, err := m.Delete.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
+		n41, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n41
 	}
-	if m.DeleteRange != nil {
-		data[i] = 0x3a
+	if m.Increment != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n42, err := m.DeleteRange.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
+		n42, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n42
 	}
-	if m.Scan != nil {
-		data[i] = 0x42
+	if m.Delete != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n43, err := m.Scan.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
+		n43, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n43
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x4a
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n44, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
+		n44, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n44
+	}
+	if m.Scan != nil {
+		data[i] = 0x42
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
+		n45, err := m.Scan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n45
+	}
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
+		n46, err := m.EndTransaction.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n46
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -5156,12 +5392,12 @@ func (m *BatchRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n45, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n47, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n45
+	i += n47
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -5197,12 +5433,12 @@ func (m *BatchResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n46, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n48, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n46
+	i += n48
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -5238,12 +5474,12 @@ func (m *AdminSplitRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n47, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n49, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n47
+	i += n49
 	if m.SplitKey != nil {
 		data[i] = 0x12
 		i++
@@ -5273,12 +5509,12 @@ func (m *AdminSplitResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n48, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n50, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n48
+	i += n50
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -5302,12 +5538,12 @@ func (m *AdminMergeRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n49, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVRequestHeader.Size()))
+	n51, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n49
+	i += n51
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -5331,12 +5567,12 @@ func (m *AdminMergeResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n50, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.KVResponseHeader.Size()))
+	n52, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n50
+	i += n52
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

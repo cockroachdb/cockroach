@@ -205,6 +205,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	// The root user can always proceed.
 	header := args.Header()
+	kvheader := args.KVHeader()
 	if header.User == storage.UserRoot {
 		return nil
 	}
@@ -224,9 +225,9 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
 	}
 	permMap := configMap.(storage.PrefixConfigMap)
-	headerEnd := header.EndKey
+	headerEnd := kvheader.EndKey
 	if len(headerEnd) == 0 {
-		headerEnd = header.Key
+		headerEnd = kvheader.Key
 	}
 	// Visit PermConfig(s) which apply to the method's key range.
 	//   - For each perm config which the range covers, verify read or writes
@@ -238,7 +239,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	// TODO(spencer): it might make sense to visit prefixes from the
 	//   shortest to longest instead for performance. Keep an eye on profiling
 	//   for this code path as permission sets grow large.
-	return permMap.VisitPrefixes(header.Key, headerEnd,
+	return permMap.VisitPrefixes(kvheader.Key, headerEnd,
 		func(start, end proto.Key, config interface{}) (bool, error) {
 			hasPerm := false
 			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, config interface{}) (bool, error) {
@@ -256,7 +257,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 				return false, err
 			}
 			if !hasPerm {
-				if len(header.EndKey) == 0 {
+				if len(kvheader.EndKey) == 0 {
 					return false, util.Errorf("user %q cannot invoke %s at %q", header.User, args.Method(), start)
 				}
 				return false, util.Errorf("user %q cannot invoke %s at %q-%q", header.User, args.Method(), start, end)
@@ -281,10 +282,12 @@ type lookupOptions struct {
 func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	desc *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:             key,
-			User:            storage.UserRoot,
-			ReadConsistency: proto.INCONSISTENT,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				User:            storage.UserRoot,
+				ReadConsistency: proto.INCONSISTENT,
+			},
+			Key: key,
 		},
 		MaxRanges:     ds.rangeLookupMaxRanges,
 		IgnoreIntents: options.ignoreIntents,
@@ -426,7 +429,7 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.Header().RaftID = raftID
+	args.KVHeader().RaftID = raftID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
@@ -447,7 +450,7 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 			// Otherwise, copy the args value and set the replica in the header.
 			a = gogoproto.Clone(args).(proto.Request)
 		}
-		a.Header().Replica = *replicaMap[addr.String()]
+		a.KVHeader().Replica = *replicaMap[addr.String()]
 		return a
 	}
 	// RPCs are sent asynchronously and there is no synchronized access to
@@ -513,7 +516,7 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call proto.Call) 
 		// TODO(tschottdorf): If a replica group goes dead, this will cause clients
 		// to put high read pressure on the first range, so there should be some
 		// rate limiting here.
-		ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+		ds.rangeCache.EvictCachedRangeDescriptor(args.KVHeader().Key, desc)
 	} else {
 		err = reply.Header().GoError()
 	}
@@ -529,7 +532,7 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call proto.Call) 
 		switch tErr := err.(type) {
 		case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 			// Range descriptor might be out of date - evict it.
-			ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+			ds.rangeCache.EvictCachedRangeDescriptor(args.KVHeader().Key, desc)
 			// On addressing errors, don't backoff; retry immediately.
 			return retry.Reset, err
 		case *proto.NotLeaderError:
@@ -542,7 +545,7 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call proto.Call) 
 					if log.V(1) {
 						log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
 					}
-					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+					ds.rangeCache.EvictCachedRangeDescriptor(args.KVHeader().Key, desc)
 				}
 			} else {
 				newLeader = &proto.Replica{}
@@ -572,7 +575,7 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 		options.ignoreIntents = pushArgs.RangeLookup
 	}
 
-	desc, err := ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key, options)
+	desc, err := ds.rangeCache.LookupRangeDescriptor(call.Args.KVHeader().Key, options)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -580,7 +583,7 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 	var descNext *proto.RangeDescriptor
 	// If the request accesses keys beyond the end of this range,
 	// get the descriptor of the adjacent range to address next.
-	if desc.EndKey.Less(call.Args.Header().EndKey) {
+	if desc.EndKey.Less(call.Args.KVHeader().EndKey) {
 		if _, ok := call.Reply.(proto.Combinable); !ok {
 			return nil, nil, util.Error("illegal cross-range operation")
 		}
@@ -616,7 +619,7 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 	args := call.Args
 	finalReply := call.Reply
-	endKey := args.Header().EndKey
+	endKey := args.KVHeader().EndKey
 
 	// Verify permissions.
 	if err := ds.verifyPermissions(call.Args); err != nil {
@@ -668,10 +671,10 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// touch it unless we have to (it is illegal to send EndKey on
 			// commands which do not operate on ranges).
 			if descNext != nil {
-				args.Header().EndKey = desc.EndKey
+				args.KVHeader().EndKey = desc.EndKey
 				defer func() {
 					// "Untruncate" EndKey to original.
-					args.Header().EndKey = endKey
+					args.KVHeader().EndKey = endKey
 				}()
 			}
 			return ds.sendAttempt(desc, call)
@@ -726,12 +729,12 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// Reset original start key (the EndKey is taken care of without
 			// defer above).
 			defer func(k proto.Key) {
-				args.Header().Key = k
-			}(args.Header().Key)
+				args.KVHeader().Key = k
+			}(args.KVHeader().Key)
 		}
 
 		// In next iteration, query next range.
-		args.Header().Key = descNext.StartKey
+		args.KVHeader().Key = descNext.StartKey
 
 		// This is a multi-range request, make a new reply object for
 		// subsequent iterations of the loop.

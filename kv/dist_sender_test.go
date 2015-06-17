@@ -282,7 +282,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		args := tc.args
-		args.Header().RaftID = raftID // Not used in this test, but why not.
+		args.KVHeader().RaftID = raftID // Not used in this test, but why not.
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}
@@ -399,7 +399,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key)
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.KVHeader().Key)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -429,8 +429,8 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 		ds := NewDistSender(ctx, g)
 		call := proto.Call{
 			Args: &proto.InternalPushTxnRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
-				RangeLookup:   rangeLookup,
+				KVRequestHeader: proto.KVRequestHeader{Key: proto.Key("a")},
+				RangeLookup:     rangeLookup,
 			},
 			Reply: &proto.InternalPushTxnResponse{},
 		}
@@ -449,7 +449,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	descStale := true
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		header := getArgs(testAddress).(proto.Request).Header()
+		header := getArgs(testAddress).(proto.Request).KVHeader()
 		if method == "Node.InternalRangeLookup" {
 			// If the non-broken descriptor has already been returned, that's
 			// an error.
@@ -638,8 +638,10 @@ func TestVerifyPermissions(t *testing.T) {
 
 	for i, test := range testData {
 		for _, r := range test.requests {
-			*r.Header() = proto.RequestHeader{
-				User:   test.user,
+			*r.KVHeader() = proto.KVRequestHeader{
+				RequestHeader: proto.RequestHeader{
+					User: test.user,
+				},
 				Key:    test.startKey,
 				EndKey: test.endKey,
 			}

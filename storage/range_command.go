@@ -42,7 +42,7 @@ import (
 func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.Request, reply proto.Response) ([]proto.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
-	header := args.Header()
+	header := args.KVHeader()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 		reply.Header().SetGoError(err)
@@ -864,8 +864,8 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// loop do it, in order to provide a split trigger.
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: args.Key},
-				Commit:        true,
+				KVRequestHeader: proto.KVRequestHeader{Key: args.Key},
+				Commit:          true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					SplitTrigger: &proto.SplitTrigger{
 						UpdatedDesc: updatedDesc,
@@ -1025,8 +1025,8 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		// loop do it, in order to provide a merge trigger.
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: args.Key},
-				Commit:        true,
+				KVRequestHeader: proto.KVRequestHeader{Key: args.Key},
+				Commit:          true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					MergeTrigger: &proto.MergeTrigger{
 						UpdatedDesc:    updatedDesc,
@@ -1153,8 +1153,8 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		// loop do it, in order to provide a commit trigger.
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
-				Commit:        true,
+				KVRequestHeader: proto.KVRequestHeader{Key: updatedDesc.StartKey},
+				Commit:          true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
 						NodeID:          replica.NodeID,

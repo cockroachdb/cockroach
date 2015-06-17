@@ -130,29 +130,29 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
 // response in the ReadWriteCmdResponse union.
 const cockroach::proto::ResponseHeader* GetResponseHeader(const cockroach::proto::ReadWriteCmdResponse& rwResp) {
   if (rwResp.has_put()) {
-    return &rwResp.put().header();
+    return &rwResp.put().kvheader().header();
   } else if (rwResp.has_conditional_put()) {
-    return &rwResp.conditional_put().header();
+    return &rwResp.conditional_put().kvheader().header();
   } else if (rwResp.has_increment()) {
-    return &rwResp.increment().header();
+    return &rwResp.increment().kvheader().header();
   } else if (rwResp.has_delete_()) {
-    return &rwResp.delete_().header();
+    return &rwResp.delete_().kvheader().header();
   } else if (rwResp.has_delete_range()) {
-    return &rwResp.delete_range().header();
+    return &rwResp.delete_range().kvheader().header();
   } else if (rwResp.has_end_transaction()) {
-    return &rwResp.end_transaction().header();
+    return &rwResp.end_transaction().kvheader().header();
   } else if (rwResp.has_internal_heartbeat_txn()) {
-    return &rwResp.internal_heartbeat_txn().header();
+    return &rwResp.internal_heartbeat_txn().kvheader().header();
   } else if (rwResp.has_internal_gc()) {
-    return &rwResp.internal_gc().header();
+    return &rwResp.internal_gc().kvheader().header();
   } else if (rwResp.has_internal_push_txn()) {
-    return &rwResp.internal_push_txn().header();
+    return &rwResp.internal_push_txn().kvheader().header();
   } else if (rwResp.has_internal_resolve_intent()) {
-    return &rwResp.internal_resolve_intent().header();
+    return &rwResp.internal_resolve_intent().kvheader().header();
   } else if (rwResp.has_internal_merge()) {
-    return &rwResp.internal_merge().header();
+    return &rwResp.internal_merge().kvheader().header();
   } else if (rwResp.has_internal_truncate_log()) {
-    return &rwResp.internal_truncate_log().header();
+    return &rwResp.internal_truncate_log().kvheader().header();
   }
   return NULL;
 }

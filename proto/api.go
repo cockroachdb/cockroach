@@ -79,6 +79,7 @@ type Request interface {
 	gogoproto.Message
 	// Header returns the request header.
 	Header() *RequestHeader
+	KVHeader() *KVRequestHeader
 	// Method returns the request method.
 	Method() Method
 	// CreateReply creates a new response object.
@@ -91,6 +92,7 @@ type Response interface {
 	gogoproto.Message
 	// Header returns the response header.
 	Header() *ResponseHeader
+	KVHeader() *KVResponseHeader
 	// Verify verifies response integrity, as applicable.
 	Verify(req Request) error
 }
@@ -170,6 +172,15 @@ func (rh *ResponseHeader) Header() *ResponseHeader {
 	return rh
 }
 
+func (rh *KVRequestHeader) KVHeader() *KVRequestHeader {
+	return rh
+}
+
+// KVHeader implements the KVResponse interface for KVResponseHeader.
+func (rh *KVResponseHeader) KVHeader() *KVResponseHeader {
+	return rh
+}
+
 // Verify implements the Response interface for ResopnseHeader with a
 // default noop. Individual response types should override this method
 // if they contain checksummed data which can be verified.
@@ -237,7 +248,7 @@ func (rh *ResponseHeader) SetGoError(err error) {
 // Verify verifies the integrity of the get response value.
 func (gr *GetResponse) Verify(req Request) error {
 	if gr.Value != nil {
-		return gr.Value.Verify(req.Header().Key)
+		return gr.Value.Verify(req.KVHeader().Key)
 	}
 	return nil
 }
@@ -264,8 +275,8 @@ func (br *BatchRequest) Add(args Request) {
 		panic(fmt.Sprintf("unable to add %T to batch request", args))
 	}
 	if br.Key == nil {
-		br.Key = args.Header().Key
-		br.EndKey = args.Header().EndKey
+		br.Key = args.KVHeader().Key
+		br.EndKey = args.KVHeader().EndKey
 	}
 	br.Requests = append(br.Requests, union)
 }

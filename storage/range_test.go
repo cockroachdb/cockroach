@@ -411,11 +411,13 @@ func TestRangeNotLeaderError(t *testing.T) {
 		RaftNodeID: proto.MakeRaftNodeID(2, 2),
 	})
 
-	header := proto.RequestHeader{
-		Key:       proto.Key("a"),
-		RaftID:    tc.rng.Desc().RaftID,
-		Replica:   proto.Replica{StoreID: tc.store.StoreID()},
-		Timestamp: now,
+	header := proto.KVRequestHeader{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: now,
+		},
+		Key:     proto.Key("a"),
+		RaftID:  tc.rng.Desc().RaftID,
+		Replica: proto.Replica{StoreID: tc.store.StoreID()},
 	}
 	testCases := []struct {
 		args  proto.Request
@@ -423,20 +425,20 @@ func TestRangeNotLeaderError(t *testing.T) {
 	}{
 		// Admin split covers admin commands.
 		{&proto.AdminSplitRequest{
-			RequestHeader: header,
-			SplitKey:      proto.Key("a"),
+			KVRequestHeader: header,
+			SplitKey:        proto.Key("a"),
 		},
 			&proto.AdminSplitResponse{},
 		},
 		// Get covers read-only commands.
 		{&proto.GetRequest{
-			RequestHeader: header,
+			KVRequestHeader: header,
 		},
 			&proto.GetResponse{},
 		},
 		// Put covers read-write commands.
 		{&proto.PutRequest{
-			RequestHeader: header,
+			KVRequestHeader: header,
 			Value: proto.Value{
 				Bytes: []byte("value"),
 			},
@@ -634,8 +636,11 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
-		Value:         proto.Value{Bytes: data},
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{Timestamp: proto.MinTimestamp},
+			Key:           key,
+		},
+		Value: proto.Value{Bytes: data},
 	}
 	reply := &proto.PutResponse{}
 
@@ -677,8 +682,11 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
-		Value:         proto.Value{Bytes: data},
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{Timestamp: proto.MinTimestamp},
+			Key:           key,
+		},
+		Value: proto.Value{Bytes: data},
 	}
 	reply := &proto.PutResponse{}
 
@@ -706,7 +714,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 // the default replica for the specified key.
 func getArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
@@ -720,11 +728,13 @@ func getArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.Get
 // the default replica for the specified key / value.
 func putArgs(key, value []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:       key,
-			Timestamp: proto.MinTimestamp,
-			RaftID:    raftID,
-			Replica:   proto.Replica{StoreID: storeID},
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: proto.MinTimestamp,
+			},
+			Key:     key,
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -737,7 +747,7 @@ func putArgs(key, value []byte, raftID proto.RaftID, storeID proto.StoreID) (*pr
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
 func deleteArgs(key proto.Key, raftID proto.RaftID, storeID proto.StoreID) (*proto.DeleteRequest, *proto.DeleteResponse) {
 	args := &proto.DeleteRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
@@ -763,7 +773,7 @@ func readOrWriteArgs(key proto.Key, read bool, raftID proto.RaftID, storeID prot
 // addressed to the default replica for the specified key / value.
 func incrementArgs(key []byte, inc int64, raftID proto.RaftID, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
@@ -776,7 +786,7 @@ func incrementArgs(key []byte, inc int64, raftID proto.RaftID, storeID proto.Sto
 
 func scanArgs(start, end []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.ScanRequest, *proto.ScanResponse) {
 	args := &proto.ScanRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     start,
 			EndKey:  end,
 			RaftID:  raftID,
@@ -792,11 +802,13 @@ func scanArgs(start, end []byte, raftID proto.RaftID, storeID proto.StoreID) (*p
 func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
 	args := &proto.EndTransactionRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Txn: txn,
+			},
 			Key:     txn.Key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
-			Txn:     txn,
 		},
 		Commit: commit,
 	}
@@ -809,12 +821,14 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RaftID, storeI
 func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:       pushee.Key,
-			Timestamp: pusher.Timestamp,
-			RaftID:    raftID,
-			Replica:   proto.Replica{StoreID: storeID},
-			Txn:       pusher,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: pusher.Timestamp,
+				Txn:       pusher,
+			},
+			Key:     pushee.Key,
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		Now:       pusher.Timestamp,
 		PusheeTxn: *pushee,
@@ -828,11 +842,13 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 func heartbeatArgs(txn *proto.Transaction, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
 	args := &proto.InternalHeartbeatTxnRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Txn: txn,
+			},
 			Key:     txn.Key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
-			Txn:     txn,
 		},
 	}
 	reply := &proto.InternalHeartbeatTxnResponse{}
@@ -845,7 +861,7 @@ func heartbeatArgs(txn *proto.Transaction, raftID proto.RaftID, storeID proto.St
 func internalMergeArgs(key []byte, value proto.Value, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalMergeRequest, *proto.InternalMergeResponse) {
 	args := &proto.InternalMergeRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
@@ -859,7 +875,7 @@ func internalMergeArgs(key []byte, value proto.Value, raftID proto.RaftID, store
 func internalTruncateLogArgs(index uint64, raftID proto.RaftID, storeID proto.StoreID) (
 	*proto.InternalTruncateLogRequest, *proto.InternalTruncateLogResponse) {
 	args := &proto.InternalTruncateLogRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
@@ -2013,12 +2029,14 @@ func TestRangeStatsComputation(t *testing.T) {
 
 	// Resolve the 2nd value.
 	rArgs := &proto.InternalResolveIntentRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp: pArgs.Txn.Timestamp,
-			Key:       pArgs.Key,
-			RaftID:    tc.rng.Desc().RaftID,
-			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
-			Txn:       pArgs.Txn,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: pArgs.Txn.Timestamp,
+				Txn:       pArgs.Txn,
+			},
+			Key:     pArgs.Key,
+			RaftID:  tc.rng.Desc().RaftID,
+			Replica: proto.Replica{StoreID: tc.store.StoreID()},
 		},
 	}
 	rArgs.Txn.Status = proto.COMMITTED
@@ -2199,11 +2217,13 @@ func TestConditionFailedError(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := &proto.ConditionalPutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:       key,
-			Timestamp: proto.MinTimestamp,
-			RaftID:    1,
-			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: proto.MinTimestamp,
+			},
+			Key:     key,
+			RaftID:  1,
+			Replica: proto.Replica{StoreID: tc.store.StoreID()},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -2317,7 +2337,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 
 	// Get original meta2 descriptor.
 	rlArgs := &proto.InternalRangeLookupRequest{
-		RequestHeader: proto.RequestHeader{
+		KVRequestHeader: proto.KVRequestHeader{
 			Key:     keys.RangeMetaKey(key),
 			RaftID:  tc.rng.Desc().RaftID,
 			Replica: proto.Replica{StoreID: tc.store.StoreID()},
@@ -2403,7 +2423,7 @@ func TestInternalRangeLookup(t *testing.T) {
 		reply := proto.InternalRangeLookupResponse{}
 		if err := tc.store.ExecuteCmd(context.Background(), proto.Call{
 			Args: &proto.InternalRangeLookupRequest{
-				RequestHeader: proto.RequestHeader{
+				KVRequestHeader: proto.KVRequestHeader{
 					RaftID: 1,
 					Key:    key,
 				},

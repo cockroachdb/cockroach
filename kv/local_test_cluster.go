@@ -74,7 +74,7 @@ func (rls *retryableLocalSender) Send(_ context.Context, call proto.Call) {
 		if err := call.Reply.Header().GoError(); err != nil {
 			if _, ok := err.(*proto.RangeKeyMismatchError); ok {
 				// Clear request replica.
-				call.Args.Header().Replica = proto.Replica{}
+				call.Args.KVHeader().Replica = proto.Replica{}
 				return retry.Continue, err
 			}
 		}

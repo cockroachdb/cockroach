@@ -101,8 +101,8 @@ func (x *InternalValueType) UnmarshalJSON(data []byte) error {
 // additional consecutive addressable ranges. Specify max_ranges > 1
 // to pre-fill the range descriptor cache.
 type InternalRangeLookupRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	MaxRanges     int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
+	MaxRanges       int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
 	// Ignore intents indicates whether or not intents encountered
 	// while looking up the range info should be resolved. This should
 	// be false in general, except for the case where the lookup is
@@ -136,7 +136,7 @@ func (m *InternalRangeLookupRequest) GetIgnoreIntents() bool {
 // additional consecutive ranges beyond the requested range to pre-fill
 // the range descriptor cache.
 type InternalRangeLookupResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Ranges           []RangeDescriptor `protobuf:"bytes,2,rep,name=ranges" json:"ranges"`
 	XXX_unrecognized []byte            `json:"-"`
 }
@@ -158,7 +158,7 @@ func (m *InternalRangeLookupResponse) GetRanges() []RangeDescriptor {
 // ongoing. Note that this heartbeat message is different from the
 // heartbeat message in the gossip protocol.
 type InternalHeartbeatTxnRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -172,7 +172,7 @@ func (*InternalHeartbeatTxnRequest) ProtoMessage()    {}
 // know the disposition of the transaction (i.e. aborted, committed or
 // pending).
 type InternalHeartbeatTxnResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -184,7 +184,7 @@ func (*InternalHeartbeatTxnResponse) ProtoMessage()    {}
 // sent by range leaders after scanning range data to find expired
 // MVCC values.
 type InternalGCRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	GCMeta           GCMetadata                `protobuf:"bytes,2,opt,name=gc_meta" json:"gc_meta"`
 	Keys             []InternalGCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
 	XXX_unrecognized []byte                    `json:"-"`
@@ -228,7 +228,7 @@ func (m *InternalGCRequest_GCKey) GetTimestamp() Timestamp {
 // An InternalGCResponse is the return value from the InternalGC()
 // method.
 type InternalGCResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -250,8 +250,8 @@ func (*InternalGCResponse) ProtoMessage()    {}
 // course of action is determined by the specified push type, and by
 // the owning txn's status and priority.
 type InternalPushTxnRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	PusheeTxn     Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
+	PusheeTxn       Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
 	// Now holds the timestamp used to compare the last heartbeat of the pushee
 	// against. This is necessary since the request header's timestamp does not
 	// necessarily advance with the node clock across retries and hence cannot
@@ -310,7 +310,7 @@ func (m *InternalPushTxnRequest) GetRangeLookup() bool {
 // InternalResolveIntent() on the conflicted key. It returns an error
 // otherwise.
 type InternalPushTxnResponse struct {
-	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// Txn is non-nil if the transaction could be heartbeat and contains
 	// the current value of the transaction.
 	PusheeTxn        *Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn,omitempty"`
@@ -333,7 +333,7 @@ func (m *InternalPushTxnResponse) GetPusheeTxn() *Transaction {
 // coordinators and after success calling InternalPushTxn to clean up
 // write intents: either to remove them or commit them.
 type InternalResolveIntentRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -344,7 +344,7 @@ func (*InternalResolveIntentRequest) ProtoMessage()    {}
 // An InternalResolveIntentResponse is the return value from the
 // InternalResolveIntent() method.
 type InternalResolveIntentResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -356,7 +356,7 @@ func (*InternalResolveIntentResponse) ProtoMessage()    {}
 // InternalResolveIntentRange() method. This clear write intents
 // for a range of keys to resolve intents created by range ops.
 type InternalResolveIntentRangeRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -367,7 +367,7 @@ func (*InternalResolveIntentRangeRequest) ProtoMessage()    {}
 // An InternalResolveIntentRangeResponse is the return value from the
 // InternalResolveIntent() method.
 type InternalResolveIntentRangeResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -379,7 +379,7 @@ func (*InternalResolveIntentRangeResponse) ProtoMessage()    {}
 // specifies a key and a value which should be merged into the existing value at
 // that key.
 type InternalMergeRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -397,7 +397,7 @@ func (m *InternalMergeRequest) GetValue() Value {
 
 // InternalMergeResponse is the response to an InternalMerge() operation.
 type InternalMergeResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -411,7 +411,7 @@ func (*InternalMergeResponse) ProtoMessage()    {}
 // to identical as possible. The raft leader can also inform decisions about the cutoff point
 // with its knowledge of the replicas' acknowledgement status.
 type InternalTruncateLogRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	// Log entries < this index are to be discarded.
 	Index            uint64 `protobuf:"varint,2,opt,name=index" json:"index"`
 	XXX_unrecognized []byte `json:"-"`
@@ -430,7 +430,7 @@ func (m *InternalTruncateLogRequest) GetIndex() uint64 {
 
 // InternalTruncateLogResponse is the response to an InternalTruncateLog() operation.
 type InternalTruncateLogResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -442,7 +442,7 @@ func (*InternalTruncateLogResponse) ProtoMessage()    {}
 // method. It is sent by the store on behalf of one of its ranges upon receipt
 // of a leader election event for that range.
 type InternalLeaderLeaseRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Lease            Lease  `protobuf:"bytes,2,opt,name=lease" json:"lease"`
 	XXX_unrecognized []byte `json:"-"`
 }
@@ -461,7 +461,7 @@ func (m *InternalLeaderLeaseRequest) GetLease() Lease {
 // An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
 // operation.
 type InternalLeaderLeaseResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -670,7 +670,7 @@ func (m *InternalResponseUnion) GetInternalResolveIntentRange() *InternalResolve
 //
 // See comments for BatchRequest.
 type InternalBatchRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVRequestHeader  `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Requests         []InternalRequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 	XXX_unrecognized []byte                 `json:"-"`
 }
@@ -690,7 +690,7 @@ func (m *InternalBatchRequest) GetRequests() []InternalRequestUnion {
 //
 // See comments for BatchResponse.
 type InternalBatchResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	KVResponseHeader `protobuf:"bytes,1,opt,name=kvheader,embedded=kvheader" json:"kvheader"`
 	Responses        []InternalResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 	XXX_unrecognized []byte                  `json:"-"`
 }
@@ -1283,7 +1283,7 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1301,7 +1301,7 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1382,7 +1382,7 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1400,7 +1400,7 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1474,7 +1474,7 @@ func (m *InternalHeartbeatTxnRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1492,7 +1492,7 @@ func (m *InternalHeartbeatTxnRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1541,7 +1541,7 @@ func (m *InternalHeartbeatTxnResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1559,7 +1559,7 @@ func (m *InternalHeartbeatTxnResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1608,7 +1608,7 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1626,7 +1626,7 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1813,7 +1813,7 @@ func (m *InternalGCResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1831,7 +1831,7 @@ func (m *InternalGCResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -1880,7 +1880,7 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1898,7 +1898,7 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2027,7 +2027,7 @@ func (m *InternalPushTxnResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2045,7 +2045,7 @@ func (m *InternalPushTxnResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2121,7 +2121,7 @@ func (m *InternalResolveIntentRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2139,7 +2139,7 @@ func (m *InternalResolveIntentRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2188,7 +2188,7 @@ func (m *InternalResolveIntentResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2206,7 +2206,7 @@ func (m *InternalResolveIntentResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2255,7 +2255,7 @@ func (m *InternalResolveIntentRangeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2273,7 +2273,7 @@ func (m *InternalResolveIntentRangeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2322,7 +2322,7 @@ func (m *InternalResolveIntentRangeResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2340,7 +2340,7 @@ func (m *InternalResolveIntentRangeResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2389,7 +2389,7 @@ func (m *InternalMergeRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2407,7 +2407,7 @@ func (m *InternalMergeRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2480,7 +2480,7 @@ func (m *InternalMergeResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2498,7 +2498,7 @@ func (m *InternalMergeResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2547,7 +2547,7 @@ func (m *InternalTruncateLogRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2565,7 +2565,7 @@ func (m *InternalTruncateLogRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2629,7 +2629,7 @@ func (m *InternalTruncateLogResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2647,7 +2647,7 @@ func (m *InternalTruncateLogResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2696,7 +2696,7 @@ func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2714,7 +2714,7 @@ func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -2787,7 +2787,7 @@ func (m *InternalLeaderLeaseResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2805,7 +2805,7 @@ func (m *InternalLeaderLeaseResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3534,7 +3534,7 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVRequestHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3552,7 +3552,7 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVRequestHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -3626,7 +3626,7 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field KVResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3644,7 +3644,7 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.KVResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -5694,7 +5694,7 @@ func (this *InternalRaftCommandUnion) SetValue(value interface{}) bool {
 func (m *InternalRangeLookupRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	n += 1 + sovInternal(uint64(m.MaxRanges))
 	n += 2
@@ -5707,7 +5707,7 @@ func (m *InternalRangeLookupRequest) Size() (n int) {
 func (m *InternalRangeLookupResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if len(m.Ranges) > 0 {
 		for _, e := range m.Ranges {
@@ -5724,7 +5724,7 @@ func (m *InternalRangeLookupResponse) Size() (n int) {
 func (m *InternalHeartbeatTxnRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5735,7 +5735,7 @@ func (m *InternalHeartbeatTxnRequest) Size() (n int) {
 func (m *InternalHeartbeatTxnResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5746,7 +5746,7 @@ func (m *InternalHeartbeatTxnResponse) Size() (n int) {
 func (m *InternalGCRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.GCMeta.Size()
 	n += 1 + l + sovInternal(uint64(l))
@@ -5780,7 +5780,7 @@ func (m *InternalGCRequest_GCKey) Size() (n int) {
 func (m *InternalGCResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5791,7 +5791,7 @@ func (m *InternalGCResponse) Size() (n int) {
 func (m *InternalPushTxnRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.PusheeTxn.Size()
 	n += 1 + l + sovInternal(uint64(l))
@@ -5808,7 +5808,7 @@ func (m *InternalPushTxnRequest) Size() (n int) {
 func (m *InternalPushTxnResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.PusheeTxn != nil {
 		l = m.PusheeTxn.Size()
@@ -5823,7 +5823,7 @@ func (m *InternalPushTxnResponse) Size() (n int) {
 func (m *InternalResolveIntentRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5834,7 +5834,7 @@ func (m *InternalResolveIntentRequest) Size() (n int) {
 func (m *InternalResolveIntentResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5845,7 +5845,7 @@ func (m *InternalResolveIntentResponse) Size() (n int) {
 func (m *InternalResolveIntentRangeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5856,7 +5856,7 @@ func (m *InternalResolveIntentRangeRequest) Size() (n int) {
 func (m *InternalResolveIntentRangeResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5867,7 +5867,7 @@ func (m *InternalResolveIntentRangeResponse) Size() (n int) {
 func (m *InternalMergeRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovInternal(uint64(l))
@@ -5880,7 +5880,7 @@ func (m *InternalMergeRequest) Size() (n int) {
 func (m *InternalMergeResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5891,7 +5891,7 @@ func (m *InternalMergeResponse) Size() (n int) {
 func (m *InternalTruncateLogRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	n += 1 + sovInternal(uint64(m.Index))
 	if m.XXX_unrecognized != nil {
@@ -5903,7 +5903,7 @@ func (m *InternalTruncateLogRequest) Size() (n int) {
 func (m *InternalTruncateLogResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5914,7 +5914,7 @@ func (m *InternalTruncateLogResponse) Size() (n int) {
 func (m *InternalLeaderLeaseRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.Lease.Size()
 	n += 1 + l + sovInternal(uint64(l))
@@ -5927,7 +5927,7 @@ func (m *InternalLeaderLeaseRequest) Size() (n int) {
 func (m *InternalLeaderLeaseResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -6044,7 +6044,7 @@ func (m *InternalResponseUnion) Size() (n int) {
 func (m *InternalBatchRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = m.RequestHeader.Size()
+	l = m.KVRequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if len(m.Requests) > 0 {
 		for _, e := range m.Requests {
@@ -6061,7 +6061,7 @@ func (m *InternalBatchRequest) Size() (n int) {
 func (m *InternalBatchResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ResponseHeader.Size()
+	l = m.KVResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	if len(m.Responses) > 0 {
 		for _, e := range m.Responses {
@@ -6371,8 +6371,8 @@ func (m *InternalRangeLookupRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n1, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n1, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6411,8 +6411,8 @@ func (m *InternalRangeLookupResponse) MarshalTo(data []byte) (n int, err error) 
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n2, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n2, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6452,8 +6452,8 @@ func (m *InternalHeartbeatTxnRequest) MarshalTo(data []byte) (n int, err error) 
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n3, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n3, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6481,8 +6481,8 @@ func (m *InternalHeartbeatTxnResponse) MarshalTo(data []byte) (n int, err error)
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n4, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n4, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6510,8 +6510,8 @@ func (m *InternalGCRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n5, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n5, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6594,8 +6594,8 @@ func (m *InternalGCResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n8, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n8, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6623,8 +6623,8 @@ func (m *InternalPushTxnRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n9, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n9, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6679,8 +6679,8 @@ func (m *InternalPushTxnResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n12, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n12, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6718,8 +6718,8 @@ func (m *InternalResolveIntentRequest) MarshalTo(data []byte) (n int, err error)
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n14, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n14, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6747,8 +6747,8 @@ func (m *InternalResolveIntentResponse) MarshalTo(data []byte) (n int, err error
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n15, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n15, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6776,8 +6776,8 @@ func (m *InternalResolveIntentRangeRequest) MarshalTo(data []byte) (n int, err e
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n16, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n16, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6805,8 +6805,8 @@ func (m *InternalResolveIntentRangeResponse) MarshalTo(data []byte) (n int, err 
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n17, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n17, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6834,8 +6834,8 @@ func (m *InternalMergeRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n18, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n18, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6871,8 +6871,8 @@ func (m *InternalMergeResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n20, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n20, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6900,8 +6900,8 @@ func (m *InternalTruncateLogRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n21, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n21, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6932,8 +6932,8 @@ func (m *InternalTruncateLogResponse) MarshalTo(data []byte) (n int, err error) 
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n22, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n22, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6961,8 +6961,8 @@ func (m *InternalLeaderLeaseRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n23, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n23, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -6998,8 +6998,8 @@ func (m *InternalLeaderLeaseResponse) MarshalTo(data []byte) (n int, err error) 
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n25, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n25, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -7301,8 +7301,8 @@ func (m *InternalBatchRequest) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
-	n48, err := m.RequestHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVRequestHeader.Size()))
+	n48, err := m.KVRequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -7342,8 +7342,8 @@ func (m *InternalBatchResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
-	n49, err := m.ResponseHeader.MarshalTo(data[i:])
+	i = encodeVarintInternal(data, i, uint64(m.KVResponseHeader.Size()))
+	n49, err := m.KVResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}

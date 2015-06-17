@@ -1202,7 +1202,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 	args, reply := call.Args, call.Reply
 	ctx = s.Context(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
-	header := args.Header()
+	header := args.KVHeader()
 	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(call.Args)); err != nil {
 		reply.Header().SetGoError(err)
 		return err
@@ -1308,27 +1308,31 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	now := s.Clock().Now()
 	header := args.Header()
 	bArgs := &proto.InternalBatchRequest{
-		RequestHeader: proto.RequestHeader{
-			Txn:          header.Txn,
-			User:         header.User,
-			UserPriority: header.UserPriority,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Txn:          header.Txn,
+				User:         header.User,
+				UserPriority: header.UserPriority,
+			},
 		},
 	}
 	bReply := &proto.InternalBatchResponse{}
 	for _, intent := range wiErr.Intents {
 		pushArgs := &proto.InternalPushTxnRequest{
-			RequestHeader: proto.RequestHeader{
-				Timestamp: header.Timestamp,
-				Key:       intent.Txn.Key,
-				// TODO(tschottdorf):
-				// The following fields should not be supplied here, but store
-				// tests (for example TestStoreResolveWriteIntent) which do not
-				// go through TxnCoordSender rely on them being specified on
-				// the individual calls (and TxnCoordSender is in charge of
-				// filling them in here later).
-				Txn:          header.Txn,
-				User:         header.User,
-				UserPriority: header.UserPriority,
+			KVRequestHeader: proto.KVRequestHeader{
+				RequestHeader: proto.RequestHeader{
+					Timestamp: header.Timestamp,
+					// TODO(tschottdorf):
+					// The following fields should not be supplied here, but store
+					// tests (for example TestStoreResolveWriteIntent) which do not
+					// go through TxnCoordSender rely on them being specified on
+					// the individual calls (and TxnCoordSender is in charge of
+					// filling them in here later).
+					Txn:          header.Txn,
+					User:         header.User,
+					UserPriority: header.UserPriority,
+				},
+				Key: intent.Txn.Key,
 			},
 			PusheeTxn: intent.Txn,
 			// The timestamp is used by InternalPushTxn for figuring out
@@ -1369,14 +1373,16 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	for i, intent := range wiErr.Intents {
 		pushReply := bReply.Responses[i].GetValue().(*proto.InternalPushTxnResponse)
 		resolveArgs := &proto.InternalResolveIntentRequest{
-			RequestHeader: proto.RequestHeader{
-				// Use the pushee's timestamp, which might be lower than the
-				// pusher's request timestamp. No need to push the intent higher
-				// than the pushee's txn!
-				Timestamp: pushReply.PusheeTxn.Timestamp,
-				Key:       intent.Key,
-				User:      UserRoot,
-				Txn:       pushReply.PusheeTxn,
+			KVRequestHeader: proto.KVRequestHeader{
+				RequestHeader: proto.RequestHeader{
+					// Use the pushee's timestamp, which might be lower than the
+					// pusher's request timestamp. No need to push the intent higher
+					// than the pushee's txn!
+					Timestamp: pushReply.PusheeTxn.Timestamp,
+					User:      UserRoot,
+					Txn:       pushReply.PusheeTxn,
+				},
+				Key: intent.Key,
 			},
 		}
 		resolveReply := &proto.InternalResolveIntentResponse{}

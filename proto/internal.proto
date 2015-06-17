@@ -35,7 +35,7 @@ option (gogoproto.unmarshaler_all) = true;
 // additional consecutive addressable ranges. Specify max_ranges > 1
 // to pre-fill the range descriptor cache.
 message InternalRangeLookupRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
   // Ignore intents indicates whether or not intents encountered
   // while looking up the range info should be resolved. This should
@@ -51,7 +51,7 @@ message InternalRangeLookupRequest {
 // additional consecutive ranges beyond the requested range to pre-fill
 // the range descriptor cache.
 message InternalRangeLookupResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
 }
 
@@ -61,7 +61,7 @@ message InternalRangeLookupResponse {
 // ongoing. Note that this heartbeat message is different from the
 // heartbeat message in the gossip protocol.
 message InternalHeartbeatTxnRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalHeartbeatTxnResponse is the return value from the
@@ -70,14 +70,14 @@ message InternalHeartbeatTxnRequest {
 // know the disposition of the transaction (i.e. aborted, committed or
 // pending).
 message InternalHeartbeatTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalGCRequest is arguments to the InternalGC() method. It's
 // sent by range leaders after scanning range data to find expired
 // MVCC values.
 message InternalGCRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional GCMetadata gc_meta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCMeta"];
 
   message GCKey {
@@ -90,7 +90,7 @@ message InternalGCRequest {
 // An InternalGCResponse is the return value from the InternalGC()
 // method.
 message InternalGCResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // TxnPushType determines what action to take when pushing a
@@ -119,7 +119,7 @@ enum PushTxnType {
 // course of action is determined by the specified push type, and by
 // the owning txn's status and priority.
 message InternalPushTxnRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
   // Now holds the timestamp used to compare the last heartbeat of the pushee
   // against. This is necessary since the request header's timestamp does not
@@ -146,7 +146,7 @@ message InternalPushTxnRequest {
 // InternalResolveIntent() on the conflicted key. It returns an error
 // otherwise.
 message InternalPushTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Txn is non-nil if the transaction could be heartbeat and contains
   // the current value of the transaction.
   optional Transaction pushee_txn = 2;
@@ -157,39 +157,39 @@ message InternalPushTxnResponse {
 // coordinators and after success calling InternalPushTxn to clean up
 // write intents: either to remove them or commit them.
 message InternalResolveIntentRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalResolveIntentResponse is the return value from the
 // InternalResolveIntent() method.
 message InternalResolveIntentResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalResolveIntentRangeRequest is arguments to the
 // InternalResolveIntentRange() method. This clear write intents
 // for a range of keys to resolve intents created by range ops.
 message InternalResolveIntentRangeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalResolveIntentRangeResponse is the return value from the
 // InternalResolveIntent() method.
 message InternalResolveIntentRangeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalMergeRequest contains arguments to the InternalMerge() method. It
 // specifies a key and a value which should be merged into the existing value at
 // that key.
 message InternalMergeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
 // InternalMergeResponse is the response to an InternalMerge() operation.
 message InternalMergeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // InternalTruncateLogRequest is used to remove a prefix of the raft log. While there
@@ -198,7 +198,7 @@ message InternalMergeResponse {
 // to identical as possible. The raft leader can also inform decisions about the cutoff point
 // with its knowledge of the replicas' acknowledgement status.
 message InternalTruncateLogRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Log entries < this index are to be discarded.
   optional uint64 index = 2 [(gogoproto.nullable) = false];
@@ -206,21 +206,21 @@ message InternalTruncateLogRequest {
 
 // InternalTruncateLogResponse is the response to an InternalTruncateLog() operation.
 message InternalTruncateLogResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalLeaderLeaseRequest is arguments to the InternalLeaderLease()
 // method. It is sent by the store on behalf of one of its ranges upon receipt
 // of a leader election event for that range.
 message InternalLeaderLeaseRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Lease lease = 2[(gogoproto.nullable) = false];
 }
 
 // An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
 // operation.
 message InternalLeaderLeaseResponse{
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InternalRequestUnion contains exactly one of the optional requests.
@@ -268,7 +268,7 @@ message InternalResponseUnion {
 //
 // See comments for BatchRequest.
 message InternalBatchRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated InternalRequestUnion requests = 2 [(gogoproto.nullable) = false];
 }
 
@@ -276,7 +276,7 @@ message InternalBatchRequest {
 //
 // See comments for BatchResponse.
 message InternalBatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated InternalResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 

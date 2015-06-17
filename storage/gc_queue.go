@@ -127,9 +127,11 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 
 	gcArgs := &proto.InternalGCRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp: now,
-			RaftID:    rng.Desc().RaftID,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: now,
+			},
+			RaftID: rng.Desc().RaftID,
 		},
 	}
 	var mu sync.Mutex
@@ -260,12 +262,14 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 	// Attempt to push the transaction which created the intent.
 	now := rng.rm.Clock().Now()
 	pushArgs := &proto.InternalPushTxnRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp:    now,
-			Key:          meta.Txn.Key,
-			User:         UserRoot,
-			UserPriority: gogoproto.Int32(proto.MaxPriority),
-			Txn:          nil,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp:    now,
+				User:         UserRoot,
+				UserPriority: gogoproto.Int32(proto.MaxPriority),
+				Txn:          nil,
+			},
+			Key: meta.Txn.Key,
 		},
 		Now:       now,
 		PusheeTxn: *meta.Txn,
@@ -282,11 +286,13 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 
 	// We pushed the transaction successfully, so resolve the intent.
 	resolveArgs := &proto.InternalResolveIntentRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp: now,
-			Key:       key,
-			User:      UserRoot,
-			Txn:       pushReply.PusheeTxn,
+		KVRequestHeader: proto.KVRequestHeader{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: now,
+				User:      UserRoot,
+				Txn:       pushReply.PusheeTxn,
+			},
+			Key: key,
 		},
 	}
 	if err := rng.AddCmd(rng.context(), proto.Call{Args: resolveArgs, Reply: &proto.InternalResolveIntentResponse{}}, true); err != nil {
