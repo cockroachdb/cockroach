@@ -866,10 +866,9 @@ configuration metadata.
 
 # Raft - Consistency of Range Replicas
 
-Each range is configured to consist of three or more replicas. The
-replicas in a range maintain their own instance of a distributed
-consensus algorithm. We use the [*Raft consensus
-algorithm*](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf)
+Each range is configured to consist of three or more replicas, as specified by
+their ZoneConfig. The replicas in a range maintain their own instance of a
+distributed consensus algorithm. We use the [*Raft consensus algorithm*](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf)
 as it is simpler to reason about and includes a reference implementation
 covering important details. Every write to replicas is logged twice.
 Once to RocksDB’s internal log and once to levedb itself as part of the
@@ -879,27 +878,13 @@ promising performance characteristics for WAN-distributed replicas, but
 it does not guarantee a consistent ordering between replicas.
 
 Raft elects a relatively long-lived leader which must be involved to
-propose writes. It heartbeats followers periodically to keep their logs
+propose commands. It heartbeats followers periodically and keeps their logs
 replicated. In the absence of heartbeats, followers become candidates
 after randomized election timeouts and proceed to hold new leader
 elections. Cockroach weights random timeouts such that the replicas with
 shorter round trip times to peers are more likely to hold elections
-first. Although only the leader can propose a new write, and as such
-must be involved in any write to the consensus log, any replica can
-service reads if the read is for a timestamp which the replica knows is
-safe based on the last committed consensus write and the state of any
-pending transactions.
-
-Only the leader can propose a new write, but Cockroach accepts writes at
-any replica. The replica merely forwards the write to the leader.
-Instead of resending the write, the leader has only to acknowledge the
-write to the forwarding replica using a log sequence number, as though
-it were proposing it in the first place. The other replicas receive the
-full write as though the leader were the originator.
-
-Having a stable leader provides the choice of replica to handle
-range-specific maintenance and processing tasks, such as delivering
-pending message queues, handling splits and merges, rebalancing, etc.
+first (not implemented yet). Only the Raft leader may propose commands;
+followers will simply relay commands to the last known leader.
 
 # Message Queues
 
