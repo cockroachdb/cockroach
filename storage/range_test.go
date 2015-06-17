@@ -2366,11 +2366,11 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	rlArgs.IgnoreIntents = true
 	var origCount, newCount int
 	for i := 0; i < 100; i++ {
-		rlArgs.Timestamp = proto.ZeroTimestamp
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.InternalRangeLookupRequest)
+		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 		rlReply.Reset()
 
-		if err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply}, true); err != nil {
-
+		if err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: clonedRLArgs, Reply: rlReply}, true); err != nil {
 			t.Fatal(err)
 		}
 		if reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
