@@ -369,42 +369,31 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
-	// If lease is currently held by another, redirect to holder.
-	if held, expired := r.HasLeaderLease(timestamp); !held && !expired {
-		return r.newNotLeaderError()
-	} else if !held || expired {
-		// Otherwise, if not held by this replica or expired, request renewal.
-		err := r.requestLeaderLease(timestamp)
-		// Getting a LeaseRejectedError back means someone else got there
-		// first.
-		if _, ok := err.(*proto.LeaseRejectedError); ok {
-			if held, expired := r.HasLeaderLease(timestamp); !held && !expired {
-				return r.newNotLeaderError()
-			}
+
+	raftNodeID := r.rm.RaftNodeID()
+
+	lease := r.getLease()
+	if lease.Covers(timestamp) {
+		if lease.OwnedBy(raftNodeID) {
+			// Happy path: We have an active lease, nothing to do.
+			return nil
 		}
-		return err
+		// If lease is currently held by another, redirect to holder.
+		return r.newNotLeaderError()
 	}
-	return nil
-}
+	// Otherwise, no active lease: Request renewal.
+	err := r.requestLeaderLease(timestamp)
 
-// verifyLeaderLease checks whether the requesting replica (by raft node ID)
-// holds the leader lease covering the specified timestamp.
-func verifyLeaderLease(lease *proto.Lease, replicaRaftNodeID proto.RaftNodeID, timestamp proto.Timestamp) (bool, bool) {
-	if lease == nil || lease.RaftNodeID == 0 {
-		// The lease has never been held.
-		return false, true
+	// Getting a LeaseRejectedError back means someone else got there first;
+	// we can redirect if they cover our timestamp. Note that it can't be us,
+	// since we're holding a lock here, and even if it were it would be a rare
+	// extra round-trip.
+	if _, ok := err.(*proto.LeaseRejectedError); ok {
+		if r.getLease().Covers(timestamp) {
+			return r.newNotLeaderError()
+		}
 	}
-	held := lease.RaftNodeID == replicaRaftNodeID
-	expired := !timestamp.Less(lease.Expiration)
-	return held, expired
-}
-
-// HasLeaderLease returns whether this replica holds or was the last
-// holder of the leader lease, and whether the lease has expired.
-// Leases may not overlap, and a gap between successive lease holders
-// is expected.
-func (r *Range) HasLeaderLease(timestamp proto.Timestamp) (bool, bool) {
-	return verifyLeaderLease(r.getLease(), r.rm.RaftNodeID(), timestamp)
+	return err
 }
 
 // WaitForLeaderLease is used from unittests to wait until this range
@@ -770,7 +759,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	r.Unlock()
 
 	args := raftCmd.Cmd.GetValue().(proto.Request)
-	origin := proto.RaftNodeID(raftCmd.OriginNodeID)
+	originNode := proto.RaftNodeID(raftCmd.OriginNodeID)
 	var reply proto.Response
 	var ctx context.Context
 	var err error
@@ -786,25 +775,34 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 
 	// Verify the leader lease is held; Note that we don't require the leader
 	// lease when trying to grant the leader lease!
-	held, expired := verifyLeaderLease(r.getLease(), origin, args.Header().Timestamp)
-	if (!held || expired) && args.Method() != proto.InternalLeaderLease {
+	lease := r.getLease()
+	if args.Method() != proto.InternalLeaderLease &&
+		(!lease.OwnedBy(originNode) || !lease.Covers(args.Header().Timestamp)) {
 		// This error case is somewhat special: Any command that makes it into
-		// Raft should have the leader lease held by the proposer. The only
-		// case that violates this assumption is that of the proposer having a
-		// corrupted internal state and erroneously assuming leadership. Then,
-		// the command should certainly not be executed by the replicas, but
-		// the error must not enter the response cache (which is updated in
-		// applyRaftCommand below) since it is going to be retried with exactly
-		// the same timestamp. On retry, it may be proposed by the real leader
-		// (or a later leader, which thereby assumes leadership over all past
-		// timestamps as well), for which the command should execute. If it did
-		// hit the response cache, the distributed sender would get stuck in an
-		// infinite loop, retrieving a stale NotLeaderError over and over
-		// again.
+		// Raft should have the leader lease held by the proposer at entrance
+		// time, but it may not be held when we check now. Two reasons for this
+		// are possible: The proposer erroneously assumed leadership (in the
+		// case of replica corruption) or, far more likely, leadership has
+		// changed (the most recent leader assumes responsibility for all past
+		// timestamps as well). In the first case, it's clear that the command
+		// must not be executed. But even if the lease was held at propose
+		// time, it's not valid to go ahead with the execution if leadership
+		// has since changed: Writes must be aware of the latest time the
+		// mutated key was read, and since reads are served locally by the
+		// lease holder without going through Raft, the new lease holder may
+		// already have served a read which was not taken into account for this
+		// operation's timestamp. Hence, we must retry at the current leader.
+		//
+		// It's crucial that we don't update the response cache for the error
+		// returned below (which is updated only in applyRaftCommand) since the
+		// request is going to be retried with the same ClientCmdID and would
+		// get the distributed sender stuck in an infinite loop, retrieving a
+		// stale NotLeaderError over and over again, even when proposing at the
+		// correct replica.
 		err = r.newNotLeaderError()
 	} else {
 		err = r.maybeSetCorrupt(
-			r.applyRaftCommand(ctx, index, origin, args, reply),
+			r.applyRaftCommand(ctx, index, originNode, args, reply),
 		)
 	}
 
@@ -1104,7 +1102,9 @@ func newChainedError(errs ...error) *chainedError {
 // which puts its integrity at risk.
 type replicaCorruptionError struct {
 	error
-	processed bool // for now, required for testing
+	// processed indicates that the error has been taken into account and
+	// necessary steps will be taken. For now, required for testing.
+	processed bool
 }
 
 // Error implements the error interface.

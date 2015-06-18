@@ -1605,8 +1605,8 @@ func (s *Store) updateStoreStatus() {
 				replicatedRangeCount++
 			}
 
-			// If the range has the leader lease, then it's available.
-			if _, expired := rng.HasLeaderLease(timestamp); !expired {
+			// If any replica holds the leader lease, the range is available.
+			if rng.getLease().Covers(timestamp) {
 				availableRangeCount++
 			} else {
 				// If there is no leader lease, then as long as more than 50%

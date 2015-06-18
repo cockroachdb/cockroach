@@ -65,7 +65,8 @@ func (q *rangeGCQueue) needsLeaderLease() bool {
 // and if so at what priority. Currently all inactive ranges are
 // considered for possible GC at equal priority.
 func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Range) (bool, float64) {
-	if _, expired := rng.HasLeaderLease(now); !expired {
+	lease := rng.getLease()
+	if lease.Covers(now) {
 		// If anyone holds a non-expired lease and we know about it, we
 		// have recently been an active member of the range.  This is not
 		// a guarantee that the range is not garbage (we could have just
@@ -76,7 +77,7 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Range) (bool, float
 	}
 
 	// Otherwise, check if long enough time has passed after the lease was expired.
-	return rng.getLease().Expiration.Add(int64(RangeGCQueueUnleasedDuration), 0).Less(now), 0
+	return lease.Expiration.Add(int64(RangeGCQueueUnleasedDuration), 0).Less(now), 0
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are

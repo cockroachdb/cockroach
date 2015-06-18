@@ -602,3 +602,15 @@ func (l Lease) String() string {
 	tStr := t.Format("15:04:05.000")
 	return fmt.Sprintf("replica %d:%d %s +%.3fs", nodeID, storeID, tStr, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
 }
+
+// Covers returns true if the given timestamp is strictly less than the
+// Lease expiration, which indicates that the lease holder is authorized
+// to carry out operations with that timestamp.
+func (l Lease) Covers(timestamp Timestamp) bool {
+	return timestamp.Less(l.Expiration)
+}
+
+// OwnedBy returns whether the lease owner is equal to the given RaftNodeID.
+func (l Lease) OwnedBy(id RaftNodeID) bool {
+	return l.RaftNodeID == id
+}
