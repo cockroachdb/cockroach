@@ -387,11 +387,16 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 	return nil
 }
 
-// verifyLeaderLease checks whether the requesting replica (by raft
-// node ID) holds the leader lease covering the specified timestamp.
-func (r *Range) verifyLeaderLease(originRaftNodeID proto.RaftNodeID, timestamp proto.Timestamp) bool {
-	l := r.getLease()
-	return originRaftNodeID == l.RaftNodeID && timestamp.Less(l.Expiration)
+// verifyLeaderLease checks whether the requesting replica (by raft node ID)
+// holds the leader lease covering the specified timestamp.
+func verifyLeaderLease(lease *proto.Lease, replicaRaftNodeID proto.RaftNodeID, timestamp proto.Timestamp) (bool, bool) {
+	if lease == nil || lease.RaftNodeID == 0 {
+		// The lease has never been held.
+		return false, true
+	}
+	held := lease.RaftNodeID == replicaRaftNodeID
+	expired := !timestamp.Less(lease.Expiration)
+	return held, expired
 }
 
 // HasLeaderLease returns whether this replica holds or was the last
@@ -399,13 +404,7 @@ func (r *Range) verifyLeaderLease(originRaftNodeID proto.RaftNodeID, timestamp p
 // Leases may not overlap, and a gap between successive lease holders
 // is expected.
 func (r *Range) HasLeaderLease(timestamp proto.Timestamp) (bool, bool) {
-	if l := r.getLease(); l.RaftNodeID != 0 {
-		held := l.RaftNodeID == r.rm.RaftNodeID()
-		expired := !timestamp.Less(l.Expiration)
-		return held, expired
-	}
-	// The lease has never been held.
-	return false, true
+	return verifyLeaderLease(r.getLease(), r.rm.RaftNodeID(), timestamp)
 }
 
 // WaitForLeaderLease is used from unittests to wait until this range
@@ -760,56 +759,82 @@ func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request, repl
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
-//
-// TODO(spencer): Differentiate between errors caused by the normal culprits --
-// bad inputs from clients, stale information, etc. and errors which might
-// cause the range replicas to diverge -- running out of disk space, underlying
-// rocksdb corruption, etc. Do a careful code audit to make sure we identify
-// errors which should be classified as a ReplicaCorruptionError--when those
-// bubble up to the point where we've just tried to execute a Raft command, the
-// Raft replica would need to stall itself.
 func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.InternalRaftCommand) error {
 	if index == 0 {
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
+
 	r.Lock()
 	cmd := r.pendingCmds[idKey]
 	delete(r.pendingCmds, idKey)
 	r.Unlock()
 
 	args := raftCmd.Cmd.GetValue().(proto.Request)
+	origin := proto.RaftNodeID(raftCmd.OriginNodeID)
+	var reply proto.Response
+	var ctx context.Context
+	var err error
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied reply.
-		err := r.applyRaftCommand(cmd.ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, cmd.Reply)
-		cmd.done <- err
-		return err
+		reply = cmd.Reply
+		ctx = cmd.ctx
+	} else {
+		// This command originated elsewhere so we must create a new reply buffer.
+		reply = args.CreateReply()
+		ctx = r.context()
 	}
-	// This command originated elsewhere so we must create a new reply buffer.
-	err := r.applyRaftCommand(r.context(), index, proto.RaftNodeID(raftCmd.OriginNodeID), args, args.CreateReply())
-	if err != nil && log.V(1) {
+
+	// Verify the leader lease is held; Note that we don't require the leader
+	// lease when trying to grant the leader lease!
+	held, expired := verifyLeaderLease(r.getLease(), origin, args.Header().Timestamp)
+	if (!held || expired) && args.Method() != proto.InternalLeaderLease {
+		// This error case is somewhat special: Any command that makes it into
+		// Raft should have the leader lease held by the proposer. The only
+		// case that violates this assumption is that of the proposer having a
+		// corrupted internal state and erroneously assuming leadership. Then,
+		// the command should certainly not be executed by the replicas, but
+		// the error must not enter the response cache (which is updated in
+		// applyRaftCommand below) since it is going to be retried with exactly
+		// the same timestamp. On retry, it may be proposed by the real leader
+		// (or a later leader, which thereby assumes leadership over all past
+		// timestamps as well), for which the command should execute. If it did
+		// hit the response cache, the distributed sender would get stuck in an
+		// infinite loop, retrieving a stale NotLeaderError over and over
+		// again.
+		err = r.newNotLeaderError()
+	} else {
+		err = r.maybeSetCorrupt(
+			r.applyRaftCommand(ctx, index, origin, args, reply),
+		)
+	}
+
+	// TODO(tamird,tschottdorf): according to #1400 we intend to set the reply
+	// header's error as late as possible and in a central location. Range
+	// commands still write to the header directly, but once they don't this
+	// could be the authoritative location that sets the reply error for any-
+	// thing that makes it into Raft. Note that we must set this prior to
+	// signaling cmd.done below, or the waiting RPC handler might proceed
+	// before we've updated its reply.
+	reply.Header().SetGoError(err)
+
+	if cmd != nil {
+		cmd.done <- err
+	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
 	}
+
 	return err
 }
 
-// applyRaftCommand applies a raft command from the replicated log to
-// the underlying state machine (i.e. the engine).
-// The caller needs to hold the range lock.
-func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID proto.RaftNodeID, args proto.Request, reply proto.Response) error {
+// applyRaftCommand applies a raft command from the replicated log to the
+// underlying state machine (i.e. the engine). The caller needs to hold the
+// range lock.
+// When certain critical operations fail, a replicaCorruptionError may be
+// returned, and must be handled by the caller.
+func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID proto.RaftNodeID, args proto.Request, reply proto.Response) (rErr error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
-
-	committed := false
-	defer func() {
-		if !committed {
-			// We didn't commit the batch, but advance the last applied index nonetheless.
-			if err := setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
-				log.Fatalc(ctx, "could not advance applied index: %s", err)
-			}
-			atomic.StoreUint64(&r.appliedIndex, index)
-		}
-	}()
 
 	header := args.Header()
 
@@ -819,23 +844,37 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
-			return reply.Header().GoError()
+			return err
 		} else if ok && err != nil {
-			newErr := util.Errorf("unable to read result for %+v from the response cache: %s", args, err)
-			reply.Header().SetGoError(newErr)
-			return newErr
+			return newReplicaCorruptionError(
+				util.Errorf("could not read from response cache"), err)
 		}
 	}
 
-	// Verify the leader lease is held; Note that we don't require the
-	// leader lease when trying to grant the leader lease!
-	if _, ok := args.(*proto.InternalLeaderLeaseRequest); !ok {
-		if !r.verifyLeaderLease(originNodeID, header.Timestamp) {
-			err := r.newNotLeaderError()
-			reply.Header().SetGoError(err)
-			return err
+	committed := false
+
+	defer func() {
+		if !committed {
+			// We didn't commit the batch, but advance the last applied index nonetheless.
+			if sErr := setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); sErr != nil {
+				rErr = newReplicaCorruptionError(
+					util.Errorf("could not advance applied index"), sErr, rErr)
+				return
+			}
+			atomic.StoreUint64(&r.appliedIndex, index)
 		}
-	}
+		if proto.IsWrite(args) {
+			// No matter the result, add result to the response cache if this
+			// is a write method. This must be done as part of the execution of
+			// raft commands so that every replica maintains the same responses
+			// to continue request idempotence, even if leadership changes.
+			if pErr := r.respCache.PutResponse(args.Header().CmdID, reply); pErr != nil {
+				rErr = newReplicaCorruptionError(
+					util.Errorf("could not put to response cache"), pErr, rErr)
+				return
+			}
+		}
+	}()
 
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
@@ -845,27 +884,33 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 	ms := proto.MVCCStats{}
 
 	// Execute the command; the error will also be set in the reply header.
+	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
+	// touch the reply header's error field.
 	intents, err := r.executeCmd(batch, &ms, args, reply)
 
 	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-		log.Fatalc(ctx, "applied index moved backwards: %d >= %d", oldIndex, index)
+		return newReplicaCorruptionError(
+			util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
 	}
 
 	// Advance the applied index atomically within the batch.
 	if e := setAppliedIndex(batch, r.Desc().RaftID, index); e != nil {
-		if reply.Header().GoError() == nil {
-			reply.Header().SetGoError(e)
-		}
-		err = e
+		return newReplicaCorruptionError(
+			util.Errorf("could not update applied index"), e)
 	}
 
-	if err == nil && proto.IsWrite(args) {
+	// If the execution of the command wasn't successful, stop here.
+	if err != nil {
+		return err
+	}
+
+	if proto.IsWrite(args) {
 		// On success, flush the MVCC stats to the batch and commit.
 		if err := r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime); err != nil {
-			log.Fatalc(ctx, "%s", err) // should never fail writing to a batch
+			return newReplicaCorruptionError(util.Errorf("could not merge MVCC stats"), err)
 		}
 		if err := batch.Commit(); err != nil {
-			log.Fatalc(ctx, "failed to commit batch from Raft command execution: %s", err)
+			return newReplicaCorruptionError(util.Errorf("could not commit batch"), err)
 		}
 		committed = true
 		// Publish update to event feed.
@@ -886,23 +931,9 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 		}
 	}
 
-	// Add this command's result to the response cache if this is a
-	// write method. This must be done as part of the execution of
-	// raft commands so that every replica maintains the same responses
-	// to continue request idempotence when leadership changes.
-	if proto.IsWrite(args) {
-		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
-			log.Errorc(ctx, "unable to write result of %+v: %+v to the response cache: %s",
-				args, reply, putErr)
-		}
-	}
-
-	if err := reply.Header().GoError(); err != nil {
-		return err
-	}
-
-	// Only resolve skipped intents asynchronously on one of the replicas.
-	if originNodeID == r.rm.RaftNodeID() && err == nil {
+	// Only resolve skipped intents asynchronously on the replica on which this
+	// command originated.
+	if originNodeID == r.rm.RaftNodeID() {
 		r.handleSkippedIntents(args, intents)
 	}
 
@@ -1033,6 +1064,76 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 			stopper.FinishTask()
 		}()
 	}
+}
+
+type chainedError struct {
+	error
+	cause *chainedError
+}
+
+// Error implements the error interface, printing the underlying chain of errors.
+func (ce *chainedError) Error() string {
+	if ce == nil {
+		ce = &chainedError{}
+	}
+	if ce.cause != nil {
+		return fmt.Sprintf("%s (caused by %s)", ce.error, ce.cause)
+	}
+	return ce.error.Error()
+}
+
+// newChainedError returns a chainedError made up from the given errors,
+// omitting nil values. It returns nil unless at least one of its arguments
+// is not nil.
+func newChainedError(errs ...error) *chainedError {
+	if len(errs) == 0 || (len(errs) == 1 && errs[0] == nil) {
+		return nil
+	}
+	ce := &chainedError{error: errs[0]}
+	for _, err := range errs[1:] {
+		if err == nil {
+			continue
+		}
+		ce.cause = &chainedError{error: err}
+		ce = ce.cause
+	}
+	return ce
+}
+
+// A replicaCorruptionError indicates that the replica has experienced an error
+// which puts its integrity at risk.
+type replicaCorruptionError struct {
+	error
+	processed bool // for now, required for testing
+}
+
+// Error implements the error interface.
+func (rce *replicaCorruptionError) Error() string {
+	if rce == nil {
+		rce = newReplicaCorruptionError()
+	}
+	return fmt.Sprintf("replica corruption (processed=%t): %s", rce.processed, rce.error)
+}
+
+// newReplicaCorruptionError creates a new error indicating a corrupt replica,
+// with the supplied list of errors given as history.
+func newReplicaCorruptionError(err ...error) *replicaCorruptionError {
+	return &replicaCorruptionError{error: newChainedError(err...)}
+}
+
+// maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
+// failure is indicated by a call to maybeSetCorrupt with a replicaCorruptionError.
+// Currently any error is passed through, but prospectively it should stop the
+// range from participating in progress, trigger a rebalance operation and
+// decide on an error-by-error basis whether the corruption is limited to the
+// range, store, node or cluster with corresponding actions taken.
+func (r *Range) maybeSetCorrupt(err error) error {
+	if cErr, ok := err.(*replicaCorruptionError); ok && cErr != nil {
+		log.Errorc(r.context(), "stalling replica due to: %s", cErr.error)
+		cErr.processed = true
+		return cErr
+	}
+	return err
 }
 
 // loadConfigMap scans the config entries under keyPrefix and

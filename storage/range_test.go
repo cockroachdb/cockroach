@@ -2284,6 +2284,38 @@ func TestAppliedIndex(t *testing.T) {
 	}
 }
 
+// TestReplicaCorruption verifies that a replicaCorruptionError correctly marks
+// the range as corrupt.
+func TestReplicaCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	args, reply := putArgs(proto.Key("test"), []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
+	err := tc.rng.AddCmd(tc.rng.context(),
+		proto.Call{Args: args, Reply: reply}, true /* wait */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Set the stored applied index sky high.
+	newIndex := 2*atomic.LoadUint64(&tc.rng.appliedIndex) + 1
+	atomic.StoreUint64(&tc.rng.appliedIndex, newIndex)
+	// Not really needed, but let's be thorough.
+	err = setAppliedIndex(tc.rng.rm.Engine(), tc.rng.Desc().RaftID, newIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should mark replica corrupt (and panic as a result) since we messed
+	// with the applied index.
+	err = tc.rng.AddCmd(tc.rng.context(),
+		proto.Call{Args: args, Reply: reply}, true /* wait */)
+
+	if err == nil || !strings.Contains(err.Error(), "replica corruption (processed=true)") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
 // TestChangeReplicasDuplicateError tests that a replica change that would
 // use a NodeID twice in the replica configuration fails.
 func TestChangeReplicasDuplicateError(t *testing.T) {
