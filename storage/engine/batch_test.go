@@ -435,3 +435,31 @@ func TestBatchConcurrency(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 }
+
+func TestBatchDefer(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	e := NewInMem(proto.Attributes{}, 1<<20)
+	defer e.Close()
+
+	b := e.NewBatch()
+	defer b.Close()
+
+	list := []string{}
+
+	b.Defer(func() {
+		list = append(list, "one")
+	})
+	b.Defer(func() {
+		list = append(list, "two")
+	})
+
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Order was reversed when the defers were run.
+	if !reflect.DeepEqual(list, []string{"two", "one"}) {
+		t.Errorf("expected [two, one]; got %v", list)
+	}
+}

@@ -953,7 +953,14 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
 	r.Unlock()
 
-	return r.rm.SplitRange(r, newRng)
+	batch.Defer(func() {
+		if err := r.rm.SplitRange(r, newRng); err != nil {
+			// Our in-memory state has diverged from the on-disk state.
+			log.Fatalf("failed to update Store after split: %s", err)
+		}
+	})
+
+	return nil
 }
 
 // AdminMerge extends the range to subsume the range that comes next in
@@ -1084,7 +1091,13 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	// and not worth the extra logic and potential for error.
 	r.tsCache.Clear(r.rm.Clock())
 
-	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
+	batch.Defer(func() {
+		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID); err != nil {
+			// Our in-memory state has diverged from the on-disk state.
+			log.Fatalf("failed to update store after merging range: %s", err)
+		}
+	})
+	return nil
 }
 
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
