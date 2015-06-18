@@ -222,35 +222,6 @@ func (m *Value) GetTag() string {
 	return ""
 }
 
-// MVCCValue differentiates between normal versioned values and
-// deletion tombstones.
-type MVCCValue struct {
-	// True to indicate a deletion tombstone. If false, value should not
-	// be nil.
-	Deleted bool `protobuf:"varint,1,opt,name=deleted" json:"deleted"`
-	// The value. Nil if deleted is true; not nil otherwise.
-	Value            *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *MVCCValue) Reset()         { *m = MVCCValue{} }
-func (m *MVCCValue) String() string { return proto1.CompactTextString(m) }
-func (*MVCCValue) ProtoMessage()    {}
-
-func (m *MVCCValue) GetDeleted() bool {
-	if m != nil {
-		return m.Deleted
-	}
-	return false
-}
-
-func (m *MVCCValue) GetValue() *Value {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 type KeyValue struct {
@@ -631,72 +602,6 @@ func (m *Intent) GetTxn() Transaction {
 	return Transaction{}
 }
 
-// MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
-type MVCCMetadata struct {
-	Txn *Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
-	// The timestamp of the most recent versioned value.
-	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
-	// Is the most recent value a deletion tombstone?
-	Deleted bool `protobuf:"varint,3,opt,name=deleted" json:"deleted"`
-	// The size in bytes of the most recent encoded key.
-	KeyBytes int64 `protobuf:"varint,4,opt,name=key_bytes" json:"key_bytes"`
-	// The size in bytes of the most recent versioned value.
-	ValBytes int64 `protobuf:"varint,5,opt,name=val_bytes" json:"val_bytes"`
-	// Inline value, used for values with zero timestamp. This provides
-	// an efficient short circuit of the normal MVCC metadata sentinel
-	// and subsequent version rows. If timestamp == (0, 0), then there
-	// is only a single MVCC metadata row with value inlined, and with
-	// empty timestamp, key_bytes, and val_bytes.
-	Value            *Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
-func (m *MVCCMetadata) String() string { return proto1.CompactTextString(m) }
-func (*MVCCMetadata) ProtoMessage()    {}
-
-func (m *MVCCMetadata) GetTxn() *Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
-
-func (m *MVCCMetadata) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *MVCCMetadata) GetDeleted() bool {
-	if m != nil {
-		return m.Deleted
-	}
-	return false
-}
-
-func (m *MVCCMetadata) GetKeyBytes() int64 {
-	if m != nil {
-		return m.KeyBytes
-	}
-	return 0
-}
-
-func (m *MVCCMetadata) GetValBytes() int64 {
-	if m != nil {
-		return m.ValBytes
-	}
-	return 0
-}
-
-func (m *MVCCMetadata) GetValue() *Value {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
 // GCMetadata holds information about the last complete key/value
 // garbage collection scan of a range.
 type GCMetadata struct {
@@ -722,128 +627,6 @@ func (m *GCMetadata) GetLastScanNanos() int64 {
 func (m *GCMetadata) GetOldestIntentNanos() int64 {
 	if m != nil && m.OldestIntentNanos != nil {
 		return *m.OldestIntentNanos
-	}
-	return 0
-}
-
-// MVCCStats tracks byte and instance counts for:
-//  - Live key/values (i.e. what a scan at current time will reveal;
-//    note that this includes intent keys and values, but not keys and
-//    values with most recent value deleted)
-//  - Key bytes (includes all keys, even those with most recent value deleted)
-//  - Value bytes (includes all versions)
-//  - Key count (count of all keys, including keys with deleted tombstones)
-//  - Value count (all versions, including deleted tombstones)
-//  - Intents (provisional values written during txns)
-//  - System-local key counts and byte totals
-type MVCCStats struct {
-	LiveBytes        int64  `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
-	KeyBytes         int64  `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`
-	ValBytes         int64  `protobuf:"varint,3,opt,name=val_bytes" json:"val_bytes"`
-	IntentBytes      int64  `protobuf:"varint,4,opt,name=intent_bytes" json:"intent_bytes"`
-	LiveCount        int64  `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
-	KeyCount         int64  `protobuf:"varint,6,opt,name=key_count" json:"key_count"`
-	ValCount         int64  `protobuf:"varint,7,opt,name=val_count" json:"val_count"`
-	IntentCount      int64  `protobuf:"varint,8,opt,name=intent_count" json:"intent_count"`
-	IntentAge        int64  `protobuf:"varint,9,opt,name=intent_age" json:"intent_age"`
-	GCBytesAge       int64  `protobuf:"varint,10,opt,name=gc_bytes_age" json:"gc_bytes_age"`
-	SysBytes         int64  `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
-	SysCount         int64  `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
-	LastUpdateNanos  int64  `protobuf:"varint,30,opt,name=last_update_nanos" json:"last_update_nanos"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
-func (m *MVCCStats) String() string { return proto1.CompactTextString(m) }
-func (*MVCCStats) ProtoMessage()    {}
-
-func (m *MVCCStats) GetLiveBytes() int64 {
-	if m != nil {
-		return m.LiveBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetKeyBytes() int64 {
-	if m != nil {
-		return m.KeyBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetValBytes() int64 {
-	if m != nil {
-		return m.ValBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetIntentBytes() int64 {
-	if m != nil {
-		return m.IntentBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetLiveCount() int64 {
-	if m != nil {
-		return m.LiveCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetKeyCount() int64 {
-	if m != nil {
-		return m.KeyCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetValCount() int64 {
-	if m != nil {
-		return m.ValCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetIntentCount() int64 {
-	if m != nil {
-		return m.IntentCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetIntentAge() int64 {
-	if m != nil {
-		return m.IntentAge
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetGCBytesAge() int64 {
-	if m != nil {
-		return m.GCBytesAge
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetSysBytes() int64 {
-	if m != nil {
-		return m.SysBytes
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetSysCount() int64 {
-	if m != nil {
-		return m.SysCount
-	}
-	return 0
-}
-
-func (m *MVCCStats) GetLastUpdateNanos() int64 {
-	if m != nil {
-		return m.LastUpdateNanos
 	}
 	return 0
 }
@@ -1030,93 +813,6 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			s := string(data[index:postIndex])
 			m.Tag = &s
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-
-	return nil
-}
-func (m *MVCCValue) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Deleted", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.Deleted = bool(v != 0)
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Value == nil {
-				m.Value = &Value{}
-			}
-			if err := m.Value.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -2426,174 +2122,6 @@ func (m *Intent) Unmarshal(data []byte) error {
 
 	return nil
 }
-func (m *MVCCMetadata) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Txn == nil {
-				m.Txn = &Transaction{}
-			}
-			if err := m.Txn.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Timestamp.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Deleted", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				v |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.Deleted = bool(v != 0)
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.KeyBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.ValBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Value == nil {
-				m.Value = &Value{}
-			}
-			if err := m.Value.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-
-	return nil
-}
 func (m *GCMetadata) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -2669,244 +2197,6 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 
 	return nil
 }
-func (m *MVCCStats) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LiveBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.LiveBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.KeyBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.ValBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.IntentBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LiveCount", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.LiveCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KeyCount", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.KeyCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ValCount", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.ValCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntentCount", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.IntentCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 9:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.IntentAge |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 10:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.GCBytesAge |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 12:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SysBytes", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.SysBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 13:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SysCount", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.SysCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 30:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.LastUpdateNanos |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-
-	return nil
-}
 func (m *Timestamp) Size() (n int) {
 	var l int
 	_ = l
@@ -2934,20 +2224,6 @@ func (m *Value) Size() (n int) {
 	}
 	if m.Tag != nil {
 		l = len(*m.Tag)
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *MVCCValue) Size() (n int) {
-	var l int
-	_ = l
-	n += 2
-	if m.Value != nil {
-		l = m.Value.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -3151,28 +2427,6 @@ func (m *Intent) Size() (n int) {
 	return n
 }
 
-func (m *MVCCMetadata) Size() (n int) {
-	var l int
-	_ = l
-	if m.Txn != nil {
-		l = m.Txn.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	l = m.Timestamp.Size()
-	n += 1 + l + sovData(uint64(l))
-	n += 2
-	n += 1 + sovData(uint64(m.KeyBytes))
-	n += 1 + sovData(uint64(m.ValBytes))
-	if m.Value != nil {
-		l = m.Value.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *GCMetadata) Size() (n int) {
 	var l int
 	_ = l
@@ -3180,28 +2434,6 @@ func (m *GCMetadata) Size() (n int) {
 	if m.OldestIntentNanos != nil {
 		n += 1 + sovData(uint64(*m.OldestIntentNanos))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *MVCCStats) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovData(uint64(m.LiveBytes))
-	n += 1 + sovData(uint64(m.KeyBytes))
-	n += 1 + sovData(uint64(m.ValBytes))
-	n += 1 + sovData(uint64(m.IntentBytes))
-	n += 1 + sovData(uint64(m.LiveCount))
-	n += 1 + sovData(uint64(m.KeyCount))
-	n += 1 + sovData(uint64(m.ValCount))
-	n += 1 + sovData(uint64(m.IntentCount))
-	n += 1 + sovData(uint64(m.IntentAge))
-	n += 1 + sovData(uint64(m.GCBytesAge))
-	n += 1 + sovData(uint64(m.SysBytes))
-	n += 1 + sovData(uint64(m.SysCount))
-	n += 2 + sovData(uint64(m.LastUpdateNanos))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3296,45 +2528,6 @@ func (m *Value) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
-func (m *MVCCValue) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCValue) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	if m.Deleted {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	if m.Value != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(m.Value.Size()))
-		n2, err := m.Value.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
 func (m *KeyValue) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -3359,11 +2552,11 @@ func (m *KeyValue) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Value.Size()))
-	n3, err := m.Value.MarshalTo(data[i:])
+	n2, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n2
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3452,19 +2645,19 @@ func (m *SplitTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n4, err := m.UpdatedDesc.MarshalTo(data[i:])
+	n3, err := m.UpdatedDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
+	n4, err := m.NewDesc.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n4
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.NewDesc.Size()))
-	n5, err := m.NewDesc.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3489,11 +2682,11 @@ func (m *MergeTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.UpdatedDesc.Size()))
-	n6, err := m.UpdatedDesc.MarshalTo(data[i:])
+	n5, err := m.UpdatedDesc.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n5
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.SubsumedRaftID))
@@ -3564,31 +2757,31 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.SplitTrigger.Size()))
-		n7, err := m.SplitTrigger.MarshalTo(data[i:])
+		n6, err := m.SplitTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n6
 	}
 	if m.MergeTrigger != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
-		n8, err := m.MergeTrigger.MarshalTo(data[i:])
+		n7, err := m.MergeTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n7
 	}
 	if m.ChangeReplicasTrigger != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
-		n9, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
+		n8, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n8
 	}
 	if len(m.Intents) > 0 {
 		for _, b := range m.Intents {
@@ -3620,22 +2813,22 @@ func (m *NodeList) MarshalTo(data []byte) (n int, err error) {
 	var l int
 	_ = l
 	if len(m.Nodes) > 0 {
-		data11 := make([]byte, len(m.Nodes)*10)
-		var j10 int
+		data10 := make([]byte, len(m.Nodes)*10)
+		var j9 int
 		for _, num1 := range m.Nodes {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				data11[j10] = uint8(uint64(num)&0x7f | 0x80)
+				data10[j9] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j10++
+				j9++
 			}
-			data11[j10] = uint8(num)
-			j10++
+			data10[j9] = uint8(num)
+			j9++
 		}
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(j10))
-		i += copy(data[i:], data11[:j10])
+		i = encodeVarintData(data, i, uint64(j9))
+		i += copy(data[i:], data10[:j9])
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3690,44 +2883,44 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x42
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n12, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n11, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n11
 	}
 	data[i] = 0x4a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n13, err := m.Timestamp.MarshalTo(data[i:])
+	n12, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n12
+	data[i] = 0x52
+	i++
+	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
+	n13, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n13
-	data[i] = 0x52
+	data[i] = 0x5a
 	i++
-	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n14, err := m.OrigTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n14, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n14
-	data[i] = 0x5a
+	data[i] = 0x62
 	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n15, err := m.MaxTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n15, err := m.CertainNodes.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n15
-	data[i] = 0x62
-	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n16, err := m.CertainNodes.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n16
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3752,19 +2945,19 @@ func (m *Lease) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n17, err := m.Start.MarshalTo(data[i:])
+	n16, err := m.Start.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n16
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n17, err := m.Expiration.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n17
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n18, err := m.Expiration.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
@@ -3798,74 +2991,11 @@ func (m *Intent) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n19, err := m.Txn.MarshalTo(data[i:])
+	n18, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *MVCCMetadata) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Txn != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-		n20, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n20
-	}
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n21, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n21
-	data[i] = 0x18
-	i++
-	if m.Deleted {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	data[i] = 0x20
-	i++
-	i = encodeVarintData(data, i, uint64(m.KeyBytes))
-	data[i] = 0x28
-	i++
-	i = encodeVarintData(data, i, uint64(m.ValBytes))
-	if m.Value != nil {
-		data[i] = 0x32
-		i++
-		i = encodeVarintData(data, i, uint64(m.Value.Size()))
-		n22, err := m.Value.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n22
-	}
+	i += n18
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3895,68 +3025,6 @@ func (m *GCMetadata) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintData(data, i, uint64(*m.OldestIntentNanos))
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *MVCCStats) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCStats) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintData(data, i, uint64(m.LiveBytes))
-	data[i] = 0x10
-	i++
-	i = encodeVarintData(data, i, uint64(m.KeyBytes))
-	data[i] = 0x18
-	i++
-	i = encodeVarintData(data, i, uint64(m.ValBytes))
-	data[i] = 0x20
-	i++
-	i = encodeVarintData(data, i, uint64(m.IntentBytes))
-	data[i] = 0x28
-	i++
-	i = encodeVarintData(data, i, uint64(m.LiveCount))
-	data[i] = 0x30
-	i++
-	i = encodeVarintData(data, i, uint64(m.KeyCount))
-	data[i] = 0x38
-	i++
-	i = encodeVarintData(data, i, uint64(m.ValCount))
-	data[i] = 0x40
-	i++
-	i = encodeVarintData(data, i, uint64(m.IntentCount))
-	data[i] = 0x48
-	i++
-	i = encodeVarintData(data, i, uint64(m.IntentAge))
-	data[i] = 0x50
-	i++
-	i = encodeVarintData(data, i, uint64(m.GCBytesAge))
-	data[i] = 0x60
-	i++
-	i = encodeVarintData(data, i, uint64(m.SysBytes))
-	data[i] = 0x68
-	i++
-	i = encodeVarintData(data, i, uint64(m.SysCount))
-	data[i] = 0xf0
-	i++
-	data[i] = 0x1
-	i++
-	i = encodeVarintData(data, i, uint64(m.LastUpdateNanos))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

@@ -17,6 +17,128 @@ import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 var _ = proto1.Marshal
 var _ = math.Inf
 
+// MVCCStats tracks byte and instance counts for:
+//  - Live key/values (i.e. what a scan at current time will reveal;
+//    note that this includes intent keys and values, but not keys and
+//    values with most recent value deleted)
+//  - Key bytes (includes all keys, even those with most recent value deleted)
+//  - Value bytes (includes all versions)
+//  - Key count (count of all keys, including keys with deleted tombstones)
+//  - Value count (all versions, including deleted tombstones)
+//  - Intents (provisional values written during txns)
+//  - System-local key counts and byte totals
+type MVCCStats struct {
+	LiveBytes        int64  `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
+	KeyBytes         int64  `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`
+	ValBytes         int64  `protobuf:"varint,3,opt,name=val_bytes" json:"val_bytes"`
+	IntentBytes      int64  `protobuf:"varint,4,opt,name=intent_bytes" json:"intent_bytes"`
+	LiveCount        int64  `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
+	KeyCount         int64  `protobuf:"varint,6,opt,name=key_count" json:"key_count"`
+	ValCount         int64  `protobuf:"varint,7,opt,name=val_count" json:"val_count"`
+	IntentCount      int64  `protobuf:"varint,8,opt,name=intent_count" json:"intent_count"`
+	IntentAge        int64  `protobuf:"varint,9,opt,name=intent_age" json:"intent_age"`
+	GCBytesAge       int64  `protobuf:"varint,10,opt,name=gc_bytes_age" json:"gc_bytes_age"`
+	SysBytes         int64  `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
+	SysCount         int64  `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
+	LastUpdateNanos  int64  `protobuf:"varint,30,opt,name=last_update_nanos" json:"last_update_nanos"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
+func (m *MVCCStats) String() string { return proto1.CompactTextString(m) }
+func (*MVCCStats) ProtoMessage()    {}
+
+func (m *MVCCStats) GetLiveBytes() int64 {
+	if m != nil {
+		return m.LiveBytes
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetKeyBytes() int64 {
+	if m != nil {
+		return m.KeyBytes
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetValBytes() int64 {
+	if m != nil {
+		return m.ValBytes
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetIntentBytes() int64 {
+	if m != nil {
+		return m.IntentBytes
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetLiveCount() int64 {
+	if m != nil {
+		return m.LiveCount
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetKeyCount() int64 {
+	if m != nil {
+		return m.KeyCount
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetValCount() int64 {
+	if m != nil {
+		return m.ValCount
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetIntentCount() int64 {
+	if m != nil {
+		return m.IntentCount
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetIntentAge() int64 {
+	if m != nil {
+		return m.IntentAge
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetGCBytesAge() int64 {
+	if m != nil {
+		return m.GCBytesAge
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetSysBytes() int64 {
+	if m != nil {
+		return m.SysBytes
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetSysCount() int64 {
+	if m != nil {
+		return m.SysCount
+	}
+	return 0
+}
+
+func (m *MVCCStats) GetLastUpdateNanos() int64 {
+	if m != nil {
+		return m.LastUpdateNanos
+	}
+	return 0
+}
+
 // StoreStatus contains the stats needed to calculate the current status of a
 // store.
 type StoreStatus struct {
@@ -168,6 +290,244 @@ func (m *NodeStatus) GetAvailableRangeCount() int32 {
 }
 
 func init() {
+}
+func (m *MVCCStats) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LiveBytes", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.LiveBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.KeyBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.ValBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.IntentBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LiveCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.LiveCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KeyCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.KeyCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.ValCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.IntentCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.IntentAge |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.GCBytesAge |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SysBytes", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.SysBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 13:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SysCount", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.SysCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 30:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.LastUpdateNanos |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
 }
 func (m *StoreStatus) Unmarshal(data []byte) error {
 	l := len(data)
@@ -563,6 +923,28 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *MVCCStats) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovStatus(uint64(m.LiveBytes))
+	n += 1 + sovStatus(uint64(m.KeyBytes))
+	n += 1 + sovStatus(uint64(m.ValBytes))
+	n += 1 + sovStatus(uint64(m.IntentBytes))
+	n += 1 + sovStatus(uint64(m.LiveCount))
+	n += 1 + sovStatus(uint64(m.KeyCount))
+	n += 1 + sovStatus(uint64(m.ValCount))
+	n += 1 + sovStatus(uint64(m.IntentCount))
+	n += 1 + sovStatus(uint64(m.IntentAge))
+	n += 1 + sovStatus(uint64(m.GCBytesAge))
+	n += 1 + sovStatus(uint64(m.SysBytes))
+	n += 1 + sovStatus(uint64(m.SysCount))
+	n += 2 + sovStatus(uint64(m.LastUpdateNanos))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *StoreStatus) Size() (n int) {
 	var l int
 	_ = l
@@ -620,6 +1002,68 @@ func sovStatus(x uint64) (n int) {
 func sozStatus(x uint64) (n int) {
 	return sovStatus(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+func (m *MVCCStats) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MVCCStats) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.LiveBytes))
+	data[i] = 0x10
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.KeyBytes))
+	data[i] = 0x18
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.ValBytes))
+	data[i] = 0x20
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.IntentBytes))
+	data[i] = 0x28
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.LiveCount))
+	data[i] = 0x30
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.KeyCount))
+	data[i] = 0x38
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.ValCount))
+	data[i] = 0x40
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.IntentCount))
+	data[i] = 0x48
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.IntentAge))
+	data[i] = 0x50
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.GCBytesAge))
+	data[i] = 0x60
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.SysBytes))
+	data[i] = 0x68
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.SysCount))
+	data[i] = 0xf0
+	i++
+	data[i] = 0x1
+	i++
+	i = encodeVarintStatus(data, i, uint64(m.LastUpdateNanos))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *StoreStatus) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
