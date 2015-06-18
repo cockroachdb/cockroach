@@ -124,7 +124,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) erro
 		key := keys.ResponseCacheKey(destRaftID, &cmdID)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
-		meta := &proto.MVCCMetadata{}
+		meta := &engine.MVCCMetadata{}
 		if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
 			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
 				proto.Key(kv.Key), kv.Value, err)
@@ -157,7 +157,7 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RaftID) er
 		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
-		meta := &proto.MVCCMetadata{}
+		meta := &engine.MVCCMetadata{}
 		if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
 			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
 				proto.Key(kv.Key), kv.Value, err)

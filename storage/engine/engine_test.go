@@ -168,7 +168,7 @@ func TestEngineBatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m := &proto.MVCCMetadata{}
+			m := &MVCCMetadata{}
 			if err := gogoproto.Unmarshal(b, m); err != nil {
 				t.Fatal(err)
 			}
@@ -222,7 +222,7 @@ func TestEngineBatch(t *testing.T) {
 			} else if !bytes.Equal(iter.Key(), key) {
 				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
 			} else {
-				m := &proto.MVCCMetadata{}
+				m := &MVCCMetadata{}
 				if err := iter.ValueProto(m); err != nil {
 					t.Fatal(err)
 				}
@@ -364,7 +364,7 @@ func TestEngineMerge(t *testing.T) {
 				}
 			}
 			result, _ := engine.Get(tc.testKey)
-			var resultV, expectedV proto.MVCCMetadata
+			var resultV, expectedV MVCCMetadata
 			if err := gogoproto.Unmarshal(result, &resultV); err != nil {
 				t.Fatal(err)
 			}

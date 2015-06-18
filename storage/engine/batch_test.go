@@ -139,7 +139,7 @@ func TestBatchGet(t *testing.T) {
 }
 
 func compareMergedValues(t *testing.T, result, expected []byte) bool {
-	var resultV, expectedV proto.MVCCMetadata
+	var resultV, expectedV MVCCMetadata
 	if err := gogoproto.Unmarshal(result, &resultV); err != nil {
 		t.Fatal(err)
 	}

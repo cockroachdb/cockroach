@@ -63,16 +63,6 @@ message Value {
   optional string tag = 5;
 }
 
-// MVCCValue differentiates between normal versioned values and
-// deletion tombstones.
-message MVCCValue {
-  // True to indicate a deletion tombstone. If false, value should not
-  // be nil.
-  optional bool deleted = 1 [(gogoproto.nullable) = false];
-  // The value. Nil if deleted is true; not nil otherwise.
-  optional Value value = 2;
-}
-
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 message KeyValue {
@@ -266,25 +256,6 @@ message Intent {
   optional Transaction txn = 2 [(gogoproto.nullable) = false];
 }
 
-// MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
-message MVCCMetadata {
-  optional Transaction txn = 1;
-  // The timestamp of the most recent versioned value.
-  optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  // Is the most recent value a deletion tombstone?
-  optional bool deleted = 3 [(gogoproto.nullable) = false];
-  // The size in bytes of the most recent encoded key.
-  optional int64 key_bytes = 4 [(gogoproto.nullable) = false];
-  // The size in bytes of the most recent versioned value.
-  optional int64 val_bytes = 5 [(gogoproto.nullable) = false];
-  // Inline value, used for values with zero timestamp. This provides
-  // an efficient short circuit of the normal MVCC metadata sentinel
-  // and subsequent version rows. If timestamp == (0, 0), then there
-  // is only a single MVCC metadata row with value inlined, and with
-  // empty timestamp, key_bytes, and val_bytes.
-  optional Value value = 6;
-}
-
 // GCMetadata holds information about the last complete key/value
 // garbage collection scan of a range.
 message GCMetadata {
@@ -293,30 +264,4 @@ message GCMetadata {
   // The oldest unresolved write intent in nanoseconds since epoch.
   // Null if there are no unresolved write intents.
   optional int64 oldest_intent_nanos = 2;
-}
-
-// MVCCStats tracks byte and instance counts for:
-//  - Live key/values (i.e. what a scan at current time will reveal;
-//    note that this includes intent keys and values, but not keys and
-//    values with most recent value deleted)
-//  - Key bytes (includes all keys, even those with most recent value deleted)
-//  - Value bytes (includes all versions)
-//  - Key count (count of all keys, including keys with deleted tombstones)
-//  - Value count (all versions, including deleted tombstones)
-//  - Intents (provisional values written during txns)
-//  - System-local key counts and byte totals
-message MVCCStats {
-  optional int64 live_bytes = 1 [(gogoproto.nullable) = false];
-  optional int64 key_bytes = 2 [(gogoproto.nullable) = false];
-  optional int64 val_bytes = 3 [(gogoproto.nullable) = false];
-  optional int64 intent_bytes = 4 [(gogoproto.nullable) = false];
-  optional int64 live_count = 5 [(gogoproto.nullable) = false];
-  optional int64 key_count = 6 [(gogoproto.nullable) = false];
-  optional int64 val_count = 7 [(gogoproto.nullable) = false];
-  optional int64 intent_count = 8 [(gogoproto.nullable) = false];
-  optional int64 intent_age = 9 [(gogoproto.nullable) = false];
-  optional int64 gc_bytes_age = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge" ];
-  optional int64 sys_bytes = 12 [(gogoproto.nullable) = false];
-  optional int64 sys_count = 13 [(gogoproto.nullable) = false];
-  optional int64 last_update_nanos = 30 [(gogoproto.nullable) = false];
 }

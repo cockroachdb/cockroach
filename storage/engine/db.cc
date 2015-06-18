@@ -27,6 +27,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
+#include "mvcc.pb.h"
 #include "cockroach/proto/api.pb.h"
 #include "cockroach/proto/data.pb.h"
 #include "cockroach/proto/internal.pb.h"
@@ -250,7 +251,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       return false;
     }
     // Parse MVCC metadata for inlined value.
-    cockroach::proto::MVCCMetadata meta;
+    cockroach::storage::engine::MVCCMetadata meta;
     if (!meta.ParseFromArray(existing_value.data(), existing_value.size())) {
       // *error_msg = (char*)"failed to parse mvcc metadata entry";
       return false;
@@ -559,7 +560,7 @@ bool MergeValues(cockroach::proto::Value *left, const cockroach::proto::Value &r
 
 
 // MergeResult serializes the result MVCCMetadata value into a byte slice.
-DBStatus MergeResult(cockroach::proto::MVCCMetadata* meta, DBString* result) {
+DBStatus MergeResult(cockroach::storage::engine::MVCCMetadata* meta, DBString* result) {
   // TODO(pmattis): Should recompute checksum here. Need a crc32
   // implementation and need to verify the checksumming is identical
   // to what is being done in Go. Zlib's crc32 should be sufficient.
@@ -600,7 +601,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     // read of the key). In effect, there is no propagation of error
     // information to the client.
 
-    cockroach::proto::MVCCMetadata meta;
+    cockroach::storage::engine::MVCCMetadata meta;
     if (existing_value != NULL) {
       if (!meta.ParseFromArray(existing_value->data(), existing_value->size())) {
         // Corrupted existing value.
@@ -627,7 +628,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const std::deque<rocksdb::Slice>& operand_list,
       std::string* new_value,
       rocksdb::Logger* logger) const {
-    cockroach::proto::MVCCMetadata meta;
+    cockroach::storage::engine::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
       if (!MergeOne(&meta, operand_list[i], false, logger)) {
@@ -643,11 +644,11 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   }
 
  private:
-  bool MergeOne(cockroach::proto::MVCCMetadata* meta,
+  bool MergeOne(cockroach::storage::engine::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
                 bool full_merge,
                 rocksdb::Logger* logger) const {
-    cockroach::proto::MVCCMetadata operand_meta;
+    cockroach::storage::engine::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
@@ -1292,12 +1293,12 @@ DBIterator* DBBatchNewIter(DBEngine* db, DBBatch* batch) {
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   new_value->len = 0;
 
-  cockroach::proto::MVCCMetadata meta;
+  cockroach::storage::engine::MVCCMetadata meta;
   if (!meta.ParseFromArray(existing.data, existing.len)) {
     return ToDBString("corrupted existing value");
   }
 
-  cockroach::proto::MVCCMetadata update_meta;
+  cockroach::storage::engine::MVCCMetadata update_meta;
   if (!update_meta.ParseFromArray(update.data, update.len)) {
     return ToDBString("corrupted update value");
   }

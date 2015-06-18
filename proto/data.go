@@ -520,23 +520,6 @@ func (t Transaction) Short() string {
 	return util.UUID(t.ID).Short()
 }
 
-// IsInline returns true if the value is inlined in the metadata.
-func (meta MVCCMetadata) IsInline() bool {
-	return meta.Value != nil
-}
-
-// HasWriteIntentError returns whether the metadata has an open intent which
-// has not been laid down by the given transaction (which may be nil).
-func (meta MVCCMetadata) HasWriteIntentError(txn *Transaction) bool {
-	return meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID))
-}
-
-// IsIntentOf returns true if the meta record is an intent of the supplied
-// transaction.
-func (meta MVCCMetadata) IsIntentOf(txn *Transaction) bool {
-	return meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)
-}
-
 // NewGCMetadata returns a GCMetadata initialized to have a ByteCounts
 // slice with ten byte count values set to zero.  Now is specified as
 // nanoseconds since the Unix epoch.

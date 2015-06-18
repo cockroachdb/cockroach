@@ -1951,9 +1951,9 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	mKeySize := int64(len(MVCCEncodeKey(key)))
-	mValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts}, t)
+	mValSize := encodedSize(&MVCCMetadata{Timestamp: ts}, t)
 	vKeySize := mvccVersionTimestampSize
-	vValSize := encodedSize(&proto.MVCCValue{Value: &value}, t)
+	vValSize := encodedSize(&MVCCValue{Value: &value}, t)
 
 	expMS := proto.MVCCStats{
 		LiveBytes: mKeySize + mValSize + vKeySize + vValSize,
@@ -1971,9 +1971,9 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCDelete(engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
-	m2ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
+	m2ValSize := encodedSize(&MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
 	v2KeySize := mvccVersionTimestampSize
-	v2ValSize := encodedSize(&proto.MVCCValue{Deleted: true}, t)
+	v2ValSize := encodedSize(&MVCCValue{Deleted: true}, t)
 	expMS2 := proto.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,
 		KeyCount:    1,
@@ -2013,9 +2013,9 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	mKey2Size := int64(len(MVCCEncodeKey(key2)))
-	mVal2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
+	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
-	vVal2Size := encodedSize(&proto.MVCCValue{Value: &value2}, t)
+	vVal2Size := encodedSize(&MVCCValue{Value: &value2}, t)
 	expMS3 := proto.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
@@ -2037,8 +2037,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCResolveWriteIntent(engine, ms, key2, ts4, txn); err != nil {
 		t.Fatal(err)
 	}
-	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
-	m2Val2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4}, t)
+	m3ValSize := encodedSize(&MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
+	m2Val2Size := encodedSize(&MVCCMetadata{Timestamp: ts4}, t)
 	expMS4 := proto.MVCCStats{
 		KeyBytes:   mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:   2,
@@ -2070,7 +2070,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(len(MVCCEncodeKey(txnKey)))
-	txnValSize := encodedSize(&proto.MVCCMetadata{Value: &txnVal}, t)
+	txnValSize := encodedSize(&MVCCMetadata{Value: &txnVal}, t)
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
 	expMS6.SysCount++
@@ -2352,7 +2352,7 @@ func TestResovleIntentWithLowerEpoch(t *testing.T) {
 
 	// Check that the intent was not cleared.
 	metaKey := MVCCEncodeKey(testKey1)
-	meta := &proto.MVCCMetadata{}
+	meta := &MVCCMetadata{}
 	ok, _, _, err := engine.GetProto(metaKey, meta)
 	if err != nil {
 		t.Fatal(err)

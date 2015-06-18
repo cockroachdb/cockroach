@@ -45,6 +45,23 @@ var (
 	MVCCKeyMax = MVCCEncodeKey(proto.KeyMax)
 )
 
+// IsInline returns true if the value is inlined in the metadata.
+func (meta MVCCMetadata) IsInline() bool {
+	return meta.Value != nil
+}
+
+// HasWriteIntentError returns whether the metadata has an open intent which
+// has not been laid down by the given transaction (which may be nil).
+func (meta MVCCMetadata) HasWriteIntentError(txn *proto.Transaction) bool {
+	return meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID))
+}
+
+// IsIntentOf returns true if the meta record is an intent of the supplied
+// transaction.
+func (meta MVCCMetadata) IsIntentOf(txn *proto.Transaction) bool {
+	return meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)
+}
+
 // updateStatsForKey returns whether or not the bytes and counts for
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
@@ -115,7 +132,7 @@ func updateStatsOnMerge(ms *proto.MVCCStats, key proto.Key, valSize int64) {
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
 func updateStatsOnPut(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata, origAgeSeconds int64) {
+	metaKeySize, metaValSize int64, orig, meta *MVCCMetadata, origAgeSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
 		return
@@ -180,7 +197,7 @@ func updateStatsOnPut(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origM
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
 func updateStatsOnResolve(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool, origAgeSeconds int64) {
+	metaKeySize, metaValSize int64, meta *MVCCMetadata, commit bool, origAgeSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
 		return
@@ -214,7 +231,7 @@ func updateStatsOnResolve(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, o
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
 func updateStatsOnAbort(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
-	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata,
+	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *MVCCMetadata,
 	origAgeSeconds, restoredAgeSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
@@ -270,7 +287,7 @@ func updateStatsOnAbort(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, ori
 // value counts, and updating the GC'able bytes age. If meta is
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
-func updateStatsOnGC(ms *proto.MVCCStats, key proto.Key, keySize, valSize int64, meta *proto.MVCCMetadata, ageSeconds int64) {
+func updateStatsOnGC(ms *proto.MVCCStats, key proto.Key, keySize, valSize int64, meta *MVCCMetadata, ageSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
 		return
@@ -346,8 +363,8 @@ func MVCCPutProto(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp p
 }
 
 type getBuffer struct {
-	meta  proto.MVCCMetadata
-	value proto.MVCCValue
+	meta  MVCCMetadata
+	value MVCCValue
 	key   [1024]byte
 }
 
@@ -572,9 +589,9 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey,
 // allocations. Managing this temporary buffer using a sync.Pool
 // completely eliminates allocation from the put common path.
 type putBuffer struct {
-	meta    proto.MVCCMetadata
-	newMeta proto.MVCCMetadata
-	value   proto.MVCCValue
+	meta    MVCCMetadata
+	newMeta MVCCMetadata
+	value   MVCCValue
 	pvalue  proto.Value
 	key     [1024]byte
 }
@@ -637,7 +654,7 @@ func MVCCDelete(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp pro
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
 func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp,
-	value proto.MVCCValue, txn *proto.Transaction, buf *putBuffer) error {
+	value MVCCValue, txn *proto.Transaction, buf *putBuffer) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -659,14 +676,14 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 		if value.Deleted {
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
-			buf.meta = proto.MVCCMetadata{Value: value.Value}
+			buf.meta = MVCCMetadata{Value: value.Value}
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
 		}
 		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
 		return err
 	}
 
-	var meta *proto.MVCCMetadata
+	var meta *MVCCMetadata
 	var origAgeSeconds int64
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
@@ -709,7 +726,7 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 			return nil
 		}
 	}
-	buf.newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+	buf.newMeta = MVCCMetadata{Txn: txn, Timestamp: timestamp}
 	newMeta := &buf.newMeta
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
@@ -819,7 +836,7 @@ func MVCCMerge(engine Engine, ms *proto.MVCCStats, key proto.Key, value proto.Va
 	metaKey := MVCCEncodeKey(key)
 
 	// Encode and merge the MVCC metadata with inlined value.
-	meta := &proto.MVCCMetadata{Value: &value}
+	meta := &MVCCMetadata{Value: &value}
 	data, err := gogoproto.Marshal(meta)
 	if err != nil {
 		return err
@@ -999,7 +1016,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 	}
 
 	metaKey := MVCCEncodeKey(key)
-	meta := &proto.MVCCMetadata{}
+	meta := &MVCCMetadata{}
 	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, meta)
 	if err != nil {
 		return err
@@ -1096,14 +1113,14 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
 		// Get the bytes for the next version so we have size for stat counts.
-		value := proto.MVCCValue{}
+		value := MVCCValue{}
 		var valueSize int64
 		ok, _, valueSize, err = engine.GetProto(kvs[0].Key, &value)
 		if err != nil || !ok {
 			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
 		}
 		// Update the keyMetadata with the next version.
-		newMeta := &proto.MVCCMetadata{
+		newMeta := &MVCCMetadata{
 			Timestamp: ts,
 			Deleted:   value.Deleted,
 			KeyBytes:  mvccVersionTimestampSize,
@@ -1183,7 +1200,7 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 			return util.Errorf("could not seek to key %q", gcKey.Key)
 		}
 		// First, check whether all values of the key are being deleted.
-		meta := &proto.MVCCMetadata{}
+		meta := &MVCCMetadata{}
 		if err := gogoproto.Unmarshal(iter.Value(), meta); err != nil {
 			return util.Errorf("unable to marshal mvcc meta: %s", err)
 		}
@@ -1350,7 +1367,7 @@ func MVCCFindSplitKey(engine Engine, raftID proto.RaftID, key, endKey proto.Key)
 func MVCCComputeStats(iter Iterator, nowNanos int64) (proto.MVCCStats, error) {
 	ms := proto.MVCCStats{LastUpdateNanos: nowNanos}
 	first := false
-	meta := &proto.MVCCMetadata{}
+	meta := &MVCCMetadata{}
 
 	for ; iter.Valid(); iter.Next() {
 		key, ts, isValue := MVCCDecodeKey(iter.Key())

@@ -56,7 +56,7 @@ func mustMarshal(m gogoproto.Message) []byte {
 }
 
 func appender(s string) []byte {
-	v := &proto.MVCCMetadata{
+	v := &MVCCMetadata{
 		Value: &proto.Value{
 			Bytes: []byte(s),
 		},
@@ -87,7 +87,7 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 	if err != nil {
 		panic(err)
 	}
-	return mustMarshal(&proto.MVCCMetadata{Value: v})
+	return mustMarshal(&MVCCMetadata{Value: v})
 }
 
 // TestGoMerge tests the function goMerge but not the integration with
@@ -148,7 +148,7 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{appender(""), appender(""), appender("")},
 		{nil, appender(""), appender("")},
-		{nil, nil, mustMarshal(&proto.MVCCMetadata{Value: &proto.Value{}})},
+		{nil, nil, mustMarshal(&MVCCMetadata{Value: &proto.Value{}})},
 		{appender("\n "), appender(" \t "), appender("\n  \t ")},
 		{appender("ქართული"), appender("\nKhartuli"), appender("ქართული\nKhartuli")},
 		{appender(gibber1), appender(gibber2), appender(gibber1 + gibber2)},
@@ -160,7 +160,7 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		var resultV, expectedV proto.MVCCMetadata
+		var resultV, expectedV MVCCMetadata
 		if err := gogoproto.Unmarshal(result, &resultV); err != nil {
 			t.Fatal(err)
 		}
@@ -289,12 +289,12 @@ func TestGoMerge(t *testing.T) {
 
 // unmarshalTimeSeries unmarshals the time series value stored in the given byte
 // array. It is assumed that the time series value was originally marshalled as
-// a proto.MVCCMetadata with an inline value.
+// a MVCCMetadata with an inline value.
 func unmarshalTimeSeries(t testing.TB, b []byte) *proto.InternalTimeSeriesData {
 	if b == nil {
 		return nil
 	}
-	var mvccValue proto.MVCCMetadata
+	var mvccValue MVCCMetadata
 	if err := gogoproto.Unmarshal(b, &mvccValue); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}

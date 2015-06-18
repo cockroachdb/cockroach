@@ -873,13 +873,13 @@ func internalTruncateLogArgs(index uint64, raftID proto.RaftID, storeID proto.St
 // mvcc value. If value is nil, MVCCValue.Deleted is set to true;
 // otherwise MVCCValue.Value is set to value.
 func getSerializedMVCCValue(value *proto.Value) []byte {
-	mvccVal := &proto.MVCCValue{}
+	mvccVal := &engine.MVCCValue{}
 	if value != nil {
 		mvccVal.Value = value
 	} else {
 		mvccVal.Deleted = true
 	}
-	data, err := gogoproto.Marshal(&proto.MVCCValue{Value: value})
+	data, err := gogoproto.Marshal(&engine.MVCCValue{Value: value})
 	if err != nil {
 		panic("unexpected marshal error")
 	}

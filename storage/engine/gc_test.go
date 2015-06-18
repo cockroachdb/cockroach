@@ -40,7 +40,7 @@ var (
 )
 
 func serializedMVCCValue(deleted bool, t *testing.T) []byte {
-	data, err := gogoproto.Marshal(&proto.MVCCValue{Deleted: deleted})
+	data, err := gogoproto.Marshal(&MVCCValue{Deleted: deleted})
 	if err != nil {
 		t.Fatalf("unexpected marshal error: %v", err)
 	}
