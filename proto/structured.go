@@ -27,6 +27,8 @@ const (
 	PrimaryKeyIndexName = "primary"
 	// MaxReservedDescID is the maximum reserved descriptor ID.
 	MaxReservedDescID = 999
+	// RootNamespaceID is the ID of the root namespace.
+	RootNamespaceID = 0
 )
 
 func validateName(name, typ string) error {

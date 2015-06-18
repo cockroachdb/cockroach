@@ -45,8 +45,6 @@ import (
 //
 // - Allow usage of `map[string]interface{}` in place of a struct. Probably
 //   need table schemas first so we know which columns exist.
-//
-// - Add support for namespaces. Currently namespace ID 0 is hardcoded.
 
 func lowerStrings(s []string) []string {
 	for i := range s {
@@ -205,15 +203,80 @@ func (m *model) encodeColumnKey(primaryKey []byte, colID uint32) []byte {
 	return roachencoding.EncodeUvarint(key, uint64(colID))
 }
 
+// CreateNamespace creates a new namespace.
+//
+// TODO(pmattis): Is "namespace" the correct terminology? PostgreSQL and MySQL
+// use "database". PostgreSQL also has the notion of a schema. A
+// fully-qualified name in PostgreSQL looks like
+// "<database>.<schema>.<table>". See
+// http://www.postgresql.org/docs/9.4/static/ddl-schemas.html.
+func (db *DB) CreateNamespace(name string) error {
+	if name == "" {
+		return fmt.Errorf("empty namespace name")
+	}
+
+	nameKey := keys.MakeNameMetadataKey(proto.RootNamespaceID, strings.ToLower(name))
+	if gr, err := db.Get(nameKey); err != nil {
+		return err
+	} else if gr.Exists() {
+		return fmt.Errorf("namespace \"%s\" already exists", name)
+	}
+	ir, err := db.Inc(keys.DescIDGenerator, 1)
+	if err != nil {
+		return err
+	}
+	nsID := uint32(ir.ValueInt() - 1)
+	return db.CPut(nameKey, nsID, nil)
+}
+
+// ListNamespaces lists the namespaces.
+func (db *DB) ListNamespaces() ([]string, error) {
+	prefix := keys.MakeNameMetadataKey(proto.RootNamespaceID, "")
+	rows, err := db.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(rows))
+	for i, row := range rows {
+		names[i] = string(bytes.TrimPrefix(row.Key, prefix))
+	}
+	return names, nil
+}
+
+func (db *DB) lookupTable(path string) (nsID uint32, name string, err error) {
+	parts := strings.Split(strings.ToLower(path), ".")
+	if len(parts) != 2 {
+		return 0, "", fmt.Errorf("\"%s\" malformed, expected \"<namespace>.<table>\"", path)
+	}
+	nameKey := keys.MakeNameMetadataKey(nsID, parts[0])
+	gr, err := db.Get(nameKey)
+	if err != nil {
+		return 0, "", err
+	} else if !gr.Exists() {
+		return 0, "", fmt.Errorf("namespace \"%s\" does not exist", parts[0])
+	}
+	nsID = uint32(gr.ValueInt())
+	return nsID, parts[1], nil
+}
+
 // CreateTable creates a table from the specified schema. Table creation will
-// fail if the table name is already in use.
+// fail if the table name is already in use. The table name is required to have
+// the form "<namespace>.<table>".
 func (db *DB) CreateTable(schema proto.TableSchema) error {
+	schema.Name = strings.ToLower(schema.Name)
 	desc := proto.TableDescFromSchema(schema)
 	if err := proto.ValidateTableDesc(desc); err != nil {
 		return err
 	}
 
-	nameKey := keys.MakeNameMetadataKey(0, desc.Name)
+	nsID, name, err := db.lookupTable(desc.Name)
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return fmt.Errorf("empty table name: %s", desc.Name)
+	}
+	nameKey := keys.MakeNameMetadataKey(nsID, name)
 
 	// This isn't strictly necessary as the conditional put below will fail if
 	// the key already exists, but it seems good to avoid the table ID allocation
@@ -242,9 +305,10 @@ func (db *DB) CreateTable(schema proto.TableSchema) error {
 	})
 }
 
-// DescribeTable retrieves the table schema for the specified table.
-func (db *DB) DescribeTable(name string) (*proto.TableSchema, error) {
-	desc, err := db.getTableDesc(name)
+// DescribeTable retrieves the table schema for the specified table. Path has
+// the form "<namespace>.<table>".
+func (db *DB) DescribeTable(path string) (*proto.TableSchema, error) {
+	desc, err := db.getTableDesc(path)
 	if err != nil {
 		return nil, err
 	}
@@ -252,8 +316,9 @@ func (db *DB) DescribeTable(name string) (*proto.TableSchema, error) {
 	return &schema, nil
 }
 
-// RenameTable renames a table.
-func (db *DB) RenameTable(oldName, newName string) error {
+// RenameTable renames a table. Old path and new path have the form
+// "<namespace>.<table>".
+func (db *DB) RenameTable(oldPath, newPath string) error {
 	// TODO(pmattis): Should we allow both the old and new name to exist
 	// simultaneously for a period of time? The thought is to allow an
 	// application to access the table via either name while the application is
@@ -262,25 +327,37 @@ func (db *DB) RenameTable(oldName, newName string) error {
 	// table. Similar to a file, a table would not be removed until all of the
 	// hard links are removed.
 
+	oldNSID, oldName, err := db.lookupTable(oldPath)
+	if err != nil {
+		return err
+	}
+	newNSID, newName, err := db.lookupTable(newPath)
+	if err != nil {
+		return err
+	}
+	if newName == "" {
+		return fmt.Errorf("empty table name: %s", newPath)
+	}
+
 	return db.Txn(func(txn *Txn) error {
-		oldNameKey := keys.MakeNameMetadataKey(0, strings.ToLower(oldName))
+		oldNameKey := keys.MakeNameMetadataKey(oldNSID, oldName)
 		gr, err := txn.Get(oldNameKey)
 		if err != nil {
 			return err
 		}
 		if !gr.Exists() {
-			return fmt.Errorf("unable to find table \"%s\"", oldName)
+			return fmt.Errorf("unable to find table \"%s\"", oldPath)
 		}
 		descKey := gr.ValueBytes()
 		desc := proto.TableDescriptor{}
 		if err := txn.GetProto(descKey, &desc); err != nil {
 			return err
 		}
-		desc.Name = strings.ToLower(newName)
+		desc.Name = strings.ToLower(newPath)
 		if err := proto.ValidateTableDesc(desc); err != nil {
 			return err
 		}
-		newNameKey := keys.MakeNameMetadataKey(0, desc.Name)
+		newNameKey := keys.MakeNameMetadataKey(newNSID, newName)
 		b := &Batch{}
 		b.Put(descKey, &desc)
 		// If the new name already exists the conditional put will fail causing the
@@ -291,15 +368,23 @@ func (db *DB) RenameTable(oldName, newName string) error {
 	})
 }
 
-// DeleteTable deletes the specified table.
-func (db *DB) DeleteTable(name string) error {
-	nameKey := keys.MakeNameMetadataKey(0, strings.ToLower(name))
+// DeleteTable deletes the specified table. Path has the form
+// "<namespace>.<table>".
+func (db *DB) DeleteTable(path string) error {
+	nsID, name, err := db.lookupTable(path)
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return fmt.Errorf("empty table name: %s", path)
+	}
+	nameKey := keys.MakeNameMetadataKey(nsID, name)
 	gr, err := db.Get(nameKey)
 	if err != nil {
 		return err
 	}
 	if !gr.Exists() {
-		return fmt.Errorf("unable to find table \"%s\"", name)
+		return fmt.Errorf("unable to find table \"%s\"", path)
 	}
 	descKey := gr.ValueBytes()
 	desc := proto.TableDescriptor{}
@@ -311,18 +396,22 @@ func (db *DB) DeleteTable(name string) error {
 	// return db.Del(descKey)
 }
 
-// ListTables lists the tables.
-func (db *DB) ListTables() ([]string, error) {
-	tableNamePrefix := keys.MakeNameMetadataKey(0, "")
-	rows, err := db.Scan(tableNamePrefix, tableNamePrefix.PrefixEnd(), 0)
+// ListTables lists the tables in the specified namespace.
+func (db *DB) ListTables(namespace string) ([]string, error) {
+	nsID, _, err := db.lookupTable(namespace + ".")
 	if err != nil {
 		return nil, err
 	}
-	tableNames := make([]string, len(rows))
-	for i, row := range rows {
-		tableNames[i] = string(bytes.TrimPrefix(row.Key, tableNamePrefix))
+	prefix := keys.MakeNameMetadataKey(nsID, "")
+	rows, err := db.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
 	}
-	return tableNames, nil
+	names := make([]string, len(rows))
+	for i, row := range rows {
+		names[i] = string(bytes.TrimPrefix(row.Key, prefix))
+	}
+	return names, nil
 }
 
 // BindModel binds the supplied interface with the named table. You must bind
@@ -396,13 +485,20 @@ func (db *DB) BindModel(name string, obj interface{}) error {
 	return nil
 }
 
-func (db *DB) getTableDesc(name string) (*proto.TableDescriptor, error) {
-	gr, err := db.Get(keys.MakeNameMetadataKey(0, strings.ToLower(name)))
+func (db *DB) getTableDesc(path string) (*proto.TableDescriptor, error) {
+	nsID, name, err := db.lookupTable(path)
+	if err != nil {
+		return nil, err
+	}
+	if name == "" {
+		return nil, fmt.Errorf("empty table name: %s", path)
+	}
+	gr, err := db.Get(keys.MakeNameMetadataKey(nsID, name))
 	if err != nil {
 		return nil, err
 	}
 	if !gr.Exists() {
-		return nil, fmt.Errorf("unable to find table \"%s\"", name)
+		return nil, fmt.Errorf("unable to find table \"%s\"", path)
 	}
 	descKey := gr.ValueBytes()
 	desc := proto.TableDescriptor{}

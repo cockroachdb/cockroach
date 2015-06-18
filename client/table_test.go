@@ -55,21 +55,60 @@ func isError(err error, re string) bool {
 	return matched
 }
 
+func TestCreateNamespace(t *testing.T) {
+	s, db := setup()
+	defer s.Stop()
+
+	if err := db.CreateNamespace("foo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateNamespace("foo"); !isError(err, "namespace .* already exists") {
+		t.Fatalf("expected failure, but found '%+v'", err)
+	}
+	if err := db.CreateNamespace(""); !isError(err, "empty namespace name") {
+		t.Fatalf("expected failure, but found '%+v'", err)
+	}
+}
+
+func TestListNamespaces(t *testing.T) {
+	s, db := setup()
+	defer s.Stop()
+
+	names := []string{"a", "b", "c", "d", "e", "f", "g", "i"}
+	for i, name := range names {
+		if err := db.CreateNamespace(name); err != nil {
+			t.Fatal(err)
+		}
+		namespaces, err := db.ListNamespaces()
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedNamespaces := namespaces[:i+1]
+		if !reflect.DeepEqual(expectedNamespaces, namespaces) {
+			t.Errorf("expected %+v, but got %+v", expectedNamespaces, namespaces)
+		}
+	}
+}
+
 func TestCreateTable(t *testing.T) {
 	s, db := setup()
 	defer s.Stop()
 
-	if _, err := db.DescribeTable("users"); !isError(err, "unable to find table") {
-		t.Fatalf("expected failure, but found success")
+	if err := db.CreateNamespace("t"); err != nil {
+		t.Fatal(err)
 	}
 
-	schema := makeTestSchema("users")
+	if _, err := db.DescribeTable("t.users"); !isError(err, "unable to find table") {
+		t.Fatalf("expected failure, but found '%+v'", err)
+	}
+
+	schema := makeTestSchema("t.users")
 	if err := db.CreateTable(schema); err != nil {
 		t.Fatal(err)
 	}
 
 	// Table names are case-insensitive.
-	schema2, err := db.DescribeTable("USERS")
+	schema2, err := db.DescribeTable("T.USERS")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,12 +118,16 @@ func TestCreateTable(t *testing.T) {
 
 	// Creating the table again should fail as the table already exists.
 	if err := db.CreateTable(schema); !isError(err, "table .* already exists") {
-		t.Fatalf("expected failure, but found success")
+		t.Fatalf("expected failure, but found '%+v'", err)
 	}
 
 	// Verify we were allocated a non-reserved table ID. This involves manually
 	// retrieving the descriptor. Don't do this at home kiddies.
-	gr, err := db.Get(keys.MakeNameMetadataKey(0, "users"))
+	gr, err := db.Get(keys.MakeNameMetadataKey(0, "t"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gr, err = db.Get(keys.MakeNameMetadataKey(uint32(gr.ValueInt()), "users"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,25 +144,29 @@ func TestRenameTable(t *testing.T) {
 	s, db := setup()
 	defer s.Stop()
 
-	// Cannot rename a non-exist table.
-	if err := db.RenameTable("a", "b"); !isError(err, "unable to find table") {
-		t.Fatalf("expected failure, but found success")
-	}
-
-	if err := db.CreateTable(makeTestSchema("a")); err != nil {
+	if err := db.CreateNamespace("t"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := db.RenameTable("a", "b"); err != nil {
+	// Cannot rename a non-exist table.
+	if err := db.RenameTable("t.a", "t.b"); !isError(err, "unable to find table") {
+		t.Fatalf("expected failure, but found '%+v'", err)
+	}
+
+	if err := db.CreateTable(makeTestSchema("t.a")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.RenameTable("t.a", "t.b"); err != nil {
 		t.Fatal(err)
 	}
 
 	// A second rename should fail (the table is now named "b").
-	if err := db.RenameTable("a", "b"); !isError(err, "unable to find table") {
-		t.Fatalf("expected failure, but found success")
+	if err := db.RenameTable("t.a", "t.b"); !isError(err, "unable to find table") {
+		t.Fatalf("expected failure, but found '%+v'", err)
 	}
 
-	tables, err := db.ListTables()
+	tables, err := db.ListTables("t")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,13 +180,17 @@ func TestListTables(t *testing.T) {
 	s, db := setup()
 	defer s.Stop()
 
+	if err := db.CreateNamespace("t"); err != nil {
+		t.Fatal(err)
+	}
+
 	names := []string{"a", "b", "c", "d", "e", "f", "g", "i"}
 	for i, name := range names {
-		if err := db.CreateTable(makeTestSchema(name)); err != nil {
+		if err := db.CreateTable(makeTestSchema("t." + name)); err != nil {
 			t.Fatal(err)
 		}
 
-		tables, err := db.ListTables()
+		tables, err := db.ListTables("t")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -161,18 +212,22 @@ func TestStruct(t *testing.T) {
 		Delinquent int
 	}
 
+	if err := db.CreateNamespace("t"); err != nil {
+		t.Fatal(err)
+	}
+
 	schema, err := client.SchemaFromModel(User{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema.Name = "users"
+	schema.Name = "t.users"
 	if err := db.CreateTable(schema); err != nil {
 		t.Fatal(err)
 	}
 
 	// Bind our User model to the "users" table, specifying the "id" column as
 	// the primary key.
-	if err := db.BindModel("users", User{}); err != nil {
+	if err := db.BindModel("t.users", User{}); err != nil {
 		t.Fatal(err)
 	}
 
