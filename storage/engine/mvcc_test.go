@@ -212,7 +212,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
+	value, _, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, err = MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
+	value, _, err = MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
