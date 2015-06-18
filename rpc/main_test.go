@@ -18,33 +18,40 @@
 package rpc
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-var clientTestBaseContext = NewTestContext(nil)
-var serverTestBaseContext = NewServerTestContext(nil)
 
 // NewTestContext returns a rpc.Context for testing.
 // It is meant to be used by rpc clients.
-func NewTestContext(clock *hlc.Clock) *Context {
+func NewTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
-	return NewContext(testutils.NewTestBaseContext(), clock, nil)
+	return NewContext(testutils.NewTestBaseContext(), clock, stopper)
 }
 
 // NewServerTestContext returns a rpc.Context for testing.
 // It is meant to be used by rpc servers.
-func NewServerTestContext(clock *hlc.Clock) *Context {
+func NewServerTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
-	return NewContext(testutils.NewServerTestBaseContext(), clock, nil)
+	return NewContext(testutils.NewServerTestBaseContext(), clock, stopper)
 }
+
+//go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
+}
+
+func TestMain(m *testing.M) {
+	leaktest.TestMainWithLeakCheck(m)
 }

@@ -69,14 +69,14 @@ func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
 
 	// All requests currently accept JSON.
 	req.Header.Set(util.ContentTypeHeader, util.JSONContentType)
-	req.Header.Set("Accept", util.JSONContentType)
+	req.Header.Set(util.AcceptHeader, util.JSONContentType)
 	resp, err := ths.client.Do(req)
 	if err != nil {
 		ths.t.Fatal(err)
 	}
 
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
 		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, body)
 	}
@@ -114,14 +114,14 @@ func (ths *TestHTTPSession) Get(relative string) []byte {
 	}
 
 	// All requests currently accept JSON.
-	req.Header.Set("Accept", util.JSONContentType)
+	req.Header.Set(util.AcceptHeader, util.JSONContentType)
 	resp, err := ths.client.Do(req)
 	if err != nil {
 		ths.t.Fatal(err)
 	}
 
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
 		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, body)
 	}

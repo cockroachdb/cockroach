@@ -210,7 +210,7 @@ func ExampleAcctContentTypes() {
 
 		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
 			acctPathPrefix, key), nil)
-		req.Header.Add("Accept", test.accept)
+		req.Header.Add(util.AcceptHeader, test.accept)
 		if body, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}

@@ -113,7 +113,9 @@ func NewClient(addr net.Addr, opts *retry.Options, context *Context) *Client {
 	}
 	clientMu.Unlock()
 
-	go c.connect(opts, context)
+	context.Stopper.RunWorker(func() {
+		c.connect(opts, context)
+	})
 	return c
 }
 
@@ -127,7 +129,7 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
 	retryOpts.Stopper = context.Stopper
 
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
 		tlsConfig, err := context.GetClientTLSConfig()
 		if err != nil {
 			// Problem loading the TLS config. Retrying will not help.
@@ -159,15 +161,15 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 		log.Infof("client %s connected", c.addr)
 		close(c.Ready)
 
-		// Launch periodic heartbeat.
-		go c.startHeartbeat()
-
 		return retry.Break, nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Errorf("client %s failed to connect: %v", c.addr, err)
 		c.Close()
 	}
+
+	// Launch periodic heartbeat. This blocks until the client is to be closed.
+	c.runHeartbeat(context.Stopper)
+	c.Close()
 }
 
 // IsConnected returns whether the client is connected.
@@ -217,31 +219,32 @@ func (c *Client) Close() {
 		c.mu.Lock()
 		c.healthy = false
 		c.closed = true
-		c.mu.Unlock()
-		close(c.Closed)
 		if c.Client != nil {
 			c.Client.Close()
 		}
+		c.mu.Unlock()
+		close(c.Closed)
 	}
 	clientMu.Unlock()
 }
 
-// startHeartbeat sends periodic heartbeats to client. Closes the
+// runHeartbeat sends periodic heartbeats to client. Closes the
 // connection on error. Heartbeats are sent in an infinite loop until
 // an error is encountered.
-func (c *Client) startHeartbeat() {
+func (c *Client) runHeartbeat(stopper *util.Stopper) {
 	if log.V(2) {
 		log.Infof("client %s starting heartbeat", c.Addr())
 	}
-	// On heartbeat failure, remove this client from cache. A new
-	// client to this address will be created on the next call to
-	// NewClient().
+
 	for {
-		time.Sleep(heartbeatInterval)
-		if err := c.heartbeat(); err != nil {
-			log.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
-			c.Close()
-			break
+		select {
+		case <-stopper.ShouldStop():
+			return
+		case <-time.After(heartbeatInterval):
+			if err := c.heartbeat(); err != nil {
+				log.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
+				return
+			}
 		}
 	}
 }

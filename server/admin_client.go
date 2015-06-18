@@ -41,7 +41,7 @@ func sendAdminRequest(ctx *Context, req *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, util.Errorf("unable to read admin REST response: %s", err)
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, util.Errorf("%s: %s", resp.Status, string(b))
 	}
 	return b, nil

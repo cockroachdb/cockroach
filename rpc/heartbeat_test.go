@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestHeartbeatReply(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano)
 	heartbeat := &HeartbeatService{
@@ -51,6 +53,7 @@ func TestHeartbeatReply(t *testing.T) {
 }
 
 func TestManualHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano)
 	manualHeartbeat := &ManualHeartbeatService{
@@ -88,7 +91,12 @@ func TestManualHeartbeat(t *testing.T) {
 }
 
 func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	sContext := serverTestBaseContext
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	sContext := NewServerTestContext(nil, stopper)
 	serverAddr := util.CreateTestAddr("tcp")
 	// Start heartbeat.
 	s := NewServer(serverAddr, sContext)

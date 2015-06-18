@@ -233,7 +233,7 @@ func ExamplePermContentTypes() {
 
 		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
 			permPathPrefix, key), nil)
-		req.Header.Add("Accept", test.accept)
+		req.Header.Add(util.AcceptHeader, test.accept)
 		if body, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}
@@ -327,7 +327,7 @@ func TestPermEmptyKey(t *testing.T) {
 	for i, test := range testCases {
 		req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", testContext.RequestScheme(), testContext.Addr,
 			permPathPrefix), nil)
-		req.Header.Set("Accept", test.accept)
+		req.Header.Set(util.AcceptHeader, test.accept)
 		body, err = sendAdminRequest(testContext, req)
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)

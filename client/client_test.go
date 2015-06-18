@@ -175,7 +175,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 					}
 					close(doneCall)
 					if err != nil {
-						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, test.args.Method())
+						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, test.args.Method(), err)
 					}
 				}()
 				sender.wait()

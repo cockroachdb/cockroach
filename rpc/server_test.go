@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func checkUpdateMatches(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
@@ -49,6 +50,7 @@ func checkUpdateFails(t *testing.T, network, oldAddrString, newAddrString string
 }
 
 func TestUpdatedAddr(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
 		checkUpdateMatches(t, network, "localhost:0", "127.0.0.1:1234", "localhost:1234")
 		checkUpdateMatches(t, network, "localhost:1234", "127.0.0.1:1234", "localhost:1234")

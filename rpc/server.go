@@ -40,6 +40,8 @@ import (
 type Server struct {
 	*rpc.Server              // Embedded RPC server instance
 	listener    net.Listener // Server listener
+
+	activeConns map[net.Conn]struct{}
 	handler     http.Handler
 
 	context *Context
@@ -137,14 +139,35 @@ func (s *Server) Listen() error {
 // listener.
 func (s *Server) Serve(handler http.Handler) {
 	s.handler = handler
+	s.activeConns = make(map[net.Conn]struct{})
 
-	go func() {
-		if err := http.Serve(s.listener, s); err != nil {
+	server := &http.Server{
+		Handler: s,
+		ConnState: func(conn net.Conn, state http.ConnState) {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			switch state {
+			case http.StateNew:
+				s.activeConns[conn] = struct{}{}
+			case http.StateHijacked, http.StateClosed:
+				delete(s.activeConns, conn)
+			}
+		},
+	}
+
+	s.context.Stopper.RunWorker(func() {
+		if err := server.Serve(s.listener); err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
 				log.Fatal(err)
 			}
 		}
-	}()
+	})
+
+	s.context.Stopper.RunWorker(func() {
+		<-s.context.Stopper.ShouldStop()
+		s.Close()
+	})
 }
 
 // Start runs the RPC server. After this method returns, the socket
@@ -206,12 +229,17 @@ func (s *Server) Addr() net.Addr {
 
 // Close closes the listener.
 func (s *Server) Close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closed = true
 	// If the server didn't start properly, it might not have a listener.
 	if s.listener != nil {
 		s.listener.Close()
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+
+	for conn := range s.activeConns {
+		conn.Close()
 	}
 }
 

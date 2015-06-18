@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func init() {
@@ -34,23 +35,36 @@ func init() {
 }
 
 func TestClientHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	clientContext := NewTestContext(nil, stopper)
+	serverContext := NewServerTestContext(nil, stopper)
+
 	addr := util.CreateTestAddr("tcp")
 
-	s := NewServer(addr, serverTestBaseContext)
+	s := NewServer(addr, serverContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	c := NewClient(s.Addr(), nil, clientTestBaseContext)
+	c := NewClient(s.Addr(), nil, clientContext)
 	<-c.Ready
-	if c != NewClient(s.Addr(), nil, clientTestBaseContext) {
+	if c != NewClient(s.Addr(), nil, clientContext) {
 		t.Fatal("expected cached client to be returned while healthy")
 	}
 	<-c.Ready
-	s.Close()
 }
 
 func TestClientNoCache(t *testing.T) {
-	rpcContext := serverTestBaseContext
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
+	rpcContext := NewServerTestContext(nil, stopper)
+
 	rpcContext.DisableCache = true
 	addr := util.CreateTestAddr("tcp")
 
@@ -65,16 +79,19 @@ func TestClientNoCache(t *testing.T) {
 	if c1 == c2 {
 		t.Errorf("expected different clients with cache disabled: %+v != %+v", c1, c2)
 	}
-	s.Close()
 }
 
 // TestClientHeartbeatBadServer verifies that the client is not marked
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
 	// Create a server without registering a heartbeat service.
 	serverClock := hlc.NewClock(hlc.UnixNano)
-	s := createTestServer(serverClock, t)
-	defer s.Close()
+	s := createTestServer(serverClock, stopper, t)
 
 	// Create a client. It should attempt a heartbeat and fail.
 	c := NewClient(s.Addr(), nil, s.context)
@@ -96,14 +113,17 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 
 	// A heartbeat should succeed and the client should become ready.
 	<-c.Ready
-	s.Close()
 }
 
 func TestOffsetMeasurement(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
 	serverManual := hlc.NewManualClock(10)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
-	s := createTestServer(serverClock, t)
-	defer s.Close()
+	s := createTestServer(serverClock, stopper, t)
 
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
@@ -116,7 +136,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Create a client that is 10 nanoseconds behind the server.
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewTestContext(clientClock)
+	context := NewTestContext(clientClock, stopper)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -142,10 +162,14 @@ func TestOffsetMeasurement(t *testing.T) {
 // zero offset if the heartbeat reply exceeds the
 // maximumClockReadingDelay, but not the heartbeat timeout.
 func TestDelayedOffsetMeasurement(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
 	serverManual := hlc.NewManualClock(10)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
-	s := createTestServer(serverClock, t)
-	defer s.Close()
+	s := createTestServer(serverClock, stopper, t)
 
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
@@ -162,7 +186,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
 	}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewTestContext(clientClock)
+	context := NewTestContext(clientClock, stopper)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -187,15 +211,20 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 }
 
 func TestFailedOffestMeasurement(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+
 	serverManual := hlc.NewManualClock(0)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
-	s := createTestServer(serverClock, t)
-	defer s.Close()
+	s := createTestServer(serverClock, stopper, t)
 
 	heartbeat := &ManualHeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 		ready:              make(chan struct{}),
+		stopper:            stopper,
 	}
 	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
@@ -204,7 +233,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
-	context := NewTestContext(clientClock)
+	context := NewTestContext(clientClock, stopper)
 	c := NewClient(s.Addr(), nil, context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Ready
@@ -235,9 +264,9 @@ func (ac *AdvancingClock) UnixNano() int64 {
 // createTestServer creates and starts a new server with a test tlsConfig and
 // addr. Be sure to close the server when done. Building the server manually
 // like this allows for manual registration of the heartbeat service.
-func createTestServer(serverClock *hlc.Clock, t *testing.T) *Server {
+func createTestServer(serverClock *hlc.Clock, stopper *util.Stopper, t *testing.T) *Server {
 	// Create a test context, but override the clock.
-	serverContext := NewServerTestContext(serverClock)
+	serverContext := NewServerTestContext(serverClock, stopper)
 
 	// Create the server so that we can register a manual clock.
 	addr := util.CreateTestAddr("tcp")
