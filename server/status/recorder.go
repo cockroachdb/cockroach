@@ -103,6 +103,16 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 		data = append(data, ssr.recordInt("gcbytesage", ssr.stats.GCBytesAge))
 		data = append(data, ssr.recordInt("lastupdatenanos", ssr.stats.LastUpdateNanos))
 		data = append(data, ssr.recordInt("ranges", ssr.rangeCount))
+		data = append(data, ssr.recordInt("ranges.leader", int64(ssr.leaderRangeCount)))
+		data = append(data, ssr.recordInt("ranges.replicated", int64(ssr.replicatedRangeCount)))
+		data = append(data, ssr.recordInt("ranges.available", int64(ssr.availableRangeCount)))
+
+		// Record statistics from descriptor.
+		if ssr.desc != nil {
+			capacity := ssr.desc.Capacity
+			data = append(data, ssr.recordInt("capacity", int64(capacity.Capacity)))
+			data = append(data, ssr.recordInt("capacity.available", int64(capacity.Available)))
+		}
 	})
 	nsr.lastDataCount = len(data)
 	return data

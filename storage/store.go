@@ -364,8 +364,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	}
 
 	// Add range scanner and configure with queues.
-	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s),
-		s.updateStoreStatus)
+	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s), s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
@@ -395,6 +394,11 @@ func (s *Store) Context(ctx context.Context) context.Context {
 // IsStarted returns true if the Store has been started.
 func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
+}
+
+// StartedAt returns the timestamp at which the store was most recently started.
+func (s *Store) StartedAt() int64 {
+	return s.startedAt
 }
 
 // Start the engine, set the GC and read the StoreIdent.
@@ -1573,23 +1577,24 @@ func (s *Store) WaitForRangeScanCompletion() int64 {
 	return s.scanner.WaitForScanCompletion()
 }
 
-// updateStoreStatus updates the store's status proto.
-func (s *Store) updateStoreStatus() {
-	now := s.ctx.Clock.Now().WallTime
-	timestamp := proto.Timestamp{WallTime: now}
-	scannerStats := s.scanner.Stats()
-
-	// Get the zone configs.
+// computeReplicationStatus counts a number of simple replication statistics for
+// the ranges in this store.
+// TODO(bram): It may be appropriate to compute these statistics while scanning
+// ranges. An ideal solution would be to create incremental events whenever
+// availability changes.
+func (s *Store) computeReplicationStatus(now int64) (
+	leaderRangeCount, replicatedRangeCount, availableRangeCount int32) {
+	// Get the zone configs, which are needed to determine if a range is
+	// under-replicated.
 	zoneMap, err := s.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil || zoneMap == nil {
 		log.Error("unable to get zone configs")
 		return
 	}
 
-	// Get the leader count and replication count.
-	// TODO(bram): Consider moving this to be part of the range scanner directly.
-	var leaderRangeCount, replicatedRangeCount, availableRangeCount int32
+	timestamp := proto.Timestamp{WallTime: now}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	for raftID, rng := range s.ranges {
 		zoneConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*proto.ZoneConfig)
 		raftStatus := s.RaftStatus(raftID)
@@ -1625,8 +1630,19 @@ func (s *Store) updateStoreStatus() {
 			}
 		}
 	}
-	s.mu.Unlock()
+	return
+}
 
+// updateStoreStatus updates the store's status proto.
+func (s *Store) updateStoreStatus() {
+	now := s.ctx.Clock.Now().WallTime
+	scannerStats := s.scanner.Stats()
+
+	// Get the leader count and replication count.
+	leaderRangeCount, replicatedRangeCount, availableRangeCount :=
+		s.computeReplicationStatus(now)
+
+	// Generate and store a StoreStatus object.
 	desc, err := s.Descriptor()
 	if err != nil {
 		log.Error(err)
@@ -1647,6 +1663,25 @@ func (s *Store) updateStoreStatus() {
 	if err := s.db.Put(key, status); err != nil {
 		log.Error(err)
 	}
+}
+
+// PublishStatus publishes periodically computed status events to the store's
+// events feed. This method itself should be periodically called by some
+// external mechanism.
+func (s *Store) PublishStatus() error {
+	// broadcast store descriptor.
+	desc, err := s.Descriptor()
+	if err != nil {
+		return err
+	}
+	s.feed.storeStatus(desc)
+
+	// broadcast replication status.
+	now := s.ctx.Clock.Now().WallTime
+	leaderRangeCount, replicatedRangeCount, availableRangeCount :=
+		s.computeReplicationStatus(now)
+	s.feed.replicationStatus(leaderRangeCount, replicatedRangeCount, availableRangeCount)
+	return nil
 }
 
 // SetRangeRetryOptions sets the retry options used for this store.
