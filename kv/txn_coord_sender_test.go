@@ -331,7 +331,7 @@ func verifyCleanup(key proto.Key, coord *TxnCoordSender, eng engine.Engine, t *t
 	}
 
 	if err := util.IsTrueWithin(func() bool {
-		meta := &proto.MVCCMetadata{}
+		meta := &engine.MVCCMetadata{}
 		ok, _, _, err := eng.GetProto(engine.MVCCEncodeKey(key), meta)
 		if err != nil {
 			t.Errorf("error getting MVCC metadata: %s", err)

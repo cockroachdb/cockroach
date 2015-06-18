@@ -35,7 +35,7 @@ func MergeInternalTimeSeriesData(sources ...*proto.InternalTimeSeriesData) (
 		if err != nil {
 			return nil, err
 		}
-		bytes, err := gogoproto.Marshal(&proto.MVCCMetadata{
+		bytes, err := gogoproto.Marshal(&MVCCMetadata{
 			Value: val,
 		})
 		if err != nil {
@@ -57,7 +57,7 @@ func MergeInternalTimeSeriesData(sources ...*proto.InternalTimeSeriesData) (
 	}
 
 	// Unmarshal merged bytes and extract the time series value within.
-	var mvccValue proto.MVCCMetadata
+	var mvccValue MVCCMetadata
 	if err := gogoproto.Unmarshal(mergedBytes, &mvccValue); err != nil {
 		return nil, err
 	}

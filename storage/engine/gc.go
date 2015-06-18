@@ -63,7 +63,7 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return proto.ZeroTimestamp
 		}
-		mvccVal := proto.MVCCValue{}
+		mvccVal := MVCCValue{}
 		if err := gogoproto.Unmarshal(values[i], &mvccVal); err != nil {
 			log.Errorf("unable to unmarshal MVCC value %q: %v", key, err)
 			return proto.ZeroTimestamp

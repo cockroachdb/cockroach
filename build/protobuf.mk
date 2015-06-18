@@ -44,13 +44,21 @@ CPP_PROTOS := $(filter %api.proto %data.proto %internal.proto %config.proto %err
 CPP_HEADERS := $(subst ./,$(ENGINE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(ENGINE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(ENGINE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(ENGINE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
 
+ENGINE_CPP_PROTOS := $(filter $(ENGINE_ROOT)%,$(GO_PROTOS))
+ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
+ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
+
 .PHONY: protos
-protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES)
+protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)
 
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.go | xargs rm
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
+	  sed -i.bak 's/import math "github\.com\/cockroachdb\/math"//g' $$dir/*.pb.go; \
+	  sed -i.bak -E 's/github\.com\/cockroachdb\/(gogoproto|github\.com)/\1/g' $$dir/*.pb.go; \
+	  sed -i.bak -E 's/github\.com\/cockroachdb\/(io|fmt)/\1/g' $$dir/*.pb.go; \
+	  rm -f $$dir/*.bak; \
 	done
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
@@ -62,3 +70,6 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	# only compile a single directory so we symlink the generated pb.cc files
 	# into the storage/engine directory.
 	(cd $(ENGINE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
+
+$(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ORG_ROOT) $(ENGINE_CPP_PROTOS)

@@ -10,6 +10,7 @@ import math "math"
 // discarding unused import gogoproto "gogoproto/gogo.pb"
 
 import io "io"
+
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 

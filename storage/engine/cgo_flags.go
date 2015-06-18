@@ -11,7 +11,7 @@ import (
 )
 
 // #cgo CXXFLAGS: -std=c++11
-// #cgo CPPFLAGS: -I ../../../c-protobuf/internal/src -I ../../../c-rocksdb/internal/include
+// #cgo CPPFLAGS: -I ../../.. -I ../../../c-protobuf/internal/src -I ../../../c-rocksdb/internal/include
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 import "C"

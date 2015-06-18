@@ -38,7 +38,7 @@ version key/value pairs. The MVCC metadata key is the actual key for
 the value, binary encoded using the SQL binary encoding scheme which
 contains a sentinel byte of 0x25, following by a 7-bit encoding of the
 key data with 1s in the high bit and terminated by a nil byte. The
-MVCC metadata value is of type proto.MVCCMetadata and contains the
+MVCC metadata value is of type MVCCMetadata and contains the
 most recent version timestamp and an optional proto.Transaction
 message. If set, the most recent version of the MVCC value is a
 transactional "intent". It also contains some information on the size
@@ -49,7 +49,7 @@ Each MVCC version key/value pair has a key which is also
 binary-encoded, but is suffixed with a decreasing, big-endian encoding
 of the timestamp (8 bytes for the nanosecond wall time, followed by 4
 bytes for the logical time). The MVCC version value is a message of
-type proto.MVCCValue which indicates whether the version is a deletion
+type MVCCValue which indicates whether the version is a deletion
 timestamp and if not, contains a proto.Value object which holds the
 actual value. The decreasing encoding on the timestamp sorts the most
 recent version directly after the metadata key. This increases the

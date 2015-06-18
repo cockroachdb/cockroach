@@ -155,7 +155,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	processKeysAndValues := func() {
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
-			meta := &proto.MVCCMetadata{}
+			meta := &engine.MVCCMetadata{}
 			if err := gogoproto.Unmarshal(vals[0], meta); err != nil {
 				log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
@@ -251,7 +251,7 @@ func (gcq *gcQueue) timer() time.Duration {
 // aborted or intent cannot be resolved, the oldestIntentNanos value
 // is atomically updated to the min of oldestIntentNanos and the
 // intent's timestamp. The wait group is signaled on completion.
-func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMetadata,
+func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *engine.MVCCMetadata,
 	updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 
