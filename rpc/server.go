@@ -97,17 +97,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify SSL settings and extract user from client certificate if needed.
-	insecureMode := s.context.Insecure
-	certificateUser := ""
-	if !insecureMode {
-		// Verify client certificate and extract user from Subject.CommonName.
-		certUser, err := security.GetCertificateUser(r.TLS)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		certificateUser = certUser
+	// Construct an authentication hook for this security mode and TLS state.
+	authHook, err := security.AuthenticationHook(s.context.Insecure, r.TLS)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
 	}
 
 	conn, _, err := w.(http.Hijacker).Hijack()
@@ -117,7 +111,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	security.LogTLSState("RPC", r.TLS)
 	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
-	s.serveConn(conn, insecureMode, certificateUser)
+	s.serveConn(conn, authHook)
 }
 
 // Listen listens on the configured address but does not start
@@ -255,8 +249,8 @@ func (s *Server) Close() {
 
 // serveConn synchronously serves a single connection. When the
 // connection is closed, close callbacks are invoked.
-func (s *Server) serveConn(conn net.Conn, insecureMode bool, certificateUser string) {
-	s.ServeCodec(codec.NewServerCodec(conn, insecureMode, certificateUser))
+func (s *Server) serveConn(conn net.Conn, authHook func(string) error) {
+	s.ServeCodec(codec.NewServerCodec(conn, authHook))
 	s.mu.Lock()
 	if s.closeCallbacks != nil {
 		for _, cb := range s.closeCallbacks {
