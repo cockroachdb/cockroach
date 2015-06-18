@@ -216,3 +216,28 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	}
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
+
+// AuthenticationHook builds an authentication hook based on the
+// security mode and client certificate.
+func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
+	func(string) error, error) {
+	if insecureMode {
+		// Noop in insecure mode.
+		return func(user string) error {
+			return nil
+		}, nil
+	}
+
+	// Verify client certificate and extract user from Subject.CommonName.
+	certUser, err := GetCertificateUser(tlsState)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(user string) error {
+		if certUser == NodeUser || certUser == user {
+			return nil
+		}
+		return util.Errorf("requested user is %s, but certificate is for %s", user, certUser)
+	}, nil
+}

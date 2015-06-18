@@ -29,7 +29,6 @@ import (
 	"net/rpc"
 
 	"github.com/cockroachdb/cockroach/rpc/codec/wire"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
@@ -39,9 +38,8 @@ type serverCodec struct {
 
 	methods []string
 
-	// Server/Connection settings determined at connection time.
-	insecureMode    bool
-	certificateUser string
+	// Authentication hook. May be nil in tests.
+	authenticationHook func(string) error
 
 	// temporary work space
 	respBodyBuf   bytes.Buffer
@@ -52,15 +50,14 @@ type serverCodec struct {
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
 // on the other end of the given conn.
-func NewServerCodec(conn io.ReadWriteCloser, insecureMode bool, certificateUser string) rpc.ServerCodec {
+func NewServerCodec(conn io.ReadWriteCloser, authenticationHook func(string) error) rpc.ServerCodec {
 	return &serverCodec{
 		baseConn: baseConn{
 			r: bufio.NewReader(conn),
 			w: bufio.NewWriter(conn),
 			c: conn,
 		},
-		insecureMode:    insecureMode,
-		certificateUser: certificateUser,
+		authenticationHook: authenticationHook,
 	}
 }
 
@@ -110,24 +107,11 @@ func (c *serverCodec) authenticateRequest(request proto.Message) error {
 		return util.Errorf("missing User in request: %+v", request)
 	}
 
-	if c.insecureMode {
-		// Insecure mode: trust the user in the header.
+	if c.authenticationHook == nil {
+		// No authentication hook: this is a test.
 		return nil
 	}
-
-	// The node user can do anything.
-	// TODO(marc): it would be nice to pass around the fact that we came in as "node".
-	if c.certificateUser == security.NodeUser {
-		return nil
-	}
-
-	// Check that users match.
-	if c.certificateUser != requestedUser {
-		return util.Errorf("requested user is %s, but certificate is for %s",
-			requestedUser, c.certificateUser)
-	}
-
-	return nil
+	return c.authenticationHook(requestedUser)
 }
 
 func (c *serverCodec) ReadRequestBody(x interface{}) error {
