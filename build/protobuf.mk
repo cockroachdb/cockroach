@@ -44,9 +44,9 @@ CPP_PROTOS := $(filter %api.proto %data.proto %internal.proto %config.proto %err
 CPP_HEADERS := $(subst ./,$(ENGINE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(ENGINE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(ENGINE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(ENGINE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
 
-ENGINE_PROTOS := $(sort $(shell find $(ENGINE_ROOT) -name *.proto -type f))
-ENGINE_CPP_HEADERS := $(ENGINE_PROTOS:%.proto=%.pb.h)
-ENGINE_CPP_SOURCES := $(ENGINE_PROTOS:%.proto=%.pb.cc)
+ENGINE_CPP_PROTOS := $(filter $(ENGINE_ROOT)%,$(GO_PROTOS))
+ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
+ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 
 .PHONY: protos
 protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)
@@ -71,5 +71,5 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	# into the storage/engine directory.
 	(cd $(ENGINE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
 
-$(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ORG_ROOT) $(ENGINE_PROTOS)
+$(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ORG_ROOT) $(ENGINE_CPP_PROTOS)
