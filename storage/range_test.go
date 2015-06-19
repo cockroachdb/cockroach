@@ -363,14 +363,21 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 	}
 }
 
-func TestRangeHasLeaderLease(t *testing.T) {
+// hasLease returns whether the most recent leader lease was held by the given
+// range replica and whether it's expired for the given timestamp.
+func hasLease(rng *Range, timestamp proto.Timestamp) (bool, bool) {
+	l := rng.getLease()
+	return l.OwnedBy(rng.rm.RaftNodeID()), !l.Covers(timestamp)
+}
+
+func TestRangeLeaderLease(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 	tc.clock.SetMaxOffset(maxClockOffset)
 
-	if held, _ := tc.rng.HasLeaderLease(tc.clock.Now()); !held {
+	if held, _ := hasLease(tc.rng, tc.clock.Now()); !held {
 		t.Errorf("expected lease on range start")
 	}
 	tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1))
@@ -380,7 +387,7 @@ func TestRangeHasLeaderLease(t *testing.T) {
 		Expiration: now.Add(20, 0),
 		RaftNodeID: proto.MakeRaftNodeID(2, 2),
 	})
-	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now().Add(15, 0)); held || expired {
+	if held, expired := hasLease(tc.rng, tc.clock.Now().Add(15, 0)); held || expired {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
@@ -392,7 +399,7 @@ func TestRangeHasLeaderLease(t *testing.T) {
 	// Advance clock past expiration and verify that another has
 	// leader lease will not be true.
 	tc.manualClock.Increment(21) // 21ns pass
-	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now()); held || !expired {
+	if held, expired := hasLease(tc.rng, tc.clock.Now()); held || !expired {
 		t.Errorf("expected another replica to have expired lease")
 	}
 }
@@ -929,7 +936,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 
 			t.Fatal(err)
 		}
-		if held, expired := tc.rng.HasLeaderLease(test.args.Header().Timestamp); !held || expired {
+		if held, expired := hasLease(tc.rng, test.args.Header().Timestamp); !held || expired {
 			t.Fatalf("%d: expected lease acquisition", i)
 		}
 		lease := tc.rng.getLease()
@@ -2281,6 +2288,38 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
 		appliedIndex = newAppliedIndex
+	}
+}
+
+// TestReplicaCorruption verifies that a replicaCorruptionError correctly marks
+// the range as corrupt.
+func TestReplicaCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	args, reply := putArgs(proto.Key("test"), []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
+	err := tc.rng.AddCmd(tc.rng.context(),
+		proto.Call{Args: args, Reply: reply}, true /* wait */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Set the stored applied index sky high.
+	newIndex := 2*atomic.LoadUint64(&tc.rng.appliedIndex) + 1
+	atomic.StoreUint64(&tc.rng.appliedIndex, newIndex)
+	// Not really needed, but let's be thorough.
+	err = setAppliedIndex(tc.rng.rm.Engine(), tc.rng.Desc().RaftID, newIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should mark replica corrupt (and panic as a result) since we messed
+	// with the applied index.
+	err = tc.rng.AddCmd(tc.rng.context(),
+		proto.Call{Args: args, Reply: reply}, true /* wait */)
+
+	if err == nil || !strings.Contains(err.Error(), "replica corruption (processed=true)") {
+		t.Fatalf("unexpected error: %s", err)
 	}
 }
 
