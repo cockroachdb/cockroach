@@ -24,9 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestNodeStatusMonitor(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	desc1 := &proto.RangeDescriptor{
 		RaftID:   1,
 		StartKey: proto.Key("a"),

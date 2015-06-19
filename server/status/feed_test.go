@@ -211,6 +211,7 @@ func (ner *nodeEventReader) eventFeedString() string {
 // TestServerNodeEventFeed verifies that a test server emits Node-specific
 // events.
 func TestServerNodeEventFeed(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -277,6 +278,7 @@ func TestServerNodeEventFeed(t *testing.T) {
 // TestNodeEventFeedTransactionRestart verifies that calls which indicate a
 // transaction restart are counted as successful.
 func TestNodeEventFeedTransactionRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	stopper, feed, consumers := startConsumerSet(1)
 	nodefeed := status.NewNodeEventFeed(proto.NodeID(1), feed)
 	ner := &nodeEventReader{}
