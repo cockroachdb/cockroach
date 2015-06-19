@@ -22,9 +22,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestCallError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	count := 0
 	db := newDB(newTestSender(func(call proto.Call) {
 		count++
@@ -41,6 +43,7 @@ func TestCallError(t *testing.T) {
 // TestClientCommandID verifies that client command ID is set
 // on call.
 func TestClientCommandID(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	count := 0
 	db := newDB(newTestSender(func(call proto.Call) {
 		count++

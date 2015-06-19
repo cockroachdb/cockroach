@@ -22,9 +22,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestLoadTLSConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	config, err := security.LoadServerTLSConfig(security.EmbeddedCertsDir, "node")
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)

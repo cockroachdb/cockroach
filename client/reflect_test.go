@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func fieldByName(m fieldMap, v reflect.Value, name string) reflect.Value {
@@ -30,6 +32,7 @@ func fieldByName(m fieldMap, v reflect.Value, name string) reflect.Value {
 }
 
 func TestMappingBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	type Foo struct {
 		A, B, C int64
 	}
@@ -56,6 +59,7 @@ func TestMappingBasic(t *testing.T) {
 }
 
 func TestMappingEmbedded(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	type Foo struct {
 		A int64
 	}
@@ -101,6 +105,7 @@ func TestMappingEmbedded(t *testing.T) {
 }
 
 func TestDBFields(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	type Foo struct {
 		A int
 		B string

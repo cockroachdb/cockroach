@@ -22,9 +22,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestSchemaFromModel(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	type Foo struct {
 		A int `roach:"primary key(a,b)"`
 		B int `roach:"unique index"` // equivalent to: unique index(b)

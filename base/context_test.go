@@ -22,9 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestClientSSLSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	certsDir := security.EmbeddedCertsDir
 
 	testCases := []struct {
@@ -71,6 +73,7 @@ func TestClientSSLSettings(t *testing.T) {
 }
 
 func TestServerSSLSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	certsDir := security.EmbeddedCertsDir
 
 	testCases := []struct {

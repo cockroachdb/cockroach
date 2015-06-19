@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func makeTestSchema(name string) proto.TableSchema {
@@ -56,6 +57,7 @@ func isError(err error, re string) bool {
 }
 
 func TestCreateNamespace(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 
@@ -71,6 +73,7 @@ func TestCreateNamespace(t *testing.T) {
 }
 
 func TestListNamespaces(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 
@@ -91,6 +94,7 @@ func TestListNamespaces(t *testing.T) {
 }
 
 func TestCreateTable(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 
@@ -141,6 +145,7 @@ func TestCreateTable(t *testing.T) {
 }
 
 func TestRenameTable(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 
@@ -177,6 +182,7 @@ func TestRenameTable(t *testing.T) {
 }
 
 func TestListTables(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 
@@ -202,6 +208,7 @@ func TestListTables(t *testing.T) {
 }
 
 func TestStruct(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 

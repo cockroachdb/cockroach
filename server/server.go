@@ -102,7 +102,9 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
 	rpcContext := rpc.NewContext(&ctx.Context, s.clock, stopper)
-	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
+	stopper.RunWorker(func() {
+		rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
+	})
 
 	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)

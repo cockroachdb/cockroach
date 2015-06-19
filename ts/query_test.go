@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 var (
@@ -102,6 +103,7 @@ var (
 
 // TestInterpolation verifies the interpolated average values of a single interpolatingIterator.
 func TestAvgInterpolation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	dataSpan := &dataSpan{
 		startNanos:  30,
 		sampleNanos: 10,
@@ -128,6 +130,7 @@ func TestAvgInterpolation(t *testing.T) {
 // TestSumAvgInterpolation verifies the behavior of an iteratorSet, which
 // advances multiple interpolatingIterators together.
 func TestSumAvgInterpolation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	dataSpan1 := &dataSpan{
 		startNanos:  30,
 		sampleNanos: 10,
@@ -166,6 +169,7 @@ func TestSumAvgInterpolation(t *testing.T) {
 }
 
 func TestSumRateInterpolation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	dataSpan1 := &dataSpan{
 		startNanos:  30,
 		sampleNanos: 10,
@@ -293,6 +297,7 @@ func (tm *testModel) assertQuery(name string, agg *proto.TimeSeriesQueryAggregat
 // TestQuery validates that query results match the expectation of the test
 // model.
 func TestQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()

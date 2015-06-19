@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -239,6 +240,7 @@ func datapoint(timestamp int64, val float64) *proto.TimeSeriesDatapoint {
 // TestStoreTimeSeries is a simple test of the Time Series module, ensuring that
 // it is storing time series correctly.
 func TestStoreTimeSeries(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()
@@ -300,6 +302,7 @@ func TestStoreTimeSeries(t *testing.T) {
 
 // TestPollSource verifies that polled data sources are called as expected.
 func TestPollSource(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()
