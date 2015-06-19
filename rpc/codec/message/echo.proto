@@ -13,8 +13,7 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
 message EchoRequest {
-	optional string user = 1 [(gogoproto.nullable) = false];
-	optional string msg = 2 [(gogoproto.nullable) = false];
+	optional string msg = 1 [(gogoproto.nullable) = false];
 }
 
 message EchoResponse {

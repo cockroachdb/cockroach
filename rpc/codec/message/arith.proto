@@ -9,9 +9,8 @@ option go_package = "message";
 import "gogoproto/gogo.proto";
 
 message ArithRequest {
-	optional string user = 1 [(gogoproto.nullable) = false];
-	optional int32 a = 2 [(gogoproto.nullable) = false];
-	optional int32 b = 3 [(gogoproto.nullable) = false];
+	optional int32 a = 1 [(gogoproto.nullable) = false];
+	optional int32 b = 2 [(gogoproto.nullable) = false];
 }
 
 message ArithResponse {
