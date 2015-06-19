@@ -125,7 +125,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
-	header := call.Args.Header()
+	header := call.Args.KVHeader()
 	if header.RaftID == 0 || header.Replica.StoreID == 0 {
 		var repl *proto.Replica
 		var raftID proto.RaftID

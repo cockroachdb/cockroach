@@ -139,9 +139,9 @@ func TestKVDBInternalMethods(t *testing.T) {
 	// Verify non-public methods experience bad request errors.
 	db := createTestClient(t, s.ServingAddr())
 	for i, test := range testCases {
-		test.args.Header().Key = proto.Key("a")
+		test.args.KVHeader().Key = proto.Key("a")
 		if proto.IsRange(test.args) {
-			test.args.Header().EndKey = test.args.Header().Key.Next()
+			test.args.KVHeader().EndKey = test.args.KVHeader().Key.Next()
 		}
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{Args: test.args, Reply: test.reply})
@@ -168,8 +168,8 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{
 			Args: &proto.EndTransactionRequest{
-				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
-				Commit:        true,
+				KVRequestHeader: proto.KVRequestHeader{Key: proto.Key("foo")},
+				Commit:          true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					SplitTrigger: &proto.SplitTrigger{
 						UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},

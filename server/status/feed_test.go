@@ -287,23 +287,29 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	nodeID := proto.NodeID(1)
 
 	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Error: &proto.Error{
-				TransactionRestart: proto.TransactionRestart_BACKOFF,
+		KVResponseHeader: proto.KVResponseHeader{
+			ResponseHeader: proto.ResponseHeader{
+				Error: &proto.Error{
+					TransactionRestart: proto.TransactionRestart_BACKOFF,
+				},
 			},
 		},
 	})
 	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Error: &proto.Error{
-				TransactionRestart: proto.TransactionRestart_IMMEDIATE,
+		KVResponseHeader: proto.KVResponseHeader{
+			ResponseHeader: proto.ResponseHeader{
+				Error: &proto.Error{
+					TransactionRestart: proto.TransactionRestart_IMMEDIATE,
+				},
 			},
 		},
 	})
 	nodefeed.CallComplete(&proto.PutRequest{}, &proto.PutResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Error: &proto.Error{
-				TransactionRestart: proto.TransactionRestart_ABORT,
+		KVResponseHeader: proto.KVResponseHeader{
+			ResponseHeader: proto.ResponseHeader{
+				Error: &proto.Error{
+					TransactionRestart: proto.TransactionRestart_ABORT,
+				},
 			},
 		},
 	})

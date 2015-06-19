@@ -442,9 +442,9 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 	}
 
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
-	for _, call := range calls {
-		bArgs.Add(call.Args)
-	}
+	//for _, call := range calls {
+	//bArgs.Add(call.Args)
+	//}
 	err = db.send(proto.Call{Args: bArgs, Reply: bReply})
 
 	// Recover from protobuf merge panics.

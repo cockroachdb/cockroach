@@ -76,25 +76,9 @@ message RequestHeader {
   // CmdID is optionally specified for request idempotence
   // (i.e. replay protection).
   optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
-  // The key for request. If the request operates on a range, this
-  // represents the starting key for the range.
-  optional bytes key = 3 [(gogoproto.casttype) = "Key"];
-  // The end key is empty if the request spans only a single key. Otherwise,
-  // it must order strictly after Key. In such a case, the header indicates
-  // that the operation takes place on the key range from Key to EndKey,
-  // including Key and excluding EndKey.
-  optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
   // User is the originating user. Used to lookup priority when
   // scheduling queued operations at target node.
   optional string user = 5 [(gogoproto.nullable) = false];
-  // Replica specifies the destination for the request. This is a specific
-  // instance of the available replicas belonging to RangeID.
-  optional Replica replica = 6 [(gogoproto.nullable) = false];
-  // RaftID specifies the ID of the Raft consensus group which the key
-  // range belongs to. This is used by the receiving node to route the
-  // request to the correct range.
-  optional int64 raft_id = 7 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
   // UserPriority specifies priority multiple for non-transactional
   // commands. This value should be a positive integer [1, 2^31-1).
   // It's properly viewed as a multiple for how likely this
@@ -135,27 +119,53 @@ message ResponseHeader {
   optional Transaction txn = 3;
 }
 
+// KVRequestHeader is supplied with every KV node request.
+message KVRequestHeader {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The key for request. If the request operates on a range, this
+  // represents the starting key for the range.
+  optional bytes key = 3 [(gogoproto.casttype) = "Key"];
+  // The end key is empty if the request spans only a single key. Otherwise,
+  // it must order strictly after Key. In such a case, the header indicates
+  // that the operation takes place on the key range from Key to EndKey,
+  // including Key and excluding EndKey.
+  optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+  // Replica specifies the destination for the request. This is a specific
+  // instance of the available replicas belonging to RangeID.
+  optional Replica replica = 6 [(gogoproto.nullable) = false];
+  // RaftID specifies the ID of the Raft consensus group which the key
+  // range belongs to. This is used by the receiving node to route the
+  // request to the correct range.
+  optional int64 raft_id = 7 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
+}
+
+// KVResponseHeader is supplied with every KV node request.
+message KVResponseHeader {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A GetRequest is the argument for the Get() method.
 message GetRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
 message GetResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2;
 }
 
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
 // A PutResponse is the return value from the Put() method.
 message PutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
@@ -165,7 +175,7 @@ message PutResponse {
 // - If key exists, but value is empty and ExpValue is not nil but empty, sets value.
 // - Otherwise, returns error and the actual value of the key in the response.
 message ConditionalPutRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   optional Value value = 2 [(gogoproto.nullable) = false];
   // ExpValue.Bytes empty to test for non-existence. Specify as nil
@@ -177,7 +187,7 @@ message ConditionalPutRequest {
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 message ConditionalPutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An IncrementRequest is the argument to the Increment() method. It
@@ -187,7 +197,7 @@ message ConditionalPutResponse {
 // by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
 // cannot be invoked on an incremented key.
 message IncrementRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 increment = 2 [(gogoproto.nullable) = false];
 }
 
@@ -195,24 +205,24 @@ message IncrementRequest {
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
 message IncrementResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 new_value = 2 [(gogoproto.nullable) = false];
 }
 
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteResponse is the return value from the Delete() method.
 message DeleteResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
 message DeleteRangeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // If 0, *all* entries between Key (inclusive) and EndKey
   // (exclusive) are deleted. Must be >= 0
   optional int64 max_entries_to_delete = 2 [(gogoproto.nullable) = false];
@@ -221,7 +231,7 @@ message DeleteRangeRequest {
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
 message DeleteRangeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Number of entries removed.
   optional int64 num_deleted = 2 [(gogoproto.nullable) = false];
 }
@@ -229,14 +239,14 @@ message DeleteRangeResponse {
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for the scan and the maximum number of results.
 message ScanRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Must be > 0.
   optional int64 max_results = 2 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
 message ScanResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
 }
@@ -244,7 +254,7 @@ message ScanResponse {
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
 // specifies whether to commit or roll back an extant transaction.
 message EndTransactionRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   optional bool commit = 2 [(gogoproto.nullable) = false];
   // Optional commit triggers. Note that commit triggers are for
@@ -255,7 +265,7 @@ message EndTransactionRequest {
 
 // An EndTransactionResponse is the return value from the
 // EndTransaction() method. The final transaction record is returned
-// as part of the response header. In particular, transaction status
+// as part of the response kvheader. In particular, transaction status
 // and timestamp will be updated to reflect final committed
 // values. Clients may propagate the transaction timestamp as the
 // final txn commit timestamp in order to preserve causal ordering
@@ -264,7 +274,7 @@ message EndTransactionRequest {
 // signalling completion of the transaction to another distributed
 // node to maintain consistency.
 message EndTransactionResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Remaining time (ns).
   optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
   // List of intents resolved by EndTransaction call.
@@ -307,32 +317,32 @@ message ResponseUnion {
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
 //
-// The RequestHeader should contain the Key of the first request
+// The KVRequestHeader should contain the Key of the first request
 // in the batch. It also contains the transaction itself; individual
 // calls must not have transactions specified. The same applies to
 // the User and UserPriority fields.
 message BatchRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }
 
 // A BatchResponse contains one or more responses, one per request
 // corresponding to the requests in the matching BatchRequest. The
-// error in the response header is set to the first error from the
+// error in the response kvheader is set to the first error from the
 // slice of responses, if applicable.
 message BatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
-// existing range which contains RequestHeader.Key is split by
+// existing range which contains KVRequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
 // determine a split key that is roughly halfway through the
 // range. The existing range is resized to cover only its start key to
 // the split key. The new range created by the split starts at the
 // split key and extends to the original range's end key. If split_key
-// is known, header.key should also be set to split_key.
+// is known, kvheader.key should also be set to split_key.
 //
 // New range IDs for each of the split range's replica and a new Raft
 // ID are generated by the operation. Split requests are done in the
@@ -346,14 +356,14 @@ message BatchResponse {
 // metadata (e.g. response cache and range stats must be copied or
 // recomputed).
 message AdminSplitRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional bytes split_key = 2 [(gogoproto.casttype) = "Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
 message AdminSplitResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeRequest is the argument to the AdminMerge() method. A
@@ -366,11 +376,11 @@ message AdminSplitResponse {
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
 message AdminMergeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVRequestHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
 message AdminMergeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional KVResponseHeader kvheader = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

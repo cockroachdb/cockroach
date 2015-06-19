@@ -61,8 +61,8 @@ func (br *InternalBatchRequest) Add(args Request) {
 		panic(fmt.Sprintf("unable to add %T to internal batch request", args))
 	}
 	if br.Key == nil {
-		br.Key = args.Header().Key
-		br.EndKey = args.Header().EndKey
+		br.Key = args.KVHeader().Key
+		br.EndKey = args.KVHeader().EndKey
 	}
 	br.Requests = append(br.Requests, union)
 }

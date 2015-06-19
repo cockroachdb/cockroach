@@ -325,12 +325,14 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
 	args := &proto.InternalLeaderLeaseRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:       r.Desc().StartKey,
-			Timestamp: timestamp,
-			CmdID: proto.ClientCmdID{
-				WallTime: r.rm.Clock().Now().WallTime,
-				Random:   rand.Int63(),
+		KVRequestHeader: proto.KVRequestHeader{
+			Key: r.Desc().StartKey,
+			RequestHeader: proto.RequestHeader{
+				Timestamp: timestamp,
+				CmdID: proto.ClientCmdID{
+					WallTime: r.rm.Clock().Now().WallTime,
+					Random:   rand.Int63(),
+				},
 			},
 		},
 		Lease: proto.Lease{
@@ -508,7 +510,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(ctx context.Context, call proto.Call, wait bool) error {
 	args, reply := call.Args, call.Reply
-	header := args.Header()
+	header := args.KVHeader()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 		reply.Header().SetGoError(err)
@@ -530,7 +532,7 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call, wait bool) error {
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
 // invocation of endCmd().
-func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{} {
+func (r *Range) beginCmd(header *proto.KVRequestHeader, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
 	r.cmdQ.GetWait(header.Key, header.EndKey, readOnly, &wg)
@@ -551,8 +553,9 @@ func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{}
 func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOnly bool) {
 	r.Lock()
 	if err == nil && usesTimestampCache(args) {
+		kvheader := args.KVHeader()
 		header := args.Header()
-		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.GetID(), readOnly)
+		r.tsCache.Add(kvheader.Key, kvheader.EndKey, header.Timestamp, header.Txn.GetID(), readOnly)
 	}
 	r.cmdQ.Remove(cmdKey)
 	r.Unlock()
@@ -608,7 +611,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
-	cmdKey := r.beginCmd(header, true)
+	cmdKey := r.beginCmd(args.KVHeader(), true)
 
 	// This replica must have leader lease to process a consistent read.
 	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
@@ -643,13 +646,14 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
+	kvheader := args.KVHeader()
 
 	// Add the write to the command queue to gate subsequent overlapping
 	// Commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
-	cmdKey := r.beginCmd(header, false)
+	cmdKey := r.beginCmd(kvheader, false)
 
 	// This replica must have leader lease to process a write.
 	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
@@ -668,7 +672,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// inform the final commit timestamp.
 	if usesTimestampCache(args) {
 		r.Lock()
-		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, header.Txn.GetID())
+		rTS, wTS := r.tsCache.GetMax(kvheader.Key, kvheader.EndKey, header.Txn.GetID())
 		r.Unlock()
 
 		// Always push the timestamp forward if there's been a read which
@@ -812,6 +816,7 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 	}()
 
 	header := args.Header()
+	kvheader := args.KVHeader()
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
@@ -877,10 +882,10 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 		// Maybe update gossip configs on a put.
 		switch args.(type) {
 		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-			if header.Key.Less(keys.SystemMax) {
+			if kvheader.Key.Less(keys.SystemMax) {
 				// We hold the lock already.
 				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
-					return bytes.HasPrefix(header.Key, configPrefix)
+					return bytes.HasPrefix(kvheader.Key, configPrefix)
 				})
 			}
 		}

@@ -151,12 +151,14 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		endKey := o.Key.End().(proto.Key)
 		if !key.Next().Equal(endKey) {
 			call.Args = &proto.InternalResolveIntentRangeRequest{
-				RequestHeader: proto.RequestHeader{
-					Timestamp: txn.Timestamp,
-					Key:       key,
-					EndKey:    endKey,
-					User:      storage.UserRoot,
-					Txn:       txn,
+				KVRequestHeader: proto.KVRequestHeader{
+					RequestHeader: proto.RequestHeader{
+						Timestamp: txn.Timestamp,
+						User:      storage.UserRoot,
+						Txn:       txn,
+					},
+					Key:    key,
+					EndKey: endKey,
 				},
 			}
 			call.Reply = &proto.InternalResolveIntentRangeResponse{}
@@ -172,11 +174,13 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 				continue
 			}
 			call.Args = &proto.InternalResolveIntentRequest{
-				RequestHeader: proto.RequestHeader{
-					Timestamp: txn.Timestamp,
-					Key:       key,
-					User:      storage.UserRoot,
-					Txn:       txn,
+				KVRequestHeader: proto.KVRequestHeader{
+					RequestHeader: proto.RequestHeader{
+						Timestamp: txn.Timestamp,
+						User:      storage.UserRoot,
+						Txn:       txn,
+					},
+					Key: key,
 				},
 			}
 			call.Reply = &proto.InternalResolveIntentResponse{}
@@ -186,11 +190,11 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		if stopper.StartTask() {
 			go func() {
 				if log.V(2) {
-					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+					log.Infof("cleaning up intent %q for txn %s", call.Args.KVHeader().Key, txn)
 				}
 				sender.Send(context.TODO(), call)
 				if call.Reply.Header().Error != nil {
-					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
+					log.Warningf("failed to cleanup %q intent: %s", call.Args.KVHeader().Key, call.Reply.Header().GoError())
 				}
 				stopper.FinishTask()
 			}()
@@ -306,7 +310,7 @@ func (tc *TxnCoordSender) startStats() {
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
 func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
-	header := call.Args.Header()
+	header := call.Args.KVHeader()
 	tc.maybeBeginTxn(header)
 
 	// Process batch specially; otherwise, send via wrapped sender.
@@ -315,7 +319,7 @@ func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
 		tc.sendBatch(args, call.Reply.(*proto.InternalBatchResponse))
 	case *proto.BatchRequest:
 		// Convert the batch request to internal-batch request.
-		internalArgs := &proto.InternalBatchRequest{RequestHeader: args.RequestHeader}
+		internalArgs := &proto.InternalBatchRequest{KVRequestHeader: args.KVRequestHeader}
 		internalReply := &proto.InternalBatchResponse{}
 		for i := range args.Requests {
 			internalArgs.Add(args.Requests[i].GetValue().(proto.Request))
@@ -336,7 +340,7 @@ func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
 // in the request but has a nil ID. The new transaction is initialized
 // using the name and isolation in the otherwise uninitialized txn.
 // The Priority, if non-zero is used as a minimum.
-func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
+func (tc *TxnCoordSender) maybeBeginTxn(header *proto.KVRequestHeader) {
 	if header.Txn != nil {
 		if len(header.Txn.ID) == 0 {
 			newTxn := proto.NewTransaction(header.Txn.Name, keys.KeyAddress(header.Key), header.GetUserPriority(),
@@ -367,6 +371,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 func (tc *TxnCoordSender) sendOne(call proto.Call) {
 	var startNS int64
 	header := call.Args.Header()
+	kvheader := call.Args.KVHeader()
 	// If this call is part of a transaction...
 	if header.Txn != nil {
 		// Set the timestamp to the original timestamp for read-only
@@ -379,7 +384,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 		}
 		// EndTransaction must have its key set to that of the txn.
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
-			header.Key = header.Txn.Key
+			kvheader.Key = header.Txn.Key
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
@@ -394,7 +399,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 		if call.Reply.Header().Txn == nil {
 			call.Reply.Header().Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
 		}
-		tc.updateResponseTxn(header, call.Reply.Header())
+		tc.updateResponseTxn(kvheader, call.Reply.Header())
 	}
 
 	if txn := call.Reply.Header().Txn; txn != nil {
@@ -418,7 +423,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 					tc.txns[id] = txnMeta
 					tc.heartbeat(id)
 				}
-				txnMeta.addKeyRange(header.Key, header.EndKey)
+				txnMeta.addKeyRange(kvheader.Key, kvheader.EndKey)
 			}
 			// Update our record of this transaction.
 			if txnMeta != nil {
@@ -548,7 +553,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batch
 // timestamp and error. The timestamp may have changed upon
 // encountering a newer write or read. Both the timestamp and the
 // priority may change depending on error conditions.
-func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
+func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.KVRequestHeader, replyHeader *proto.ResponseHeader) {
 	// Move txn timestamp forward to response timestamp if applicable.
 	if replyHeader.Txn.Timestamp.Less(replyHeader.Timestamp) {
 		replyHeader.Txn.Timestamp = replyHeader.Timestamp
@@ -688,14 +693,16 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 				}
 
 				request := &proto.InternalHeartbeatTxnRequest{
-					RequestHeader: proto.RequestHeader{
-						Key:  txn.Key,
-						User: storage.UserRoot,
-						Txn:  &txn,
+					KVRequestHeader: proto.KVRequestHeader{
+						RequestHeader: proto.RequestHeader{
+							User: storage.UserRoot,
+							Txn:  &txn,
+						},
+						Key: txn.Key,
 					},
 				}
 
-				request.Header().Timestamp = tc.clock.Now()
+				request.KVHeader().Timestamp = tc.clock.Now()
 				reply := &proto.InternalHeartbeatTxnResponse{}
 				call := proto.Call{
 					Args:  request,

@@ -36,8 +36,8 @@ import (
 var (
 	testKey     = proto.Key("a")
 	testTS      = proto.Timestamp{WallTime: 1, Logical: 1}
-	testPutReq  = &proto.PutRequest{RequestHeader: proto.RequestHeader{Timestamp: testTS, Key: testKey}}
-	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
+	testPutReq  = &proto.PutRequest{KVRequestHeader: proto.KVRequestHeader{RequestHeader: proto.RequestHeader{Timestamp: testTS}, Key: testKey}}
+	testPutResp = &proto.PutResponse{KVResponseHeader: proto.KVResponseHeader{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}}
 )
 
 func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {

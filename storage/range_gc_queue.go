@@ -90,7 +90,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{
 		Args: &proto.InternalRangeLookupRequest{
-			RequestHeader: proto.RequestHeader{
+			KVRequestHeader: proto.KVRequestHeader{
 				Key: keys.RangeMetaKey(rng.Desc().StartKey),
 			},
 			MaxRanges: 1,
