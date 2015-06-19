@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Server is a Cockroach-specific RPC server with an embedded go RPC
@@ -249,7 +250,7 @@ func (s *Server) Close() {
 
 // serveConn synchronously serves a single connection. When the
 // connection is closed, close callbacks are invoked.
-func (s *Server) serveConn(conn net.Conn, authHook func(string) error) {
+func (s *Server) serveConn(conn net.Conn, authHook func(proto.Message) error) {
 	s.ServeCodec(codec.NewServerCodec(conn, authHook))
 	s.mu.Lock()
 	if s.closeCallbacks != nil {
