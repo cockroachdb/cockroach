@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // This is just the mechanics of certs generation.
 func TestGenerateCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
 	defer ResetTest()
@@ -68,6 +70,7 @@ func TestGenerateCerts(t *testing.T) {
 // This is a fairly high-level test of CA and node certificates.
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
 	defer ResetTest()
