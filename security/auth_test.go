@@ -116,7 +116,9 @@ func TestAuthenticationHook(t *testing.T) {
 		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("bar"), true, false},
 		// Secure mode, user mismatch, but client certificate is for the node user.
 		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), makeUserRequest("bar"), true, true},
-		// Secure mode, matchin users.
+		// Secure mode, user mismatch, and the root user does not get blind permissions.
+		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), makeUserRequest("bar"), true, false},
+		// Secure mode, matching users.
 		{false, makeFakeTLSState([]string{"foo"}, []int{1}), makeUserRequest("foo"), true, true},
 	}
 
