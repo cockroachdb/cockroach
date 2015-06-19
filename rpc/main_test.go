@@ -46,11 +46,11 @@ func NewServerTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
 	return NewContext(testutils.NewServerTestBaseContext(), clock, stopper)
 }
 
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
 }
+
+//go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
 	leaktest.TestMainWithLeakCheck(m)
