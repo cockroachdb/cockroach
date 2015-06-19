@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -149,40 +150,44 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 // clock from the true cluster time is within MaxOffset. If the offset exceeds
 // MaxOffset, then this method will trigger a fatal error, causing the node to
 // suicide.
-func (r *RemoteClockMonitor) MonitorRemoteOffsets() {
+func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *util.Stopper) {
 	if log.V(1) {
 		log.Infof("monitoring cluster offset")
 	}
 	for {
-		time.Sleep(monitorInterval)
-		offsetInterval, err := r.findOffsetInterval()
-		// By the contract of the hlc, if the value is 0, then safety checking
-		// of the max offset is disabled. However we may still want to
-		// propagate the information to a status node.
-		// TODO(embark): once there is a framework for collecting timeseries
-		// data about the db, propagate the offset status to that.
-		// Don't forget to protect r.offsets through the Mutex if those
-		// Fatalf's below ever turn into something less destructive.
-		if r.lClock.MaxOffset() != 0 {
-			if err != nil {
-				log.Fatalf("clock offset from the cluster time "+
-					"for remote clocks %v could not be determined: %s",
-					r.offsets, err)
-			}
+		select {
+		case <-stopper.ShouldStop():
+			return
+		case <-time.After(monitorInterval):
+			offsetInterval, err := r.findOffsetInterval()
+			// By the contract of the hlc, if the value is 0, then safety checking
+			// of the max offset is disabled. However we may still want to
+			// propagate the information to a status node.
+			// TODO(embark): once there is a framework for collecting timeseries
+			// data about the db, propagate the offset status to that.
+			// Don't forget to protect r.offsets through the Mutex if those
+			// Fatalf's below ever turn into something less destructive.
+			if r.lClock.MaxOffset() != 0 {
+				if err != nil {
+					log.Fatalf("clock offset from the cluster time "+
+						"for remote clocks %v could not be determined: %s",
+						r.offsets, err)
+				}
 
-			if !isHealthyOffsetInterval(offsetInterval, r.lClock.MaxOffset()) {
-				log.Fatalf("clock offset from the cluster time "+
-					"for remote clocks: %v is in interval: %s, which "+
-					"indicates that the true offset is greater than %s",
-					r.offsets, offsetInterval, time.Duration(r.lClock.MaxOffset()))
+				if !isHealthyOffsetInterval(offsetInterval, r.lClock.MaxOffset()) {
+					log.Fatalf("clock offset from the cluster time "+
+						"for remote clocks: %v is in interval: %s, which "+
+						"indicates that the true offset is greater than %s",
+						r.offsets, offsetInterval, time.Duration(r.lClock.MaxOffset()))
+				}
+				if log.V(1) {
+					log.Infof("healthy cluster offset: %s", offsetInterval)
+				}
 			}
-			if log.V(1) {
-				log.Infof("healthy cluster offset: %s", offsetInterval)
-			}
+			r.mu.Lock()
+			r.lastMonitoredAt = r.lClock.PhysicalNow()
+			r.mu.Unlock()
 		}
-		r.mu.Lock()
-		r.lastMonitoredAt = r.lClock.PhysicalNow()
-		r.mu.Unlock()
 	}
 }
 

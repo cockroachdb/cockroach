@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -57,6 +58,7 @@ func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {
 
 // TestHTTPSenderSend verifies sending posts.
 func TestHTTPSenderSend(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	server, addr := startTestHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected method POST; got %s", r.Method)
@@ -102,6 +104,7 @@ func TestHTTPSenderSend(t *testing.T) {
 // TestHTTPSenderRetryResponseCodes verifies that send is retried
 // on some HTTP response codes but not on others.
 func TestHTTPSenderRetryResponseCodes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	retryOptions := defaultRetryOptions
 	retryOptions.Backoff = 1 * time.Millisecond
 
@@ -169,6 +172,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 // TestHTTPSenderRetryHTTPSendError verifies that send is retried
 // on all errors sending HTTP requests.
 func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	retryOptions := defaultRetryOptions
 	retryOptions.Backoff = 1 * time.Millisecond
 

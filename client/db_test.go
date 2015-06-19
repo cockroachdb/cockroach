@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func setup() (*server.TestServer, *client.DB) {
@@ -268,6 +269,7 @@ func ExampleDB_Insecure() {
 }
 
 func TestOpenArgs(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -292,6 +294,7 @@ func TestOpenArgs(t *testing.T) {
 }
 
 func TestDebugName(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setup()
 	defer s.Stop()
 
@@ -306,6 +309,7 @@ func TestDebugName(t *testing.T) {
 }
 
 func TestCommonMethods(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	batchType := reflect.TypeOf(&client.Batch{})
 	dbType := reflect.TypeOf(&client.DB{})
 	txnType := reflect.TypeOf(&client.Txn{})

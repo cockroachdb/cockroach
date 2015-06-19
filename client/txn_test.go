@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -66,6 +67,7 @@ func newTestSender(handler func(proto.Call)) SenderFunc {
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	makeTS := func(walltime int64, logical int32) proto.Timestamp {
 		return proto.Timestamp{
 			WallTime: walltime,
@@ -104,6 +106,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(call proto.Call) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
@@ -123,6 +126,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 // Also verifies that User and UserPriority are propagated to the
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(call proto.Call) {}))
 	db.user = "foo"
 	db.userPriority = 101
@@ -143,6 +147,7 @@ func TestTransactionConfig(t *testing.T) {
 // committed but EndTransaction is not sent if only read-only
 // operations were performed.
 func TestCommitReadOnlyTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var calls []proto.Method
 	db := newDB(newTestSender(func(call proto.Call) {
 		calls = append(calls, call.Method())
@@ -162,6 +167,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 // TestCommitMutatingTransaction verifies that transaction is committed
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var calls []proto.Method
 	db := newDB(newTestSender(func(call proto.Call) {
 		calls = append(calls, call.Method())
@@ -184,6 +190,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 // ended explicitly in the retryable func, it is not automatically
 // ended a second time at completion of retryable func.
 func TestCommitTransactionOnce(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	count := 0
 	db := newDB(newTestSender(func(call proto.Call) {
 		count++
@@ -201,6 +208,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 // TestAbortReadOnlyTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
 func TestAbortReadOnlyTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(call proto.Call) {
 		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			t.Errorf("did not expect EndTransaction")
@@ -216,6 +224,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 // TestAbortMutatingTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
 func TestAbortMutatingTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var calls []proto.Method
 	db := newDB(newTestSender(func(call proto.Call) {
 		calls = append(calls, call.Method())
@@ -241,6 +250,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 // TestRunTransactionRetryOnErrors verifies that the transaction
 // is retried on the correct errors.
 func TestRunTransactionRetryOnErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		err   error
 		retry bool // Expect retry?
