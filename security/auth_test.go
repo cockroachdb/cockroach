@@ -26,6 +26,7 @@ import (
 
 	cockroach_proto "github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -51,6 +52,7 @@ func makeFakeTLSState(commonNames []string, chainLengths []int) *tls.ConnectionS
 }
 
 func TestGetCertificateUser(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Nil TLS state.
 	if _, err := security.GetCertificateUser(nil); err == nil {
 		t.Error("unexpected success")
@@ -92,6 +94,7 @@ func makeUserRequest(user string) proto.Message {
 }
 
 func TestAuthenticationHook(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Proto that does not implement GetUser.
 	badRequest := &cockroach_proto.GetResponse{}
 
