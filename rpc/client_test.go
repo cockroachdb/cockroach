@@ -40,18 +40,18 @@ func TestClientHeartbeat(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
-	serverContext := NewServerTestContext(nil, stopper)
-
 	addr := util.CreateTestAddr("tcp")
 
+	serverContext := NewServerTestContext(nil, stopper)
+
+	// Heartbeats are node-to-node requests: use server context for both server and client.
 	s := NewServer(addr, serverContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	c := NewClient(s.Addr(), nil, clientContext)
+	c := NewClient(s.Addr(), nil, serverContext)
 	<-c.Ready
-	if c != NewClient(s.Addr(), nil, clientContext) {
+	if c != NewClient(s.Addr(), nil, serverContext) {
 		t.Fatal("expected cached client to be returned while healthy")
 	}
 	<-c.Ready
@@ -134,9 +134,10 @@ func TestOffsetMeasurement(t *testing.T) {
 	}
 
 	// Create a client that is 10 nanoseconds behind the server.
+	// Use the server context (heartbeat is node-to-node).
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewTestContext(clientClock, stopper)
+	context := NewServerTestContext(clientClock, stopper)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -186,7 +187,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
 	}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewTestContext(clientClock, stopper)
+	context := NewServerTestContext(clientClock, stopper)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -233,7 +234,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
-	context := NewTestContext(clientClock, stopper)
+	context := NewServerTestContext(clientClock, stopper)
 	c := NewClient(s.Addr(), nil, context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Ready

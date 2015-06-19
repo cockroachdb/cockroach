@@ -59,7 +59,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	rpcContext := rpc.NewContext(testBaseContext, ctx.Clock, stopper)
+	rpcContext := rpc.NewContext(serverTestBaseContext, ctx.Clock, stopper)
 	g := gossip.New(rpcContext, testContext.GossipInterval, testContext.GossipBootstrapResolvers)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.

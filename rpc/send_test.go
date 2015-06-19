@@ -50,9 +50,8 @@ func TestSendToOneClient(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
-	ServerContext := NewServerTestContext(nil, stopper)
-	s := createAndStartNewServer(t, ServerContext)
+	serverContext := NewServerTestContext(nil, stopper)
+	s := createAndStartNewServer(t, serverContext)
 
 	opts := Options{
 		N:               1,
@@ -60,7 +59,7 @@ func TestSendToOneClient(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	replies, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext)
+	replies, err := sendPing(opts, []net.Addr{s.Addr()}, serverContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +76,6 @@ func TestSendToMultipleClients(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
 	serverContext := NewServerTestContext(nil, stopper)
 
 	numServers := 4
@@ -94,7 +92,7 @@ func TestSendToMultipleClients(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         1 * time.Second,
 		}
-		replies, err := sendPing(opts, addrs, clientContext)
+		replies, err := sendPing(opts, addrs, serverContext)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,12 +110,11 @@ func TestRetryableError(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
 	serverContext := NewServerTestContext(nil, stopper)
 	s := createAndStartNewServer(t, serverContext)
 
 	// Wait until the server becomes ready and shut down the server.
-	c := NewClient(s.Addr(), nil, clientContext)
+	c := NewClient(s.Addr(), nil, serverContext)
 	<-c.Ready
 	// Directly call Close() to close the connection without
 	// removing the client from the cache.
@@ -130,7 +127,7 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, serverContext); err != nil {
 		retryErr, ok := err.(util.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -151,7 +148,6 @@ func TestUnretryableError(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
 	serverContext := NewServerTestContext(nil, stopper)
 	s := createAndStartNewServer(t, serverContext)
 
@@ -169,7 +165,7 @@ func TestUnretryableError(t *testing.T) {
 	getReply := func() interface{} {
 		return 0
 	}
-	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, clientContext)
+	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, serverContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -197,7 +193,6 @@ func TestClientNotReady(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
 	serverContext := NewServerTestContext(nil, stopper)
 
 	addr := util.CreateTestAddr("tcp")
@@ -223,7 +218,7 @@ func TestClientNotReady(t *testing.T) {
 	}
 
 	// Send RPC to an address where no server is running.
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, serverContext); err != nil {
 		retryErr, ok := err.(util.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -240,7 +235,7 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0 * time.Nanosecond
 	c := make(chan interface{})
 	go func() {
-		if _, err := sendPing(opts, []net.Addr{s.Addr()}, clientContext); err == nil {
+		if _, err := sendPing(opts, []net.Addr{s.Addr()}, serverContext); err == nil {
 			t.Fatalf("expected error when client is closed")
 		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
 			t.Fatal(err)
@@ -255,7 +250,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will
 	// cause the blocked ping RPC to finish.
-	client := NewClient(s.Addr(), nil, clientContext)
+	client := NewClient(s.Addr(), nil, serverContext)
 	client.Close()
 	select {
 	case <-c:
@@ -272,7 +267,6 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	clientContext := NewTestContext(nil, stopper)
 	serverContext := NewServerTestContext(nil, stopper)
 
 	testCases := []struct {
@@ -357,7 +351,7 @@ func TestComplexScenarios(t *testing.T) {
 		}
 		defer func() { sendOneFn = sendOne }()
 
-		replies, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, clientContext)
+		replies, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, serverContext)
 		if test.success {
 			if len(replies) != test.numRequests {
 				t.Errorf("%d: %v replies are expected, but got %v", i, test.numRequests, len(replies))

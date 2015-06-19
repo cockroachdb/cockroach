@@ -212,16 +212,9 @@ func (s *Server) authenticateRequest(handler http.Handler) func(http.ResponseWri
 			return
 		}
 
-		security.LogRequestCertificates(r)
-		// Verify that we have:
-		// - a TLS config
-		// - at least one client certificate
-		// - all client certificates have a valid chain
-		// TODO(marc): we should verify that the chain ends in our CA. Is it really needed though? It should be the only
-		// one in the pool.
-		// We should probably check for exactly one cert.
-		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || len(r.TLS.VerifiedChains) != len(r.TLS.PeerCertificates) {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		_, err := security.GetCertificateUser(r.TLS)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 		handler.ServeHTTP(w, r)

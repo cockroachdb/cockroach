@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 var testBaseContext = testutils.NewTestBaseContext()
 var serverTestBaseContext = testutils.NewServerTestBaseContext()
+var insecureTestBaseContext = &base.Context{Insecure: true, User: security.NodeUser}
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {

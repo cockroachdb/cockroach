@@ -37,10 +37,11 @@ const (
 
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
+// We use insecure contexts since we do not have certificates for unix sockets.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
 	stopper = util.NewStopper()
-	lRPCContext := rpc.NewContext(serverTestBaseContext, lclock, stopper)
+	lRPCContext := rpc.NewContext(insecureTestBaseContext, lclock, stopper)
 
 	laddr := util.CreateTestAddr("unix")
 	lserver := rpc.NewServer(laddr, lRPCContext)
@@ -58,7 +59,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
-	rRPCContext := rpc.NewContext(serverTestBaseContext, rclock, stopper)
+	rRPCContext := rpc.NewContext(insecureTestBaseContext, rclock, stopper)
 	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
@@ -93,7 +94,7 @@ func TestClientGossip(t *testing.T) {
 	client := newClient(remote.is.NodeAddr)
 	// Use an insecure context. We're talking to unix socket which are not in the certs.
 	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, lclock, stopper)
+	rpcContext := rpc.NewContext(insecureTestBaseContext, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
 	if err := util.IsTrueWithin(func() bool {

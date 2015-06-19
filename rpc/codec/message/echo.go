@@ -15,11 +15,9 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package security
+package message
 
-const (
-	// NodeUser is used by nodes for intra-cluster traffic.
-	NodeUser = "node"
-	// RootUser is the default cluster administrator.
-	RootUser = "root"
-)
+// GetUser implements the userRequest interface used by authentication.
+func (e *EchoRequest) GetUser() string {
+	return "test"
+}

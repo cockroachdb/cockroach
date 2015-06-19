@@ -37,6 +37,9 @@ type serverCodec struct {
 
 	methods []string
 
+	// Post body-decoding hook. May be nil in tests.
+	requestBodyHook func(proto.Message) error
+
 	// temporary work space
 	respBodyBuf   bytes.Buffer
 	respHeaderBuf bytes.Buffer
@@ -46,13 +49,14 @@ type serverCodec struct {
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
 // on the other end of the given conn.
-func NewServerCodec(conn io.ReadWriteCloser) rpc.ServerCodec {
+func NewServerCodec(conn io.ReadWriteCloser, requestBodyHook func(proto.Message) error) rpc.ServerCodec {
 	return &serverCodec{
 		baseConn: baseConn{
 			r: bufio.NewReader(conn),
 			w: bufio.NewWriter(conn),
 			c: conn,
 		},
+		requestBodyHook: requestBodyHook,
 	}
 }
 
@@ -79,6 +83,12 @@ func (c *serverCodec) ReadRequestHeader(r *rpc.Request) error {
 	return nil
 }
 
+// UserRequest is an interface for RPC requests that have a "requested user".
+type UserRequest interface {
+	// GetUser returns the user from the request.
+	GetUser() string
+}
+
 func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	if x == nil {
 		return nil
@@ -95,9 +105,12 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	if err != nil {
 		return err
 	}
-
 	c.reqHeader.Reset()
-	return nil
+
+	if c.requestBodyHook == nil {
+		return nil
+	}
+	return c.requestBodyHook(request)
 }
 
 func (c *serverCodec) WriteResponse(r *rpc.Response, x interface{}) error {
@@ -176,13 +189,6 @@ func (c *serverCodec) readRequestHeader(r *bufio.Reader, header *wire.RequestHea
 func (c *serverCodec) readRequestBody(r *bufio.Reader, header *wire.RequestHeader,
 	request proto.Message) error {
 	return c.recvProto(request, header.UncompressedSize, decompressors[header.Compression])
-}
-
-// ServeConn runs the Protobuf-RPC server on a single connection.
-// ServeConn blocks, serving the connection until the client hangs up.
-// The caller typically invokes ServeConn in a go statement.
-func ServeConn(conn io.ReadWriteCloser) {
-	rpc.ServeCodec(NewServerCodec(conn))
 }
 
 type marshalTo interface {

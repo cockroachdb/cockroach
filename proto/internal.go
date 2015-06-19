@@ -100,3 +100,10 @@ func (samp *InternalTimeSeriesSample) Minimum() float64 {
 	}
 	return samp.GetMin()
 }
+
+// GetUser implements UserRequest.
+// Raft messages are always sent by the node user.
+func (m *RaftMessageRequest) GetUser() string {
+	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
+	return "node"
+}

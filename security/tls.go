@@ -23,14 +23,10 @@ package security
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
-	"net/http"
 	"path"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -169,31 +165,5 @@ func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 func LoadInsecureClientTLSConfig() *tls.Config {
 	return &tls.Config{
 		InsecureSkipVerify: true,
-	}
-}
-
-// LogRequestCertificates examines a http request and logs a summary of the TLS config.
-func LogRequestCertificates(r *http.Request) {
-	if r.TLS == nil {
-		if log.V(3) {
-			log.Infof("%s %s: no TLS", r.Method, r.URL)
-		}
-		return
-	}
-
-	peerCerts := []string{}
-	verifiedChain := []string{}
-	for _, cert := range r.TLS.PeerCertificates {
-		peerCerts = append(peerCerts, fmt.Sprintf("%s (%s, %s)", cert.Subject.CommonName, cert.DNSNames, cert.IPAddresses))
-	}
-	for _, chain := range r.TLS.VerifiedChains {
-		subjects := []string{}
-		for _, cert := range chain {
-			subjects = append(subjects, cert.Subject.CommonName)
-		}
-		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
-	}
-	if log.V(3) {
-		log.Infof("%s %s: peer certs: %v, chain: %v", r.Method, r.URL, peerCerts, verifiedChain)
 	}
 }
