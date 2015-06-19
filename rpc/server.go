@@ -90,24 +90,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// TODO(marc): figure out the right way to do authentication,
-	// and how to pass verified credentials.
-	security.LogRequestCertificates(r)
 
 	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
 	if r.Method != "CONNECT" {
-		w.Header().Set(util.ContentTypeHeader, "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		io.WriteString(w, "405 must CONNECT\n")
+		http.Error(w, "405 must CONNECT", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Verify SSL settings and extract user from client certificate if needed.
+	insecureMode := s.context.Insecure
+	certificateUser := ""
+	if !insecureMode {
+		// Verify client certificate and extract user from Subject.CommonName.
+		certUser, err := security.GetCertificateUser(r.TLS)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		certificateUser = certUser
+	}
+
 	conn, _, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		log.Infof("rpc hijacking %s: %s", r.RemoteAddr, err)
 		return
 	}
+	security.LogTLSState("RPC", r.TLS)
 	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
-	s.serveConn(conn)
+	s.serveConn(conn, insecureMode, certificateUser)
 }
 
 // Listen listens on the configured address but does not start
@@ -245,8 +255,8 @@ func (s *Server) Close() {
 
 // serveConn synchronously serves a single connection. When the
 // connection is closed, close callbacks are invoked.
-func (s *Server) serveConn(conn net.Conn) {
-	s.ServeCodec(codec.NewServerCodec(conn))
+func (s *Server) serveConn(conn net.Conn, insecureMode bool, certificateUser string) {
+	s.ServeCodec(codec.NewServerCodec(conn, insecureMode, certificateUser))
 	s.mu.Lock()
 	if s.closeCallbacks != nil {
 		for _, cb := range s.closeCallbacks {

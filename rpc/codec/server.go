@@ -29,6 +29,8 @@ import (
 	"net/rpc"
 
 	"github.com/cockroachdb/cockroach/rpc/codec/wire"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -36,6 +38,10 @@ type serverCodec struct {
 	baseConn
 
 	methods []string
+
+	// Server/Connection settings determined at connection time.
+	insecureMode    bool
+	certificateUser string
 
 	// temporary work space
 	respBodyBuf   bytes.Buffer
@@ -46,13 +52,15 @@ type serverCodec struct {
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
 // on the other end of the given conn.
-func NewServerCodec(conn io.ReadWriteCloser) rpc.ServerCodec {
+func NewServerCodec(conn io.ReadWriteCloser, insecureMode bool, certificateUser string) rpc.ServerCodec {
 	return &serverCodec{
 		baseConn: baseConn{
 			r: bufio.NewReader(conn),
 			w: bufio.NewWriter(conn),
 			c: conn,
 		},
+		insecureMode:    insecureMode,
+		certificateUser: certificateUser,
 	}
 }
 
@@ -79,6 +87,49 @@ func (c *serverCodec) ReadRequestHeader(r *rpc.Request) error {
 	return nil
 }
 
+// UserRequest is an interface for RPC requests that have a "requested user".
+type UserRequest interface {
+	// GetUser returns the user from the request.
+	GetUser() string
+}
+
+// authenticateRequest takes a request proto and attempts to authenticate it.
+// Requests need to implement UserRequest.
+// We compare the header.User against the client certificate Subject.CommonName.
+func (c *serverCodec) authenticateRequest(request proto.Message) error {
+	// UserRequest must be implemented.
+	requestWithUser, ok := request.(UserRequest)
+	if !ok {
+		return util.Errorf("unknown request type: %T", request)
+	}
+
+	// Extract user and verify.
+	// TODO(marc): we may eventually need stricter user syntax rules.
+	requestedUser := requestWithUser.GetUser()
+	if len(requestedUser) == 0 {
+		return util.Errorf("missing User in request: %+v", request)
+	}
+
+	if c.insecureMode {
+		// Insecure mode: trust the user in the header.
+		return nil
+	}
+
+	// The node user can do anything.
+	// TODO(marc): it would be nice to pass around the fact that we came in as "node".
+	if c.certificateUser == security.NodeUser {
+		return nil
+	}
+
+	// Check that users match.
+	if c.certificateUser != requestedUser {
+		return util.Errorf("requested user is %s, but certificate is for %s",
+			requestedUser, c.certificateUser)
+	}
+
+	return nil
+}
+
 func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	if x == nil {
 		return nil
@@ -95,9 +146,9 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	if err != nil {
 		return err
 	}
-
 	c.reqHeader.Reset()
-	return nil
+
+	return c.authenticateRequest(request)
 }
 
 func (c *serverCodec) WriteResponse(r *rpc.Response, x interface{}) error {
@@ -176,13 +227,6 @@ func (c *serverCodec) readRequestHeader(r *bufio.Reader, header *wire.RequestHea
 func (c *serverCodec) readRequestBody(r *bufio.Reader, header *wire.RequestHeader,
 	request proto.Message) error {
 	return c.recvProto(request, header.UncompressedSize, decompressors[header.Compression])
-}
-
-// ServeConn runs the Protobuf-RPC server on a single connection.
-// ServeConn blocks, serving the connection until the client hangs up.
-// The caller typically invokes ServeConn in a go statement.
-func ServeConn(conn io.ReadWriteCloser) {
-	rpc.ServeCodec(NewServerCodec(conn))
 }
 
 type marshalTo interface {

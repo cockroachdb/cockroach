@@ -43,3 +43,10 @@ func (a Addr) NetAddr() (net.Addr, error) {
 	}
 	return nil, util.Errorf("network %s not supported", a.Network)
 }
+
+// GetUser implements UserRequest.
+// Gossip messages are always sent by the node user.
+func (m *GossipRequest) GetUser() string {
+	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
+	return "node"
+}

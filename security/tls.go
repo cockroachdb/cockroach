@@ -174,19 +174,23 @@ func LoadInsecureClientTLSConfig() *tls.Config {
 
 // LogRequestCertificates examines a http request and logs a summary of the TLS config.
 func LogRequestCertificates(r *http.Request) {
-	if r.TLS == nil {
+	LogTLSState(fmt.Sprintf("%s %s", r.Method, r.URL), r.TLS)
+}
+
+func LogTLSState(method string, tlsState *tls.ConnectionState) {
+	if tlsState == nil {
 		if log.V(3) {
-			log.Infof("%s %s: no TLS", r.Method, r.URL)
+			log.Infof("%s: no TLS", method)
 		}
 		return
 	}
 
 	peerCerts := []string{}
 	verifiedChain := []string{}
-	for _, cert := range r.TLS.PeerCertificates {
-		peerCerts = append(peerCerts, fmt.Sprintf("%s (%s, %s)", cert.Subject.CommonName, cert.DNSNames, cert.IPAddresses))
+	for _, cert := range tlsState.PeerCertificates {
+		peerCerts = append(peerCerts, cert.Subject.CommonName)
 	}
-	for _, chain := range r.TLS.VerifiedChains {
+	for _, chain := range tlsState.VerifiedChains {
 		subjects := []string{}
 		for _, cert := range chain {
 			subjects = append(subjects, cert.Subject.CommonName)
@@ -194,6 +198,21 @@ func LogRequestCertificates(r *http.Request) {
 		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
 	}
 	if log.V(3) {
-		log.Infof("%s %s: peer certs: %v, chain: %v", r.Method, r.URL, peerCerts, verifiedChain)
+		log.Infof("%s: peer certs: %v, chain: %v", method, peerCerts, verifiedChain)
 	}
+}
+
+// GetCertificateUser extract the username from a client certificate.
+func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
+	if tlsState == nil {
+		return "", util.Errorf("request is not using TLS")
+	}
+	if len(tlsState.PeerCertificates) == 0 {
+		return "", util.Errorf("no client certificates in request")
+	}
+	if len(tlsState.VerifiedChains) != len(tlsState.PeerCertificates) {
+		// TODO(marc): can this happen?
+		return "", util.Errorf("client cerficates not verified")
+	}
+	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }

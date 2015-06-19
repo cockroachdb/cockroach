@@ -25,14 +25,22 @@ var _ = proto.Marshal
 var _ = math.Inf
 
 type ArithRequest struct {
-	A                int32  `protobuf:"varint,1,opt,name=a" json:"a"`
-	B                int32  `protobuf:"varint,2,opt,name=b" json:"b"`
+	User             string `protobuf:"bytes,1,opt,name=user" json:"user"`
+	A                int32  `protobuf:"varint,2,opt,name=a" json:"a"`
+	B                int32  `protobuf:"varint,3,opt,name=b" json:"b"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *ArithRequest) Reset()         { *m = ArithRequest{} }
 func (m *ArithRequest) String() string { return proto.CompactTextString(m) }
 func (*ArithRequest) ProtoMessage()    {}
+
+func (m *ArithRequest) GetUser() string {
+	if m != nil {
+		return m.User
+	}
+	return ""
+}
 
 func (m *ArithRequest) GetA() int32 {
 	if m != nil {
