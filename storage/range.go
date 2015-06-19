@@ -836,21 +836,6 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
 
-	header := args.Header()
-
-	// Check the response cache to ensure idempotency.
-	if proto.IsWrite(args) {
-		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok && err == nil {
-			if log.V(1) {
-				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
-			}
-			return err
-		} else if ok && err != nil {
-			return newReplicaCorruptionError(
-				util.Errorf("could not read from response cache"), err)
-		}
-	}
-
 	committed := false
 
 	defer func() {
@@ -875,6 +860,21 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNodeID
 			}
 		}
 	}()
+
+	header := args.Header()
+
+	// Check the response cache to ensure idempotency.
+	if proto.IsWrite(args) {
+		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok && err == nil {
+			if log.V(1) {
+				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
+			}
+			return err
+		} else if ok && err != nil {
+			return newReplicaCorruptionError(
+				util.Errorf("could not read from response cache"), err)
+		}
+	}
 
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
