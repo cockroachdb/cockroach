@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -97,6 +98,7 @@ func getJSON(url string) (interface{}, error) {
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	url, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -116,6 +118,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 // TestAdminDebugPprof verifies that pprof tools are available.
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	url, stopper := startAdminServer()
 	defer stopper.Stop()
 

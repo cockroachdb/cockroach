@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -65,6 +66,7 @@ func startStatusServer() (*httptest.Server, *util.Stopper) {
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/local/stacks endpoint.
 func TestStatusLocalStacks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, stopper := startStatusServer()
 	defer stopper.Stop()
 	body, err := getText(s.URL + statusLocalStacksKey)
@@ -81,6 +83,7 @@ func TestStatusLocalStacks(t *testing.T) {
 // Json results. The content type of the responses is always
 // util.JSONContentType.
 func TestStatusJson(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -157,6 +160,7 @@ func TestStatusJson(t *testing.T) {
 // TestStatusGossipJson ensures that the output response for the full gossip
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -302,6 +306,7 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 // local/logfiles/{filename}, local/log and local/log/{level} function
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	dir, err := ioutil.TempDir("", "local_log_test")
 	if err != nil {
 		t.Fatal(err)
@@ -438,6 +443,7 @@ func TestStatusLocalLogs(t *testing.T) {
 // TestNodeStatusResponse verifies that node status returns the expected
 // results.
 func TestNodeStatusResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ts, body := startServerAndGetStatus(t, statusNodeKeyPrefix)
 	defer ts.Stop()
 
@@ -475,6 +481,7 @@ func TestNodeStatusResponse(t *testing.T) {
 // TestStoreStatusResponse verifies that node status returns the expected
 // results.
 func TestStoreStatusResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
 	defer ts.Stop()
 	type ssWrapper struct {
@@ -522,6 +529,7 @@ func TestStoreStatusResponse(t *testing.T) {
 // TestMetricsRecording verifies that Node statistics are periodically recorded
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tsrv := &TestServer{}
 	tsrv.Ctx = NewTestContext()
 	tsrv.Ctx.MetricsFrequency = 5 * time.Millisecond
