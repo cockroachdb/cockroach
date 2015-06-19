@@ -26,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 var testContext = testutils.NewTestBaseContext()
 
 func TestHttpQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tsrv := &server.TestServer{}
 	if err := tsrv.Start(); err != nil {
 		t.Fatal(err)

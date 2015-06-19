@@ -21,9 +21,12 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestDataKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		name        string
 		source      string
