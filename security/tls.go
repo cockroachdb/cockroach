@@ -23,15 +23,10 @@ package security
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
-	"net/http"
 	"path"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -171,99 +166,4 @@ func LoadInsecureClientTLSConfig() *tls.Config {
 	return &tls.Config{
 		InsecureSkipVerify: true,
 	}
-}
-
-// LogRequestCertificates examines a http request and logs a summary of the TLS config.
-func LogRequestCertificates(r *http.Request) {
-	LogTLSState(fmt.Sprintf("%s %s", r.Method, r.URL), r.TLS)
-}
-
-func LogTLSState(method string, tlsState *tls.ConnectionState) {
-	if tlsState == nil {
-		if log.V(3) {
-			log.Infof("%s: no TLS", method)
-		}
-		return
-	}
-
-	peerCerts := []string{}
-	verifiedChain := []string{}
-	for _, cert := range tlsState.PeerCertificates {
-		peerCerts = append(peerCerts, cert.Subject.CommonName)
-	}
-	for _, chain := range tlsState.VerifiedChains {
-		subjects := []string{}
-		for _, cert := range chain {
-			subjects = append(subjects, cert.Subject.CommonName)
-		}
-		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
-	}
-	if log.V(3) {
-		log.Infof("%s: peer certs: %v, chain: %v", method, peerCerts, verifiedChain)
-	}
-}
-
-// GetCertificateUser extract the username from a client certificate.
-func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
-	if tlsState == nil {
-		return "", util.Errorf("request is not using TLS")
-	}
-	if len(tlsState.PeerCertificates) == 0 {
-		return "", util.Errorf("no client certificates in request")
-	}
-	if len(tlsState.VerifiedChains) != len(tlsState.PeerCertificates) {
-		// TODO(marc): can this happen?
-		return "", util.Errorf("client cerficates not verified")
-	}
-	return tlsState.PeerCertificates[0].Subject.CommonName, nil
-}
-
-// AuthenticationHook builds an authentication hook based on the
-// security mode and client certificate.
-// Must be called at connection time and passed the TLS state.
-// Returns a func(proto.Message) error. The passed-in proto must implement
-// the GetUser interface.
-func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
-	func(request proto.Message) error, error) {
-	var certUser string
-	var err error
-
-	if !insecureMode {
-		certUser, err = GetCertificateUser(tlsState)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return func(request proto.Message) error {
-		// userRequest is an interface for RPC requests that have a "requested user".
-		type userRequest interface {
-			// GetUser returns the user from the request.
-			GetUser() string
-		}
-
-		// UserRequest must be implemented.
-		requestWithUser, ok := request.(userRequest)
-		if !ok {
-			return util.Errorf("unknown request type: %T", request)
-		}
-
-		// Extract user and verify.
-		// TODO(marc): we may eventually need stricter user syntax rules.
-		requestedUser := requestWithUser.GetUser()
-		if len(requestedUser) == 0 {
-			return util.Errorf("missing User in request: %+v", request)
-		}
-
-		// If running in insecure mode, we have nothing to verify it against.
-		if insecureMode {
-			return nil
-		}
-
-		// The client certificate user must either be "node", or match the requested used.
-		if certUser == NodeUser || certUser == requestedUser {
-			return nil
-		}
-		return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
-	}, nil
 }
