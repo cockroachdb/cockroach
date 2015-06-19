@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -219,25 +220,50 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 
 // AuthenticationHook builds an authentication hook based on the
 // security mode and client certificate.
+// Must be called at connection time and passed the TLS state.
+// Returns a func(proto.Message) error. The passed-in proto must implement
+// the GetUser interface.
 func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
-	func(string) error, error) {
-	if insecureMode {
-		// Noop in insecure mode.
-		return func(user string) error {
-			return nil
-		}, nil
+	func(request proto.Message) error, error) {
+	var certUser string
+	var err error
+
+	if !insecureMode {
+		certUser, err = GetCertificateUser(tlsState)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Verify client certificate and extract user from Subject.CommonName.
-	certUser, err := GetCertificateUser(tlsState)
-	if err != nil {
-		return nil, err
-	}
+	return func(request proto.Message) error {
+		// userRequest is an interface for RPC requests that have a "requested user".
+		type userRequest interface {
+			// GetUser returns the user from the request.
+			GetUser() string
+		}
 
-	return func(user string) error {
-		if certUser == NodeUser || certUser == user {
+		// UserRequest must be implemented.
+		requestWithUser, ok := request.(userRequest)
+		if !ok {
+			return util.Errorf("unknown request type: %T", request)
+		}
+
+		// Extract user and verify.
+		// TODO(marc): we may eventually need stricter user syntax rules.
+		requestedUser := requestWithUser.GetUser()
+		if len(requestedUser) == 0 {
+			return util.Errorf("missing User in request: %+v", request)
+		}
+
+		// If running in insecure mode, we have nothing to verify it against.
+		if insecureMode {
 			return nil
 		}
-		return util.Errorf("requested user is %s, but certificate is for %s", user, certUser)
+
+		// The client certificate user must either be "node", or match the requested used.
+		if certUser == NodeUser || certUser == requestedUser {
+			return nil
+		}
+		return util.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
 	}, nil
 }

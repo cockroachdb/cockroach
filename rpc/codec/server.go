@@ -29,7 +29,6 @@ import (
 	"net/rpc"
 
 	"github.com/cockroachdb/cockroach/rpc/codec/wire"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -38,8 +37,8 @@ type serverCodec struct {
 
 	methods []string
 
-	// Authentication hook. May be nil in tests.
-	authenticationHook func(string) error
+	// Post body-decoding hook. May be nil in tests.
+	requestBodyHook func(proto.Message) error
 
 	// temporary work space
 	respBodyBuf   bytes.Buffer
@@ -50,14 +49,14 @@ type serverCodec struct {
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
 // on the other end of the given conn.
-func NewServerCodec(conn io.ReadWriteCloser, authenticationHook func(string) error) rpc.ServerCodec {
+func NewServerCodec(conn io.ReadWriteCloser, requestBodyHook func(proto.Message) error) rpc.ServerCodec {
 	return &serverCodec{
 		baseConn: baseConn{
 			r: bufio.NewReader(conn),
 			w: bufio.NewWriter(conn),
 			c: conn,
 		},
-		authenticationHook: authenticationHook,
+		requestBodyHook: requestBodyHook,
 	}
 }
 
@@ -90,30 +89,6 @@ type UserRequest interface {
 	GetUser() string
 }
 
-// authenticateRequest takes a request proto and attempts to authenticate it.
-// Requests need to implement UserRequest.
-// We compare the header.User against the client certificate Subject.CommonName.
-func (c *serverCodec) authenticateRequest(request proto.Message) error {
-	// UserRequest must be implemented.
-	requestWithUser, ok := request.(UserRequest)
-	if !ok {
-		return util.Errorf("unknown request type: %T", request)
-	}
-
-	// Extract user and verify.
-	// TODO(marc): we may eventually need stricter user syntax rules.
-	requestedUser := requestWithUser.GetUser()
-	if len(requestedUser) == 0 {
-		return util.Errorf("missing User in request: %+v", request)
-	}
-
-	if c.authenticationHook == nil {
-		// No authentication hook: this is a test.
-		return nil
-	}
-	return c.authenticationHook(requestedUser)
-}
-
 func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	if x == nil {
 		return nil
@@ -132,7 +107,10 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	}
 	c.reqHeader.Reset()
 
-	return c.authenticateRequest(request)
+	if c.requestBodyHook == nil {
+		return nil
+	}
+	return c.requestBodyHook(request)
 }
 
 func (c *serverCodec) WriteResponse(r *rpc.Response, x interface{}) error {
