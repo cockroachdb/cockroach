@@ -304,10 +304,10 @@ func (r *Range) getLease() *proto.Lease {
 }
 
 // newNotLeaderError returns a NotLeaderError intialized with the
-// replica for the last known holder of the leader lease.
-func (r *Range) newNotLeaderError() error {
+// replica for the holder (if any) of the given lease.
+func (r *Range) newNotLeaderError(l *proto.Lease) error {
 	err := &proto.NotLeaderError{}
-	if l := r.getLease(); l.RaftNodeID != 0 {
+	if l != nil && l.RaftNodeID != 0 {
 		_, err.Replica = r.Desc().FindReplica(r.rm.StoreID())
 		_, storeID := proto.DecodeRaftNodeID(proto.RaftNodeID(l.RaftNodeID))
 		_, err.Leader = r.Desc().FindReplica(storeID)
@@ -379,7 +379,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 			return nil
 		}
 		// If lease is currently held by another, redirect to holder.
-		return r.newNotLeaderError()
+		return r.newNotLeaderError(lease)
 	}
 	// Otherwise, no active lease: Request renewal.
 	err := r.requestLeaderLease(timestamp)
@@ -389,8 +389,8 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 	// since we're holding a lock here, and even if it were it would be a rare
 	// extra round-trip.
 	if _, ok := err.(*proto.LeaseRejectedError); ok {
-		if r.getLease().Covers(timestamp) {
-			return r.newNotLeaderError()
+		if lease := r.getLease(); lease.Covers(timestamp) {
+			return r.newNotLeaderError(lease)
 		}
 	}
 	return err
@@ -799,7 +799,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 		// get the distributed sender stuck in an infinite loop, retrieving a
 		// stale NotLeaderError over and over again, even when proposing at the
 		// correct replica.
-		err = r.newNotLeaderError()
+		err = r.newNotLeaderError(lease)
 	} else {
 		err = r.maybeSetCorrupt(
 			r.applyRaftCommand(ctx, index, originNode, args, reply),
