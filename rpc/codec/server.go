@@ -83,12 +83,6 @@ func (c *serverCodec) ReadRequestHeader(r *rpc.Request) error {
 	return nil
 }
 
-// UserRequest is an interface for RPC requests that have a "requested user".
-type UserRequest interface {
-	// GetUser returns the user from the request.
-	GetUser() string
-}
-
 func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	if x == nil {
 		return nil
