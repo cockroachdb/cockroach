@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 //go:generate go tool yacc -o sql.go sql.y
@@ -24,11 +25,11 @@ import (
 // Parse parses the sql and returns a Statement, which is the AST
 // representation of the query.
 func Parse(sql string) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql)
+	tokenizer := newStringTokenizer(sql)
 	if yyParse(tokenizer) != 0 {
-		return nil, errors.New(tokenizer.LastError)
+		return nil, errors.New(tokenizer.lastError)
 	}
-	return tokenizer.ParseTree, nil
+	return tokenizer.parseTree, nil
 }
 
 // Statement represents a statement.
@@ -37,20 +38,22 @@ type Statement interface {
 	statement()
 }
 
-func (*Union) statement()  {}
-func (*Select) statement() {}
-func (*Insert) statement() {}
-func (*Update) statement() {}
-func (*Delete) statement() {}
-func (*Set) statement()    {}
-func (*Use) statement()    {}
-func (*DDL) statement()    {}
+func (*Union) statement()          {}
+func (*Select) statement()         {}
+func (*Insert) statement()         {}
+func (*Update) statement()         {}
+func (*Delete) statement()         {}
+func (*Set) statement()            {}
+func (*Use) statement()            {}
+func (*CreateDatabase) statement() {}
+func (*CreateIndex) statement()    {}
+func (*CreateTable) statement()    {}
+func (*DDL) statement()            {}
 
 // SelectStatement any SELECT statement.
 type SelectStatement interface {
-	fmt.Stringer
+	Statement
 	selectStatement()
-	statement()
 	insertRows()
 }
 
@@ -184,19 +187,119 @@ func (node *Use) String() string {
 	return fmt.Sprintf("USE %v%s", node.Comments, node.Name)
 }
 
+// CreateDatabase represents a CREATE DATABASE statement.
+type CreateDatabase struct {
+	IfNotExists string // TODO(pmattis): Make this a bool
+	Name        string
+}
+
+func (node *CreateDatabase) String() string {
+	return fmt.Sprintf("CREATE DATABASE%s %s", node.IfNotExists, node.Name)
+}
+
+// CreateIndex represents a CREATE INDEX statement.
+type CreateIndex struct {
+	Name       string
+	TableName  string
+	Constraint string
+}
+
+func (node *CreateIndex) String() string {
+	if node.Constraint == "" {
+		return fmt.Sprintf("CREATE INDEX %s ON %s", node.Name, node.TableName)
+	}
+	return fmt.Sprintf("CREATE %s INDEX %s ON %s", node.Constraint, node.Name, node.TableName)
+}
+
+// TableDef represents a column or index definition within a CREATE TABLE
+// statement.
+type TableDef interface {
+	// Placeholder function to ensure that only desired types (*TableDef) conform
+	// to the TableDef interface.
+	tableDef()
+}
+
+func (*ColumnTableDef) tableDef() {}
+func (*IndexTableDef) tableDef()  {}
+
+// TableDefs represents a list of table definitions.
+type TableDefs []TableDef
+
+func (node TableDefs) String() string {
+	var prefix string
+	var buf bytes.Buffer
+	for _, n := range node {
+		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		prefix = ", "
+	}
+	return buf.String()
+}
+
+// ColumnTableDef represents a column definition within a CREATE TABLE
+// statement.
+type ColumnTableDef struct {
+	Name       string
+	Type       string // TODO(pmattis): Make this a DataType interface.
+	Null       string // TODO(pmattis): Make this a bool.
+	Constraint string // TODO(pmattis): Make this an enum (primary or unique).
+}
+
+func (node *ColumnTableDef) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
+	if node.Null != "" {
+		fmt.Fprintf(&buf, " %s", node.Null)
+	}
+	if node.Constraint != "" {
+		fmt.Fprintf(&buf, " %s", node.Constraint)
+	}
+	return buf.String()
+}
+
+// IndexTableDef represents an index definition within a CREATE TABLE
+// statement.
+type IndexTableDef struct {
+	Name       string
+	Constraint string
+	Columns    []string
+}
+
+func (node *IndexTableDef) String() string {
+	var buf bytes.Buffer
+	if node.Constraint != "" {
+		fmt.Fprintf(&buf, "%s ", node.Constraint)
+	}
+	fmt.Fprintf(&buf, "INDEX %s (%s)",
+		node.Name, strings.Join(node.Columns, ", "))
+	return buf.String()
+}
+
+// CreateTable represents a CREATE TABLE statement.
+type CreateTable struct {
+	IfNotExists string // TODO(pmattis): Make this a bool
+	Name        string
+	Defs        TableDefs
+}
+
+func (node *CreateTable) String() string {
+	return fmt.Sprintf("CREATE TABLE%s %s (%s)", node.IfNotExists, node.Name, node.Defs)
+}
+
 // DDL represents a CREATE, ALTER, DROP or RENAME statement.
 // Table is set for astAlter, astDrop, astRename.
 // NewName is set for astAlter, astCreate, astRename.
+//
+// TODO(pmattis): Replace usage of this struct with specific implementations
+// for the various statements it now contains. See the CreateTable struct as an
+// example.
 type DDL struct {
-	Action  string
-	Name    string
-	NewName string
+	Action      string
+	IfNotExists string
+	Name        string
+	NewName     string
 }
 
 const (
-	astCreateDatabase  = "CREATE DATABASE"
-	astCreateIndex     = "CREATE INDEX"
-	astCreateTable     = "CREATE TABLE"
 	astCreateView      = "CREATE VIEW"
 	astAlterTable      = "ALTER TABLE"
 	astAlterView       = "ALTER VIEW"
@@ -205,22 +308,33 @@ const (
 	astDropTable       = "DROP TABLE"
 	astDropView        = "DROP VIEW"
 	astRenameTable     = "RENAME TABLE"
+	astShowDatabases   = "SHOW DATABASES"
 	astShowTables      = "SHOW TABLES"
 	astShowIndex       = "SHOW INDEX FROM"
 	astShowColumns     = "SHOW COLUMNS FROM"
 	astShowFullColumns = "SHOW FULL COLUMNS FROM"
 	astTruncateTable   = "TRUNCATE TABLE"
+	astIfNotExists     = " IF NOT EXISTS"
+	astUnique          = "UNIQUE"
+	astPrimaryKey      = "PRIMARY KEY"
+	astKey             = "KEY"
+	astUnsigned        = "UNSIGNED"
 )
 
 func (node *DDL) String() string {
 	switch node.Action {
-	case astCreateIndex, astDropIndex:
+	case astDropIndex:
 		return fmt.Sprintf("%s %s ON %s", node.Action, node.Name, node.NewName)
 	case astRenameTable:
 		return fmt.Sprintf("%s %s %s", node.Action, node.Name, node.NewName)
-	case astCreateDatabase, astCreateTable, astCreateView:
-		return fmt.Sprintf("%s %s", node.Action, node.NewName)
+	case astCreateView:
+		return fmt.Sprintf("%s%s %s", node.Action, node.IfNotExists, node.NewName)
+	case astShowDatabases:
+		return node.Action
 	case astShowTables:
+		if node.Name != "" {
+			return fmt.Sprintf("%s FROM %s", node.Action, node.Name)
+		}
 		return node.Action
 	default:
 		return fmt.Sprintf("%s %s", node.Action, node.Name)
@@ -611,12 +725,12 @@ type NullCheck struct {
 
 // NullCheck.Operator
 const (
-	astIsNull    = "IS NULL"
-	astIsNotNull = "IS NOT NULL"
+	astNull    = "NULL"
+	astNotNull = "NOT NULL"
 )
 
 func (node *NullCheck) String() string {
-	return fmt.Sprintf("%v %s", node.Expr, node.Operator)
+	return fmt.Sprintf("%v IS %s", node.Expr, node.Operator)
 }
 
 // ExistsExpr represents an EXISTS expression.

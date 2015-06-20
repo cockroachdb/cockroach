@@ -8,15 +8,15 @@ package parser
 import "strings"
 
 func setParseTree(yylex interface{}, stmt Statement) {
-  yylex.(*Tokenizer).ParseTree = stmt
+  yylex.(*tokenizer).parseTree = stmt
 }
 
 func setAllowComments(yylex interface{}, allow bool) {
-  yylex.(*Tokenizer).AllowComments = allow
+  yylex.(*tokenizer).allowComments = allow
 }
 
 func forceEOF(yylex interface{}) {
-  yylex.(*Tokenizer).ForceEOF = true
+  yylex.(*tokenizer).forceEOF = true
 }
 
 %}
@@ -53,11 +53,21 @@ func forceEOF(yylex interface{}) {
   insRows     InsertRows
   updateExprs UpdateExprs
   updateExpr  *UpdateExpr
+  tableDefs   TableDefs
+  tableDef    TableDef
 }
 
 %token tokLexError
 %token <empty> tokSelect tokInsert tokUpdate tokDelete tokFrom tokWhere tokGroup tokHaving tokOrder tokBy tokLimit tokOffset tokFor
 %token <empty> tokAll tokDistinct tokAs tokExists tokIn tokIs tokLike tokBetween tokNull tokAsc tokDesc tokValues tokInto tokDuplicate tokKey tokDefault tokSet tokLock
+%token tokInt tokTinyInt tokSmallInt tokMediumInt tokBigInt tokInteger
+%token tokReal tokDouble tokFloat tokDecimal tokNumeric
+%token tokDate tokTime tokDateTime tokTimestamp
+%token tokChar tokVarChar tokBinary tokVarBinary
+%token tokText tokTinyText tokMediumText tokLongText
+%token tokBlob tokTinyBlob tokMediumBlob tokLongBlob
+%token tokBit tokEnum
+
 %token <str> tokID tokString tokNumber tokValueArg tokComment
 %token <empty> tokLE tokGE tokNE tokNullSafeEqual
 %token <empty> '(' '=' '<' '>' '~'
@@ -78,7 +88,7 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <empty> tokCreate tokAlter tokDrop tokRename tokTruncate tokShow
-%token <empty> tokDatabase tokTable tokTables tokIndex tokView tokColumns tokFull tokTo tokIgnore tokIf tokUnique
+%token <empty> tokDatabase tokDatabases tokTable tokTables tokIndex tokView tokColumns tokFull tokTo tokIgnore tokIf tokUnique tokUnsigned tokPrimary
 
 %start any_command
 
@@ -127,8 +137,16 @@ func forceEOF(yylex interface{}) {
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
 %type <updateExpr> update_expression
-%type <empty> exists_opt not_exists_opt ignore_opt non_rename_operation to_opt constraint_opt using_opt
+%type <empty> exists_opt ignore_opt non_rename_operation to_opt using_opt
+%type <str> unsigned_opt
+%type <str> constraint_opt not_exists_opt from_opt
+%type <str> int_opt float_opt decimal_opt precision_opt
 %type <str> sql_id
+%type <tableDefs> table_def_list
+%type <tableDef> table_def
+%type <str> data_type
+%type <str> column_null_opt
+%type <str> column_constraint_opt
 %type <empty> force_eof
 
 %%
@@ -207,9 +225,13 @@ use_statement:
   }
 
 show_statement:
-  tokShow tokTables
+  tokShow tokDatabases
   {
-    $$ = &DDL{Action: astShowTables}
+    $$ = &DDL{Action: astShowDatabases}
+  }
+| tokShow tokTables from_opt
+  {
+    $$ = &DDL{Action: astShowTables, Name: $3}
   }
 | tokShow tokIndex tokFrom sql_id
   {
@@ -225,22 +247,183 @@ show_statement:
   }
 
 create_statement:
-  tokCreate tokTable not_exists_opt sql_id force_eof
+  tokCreate tokTable not_exists_opt sql_id '(' table_def_list ')' force_eof
   {
-    $$ = &DDL{Action: astCreateTable, NewName: $4}
+    $$ = &CreateTable{IfNotExists: $3, Name: $4, Defs: $6}
   }
 | tokCreate constraint_opt tokIndex sql_id using_opt tokOn sql_id force_eof
   {
-    $$ = &DDL{Action: astCreateIndex, Name: $4, NewName: $7}
+    $$ = &CreateIndex{Name: $4, TableName: $7, Constraint: $2}
   }
 | tokCreate tokView sql_id force_eof
   {
     $$ = &DDL{Action: astCreateView, NewName: $3}
   }
-| tokCreate tokDatabase not_exists_opt sql_id force_eof
+| tokCreate tokDatabase not_exists_opt sql_id
   {
-    $$ = &DDL{Action: astCreateDatabase, NewName: $4}
+    $$ = &CreateDatabase{IfNotExists: $3, Name: $4}
   }
+
+table_def_list:
+  table_def
+  {
+    $$ = TableDefs{$1}
+  }
+| table_def_list ',' table_def
+  {
+    $$ = append($$, $3)
+  }
+
+table_def:
+  sql_id data_type column_null_opt column_constraint_opt
+  {
+    $$ = &ColumnTableDef{Name: $1, Type: $2, Null: $3, Constraint: $4}
+  }
+| constraint_opt tokIndex sql_id '(' index_list ')'
+  {
+    $$ = &IndexTableDef{Name: $3, Constraint: $1, Columns: $5}
+  }
+
+// TODO(pmattis): Parsing of the data types needs to be fleshed out.
+data_type:
+  tokBit int_opt
+  {
+    $$ = "BIT"
+  }
+| tokInt int_opt unsigned_opt
+  {
+    $$ = "INT"
+  }
+| tokTinyInt int_opt unsigned_opt
+  {
+    $$ = "TINYINT"
+  }
+| tokSmallInt int_opt unsigned_opt
+  {
+    $$ = "SMALLINT"
+  }
+| tokMediumInt int_opt unsigned_opt
+  {
+    $$ = "MEDIUMINT"
+  }
+| tokBigInt int_opt unsigned_opt
+  {
+    $$ = "BIGINT"
+  }
+| tokInteger int_opt unsigned_opt
+  {
+    $$ = "INTEGER"
+  }
+| tokReal float_opt unsigned_opt
+  {
+    $$ = "REAL"
+  }
+| tokDouble float_opt unsigned_opt
+  {
+    $$ = "DOUBLE"
+  }
+| tokFloat float_opt unsigned_opt
+  {
+    $$ = "FLOAT"
+  }
+| tokDecimal decimal_opt unsigned_opt
+  {
+    $$ = "DECIMAL"
+  }
+| tokNumeric decimal_opt unsigned_opt
+  {
+    $$ = "NUMERIC"
+  }
+| tokDate
+  {
+    $$ = "DATE"
+  }
+| tokTime
+  {
+    $$ = "TIME"
+  }
+| tokDateTime
+  {
+    $$ = "DATETIME"
+  }
+| tokTimestamp
+  {
+    $$ = "TIMESTAMP"
+  }
+| tokChar int_opt
+  {
+    $$ = "CHAR"
+  }
+| tokVarChar int_opt
+  {
+    $$ = "VARCHAR"
+  }
+| tokBinary int_opt
+  {
+    $$ = "BINARY"
+  }
+| tokVarBinary int_opt
+  {
+    $$ = "VARBINARY"
+  }
+| tokText
+  {
+    $$ = "TEXT"
+  }
+| tokTinyText
+  {
+    $$ = "TINYTEXT"
+  }
+| tokMediumText
+  {
+    $$ = "MEDIUMTEXT"
+  }
+| tokLongText
+  {
+    $$ = "LONGTEXT"
+  }
+| tokBlob
+  {
+    $$ = "BLOB"
+  }
+| tokTinyBlob
+  {
+    $$ = "TINYBLOB"
+  }
+| tokMediumBlob
+  {
+    $$ = "MEDIUMBLOB"
+  }
+| tokLongBlob
+  {
+    $$ = "LONGBLOB"
+  }
+| tokEnum '(' index_list ')'
+  {
+    $$ = "ENUM"
+  }
+| tokSet '(' index_list ')'
+  {
+    $$ = "SET"
+  }
+
+column_null_opt:
+  { $$ = "" }
+| tokNull
+  { $$ = astNull }
+| tokNot tokNull
+  { $$ = astNotNull }
+
+column_constraint_opt:
+  { $$ = "" }
+| tokPrimary tokKey
+  { $$ = astPrimaryKey }
+| tokKey
+  { $$ = astKey }
+| tokUnique
+  { $$ = astUnique }
+| tokUnique tokKey
+  { $$ = astUnique }
 
 alter_statement:
   tokAlter ignore_opt tokTable tokID non_rename_operation force_eof
@@ -577,11 +760,11 @@ condition:
   }
 | value_expression tokIs tokNull
   {
-    $$ = &NullCheck{Operator: astIsNull, Expr: $1}
+    $$ = &NullCheck{Operator: astNull, Expr: $1}
   }
 | value_expression tokIs tokNot tokNull
   {
-    $$ = &NullCheck{Operator: astIsNotNull, Expr: $1}
+    $$ = &NullCheck{Operator: astNotNull, Expr: $1}
   }
 | tokExists subquery
   {
@@ -981,9 +1164,9 @@ exists_opt:
   { $$ = struct{}{} }
 
 not_exists_opt:
-  { $$ = struct{}{} }
+  { $$ = "" }
 | tokIf tokNot tokExists
-  { $$ = struct{}{} }
+  { $$ = astIfNotExists }
 
 ignore_opt:
   { $$ = struct{}{} }
@@ -1008,22 +1191,48 @@ to_opt:
   { $$ = struct{}{} }
 
 constraint_opt:
-  { $$ = struct{}{} }
+  { $$ = "" }
 | tokUnique
-  { $$ = struct{}{} }
+  { $$ = astUnique }
+
+int_opt:
+  { $$ = "" }
+| '(' sql_id ')'
+  { $$ = $2 }
+
+float_opt:
+  { $$ = "" }
+| '(' sql_id ',' sql_id ')'
+  { $$ = $2 }
+
+decimal_opt:
+  { $$ = "" }
+| '(' sql_id precision_opt ')'
+  { $$ = $2 }
+
+precision_opt:
+  { $$ = "" }
+| ',' sql_id
+  { $$ = $2 }
+
+unsigned_opt:
+  { $$ = "" }
+| tokUnsigned
+  { $$ = astUnsigned }
 
 using_opt:
   { $$ = struct{}{} }
 | tokUsing sql_id
   { $$ = struct{}{} }
 
+from_opt:
+  { $$ = "" }
+| tokFrom sql_id
+  { $$ = $2 }
+
 sql_id:
   tokID
-  {
-    $$ = strings.ToLower($1)
-  }
+  { $$ = strings.ToLower($1) }
 
 force_eof:
-{
-  forceEOF(yylex)
-}
+  { forceEOF(yylex) }

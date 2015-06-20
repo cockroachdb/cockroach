@@ -13,23 +13,24 @@ import (
 const eofChar = 0x100
 
 // Tokenizer is the struct used to generate SQL tokens for the parser.
-type Tokenizer struct {
-	InStream      *strings.Reader
-	AllowComments bool
-	ForceEOF      bool
+type tokenizer struct {
+	inStream      *strings.Reader
+	allowComments bool
+	forceEOF      bool
 	lastChar      uint16
-	Position      int
+	position      int
 	errorToken    []byte
-	LastError     string
+	lastError     string
 	posVarIndex   int
-	ParseTree     Statement
+	parseTree     Statement
 }
 
-// NewStringTokenizer creates a new Tokenizer for the sql string.
-func NewStringTokenizer(sql string) *Tokenizer {
-	return &Tokenizer{InStream: strings.NewReader(sql)}
+// newStringTokenizer creates a new Tokenizer for the sql string.
+func newStringTokenizer(sql string) *tokenizer {
+	return &tokenizer{inStream: strings.NewReader(sql)}
 }
 
+// TODO(pmattis): Get the full list of keywords and reserved words.
 var keywords = map[string]int{
 	"SELECT": tokSelect,
 	"INSERT": tokInsert,
@@ -89,32 +90,65 @@ var keywords = map[string]int{
 	"SET":       tokSet,
 	"LOCK":      tokLock,
 
-	"CREATE":   tokCreate,
-	"ALTER":    tokAlter,
-	"RENAME":   tokRename,
-	"DROP":     tokDrop,
-	"TRUNCATE": tokTruncate,
-	"SHOW":     tokShow,
-	"TABLE":    tokTable,
-	"TABLES":   tokTables,
-	"DATABASE": tokDatabase,
-	"INDEX":    tokIndex,
-	"VIEW":     tokView,
-	"COLUMNS":  tokColumns,
-	"FULL":     tokFull,
-	"TO":       tokTo,
-	"IGNORE":   tokIgnore,
-	"IF":       tokIf,
-	"UNIQUE":   tokUnique,
-	"USING":    tokUsing,
+	"CREATE":    tokCreate,
+	"ALTER":     tokAlter,
+	"RENAME":    tokRename,
+	"DROP":      tokDrop,
+	"TRUNCATE":  tokTruncate,
+	"SHOW":      tokShow,
+	"TABLE":     tokTable,
+	"TABLES":    tokTables,
+	"DATABASE":  tokDatabase,
+	"DATABASES": tokDatabases,
+	"INDEX":     tokIndex,
+	"VIEW":      tokView,
+	"COLUMNS":   tokColumns,
+	"FULL":      tokFull,
+	"TO":        tokTo,
+	"IGNORE":    tokIgnore,
+	"IF":        tokIf,
+	"UNIQUE":    tokUnique,
+	"USING":     tokUsing,
+
+	"BIT":        tokBit,
+	"INT":        tokInt,
+	"TINYINT":    tokTinyInt,
+	"SMALLINT":   tokSmallInt,
+	"MEDIUMINT":  tokMediumInt,
+	"BIGINT":     tokBigInt,
+	"INTEGER":    tokInteger,
+	"REAL":       tokReal,
+	"DOUBLE":     tokDouble,
+	"FLOAT":      tokFloat,
+	"DECIMAL":    tokDecimal,
+	"NUMERIC":    tokNumeric,
+	"DATE":       tokDate,
+	"TIME":       tokTime,
+	"DATETIME":   tokDateTime,
+	"TIMESTAMP":  tokTimestamp,
+	"CHAR":       tokChar,
+	"VARCHAR":    tokVarChar,
+	"BINARY":     tokBinary,
+	"VARBINARY":  tokVarBinary,
+	"TEXT":       tokText,
+	"TINYTEXT":   tokTinyText,
+	"MEDIUMTEXT": tokMediumText,
+	"LONGTEXT":   tokLongText,
+	"BLOB":       tokBlob,
+	"TINYBLOB":   tokTinyBlob,
+	"MEDIUMBLOB": tokMediumBlob,
+	"LONGBLOB":   tokLongBlob,
+	"ENUM":       tokEnum,
+	"UNSIGNED":   tokUnsigned,
+	"PRIMARY":    tokPrimary,
 }
 
 // Lex returns the next token form the Tokenizer.
 // This function is used by go yacc.
-func (tkn *Tokenizer) Lex(lval *yySymType) int {
+func (tkn *tokenizer) Lex(lval *yySymType) int {
 	typ, val := tkn.Scan()
 	for typ == tokComment {
-		if tkn.AllowComments {
+		if tkn.allowComments {
 			break
 		}
 		typ, val = tkn.Scan()
@@ -128,20 +162,20 @@ func (tkn *Tokenizer) Lex(lval *yySymType) int {
 }
 
 // Error is called by go yacc if there's a parsing error.
-func (tkn *Tokenizer) Error(err string) {
+func (tkn *tokenizer) Error(err string) {
 	buf := bytes.NewBuffer(make([]byte, 0, 32))
 	if tkn.errorToken != nil {
-		fmt.Fprintf(buf, "%s at position %v near %s", err, tkn.Position, tkn.errorToken)
+		fmt.Fprintf(buf, "%s at position %v near %s", err, tkn.position, tkn.errorToken)
 	} else {
-		fmt.Fprintf(buf, "%s at position %v", err, tkn.Position)
+		fmt.Fprintf(buf, "%s at position %v", err, tkn.position)
 	}
-	tkn.LastError = buf.String()
+	tkn.lastError = buf.String()
 }
 
 // Scan scans the tokenizer for the next token and returns
 // the token type and an optional value.
-func (tkn *Tokenizer) Scan() (int, []byte) {
-	if tkn.ForceEOF {
+func (tkn *tokenizer) Scan() (int, []byte) {
+	if tkn.forceEOF {
 		return 0, nil
 	}
 
@@ -241,7 +275,7 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 	}
 }
 
-func (tkn *Tokenizer) skipBlank() {
+func (tkn *tokenizer) skipBlank() {
 	ch := tkn.lastChar
 	for ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' {
 		tkn.next()
@@ -249,7 +283,7 @@ func (tkn *Tokenizer) skipBlank() {
 	}
 }
 
-func (tkn *Tokenizer) scanIdentifier() (int, []byte) {
+func (tkn *tokenizer) scanIdentifier() (int, []byte) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 8))
 	buffer.WriteByte(byte(tkn.lastChar))
 	for tkn.next(); isLetter(tkn.lastChar) || isDigit(tkn.lastChar); tkn.next() {
@@ -262,7 +296,7 @@ func (tkn *Tokenizer) scanIdentifier() (int, []byte) {
 	return tokID, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) scanBindVar() (int, []byte) {
+func (tkn *tokenizer) scanBindVar() (int, []byte) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 8))
 	buffer.WriteByte(byte(tkn.lastChar))
 	for tkn.next(); isLetter(tkn.lastChar) || isDigit(tkn.lastChar) || tkn.lastChar == '.'; tkn.next() {
@@ -274,13 +308,13 @@ func (tkn *Tokenizer) scanBindVar() (int, []byte) {
 	return tokValueArg, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) scanMantissa(base int, buffer *bytes.Buffer) {
+func (tkn *tokenizer) scanMantissa(base int, buffer *bytes.Buffer) {
 	for digitVal(tkn.lastChar) < base {
 		tkn.consumeNext(buffer)
 	}
 }
 
-func (tkn *Tokenizer) scanNumber(seenDecimalPoint bool) (int, []byte) {
+func (tkn *tokenizer) scanNumber(seenDecimalPoint bool) (int, []byte) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 8))
 	if seenDecimalPoint {
 		buffer.WriteByte('.')
@@ -337,7 +371,7 @@ exit:
 	return tokNumber, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) scanString(delim uint16, typ int) (int, []byte) {
+func (tkn *tokenizer) scanString(delim uint16, typ int) (int, []byte) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 8))
 	for {
 		ch := tkn.lastChar
@@ -367,7 +401,7 @@ func (tkn *Tokenizer) scanString(delim uint16, typ int) (int, []byte) {
 	return typ, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) scanCommentType1(prefix string) (int, []byte) {
+func (tkn *tokenizer) scanCommentType1(prefix string) (int, []byte) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 8))
 	buffer.WriteString(prefix)
 	for tkn.lastChar != eofChar {
@@ -380,7 +414,7 @@ func (tkn *Tokenizer) scanCommentType1(prefix string) (int, []byte) {
 	return tokComment, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) scanCommentType2() (int, []byte) {
+func (tkn *tokenizer) scanCommentType2() (int, []byte) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 8))
 	buffer.WriteString("/*")
 	for {
@@ -400,7 +434,7 @@ func (tkn *Tokenizer) scanCommentType2() (int, []byte) {
 	return tokComment, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) consumeNext(buffer *bytes.Buffer) {
+func (tkn *tokenizer) consumeNext(buffer *bytes.Buffer) {
 	if tkn.lastChar == eofChar {
 		// This should never happen.
 		panic("unexpected EOF")
@@ -409,14 +443,14 @@ func (tkn *Tokenizer) consumeNext(buffer *bytes.Buffer) {
 	tkn.next()
 }
 
-func (tkn *Tokenizer) next() {
-	if ch, err := tkn.InStream.ReadByte(); err != nil {
+func (tkn *tokenizer) next() {
+	if ch, err := tkn.inStream.ReadByte(); err != nil {
 		// Only EOF is possible.
 		tkn.lastChar = eofChar
 	} else {
 		tkn.lastChar = uint16(ch)
 	}
-	tkn.Position++
+	tkn.position++
 }
 
 func isLetter(ch uint16) bool {
