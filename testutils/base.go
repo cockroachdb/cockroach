@@ -28,19 +28,20 @@ import (
 // This uses embedded certs and the "root" user (default client user).
 // The "root" user has client certificates only.
 func NewRootTestBaseContext() *base.Context {
-	return &base.Context{
-		Certs: security.EmbeddedCertsDir,
-		User:  security.RootUser,
-	}
+	return newTestBaseContext(security.RootUser)
 }
 
 // NewNodeTestBaseContext creates a base context for testing.
 // This uses embedded certs and the "node" user (default node user).
 // The "node" user has both server and client certificates.
 func NewNodeTestBaseContext() *base.Context {
+	return newTestBaseContext(security.NodeUser)
+}
+
+func newTestBaseContext(user string) *base.Context {
 	return &base.Context{
 		Certs: security.EmbeddedCertsDir,
-		User:  security.NodeUser,
+		User:  user,
 	}
 }
 
