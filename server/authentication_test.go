@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
@@ -42,83 +43,70 @@ func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	testCases := []struct {
-		method, key   string
-		certsStatus   int // Status code for https with client certs.
-		noCertsStatus int // Status code for https without client certs.
-	}{
-		// /ui/: basic file server: no auth.
-		{"GET", "/index.html", http.StatusOK, http.StatusOK},
-
-		// /_admin/: server.adminServer: no auth.
-		{"GET", healthPath, http.StatusOK, http.StatusOK},
-
-		// /debug/: server.adminServer: no auth.
-		{"GET", debugEndpoint + "vars", http.StatusOK, http.StatusOK},
-
-		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusNodeKeyPrefix, http.StatusOK, http.StatusOK},
-
-		// /kv/db/: kv.DBServer. These are proto reqs, but we can at least get past auth.
-		{"GET", kv.DBPrefix + "Get", http.StatusBadRequest, http.StatusUnauthorized},
-
-		// /ts/: ts.Server.
-		{"GET", ts.URLPrefix, http.StatusNotFound, http.StatusUnauthorized},
-	}
 
 	// HTTPS with client certs.
 	certsContext := testutils.NewRootTestBaseContext()
-	client, err := certsContext.GetHTTPClient()
-	if err != nil {
-		t.Fatalf("error initializing http client: %s", err)
-	}
-	for tcNum, tc := range testCases {
-		resp, err := doHTTPReq(t, client, tc.method,
-			fmt.Sprintf("%s://%s%s", certsContext.RequestScheme(), s.ServingAddr(), tc.key))
-		if err != nil {
-			t.Fatalf("[%d]: error issuing request: %s", tcNum, err)
-		}
-
-		defer resp.Body.Close()
-		if resp.StatusCode != tc.certsStatus {
-			t.Errorf("[%d]: expected status code %d, got %d", tcNum, tc.certsStatus, resp.StatusCode)
-		}
-	}
-
 	// HTTPS without client certs.
 	noCertsContext := testutils.NewRootTestBaseContext()
 	noCertsContext.Certs = ""
-	client, err = noCertsContext.GetHTTPClient()
-	if err != nil {
-		t.Fatalf("error initializing http client: %s", err)
-	}
-	for tcNum, tc := range testCases {
-		resp, err := doHTTPReq(t, client, tc.method,
-			fmt.Sprintf("%s://%s%s", noCertsContext.RequestScheme(), s.ServingAddr(), tc.key))
-		if err != nil {
-			t.Fatalf("[%d]: error issuing request: %s", tcNum, err)
-		}
-
-		defer resp.Body.Close()
-		if resp.StatusCode != tc.noCertsStatus {
-			t.Errorf("[%d]: expected status code %d, got %d", tcNum, tc.noCertsStatus, resp.StatusCode)
-		}
-	}
-
 	// Plain http.
 	insecureContext := testutils.NewRootTestBaseContext()
 	insecureContext.Insecure = true
-	client, err = insecureContext.GetHTTPClient()
-	if err != nil {
-		t.Fatalf("error initializing http client: %s", err)
+
+	testCases := []struct {
+		method, key string
+		ctx         *base.Context
+		success     bool // request sent successfully (may be non-200)
+		code        int  // http response code
+	}{
+		// /ui/: basic file server: no auth.
+		{"GET", "/index.html", certsContext, true, http.StatusOK},
+		{"GET", "/index.html", noCertsContext, true, http.StatusOK},
+		{"GET", "/index.html", insecureContext, false, -1},
+
+		// /_admin/: server.adminServer: no auth.
+		{"GET", healthPath, certsContext, true, http.StatusOK},
+		{"GET", healthPath, noCertsContext, true, http.StatusOK},
+		{"GET", healthPath, insecureContext, false, -1},
+
+		// /debug/: server.adminServer: no auth.
+		{"GET", debugEndpoint + "vars", certsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", noCertsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", insecureContext, false, -1},
+
+		// /_status/nodes: server.statusServer: no auth.
+		{"GET", statusNodeKeyPrefix, certsContext, true, http.StatusOK},
+		{"GET", statusNodeKeyPrefix, noCertsContext, true, http.StatusOK},
+		{"GET", statusNodeKeyPrefix, insecureContext, false, -1},
+
+		// /kv/db/: kv.DBServer. These are proto reqs, but we can at least get past auth.
+		{"GET", kv.DBPrefix + "Get", certsContext, true, http.StatusBadRequest},
+		{"GET", kv.DBPrefix + "Get", noCertsContext, true, http.StatusUnauthorized},
+		{"GET", kv.DBPrefix + "Get", insecureContext, false, -1},
+
+		// /ts/: ts.Server.
+		{"GET", ts.URLPrefix, certsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, noCertsContext, true, http.StatusUnauthorized},
+		{"GET", ts.URLPrefix, insecureContext, false, -1},
 	}
+
 	for tcNum, tc := range testCases {
+		client, err := tc.ctx.GetHTTPClient()
+		if err != nil {
+			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
+		}
 		resp, err := doHTTPReq(t, client, tc.method,
-			fmt.Sprintf("%s://%s%s", insecureContext.RequestScheme(), s.ServingAddr(), tc.key))
-		// We're talking http to a https server. We don't even make it to a response.
-		if err == nil {
-			defer resp.Body.Close()
-			t.Errorf("[%d]: unexpected success", tcNum)
+			fmt.Sprintf("%s://%s%s", tc.ctx.RequestScheme(), s.ServingAddr(), tc.key))
+		if (err == nil) != tc.success {
+			t.Fatalf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
+		}
+		if err != nil {
+			continue
+		}
+
+		defer resp.Body.Close()
+		if resp.StatusCode != tc.code {
+			t.Errorf("[%d]: expected status code %d, got %d", tcNum, tc.code, resp.StatusCode)
 		}
 	}
 }
