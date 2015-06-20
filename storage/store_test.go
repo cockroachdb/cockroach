@@ -51,7 +51,7 @@ var testIdent = proto.StoreIdent{
 	StoreID:   1,
 }
 
-var testBaseContext = testutils.NewTestBaseContext()
+var rootTestBaseContext = testutils.NewRootTestBaseContext()
 
 // setTestRetryOptions sets aggressive retries with a limit on number
 // of attempts so we don't get stuck behind indefinite backoff/retry
@@ -149,7 +149,7 @@ func (db *testSender) sendOne(call proto.Call) {
 // responsible for stopping the stopper upon completion.
 func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	stopper := util.NewStopper()
-	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	manual := hlc.NewManualClock(0)

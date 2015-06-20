@@ -31,14 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-var testBaseContext = testutils.NewTestBaseContext()
-var serverTestBaseContext = testutils.NewServerTestBaseContext()
+var rootTestBaseContext = testutils.NewRootTestBaseContext()
 var insecureTestBaseContext = &base.Context{Insecure: true, User: security.NodeUser}
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), nil)
+	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 	if err := g.AddInfo("i", int64(1), time.Hour); err != nil {
 		t.Fatal(err)
@@ -73,7 +72,7 @@ func TestGossipInfoStore(t *testing.T) {
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), nil)
+	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 
 	// For int64.

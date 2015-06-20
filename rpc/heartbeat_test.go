@@ -96,10 +96,10 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 
-	sContext := NewServerTestContext(nil, stopper)
+	nodeContext := NewNodeTestContext(nil, stopper)
 	serverAddr := util.CreateTestAddr("tcp")
 	// Start heartbeat.
-	s := NewServer(serverAddr, sContext)
+	s := NewServer(serverAddr, nodeContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -111,22 +111,22 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 		addr:         s.Addr(),
 		Ready:        make(chan struct{}),
 		Closed:       make(chan struct{}),
-		clock:        sContext.localClock,
-		remoteClocks: sContext.RemoteClocks,
+		clock:        nodeContext.localClock,
+		remoteClocks: nodeContext.RemoteClocks,
 		offset: proto.RemoteOffset{
 			Offset:      10,
 			Uncertainty: 5,
 			MeasuredAt:  20,
 		},
 	}
-	if err := client.connect(nil, sContext); err != nil {
+	if err := client.connect(nil, nodeContext); err != nil {
 		t.Fatal(err)
 	}
 
-	sContext.RemoteClocks.mu.Lock()
+	nodeContext.RemoteClocks.mu.Lock()
 	remoteAddr := client.Addr().String()
-	o := sContext.RemoteClocks.offsets[remoteAddr]
-	sContext.RemoteClocks.mu.Unlock()
+	o := nodeContext.RemoteClocks.offsets[remoteAddr]
+	nodeContext.RemoteClocks.mu.Unlock()
 	expServerOffset := proto.RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
 	if o.Equal(expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
@@ -136,14 +136,14 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	// Remove the offset from RemoteClocks and simulate the remote end
 	// closing the client connection. A new offset for the server should
 	// not be added to the clock monitor.
-	sContext.RemoteClocks.mu.Lock()
-	delete(sContext.RemoteClocks.offsets, remoteAddr)
+	nodeContext.RemoteClocks.mu.Lock()
+	delete(nodeContext.RemoteClocks.offsets, remoteAddr)
 	client.Client.Close()
-	sContext.RemoteClocks.mu.Unlock()
+	nodeContext.RemoteClocks.mu.Unlock()
 
-	sContext.RemoteClocks.mu.Lock()
-	if offset, ok := sContext.RemoteClocks.offsets[remoteAddr]; ok {
+	nodeContext.RemoteClocks.mu.Lock()
+	if offset, ok := nodeContext.RemoteClocks.offsets[remoteAddr]; ok {
 		t.Errorf("unexpected updated offset: %v", offset)
 	}
-	sContext.RemoteClocks.mu.Unlock()
+	nodeContext.RemoteClocks.mu.Unlock()
 }
