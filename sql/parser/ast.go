@@ -189,26 +189,35 @@ func (node *Use) String() string {
 
 // CreateDatabase represents a CREATE DATABASE statement.
 type CreateDatabase struct {
-	IfNotExists string // TODO(pmattis): Make this a bool
+	IfNotExists bool
 	Name        string
 }
 
 func (node *CreateDatabase) String() string {
-	return fmt.Sprintf("CREATE DATABASE%s %s", node.IfNotExists, node.Name)
+	var buf bytes.Buffer
+	buf.WriteString("CREATE DATABASE")
+	if node.IfNotExists {
+		buf.WriteString(" IF NOT EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s", node.Name)
+	return buf.String()
 }
 
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
-	Name       string
-	TableName  string
-	Constraint string
+	Name      string
+	TableName string
+	Unique    bool
 }
 
 func (node *CreateIndex) String() string {
-	if node.Constraint == "" {
-		return fmt.Sprintf("CREATE INDEX %s ON %s", node.Name, node.TableName)
+	var buf bytes.Buffer
+	buf.WriteString("CREATE ")
+	if node.Unique {
+		buf.WriteString("UNIQUE ")
 	}
-	return fmt.Sprintf("CREATE %s INDEX %s ON %s", node.Constraint, node.Name, node.TableName)
+	fmt.Fprintf(&buf, "INDEX %s ON %s", node.Name, node.TableName)
+	return buf.String()
 }
 
 // TableDef represents a column or index definition within a CREATE TABLE
@@ -235,23 +244,40 @@ func (node TableDefs) String() string {
 	return buf.String()
 }
 
-// ColumnTableDef represents a column definition within a CREATE TABLE
+// NullType represents either NULL, NOT NULL or an unspecified value (silent
+// NULL).
+type NullType int
+
+// The values for NullType.
+const (
+	NotNull NullType = iota
+	Null
+	SilentNull
+)
+
+// ColumnTableDef represents a column dlefinition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
 	Name       string
 	Type       ColumnType
-	Null       string // TODO(pmattis): Make this a bool.
-	Constraint string // TODO(pmattis): Make this an enum (primary or unique).
+	Null       NullType
+	PrimaryKey bool
+	Unique     bool
 }
 
 func (node *ColumnTableDef) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
-	if node.Null != "" {
-		fmt.Fprintf(&buf, " %s", node.Null)
+	switch node.Null {
+	case Null:
+		buf.WriteString(" NULL")
+	case NotNull:
+		buf.WriteString(" NOT NULL")
 	}
-	if node.Constraint != "" {
-		fmt.Fprintf(&buf, " %s", node.Constraint)
+	if node.PrimaryKey {
+		buf.WriteString(" PRIMARY KEY")
+	} else if node.Unique {
+		buf.WriteString(" UNIQUE")
 	}
 	return buf.String()
 }
@@ -259,15 +285,15 @@ func (node *ColumnTableDef) String() string {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name       string
-	Constraint string
-	Columns    []string
+	Name    string
+	Unique  bool
+	Columns []string
 }
 
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
-	if node.Constraint != "" {
-		fmt.Fprintf(&buf, "%s ", node.Constraint)
+	if node.Unique {
+		buf.WriteString("UNIQUE ")
 	}
 	fmt.Fprintf(&buf, "INDEX %s (%s)",
 		node.Name, strings.Join(node.Columns, ", "))
@@ -276,13 +302,19 @@ func (node *IndexTableDef) String() string {
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists string // TODO(pmattis): Make this a bool
+	IfNotExists bool
 	Name        string
 	Defs        TableDefs
 }
 
 func (node *CreateTable) String() string {
-	return fmt.Sprintf("CREATE TABLE%s %s (%s)", node.IfNotExists, node.Name, node.Defs)
+	var buf bytes.Buffer
+	buf.WriteString("CREATE TABLE")
+	if node.IfNotExists {
+		buf.WriteString(" IF NOT EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s (%s)", node.Name, node.Defs)
+	return buf.String()
 }
 
 // DDL represents a CREATE, ALTER, DROP or RENAME statement.
@@ -293,10 +325,9 @@ func (node *CreateTable) String() string {
 // for the various statements it now contains. See the CreateTable struct as an
 // example.
 type DDL struct {
-	Action      string
-	IfNotExists string
-	Name        string
-	NewName     string
+	Action  string
+	Name    string
+	NewName string
 }
 
 const (
@@ -314,10 +345,6 @@ const (
 	astShowColumns     = "SHOW COLUMNS FROM"
 	astShowFullColumns = "SHOW FULL COLUMNS FROM"
 	astTruncateTable   = "TRUNCATE TABLE"
-	astIfNotExists     = " IF NOT EXISTS"
-	astUnique          = "UNIQUE"
-	astPrimaryKey      = "PRIMARY KEY"
-	astKey             = "KEY"
 	astUnsigned        = "UNSIGNED"
 )
 
@@ -328,7 +355,7 @@ func (node *DDL) String() string {
 	case astRenameTable:
 		return fmt.Sprintf("%s %s %s", node.Action, node.Name, node.NewName)
 	case astCreateView:
-		return fmt.Sprintf("%s%s %s", node.Action, node.IfNotExists, node.NewName)
+		return fmt.Sprintf("%s %s", node.Action, node.NewName)
 	case astShowDatabases:
 		return node.Action
 	case astShowTables:

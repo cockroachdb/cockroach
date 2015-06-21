@@ -154,8 +154,8 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <updateExprs> update_list
 %type <updateExpr> update_expression
 %type <empty> exists_opt ignore_opt non_rename_operation to_opt using_opt
-%type <boolVal> unsigned_opt
-%type <str> constraint_opt not_exists_opt from_opt
+%type <boolVal> unsigned_opt not_exists_opt unique_opt
+%type <str> from_opt
 %type <intVal> int_opt int_val precision_opt
 %type <intVal2> float_opt decimal_opt 
 %type <str> sql_id
@@ -163,8 +163,7 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <tableDef> table_def
 %type <columnType> column_type
 %type <str> int_type float_type decimal_type char_type binary_type text_type blob_type
-%type <str> column_null_opt
-%type <str> column_constraint_opt
+%type <intVal> column_null_opt column_constraint_opt
 %type <empty> force_eof
 
 %%
@@ -269,9 +268,9 @@ create_statement:
   {
     $$ = &CreateTable{IfNotExists: $3, Name: $4, Defs: $6}
   }
-| tokCreate constraint_opt tokIndex sql_id using_opt tokOn sql_id force_eof
+| tokCreate unique_opt tokIndex sql_id using_opt tokOn sql_id force_eof
   {
-    $$ = &CreateIndex{Name: $4, TableName: $7, Constraint: $2}
+    $$ = &CreateIndex{Name: $4, TableName: $7, Unique: $2}
   }
 | tokCreate tokView sql_id force_eof
   {
@@ -295,11 +294,11 @@ table_def_list:
 table_def:
   sql_id column_type column_null_opt column_constraint_opt
   {
-    $$ = &ColumnTableDef{Name: $1, Type: $2, Null: $3, Constraint: $4}
+    $$ = &ColumnTableDef{Name: $1, Type: $2, Null: NullType($3), PrimaryKey: $4 == 1, Unique: $4 == 2}
   }
-| constraint_opt tokIndex sql_id '(' index_list ')'
+| unique_opt tokIndex sql_id '(' index_list ')'
   {
-    $$ = &IndexTableDef{Name: $3, Constraint: $1, Columns: $5}
+    $$ = &IndexTableDef{Name: $3, Unique: $1, Columns: $5}
   }
 
 column_type:
@@ -393,22 +392,22 @@ blob_type:
   { $$ = astLongBlob }
 
 column_null_opt:
-  { $$ = "" }
+  { $$ = int(SilentNull) }
 | tokNull
-  { $$ = astNull }
+  { $$ = int(Null) }
 | tokNot tokNull
-  { $$ = astNotNull }
+  { $$ = int(NotNull) }
 
 column_constraint_opt:
-  { $$ = "" }
+  { $$ = 0 }
 | tokPrimary tokKey
-  { $$ = astPrimaryKey }
+  { $$ = 1 }
 | tokKey
-  { $$ = astKey }
+  { $$ = 1 }
 | tokUnique
-  { $$ = astUnique }
+  { $$ = 2 }
 | tokUnique tokKey
-  { $$ = astUnique }
+  { $$ = 2 }
 
 alter_statement:
   tokAlter ignore_opt tokTable tokID non_rename_operation force_eof
@@ -1149,9 +1148,9 @@ exists_opt:
   { $$ = struct{}{} }
 
 not_exists_opt:
-  { $$ = "" }
+  { $$ = false }
 | tokIf tokNot tokExists
-  { $$ = astIfNotExists }
+  { $$ = true }
 
 ignore_opt:
   { $$ = struct{}{} }
@@ -1175,10 +1174,10 @@ to_opt:
 | tokTo
   { $$ = struct{}{} }
 
-constraint_opt:
-  { $$ = "" }
+unique_opt:
+  { $$ = false }
 | tokUnique
-  { $$ = astUnique }
+  { $$ = true }
 
 int_opt:
   { $$ = -1 }
