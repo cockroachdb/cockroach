@@ -18,13 +18,18 @@
 package storage_test
 
 import (
+	"bytes"
+	"math"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -149,4 +154,184 @@ func TestRejectFutureCommand(t *testing.T) {
 	if v := mustGetInteger(val); v != 15 {
 		t.Errorf("expected 15, got %v", v)
 	}
+}
+
+// TestTxnPutOutOfOrder tests a case where a put operation of an older
+// timestamp comes after a put operation of a newer timestamp in a
+// txn. The test makes sure such an out-of-order put succeeds and
+// overrides an old value.
+//
+// The test uses a "Writer" and a "Reader" to reproduce an
+// out-of-order put. The Writer executes a put operation in a txn and
+// commits it. The Reader executes two get operations on the same key
+// with higher priority (outside of a txn), which pushes the Writer's
+// intent forward in time, so that the Writer's retry happens in the
+// previous attempt's past.
+//
+// 1) The Writer executes a put operation with time T in a txn.
+// 2) Before the Writer's txn is committed, the Reader sends a get
+//    operation with time T+100. This pushes the Writer txn timestamp to
+//    T+100 and triggers the restart of the Writer's txn. A write intent
+//    at timestamp T+100 is written.
+// 3) Before the Writer starts a new epoch of the txn, the Reader sends
+//    another get operation with time T+200. The Writer txn timestamp is
+//    pushed again to T+200 by updating the timestamp of the write
+//    intent to T+200. The test deliberately fails the get operation, so
+//    cockroach doesn't update its read timestamp cache.
+// 4) The Writer restarts its txn and executes the put operation
+//    again. This put operation becomes out-of-order since its
+//    timestamp is T+100 while the intent timestamp pushed at Step 3
+//    is T+200.
+// 5) The put operation still succeeds and overrides the old value using
+//    timestamp T+100. (When the Writer attempts to commit its txn, the
+//    txn will be restarted again. The txn will start a new epoch with
+//    timestamp T+200, and then it finally succeeds.)
+func TestTxnPutOutOfOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	key := "key"
+	// Set up a filter to so that the get operation at Step 3 will return an error.
+	var numGets int32
+	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+		if _, ok := args.(*proto.GetRequest); ok &&
+			args.Header().Key.Equal(proto.Key(key)) &&
+			args.Header().Txn == nil {
+			// The Reader executes two get operations, each of which triggers two get requests
+			// (the first request fails and triggers txn push, and then the second request
+			// succeeds). Returns an error for the fourth get request to avoid timestamp cache
+			// update after the third get operation pushes the txn timestamp.
+			if atomic.AddInt32(&numGets, 1) == 4 {
+				reply.Header().SetGoError(util.Errorf("Test"))
+				return true
+			}
+		}
+		return false
+	}
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+
+	manualClock := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manualClock.UnixNano)
+	store, stopper := createTestStoreWithEngine(t,
+		engine.NewInMem(proto.Attributes{}, 10<<20),
+		clock,
+		true,
+		nil)
+	defer stopper.Stop()
+
+	// Put an initial value.
+	initVal := []byte("initVal")
+	err := store.DB().Put(key, initVal)
+	if err != nil {
+		t.Fatalf("failed to put: %s", err)
+	}
+
+	waitPut := make(chan struct{})
+	waitFirstGet := make(chan struct{})
+	waitTxnRestart := make(chan struct{})
+	waitSecondGet := make(chan struct{})
+	waitTxnComplete := make(chan struct{})
+
+	// Start the Writer.
+	go func() {
+		epoch := -1
+		// Start a txn that does read-after-write.
+		// The txn will be restarted twice, and the out-of-order put
+		// will happen in the second epoch.
+		if err := store.DB().Txn(func(txn *client.Txn) error {
+			epoch++
+
+			if epoch == 1 {
+				// Wait until the second get operation is issued.
+				close(waitTxnRestart)
+				<-waitSecondGet
+			}
+
+			updatedVal := []byte("updatedVal")
+			if err := txn.Put(key, updatedVal); err != nil {
+				return err
+			}
+
+			// Make sure a get will return the value that was just written.
+			actual, err := txn.Get(key)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(actual.ValueBytes(), updatedVal) {
+				t.Fatalf("unexpected get result: %s", actual)
+			}
+
+			if epoch == 0 {
+				// Wait until the first get operation will push the txn timestamp.
+				close(waitPut)
+				<-waitFirstGet
+			}
+
+			b := &client.Batch{}
+			err = txn.Commit(b)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if epoch != 2 {
+			t.Fatalf("unexpected number of txn retries: %d", epoch)
+		}
+
+		close(waitTxnComplete)
+	}()
+
+	<-waitPut
+
+	// Start the Reader.
+
+	// Advance the clock and send a get operation with higher
+	// priority to trigger the txn restart.
+	manualClock.Increment(100)
+
+	priority := int32(math.MaxInt32)
+	requestHeader := proto.RequestHeader{
+		Key:          proto.Key(key),
+		RaftID:       1,
+		Replica:      proto.Replica{StoreID: store.StoreID()},
+		UserPriority: &priority,
+		Timestamp:    clock.Now(),
+	}
+	getCall := proto.Call{
+		Args: &proto.GetRequest{
+			RequestHeader: requestHeader,
+		},
+		Reply: &proto.GetResponse{},
+	}
+	err = store.ExecuteCmd(context.Background(), getCall)
+	if err != nil {
+		t.Fatalf("failed to get: %s", err)
+	}
+
+	// Wait until the writer restarts the txn.
+	close(waitFirstGet)
+	<-waitTxnRestart
+
+	// Advance the clock and send a get operation again. This time
+	// we use TestingCommandFilter so that a get operation is not
+	// processed after the write intent is resolved (to prevent the
+	// timestamp cache from being updated).
+	manualClock.Increment(100)
+
+	requestHeader.Timestamp = clock.Now()
+	getCall = proto.Call{
+		Args: &proto.GetRequest{
+			RequestHeader: requestHeader,
+		},
+		Reply: &proto.GetResponse{},
+	}
+
+	err = store.ExecuteCmd(context.Background(), getCall)
+	if err == nil {
+		t.Fatal("unexpected success of get")
+	}
+
+	close(waitSecondGet)
+	<-waitTxnComplete
 }

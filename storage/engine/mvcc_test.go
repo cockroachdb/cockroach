@@ -206,7 +206,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Put operation with earlier walltime. Will be ignored.
+	// Put operation with earlier walltime. Will NOT be ignored.
 	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1)
 	if err != nil {
 		t.Fatal(err)
@@ -216,12 +216,12 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value.Bytes, value1.Bytes) {
+	if !bytes.Equal(value.Bytes, value2.Bytes) {
 		t.Fatalf("the value should be %s, but got %s",
-			value1.Bytes, value.Bytes)
+			value2.Bytes, value.Bytes)
 	}
 
-	// Another put operation with earlier logical time. Will be ignored.
+	// Another put operation with earlier logical time. Will NOT be ignored.
 	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1)
 	if err != nil {
 		t.Fatal(err)
@@ -231,9 +231,9 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value.Bytes, value1.Bytes) {
+	if !bytes.Equal(value.Bytes, value2.Bytes) {
 		t.Fatalf("the value should be %s, but got %s",
-			value1.Bytes, value.Bytes)
+			value2.Bytes, value.Bytes)
 	}
 }
 
@@ -1315,8 +1315,8 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Try a write with an earlier epoch; again ignored.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err != nil {
-		t.Fatal(err)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err == nil {
+		t.Fatal("unexpected success of a write with an earlier epoch")
 	}
 	// Try a write with different value using both later timestamp and epoch.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value3, txn1e2); err != nil {
