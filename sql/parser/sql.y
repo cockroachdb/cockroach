@@ -5,7 +5,10 @@
 %{
 package parser
 
-import "strings"
+import (
+  "strconv"
+  "strings"
+)
 
 func setParseTree(yylex interface{}, stmt Statement) {
   yylex.(*tokenizer).parseTree = stmt
@@ -17,6 +20,15 @@ func setAllowComments(yylex interface{}, allow bool) {
 
 func forceEOF(yylex interface{}) {
   yylex.(*tokenizer).forceEOF = true
+}
+
+func parseInt(yylex yyLexer, s string) (int, bool) {
+  i, err := strconv.Atoi(s)
+  if err != nil {
+    yylex.Error(err.Error())
+    return -1, false
+  }
+  return i, true
 }
 
 %}
@@ -55,6 +67,10 @@ func forceEOF(yylex interface{}) {
   updateExpr  *UpdateExpr
   tableDefs   TableDefs
   tableDef    TableDef
+  columnType  ColumnType
+  intVal      int
+  intVal2     [2]int
+  boolVal     bool
 }
 
 %token tokLexError
@@ -138,13 +154,15 @@ func forceEOF(yylex interface{}) {
 %type <updateExprs> update_list
 %type <updateExpr> update_expression
 %type <empty> exists_opt ignore_opt non_rename_operation to_opt using_opt
-%type <str> unsigned_opt
+%type <boolVal> unsigned_opt
 %type <str> constraint_opt not_exists_opt from_opt
-%type <str> int_opt float_opt decimal_opt precision_opt
+%type <intVal> int_opt int_val precision_opt
+%type <intVal2> float_opt decimal_opt 
 %type <str> sql_id
 %type <tableDefs> table_def_list
 %type <tableDef> table_def
-%type <str> data_type
+%type <columnType> column_type
+%type <str> int_type float_type decimal_type char_type binary_type text_type blob_type
 %type <str> column_null_opt
 %type <str> column_constraint_opt
 %type <empty> force_eof
@@ -275,7 +293,7 @@ table_def_list:
   }
 
 table_def:
-  sql_id data_type column_null_opt column_constraint_opt
+  sql_id column_type column_null_opt column_constraint_opt
   {
     $$ = &ColumnTableDef{Name: $1, Type: $2, Null: $3, Constraint: $4}
   }
@@ -284,128 +302,95 @@ table_def:
     $$ = &IndexTableDef{Name: $3, Constraint: $1, Columns: $5}
   }
 
-// TODO(pmattis): Parsing of the data types needs to be fleshed out.
-data_type:
+column_type:
   tokBit int_opt
-  {
-    $$ = "BIT"
-  }
-| tokInt int_opt unsigned_opt
-  {
-    $$ = "INT"
-  }
-| tokTinyInt int_opt unsigned_opt
-  {
-    $$ = "TINYINT"
-  }
-| tokSmallInt int_opt unsigned_opt
-  {
-    $$ = "SMALLINT"
-  }
-| tokMediumInt int_opt unsigned_opt
-  {
-    $$ = "MEDIUMINT"
-  }
-| tokBigInt int_opt unsigned_opt
-  {
-    $$ = "BIGINT"
-  }
-| tokInteger int_opt unsigned_opt
-  {
-    $$ = "INTEGER"
-  }
-| tokReal float_opt unsigned_opt
-  {
-    $$ = "REAL"
-  }
-| tokDouble float_opt unsigned_opt
-  {
-    $$ = "DOUBLE"
-  }
-| tokFloat float_opt unsigned_opt
-  {
-    $$ = "FLOAT"
-  }
-| tokDecimal decimal_opt unsigned_opt
-  {
-    $$ = "DECIMAL"
-  }
-| tokNumeric decimal_opt unsigned_opt
-  {
-    $$ = "NUMERIC"
-  }
+  { $$ = &BitType{N: $2} }
+| int_type int_opt unsigned_opt
+  { $$ = &IntType{Name: $1, N: $2, Unsigned: $3} }
+| float_type float_opt unsigned_opt
+  { $$ = &FloatType{Name: $1, N: $2[0], Prec: $2[1], Unsigned: $3} }
+| decimal_type decimal_opt
+  { $$ = &DecimalType{Name: $1, N: $2[0], Prec: $2[1]} }
 | tokDate
-  {
-    $$ = "DATE"
-  }
+  { $$ = &DateType{} }
 | tokTime
-  {
-    $$ = "TIME"
-  }
+  { $$ = &TimeType{} }
 | tokDateTime
-  {
-    $$ = "DATETIME"
-  }
+  { $$ = &DateTimeType{} }
 | tokTimestamp
-  {
-    $$ = "TIMESTAMP"
-  }
-| tokChar int_opt
-  {
-    $$ = "CHAR"
-  }
-| tokVarChar int_opt
-  {
-    $$ = "VARCHAR"
-  }
-| tokBinary int_opt
-  {
-    $$ = "BINARY"
-  }
-| tokVarBinary int_opt
-  {
-    $$ = "VARBINARY"
-  }
-| tokText
-  {
-    $$ = "TEXT"
-  }
-| tokTinyText
-  {
-    $$ = "TINYTEXT"
-  }
-| tokMediumText
-  {
-    $$ = "MEDIUMTEXT"
-  }
-| tokLongText
-  {
-    $$ = "LONGTEXT"
-  }
-| tokBlob
-  {
-    $$ = "BLOB"
-  }
-| tokTinyBlob
-  {
-    $$ = "TINYBLOB"
-  }
-| tokMediumBlob
-  {
-    $$ = "MEDIUMBLOB"
-  }
-| tokLongBlob
-  {
-    $$ = "LONGBLOB"
-  }
+  { $$ = &TimestampType{} }
+| char_type int_opt
+  { $$ = &CharType{Name: $1, N: $2} }
+| binary_type int_opt
+  { $$ = &BinaryType{Name: $1, N: $2} }
+| text_type
+  { $$ = &TextType{Name: $1} }
+| blob_type
+  { $$ = &BlobType{Name: $1} }
 | tokEnum '(' index_list ')'
-  {
-    $$ = "ENUM"
-  }
+  { $$ = &EnumType{Vals: $3} }
 | tokSet '(' index_list ')'
-  {
-    $$ = "SET"
-  }
+  { $$ = &SetType{Vals: $3} }
+
+int_type:
+  tokInt
+  { $$ = astInt }
+| tokTinyInt
+  { $$ = astTinyInt }
+| tokSmallInt
+  { $$ = astSmallInt }
+| tokMediumInt
+  { $$ = astMediumInt }
+| tokBigInt
+  { $$ = astBigInt }
+| tokInteger
+  { $$ = astInteger }
+
+float_type:
+  tokReal
+  { $$ = astReal }
+| tokDouble
+  { $$ = astDouble }
+| tokFloat
+  { $$ = astFloat }
+
+decimal_type:
+  tokDecimal
+  { $$ = astDecimal }
+| tokNumeric
+  { $$ = astNumeric }
+
+char_type:
+  tokChar
+  { $$ = astChar }
+| tokVarChar
+  { $$ = astVarChar }
+
+binary_type:
+  tokBinary
+  { $$ = astBinary }
+| tokVarBinary
+  { $$ = astVarBinary }
+
+text_type:
+  tokText
+  { $$ = astText }
+| tokTinyText
+  { $$ = astTinyText }
+| tokMediumText
+  { $$ = astMediumText }
+| tokLongText
+  { $$ = astLongText }
+
+blob_type:
+  tokBlob
+  { $$ = astBlob }
+| tokTinyBlob
+  { $$ = astTinyBlob }
+| tokMediumBlob
+  { $$ = astMediumBlob }
+| tokLongBlob
+  { $$ = astLongBlob }
 
 column_null_opt:
   { $$ = "" }
@@ -1196,29 +1181,39 @@ constraint_opt:
   { $$ = astUnique }
 
 int_opt:
-  { $$ = "" }
-| '(' sql_id ')'
+  { $$ = -1 }
+| '(' int_val ')'
   { $$ = $2 }
+
+int_val:
+  tokNumber
+  {
+    if i, ok := parseInt(yylex, $1); !ok {
+      return 1
+    } else {
+      $$ = i
+    }
+  }
 
 float_opt:
-  { $$ = "" }
-| '(' sql_id ',' sql_id ')'
-  { $$ = $2 }
+  { $$[0], $$[1] = -1, -1 }
+| '(' int_val ',' int_val ')'
+  { $$[0], $$[1] = $2, $4 }
 
 decimal_opt:
-  { $$ = "" }
-| '(' sql_id precision_opt ')'
-  { $$ = $2 }
+  { $$[0], $$[1] = -1, -1 }
+| '(' int_val precision_opt ')'
+  { $$[0], $$[1] = $2, $3 }
 
 precision_opt:
-  { $$ = "" }
-| ',' sql_id
+  { $$ = -1 }
+| ',' int_val
   { $$ = $2 }
 
 unsigned_opt:
-  { $$ = "" }
+  { $$ = false }
 | tokUnsigned
-  { $$ = astUnsigned }
+  { $$ = true }
 
 using_opt:
   { $$ = struct{}{} }

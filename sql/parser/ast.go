@@ -239,7 +239,7 @@ func (node TableDefs) String() string {
 // statement.
 type ColumnTableDef struct {
 	Name       string
-	Type       string // TODO(pmattis): Make this a DataType interface.
+	Type       ColumnType
 	Null       string // TODO(pmattis): Make this a bool.
 	Constraint string // TODO(pmattis): Make this an enum (primary or unique).
 }
