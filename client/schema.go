@@ -24,26 +24,26 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/structured"
 )
 
 var schemaOptRE = regexp.MustCompile(`\s*((?:\w|\s)+)(?:\(([^)]+)\))?\s*`)
 
-type columnsByName []proto.Column
+type columnsByName []structured.Column
 
 func (s columnsByName) Len() int           { return len(s) }
 func (s columnsByName) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s columnsByName) Less(i, j int) bool { return s[i].Name < s[j].Name }
 
-type indexesByName []proto.TableSchema_IndexByName
+type indexesByName []structured.TableSchema_IndexByName
 
 func (s indexesByName) Len() int      { return len(s) }
 func (s indexesByName) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s indexesByName) Less(i, j int) bool {
 	// Sort the name "primary" less than other names.
-	if s[i].Name == proto.PrimaryKeyIndexName {
-		return s[j].Name != proto.PrimaryKeyIndexName
-	} else if s[j].Name == proto.PrimaryKeyIndexName {
+	if s[i].Name == structured.PrimaryKeyIndexName {
+		return s[j].Name != structured.PrimaryKeyIndexName
+	} else if s[j].Name == structured.PrimaryKeyIndexName {
 		return false
 	}
 	return s[i].Name < s[j].Name
@@ -76,8 +76,8 @@ func (s indexesByName) Less(i, j int) bool {
 //   "index" [(columns...)]" - creates an index on <columns>.
 //
 //   "unique index" [(columns...)]" - creates a unique index on <columns>.
-func SchemaFromModel(obj interface{}) (proto.TableSchema, error) {
-	s := proto.TableSchema{}
+func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
+	s := structured.TableSchema{}
 	m, err := getDBFields(deref(reflect.TypeOf(obj)))
 	if err != nil {
 		return s, err
@@ -87,9 +87,9 @@ func SchemaFromModel(obj interface{}) (proto.TableSchema, error) {
 
 	// Create the columns for the table.
 	for name := range m {
-		col := proto.Column{
+		col := structured.Column{
 			Name: name,
-			Type: proto.Column_BYTES,
+			Type: structured.Column_BYTES,
 		}
 		s.Columns = append(s.Columns, col)
 	}
@@ -112,10 +112,10 @@ func SchemaFromModel(obj interface{}) (proto.TableSchema, error) {
 			} else {
 				params = []string{name}
 			}
-			var index proto.Index
+			var index structured.Index
 			switch strings.ToLower(cmd) {
 			case "primary key":
-				index.Name = proto.PrimaryKeyIndexName
+				index.Name = structured.PrimaryKeyIndexName
 				index.Unique = true
 			case "unique index":
 				index.Name = strings.Join(params, ":")
@@ -123,7 +123,7 @@ func SchemaFromModel(obj interface{}) (proto.TableSchema, error) {
 			case "index":
 				index.Name = strings.Join(params, ":")
 			}
-			s.Indexes = append(s.Indexes, proto.TableSchema_IndexByName{
+			s.Indexes = append(s.Indexes, structured.TableSchema_IndexByName{
 				Index:       index,
 				ColumnNames: params,
 			})

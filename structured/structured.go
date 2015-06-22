@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package proto
+package structured
 
 import (
 	"fmt"
