@@ -52,6 +52,7 @@ type Network struct {
 // the concurrent goroutines enough time to pass data back and forth
 // in order to yield accurate estimates of how old data actually ends
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
+// TODO: This method should take `stopper` as an argument.
 func NewNetwork(nodeCount int, networkType string,
 	gossipInterval time.Duration) *Network {
 	clock := hlc.NewClock(hlc.UnixNano)
