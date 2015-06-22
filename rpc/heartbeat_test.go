@@ -119,8 +119,9 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 			MeasuredAt:  20,
 		},
 	}
-	go client.connect(nil, sContext)
-	<-client.Ready
+	if err := client.connect(nil, sContext); err != nil {
+		t.Fatal(err)
+	}
 
 	sContext.RemoteClocks.mu.Lock()
 	remoteAddr := client.Addr().String()
@@ -139,8 +140,6 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	delete(sContext.RemoteClocks.offsets, remoteAddr)
 	client.Client.Close()
 	sContext.RemoteClocks.mu.Unlock()
-
-	<-client.Closed
 
 	sContext.RemoteClocks.mu.Lock()
 	if offset, ok := sContext.RemoteClocks.offsets[remoteAddr]; ok {

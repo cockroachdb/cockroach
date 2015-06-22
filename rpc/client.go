@@ -114,13 +114,23 @@ func NewClient(addr net.Addr, opts *retry.Options, context *Context) *Client {
 	clientMu.Unlock()
 
 	context.Stopper.RunWorker(func() {
-		c.connect(opts, context)
+		if err := c.connect(opts, context); err != nil {
+			log.Errorf("client %s failed to connect: %v", c.addr, err)
+		} else {
+			// Signal client is ready by closing Ready channel.
+			log.Infof("client %s connected", c.addr)
+			close(c.Ready)
+
+			// Launch periodic heartbeat. This blocks until the client is to be closed.
+			c.runHeartbeat(context.Stopper)
+		}
+		c.Close()
 	})
 	return c
 }
 
 // connect dials the connection in a backoff/retry loop.
-func (c *Client) connect(opts *retry.Options, context *Context) {
+func (c *Client) connect(opts *retry.Options, context *Context) error {
 	// Attempt to dial connection.
 	retryOpts := clientRetryOptions
 	if opts != nil {
@@ -157,19 +167,12 @@ func (c *Client) connect(opts *retry.Options, context *Context) {
 			return retry.Break, err
 		}
 
-		// Signal client is ready by closing Ready channel.
-		log.Infof("client %s connected", c.addr)
-		close(c.Ready)
-
 		return retry.Break, nil
 	}); err != nil {
-		log.Errorf("client %s failed to connect: %v", c.addr, err)
-		c.Close()
+		return err
 	}
 
-	// Launch periodic heartbeat. This blocks until the client is to be closed.
-	c.runHeartbeat(context.Stopper)
-	c.Close()
+	return nil
 }
 
 // IsConnected returns whether the client is connected.
