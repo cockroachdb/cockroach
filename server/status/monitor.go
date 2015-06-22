@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -180,7 +181,7 @@ func (nsm *NodeStatusMonitor) OnCallError(event *CallErrorEvent) {
 // rangeDataAccumulator instance.
 type rangeDataAccumulator struct {
 	sync.Mutex
-	stats      proto.MVCCStats
+	stats      engine.MVCCStats
 	rangeCount int64
 	// 'scanning' is a special mode used to initialize a rangeDataAccumulator.
 	// During typical operation stats are monitored using per-operation deltas;
@@ -250,7 +251,7 @@ func (rda *rangeDataAccumulator) beginScanRanges(event *storage.BeginScanRangesE
 	rda.Lock()
 	defer rda.Unlock()
 	rda.isScanning = true
-	rda.stats = proto.MVCCStats{}
+	rda.stats = engine.MVCCStats{}
 	rda.rangeCount = 0
 	rda.seenScan = make(map[proto.RaftID]struct{})
 }

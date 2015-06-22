@@ -39,7 +39,7 @@ import (
 // are exactly correct and that the bytes and counts for Live, Key and Val are
 // at least the expected value.
 // The latest actual stats are returned.
-func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
+func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *storage.StoreStatus, testNumber int) *storage.StoreStatus {
 	storeStatusKey := keys.StoreStatusKey(int32(store.Ident.StoreID))
 	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
 	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
@@ -48,7 +48,7 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	if gReply.Value == nil {
 		t.Errorf("%v: could not find store status at: %s", testNumber, storeStatusKey)
 	}
-	storeStatus := &proto.StoreStatus{}
+	storeStatus := &storage.StoreStatus{}
 	if err := gogoproto.Unmarshal(gReply.Value.GetBytes(), storeStatus); err != nil {
 		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, gReply)
 	}
@@ -123,14 +123,14 @@ func TestStoreStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedStoreStatus := &proto.StoreStatus{
+	expectedStoreStatus := &storage.StoreStatus{
 		Desc:                 *storeDesc,
 		NodeID:               1,
 		RangeCount:           1,
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
@@ -154,14 +154,14 @@ func TestStoreStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedStoreStatus = &proto.StoreStatus{
+	expectedStoreStatus = &storage.StoreStatus{
 		Desc:                 oldstats.Desc,
 		NodeID:               1,
 		RangeCount:           1,
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
@@ -180,14 +180,14 @@ func TestStoreStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedStoreStatus = &proto.StoreStatus{
+	expectedStoreStatus = &storage.StoreStatus{
 		Desc:                 oldstats.Desc,
 		NodeID:               1,
 		RangeCount:           2,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
@@ -212,14 +212,14 @@ func TestStoreStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedStoreStatus = &proto.StoreStatus{
+	expectedStoreStatus = &storage.StoreStatus{
 		Desc:                 oldstats.Desc,
 		NodeID:               1,
 		RangeCount:           2,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,

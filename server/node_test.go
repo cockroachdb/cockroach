@@ -265,7 +265,7 @@ func TestCorruptedClusterID(t *testing.T) {
 // the bytes and counts for Live, Key and Val are at least the expected value.
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
-func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.NodeStatus, testNumber int) *proto.NodeStatus {
+func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *NodeStatus, testNumber int) *NodeStatus {
 	nodeStatusKey := keys.NodeStatusKey(int32(node.Descriptor.NodeID))
 	request := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
@@ -280,7 +280,7 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 	if response.Value == nil {
 		t.Errorf("%v: could not find node status at: %s", testNumber, nodeStatusKey)
 	}
-	nodeStatus := &proto.NodeStatus{}
+	nodeStatus := &NodeStatus{}
 	if err := gogoproto.Unmarshal(response.Value.GetBytes(), nodeStatus); err != nil {
 		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, response)
 	}
@@ -367,7 +367,7 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedNodeStatus := &proto.NodeStatus{
+	expectedNodeStatus := &NodeStatus{
 		RangeCount:           1,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            0,
@@ -376,7 +376,7 @@ func TestNodeStatus(t *testing.T) {
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
@@ -401,7 +401,7 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedNodeStatus = &proto.NodeStatus{
+	expectedNodeStatus = &NodeStatus{
 		RangeCount:           1,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            oldStats.StartedAt,
@@ -410,7 +410,7 @@ func TestNodeStatus(t *testing.T) {
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
@@ -444,7 +444,7 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatal(reply.Error)
 	}
 
-	expectedNodeStatus = &proto.NodeStatus{
+	expectedNodeStatus = &NodeStatus{
 		RangeCount:           2,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            oldStats.StartedAt,
@@ -453,7 +453,7 @@ func TestNodeStatus(t *testing.T) {
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
@@ -476,7 +476,7 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedNodeStatus = &proto.NodeStatus{
+	expectedNodeStatus = &NodeStatus{
 		RangeCount:           2,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
 		StartedAt:            oldStats.StartedAt,
@@ -485,7 +485,7 @@ func TestNodeStatus(t *testing.T) {
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
 		ReplicatedRangeCount: 0,
-		Stats: proto.MVCCStats{
+		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,

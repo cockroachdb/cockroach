@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -51,7 +52,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		rng := &Range{
 			stats: &rangeStats{
 				raftID: desc.RaftID,
-				MVCCStats: proto.MVCCStats{
+				MVCCStats: engine.MVCCStats{
 					KeyBytes:  1,
 					ValBytes:  2,
 					KeyCount:  1,

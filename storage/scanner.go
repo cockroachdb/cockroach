@@ -24,6 +24,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -62,7 +63,7 @@ type rangeSet interface {
 // aggregation of MVCC stats across all ranges in the store.
 type storeStats struct {
 	RangeCount int
-	MVCC       proto.MVCCStats
+	MVCC       engine.MVCCStats
 }
 
 // A rangeScanner iterates over ranges at a measured pace in order to

@@ -19,6 +19,7 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -30,7 +31,7 @@ import (
 type RegisterRangeEvent struct {
 	StoreID proto.StoreID
 	Desc    *proto.RangeDescriptor
-	Stats   proto.MVCCStats
+	Stats   engine.MVCCStats
 	Scan    bool
 }
 
@@ -41,9 +42,9 @@ type RegisterRangeEvent struct {
 type UpdateRangeEvent struct {
 	StoreID proto.StoreID
 	Desc    *proto.RangeDescriptor
-	Stats   proto.MVCCStats
+	Stats   engine.MVCCStats
 	Method  proto.Method
-	Delta   proto.MVCCStats
+	Delta   engine.MVCCStats
 }
 
 // RemoveRangeEvent occurs whenever a Range is removed from a store. This
@@ -52,7 +53,7 @@ type UpdateRangeEvent struct {
 type RemoveRangeEvent struct {
 	StoreID proto.StoreID
 	Desc    *proto.RangeDescriptor
-	Stats   proto.MVCCStats
+	Stats   engine.MVCCStats
 }
 
 // SplitRangeEvent occurs whenever a range is split in two. This Event actually
@@ -123,7 +124,7 @@ func (sef StoreEventFeed) registerRange(rng *Range, scan bool) {
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
-func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, delta *proto.MVCCStats) {
+func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, delta *engine.MVCCStats) {
 	if sef.f == nil {
 		return
 	}
@@ -230,7 +231,7 @@ func makeRegisterRangeEvent(id proto.StoreID, rng *Range, scan bool) *RegisterRa
 	}
 }
 
-func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, delta *proto.MVCCStats) *UpdateRangeEvent {
+func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, delta *engine.MVCCStats) *UpdateRangeEvent {
 	return &UpdateRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),

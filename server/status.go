@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/julienschmidt/httprouter"
@@ -363,9 +364,9 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	nodeStatuses := []proto.NodeStatus{}
+	nodeStatuses := []NodeStatus{}
 	for _, row := range rows {
-		nodeStatus := &proto.NodeStatus{}
+		nodeStatus := &NodeStatus{}
 		if err := row.ValueProto(nodeStatus); err != nil {
 			log.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -394,7 +395,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	}
 	key := keys.NodeStatusKey(int32(id))
 
-	nodeStatus := &proto.NodeStatus{}
+	nodeStatus := &NodeStatus{}
 	if err := s.db.GetProto(key, nodeStatus); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -423,9 +424,9 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	storeStatuses := []proto.StoreStatus{}
+	storeStatuses := []storage.StoreStatus{}
 	for _, row := range rows {
-		storeStatus := &proto.StoreStatus{}
+		storeStatus := &storage.StoreStatus{}
 		if err := row.ValueProto(storeStatus); err != nil {
 			log.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -454,7 +455,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	}
 	key := keys.StoreStatusKey(int32(id))
 
-	storeStatus := &proto.StoreStatus{}
+	storeStatus := &storage.StoreStatus{}
 	if err := s.db.GetProto(key, storeStatus); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)

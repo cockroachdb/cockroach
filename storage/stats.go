@@ -33,9 +33,9 @@ import (
 // processing goroutine and should never be individually updated; use
 // Update() instead. For access from other goroutines, use GetMVCC().
 type rangeStats struct {
-	raftID          proto.RaftID
-	sync.Mutex      // Protects MVCCStats
-	proto.MVCCStats // embedded, cached version of stat values
+	raftID           proto.RaftID
+	sync.Mutex       // Protects MVCCStats
+	engine.MVCCStats // embedded, cached version of stat values
 }
 
 // newRangeStats creates a new instance of rangeStats using the
@@ -54,7 +54,7 @@ func newRangeStats(raftID proto.RaftID, e engine.Engine) (*rangeStats, error) {
 // GetMVCC returns a copy of the underlying MVCCStats. Use this for
 // thread-safe access from goroutines other than the store multiraft
 // processing goroutine.
-func (rs *rangeStats) GetMVCC() proto.MVCCStats {
+func (rs *rangeStats) GetMVCC() engine.MVCCStats {
 	rs.Lock()
 	defer rs.Unlock()
 	return rs.MVCCStats
@@ -73,7 +73,7 @@ func (rs *rangeStats) GetSize() int64 {
 // by multiplying the previous intent count by the elapsed nanos since
 // the last update to range stats. Stats are stored to the underlying
 // engine and the rangeStats MVCCStats updated to reflect merged totals.
-func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *proto.MVCCStats, nowNanos int64) error {
+func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowNanos int64) error {
 	rs.Lock()
 	defer rs.Unlock()
 	// Augment the current intent age.
@@ -86,7 +86,7 @@ func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *proto.MVCCStats, nowNa
 }
 
 // SetStats sets stats wholesale.
-func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms proto.MVCCStats) error {
+func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.MVCCStats = ms

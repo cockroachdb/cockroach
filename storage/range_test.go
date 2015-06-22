@@ -1972,8 +1972,8 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS proto.MVCCStats, t *testing.T) {
-	var ms proto.MVCCStats
+func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS engine.MVCCStats, t *testing.T) {
+	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -2003,7 +2003,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 		t.Fatal(err)
 	}
-	expMS := proto.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS := engine.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -2015,7 +2015,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 128, KeyBytes: 30, ValBytes: 98, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 128, KeyBytes: 30, ValBytes: 98, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2035,7 +2035,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Delete the 1st value.
@@ -2046,7 +2046,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 58, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 58, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 }
 

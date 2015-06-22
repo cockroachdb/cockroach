@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -39,7 +40,7 @@ func TestNodeStatusMonitor(t *testing.T) {
 		StartKey: proto.Key("b"),
 		EndKey:   proto.Key("c"),
 	}
-	stats := proto.MVCCStats{
+	stats := engine.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
 		ValBytes:        2,
@@ -169,7 +170,7 @@ func TestNodeStatusMonitor(t *testing.T) {
 	feed.Close()
 	monitorStopper.Stop()
 
-	expectedStats := proto.MVCCStats{
+	expectedStats := engine.MVCCStats{
 		LiveBytes:       6,
 		KeyBytes:        12,
 		ValBytes:        12,

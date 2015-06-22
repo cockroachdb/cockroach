@@ -1652,7 +1652,7 @@ func TestFindSplitKey(t *testing.T) {
 	engine := NewInMem(proto.Attributes{}, 1<<20)
 	defer engine.Close()
 
-	ms := &proto.MVCCStats{}
+	ms := &MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
 	// bytes, writing key #i to (encoded) key #i through the MVCC
 	// facility. Assuming that this translates roughly into same-length
@@ -1765,7 +1765,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		engine := NewInMem(proto.Attributes{}, 1<<20)
 		defer engine.Close()
 
-		ms := &proto.MVCCStats{}
+		ms := &MVCCStats{}
 		val := proto.Value{Bytes: []byte(strings.Repeat("X", 10))}
 		for _, k := range test.keys {
 			if err := MVCCPut(engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
@@ -1849,7 +1849,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		engine := NewInMem(proto.Attributes{}, 1<<20)
 		defer engine.Close()
 
-		ms := &proto.MVCCStats{}
+		ms := &MVCCStats{}
 		var expKey proto.Key
 		for j, keySize := range test.keySizes {
 			key := proto.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
@@ -1887,7 +1887,7 @@ func encodedSize(msg gogoproto.Message, t *testing.T) int64 {
 	return int64(len(data))
 }
 
-func verifyStats(debug string, ms *proto.MVCCStats, expMS *proto.MVCCStats, t *testing.T) {
+func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 	// ...And verify stats.
 	if ms.LiveBytes != expMS.LiveBytes {
 		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
@@ -1935,7 +1935,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	ms := &proto.MVCCStats{}
+	ms := &MVCCStats{}
 
 	// Verify size of mvccVersionTimestampSize.
 	ts := makeTS(1*1E9, 0)
@@ -1955,7 +1955,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	vKeySize := mvccVersionTimestampSize
 	vValSize := encodedSize(&MVCCValue{Value: &value}, t)
 
-	expMS := proto.MVCCStats{
+	expMS := MVCCStats{
 		LiveBytes: mKeySize + mValSize + vKeySize + vValSize,
 		LiveCount: 1,
 		KeyBytes:  mKeySize + vKeySize,
@@ -1974,7 +1974,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	m2ValSize := encodedSize(&MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := encodedSize(&MVCCValue{Deleted: true}, t)
-	expMS2 := proto.MVCCStats{
+	expMS2 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,
 		KeyCount:    1,
 		ValBytes:    m2ValSize + vValSize + v2ValSize,
@@ -2016,7 +2016,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := encodedSize(&MVCCValue{Value: &value2}, t)
-	expMS3 := proto.MVCCStats{
+	expMS3 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
 		ValBytes:    m2ValSize + vValSize + v2ValSize + mVal2Size + vVal2Size,
@@ -2039,7 +2039,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	m3ValSize := encodedSize(&MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
 	m2Val2Size := encodedSize(&MVCCMetadata{Timestamp: ts4}, t)
-	expMS4 := proto.MVCCStats{
+	expMS4 := MVCCStats{
 		KeyBytes:   mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:   2,
 		ValBytes:   m3ValSize + vValSize + v2ValSize + m2Val2Size + vVal2Size,
@@ -2088,7 +2088,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	ms := &proto.MVCCStats{}
+	ms := &MVCCStats{}
 
 	// Now, generate a random sequence of puts, deletes and resolves.
 	// Each put and delete may or may not involve a txn. Resolves may
@@ -2182,7 +2182,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	ms := &proto.MVCCStats{}
+	ms := &MVCCStats{}
 
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
@@ -2367,7 +2367,7 @@ func BenchmarkMVCCStats(b *testing.B) {
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	defer rocksdb.Close()
 
-	ms := proto.MVCCStats{
+	ms := MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        1,
 		ValBytes:        1,

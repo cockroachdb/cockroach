@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -87,7 +88,7 @@ func TestStoreEventFeed(t *testing.T) {
 	rng1 := &Range{
 		stats: &rangeStats{
 			raftID: desc1.RaftID,
-			MVCCStats: proto.MVCCStats{
+			MVCCStats: engine.MVCCStats{
 				LiveBytes: 400,
 				KeyBytes:  40,
 				ValBytes:  360,
@@ -100,7 +101,7 @@ func TestStoreEventFeed(t *testing.T) {
 	rng2 := &Range{
 		stats: &rangeStats{
 			raftID: desc2.RaftID,
-			MVCCStats: proto.MVCCStats{
+			MVCCStats: engine.MVCCStats{
 				LiveBytes: 200,
 				KeyBytes:  30,
 				ValBytes:  170,
@@ -110,7 +111,7 @@ func TestStoreEventFeed(t *testing.T) {
 	if err := rng2.setDesc(desc2); err != nil {
 		t.Fatal(err)
 	}
-	diffStats := &proto.MVCCStats{
+	diffStats := &engine.MVCCStats{
 		IntentBytes: 30,
 		IntentAge:   20,
 	}
@@ -136,7 +137,7 @@ func TestStoreEventFeed(t *testing.T) {
 					StartKey: proto.Key("a"),
 					EndKey:   proto.Key("b"),
 				},
-				Stats: proto.MVCCStats{
+				Stats: engine.MVCCStats{
 					LiveBytes: 400,
 					KeyBytes:  40,
 					ValBytes:  360,
@@ -155,13 +156,13 @@ func TestStoreEventFeed(t *testing.T) {
 					StartKey: proto.Key("a"),
 					EndKey:   proto.Key("b"),
 				},
-				Stats: proto.MVCCStats{
+				Stats: engine.MVCCStats{
 					LiveBytes: 400,
 					KeyBytes:  40,
 					ValBytes:  360,
 				},
 				Method: proto.Put,
-				Delta: proto.MVCCStats{
+				Delta: engine.MVCCStats{
 					IntentBytes: 30,
 					IntentAge:   20,
 				},
@@ -179,7 +180,7 @@ func TestStoreEventFeed(t *testing.T) {
 					StartKey: proto.Key("b"),
 					EndKey:   proto.Key("c"),
 				},
-				Stats: proto.MVCCStats{
+				Stats: engine.MVCCStats{
 					LiveBytes: 200,
 					KeyBytes:  30,
 					ValBytes:  170,
@@ -199,12 +200,12 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("a"),
 						EndKey:   proto.Key("b"),
 					},
-					Stats: proto.MVCCStats{
+					Stats: engine.MVCCStats{
 						LiveBytes: 400,
 						KeyBytes:  40,
 						ValBytes:  360,
 					},
-					Delta: proto.MVCCStats{
+					Delta: engine.MVCCStats{
 						LiveBytes: -200,
 						KeyBytes:  -30,
 						ValBytes:  -170,
@@ -216,7 +217,7 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("b"),
 						EndKey:   proto.Key("c"),
 					},
-					Stats: proto.MVCCStats{
+					Stats: engine.MVCCStats{
 						LiveBytes: 200,
 						KeyBytes:  30,
 						ValBytes:  170,
@@ -237,12 +238,12 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("a"),
 						EndKey:   proto.Key("b"),
 					},
-					Stats: proto.MVCCStats{
+					Stats: engine.MVCCStats{
 						LiveBytes: 400,
 						KeyBytes:  40,
 						ValBytes:  360,
 					},
-					Delta: proto.MVCCStats{
+					Delta: engine.MVCCStats{
 						LiveBytes: 200,
 						KeyBytes:  30,
 						ValBytes:  170,
@@ -254,7 +255,7 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("b"),
 						EndKey:   proto.Key("c"),
 					},
-					Stats: proto.MVCCStats{
+					Stats: engine.MVCCStats{
 						LiveBytes: 200,
 						KeyBytes:  30,
 						ValBytes:  170,
