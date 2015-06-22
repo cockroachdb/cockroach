@@ -97,7 +97,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// zero, this will translate into non live bytes.  Also write
 		// intent count. Note: the actual accounting on bytes is fictional
 		// in this test.
-		stats := proto.MVCCStats{
+		stats := engine.MVCCStats{
 			KeyBytes:    test.gcBytes,
 			IntentCount: test.intentCount,
 			IntentAge:   test.intentAge,

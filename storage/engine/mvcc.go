@@ -62,17 +62,58 @@ func (meta MVCCMetadata) IsIntentOf(txn *proto.Transaction) bool {
 	return meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)
 }
 
+// Delta returns the difference between two MVCCStats structures.
+func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
+	result := *ms
+	result.Subtract(oms)
+	return result
+}
+
+// Add adds values from oms to ms.
+func (ms *MVCCStats) Add(oms *MVCCStats) {
+	ms.LiveBytes += oms.LiveBytes
+	ms.KeyBytes += oms.KeyBytes
+	ms.ValBytes += oms.ValBytes
+	ms.IntentBytes += oms.IntentBytes
+	ms.LiveCount += oms.LiveCount
+	ms.KeyCount += oms.KeyCount
+	ms.ValCount += oms.ValCount
+	ms.IntentCount += oms.IntentCount
+	ms.IntentAge += oms.IntentAge
+	ms.GCBytesAge += oms.GCBytesAge
+	ms.SysBytes += oms.SysBytes
+	ms.SysCount += oms.SysCount
+	ms.LastUpdateNanos += oms.LastUpdateNanos
+}
+
+// Subtract subtracts the values of oms from ms.
+func (ms *MVCCStats) Subtract(oms *MVCCStats) {
+	ms.LiveBytes -= oms.LiveBytes
+	ms.KeyBytes -= oms.KeyBytes
+	ms.ValBytes -= oms.ValBytes
+	ms.IntentBytes -= oms.IntentBytes
+	ms.LiveCount -= oms.LiveCount
+	ms.KeyCount -= oms.KeyCount
+	ms.ValCount -= oms.ValCount
+	ms.IntentCount -= oms.IntentCount
+	ms.IntentAge -= oms.IntentAge
+	ms.GCBytesAge -= oms.GCBytesAge
+	ms.SysBytes -= oms.SysBytes
+	ms.SysCount -= oms.SysCount
+	ms.LastUpdateNanos -= oms.LastUpdateNanos
+}
+
 // updateStatsForKey returns whether or not the bytes and counts for
 // the specified key should be tracked at all, and if so, whether the
 // key is system-local.
-func updateStatsForKey(ms *proto.MVCCStats, key proto.Key) (bool, bool) {
+func updateStatsForKey(ms *MVCCStats, key proto.Key) (bool, bool) {
 	return ms != nil, key.Less(keys.LocalMax)
 }
 
 // updateStatsForInline updates stat counters for an inline value.
 // These are simpler as they don't involve intents or multiple
 // versions.
-func updateStatsForInline(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64) {
+func updateStatsForInline(ms *MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
 		return
@@ -113,7 +154,7 @@ func updateStatsForInline(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, o
 // compaction. Instead, we undercount by adding only the size of the
 // value.Bytes byte slice. These errors are corrected during splits
 // and merges.
-func updateStatsOnMerge(ms *proto.MVCCStats, key proto.Key, valSize int64) {
+func updateStatsOnMerge(ms *MVCCStats, key proto.Key, valSize int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
 		return
@@ -131,7 +172,7 @@ func updateStatsOnMerge(ms *proto.MVCCStats, key proto.Key, valSize int64) {
 // versioned value's key & value bytes. If the value is not a
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
-func updateStatsOnPut(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
+func updateStatsOnPut(ms *MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64, orig, meta *MVCCMetadata, origAgeSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
@@ -196,7 +237,7 @@ func updateStatsOnPut(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origM
 // between the original and new metadata sizes. The size of the
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
-func updateStatsOnResolve(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
+func updateStatsOnResolve(ms *MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64, meta *MVCCMetadata, commit bool, origAgeSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
@@ -230,7 +271,7 @@ func updateStatsOnResolve(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, o
 // aborted value's key and value byte sizes. If an earlier version
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
-func updateStatsOnAbort(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
+func updateStatsOnAbort(ms *MVCCStats, key proto.Key, origMetaKeySize, origMetaValSize,
 	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *MVCCMetadata,
 	origAgeSeconds, restoredAgeSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
@@ -287,7 +328,7 @@ func updateStatsOnAbort(ms *proto.MVCCStats, key proto.Key, origMetaKeySize, ori
 // value counts, and updating the GC'able bytes age. If meta is
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
-func updateStatsOnGC(ms *proto.MVCCStats, key proto.Key, keySize, valSize int64, meta *MVCCMetadata, ageSeconds int64) {
+func updateStatsOnGC(ms *MVCCStats, key proto.Key, keySize, valSize int64, meta *MVCCMetadata, ageSeconds int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
 		return
@@ -317,13 +358,13 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the supplied MVCCStats struct.
-func MVCCGetRangeStats(engine Engine, raftID proto.RaftID, ms *proto.MVCCStats) error {
+func MVCCGetRangeStats(engine Engine, raftID proto.RaftID, ms *MVCCStats) error {
 	_, err := MVCCGetProto(engine, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
 	return err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
-func MVCCSetRangeStats(engine Engine, raftID proto.RaftID, ms *proto.MVCCStats) error {
+func MVCCSetRangeStats(engine Engine, raftID proto.RaftID, ms *MVCCStats) error {
 	return MVCCPutProto(engine, nil, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
 }
 
@@ -352,7 +393,7 @@ func MVCCGetProto(engine Engine, key proto.Key, timestamp proto.Timestamp, consi
 
 // MVCCPutProto sets the given key to the protobuf-serialized byte
 // string of msg and the provided timestamp.
-func MVCCPutProto(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) error {
+func MVCCPutProto(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) error {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
 		return err
@@ -614,7 +655,7 @@ var putBufferPool = sync.Pool{
 // single row and never accumulate more than a single value. Successive
 // zero timestamp writes to a key replace the value and deletes clear
 // the value. In addition, zero timestamp values may be merged.
-func MVCCPut(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp,
+func MVCCPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp,
 	value proto.Value, txn *proto.Transaction) error {
 	if value.Timestamp != nil && !value.Timestamp.Equal(timestamp) {
 		return util.Errorf(
@@ -637,7 +678,7 @@ func MVCCPut(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.
 
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
-func MVCCDelete(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp,
+func MVCCDelete(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp,
 	txn *proto.Transaction) error {
 	buf := putBufferPool.Get().(*putBuffer)
 	buf.value.Reset()
@@ -653,7 +694,7 @@ func MVCCDelete(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp pro
 
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
-func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp,
+func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp,
 	value MVCCValue, txn *proto.Transaction, buf *putBuffer) error {
 	if len(key) == 0 {
 		return emptyKeyError()
@@ -760,7 +801,7 @@ func mvccPutInternal(engine Engine, ms *proto.MVCCStats, key proto.Key, timestam
 // MVCCIncrement fetches the value for key, and assuming the value is
 // an "integer" type, increments it by inc and stores the new
 // value. The newly incremented value is returned.
-func MVCCIncrement(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, inc int64) (int64, error) {
+func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, inc int64) (int64, error) {
 	// Handle check for non-existence of key. In order to detect
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
@@ -795,7 +836,7 @@ func MVCCIncrement(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp 
 // MVCCConditionalPut sets the value for a specified key only if the
 // expected value matches. If not, the return a ConditionFailedError
 // containing the actual value.
-func MVCCConditionalPut(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp, value proto.Value,
+func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, value proto.Value,
 	expValue *proto.Value, txn *proto.Transaction) error {
 	// Handle check for non-existence of key. In order to detect
 	// the potential write intent by another concurrent transaction
@@ -829,7 +870,7 @@ func MVCCConditionalPut(engine Engine, ms *proto.MVCCStats, key proto.Key, times
 // combines time series observations if the proto.Value tag value
 // indicates the value byte slice is of type _CR_TS (the internal
 // cockroach time series data tag).
-func MVCCMerge(engine Engine, ms *proto.MVCCStats, key proto.Key, value proto.Value) error {
+func MVCCMerge(engine Engine, ms *MVCCStats, key proto.Key, value proto.Value) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -850,7 +891,7 @@ func MVCCMerge(engine Engine, ms *proto.MVCCStats, key proto.Key, value proto.Va
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func MVCCDeleteRange(engine Engine, ms *proto.MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
+func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
@@ -1007,7 +1048,7 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
-func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
+func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -1143,7 +1184,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *proto.MVCCStats, key proto.Key, t
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func MVCCResolveWriteIntentRange(engine Engine, ms *proto.MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
+func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
 	if txn == nil {
 		return 0, util.Error("no txn specified")
 	}
@@ -1189,7 +1230,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *proto.MVCCStats, key, endKey
 // it iterates through the keys listed for garbage collection by the
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration.
-func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.InternalGCRequest_GCKey, timestamp proto.Timestamp) error {
+func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.InternalGCRequest_GCKey, timestamp proto.Timestamp) error {
 	iter := engine.NewIterator()
 
 	// Iterate through specified GC keys.
@@ -1305,7 +1346,7 @@ func MVCCFindSplitKey(engine Engine, raftID proto.RaftID, key, endKey proto.Key)
 	encEndKey := MVCCEncodeKey(endKey)
 
 	// Get range size from stats.
-	var ms proto.MVCCStats
+	var ms MVCCStats
 	if err := MVCCGetRangeStats(engine, raftID, &ms); err != nil {
 		return nil, err
 	}
@@ -1364,8 +1405,8 @@ func MVCCFindSplitKey(engine Engine, raftID proto.RaftID, key, endKey proto.Key)
 // (i.e. the one with start key == KeyMin). The nowNanos arg specifies
 // the wall time in nanoseconds since the epoch and is used to compute
 // the total age of all intents.
-func MVCCComputeStats(iter Iterator, nowNanos int64) (proto.MVCCStats, error) {
-	ms := proto.MVCCStats{LastUpdateNanos: nowNanos}
+func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
+	ms := MVCCStats{LastUpdateNanos: nowNanos}
 	first := false
 	meta := &MVCCMetadata{}
 

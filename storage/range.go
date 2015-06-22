@@ -442,7 +442,7 @@ func (r *Range) GetReplica() *proto.Replica {
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
-func (r *Range) GetMVCCStats() proto.MVCCStats {
+func (r *Range) GetMVCCStats() engine.MVCCStats {
 	return r.stats.GetMVCC()
 }
 
@@ -878,8 +878,8 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	batch := r.rm.Engine().NewBatch()
 	defer batch.Close()
 
-	// Create a proto.MVCCStats instance.
-	ms := proto.MVCCStats{}
+	// Create a engine.MVCCStats instance.
+	ms := engine.MVCCStats{}
 
 	// Execute the command; the error will also be set in the reply header.
 	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not

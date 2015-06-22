@@ -553,47 +553,6 @@ func (s Int32Slice) Len() int           { return len(s) }
 func (s Int32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }
 
-// Delta returns the difference between two MVCCStats structures.
-func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
-	result := *ms
-	result.Subtract(oms)
-	return result
-}
-
-// Add adds values from oms to ms.
-func (ms *MVCCStats) Add(oms *MVCCStats) {
-	ms.LiveBytes += oms.LiveBytes
-	ms.KeyBytes += oms.KeyBytes
-	ms.ValBytes += oms.ValBytes
-	ms.IntentBytes += oms.IntentBytes
-	ms.LiveCount += oms.LiveCount
-	ms.KeyCount += oms.KeyCount
-	ms.ValCount += oms.ValCount
-	ms.IntentCount += oms.IntentCount
-	ms.IntentAge += oms.IntentAge
-	ms.GCBytesAge += oms.GCBytesAge
-	ms.SysBytes += oms.SysBytes
-	ms.SysCount += oms.SysCount
-	ms.LastUpdateNanos += oms.LastUpdateNanos
-}
-
-// Subtract subtracts the values of oms from ms.
-func (ms *MVCCStats) Subtract(oms *MVCCStats) {
-	ms.LiveBytes -= oms.LiveBytes
-	ms.KeyBytes -= oms.KeyBytes
-	ms.ValBytes -= oms.ValBytes
-	ms.IntentBytes -= oms.IntentBytes
-	ms.LiveCount -= oms.LiveCount
-	ms.KeyCount -= oms.KeyCount
-	ms.ValCount -= oms.ValCount
-	ms.IntentCount -= oms.IntentCount
-	ms.IntentAge -= oms.IntentAge
-	ms.GCBytesAge -= oms.GCBytesAge
-	ms.SysBytes -= oms.SysBytes
-	ms.SysCount -= oms.SysCount
-	ms.LastUpdateNanos -= oms.LastUpdateNanos
-}
-
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {

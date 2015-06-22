@@ -443,7 +443,7 @@ func TestNodeStatusResponse(t *testing.T) {
 
 	// First fetch all the node statuses.
 	type nsWrapper struct {
-		Data []proto.NodeStatus `json:"d"`
+		Data []NodeStatus `json:"d"`
 	}
 	wrapper := nsWrapper{}
 	if err := json.Unmarshal(body, &wrapper); err != nil {
@@ -461,7 +461,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
-		nodeStatus := &proto.NodeStatus{}
+		nodeStatus := &NodeStatus{}
 		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodeKeyPrefix, oldNodeStatus.Desc.NodeID))
 		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
 			t.Fatal(err)
@@ -478,7 +478,7 @@ func TestStoreStatusResponse(t *testing.T) {
 	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
 	defer ts.Stop()
 	type ssWrapper struct {
-		Data []proto.StoreStatus `json:"d"`
+		Data []storage.StoreStatus `json:"d"`
 	}
 	wrapper := ssWrapper{}
 	if err := json.Unmarshal(body, &wrapper); err != nil {
@@ -507,7 +507,7 @@ func TestStoreStatusResponse(t *testing.T) {
 		}
 
 		// Also fetch the each status individually.
-		fetchedStoreStatus := &proto.StoreStatus{}
+		fetchedStoreStatus := &storage.StoreStatus{}
 		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoreKeyPrefix, storeStatus.Desc.StoreID))
 		if err := json.Unmarshal(requestBody, &fetchedStoreStatus); err != nil {
 			t.Fatal(err)

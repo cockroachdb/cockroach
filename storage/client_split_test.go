@@ -53,8 +53,8 @@ func adminSplitArgs(key, splitKey []byte, raftID proto.RaftID, storeID proto.Sto
 	return args, reply
 }
 
-func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS proto.MVCCStats) error {
-	var ms proto.MVCCStats
+func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS engine.MVCCStats) error {
+	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	var ms proto.MVCCStats
+	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non ero and
 	// exceed the original range when summed.
-	var left, right proto.MVCCStats
+	var left, right engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &left); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	rng := store.LookupRange(proto.Key("\x01"), nil)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
-	if err := verifyRangeStats(store.Engine(), rng.Desc().RaftID, proto.MVCCStats{}); err != nil {
+	if err := verifyRangeStats(store.Engine(), rng.Desc().RaftID, engine.MVCCStats{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -304,7 +304,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		}
 	}
 	// Get the range stats now that we have data.
-	var ms proto.MVCCStats
+	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var msLeft, msRight proto.MVCCStats
+	var msLeft, msRight engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +325,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// The stats should be exactly equal when added.
-	expMS := proto.MVCCStats{
+	expMS := engine.MVCCStats{
 		LiveBytes:   msLeft.LiveBytes + msRight.LiveBytes,
 		KeyBytes:    msLeft.KeyBytes + msRight.KeyBytes,
 		ValBytes:    msLeft.ValBytes + msRight.ValBytes,
@@ -346,7 +346,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 func fillRange(store *storage.Store, raftID proto.RaftID, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		var ms proto.MVCCStats
+		var ms engine.MVCCStats
 		if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &ms); err != nil {
 			t.Fatal(err)
 		}

@@ -851,7 +851,7 @@ func (s *Store) BootstrapRange() error {
 		},
 	}
 	batch := s.engine.NewBatch()
-	ms := &proto.MVCCStats{}
+	ms := &engine.MVCCStats{}
 	now := s.ctx.Clock.Now()
 
 	// Range descriptor.
@@ -1553,13 +1553,13 @@ func raftEntryFormatter(data []byte) string {
 // GetStatus fetches the latest store status from the stored value on the cluster.
 // Returns nil if the scanner has not yet run. The scanner runs once every
 // ctx.ScanInterval.
-func (s *Store) GetStatus() (*proto.StoreStatus, error) {
+func (s *Store) GetStatus() (*StoreStatus, error) {
 	if s.scanner.Count() == 0 {
 		// The scanner hasn't completed a first run yet.
 		return nil, nil
 	}
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
-	status := &proto.StoreStatus{}
+	status := &StoreStatus{}
 	if err := s.db.GetProto(key, status); err != nil {
 		return nil, err
 	}
@@ -1632,13 +1632,13 @@ func (s *Store) updateStoreStatus() {
 		log.Error(err)
 		return
 	}
-	status := &proto.StoreStatus{
+	status := &StoreStatus{
 		Desc:                 *desc,
 		NodeID:               s.Ident.NodeID,
 		UpdatedAt:            now,
 		StartedAt:            s.startedAt,
 		RangeCount:           int32(scannerStats.RangeCount),
-		Stats:                proto.MVCCStats(scannerStats.MVCC),
+		Stats:                engine.MVCCStats(scannerStats.MVCC),
 		LeaderRangeCount:     leaderRangeCount,
 		ReplicatedRangeCount: replicatedRangeCount,
 		AvailableRangeCount:  availableRangeCount,

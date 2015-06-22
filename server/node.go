@@ -482,7 +482,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				}
 				// Walk through all the stores on this node.
 				var rangeCount, leaderRangeCount, replicatedRangeCount, availableRangeCount int32
-				stats := &proto.MVCCStats{}
+				stats := &engine.MVCCStats{}
 				accessedStoreIDs := []proto.StoreID{}
 				// will never error because `return nil` below
 				_ = n.lSender.VisitStores(func(store *storage.Store) error {
@@ -506,7 +506,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 
 				// Store the combined stats in the db.
 				now := n.ctx.Clock.Now().WallTime
-				status := &proto.NodeStatus{
+				status := &NodeStatus{
 					Desc:                 n.Descriptor,
 					StoreIDs:             accessedStoreIDs,
 					UpdatedAt:            now,
