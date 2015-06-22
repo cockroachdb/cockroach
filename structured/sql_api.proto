@@ -1,0 +1,98 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Vivek Menezes (vivek@cockroachlabs.com) 
+
+syntax = "proto2";
+package cockroach.proto;
+option go_package = "structured";
+
+import "cockroach/proto/api.proto";
+import "cockroach/proto/errors.proto";
+import "gogoproto/gogo.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+// SQLRequestHeader is supplied with every CmdRequest.
+message SQLRequestHeader {
+  // Session settings that were returned in the last response that
+  // contained them, being reflected back to the server.
+  optional bytes session = 1;
+  // The transaction state returned in the previous response being
+  // reflected back.
+  optional bytes txn = 2;
+  // CmdID is optionally specified for request idempotence
+  // (i.e. replay protection).
+  optional ClientCmdID cmd_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
+}
+
+// SQLResponseHeader is returned with every Cmd response.
+message SQLResponseHeader {
+  // Error is non-nil if an error occurred.
+  optional Error error = 1;
+  // Setting that should be reflected back in all subsequent requests.
+  // When not set, future requests should continue to use existing settings.
+  optional bytes settings = 2;
+  // Transaction message returned in a response; not to be interpreted by
+  // the recipient and reflected in a subsequent request. When not set,
+  // the subsequent request should not contain a transaction object.
+  optional bytes txn = 3;
+}
+
+message Datum {
+  option (gogoproto.onlyone) = true;
+  oneof value {
+    bool bval = 1;
+    int64 ival = 2;
+    double dval = 3;
+    bytes blobval = 4;
+  }
+  // Checksum is a CRC-32-IEEE checksum of the value.
+  // If this is an integer value, then the value is interpreted as an 8
+  // byte, big-endian encoded value. This value is set by the client on
+  // updates to do end-to-end integrity verification. If the checksum is
+  // incorrect, the update operation will fail. If the client does not
+  // wish to use end-to-end checksumming, this value should be nil.
+  optional fixed32 checksum = 9;
+}
+
+// A Result is a collection of values representing a row
+// in a result view. A column value not present in a row
+// has Nil Bytes in the value.
+message Result {
+  repeated Datum values = 1;
+}
+
+// A SQLRequest to cockroach. A transaction can consists of multiple
+// SQLRequests.
+message SQLRequest {
+  // Request header.
+  optional SQLRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    // SQL commands/queries to be serially executed by the server.
+  message Cmd {
+    optional string sql = 1;
+    // parameters are referred to in the above sql command/query using "?".
+    repeated Datum params = 2;
+  }
+  repeated Cmd cmds = 2;
+}
+
+message SQLResponse {
+  optional SQLResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The result set.
+  repeated Result results = 2;
+}
