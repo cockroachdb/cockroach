@@ -153,8 +153,8 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
 %type <updateExpr> update_expression
-%type <empty> exists_opt ignore_opt non_rename_operation to_opt using_opt
-%type <boolVal> unsigned_opt not_exists_opt unique_opt
+%type <empty> ignore_opt non_rename_operation to_opt using_opt
+%type <boolVal> unsigned_opt if_exists_opt if_not_exists_opt unique_opt
 %type <str> from_opt
 %type <intVal> int_opt int_val precision_opt
 %type <intVal2> float_opt decimal_opt 
@@ -244,27 +244,27 @@ use_statement:
 show_statement:
   tokShow tokDatabases
   {
-    $$ = &DDL{Action: astShowDatabases}
+    $$ = &ShowDatabases{}
   }
 | tokShow tokTables from_opt
   {
-    $$ = &DDL{Action: astShowTables, Name: $3}
+    $$ = &ShowTables{Name: $3}
   }
 | tokShow tokIndex tokFrom sql_id
   {
-    $$ = &DDL{Action: astShowIndex, Name: $4}
+    $$ = &ShowIndex{Name: $4}
   }
 | tokShow tokColumns tokFrom sql_id
   {
-    $$ = &DDL{Action: astShowColumns, Name: $4}
+    $$ = &ShowColumns{Name: $4}
   }
 | tokShow tokFull tokColumns tokFrom sql_id
   {
-    $$ = &DDL{Action: astShowFullColumns, Name: $5}
+    $$ = &ShowColumns{Name: $5, Full: true}
   }
 
 create_statement:
-  tokCreate tokTable not_exists_opt sql_id '(' table_def_list ')' force_eof
+  tokCreate tokTable if_not_exists_opt sql_id '(' table_def_list ')' force_eof
   {
     $$ = &CreateTable{IfNotExists: $3, Name: $4, Defs: $6}
   }
@@ -274,9 +274,9 @@ create_statement:
   }
 | tokCreate tokView sql_id force_eof
   {
-    $$ = &DDL{Action: astCreateView, NewName: $3}
+    $$ = &CreateView{Name: $3}
   }
-| tokCreate tokDatabase not_exists_opt sql_id
+| tokCreate tokDatabase if_not_exists_opt sql_id
   {
     $$ = &CreateDatabase{IfNotExists: $3, Name: $4}
   }
@@ -412,46 +412,46 @@ column_constraint_opt:
 alter_statement:
   tokAlter ignore_opt tokTable tokID non_rename_operation force_eof
   {
-    $$ = &DDL{Action: astAlterTable, Name: $4, NewName: $4}
+    $$ = &AlterTable{Name: $4}
   }
 | tokAlter ignore_opt tokTable tokID tokRename to_opt tokID
   {
     // Change this to a rename statement
-    $$ = &DDL{Action: astRenameTable, Name: $4, NewName: $7}
+    $$ = &RenameTable{Name: $4, NewName: $7}
   }
 | tokAlter tokView sql_id force_eof
   {
-    $$ = &DDL{Action: astAlterView, Name: $3, NewName: $3}
+    $$ = &AlterView{Name: $3}
   }
 
 rename_statement:
   tokRename tokTable tokID tokTo tokID
   {
-    $$ = &DDL{Action: astRenameTable, Name: $3, NewName: $5}
+    $$ = &RenameTable{Name: $3, NewName: $5}
   }
 
 truncate_statement:
   tokTruncate tokTable tokID
   {
-    $$ = &DDL{Action: astTruncateTable, Name: $3}
+    $$ = &TruncateTable{Name: $3}
   }
 
 drop_statement:
-  tokDrop tokTable exists_opt sql_id
+  tokDrop tokTable if_exists_opt sql_id
   {
-    $$ = &DDL{Action: astDropTable, Name: $4}
+    $$ = &DropTable{Name: $4, IfExists: $3}
   }
 | tokDrop tokIndex sql_id tokOn sql_id
   {
-    $$ = &DDL{Action: astDropIndex, Name: $3, NewName: $5}
+    $$ = &DropIndex{Name: $3, TableName: $5}
   }
-| tokDrop tokView exists_opt sql_id force_eof
+| tokDrop tokView if_exists_opt sql_id force_eof
   {
-    $$ = &DDL{Action: astDropView, Name: $4}
+    $$ = &DropView{Name: $4, IfExists: $3}
   }
-| tokDrop tokDatabase exists_opt sql_id force_eof
+| tokDrop tokDatabase if_exists_opt sql_id force_eof
   {
-    $$ = &DDL{Action: astDropDatabase, Name: $4}
+    $$ = &DropDatabase{Name: $4, IfExists: $3}
   }
 
 comment_opt:
@@ -1142,12 +1142,12 @@ update_expression:
     $$ = &UpdateExpr{Name: $1, Expr: $3} 
   }
 
-exists_opt:
-  { $$ = struct{}{} }
+if_exists_opt:
+  { $$ = false }
 | tokIf tokExists
-  { $$ = struct{}{} }
+  { $$ = true }
 
-not_exists_opt:
+if_not_exists_opt:
   { $$ = false }
 | tokIf tokNot tokExists
   { $$ = true }

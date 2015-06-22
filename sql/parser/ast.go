@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 //go:generate go tool yacc -o sql.go sql.y
@@ -38,17 +37,13 @@ type Statement interface {
 	statement()
 }
 
-func (*Union) statement()          {}
-func (*Select) statement()         {}
-func (*Insert) statement()         {}
-func (*Update) statement()         {}
-func (*Delete) statement()         {}
-func (*Set) statement()            {}
-func (*Use) statement()            {}
-func (*CreateDatabase) statement() {}
-func (*CreateIndex) statement()    {}
-func (*CreateTable) statement()    {}
-func (*DDL) statement()            {}
+func (*Union) statement()  {}
+func (*Select) statement() {}
+func (*Insert) statement() {}
+func (*Update) statement() {}
+func (*Delete) statement() {}
+func (*Set) statement()    {}
+func (*Use) statement()    {}
 
 // SelectStatement any SELECT statement.
 type SelectStatement interface {
@@ -185,187 +180,6 @@ type Use struct {
 
 func (node *Use) String() string {
 	return fmt.Sprintf("USE %v%s", node.Comments, node.Name)
-}
-
-// CreateDatabase represents a CREATE DATABASE statement.
-type CreateDatabase struct {
-	IfNotExists bool
-	Name        string
-}
-
-func (node *CreateDatabase) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE DATABASE")
-	if node.IfNotExists {
-		buf.WriteString(" IF NOT EXISTS")
-	}
-	fmt.Fprintf(&buf, " %s", node.Name)
-	return buf.String()
-}
-
-// CreateIndex represents a CREATE INDEX statement.
-type CreateIndex struct {
-	Name      string
-	TableName string
-	Unique    bool
-}
-
-func (node *CreateIndex) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE ")
-	if node.Unique {
-		buf.WriteString("UNIQUE ")
-	}
-	fmt.Fprintf(&buf, "INDEX %s ON %s", node.Name, node.TableName)
-	return buf.String()
-}
-
-// TableDef represents a column or index definition within a CREATE TABLE
-// statement.
-type TableDef interface {
-	// Placeholder function to ensure that only desired types (*TableDef) conform
-	// to the TableDef interface.
-	tableDef()
-}
-
-func (*ColumnTableDef) tableDef() {}
-func (*IndexTableDef) tableDef()  {}
-
-// TableDefs represents a list of table definitions.
-type TableDefs []TableDef
-
-func (node TableDefs) String() string {
-	var prefix string
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
-		prefix = ", "
-	}
-	return buf.String()
-}
-
-// NullType represents either NULL, NOT NULL or an unspecified value (silent
-// NULL).
-type NullType int
-
-// The values for NullType.
-const (
-	NotNull NullType = iota
-	Null
-	SilentNull
-)
-
-// ColumnTableDef represents a column dlefinition within a CREATE TABLE
-// statement.
-type ColumnTableDef struct {
-	Name       string
-	Type       ColumnType
-	Null       NullType
-	PrimaryKey bool
-	Unique     bool
-}
-
-func (node *ColumnTableDef) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
-	switch node.Null {
-	case Null:
-		buf.WriteString(" NULL")
-	case NotNull:
-		buf.WriteString(" NOT NULL")
-	}
-	if node.PrimaryKey {
-		buf.WriteString(" PRIMARY KEY")
-	} else if node.Unique {
-		buf.WriteString(" UNIQUE")
-	}
-	return buf.String()
-}
-
-// IndexTableDef represents an index definition within a CREATE TABLE
-// statement.
-type IndexTableDef struct {
-	Name    string
-	Unique  bool
-	Columns []string
-}
-
-func (node *IndexTableDef) String() string {
-	var buf bytes.Buffer
-	if node.Unique {
-		buf.WriteString("UNIQUE ")
-	}
-	fmt.Fprintf(&buf, "INDEX %s (%s)",
-		node.Name, strings.Join(node.Columns, ", "))
-	return buf.String()
-}
-
-// CreateTable represents a CREATE TABLE statement.
-type CreateTable struct {
-	IfNotExists bool
-	Name        string
-	Defs        TableDefs
-}
-
-func (node *CreateTable) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE TABLE")
-	if node.IfNotExists {
-		buf.WriteString(" IF NOT EXISTS")
-	}
-	fmt.Fprintf(&buf, " %s (%s)", node.Name, node.Defs)
-	return buf.String()
-}
-
-// DDL represents a CREATE, ALTER, DROP or RENAME statement.
-// Table is set for astAlter, astDrop, astRename.
-// NewName is set for astAlter, astCreate, astRename.
-//
-// TODO(pmattis): Replace usage of this struct with specific implementations
-// for the various statements it now contains. See the CreateTable struct as an
-// example.
-type DDL struct {
-	Action  string
-	Name    string
-	NewName string
-}
-
-const (
-	astCreateView      = "CREATE VIEW"
-	astAlterTable      = "ALTER TABLE"
-	astAlterView       = "ALTER VIEW"
-	astDropDatabase    = "DROP DATABASE"
-	astDropIndex       = "DROP INDEX"
-	astDropTable       = "DROP TABLE"
-	astDropView        = "DROP VIEW"
-	astRenameTable     = "RENAME TABLE"
-	astShowDatabases   = "SHOW DATABASES"
-	astShowTables      = "SHOW TABLES"
-	astShowIndex       = "SHOW INDEX FROM"
-	astShowColumns     = "SHOW COLUMNS FROM"
-	astShowFullColumns = "SHOW FULL COLUMNS FROM"
-	astTruncateTable   = "TRUNCATE TABLE"
-	astUnsigned        = "UNSIGNED"
-)
-
-func (node *DDL) String() string {
-	switch node.Action {
-	case astDropIndex:
-		return fmt.Sprintf("%s %s ON %s", node.Action, node.Name, node.NewName)
-	case astRenameTable:
-		return fmt.Sprintf("%s %s %s", node.Action, node.Name, node.NewName)
-	case astCreateView:
-		return fmt.Sprintf("%s %s", node.Action, node.NewName)
-	case astShowDatabases:
-		return node.Action
-	case astShowTables:
-		if node.Name != "" {
-			return fmt.Sprintf("%s FROM %s", node.Action, node.Name)
-		}
-		return node.Action
-	default:
-		return fmt.Sprintf("%s %s", node.Action, node.Name)
-	}
 }
 
 // Comments represents a list of comments.

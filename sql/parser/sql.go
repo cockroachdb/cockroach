@@ -472,7 +472,7 @@ var yyPgo = []int{
 	15, 21, 14, 557, 552, 551, 550, 11, 24, 6,
 	549, 544, 13, 543, 7, 542, 541, 19, 539, 538,
 	537, 535, 9, 534, 4, 532, 3, 531, 526, 5,
-	18, 2, 81, 399, 525, 524, 523, 522, 8, 388,
+	18, 2, 81, 525, 524, 523, 522, 8, 399, 388,
 	403, 520, 10, 1, 519, 518, 516, 0, 515, 16,
 	513, 511, 510, 508, 504, 503, 502, 490, 489, 485,
 	12, 484,
@@ -502,10 +502,10 @@ var yyR1 = []int{
 	47, 49, 49, 44, 44, 36, 36, 36, 36, 50,
 	50, 51, 51, 52, 52, 53, 53, 54, 55, 55,
 	55, 56, 56, 56, 56, 57, 57, 57, 58, 58,
-	59, 59, 60, 60, 61, 61, 62, 63, 63, 69,
-	69, 64, 64, 65, 65, 65, 65, 65, 66, 66,
+	59, 59, 60, 60, 61, 61, 62, 68, 68, 69,
+	69, 63, 63, 64, 64, 64, 64, 64, 65, 65,
 	70, 70, 72, 72, 73, 75, 75, 76, 76, 74,
-	74, 68, 68, 67, 67, 71, 71, 77, 90,
+	74, 67, 67, 66, 66, 71, 71, 77, 90,
 }
 var yyR2 = []int{
 
@@ -543,12 +543,12 @@ var yyChk = []int{
 	-10, -11, -12, -13, -14, 5, 6, 7, 8, 34,
 	92, 119, 114, 115, 117, 118, 116, -17, 79, 80,
 	81, 82, -15, -91, -15, -15, -15, -15, -15, 121,
-	123, 124, 126, 127, 122, -70, 125, 120, 131, -64,
+	123, 124, 126, 127, 122, -70, 125, 120, 131, -63,
 	125, 129, 122, 122, 122, 124, 125, 120, -3, 18,
 	-18, 19, -16, 30, -28, 65, 9, -61, -62, -44,
 	-77, 65, -77, 65, -71, 9, 9, 9, 126, -69,
-	130, 124, -77, -69, 122, -77, 65, 65, -63, 130,
-	-77, -63, -63, -19, -20, 104, -23, 65, -32, -37,
+	130, 124, -77, -69, 122, -77, 65, 65, -68, 130,
+	-77, -68, -68, -19, -20, 104, -23, 65, -32, -37,
 	-33, 98, 74, -36, -44, -38, -43, -77, -41, -45,
 	21, 66, 67, 68, 26, -42, 102, 103, 78, 130,
 	29, 109, 69, -28, 34, 107, -28, 83, 75, 107,
@@ -559,14 +559,14 @@ var yyChk = []int{
 	76, 77, 70, 71, 72, 73, -32, -37, -32, -39,
 	-3, -37, -37, 74, 74, 74, -42, 74, -48, -37,
 	-58, 34, 74, -61, 65, -31, 10, -62, -37, -77,
-	-77, 74, 21, -67, 95, -65, 117, 115, 33, 116,
+	-77, 74, 21, -66, 95, -64, 117, 115, 33, 116,
 	13, 65, 65, -77, -90, -90, -24, -25, -27, 74,
 	65, -42, -20, -77, 104, -32, -32, -37, -38, 22,
 	24, 25, -37, -37, 26, 98, -37, -37, -37, -37,
 	-37, -37, -37, -37, 134, 134, 83, 134, -37, 134,
 	-19, 19, -19, -46, -47, 110, -35, 29, -3, -61,
 	-59, -44, -31, -52, 13, -32, -78, -79, -77, -70,
-	94, -77, -90, -66, 128, -31, 83, -26, 84, 85,
+	94, -77, -90, -65, 128, -31, 83, -26, 84, 85,
 	86, 87, 88, 90, 91, -22, 65, 20, -25, 107,
 	-38, -37, -37, 96, 26, -37, 134, -19, 134, -49,
 	-47, 112, -32, -60, 94, -40, -38, -60, 134, 83,
@@ -582,7 +582,7 @@ var yyChk = []int{
 	74, -72, -72, 74, 74, -77, -90, -51, 12, 14,
 	94, 95, 84, 84, 124, 124, 124, -37, -37, 32,
 	-38, 83, 16, 83, -55, 27, 28, -89, 133, 32,
-	131, 26, -73, 67, -68, 132, -68, -73, -73, -30,
+	131, 26, -73, 67, -67, 132, -67, -73, -73, -30,
 	-77, -30, 74, -52, -32, -39, -32, 74, 74, 74,
 	74, 7, -37, -37, -54, 32, 32, 134, 83, -74,
 	83, 134, 83, 134, -30, -56, -59, -30, -30, -30,
@@ -982,27 +982,27 @@ yydefault:
 	case 22:
 		//line sql.y:246
 		{
-			yyVAL.statement = &DDL{Action: astShowDatabases}
+			yyVAL.statement = &ShowDatabases{}
 		}
 	case 23:
 		//line sql.y:250
 		{
-			yyVAL.statement = &DDL{Action: astShowTables, Name: yyS[yypt-0].str}
+			yyVAL.statement = &ShowTables{Name: yyS[yypt-0].str}
 		}
 	case 24:
 		//line sql.y:254
 		{
-			yyVAL.statement = &DDL{Action: astShowIndex, Name: yyS[yypt-0].str}
+			yyVAL.statement = &ShowIndex{Name: yyS[yypt-0].str}
 		}
 	case 25:
 		//line sql.y:258
 		{
-			yyVAL.statement = &DDL{Action: astShowColumns, Name: yyS[yypt-0].str}
+			yyVAL.statement = &ShowColumns{Name: yyS[yypt-0].str}
 		}
 	case 26:
 		//line sql.y:262
 		{
-			yyVAL.statement = &DDL{Action: astShowFullColumns, Name: yyS[yypt-0].str}
+			yyVAL.statement = &ShowColumns{Name: yyS[yypt-0].str, Full: true}
 		}
 	case 27:
 		//line sql.y:268
@@ -1017,7 +1017,7 @@ yydefault:
 	case 29:
 		//line sql.y:276
 		{
-			yyVAL.statement = &DDL{Action: astCreateView, NewName: yyS[yypt-1].str}
+			yyVAL.statement = &CreateView{Name: yyS[yypt-1].str}
 		}
 	case 30:
 		//line sql.y:280
@@ -1272,48 +1272,48 @@ yydefault:
 	case 80:
 		//line sql.y:414
 		{
-			yyVAL.statement = &DDL{Action: astAlterTable, Name: yyS[yypt-2].str, NewName: yyS[yypt-2].str}
+			yyVAL.statement = &AlterTable{Name: yyS[yypt-2].str}
 		}
 	case 81:
 		//line sql.y:418
 		{
 			// Change this to a rename statement
-			yyVAL.statement = &DDL{Action: astRenameTable, Name: yyS[yypt-3].str, NewName: yyS[yypt-0].str}
+			yyVAL.statement = &RenameTable{Name: yyS[yypt-3].str, NewName: yyS[yypt-0].str}
 		}
 	case 82:
 		//line sql.y:423
 		{
-			yyVAL.statement = &DDL{Action: astAlterView, Name: yyS[yypt-1].str, NewName: yyS[yypt-1].str}
+			yyVAL.statement = &AlterView{Name: yyS[yypt-1].str}
 		}
 	case 83:
 		//line sql.y:429
 		{
-			yyVAL.statement = &DDL{Action: astRenameTable, Name: yyS[yypt-2].str, NewName: yyS[yypt-0].str}
+			yyVAL.statement = &RenameTable{Name: yyS[yypt-2].str, NewName: yyS[yypt-0].str}
 		}
 	case 84:
 		//line sql.y:435
 		{
-			yyVAL.statement = &DDL{Action: astTruncateTable, Name: yyS[yypt-0].str}
+			yyVAL.statement = &TruncateTable{Name: yyS[yypt-0].str}
 		}
 	case 85:
 		//line sql.y:441
 		{
-			yyVAL.statement = &DDL{Action: astDropTable, Name: yyS[yypt-0].str}
+			yyVAL.statement = &DropTable{Name: yyS[yypt-0].str, IfExists: yyS[yypt-1].boolVal}
 		}
 	case 86:
 		//line sql.y:445
 		{
-			yyVAL.statement = &DDL{Action: astDropIndex, Name: yyS[yypt-2].str, NewName: yyS[yypt-0].str}
+			yyVAL.statement = &DropIndex{Name: yyS[yypt-2].str, TableName: yyS[yypt-0].str}
 		}
 	case 87:
 		//line sql.y:449
 		{
-			yyVAL.statement = &DDL{Action: astDropView, Name: yyS[yypt-1].str}
+			yyVAL.statement = &DropView{Name: yyS[yypt-1].str, IfExists: yyS[yypt-2].boolVal}
 		}
 	case 88:
 		//line sql.y:453
 		{
-			yyVAL.statement = &DDL{Action: astDropDatabase, Name: yyS[yypt-1].str}
+			yyVAL.statement = &DropDatabase{Name: yyS[yypt-1].str, IfExists: yyS[yypt-2].boolVal}
 		}
 	case 89:
 		//line sql.y:458
@@ -2075,12 +2075,12 @@ yydefault:
 	case 237:
 		//line sql.y:1146
 		{
-			yyVAL.empty = struct{}{}
+			yyVAL.boolVal = false
 		}
 	case 238:
 		//line sql.y:1148
 		{
-			yyVAL.empty = struct{}{}
+			yyVAL.boolVal = true
 		}
 	case 239:
 		//line sql.y:1151
