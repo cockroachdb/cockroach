@@ -152,10 +152,9 @@ func (s *server) start(rpcServer *rpc.Server, stopper *util.Stopper) {
 
 	stopper.RunWorker(func() {
 		// Periodically wakeup blocked client gossip requests.
-		gossipTimeout := time.Tick(s.jitteredGossipInterval())
 		for {
 			select {
-			case <-gossipTimeout:
+			case <-time.After(s.jitteredGossipInterval()):
 				// Wakeup all blocked gossip requests.
 				s.ready.Broadcast()
 			case <-stopper.ShouldStop():

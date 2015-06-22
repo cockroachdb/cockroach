@@ -155,12 +155,11 @@ func (n *Network) GetNodeFromID(nodeID proto.NodeID) (*Node, bool) {
 // The simulation callback receives a map of nodes, keyed by node address.
 func (n *Network) SimulateNetwork(
 	simCallback func(cycle int, network *Network) bool) {
-	gossipTimeout := time.Tick(n.GossipInterval)
 	nodes := n.Nodes
 	var complete bool
 	for cycle := 0; !complete; cycle++ {
 		select {
-		case <-gossipTimeout:
+		case <-time.After(n.GossipInterval):
 			// Node 0 gossips sentinel every cycle.
 			if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, int64(cycle), time.Hour); err != nil {
 				log.Fatal(err)
