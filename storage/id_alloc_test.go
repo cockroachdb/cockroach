@@ -20,7 +20,7 @@ package storage
 import (
 	"log"
 	"sort"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -215,26 +215,11 @@ func TestAllocateWithStopper(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(10)
-	ch := make(chan struct{})
+	stopper.Stop()
 
-	stopper.RunWorker(func() {
-		<-ch // wait for signal to start.
-		for i := 0; i < 10; i++ {
-			go func() {
-				_, err := idAlloc.Allocate()
-				wg.Done()
-				// We expect all allocations to fail.
-				if err == nil {
-					t.Fatal("unexpected success")
-				}
-			}()
-		}
-	})
-
-	// Stop the stopper pre-emptively, then signal the waiting worker to try allocations.
-	go stopper.Stop()
-	close(ch)
-	wg.Wait()
+	if _, err := idAlloc.Allocate(); err == nil {
+		t.Errorf("unexpected success")
+	} else if !strings.Contains(err.Error(), "system is draining") {
+		t.Errorf("unexpected error: %s", err)
+	}
 }
