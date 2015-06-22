@@ -224,10 +224,9 @@ func TestAllocateWithStopper(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			go func() {
 				_, err := idAlloc.Allocate()
+				wg.Done()
 				// We expect all allocations to fail.
-				if err != nil {
-					wg.Done()
-				} else {
+				if err == nil {
 					t.Fatal("unexpected success")
 				}
 			}()
