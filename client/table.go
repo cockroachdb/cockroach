@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/structured"
 	roachencoding "github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -56,7 +57,7 @@ func lowerStrings(s []string) []string {
 // column holds information about a particular column and the field that column
 // is mapped to.
 type column struct {
-	proto.ColumnDescriptor
+	structured.ColumnDescriptor
 	field reflect.StructField
 }
 
@@ -64,7 +65,7 @@ type column struct {
 // table using DB.BindModel.
 type model struct {
 	name             string // Table name.
-	desc             *proto.TableDescriptor
+	desc             *structured.TableDescriptor
 	columnsByName    map[string]*column
 	columnsByID      map[uint32]*column
 	primaryKey       []*column // The columns that compose the primary key.
@@ -215,7 +216,7 @@ func (db *DB) CreateNamespace(name string) error {
 		return fmt.Errorf("empty namespace name")
 	}
 
-	nameKey := keys.MakeNameMetadataKey(proto.RootNamespaceID, strings.ToLower(name))
+	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, strings.ToLower(name))
 	if gr, err := db.Get(nameKey); err != nil {
 		return err
 	} else if gr.Exists() {
@@ -231,7 +232,7 @@ func (db *DB) CreateNamespace(name string) error {
 
 // ListNamespaces lists the namespaces.
 func (db *DB) ListNamespaces() ([]string, error) {
-	prefix := keys.MakeNameMetadataKey(proto.RootNamespaceID, "")
+	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	rows, err := db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -262,10 +263,10 @@ func (db *DB) lookupTable(path string) (nsID uint32, name string, err error) {
 // CreateTable creates a table from the specified schema. Table creation will
 // fail if the table name is already in use. The table name is required to have
 // the form "<namespace>.<table>".
-func (db *DB) CreateTable(schema proto.TableSchema) error {
+func (db *DB) CreateTable(schema structured.TableSchema) error {
 	schema.Name = strings.ToLower(schema.Name)
-	desc := proto.TableDescFromSchema(schema)
-	if err := proto.ValidateTableDesc(desc); err != nil {
+	desc := structured.TableDescFromSchema(schema)
+	if err := structured.ValidateTableDesc(desc); err != nil {
 		return err
 	}
 
@@ -307,12 +308,12 @@ func (db *DB) CreateTable(schema proto.TableSchema) error {
 
 // DescribeTable retrieves the table schema for the specified table. Path has
 // the form "<namespace>.<table>".
-func (db *DB) DescribeTable(path string) (*proto.TableSchema, error) {
+func (db *DB) DescribeTable(path string) (*structured.TableSchema, error) {
 	desc, err := db.getTableDesc(path)
 	if err != nil {
 		return nil, err
 	}
-	schema := proto.TableSchemaFromDesc(*desc)
+	schema := structured.TableSchemaFromDesc(*desc)
 	return &schema, nil
 }
 
@@ -349,12 +350,12 @@ func (db *DB) RenameTable(oldPath, newPath string) error {
 			return fmt.Errorf("unable to find table \"%s\"", oldPath)
 		}
 		descKey := gr.ValueBytes()
-		desc := proto.TableDescriptor{}
+		desc := structured.TableDescriptor{}
 		if err := txn.GetProto(descKey, &desc); err != nil {
 			return err
 		}
 		desc.Name = strings.ToLower(newPath)
-		if err := proto.ValidateTableDesc(desc); err != nil {
+		if err := structured.ValidateTableDesc(desc); err != nil {
 			return err
 		}
 		newNameKey := keys.MakeNameMetadataKey(newNSID, newName)
@@ -387,7 +388,7 @@ func (db *DB) DeleteTable(path string) error {
 		return fmt.Errorf("unable to find table \"%s\"", path)
 	}
 	descKey := gr.ValueBytes()
-	desc := proto.TableDescriptor{}
+	desc := structured.TableDescriptor{}
 	if err := db.GetProto(descKey, &desc); err != nil {
 		return err
 	}
@@ -485,7 +486,7 @@ func (db *DB) BindModel(name string, obj interface{}) error {
 	return nil
 }
 
-func (db *DB) getTableDesc(path string) (*proto.TableDescriptor, error) {
+func (db *DB) getTableDesc(path string) (*structured.TableDescriptor, error) {
 	nsID, name, err := db.lookupTable(path)
 	if err != nil {
 		return nil, err
@@ -501,11 +502,11 @@ func (db *DB) getTableDesc(path string) (*proto.TableDescriptor, error) {
 		return nil, fmt.Errorf("unable to find table \"%s\"", path)
 	}
 	descKey := gr.ValueBytes()
-	desc := proto.TableDescriptor{}
+	desc := structured.TableDescriptor{}
 	if err := db.GetProto(descKey, &desc); err != nil {
 		return nil, err
 	}
-	if err := proto.ValidateTableDesc(desc); err != nil {
+	if err := structured.ValidateTableDesc(desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil

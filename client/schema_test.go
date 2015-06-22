@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -38,20 +38,20 @@ func TestSchemaFromModel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedSchema := proto.TableSchema{
-		Table: proto.Table{Name: "foo"},
-		Columns: []proto.Column{
+	expectedSchema := structured.TableSchema{
+		Table: structured.Table{Name: "foo"},
+		Columns: []structured.Column{
 			{Name: "a"},
 			{Name: "b"},
 			{Name: "c"},
 			{Name: "d"},
 		},
-		Indexes: []proto.TableSchema_IndexByName{
-			{Index: proto.Index{Name: "primary", Unique: true},
+		Indexes: []structured.TableSchema_IndexByName{
+			{Index: structured.Index{Name: "primary", Unique: true},
 				ColumnNames: []string{"a", "b"}},
-			{Index: proto.Index{Name: "b", Unique: true},
+			{Index: structured.Index{Name: "b", Unique: true},
 				ColumnNames: []string{"b"}},
-			{Index: proto.Index{Name: "c:b"},
+			{Index: structured.Index{Name: "c:b"},
 				ColumnNames: []string{"c", "b"}},
 		},
 	}

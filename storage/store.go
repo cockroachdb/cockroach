@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -913,7 +914,7 @@ func (s *Store) BootstrapRange() error {
 	// We reserve the first 1000 descriptor IDs.
 	key = keys.DescIDGenerator
 	value := proto.Value{}
-	value.SetInteger(proto.MaxReservedDescID + 1)
+	value.SetInteger(structured.MaxReservedDescID + 1)
 	value.InitChecksum(key)
 	if err := engine.MVCCPut(batch, nil, key, now, value, nil); err != nil {
 		return err

@@ -15,14 +15,17 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package proto
+package structured
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestValidateTableDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testData := []struct {
 		err  string
 		desc TableDescriptor
@@ -134,6 +137,7 @@ func TestValidateTableDesc(t *testing.T) {
 }
 
 func TestTableDescFromSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Verify TableDescFromSchema and TableSchemaFromDesc by round-tripping a
 	// schema.
 	schemas := []TableSchema{

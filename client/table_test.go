@@ -24,22 +24,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func makeTestSchema(name string) proto.TableSchema {
-	return proto.TableSchema{
-		Table: proto.Table{
+func makeTestSchema(name string) structured.TableSchema {
+	return structured.TableSchema{
+		Table: structured.Table{
 			Name: name,
 		},
-		Columns: []proto.Column{
-			{Name: "id", Type: proto.Column_BYTES},
-			{Name: "name", Type: proto.Column_BYTES},
-			{Name: "title", Type: proto.Column_BYTES},
+		Columns: []structured.Column{
+			{Name: "id", Type: structured.Column_BYTES},
+			{Name: "name", Type: structured.Column_BYTES},
+			{Name: "title", Type: structured.Column_BYTES},
 		},
-		Indexes: []proto.TableSchema_IndexByName{
-			{Index: proto.Index{Name: "primary", Unique: true},
+		Indexes: []structured.TableSchema_IndexByName{
+			{Index: structured.Index{Name: "primary", Unique: true},
 				ColumnNames: []string{"id"}},
 		},
 	}
@@ -135,11 +135,11 @@ func TestCreateTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := proto.TableDescriptor{}
+	desc := structured.TableDescriptor{}
 	if err := db.GetProto(gr.ValueBytes(), &desc); err != nil {
 		t.Fatal(err)
 	}
-	if desc.ID <= proto.MaxReservedDescID {
+	if desc.ID <= structured.MaxReservedDescID {
 		t.Errorf("expected a non-reserved table ID, but got %d", desc.ID)
 	}
 }
