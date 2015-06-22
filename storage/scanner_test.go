@@ -249,7 +249,7 @@ func TestScannerTiming(t *testing.T) {
 		time.Sleep(runTime)
 
 		avg := s.avgScan()
-		log.Infof("%d: average scan: %s\n", i, avg)
+		log.Infof("%d: average scan: %s", i, avg)
 		if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
 			duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
 			t.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
