@@ -111,6 +111,19 @@ func TestNodeStatusRecorder(t *testing.T) {
 		Desc:    desc1,
 		Delta:   stats,
 	})
+	// Periodically published events.
+	monitor.OnReplicationStatus(&storage.ReplicationStatusEvent{
+		StoreID:              proto.StoreID(1),
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
+	})
+	monitor.OnReplicationStatus(&storage.ReplicationStatusEvent{
+		StoreID:              proto.StoreID(2),
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
+	})
 	// Node Events.
 	monitor.OnCallSuccess(&CallSuccessEvent{
 		NodeID: proto.NodeID(1),
@@ -166,6 +179,9 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(1, "gcbytesage", 100, 30),
 		generateStoreData(1, "lastupdatenanos", 100, 3*1e9),
 		generateStoreData(1, "ranges", 100, 2),
+		generateStoreData(1, "ranges.leader", 100, 1),
+		generateStoreData(1, "ranges.available", 100, 2),
+		generateStoreData(1, "ranges.replicated", 100, 0),
 
 		// Store 2 should have accumulated 1 copy of stats
 		generateStoreData(2, "livebytes", 100, 1),
@@ -180,6 +196,9 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(2, "gcbytesage", 100, 10),
 		generateStoreData(2, "lastupdatenanos", 100, 1*1e9),
 		generateStoreData(2, "ranges", 100, 1),
+		generateStoreData(2, "ranges.leader", 100, 1),
+		generateStoreData(2, "ranges.available", 100, 2),
+		generateStoreData(2, "ranges.replicated", 100, 0),
 
 		// Node stats.
 		generateNodeData(1, "calls.success", 100, 2),

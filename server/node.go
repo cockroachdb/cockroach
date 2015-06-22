@@ -47,10 +47,10 @@ const (
 	gossipGroupLimit = 100
 	// gossipInterval is the interval for gossiping storage-related info.
 	gossipInterval = 1 * time.Minute
-	// runtimeStatsInterval is the interval for logging runtime stats such
-	// as number of goroutines and memory allocated.
-	runtimeStatsInterval = 15 * time.Second
-	mb                   = 1 << 20
+	// publishStatusInterval is the interval for publishing periodic statistics
+	// from stores.
+	publishStatusInterval = 10 * time.Second
+	mb                    = 1 << 20
 )
 
 var allocRetryOptions = retry.Options{
@@ -286,6 +286,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
 	n.startStoresScanner(stopper)
+	n.startPublishStatuses(stopper)
 	n.startGossip(stopper)
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
@@ -536,6 +537,34 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 				return
 			}
 		}
+	})
+}
+
+// startPublishStatuses starts a loop which periodically instructs each store to
+// publish its current status to the event feed.
+func (n *Node) startPublishStatuses(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		// Publish status at the same frequency as metrics are collected.
+		ticker := time.NewTicker(publishStatusInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				err := n.publishStoreStatuses()
+				if err != nil {
+					log.Error(err)
+				}
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// publishStoreStatuses calls publishStatus on each store on the node.
+func (n *Node) publishStoreStatuses() error {
+	return n.lSender.VisitStores(func(store *storage.Store) error {
+		return store.PublishStatus()
 	})
 }
 

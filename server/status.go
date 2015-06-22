@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -115,7 +114,6 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip) *statusServer {
 		router: httprouter.New(),
 	}
 
-	server.router.GET(statusKeyPrefix, server.handleClusterStatus)
 	server.router.GET(statusGossipKeyPrefix, server.handleGossipStatus)
 	server.router.GET(statusLocalKeyPrefix, server.handleLocalStatus)
 	server.router.GET(statusLocalLogFileKeyPrefix, server.handleLocalLogFiles)
@@ -135,19 +133,6 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip) *statusServer {
 // ServeHTTP implements the http.Handler interface.
 func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
-}
-
-// handleStatus handles GET requests for cluster status.
-func (s *statusServer) handleClusterStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	cluster := &status.Cluster{}
-	b, contentType, err := util.MarshalResponse(r, cluster, []util.EncodingType{util.JSONEncoding})
-	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, contentType)
-	w.Write(b)
 }
 
 // handleGossipStatus handles GET requests for gossip network status.

@@ -56,8 +56,8 @@ func TestSSLEnforcement(t *testing.T) {
 		// /debug/: server.adminServer: no auth.
 		{"GET", debugEndpoint + "vars", http.StatusOK, http.StatusOK},
 
-		// /_status/: server.statusServer: no auth.
-		{"GET", statusKeyPrefix, http.StatusOK, http.StatusOK},
+		// /_status/nodes: server.statusServer: no auth.
+		{"GET", statusNodeKeyPrefix, http.StatusOK, http.StatusOK},
 
 		// /kv/db/: kv.DBServer. These are proto reqs, but we can at least get past auth.
 		{"GET", kv.DBPrefix + "Get", http.StatusBadRequest, http.StatusUnauthorized},

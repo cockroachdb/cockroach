@@ -32,7 +32,13 @@ import (
 // components.
 type StoreStatusMonitor struct {
 	rangeDataAccumulator
-	ID proto.StoreID
+	ID   proto.StoreID
+	desc *proto.StoreDescriptor
+
+	// replication counts.
+	leaderRangeCount     int32
+	replicatedRangeCount int32
+	availableRangeCount  int32
 }
 
 // NodeStatusMonitor monitors the status of a server node. Status information
@@ -113,53 +119,75 @@ func (nsm *NodeStatusMonitor) OnRegisterRange(event *storage.RegisterRangeEvent)
 	nsm.GetStoreMonitor(event.StoreID).registerRange(event)
 }
 
-// OnUpdateRange receives UpdateRangeEvents retrieved from an storage event
+// OnUpdateRange receives UpdateRangeEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnUpdateRange(event *storage.UpdateRangeEvent) {
 	nsm.GetStoreMonitor(event.StoreID).updateRange(event)
 }
 
-// OnRemoveRange receives RemoveRangeEvents retrieved from an storage event
+// OnRemoveRange receives RemoveRangeEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnRemoveRange(event *storage.RemoveRangeEvent) {
 	nsm.GetStoreMonitor(event.StoreID).removeRange(event)
 }
 
-// OnSplitRange receives SplitRangeEvents retrieved from an storage event
+// OnSplitRange receives SplitRangeEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnSplitRange(event *storage.SplitRangeEvent) {
 	nsm.GetStoreMonitor(event.StoreID).splitRange(event)
 }
 
-// OnMergeRange receives MergeRangeEvents retrieved from an storage event
+// OnMergeRange receives MergeRangeEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnMergeRange(event *storage.MergeRangeEvent) {
 	nsm.GetStoreMonitor(event.StoreID).mergeRange(event)
 }
 
-// OnStartStore receives StartStoreEvents retrieved from an storage event
+// OnStartStore receives StartStoreEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnStartStore(event *storage.StartStoreEvent) {
 	nsm.GetStoreMonitor(event.StoreID)
 }
 
-// OnBeginScanRanges receives BeginScanRangesEvents retrieved from an storage
+// OnBeginScanRanges receives BeginScanRangesEvents retrieved from a storage
 // event subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnBeginScanRanges(event *storage.BeginScanRangesEvent) {
 	nsm.GetStoreMonitor(event.StoreID).beginScanRanges(event)
 }
 
-// OnEndScanRanges receives EndScanRangesEvents retrieved from an storage event
+// OnEndScanRanges receives EndScanRangesEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnEndScanRanges(event *storage.EndScanRangesEvent) {
 	nsm.GetStoreMonitor(event.StoreID).endScanRanges(event)
+}
+
+// OnStoreStatus receives StoreStatusEvents retrieved from a storage event
+// subscription. This method is part of the implementation of
+// store.StoreEventListener.
+func (nsm *NodeStatusMonitor) OnStoreStatus(event *storage.StoreStatusEvent) {
+	ssm := nsm.GetStoreMonitor(event.Desc.StoreID)
+	ssm.Lock()
+	defer ssm.Unlock()
+	ssm.desc = event.Desc
+}
+
+// OnReplicationStatus receives ReplicationStatusEvents retrieved from a storage
+// event subscription. This method is part of the implementation of
+// store.StoreEventListener.
+func (nsm *NodeStatusMonitor) OnReplicationStatus(event *storage.ReplicationStatusEvent) {
+	ssm := nsm.GetStoreMonitor(event.StoreID)
+	ssm.Lock()
+	defer ssm.Unlock()
+	ssm.leaderRangeCount = event.LeaderRangeCount
+	ssm.replicatedRangeCount = event.ReplicatedRangeCount
+	ssm.availableRangeCount = event.AvailableRangeCount
 }
 
 // OnCallSuccess receives CallSuccessEvents from a node event subscription. This

@@ -80,6 +80,33 @@ type StartStoreEvent struct {
 	StoreID proto.StoreID
 }
 
+// StoreStatusEvent contains the current descriptor for the given store.
+//
+// Because the descriptor contains information that cannot currently be computed
+// from other events, this event should be periodically broadcast by the store
+// independently of other operations.
+type StoreStatusEvent struct {
+	Desc *proto.StoreDescriptor
+}
+
+// ReplicationStatusEvent contains statistics on the replication status of the
+// ranges in the store.
+//
+// Because these statistics cannot currently be computed from other events, this
+// event should be periodically broadcast by the store independently of other
+// operations.
+type ReplicationStatusEvent struct {
+	StoreID proto.StoreID
+
+	// Per-range availability information, which is currently computed by
+	// periodically polling the ranges of each store.
+	// TODO(mrtracy): See if this information could be computed incrementally
+	// from other events.
+	LeaderRangeCount     int32
+	ReplicatedRangeCount int32
+	AvailableRangeCount  int32
+}
+
 // BeginScanRangesEvent occurs when the store is about to scan over all ranges.
 // During such a scan, each existing range will be published to the feed as a
 // RegisterRangeEvent with the Scan flag set. This is used because downstream
@@ -163,7 +190,32 @@ func (sef StoreEventFeed) startStore() {
 	if sef.f == nil {
 		return
 	}
-	sef.f.Publish(&StartStoreEvent{sef.id})
+	sef.f.Publish(&StartStoreEvent{
+		StoreID: sef.id,
+	})
+}
+
+// storeStatus publishes a StoreStatusEvent to this feed.
+func (sef StoreEventFeed) storeStatus(desc *proto.StoreDescriptor) {
+	if sef.f == nil {
+		return
+	}
+	sef.f.Publish(&StoreStatusEvent{
+		Desc: desc,
+	})
+}
+
+// replicationStatus publishes a ReplicationStatusEvent to this feed.
+func (sef StoreEventFeed) replicationStatus(leaders, replicated, available int32) {
+	if sef.f == nil {
+		return
+	}
+	sef.f.Publish(&ReplicationStatusEvent{
+		StoreID:              sef.id,
+		LeaderRangeCount:     leaders,
+		ReplicatedRangeCount: replicated,
+		AvailableRangeCount:  available,
+	})
 }
 
 // beginScanRanges publishes a BeginScanRangesEvent to this feed.
@@ -193,6 +245,8 @@ type StoreEventListener interface {
 	OnStartStore(event *StartStoreEvent)
 	OnBeginScanRanges(event *BeginScanRangesEvent)
 	OnEndScanRanges(event *EndScanRangesEvent)
+	OnStoreStatus(event *StoreStatusEvent)
+	OnReplicationStatus(event *ReplicationStatusEvent)
 }
 
 // ProcessStoreEvents reads store events from the supplied channel and passes
@@ -218,6 +272,10 @@ func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
 			l.OnBeginScanRanges(specificEvent)
 		case *EndScanRangesEvent:
 			l.OnEndScanRanges(specificEvent)
+		case *StoreStatusEvent:
+			l.OnStoreStatus(specificEvent)
+		case *ReplicationStatusEvent:
+			l.OnReplicationStatus(specificEvent)
 		}
 	}
 }

@@ -111,6 +111,17 @@ func TestStoreEventFeed(t *testing.T) {
 	if err := rng2.setDesc(desc2); err != nil {
 		t.Fatal(err)
 	}
+	storeDesc := &proto.StoreDescriptor{
+		StoreID: proto.StoreID(1),
+		Node: proto.NodeDescriptor{
+			NodeID: proto.NodeID(1),
+		},
+		Capacity: proto.StoreCapacity{
+			Capacity:   100,
+			Available:  100,
+			RangeCount: 1,
+		},
+	}
 	diffStats := &engine.MVCCStats{
 		IntentBytes: 30,
 		IntentAge:   20,
@@ -261,6 +272,27 @@ func TestStoreEventFeed(t *testing.T) {
 						ValBytes:  170,
 					},
 				},
+			},
+		},
+		{
+			"StoreStatus",
+			func(feed StoreEventFeed) {
+				feed.storeStatus(storeDesc)
+			},
+			&StoreStatusEvent{
+				Desc: storeDesc,
+			},
+		},
+		{
+			"ReplicationStatus",
+			func(feed StoreEventFeed) {
+				feed.replicationStatus(3, 2, 1)
+			},
+			&ReplicationStatusEvent{
+				StoreID:              proto.StoreID(1),
+				LeaderRangeCount:     3,
+				ReplicatedRangeCount: 2,
+				AvailableRangeCount:  1,
 			},
 		},
 		{
