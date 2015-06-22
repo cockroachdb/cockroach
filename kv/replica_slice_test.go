@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func verifyOrdering(attrs []string, replicas replicaSlice, prefixLen int) bool {
@@ -47,6 +48,7 @@ func verifyOrdering(attrs []string, replicas replicaSlice, prefixLen int) bool {
 }
 
 func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	replicaAttrs := [][]string{
 		{"us-west-1a", "gpu"},
 		{"us-east-1a", "pdu1", "gpu"},
@@ -87,6 +89,7 @@ func getStores(rs replicaSlice) (r []proto.StoreID) {
 }
 
 func TestReplicaSetMoveToFront(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rs := replicaSlice(nil)
 	for i := 0; i < 5; i++ {
 		rs = append(rs, replicaInfo{Replica: proto.Replica{StoreID: proto.StoreID(i + 1)}})

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -88,6 +89,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 // 10 concurrent goroutines are each running successive transactions
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -132,6 +134,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // TestRangeSplitsWithWritePressure sets the zone config max bytes for
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	setTestRetryOptions()
@@ -191,6 +194,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // TestRangeSplitsWithSameKeyTwice check that second range split
 // on the same splitKey should not cause infinite retry loop.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 

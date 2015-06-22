@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -89,6 +90,7 @@ func createDeleteRangeRequest(key, endKey proto.Key, txn *proto.Transaction) *pr
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
 func TestTxnCoordSenderAddRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -127,6 +129,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
 // not-nil Txn with empty ID gets a new transaction initialized.
 func TestTxnCoordSenderBeginTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -166,6 +169,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 // TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -197,6 +201,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 // overlapping key ranges causes the coordinator to keep track only of
 // the minimum number of ranges.
 func TestTxnCoordSenderKeyRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ranges := []struct {
 		start, end proto.Key
 	}{
@@ -242,6 +247,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 // TestTxnCoordSenderMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
 func TestTxnCoordSenderMultipleTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -268,6 +274,7 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 // TestTxnCoordSenderHeartbeat verifies periodic heartbeat of the
 // transaction record.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -346,6 +353,7 @@ func verifyCleanup(key proto.Key, coord *TxnCoordSender, eng engine.Engine, t *t
 // sends resolve write intent requests and removes the transaction
 // from the txns map.
 func TestTxnCoordSenderEndTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -383,6 +391,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 // TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -447,6 +456,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 // TestTxnCoordSenderGC verifies that the coordinator cleans up extant
 // transactions after the lastUpdateNanos exceeds the timeout.
 func TestTxnCoordSenderGC(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -515,6 +525,7 @@ var testPutReq = &proto.PutRequest{
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
@@ -581,6 +592,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 // one-off transactional calls within a batch (the batch must contain the
 // transaction for all contained calls instead).
 func TestTxnCoordSenderBatchTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 	clock := hlc.NewClock(hlc.UnixNano)

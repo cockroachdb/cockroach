@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func createTestClient(t *testing.T, addr string) *client.DB {
@@ -39,6 +40,7 @@ func createTestClient(t *testing.T, addr string) *client.DB {
 // TestKVDBCoverage verifies that all methods may be invoked on the
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -120,6 +122,7 @@ func TestKVDBCoverage(t *testing.T) {
 // TestKVDBInternalMethods verifies no internal methods are available
 // HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -157,6 +160,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 // TestKVDBEndTransactionWithTriggers verifies that triggers are
 // disallowed on call to EndTransaction.
 func TestKVDBEndTransactionWithTriggers(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -188,6 +192,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 // TestKVDBTransaction verifies that transactions work properly over
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
