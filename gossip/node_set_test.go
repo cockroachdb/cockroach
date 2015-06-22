@@ -21,9 +21,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestNodeSetMaxSize(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes := newNodeSet(1)
 	if !nodes.hasSpace() {
 		t.Error("set should have space")
@@ -35,6 +37,7 @@ func TestNodeSetMaxSize(t *testing.T) {
 }
 
 func TestNodeSetHasNode(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes := newNodeSet(2)
 	node := proto.NodeID(1)
 	if nodes.hasNode(node) {
@@ -48,6 +51,7 @@ func TestNodeSetHasNode(t *testing.T) {
 }
 
 func TestNodeSetAddAndRemoveNode(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes := newNodeSet(2)
 	node0 := proto.NodeID(1)
 	node1 := proto.NodeID(2)
@@ -67,6 +71,7 @@ func TestNodeSetAddAndRemoveNode(t *testing.T) {
 }
 
 func TestNodeSetFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes1 := newNodeSet(2)
 	node0 := proto.NodeID(1)
 	node1 := proto.NodeID(2)
@@ -85,6 +90,7 @@ func TestNodeSetFilter(t *testing.T) {
 }
 
 func TestNodeSetAsSlice(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes := newNodeSet(2)
 	node0 := proto.NodeID(1)
 	node1 := proto.NodeID(2)

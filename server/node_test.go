@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -102,6 +103,7 @@ func formatKeys(keys []proto.Key) string {
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	localDB, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
@@ -141,6 +143,7 @@ func TestBootstrapCluster(t *testing.T) {
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	eagerStopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper); err != nil {
@@ -179,6 +182,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
@@ -228,6 +232,7 @@ func TestNodeJoin(t *testing.T) {
 // TestCorruptedClusterID verifies that a node fails to start when a
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	eagerStopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper)
@@ -339,6 +344,7 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 // TestNodeStatus verifies that the store scanner correctly updates the node's
 // status.
 func TestNodeStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ts := &TestServer{}
 	ts.Ctx = NewTestContext()
 	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
@@ -510,6 +516,7 @@ func setAllocRetryBackoff(backoff time.Duration) func() {
 }
 
 func TestIDAllocationRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	defer setAllocRetryBackoff(0)()
 	i := 98
 	sender := func(_ context.Context, c proto.Call) {

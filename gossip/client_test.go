@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -82,6 +83,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 
 // TestClientGossip verifies a client can gossip a delta to the server.
 func TestClientGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	local, remote, stopper := startGossip(t)
 	if err := local.AddInfo("local-key", "local value", time.Second); err != nil {
 		t.Fatal(err)
@@ -116,6 +118,7 @@ func TestClientGossip(t *testing.T) {
 // will drop an outgoing client connection that is already an
 // inbound client connection of another node.
 func TestClientDisconnectRedundant(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	local, remote, stopper := startGossip(t)
 	defer stopper.Stop()
 	// startClient doesn't lock the underlying gossip

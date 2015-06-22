@@ -25,11 +25,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // TestSetZoneInvalid sets invalid zone configs and verifies error
 // responses.
 func TestSetZoneInvalid(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	url, stopper := startAdminServer()
 	defer stopper.Stop()
 

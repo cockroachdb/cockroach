@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,6 +61,7 @@ func createTestConfigFile(body string) string {
 
 // TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tmp := util.CreateNTempDirs(t, "_server_test", 5)
 	defer util.CleanupDirs(tmp)
 
@@ -112,6 +114,7 @@ func TestInitEngine(t *testing.T) {
 // TestInitEngines tests whether multiple engines specified as a
 // single comma-separated list are parsed correctly.
 func TestInitEngines(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tmp := util.CreateNTempDirs(t, "_server_test", 2)
 	defer util.CleanupDirs(tmp)
 
@@ -150,12 +153,14 @@ func TestInitEngines(t *testing.T) {
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
 func TestSelfBootstrap(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	s.Stop()
 }
 
 // TestHealth verifies that health endpoint return "ok".
 func TestHealth(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 	url := testContext.RequestScheme() + "://" + s.ServingAddr() + healthPath
@@ -181,6 +186,7 @@ func TestHealth(t *testing.T) {
 // TestPlainHTTPServer verifies that we can serve plain http and talk to it.
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Create a custom context. The default one has a default --certs value.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
@@ -234,6 +240,7 @@ func TestPlainHTTPServer(t *testing.T) {
 // disabling decompression on a custom client's Transport and setting
 // it conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 	// We can't use the standard test client. Create our own.
@@ -304,6 +311,7 @@ func TestAcceptEncoding(t *testing.T) {
 // TestMultiRangeScanDeleteRange tests that commands which access multiple
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
@@ -394,6 +402,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 // TestMultiRangeScanWithMaxResults tests that commands which access multiple
 // ranges with MaxResults parameter are carried out properly.
 func TestMultiRangeScanWithMaxResults(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		splitKeys []proto.Key
 		keys      []proto.Key

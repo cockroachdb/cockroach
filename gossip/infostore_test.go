@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // testAddr and emptyAddr are defined in info_test.go.
@@ -34,6 +35,7 @@ import (
 // TestRegisterGroup registers two groups and verifies operation of
 // belongsToGroup.
 func TestRegisterGroup(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 
 	groupA := newGroup("a", 1, MinGroup)
@@ -73,6 +75,7 @@ func TestRegisterGroup(t *testing.T) {
 // TestZeroDuration verifies that specifying a zero duration sets
 // TTLStamp to max int64.
 func TestZeroDuration(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	info := is.newInfo("a", float64(1), 0*time.Second)
 	if info.TTLStamp != math.MaxInt64 {
@@ -82,6 +85,7 @@ func TestZeroDuration(t *testing.T) {
 
 // TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info2 := is.newInfo("a", float64(1), time.Second)
@@ -93,6 +97,7 @@ func TestNewInfo(t *testing.T) {
 // TestInfoStoreGetInfo adds an info, and makes sure it can be fetched
 // via getInfo. Also, verifies a non-existent info can't be fetched.
 func TestInfoStoreGetInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	i := is.newInfo("a", float64(1), time.Second)
 	if err := is.addInfo(i); err != nil {
@@ -115,6 +120,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 // Verify TTL is respected on info fetched by key
 // and group.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	i := is.newInfo("a", float64(1), time.Nanosecond)
 	if err := is.addInfo(i); err != nil {
@@ -129,6 +135,7 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 // Add infos using same key, same and lesser timestamp; verify no
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	if err := is.addInfo(info1); err != nil {
@@ -151,6 +158,7 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 
 // Add infos using same key, same timestamp; verify no replacement.
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info2 := is.newInfo("a", float64(2), time.Second)
@@ -162,6 +170,7 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 // Verify that adding two infos with different hops but same keys
 // always chooses the minimum hops.
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info1.Hops = 1
@@ -195,6 +204,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 // verify ordering. Add an additional non-group info and fetch that as
 // well.
 func TestAddGroupInfos(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 
 	group := newGroup("a", 10, MinGroup)
@@ -270,6 +280,7 @@ func TestAddGroupInfos(t *testing.T) {
 // Verify infostore combination with overlapping group and non-group
 // infos.
 func TestCombine(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is1 := newInfoStore(1, emptyAddr)
 
 	group1 := newGroup("a", 10, MinGroup)
@@ -384,6 +395,7 @@ func createTestInfoStore(t *testing.T) *infoStore {
 // Check infostore delta (both group and non-group infos) based on
 // info sequence numbers.
 func TestInfoStoreDelta(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := createTestInfoStore(t)
 
 	// Verify deltas with successive sequence numbers.
@@ -423,6 +435,7 @@ func TestInfoStoreDelta(t *testing.T) {
 // TestInfoStoreDistant verifies selection of infos from store with
 // Hops > maxHops.
 func TestInfoStoreDistant(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes := []proto.NodeID{
 		proto.NodeID(1),
 		proto.NodeID(2),
@@ -450,6 +463,7 @@ func TestInfoStoreDistant(t *testing.T) {
 // TestLeastUseful verifies that the least-contributing peer node
 // can be determined.
 func TestLeastUseful(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	nodes := []proto.NodeID{
 		proto.NodeID(1),
 		proto.NodeID(2),
@@ -519,6 +533,7 @@ func (cr *callbackRecord) Keys() []string {
 }
 
 func TestCallbacks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	wg := &sync.WaitGroup{}
 	cb1 := callbackRecord{wg: wg}
@@ -617,6 +632,7 @@ func TestCallbacks(t *testing.T) {
 // registered if there are items which match its regexp in the
 // infostore.
 func TestRegisterCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	wg := &sync.WaitGroup{}
 	cb := callbackRecord{wg: wg}

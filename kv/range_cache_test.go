@@ -24,6 +24,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -144,6 +145,7 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDe
 // store for the cache, and measures how often that backing store is
 // accessed when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(proto.Key("test"))))
 	if !bytes.Equal(expKeyMin, proto.KeyMin) {
 		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)

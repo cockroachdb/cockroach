@@ -450,7 +450,6 @@ func (g *Gossip) bootstrap(stopper *util.Stopper) {
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
-		checkTimeout := time.Tick(g.jitteredGossipInterval())
 		// Loop until closed and there are no remaining outgoing connections.
 		for {
 			select {
@@ -458,7 +457,7 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(stopper, c)
-			case <-checkTimeout:
+			case <-time.After(g.jitteredGossipInterval()):
 				g.doCheckTimeout(stopper)
 			}
 		}

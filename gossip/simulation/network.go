@@ -52,6 +52,7 @@ type Network struct {
 // the concurrent goroutines enough time to pass data back and forth
 // in order to yield accurate estimates of how old data actually ends
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
+// TODO: This method should take `stopper` as an argument.
 func NewNetwork(nodeCount int, networkType string,
 	gossipInterval time.Duration) *Network {
 	clock := hlc.NewClock(hlc.UnixNano)
@@ -155,12 +156,11 @@ func (n *Network) GetNodeFromID(nodeID proto.NodeID) (*Node, bool) {
 // The simulation callback receives a map of nodes, keyed by node address.
 func (n *Network) SimulateNetwork(
 	simCallback func(cycle int, network *Network) bool) {
-	gossipTimeout := time.Tick(n.GossipInterval)
 	nodes := n.Nodes
 	var complete bool
 	for cycle := 0; !complete; cycle++ {
 		select {
-		case <-gossipTimeout:
+		case <-time.After(n.GossipInterval):
 			// Node 0 gossips sentinel every cycle.
 			if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, int64(cycle), time.Hour); err != nil {
 				log.Fatal(err)

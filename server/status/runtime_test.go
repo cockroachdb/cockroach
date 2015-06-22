@@ -22,9 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestRuntimeStatRecorder(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(100)
 	recorder := NewRuntimeStatRecorder(proto.NodeID(1), hlc.NewClock(manual.UnixNano))
 

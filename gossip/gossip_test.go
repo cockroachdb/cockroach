@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 var testBaseContext = testutils.NewTestBaseContext()
@@ -36,6 +37,7 @@ var insecureTestBaseContext = &base.Context{Insecure: true, User: security.NodeU
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 	if err := g.AddInfo("i", int64(1), time.Hour); err != nil {
@@ -70,6 +72,7 @@ func TestGossipInfoStore(t *testing.T) {
 // TestGossipGroupsInfoStore verifies gossiping of groups via the
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), nil)
 	g := New(rpcContext, TestInterval, TestBootstrap)
 
@@ -144,6 +147,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 }
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
 		"tcp=127.0.0.1:9001",

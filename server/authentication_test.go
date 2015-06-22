@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func doHTTPReq(t *testing.T, client *http.Client, method, url string) (*http.Response, error) {
@@ -38,6 +39,7 @@ func doHTTPReq(t *testing.T, client *http.Client, method, url string) (*http.Res
 
 // Verify client certificate enforcement.
 func TestSSLEnforcement(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 	testCases := []struct {

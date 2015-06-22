@@ -21,9 +21,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestLeaderCache(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	lc := newLeaderCache(3)
 	if r := lc.Lookup(12); r.StoreID != 0 {
 		t.Fatalf("lookup of missing key returned replica: %v", r)

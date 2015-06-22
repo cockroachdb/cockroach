@@ -113,13 +113,13 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 		}
 		s.is.combine(delta)
 	}
-	// If requested max sequence is not -1, wait for gossip interval to expire.
-	if args.MaxSeq != -1 {
-		s.ready.Wait()
-	}
 	// The exit condition for waiting clients.
 	if s.closed {
 		return util.Errorf("gossip server shutdown")
+	}
+	// If requested max sequence is not -1, wait for gossip interval to expire.
+	if args.MaxSeq != -1 {
+		s.ready.Wait()
 	}
 	// Return reciprocal delta.
 	delta := s.is.delta(args.NodeID, args.MaxSeq)
@@ -152,10 +152,9 @@ func (s *server) start(rpcServer *rpc.Server, stopper *util.Stopper) {
 
 	stopper.RunWorker(func() {
 		// Periodically wakeup blocked client gossip requests.
-		gossipTimeout := time.Tick(s.jitteredGossipInterval())
 		for {
 			select {
-			case <-gossipTimeout:
+			case <-time.After(s.jitteredGossipInterval()):
 				// Wakeup all blocked gossip requests.
 				s.ready.Broadcast()
 			case <-stopper.ShouldStop():

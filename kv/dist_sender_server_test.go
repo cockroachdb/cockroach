@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -44,6 +45,7 @@ import (
 // proceed in the event that a write intent is extant at the meta
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.ServingAddr())
@@ -98,6 +100,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.DB) {
 
 // TestMultiRangeScan verifies operation of a scan across ranges.
 func TestMultiRangeScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t)
 	defer s.Stop()
 
@@ -119,6 +122,7 @@ func TestMultiRangeScan(t *testing.T) {
 // that doesn't require read consistency will set a timestamp using
 // the clock local to the distributed sender.
 func TestMultiRangeScanInconsistent(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t)
 	defer s.Stop()
 
@@ -164,6 +168,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 // TestStartEqualsEndKeyScan verifies that specifying start==end on scan
 // returns an empty set.
 func TestStartEqualsEndKeyScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.ServingAddr())
 	defer s.Stop()
@@ -181,6 +186,7 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 // TestSplitByMeta2KeyMax check range splitting at key Meta2KeyMax should
 // fail as Meta2KeyMax is not a valid split key.
 func TestSplitByMeta2KeyMax(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.ServingAddr())
 	defer s.Stop()

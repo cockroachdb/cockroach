@@ -22,9 +22,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/gossip/resolver"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestParseNodeAttributes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
@@ -41,6 +43,7 @@ func TestParseNodeAttributes(t *testing.T) {
 // TestParseGossipBootstrapAddrs verifies that GossipBootstrap is
 // parsed correctly.
 func TestParseGossipBootstrapAddrs(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ctx := NewContext()
 	ctx.GossipBootstrap = "localhost:12345,,localhost:23456"
 	ctx.Stores = "mem=1"

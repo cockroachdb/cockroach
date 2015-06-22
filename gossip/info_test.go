@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // testAddr is a fake net.Addr replacement for unittesting.
@@ -39,6 +40,7 @@ func (t testAddr) String() string {
 var emptyAddr = testAddr("<test-addr>")
 
 func TestPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	prefixes := []struct{ Key, Prefix string }{
 		{"a", ""},
 		{"a.b", "a"},
@@ -55,6 +57,7 @@ func TestPrefix(t *testing.T) {
 }
 
 func TestSort(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	infos := infoSlice{
 		{"a", 3.0, 0, 0, 0, 0, 0, 0},
 		{"b", 1.0, 0, 0, 0, 0, 0, 0},
@@ -85,6 +88,7 @@ func TestSort(t *testing.T) {
 }
 
 func TestExpired(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	now := time.Now().UnixNano()
 	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, 0, 0, 0}
 	if i.expired(now) {
@@ -96,6 +100,7 @@ func TestExpired(t *testing.T) {
 }
 
 func TestIsFresh(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	const seq = 10
 	now := time.Now().UnixNano()
 	node1 := proto.NodeID(1)

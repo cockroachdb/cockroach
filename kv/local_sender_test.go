@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestLocalSenderAddStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 	store := storage.Store{}
 	ls.AddStore(&store)
@@ -41,6 +43,7 @@ func TestLocalSenderAddStore(t *testing.T) {
 }
 
 func TestLocalSenderGetStoreCount(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
@@ -56,6 +59,7 @@ func TestLocalSenderGetStoreCount(t *testing.T) {
 }
 
 func TestLocalSenderVisitStores(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
@@ -81,6 +85,7 @@ func TestLocalSenderVisitStores(t *testing.T) {
 }
 
 func TestLocalSenderGetStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ls := NewLocalSender()
 	store := storage.Store{}
 	replica := proto.Replica{StoreID: store.Ident.StoreID}
@@ -102,6 +107,7 @@ func TestLocalSenderGetStore(t *testing.T) {
 }
 
 func TestLocalSenderLookupReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	ctx := storage.TestStoreContext
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)

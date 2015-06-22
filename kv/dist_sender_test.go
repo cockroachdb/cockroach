@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -52,7 +53,7 @@ var testRangeDescriptor = proto.RangeDescriptor{
 
 var testAddress = util.MakeUnresolvedAddr("tcp", "node1:8080")
 
-func makeTestGossip(t *testing.T) *gossip.Gossip {
+func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1, "unix", gossip.TestInterval)
 	g := n.Nodes[0].Gossip
 	permConfig := &proto.PermConfig{
@@ -86,14 +87,16 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 	}, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	return g
+	return g, n.Stop
 }
 
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
 // leader, attributes and required consistency to determine where to send
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
-	g := makeTestGossip(t)
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
 	raftID := proto.RaftID(99)
 
 	nodeAttrs := map[int32][]string{
@@ -305,7 +308,9 @@ func (mdb mockRangeDescriptorDB) getRangeDescriptors(k proto.Key, lo lookupOptio
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
 // leader cache and retries when receiving a NotLeaderError.
 func TestRetryOnNotLeaderError(t *testing.T) {
-	g := makeTestGossip(t)
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
 	leader := proto.Replica{
 		NodeID:  99,
 		StoreID: 999,
@@ -346,6 +351,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 }
 
 func TestEvictCacheOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// if rpcError is true, the first attempt gets an RPC error, otherwise
 	// the RPC call succeeds but there is an error in the RequestHeader.
 	// Currently leader and cached range descriptor are treated equally.
@@ -357,7 +363,8 @@ func TestEvictCacheOnError(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		g := makeTestGossip(t)
+		g, s := makeTestGossip(t)
+		defer s()
 		leader := proto.Replica{
 			NodeID:  99,
 			StoreID: 999,
@@ -410,7 +417,9 @@ func TestEvictCacheOnError(t *testing.T) {
 // request has range lookup set, the range lookup requests will have
 // ignore intents set.
 func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
-	g := makeTestGossip(t)
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
 		return []interface{}{getReply()}, nil
@@ -442,7 +451,9 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 // network and a mock of rpc.Send, and verifies that the DistSender correctly
 // retries upon encountering a stale entry in its range descriptor cache.
 func TestRetryOnWrongReplicaError(t *testing.T) {
-	g := makeTestGossip(t)
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
 	// Updated below, after it has first been returned.
 	newRangeDescriptor := testRangeDescriptor
 	newEndKey := proto.Key("m")
@@ -491,6 +502,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 }
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	n := simulation.NewNetwork(3, "unix", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	if _, err := ds.getFirstRangeDescriptor(); err == nil {
@@ -530,6 +542,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 // zones and across multiple zones. It also verifies that permissions
 // are checked hierarchically.
 func TestVerifyPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	n := simulation.NewNetwork(1, "unix", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	config1 := &proto.PermConfig{
@@ -661,7 +674,9 @@ func TestVerifyPermissions(t *testing.T) {
 // TestSendRPCRetry verifies that sendRPC failed on first address but succeed on
 // second address, the second reply should be successfully returned back.
 func TestSendRPCRetry(t *testing.T) {
-	g := makeTestGossip(t)
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
 	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -722,7 +737,9 @@ func TestSendRPCRetry(t *testing.T) {
 // TestGetNodeDescriptor checks that the Node descriptor automatically gets
 // looked up from Gossip.
 func TestGetNodeDescriptor(t *testing.T) {
-	g := makeTestGossip(t)
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
 	ds := NewDistSender(&DistSenderContext{}, g)
 	if err := g.SetNodeDescriptor(&proto.NodeDescriptor{NodeID: 5}); err != nil {
 		t.Fatal(err)

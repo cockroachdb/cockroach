@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	yaml "gopkg.in/yaml.v1"
 )
 
@@ -278,6 +279,7 @@ func ExamplePermContentTypes() {
 // TestPermEmptyKey verifies that the Accept header can be used
 // to control the format of the response when a key is empty.
 func TestPermEmptyKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
