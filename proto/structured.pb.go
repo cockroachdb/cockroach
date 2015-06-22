@@ -274,28 +274,13 @@ func (m *CreateTableRequest) GetSchema() TableSchema {
 }
 
 type CreateTableResponse struct {
-	Error            Error  `protobuf:"bytes,1,opt,name=error" json:"error"`
-	TableID          uint32 `protobuf:"varint,2,opt,name=table_id" json:"table_id"`
+	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *CreateTableResponse) Reset()         { *m = CreateTableResponse{} }
 func (m *CreateTableResponse) String() string { return proto1.CompactTextString(m) }
 func (*CreateTableResponse) ProtoMessage()    {}
-
-func (m *CreateTableResponse) GetError() Error {
-	if m != nil {
-		return m.Error
-	}
-	return Error{}
-}
-
-func (m *CreateTableResponse) GetTableID() uint32 {
-	if m != nil {
-		return m.TableID
-	}
-	return 0
-}
 
 // TableRequestHeader is supplied with every structured API request.
 type TableRequestHeader struct {
@@ -1892,7 +1877,7 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1910,25 +1895,10 @@ func (m *CreateTableResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Error.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.TableID |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			var sizeOfWire int
 			for {
@@ -4793,9 +4763,8 @@ func (m *CreateTableRequest) Size() (n int) {
 func (m *CreateTableResponse) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Error.Size()
+	l = m.ResponseHeader.Size()
 	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.TableID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -5589,15 +5558,12 @@ func (m *CreateTableResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Error.Size()))
-	n8, err := m.Error.MarshalTo(data[i:])
+	i = encodeVarintStructured(data, i, uint64(m.ResponseHeader.Size()))
+	n8, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n8
-	data[i] = 0x10
-	i++
-	i = encodeVarintStructured(data, i, uint64(m.TableID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

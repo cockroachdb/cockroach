@@ -96,8 +96,7 @@ message CreateTableRequest {
 }
 
 message CreateTableResponse {
-  optional Error error = 1 [(gogoproto.nullable) = false];
-  optional uint32 table_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID"];
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // TODO(tamird): Investigate generating code from this. For now, it is useful

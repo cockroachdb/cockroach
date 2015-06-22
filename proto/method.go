@@ -61,6 +61,8 @@ const (
 	EnqueueMessage
 	// Batch executes a set of commands in parallel.
 	Batch
+	// CreateTable is called to create a new structured data table.
+	CreateTable
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit
 	// AdminMerge is called to coordinate a merge of two adjacent ranges.

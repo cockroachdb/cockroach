@@ -16,11 +16,14 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
+
 Package structured provides a high-level API for application access to
 an underlying cockroach datastore. Cockroach itself provides a single
 monolithic, sorted key-value map. Structured translates between
 familiar RDBMS concepts such as tables, columns and indexes to the
 key-value store.
+
+NOTE: THIS IS WILDLY OUT OF DATE WHILE THIS PACKAGE IS BEING REDESIGNED.
 
 Schemas
 

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -64,6 +65,7 @@ type Server struct {
 	node          *Node
 	admin         *adminServer
 	status        *statusServer
+	structured    *structured.Structured
 	tsDB          *ts.DB
 	tsServer      *ts.Server
 	raftTransport multiraft.Transport
@@ -128,6 +130,11 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 			return nil, err
 		}
 	}
+	s.structured = structured.NewStructured(s.db)
+	if err = s.rpc.Register(s.structured); err != nil {
+		return nil, err
+	}
+
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Clock:           s.clock,
