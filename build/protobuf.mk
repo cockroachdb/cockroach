@@ -32,7 +32,7 @@ GOPATH := $(GITHUB_ROOT)/../..
 
 GOPATH_BIN      := $(GOPATH)/bin
 PROTOC          := $(GOPATH_BIN)/protoc
-PLUGIN_SUFFIX   := gogo
+PLUGIN_SUFFIX   := gogoroach
 PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
 GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
@@ -48,6 +48,9 @@ ENGINE_CPP_PROTOS := $(filter $(ENGINE_ROOT)%,$(GO_PROTOS))
 ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
 ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 
+$(PROTOC_GEN_GOGO): $(REPO_ROOT)/protoc-gen-gogoroach/main.go
+	go install github.com/cockroachdb/cockroach/protoc-gen-gogoroach
+
 .PHONY: protos
 protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)
 
@@ -57,7 +60,7 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 	  $(PROTOC) -I.:$(GOGOPROTO_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
 	  sed -i.bak 's/import math "github\.com\/cockroachdb\/math"//g' $$dir/*.pb.go; \
 	  sed -i.bak -E 's/github\.com\/cockroachdb\/(gogoproto|github\.com)/\1/g' $$dir/*.pb.go; \
-	  sed -i.bak -E 's/github\.com\/cockroachdb\/(io|fmt)/\1/g' $$dir/*.pb.go; \
+	  sed -i.bak -E 's/github\.com\/cockroachdb\/(io|fmt|strconv)/\1/g' $$dir/*.pb.go; \
 	  rm -f $$dir/*.bak; \
 	done
 

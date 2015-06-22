@@ -13,6 +13,8 @@ import io "io"
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
 var _ = math.Inf
@@ -49,8 +51,8 @@ func (x TransactionRestart) Enum() *TransactionRestart {
 	*p = x
 	return p
 }
-func (x TransactionRestart) String() string {
-	return proto1.EnumName(TransactionRestart_name, int32(x))
+func (x TransactionRestart) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(TransactionRestart_name, int32(x))
 }
 func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(TransactionRestart_value, data, "TransactionRestart")
@@ -64,9 +66,8 @@ func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 type NotLeaderError struct {
-	Replica          *Replica `protobuf:"bytes,1,opt,name=replica" json:"replica,omitempty"`
-	Leader           *Replica `protobuf:"bytes,2,opt,name=leader" json:"leader,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Replica *Replica `protobuf:"bytes,1,opt,name=replica" json:"replica,omitempty"`
+	Leader  *Replica `protobuf:"bytes,2,opt,name=leader" json:"leader,omitempty"`
 }
 
 func (m *NotLeaderError) Reset()      { *m = NotLeaderError{} }
@@ -89,8 +90,7 @@ func (m *NotLeaderError) GetLeader() *Replica {
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 type RangeNotFoundError struct {
-	RaftID           RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
-	XXX_unrecognized []byte `json:"-"`
+	RaftID RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 }
 
 func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
@@ -99,10 +99,9 @@ func (*RangeNotFoundError) ProtoMessage() {}
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 type RangeKeyMismatchError struct {
-	RequestStartKey  Key              `protobuf:"bytes,1,opt,name=request_start_key,casttype=Key" json:"request_start_key,omitempty"`
-	RequestEndKey    Key              `protobuf:"bytes,2,opt,name=request_end_key,casttype=Key" json:"request_end_key,omitempty"`
-	Range            *RangeDescriptor `protobuf:"bytes,3,opt,name=range" json:"range,omitempty"`
-	XXX_unrecognized []byte           `json:"-"`
+	RequestStartKey Key              `protobuf:"bytes,1,opt,name=request_start_key,casttype=Key" json:"request_start_key,omitempty"`
+	RequestEndKey   Key              `protobuf:"bytes,2,opt,name=request_end_key,casttype=Key" json:"request_end_key,omitempty"`
+	Range           *RangeDescriptor `protobuf:"bytes,3,opt,name=range" json:"range,omitempty"`
 }
 
 func (m *RangeKeyMismatchError) Reset()      { *m = RangeKeyMismatchError{} }
@@ -122,7 +121,6 @@ func (m *RangeKeyMismatchError) GetRange() *RangeDescriptor {
 type ReadWithinUncertaintyIntervalError struct {
 	Timestamp         Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	ExistingTimestamp Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
-	XXX_unrecognized  []byte    `json:"-"`
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Reset()      { *m = ReadWithinUncertaintyIntervalError{} }
@@ -145,8 +143,7 @@ func (m *ReadWithinUncertaintyIntervalError) GetExistingTimestamp() Timestamp {
 // A TransactionAbortedError indicates that the transaction was
 // aborted by another concurrent transaction.
 type TransactionAbortedError struct {
-	Txn              Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
-	XXX_unrecognized []byte      `json:"-"`
+	Txn Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
 }
 
 func (m *TransactionAbortedError) Reset()      { *m = TransactionAbortedError{} }
@@ -165,9 +162,8 @@ func (m *TransactionAbortedError) GetTxn() Transaction {
 type TransactionPushError struct {
 	// txn can be null in the event the push error happened to a
 	// non-transactional method.
-	Txn              *Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
-	PusheeTxn        Transaction  `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
-	XXX_unrecognized []byte       `json:"-"`
+	Txn       *Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
+	PusheeTxn Transaction  `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
 }
 
 func (m *TransactionPushError) Reset()      { *m = TransactionPushError{} }
@@ -191,8 +187,7 @@ func (m *TransactionPushError) GetPusheeTxn() Transaction {
 // retried, usually with an increased transaction timestamp. The
 // transaction struct to use is returned with the error.
 type TransactionRetryError struct {
-	Txn              Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
-	XXX_unrecognized []byte      `json:"-"`
+	Txn Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
 }
 
 func (m *TransactionRetryError) Reset()      { *m = TransactionRetryError{} }
@@ -212,9 +207,8 @@ func (m *TransactionRetryError) GetTxn() Transaction {
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 type TransactionStatusError struct {
-	Txn              Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
-	Msg              string      `protobuf:"bytes,2,opt,name=msg" json:"msg"`
-	XXX_unrecognized []byte      `json:"-"`
+	Txn Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
+	Msg string      `protobuf:"bytes,2,opt,name=msg" json:"msg"`
 }
 
 func (m *TransactionStatusError) Reset()      { *m = TransactionStatusError{} }
@@ -243,9 +237,8 @@ func (m *TransactionStatusError) GetMsg() string {
 // immediately. If Resolved is false, the client should back off and
 // retry.
 type WriteIntentError struct {
-	Intents          []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
-	Resolved         bool     `protobuf:"varint,2,opt,name=resolved" json:"resolved"`
-	XXX_unrecognized []byte   `json:"-"`
+	Intents  []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
+	Resolved bool     `protobuf:"varint,2,opt,name=resolved" json:"resolved"`
 }
 
 func (m *WriteIntentError) Reset()      { *m = WriteIntentError{} }
@@ -271,7 +264,6 @@ func (m *WriteIntentError) GetResolved() bool {
 type WriteTooOldError struct {
 	Timestamp         Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	ExistingTimestamp Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
-	XXX_unrecognized  []byte    `json:"-"`
 }
 
 func (m *WriteTooOldError) Reset()      { *m = WriteTooOldError{} }
@@ -296,7 +288,6 @@ func (m *WriteTooOldError) GetExistingTimestamp() Timestamp {
 // For example, a Scan which spans ranges requires a transaction.
 // The operation should be retried inside of a transaction.
 type OpRequiresTxnError struct {
-	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *OpRequiresTxnError) Reset()      { *m = OpRequiresTxnError{} }
@@ -307,8 +298,7 @@ func (*OpRequiresTxnError) ProtoMessage() {}
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 type ConditionFailedError struct {
-	ActualValue      *Value `protobuf:"bytes,1,opt,name=actual_value" json:"actual_value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ActualValue *Value `protobuf:"bytes,1,opt,name=actual_value" json:"actual_value,omitempty"`
 }
 
 func (m *ConditionFailedError) Reset()      { *m = ConditionFailedError{} }
@@ -324,9 +314,8 @@ func (m *ConditionFailedError) GetActualValue() *Value {
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing leader lease.
 type LeaseRejectedError struct {
-	Requested        Lease  `protobuf:"bytes,1,opt" json:"Requested"`
-	Existing         Lease  `protobuf:"bytes,2,opt" json:"Existing"`
-	XXX_unrecognized []byte `json:"-"`
+	Requested Lease `protobuf:"bytes,1,opt" json:"Requested"`
+	Existing  Lease `protobuf:"bytes,2,opt" json:"Existing"`
 }
 
 func (m *LeaseRejectedError) Reset()      { *m = LeaseRejectedError{} }
@@ -361,7 +350,6 @@ type ErrorDetail struct {
 	OpRequiresTxn                 *OpRequiresTxnError                 `protobuf:"bytes,11,opt,name=op_requires_txn" json:"op_requires_txn,omitempty"`
 	ConditionFailed               *ConditionFailedError               `protobuf:"bytes,12,opt,name=condition_failed" json:"condition_failed,omitempty"`
 	LeaseRejected                 *LeaseRejectedError                 `protobuf:"bytes,13,opt,name=lease_rejected" json:"lease_rejected,omitempty"`
-	XXX_unrecognized              []byte                              `json:"-"`
 }
 
 func (m *ErrorDetail) Reset()      { *m = ErrorDetail{} }
@@ -471,8 +459,7 @@ type Error struct {
 	TransactionRestart TransactionRestart `protobuf:"varint,4,opt,name=transaction_restart,enum=cockroach.proto.TransactionRestart" json:"transaction_restart"`
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
-	Detail           *ErrorDetail `protobuf:"bytes,3,opt,name=detail" json:"detail,omitempty"`
-	XXX_unrecognized []byte       `json:"-"`
+	Detail *ErrorDetail `protobuf:"bytes,3,opt,name=detail" json:"detail,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
@@ -599,7 +586,6 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -657,7 +643,6 @@ func (m *RangeNotFoundError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -771,7 +756,6 @@ func (m *RangeKeyMismatchError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -862,7 +846,6 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -929,7 +912,6 @@ func (m *TransactionAbortedError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1023,7 +1005,6 @@ func (m *TransactionPushError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1090,7 +1071,6 @@ func (m *TransactionRetryError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1179,7 +1159,6 @@ func (m *TransactionStatusError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1264,7 +1243,6 @@ func (m *WriteIntentError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1355,7 +1333,6 @@ func (m *WriteTooOldError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1397,7 +1374,6 @@ func (m *OpRequiresTxnError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1467,7 +1443,6 @@ func (m *ConditionFailedError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1558,7 +1533,6 @@ func (m *LeaseRejectedError) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1952,7 +1926,6 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2076,7 +2049,6 @@ func (m *Error) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2170,9 +2142,6 @@ func (m *NotLeaderError) Size() (n int) {
 		l = m.Leader.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2180,9 +2149,6 @@ func (m *RangeNotFoundError) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovErrors(uint64(m.RaftID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2201,9 +2167,6 @@ func (m *RangeKeyMismatchError) Size() (n int) {
 		l = m.Range.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2214,9 +2177,6 @@ func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.ExistingTimestamp.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2225,9 +2185,6 @@ func (m *TransactionAbortedError) Size() (n int) {
 	_ = l
 	l = m.Txn.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2240,9 +2197,6 @@ func (m *TransactionPushError) Size() (n int) {
 	}
 	l = m.PusheeTxn.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2251,9 +2205,6 @@ func (m *TransactionRetryError) Size() (n int) {
 	_ = l
 	l = m.Txn.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2264,9 +2215,6 @@ func (m *TransactionStatusError) Size() (n int) {
 	n += 1 + l + sovErrors(uint64(l))
 	l = len(m.Msg)
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2280,9 +2228,6 @@ func (m *WriteIntentError) Size() (n int) {
 		}
 	}
 	n += 2
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2293,18 +2238,12 @@ func (m *WriteTooOldError) Size() (n int) {
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.ExistingTimestamp.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
 func (m *OpRequiresTxnError) Size() (n int) {
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2314,9 +2253,6 @@ func (m *ConditionFailedError) Size() (n int) {
 	if m.ActualValue != nil {
 		l = m.ActualValue.Size()
 		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2328,9 +2264,6 @@ func (m *LeaseRejectedError) Size() (n int) {
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.Existing.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2389,9 +2322,6 @@ func (m *ErrorDetail) Size() (n int) {
 		l = m.LeaseRejected.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2405,9 +2335,6 @@ func (m *Error) Size() (n int) {
 	if m.Detail != nil {
 		l = m.Detail.Size()
 		n += 1 + l + sovErrors(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2460,9 +2387,6 @@ func (m *NotLeaderError) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n2
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2484,9 +2408,6 @@ func (m *RangeNotFoundError) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.RaftID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2527,9 +2448,6 @@ func (m *RangeKeyMismatchError) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n3
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2564,9 +2482,6 @@ func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (n int, err 
 		return 0, err
 	}
 	i += n5
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2593,9 +2508,6 @@ func (m *TransactionAbortedError) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n6
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2632,9 +2544,6 @@ func (m *TransactionPushError) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n8
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2661,9 +2570,6 @@ func (m *TransactionRetryError) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n9
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2694,9 +2600,6 @@ func (m *TransactionStatusError) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintErrors(data, i, uint64(len(m.Msg)))
 	i += copy(data[i:], m.Msg)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2735,9 +2638,6 @@ func (m *WriteIntentError) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2772,9 +2672,6 @@ func (m *WriteTooOldError) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n12
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2793,9 +2690,6 @@ func (m *OpRequiresTxnError) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2823,9 +2717,6 @@ func (m *ConditionFailedError) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n13
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -2861,9 +2752,6 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n15
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3012,9 +2900,6 @@ func (m *ErrorDetail) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n28
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3058,9 +2943,6 @@ func (m *Error) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x20
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3090,4 +2972,11 @@ func encodeVarintErrors(data []byte, offset int, v uint64) int {
 	}
 	data[offset] = uint8(v)
 	return offset + 1
+}
+func (x TransactionRestart) String() string {
+	s, ok := TransactionRestart_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

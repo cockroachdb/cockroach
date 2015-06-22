@@ -148,6 +148,7 @@ GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) build/devbase/godeps.sh GLOCKFILE
+	@go install github.com/cockroachdb/cockroach/protoc-gen-gogoroach
 	@build/devbase/godeps.sh
 	@touch $@
 

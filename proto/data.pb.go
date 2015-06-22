@@ -13,6 +13,8 @@ import io "io"
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
 var _ = math.Inf
@@ -39,8 +41,8 @@ func (x ReplicaChangeType) Enum() *ReplicaChangeType {
 	*p = x
 	return p
 }
-func (x ReplicaChangeType) String() string {
-	return proto1.EnumName(ReplicaChangeType_name, int32(x))
+func (x ReplicaChangeType) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(ReplicaChangeType_name, int32(x))
 }
 func (x *ReplicaChangeType) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(ReplicaChangeType_value, data, "ReplicaChangeType")
@@ -75,8 +77,8 @@ func (x IsolationType) Enum() *IsolationType {
 	*p = x
 	return p
 }
-func (x IsolationType) String() string {
-	return proto1.EnumName(IsolationType_name, int32(x))
+func (x IsolationType) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(IsolationType_name, int32(x))
 }
 func (x *IsolationType) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(IsolationType_value, data, "IsolationType")
@@ -125,8 +127,8 @@ func (x TransactionStatus) Enum() *TransactionStatus {
 	*p = x
 	return p
 }
-func (x TransactionStatus) String() string {
-	return proto1.EnumName(TransactionStatus_name, int32(x))
+func (x TransactionStatus) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(TransactionStatus_name, int32(x))
 }
 func (x *TransactionStatus) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(TransactionStatus_value, data, "TransactionStatus")
@@ -146,8 +148,7 @@ type Timestamp struct {
 	// times are equal. It is effectively bounded by (maximum clock
 	// skew)/(minimal ns between events) and nearly impossible to
 	// overflow.
-	Logical          int32  `protobuf:"varint,2,opt,name=logical" json:"logical"`
-	XXX_unrecognized []byte `json:"-"`
+	Logical int32 `protobuf:"varint,2,opt,name=logical" json:"logical"`
 }
 
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
@@ -186,8 +187,7 @@ type Value struct {
 	// Tag is an optional string value which can be used to add additional
 	// metadata to this value. For example, Tag might provide information on how
 	// the bytes in the "bytes" field should be interpreted.
-	Tag              *string `protobuf:"bytes,5,opt,name=tag" json:"tag,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	Tag *string `protobuf:"bytes,5,opt,name=tag" json:"tag,omitempty"`
 }
 
 func (m *Value) Reset()         { *m = Value{} }
@@ -225,9 +225,8 @@ func (m *Value) GetTag() string {
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 type KeyValue struct {
-	Key              Key    `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte `json:"-"`
+	Key   Key   `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
 func (m *KeyValue) Reset()         { *m = KeyValue{} }
@@ -243,9 +242,8 @@ func (m *KeyValue) GetValue() Value {
 
 // RawKeyValue contains the raw bytes of the value for a key.
 type RawKeyValue struct {
-	Key              EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
-	Value            []byte     `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte     `json:"-"`
+	Key   EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
+	Value []byte     `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *RawKeyValue) Reset()         { *m = RawKeyValue{} }
@@ -263,10 +261,9 @@ func (m *RawKeyValue) GetValue() []byte {
 // StoreIdent is written to the underlying storage engine at a
 // store-reserved system key (KeyLocalIdent).
 type StoreIdent struct {
-	ClusterID        string  `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id"`
-	NodeID           NodeID  `protobuf:"varint,2,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,3,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	XXX_unrecognized []byte  `json:"-"`
+	ClusterID string  `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id"`
+	NodeID    NodeID  `protobuf:"varint,2,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID   StoreID `protobuf:"varint,3,opt,name=store_id,casttype=StoreID" json:"store_id"`
 }
 
 func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
@@ -286,9 +283,8 @@ func (m *StoreIdent) GetClusterID() string {
 // second half. This information allows the final bookkeeping for
 // the split to be completed and the new range put into operation.
 type SplitTrigger struct {
-	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	NewDesc          RangeDescriptor `protobuf:"bytes,2,opt,name=new_desc" json:"new_desc"`
-	XXX_unrecognized []byte          `json:"-"`
+	UpdatedDesc RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
+	NewDesc     RangeDescriptor `protobuf:"bytes,2,opt,name=new_desc" json:"new_desc"`
 }
 
 func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
@@ -314,9 +310,8 @@ func (m *SplitTrigger) GetNewDesc() RangeDescriptor {
 // what was originally both ranges. This information allows the final bookkeeping
 // for the merge to be completed and put into operation.
 type MergeTrigger struct {
-	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	SubsumedRaftID   RaftID          `protobuf:"varint,2,opt,name=subsumed_raft_id,casttype=RaftID" json:"subsumed_raft_id"`
-	XXX_unrecognized []byte          `json:"-"`
+	UpdatedDesc    RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
+	SubsumedRaftID RaftID          `protobuf:"varint,2,opt,name=subsumed_raft_id,casttype=RaftID" json:"subsumed_raft_id"`
 }
 
 func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
@@ -335,8 +330,7 @@ type ChangeReplicasTrigger struct {
 	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 	ChangeType ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=cockroach.proto.ReplicaChangeType" json:"change_type"`
 	// The new replica list with this change applied.
-	UpdatedReplicas  []Replica `protobuf:"bytes,4,rep,name=updated_replicas" json:"updated_replicas"`
-	XXX_unrecognized []byte    `json:"-"`
+	UpdatedReplicas []Replica `protobuf:"bytes,4,rep,name=updated_replicas" json:"updated_replicas"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
@@ -365,8 +359,7 @@ type InternalCommitTrigger struct {
 	// List of intents to resolve on commit or abort. Note that keys
 	// listed here will only be resolved if they fall on the same range
 	// that the transaction was started on.
-	Intents          []Key  `protobuf:"bytes,4,rep,name=intents,casttype=Key" json:"intents,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Intents []Key `protobuf:"bytes,4,rep,name=intents,casttype=Key" json:"intents,omitempty"`
 }
 
 func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
@@ -399,8 +392,7 @@ func (m *InternalCommitTrigger) GetChangeReplicasTrigger() *ChangeReplicasTrigge
 type NodeList struct {
 	// Note that this does not use the NodeID custom type because that appears
 	// to interact badly with the repeated and/or packed options.
-	Nodes            []int32 `protobuf:"varint,1,rep,packed,name=nodes" json:"nodes,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	Nodes []int32 `protobuf:"varint,1,rep,packed,name=nodes" json:"nodes,omitempty"`
 }
 
 func (m *NodeList) Reset()         { *m = NodeList{} }
@@ -469,8 +461,7 @@ type Transaction struct {
 	// Bits of this mechanism are found in the local sender, the range and the
 	// txn_coord_sender, with brief comments referring here.
 	// See https://github.com/cockroachdb/cockroach/pull/221.
-	CertainNodes     NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
-	XXX_unrecognized []byte   `json:"-"`
+	CertainNodes NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -563,8 +554,7 @@ type Lease struct {
 	// The expiration is a timestamp at which the lease will expire.
 	Expiration Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration"`
 	// The Raft NodeID on which the would-be lease holder lives.
-	RaftNodeID       RaftNodeID `protobuf:"varint,3,opt,name=raft_node_id,casttype=RaftNodeID" json:"raft_node_id"`
-	XXX_unrecognized []byte     `json:"-"`
+	RaftNodeID RaftNodeID `protobuf:"varint,3,opt,name=raft_node_id,casttype=RaftNodeID" json:"raft_node_id"`
 }
 
 func (m *Lease) Reset()      { *m = Lease{} }
@@ -586,9 +576,8 @@ func (m *Lease) GetExpiration() Timestamp {
 
 // Intent groups a key and a transaction.
 type Intent struct {
-	Key              Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Txn              Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn"`
-	XXX_unrecognized []byte      `json:"-"`
+	Key Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Txn Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn"`
 }
 
 func (m *Intent) Reset()         { *m = Intent{} }
@@ -610,7 +599,6 @@ type GCMetadata struct {
 	// The oldest unresolved write intent in nanoseconds since epoch.
 	// Null if there are no unresolved write intents.
 	OldestIntentNanos *int64 `protobuf:"varint,2,opt,name=oldest_intent_nanos" json:"oldest_intent_nanos,omitempty"`
-	XXX_unrecognized  []byte `json:"-"`
 }
 
 func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
@@ -702,7 +690,6 @@ func (m *Timestamp) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -831,7 +818,6 @@ func (m *Value) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -920,7 +906,6 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1007,7 +992,6 @@ func (m *RawKeyValue) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1102,7 +1086,6 @@ func (m *StoreIdent) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1193,7 +1176,6 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1275,7 +1257,6 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1388,7 +1369,6 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1535,7 +1515,6 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1628,7 +1607,6 @@ func (m *NodeList) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1920,7 +1898,6 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2026,7 +2003,6 @@ func (m *Lease) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2115,7 +2091,6 @@ func (m *Intent) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2190,7 +2165,6 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2202,9 +2176,6 @@ func (m *Timestamp) Size() (n int) {
 	_ = l
 	n += 1 + sovData(uint64(m.WallTime))
 	n += 1 + sovData(uint64(m.Logical))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2226,9 +2197,6 @@ func (m *Value) Size() (n int) {
 		l = len(*m.Tag)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2241,9 +2209,6 @@ func (m *KeyValue) Size() (n int) {
 	}
 	l = m.Value.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2258,9 +2223,6 @@ func (m *RawKeyValue) Size() (n int) {
 		l = len(m.Value)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2271,9 +2233,6 @@ func (m *StoreIdent) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.NodeID))
 	n += 1 + sovData(uint64(m.StoreID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2284,9 +2243,6 @@ func (m *SplitTrigger) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.NewDesc.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2296,9 +2252,6 @@ func (m *MergeTrigger) Size() (n int) {
 	l = m.UpdatedDesc.Size()
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.SubsumedRaftID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2313,9 +2266,6 @@ func (m *ChangeReplicasTrigger) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovData(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2341,9 +2291,6 @@ func (m *InternalCommitTrigger) Size() (n int) {
 			n += 1 + l + sovData(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2356,9 +2303,6 @@ func (m *NodeList) Size() (n int) {
 			l += sovData(uint64(e))
 		}
 		n += 1 + sovData(uint64(l)) + l
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2392,9 +2336,6 @@ func (m *Transaction) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.CertainNodes.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2406,9 +2347,6 @@ func (m *Lease) Size() (n int) {
 	l = m.Expiration.Size()
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.RaftNodeID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2421,9 +2359,6 @@ func (m *Intent) Size() (n int) {
 	}
 	l = m.Txn.Size()
 	n += 1 + l + sovData(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2433,9 +2368,6 @@ func (m *GCMetadata) Size() (n int) {
 	n += 1 + sovData(uint64(m.LastScanNanos))
 	if m.OldestIntentNanos != nil {
 		n += 1 + sovData(uint64(*m.OldestIntentNanos))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2474,9 +2406,6 @@ func (m *Timestamp) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.Logical))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2522,9 +2451,6 @@ func (m *Value) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintData(data, i, uint64(len(*m.Tag)))
 		i += copy(data[i:], *m.Tag)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2557,9 +2483,6 @@ func (m *KeyValue) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n2
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2590,9 +2513,6 @@ func (m *RawKeyValue) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintData(data, i, uint64(len(m.Value)))
 		i += copy(data[i:], m.Value)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2621,9 +2541,6 @@ func (m *StoreIdent) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.StoreID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2658,9 +2575,6 @@ func (m *SplitTrigger) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n4
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2690,9 +2604,6 @@ func (m *MergeTrigger) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintData(data, i, uint64(m.SubsumedRaftID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2731,9 +2642,6 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -2791,9 +2699,6 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (n int, err error) {
 			i += copy(data[i:], b)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2829,9 +2734,6 @@ func (m *NodeList) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintData(data, i, uint64(j9))
 		i += copy(data[i:], data10[:j9])
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -2921,9 +2823,6 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n15
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2961,9 +2860,6 @@ func (m *Lease) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2996,9 +2892,6 @@ func (m *Intent) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n18
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -3024,9 +2917,6 @@ func (m *GCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x10
 		i++
 		i = encodeVarintData(data, i, uint64(*m.OldestIntentNanos))
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -3057,4 +2947,25 @@ func encodeVarintData(data []byte, offset int, v uint64) int {
 	}
 	data[offset] = uint8(v)
 	return offset + 1
+}
+func (x ReplicaChangeType) String() string {
+	s, ok := ReplicaChangeType_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x IsolationType) String() string {
+	s, ok := IsolationType_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x TransactionStatus) String() string {
+	s, ok := TransactionStatus_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

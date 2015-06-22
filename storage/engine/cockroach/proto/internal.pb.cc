@@ -1132,8 +1132,8 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "V\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001("
     "\014*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\r\n\t"
     "ABORT_TXN\020\001\022\017\n\013CLEANUP_TXN\020\002\032\004\210\243\036\000*%\n\021In"
-    "ternalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\023Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001", 7414);
+    "ternalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\007Z\005pro"
+    "to", 7402);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();

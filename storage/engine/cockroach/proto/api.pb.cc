@@ -832,8 +832,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "minMergeResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
     "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001*L\n\023R"
     "eadConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCO"
-    "NSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000B\023Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001", 4214);
+    "NSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000B\007Z\005pro"
+    "to", 4202);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();

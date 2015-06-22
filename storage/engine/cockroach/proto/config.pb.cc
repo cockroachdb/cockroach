@@ -404,8 +404,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "\005attrs\030\002 \001(\0132\033.cockroach.proto.Attribute"
     "sB\004\310\336\037\000\0223\n\004node\030\003 \001(\0132\037.cockroach.proto."
     "NodeDescriptorB\004\310\336\037\000\0226\n\010capacity\030\004 \001(\0132\036"
-    ".cockroach.proto.StoreCapacityB\004\310\336\037\000B\023Z\005"
-    "proto\340\342\036\001\310\342\036\001\320\342\036\001", 1657);
+    ".cockroach.proto.StoreCapacityB\004\310\336\037\000B\007Z\005"
+    "proto", 1645);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();

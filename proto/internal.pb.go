@@ -14,6 +14,8 @@ import io "io"
 import fmt "fmt"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
 var _ = math.Inf
@@ -47,8 +49,8 @@ func (x PushTxnType) Enum() *PushTxnType {
 	*p = x
 	return p
 }
-func (x PushTxnType) String() string {
-	return proto1.EnumName(PushTxnType_name, int32(x))
+func (x PushTxnType) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(PushTxnType_name, int32(x))
 }
 func (x *PushTxnType) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(PushTxnType_value, data, "PushTxnType")
@@ -83,8 +85,8 @@ func (x InternalValueType) Enum() *InternalValueType {
 	*p = x
 	return p
 }
-func (x InternalValueType) String() string {
-	return proto1.EnumName(InternalValueType_name, int32(x))
+func (x InternalValueType) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(InternalValueType_name, int32(x))
 }
 func (x *InternalValueType) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(InternalValueType_value, data, "InternalValueType")
@@ -109,8 +111,7 @@ type InternalRangeLookupRequest struct {
 	// be false in general, except for the case where the lookup is
 	// already in service of pushing intents on meta records. Attempting
 	// to resolve intents in this case would lead to infinite recursion.
-	IgnoreIntents    bool   `protobuf:"varint,3,opt,name=ignore_intents" json:"ignore_intents"`
-	XXX_unrecognized []byte `json:"-"`
+	IgnoreIntents bool `protobuf:"varint,3,opt,name=ignore_intents" json:"ignore_intents"`
 }
 
 func (m *InternalRangeLookupRequest) Reset()         { *m = InternalRangeLookupRequest{} }
@@ -137,9 +138,8 @@ func (m *InternalRangeLookupRequest) GetIgnoreIntents() bool {
 // additional consecutive ranges beyond the requested range to pre-fill
 // the range descriptor cache.
 type InternalRangeLookupResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Ranges           []RangeDescriptor `protobuf:"bytes,2,rep,name=ranges" json:"ranges"`
-	XXX_unrecognized []byte            `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Ranges         []RangeDescriptor `protobuf:"bytes,2,rep,name=ranges" json:"ranges"`
 }
 
 func (m *InternalRangeLookupResponse) Reset()         { *m = InternalRangeLookupResponse{} }
@@ -159,8 +159,7 @@ func (m *InternalRangeLookupResponse) GetRanges() []RangeDescriptor {
 // ongoing. Note that this heartbeat message is different from the
 // heartbeat message in the gossip protocol.
 type InternalHeartbeatTxnRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalHeartbeatTxnRequest) Reset()         { *m = InternalHeartbeatTxnRequest{} }
@@ -173,8 +172,7 @@ func (*InternalHeartbeatTxnRequest) ProtoMessage()    {}
 // know the disposition of the transaction (i.e. aborted, committed or
 // pending).
 type InternalHeartbeatTxnResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalHeartbeatTxnResponse) Reset()         { *m = InternalHeartbeatTxnResponse{} }
@@ -185,10 +183,9 @@ func (*InternalHeartbeatTxnResponse) ProtoMessage()    {}
 // sent by range leaders after scanning range data to find expired
 // MVCC values.
 type InternalGCRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	GCMeta           GCMetadata                `protobuf:"bytes,2,opt,name=gc_meta" json:"gc_meta"`
-	Keys             []InternalGCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
-	XXX_unrecognized []byte                    `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	GCMeta        GCMetadata                `protobuf:"bytes,2,opt,name=gc_meta" json:"gc_meta"`
+	Keys          []InternalGCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
 }
 
 func (m *InternalGCRequest) Reset()         { *m = InternalGCRequest{} }
@@ -210,9 +207,8 @@ func (m *InternalGCRequest) GetKeys() []InternalGCRequest_GCKey {
 }
 
 type InternalGCRequest_GCKey struct {
-	Key              Key       `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Timestamp        Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
-	XXX_unrecognized []byte    `json:"-"`
+	Key       Key       `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *InternalGCRequest_GCKey) Reset()         { *m = InternalGCRequest_GCKey{} }
@@ -229,8 +225,7 @@ func (m *InternalGCRequest_GCKey) GetTimestamp() Timestamp {
 // An InternalGCResponse is the return value from the InternalGC()
 // method.
 type InternalGCResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalGCResponse) Reset()         { *m = InternalGCResponse{} }
@@ -268,8 +263,7 @@ type InternalPushTxnRequest struct {
 	// Range lookup indicates whether we're pushing a txn because of an
 	// intent encountered while servicing an internal range lookup
 	// request. See notes in InternalRangeLookupRequest.
-	RangeLookup      bool   `protobuf:"varint,5,opt,name=range_lookup" json:"range_lookup"`
-	XXX_unrecognized []byte `json:"-"`
+	RangeLookup bool `protobuf:"varint,5,opt,name=range_lookup" json:"range_lookup"`
 }
 
 func (m *InternalPushTxnRequest) Reset()         { *m = InternalPushTxnRequest{} }
@@ -314,8 +308,7 @@ type InternalPushTxnResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Txn is non-nil if the transaction could be heartbeat and contains
 	// the current value of the transaction.
-	PusheeTxn        *Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn,omitempty"`
-	XXX_unrecognized []byte       `json:"-"`
+	PusheeTxn *Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn,omitempty"`
 }
 
 func (m *InternalPushTxnResponse) Reset()         { *m = InternalPushTxnResponse{} }
@@ -334,8 +327,7 @@ func (m *InternalPushTxnResponse) GetPusheeTxn() *Transaction {
 // coordinators and after success calling InternalPushTxn to clean up
 // write intents: either to remove them or commit them.
 type InternalResolveIntentRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalResolveIntentRequest) Reset()         { *m = InternalResolveIntentRequest{} }
@@ -345,8 +337,7 @@ func (*InternalResolveIntentRequest) ProtoMessage()    {}
 // An InternalResolveIntentResponse is the return value from the
 // InternalResolveIntent() method.
 type InternalResolveIntentResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalResolveIntentResponse) Reset()         { *m = InternalResolveIntentResponse{} }
@@ -357,8 +348,7 @@ func (*InternalResolveIntentResponse) ProtoMessage()    {}
 // InternalResolveIntentRange() method. This clear write intents
 // for a range of keys to resolve intents created by range ops.
 type InternalResolveIntentRangeRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalResolveIntentRangeRequest) Reset()         { *m = InternalResolveIntentRangeRequest{} }
@@ -368,8 +358,7 @@ func (*InternalResolveIntentRangeRequest) ProtoMessage()    {}
 // An InternalResolveIntentRangeResponse is the return value from the
 // InternalResolveIntent() method.
 type InternalResolveIntentRangeResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalResolveIntentRangeResponse) Reset()         { *m = InternalResolveIntentRangeResponse{} }
@@ -380,9 +369,8 @@ func (*InternalResolveIntentRangeResponse) ProtoMessage()    {}
 // specifies a key and a value which should be merged into the existing value at
 // that key.
 type InternalMergeRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Value            Value  `protobuf:"bytes,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Value         Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
 func (m *InternalMergeRequest) Reset()         { *m = InternalMergeRequest{} }
@@ -398,8 +386,7 @@ func (m *InternalMergeRequest) GetValue() Value {
 
 // InternalMergeResponse is the response to an InternalMerge() operation.
 type InternalMergeResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalMergeResponse) Reset()         { *m = InternalMergeResponse{} }
@@ -414,8 +401,7 @@ func (*InternalMergeResponse) ProtoMessage()    {}
 type InternalTruncateLogRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Log entries < this index are to be discarded.
-	Index            uint64 `protobuf:"varint,2,opt,name=index" json:"index"`
-	XXX_unrecognized []byte `json:"-"`
+	Index uint64 `protobuf:"varint,2,opt,name=index" json:"index"`
 }
 
 func (m *InternalTruncateLogRequest) Reset()         { *m = InternalTruncateLogRequest{} }
@@ -431,8 +417,7 @@ func (m *InternalTruncateLogRequest) GetIndex() uint64 {
 
 // InternalTruncateLogResponse is the response to an InternalTruncateLog() operation.
 type InternalTruncateLogResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalTruncateLogResponse) Reset()         { *m = InternalTruncateLogResponse{} }
@@ -443,9 +428,8 @@ func (*InternalTruncateLogResponse) ProtoMessage()    {}
 // method. It is sent by the store on behalf of one of its ranges upon receipt
 // of a leader election event for that range.
 type InternalLeaderLeaseRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Lease            Lease  `protobuf:"bytes,2,opt,name=lease" json:"lease"`
-	XXX_unrecognized []byte `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Lease         Lease `protobuf:"bytes,2,opt,name=lease" json:"lease"`
 }
 
 func (m *InternalLeaderLeaseRequest) Reset()         { *m = InternalLeaderLeaseRequest{} }
@@ -462,8 +446,7 @@ func (m *InternalLeaderLeaseRequest) GetLease() Lease {
 // An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
 // operation.
 type InternalLeaderLeaseResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
 func (m *InternalLeaderLeaseResponse) Reset()         { *m = InternalLeaderLeaseResponse{} }
@@ -484,7 +467,6 @@ type InternalRequestUnion struct {
 	InternalPushTxn            *InternalPushTxnRequest            `protobuf:"bytes,30,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
 	InternalResolveIntent      *InternalResolveIntentRequest      `protobuf:"bytes,31,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
 	InternalResolveIntentRange *InternalResolveIntentRangeRequest `protobuf:"bytes,32,opt,name=internal_resolve_intent_range" json:"internal_resolve_intent_range,omitempty"`
-	XXX_unrecognized           []byte                             `json:"-"`
 }
 
 func (m *InternalRequestUnion) Reset()         { *m = InternalRequestUnion{} }
@@ -582,7 +564,6 @@ type InternalResponseUnion struct {
 	InternalPushTxn            *InternalPushTxnResponse            `protobuf:"bytes,30,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
 	InternalResolveIntent      *InternalResolveIntentResponse      `protobuf:"bytes,31,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
 	InternalResolveIntentRange *InternalResolveIntentRangeResponse `protobuf:"bytes,32,opt,name=internal_resolve_intent_range" json:"internal_resolve_intent_range,omitempty"`
-	XXX_unrecognized           []byte                              `json:"-"`
 }
 
 func (m *InternalResponseUnion) Reset()         { *m = InternalResponseUnion{} }
@@ -671,9 +652,8 @@ func (m *InternalResponseUnion) GetInternalResolveIntentRange() *InternalResolve
 //
 // See comments for BatchRequest.
 type InternalBatchRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Requests         []InternalRequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
-	XXX_unrecognized []byte                 `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Requests      []InternalRequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 }
 
 func (m *InternalBatchRequest) Reset()         { *m = InternalBatchRequest{} }
@@ -691,9 +671,8 @@ func (m *InternalBatchRequest) GetRequests() []InternalRequestUnion {
 //
 // See comments for BatchResponse.
 type InternalBatchResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Responses        []InternalResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
-	XXX_unrecognized []byte                  `json:"-"`
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Responses      []InternalResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 }
 
 func (m *InternalBatchResponse) Reset()         { *m = InternalBatchResponse{} }
@@ -725,7 +704,6 @@ type ReadWriteCmdResponse struct {
 	InternalTruncateLog        *InternalTruncateLogResponse        `protobuf:"bytes,15,opt,name=internal_truncate_log" json:"internal_truncate_log,omitempty"`
 	InternalGc                 *InternalGCResponse                 `protobuf:"bytes,16,opt,name=internal_gc" json:"internal_gc,omitempty"`
 	InternalLeaderLease        *InternalLeaderLeaseResponse        `protobuf:"bytes,17,opt,name=internal_leader_lease" json:"internal_leader_lease,omitempty"`
-	XXX_unrecognized           []byte                              `json:"-"`
 }
 
 func (m *ReadWriteCmdResponse) Reset()         { *m = ReadWriteCmdResponse{} }
@@ -855,7 +833,6 @@ type InternalRaftCommandUnion struct {
 	InternalGC                 *InternalGCRequest                 `protobuf:"bytes,38,opt,name=internal_gc" json:"internal_gc,omitempty"`
 	InternalLease              *InternalLeaderLeaseRequest        `protobuf:"bytes,39,opt,name=internal_lease" json:"internal_lease,omitempty"`
 	InternalBatch              *InternalBatchRequest              `protobuf:"bytes,40,opt,name=internal_batch" json:"internal_batch,omitempty"`
-	XXX_unrecognized           []byte                             `json:"-"`
 }
 
 func (m *InternalRaftCommandUnion) Reset()         { *m = InternalRaftCommandUnion{} }
@@ -998,10 +975,9 @@ func (m *InternalRaftCommandUnion) GetInternalBatch() *InternalBatchRequest {
 // An InternalRaftCommand is a command which can be serialized and
 // sent via raft.
 type InternalRaftCommand struct {
-	RaftID           RaftID                   `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
-	OriginNodeID     RaftNodeID               `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
-	Cmd              InternalRaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
-	XXX_unrecognized []byte                   `json:"-"`
+	RaftID       RaftID                   `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	OriginNodeID RaftNodeID               `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
+	Cmd          InternalRaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 }
 
 func (m *InternalRaftCommand) Reset()         { *m = InternalRaftCommand{} }
@@ -1026,8 +1002,7 @@ type RaftMessageRequest struct {
 	// The raft payload, an encoded raftpb.Message. We transmit the message as
 	// an opaque blob to avoid the complexity of importing proto files across
 	// packages.
-	Msg              []byte `protobuf:"bytes,2,opt,name=msg" json:"msg,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Msg []byte `protobuf:"bytes,2,opt,name=msg" json:"msg,omitempty"`
 }
 
 func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
@@ -1043,7 +1018,6 @@ func (m *RaftMessageRequest) GetMsg() []byte {
 
 // RaftMessageResponse is an empty message returned by raft RPCs.
 type RaftMessageResponse struct {
-	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *RaftMessageResponse) Reset()         { *m = RaftMessageResponse{} }
@@ -1075,8 +1049,7 @@ type InternalTimeSeriesData struct {
 	// The duration of each sample interval, expressed in nanoseconds.
 	SampleDurationNanos int64 `protobuf:"varint,2,opt,name=sample_duration_nanos" json:"sample_duration_nanos"`
 	// The actual data samples for this metric.
-	Samples          []*InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples,omitempty"`
-	XXX_unrecognized []byte                      `json:"-"`
+	Samples []*InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples,omitempty"`
 }
 
 func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{} }
@@ -1136,8 +1109,7 @@ type InternalTimeSeriesSample struct {
 	// Maximum encountered measurement in this sample.
 	Max *float64 `protobuf:"fixed64,8,opt,name=max" json:"max,omitempty"`
 	// Minimum encountered measurement in this sample.
-	Min              *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Min *float64 `protobuf:"fixed64,9,opt,name=min" json:"min,omitempty"`
 }
 
 func (m *InternalTimeSeriesSample) Reset()         { *m = InternalTimeSeriesSample{} }
@@ -1186,8 +1158,7 @@ type RaftTruncatedState struct {
 	// The highest index that has been removed from the log.
 	Index uint64 `protobuf:"varint,1,opt,name=index" json:"index"`
 	// The term corresponding to 'index'.
-	Term             uint64 `protobuf:"varint,2,opt,name=term" json:"term"`
-	XXX_unrecognized []byte `json:"-"`
+	Term uint64 `protobuf:"varint,2,opt,name=term" json:"term"`
 }
 
 func (m *RaftTruncatedState) Reset()         { *m = RaftTruncatedState{} }
@@ -1212,9 +1183,8 @@ func (m *RaftTruncatedState) GetTerm() uint64 {
 // all of the range's data and metadata, including the raft log, response cache, etc.
 type RaftSnapshotData struct {
 	// The latest RangeDescriptor
-	RangeDescriptor  RangeDescriptor              `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
-	KV               []*RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep" json:"KV,omitempty"`
-	XXX_unrecognized []byte                       `json:"-"`
+	RangeDescriptor RangeDescriptor              `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
+	KV              []*RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep" json:"KV,omitempty"`
 }
 
 func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
@@ -1236,9 +1206,8 @@ func (m *RaftSnapshotData) GetKV() []*RaftSnapshotData_KeyValue {
 }
 
 type RaftSnapshotData_KeyValue struct {
-	Key              []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
-	Value            []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Key   []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
+	Value []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }
@@ -1355,7 +1324,6 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1447,7 +1415,6 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1514,7 +1481,6 @@ func (m *InternalHeartbeatTxnRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1581,7 +1547,6 @@ func (m *InternalHeartbeatTxnResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1697,7 +1662,6 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1786,7 +1750,6 @@ func (m *InternalGCRequest_GCKey) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1853,7 +1816,6 @@ func (m *InternalGCResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2000,7 +1962,6 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2094,7 +2055,6 @@ func (m *InternalPushTxnResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2161,7 +2121,6 @@ func (m *InternalResolveIntentRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2228,7 +2187,6 @@ func (m *InternalResolveIntentResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2295,7 +2253,6 @@ func (m *InternalResolveIntentRangeRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2362,7 +2319,6 @@ func (m *InternalResolveIntentRangeResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2453,7 +2409,6 @@ func (m *InternalMergeRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2520,7 +2475,6 @@ func (m *InternalMergeResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2602,7 +2556,6 @@ func (m *InternalTruncateLogRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2669,7 +2622,6 @@ func (m *InternalTruncateLogResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2760,7 +2712,6 @@ func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -2827,7 +2778,6 @@ func (m *InternalLeaderLeaseResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3167,7 +3117,6 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3507,7 +3456,6 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3599,7 +3547,6 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -3691,7 +3638,6 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -4112,7 +4058,6 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -4668,7 +4613,6 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -4765,7 +4709,6 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -4845,7 +4788,6 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -4887,7 +4829,6 @@ func (m *RaftMessageResponse) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -4985,7 +4926,6 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -5114,7 +5054,6 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -5187,7 +5126,6 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -5279,7 +5217,6 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -5366,7 +5303,6 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -5699,9 +5635,6 @@ func (m *InternalRangeLookupRequest) Size() (n int) {
 	n += 1 + l + sovInternal(uint64(l))
 	n += 1 + sovInternal(uint64(m.MaxRanges))
 	n += 2
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5716,9 +5649,6 @@ func (m *InternalRangeLookupResponse) Size() (n int) {
 			n += 1 + l + sovInternal(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5727,9 +5657,6 @@ func (m *InternalHeartbeatTxnRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5738,9 +5665,6 @@ func (m *InternalHeartbeatTxnResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5757,9 +5681,6 @@ func (m *InternalGCRequest) Size() (n int) {
 			n += 1 + l + sovInternal(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5772,9 +5693,6 @@ func (m *InternalGCRequest_GCKey) Size() (n int) {
 	}
 	l = m.Timestamp.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5783,9 +5701,6 @@ func (m *InternalGCResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5800,9 +5715,6 @@ func (m *InternalPushTxnRequest) Size() (n int) {
 	n += 1 + l + sovInternal(uint64(l))
 	n += 1 + sovInternal(uint64(m.PushType))
 	n += 2
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5815,9 +5727,6 @@ func (m *InternalPushTxnResponse) Size() (n int) {
 		l = m.PusheeTxn.Size()
 		n += 1 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5826,9 +5735,6 @@ func (m *InternalResolveIntentRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5837,9 +5743,6 @@ func (m *InternalResolveIntentResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5848,9 +5751,6 @@ func (m *InternalResolveIntentRangeRequest) Size() (n int) {
 	_ = l
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5859,9 +5759,6 @@ func (m *InternalResolveIntentRangeResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5872,9 +5769,6 @@ func (m *InternalMergeRequest) Size() (n int) {
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.Value.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5883,9 +5777,6 @@ func (m *InternalMergeResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5895,9 +5786,6 @@ func (m *InternalTruncateLogRequest) Size() (n int) {
 	l = m.RequestHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
 	n += 1 + sovInternal(uint64(m.Index))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5906,9 +5794,6 @@ func (m *InternalTruncateLogResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5919,9 +5804,6 @@ func (m *InternalLeaderLeaseRequest) Size() (n int) {
 	n += 1 + l + sovInternal(uint64(l))
 	l = m.Lease.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5930,9 +5812,6 @@ func (m *InternalLeaderLeaseResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -5982,9 +5861,6 @@ func (m *InternalRequestUnion) Size() (n int) {
 	if m.InternalResolveIntentRange != nil {
 		l = m.InternalResolveIntentRange.Size()
 		n += 2 + l + sovInternal(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -6036,9 +5912,6 @@ func (m *InternalResponseUnion) Size() (n int) {
 		l = m.InternalResolveIntentRange.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6053,9 +5926,6 @@ func (m *InternalBatchRequest) Size() (n int) {
 			n += 1 + l + sovInternal(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6069,9 +5939,6 @@ func (m *InternalBatchResponse) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovInternal(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -6134,9 +6001,6 @@ func (m *ReadWriteCmdResponse) Size() (n int) {
 	if m.InternalLeaderLease != nil {
 		l = m.InternalLeaderLease.Size()
 		n += 2 + l + sovInternal(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -6220,9 +6084,6 @@ func (m *InternalRaftCommandUnion) Size() (n int) {
 		l = m.InternalBatch.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6233,9 +6094,6 @@ func (m *InternalRaftCommand) Size() (n int) {
 	n += 1 + sovInternal(uint64(m.OriginNodeID))
 	l = m.Cmd.Size()
 	n += 1 + l + sovInternal(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6247,18 +6105,12 @@ func (m *RaftMessageRequest) Size() (n int) {
 		l = len(m.Msg)
 		n += 1 + l + sovInternal(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
 func (m *RaftMessageResponse) Size() (n int) {
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6272,9 +6124,6 @@ func (m *InternalTimeSeriesData) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovInternal(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -6291,9 +6140,6 @@ func (m *InternalTimeSeriesSample) Size() (n int) {
 	if m.Min != nil {
 		n += 9
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6302,9 +6148,6 @@ func (m *RaftTruncatedState) Size() (n int) {
 	_ = l
 	n += 1 + sovInternal(uint64(m.Index))
 	n += 1 + sovInternal(uint64(m.Term))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6319,9 +6162,6 @@ func (m *RaftSnapshotData) Size() (n int) {
 			n += 1 + l + sovInternal(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -6335,9 +6175,6 @@ func (m *RaftSnapshotData_KeyValue) Size() (n int) {
 	if m.Value != nil {
 		l = len(m.Value)
 		n += 1 + l + sovInternal(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -6389,9 +6226,6 @@ func (m *InternalRangeLookupRequest) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6430,9 +6264,6 @@ func (m *InternalRangeLookupResponse) MarshalTo(data []byte) (n int, err error) 
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6459,9 +6290,6 @@ func (m *InternalHeartbeatTxnRequest) MarshalTo(data []byte) (n int, err error) 
 		return 0, err
 	}
 	i += n3
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6488,9 +6316,6 @@ func (m *InternalHeartbeatTxnResponse) MarshalTo(data []byte) (n int, err error)
 		return 0, err
 	}
 	i += n4
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6537,9 +6362,6 @@ func (m *InternalGCRequest) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6572,9 +6394,6 @@ func (m *InternalGCRequest_GCKey) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n7
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6601,9 +6420,6 @@ func (m *InternalGCResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n8
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6657,9 +6473,6 @@ func (m *InternalPushTxnRequest) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0
 	}
 	i++
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6696,9 +6509,6 @@ func (m *InternalPushTxnResponse) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n13
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6725,9 +6535,6 @@ func (m *InternalResolveIntentRequest) MarshalTo(data []byte) (n int, err error)
 		return 0, err
 	}
 	i += n14
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6754,9 +6561,6 @@ func (m *InternalResolveIntentResponse) MarshalTo(data []byte) (n int, err error
 		return 0, err
 	}
 	i += n15
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6783,9 +6587,6 @@ func (m *InternalResolveIntentRangeRequest) MarshalTo(data []byte) (n int, err e
 		return 0, err
 	}
 	i += n16
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6812,9 +6613,6 @@ func (m *InternalResolveIntentRangeResponse) MarshalTo(data []byte) (n int, err 
 		return 0, err
 	}
 	i += n17
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6849,9 +6647,6 @@ func (m *InternalMergeRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n19
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6878,9 +6673,6 @@ func (m *InternalMergeResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n20
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6910,9 +6702,6 @@ func (m *InternalTruncateLogRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.Index))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6939,9 +6728,6 @@ func (m *InternalTruncateLogResponse) MarshalTo(data []byte) (n int, err error) 
 		return 0, err
 	}
 	i += n22
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -6976,9 +6762,6 @@ func (m *InternalLeaderLeaseRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n24
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7005,9 +6788,6 @@ func (m *InternalLeaderLeaseResponse) MarshalTo(data []byte) (n int, err error) 
 		return 0, err
 	}
 	i += n25
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7141,9 +6921,6 @@ func (m *InternalRequestUnion) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n36
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -7279,9 +7056,6 @@ func (m *InternalResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n47
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7320,9 +7094,6 @@ func (m *InternalBatchRequest) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7360,9 +7131,6 @@ func (m *InternalBatchResponse) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -7525,9 +7293,6 @@ func (m *ReadWriteCmdResponse) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n63
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -7759,9 +7524,6 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n82
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7794,9 +7556,6 @@ func (m *InternalRaftCommand) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n83
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7824,9 +7583,6 @@ func (m *RaftMessageRequest) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintInternal(data, i, uint64(len(m.Msg)))
 		i += copy(data[i:], m.Msg)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7845,9 +7601,6 @@ func (m *RaftMessageResponse) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7883,9 +7636,6 @@ func (m *InternalTimeSeriesData) MarshalTo(data []byte) (n int, err error) {
 			}
 			i += n
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -7924,9 +7674,6 @@ func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(*m.Min)))
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7951,9 +7698,6 @@ func (m *RaftTruncatedState) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.Term))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -7992,9 +7736,6 @@ func (m *RaftSnapshotData) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -8025,9 +7766,6 @@ func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintInternal(data, i, uint64(len(m.Value)))
 		i += copy(data[i:], m.Value)
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -8057,4 +7795,18 @@ func encodeVarintInternal(data []byte, offset int, v uint64) int {
 	}
 	data[offset] = uint8(v)
 	return offset + 1
+}
+func (x PushTxnType) String() string {
+	s, ok := PushTxnType_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x InternalValueType) String() string {
+	s, ok := InternalValueType_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

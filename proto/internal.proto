@@ -24,10 +24,6 @@ import "cockroach/proto/config.proto";
 import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // An InternalRangeLookupRequest is arguments to the
 // InternalRangeLookup() method. It specifies the key for which the
 // containing range is being requested, and the maximum number of

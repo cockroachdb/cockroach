@@ -22,10 +22,6 @@ option go_package = "proto";
 
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 message Attributes {

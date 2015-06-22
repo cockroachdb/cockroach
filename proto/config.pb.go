@@ -20,8 +20,7 @@ var _ = math.Inf
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 type Attributes struct {
-	Attrs            []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
-	XXX_unrecognized []byte   `json:"-"`
+	Attrs []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
 }
 
 func (m *Attributes) Reset()         { *m = Attributes{} }
@@ -40,9 +39,8 @@ func (m *Attributes) GetAttrs() []string {
 // device) and associated attributes. Replicas are stored in Range
 // lookup records (meta1, meta2).
 type Replica struct {
-	NodeID           NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	XXX_unrecognized []byte  `json:"-"`
+	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
 }
 
 func (m *Replica) Reset()      { *m = Replica{} }
@@ -61,8 +59,7 @@ type RangeDescriptor struct {
 	EndKey Key `protobuf:"bytes,3,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
 	// Replicas is the set of replicas on which this range is stored, the
 	// ordering being arbitrary and subject to permutation.
-	Replicas         []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
-	XXX_unrecognized []byte    `json:"-"`
+	Replicas []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
 }
 
 func (m *RangeDescriptor) Reset()         { *m = RangeDescriptor{} }
@@ -86,8 +83,7 @@ type GCPolicy struct {
 	// TTLSeconds specifies the maximum age of a value before it's
 	// garbage collected. Only older versions of values are garbage
 	// collected. Specifying <=0 mean older versions are never GC'd.
-	TTLSeconds       int32  `protobuf:"varint,1,opt,name=ttl_seconds" json:"ttl_seconds"`
-	XXX_unrecognized []byte `json:"-"`
+	TTLSeconds int32 `protobuf:"varint,1,opt,name=ttl_seconds" json:"ttl_seconds"`
 }
 
 func (m *GCPolicy) Reset()         { *m = GCPolicy{} }
@@ -103,8 +99,7 @@ func (m *GCPolicy) GetTTLSeconds() int32 {
 
 // AcctConfig holds accounting configuration.
 type AcctConfig struct {
-	ClusterId        string `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id" yaml:"cluster_id,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ClusterId string `protobuf:"bytes,1,opt,name=cluster_id" json:"cluster_id" yaml:"cluster_id,omitempty"`
 }
 
 func (m *AcctConfig) Reset()         { *m = AcctConfig{} }
@@ -123,8 +118,7 @@ type PermConfig struct {
 	// ACL lists users with read permissions.
 	Read []string `protobuf:"bytes,1,rep,name=read" json:"read,omitempty" yaml:"read,omitempty"`
 	// ACL lists users with write permissions.
-	Write            []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Write []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
 }
 
 func (m *PermConfig) Reset()         { *m = PermConfig{} }
@@ -155,8 +149,7 @@ type ZoneConfig struct {
 	RangeMaxBytes int64        `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes,omitempty"`
 	// If GC policy is not set, uses the next highest, non-null policy
 	// in the zone config hierarchy, up to the default policy if necessary.
-	GC               *GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc,omitempty" yaml:"gc,omitempty"`
-	XXX_unrecognized []byte    `json:"-"`
+	GC *GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc,omitempty" yaml:"gc,omitempty"`
 }
 
 func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
@@ -194,8 +187,7 @@ func (m *ZoneConfig) GetGC() *GCPolicy {
 // TODO(bram): this comment has rotted, there is no size.
 // RangeTree holds the root node and size of the range tree.
 type RangeTree struct {
-	RootKey          Key    `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	RootKey Key `protobuf:"bytes,1,opt,name=root_key,casttype=Key" json:"root_key,omitempty"`
 }
 
 func (m *RangeTree) Reset()         { *m = RangeTree{} }
@@ -209,10 +201,9 @@ type RangeTreeNode struct {
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
 	// TODO(bram): this comment has rotted, parent key is not nullable
 	// If the parent key is null, this is the root node.
-	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
-	LeftKey          *Key   `protobuf:"bytes,4,opt,name=left_key,customtype=Key" json:"left_key,omitempty"`
-	RightKey         *Key   `protobuf:"bytes,5,opt,name=right_key,customtype=Key" json:"right_key,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	ParentKey Key  `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
+	LeftKey   *Key `protobuf:"bytes,4,opt,name=left_key,customtype=Key" json:"left_key,omitempty"`
+	RightKey  *Key `protobuf:"bytes,5,opt,name=right_key,customtype=Key" json:"right_key,omitempty"`
 }
 
 func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
@@ -229,9 +220,8 @@ func (m *RangeTreeNode) GetBlack() bool {
 // Addr holds any network address. It is structurally similar to net.Addr
 // however String is replaced with Address so the proto will compile.
 type Addr struct {
-	Network          string `protobuf:"bytes,1,opt,name=network" json:"network"`
-	Address          string `protobuf:"bytes,2,opt,name=address" json:"address"`
-	XXX_unrecognized []byte `json:"-"`
+	Network string `protobuf:"bytes,1,opt,name=network" json:"network"`
+	Address string `protobuf:"bytes,2,opt,name=address" json:"address"`
 }
 
 func (m *Addr) Reset()         { *m = Addr{} }
@@ -254,10 +244,9 @@ func (m *Addr) GetAddress() string {
 
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
-	Capacity         int64  `protobuf:"varint,1,opt" json:"Capacity"`
-	Available        int64  `protobuf:"varint,2,opt" json:"Available"`
-	RangeCount       int32  `protobuf:"varint,3,opt" json:"RangeCount"`
-	XXX_unrecognized []byte `json:"-"`
+	Capacity   int64 `protobuf:"varint,1,opt" json:"Capacity"`
+	Available  int64 `protobuf:"varint,2,opt" json:"Available"`
+	RangeCount int32 `protobuf:"varint,3,opt" json:"RangeCount"`
 }
 
 func (m *StoreCapacity) Reset()         { *m = StoreCapacity{} }
@@ -287,10 +276,9 @@ func (m *StoreCapacity) GetRangeCount() int32 {
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID           NodeID     `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	Address          Addr       `protobuf:"bytes,2,opt,name=address" json:"address"`
-	Attrs            Attributes `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
-	XXX_unrecognized []byte     `json:"-"`
+	NodeID  NodeID     `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	Address Addr       `protobuf:"bytes,2,opt,name=address" json:"address"`
+	Attrs   Attributes `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
 }
 
 func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
@@ -314,11 +302,10 @@ func (m *NodeDescriptor) GetAttrs() Attributes {
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
 type StoreDescriptor struct {
-	StoreID          StoreID        `protobuf:"varint,1,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	Attrs            Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
-	Node             NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
-	Capacity         StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
-	XXX_unrecognized []byte         `json:"-"`
+	StoreID  StoreID        `protobuf:"varint,1,opt,name=store_id,casttype=StoreID" json:"store_id"`
+	Attrs    Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
+	Node     NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
+	Capacity StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
 }
 
 func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
@@ -406,7 +393,6 @@ func (m *Attributes) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -479,7 +465,6 @@ func (m *Replica) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -606,7 +591,6 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -664,7 +648,6 @@ func (m *GCPolicy) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -729,7 +712,6 @@ func (m *AcctConfig) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -816,7 +798,6 @@ func (m *PermConfig) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -941,7 +922,6 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1006,7 +986,6 @@ func (m *RangeTree) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1162,7 +1141,6 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1249,7 +1227,6 @@ func (m *Addr) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1337,7 +1314,6 @@ func (m *StoreCapacity) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1443,7 +1419,6 @@ func (m *NodeDescriptor) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1573,7 +1548,6 @@ func (m *StoreDescriptor) Unmarshal(data []byte) error {
 			if (index + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
 			index += skippy
 		}
 	}
@@ -1589,9 +1563,6 @@ func (m *Attributes) Size() (n int) {
 			n += 1 + l + sovConfig(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1600,9 +1571,6 @@ func (m *Replica) Size() (n int) {
 	_ = l
 	n += 1 + sovConfig(uint64(m.NodeID))
 	n += 1 + sovConfig(uint64(m.StoreID))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1624,9 +1592,6 @@ func (m *RangeDescriptor) Size() (n int) {
 			n += 1 + l + sovConfig(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1634,9 +1599,6 @@ func (m *GCPolicy) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovConfig(uint64(m.TTLSeconds))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1645,9 +1607,6 @@ func (m *AcctConfig) Size() (n int) {
 	_ = l
 	l = len(m.ClusterId)
 	n += 1 + l + sovConfig(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1665,9 +1624,6 @@ func (m *PermConfig) Size() (n int) {
 			l = len(s)
 			n += 1 + l + sovConfig(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1687,9 +1643,6 @@ func (m *ZoneConfig) Size() (n int) {
 		l = m.GC.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1699,9 +1652,6 @@ func (m *RangeTree) Size() (n int) {
 	if m.RootKey != nil {
 		l = len(m.RootKey)
 		n += 1 + l + sovConfig(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1726,9 +1676,6 @@ func (m *RangeTreeNode) Size() (n int) {
 		l = m.RightKey.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1739,9 +1686,6 @@ func (m *Addr) Size() (n int) {
 	n += 1 + l + sovConfig(uint64(l))
 	l = len(m.Address)
 	n += 1 + l + sovConfig(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1751,9 +1695,6 @@ func (m *StoreCapacity) Size() (n int) {
 	n += 1 + sovConfig(uint64(m.Capacity))
 	n += 1 + sovConfig(uint64(m.Available))
 	n += 1 + sovConfig(uint64(m.RangeCount))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1765,9 +1706,6 @@ func (m *NodeDescriptor) Size() (n int) {
 	n += 1 + l + sovConfig(uint64(l))
 	l = m.Attrs.Size()
 	n += 1 + l + sovConfig(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1781,9 +1719,6 @@ func (m *StoreDescriptor) Size() (n int) {
 	n += 1 + l + sovConfig(uint64(l))
 	l = m.Capacity.Size()
 	n += 1 + l + sovConfig(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1830,9 +1765,6 @@ func (m *Attributes) MarshalTo(data []byte) (n int, err error) {
 			i += copy(data[i:], s)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1857,9 +1789,6 @@ func (m *Replica) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.StoreID))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1905,9 +1834,6 @@ func (m *RangeDescriptor) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1929,9 +1855,6 @@ func (m *GCPolicy) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.TTLSeconds))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -1954,9 +1877,6 @@ func (m *AcctConfig) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintConfig(data, i, uint64(len(m.ClusterId)))
 	i += copy(data[i:], m.ClusterId)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2005,9 +1925,6 @@ func (m *PermConfig) MarshalTo(data []byte) (n int, err error) {
 			i += copy(data[i:], s)
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2054,9 +1971,6 @@ func (m *ZoneConfig) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n1
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2080,9 +1994,6 @@ func (m *RangeTree) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintConfig(data, i, uint64(len(m.RootKey)))
 		i += copy(data[i:], m.RootKey)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -2142,9 +2053,6 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n3
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2171,9 +2079,6 @@ func (m *Addr) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintConfig(data, i, uint64(len(m.Address)))
 	i += copy(data[i:], m.Address)
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2201,9 +2106,6 @@ func (m *StoreCapacity) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.RangeCount))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2241,9 +2143,6 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n5
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 
@@ -2289,9 +2188,6 @@ func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n8
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
 	return i, nil
 }
 

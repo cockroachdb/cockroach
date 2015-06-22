@@ -24,10 +24,6 @@ import "cockroach/proto/data.proto";
 import "cockroach/proto/errors.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // ClientCmdID provides a unique ID for client commands. Clients which
 // provide ClientCmdID gain operation idempotence. In other words,
 // clients can submit the same command multiple times and always

@@ -9,6 +9,13 @@ import math "math"
 
 // discarding unused import gogoproto "gogoproto/gogo.pb"
 
+import io "io"
+
+import fmt "fmt"
+import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
+
+import strconv "strconv"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
 var _ = math.Inf
@@ -45,8 +52,8 @@ func (x TimeSeriesQueryAggregator) Enum() *TimeSeriesQueryAggregator {
 	*p = x
 	return p
 }
-func (x TimeSeriesQueryAggregator) String() string {
-	return proto1.EnumName(TimeSeriesQueryAggregator_name, int32(x))
+func (x TimeSeriesQueryAggregator) MarshalJSON() ([]byte, error) {
+	return proto1.MarshalJSONEnum(TimeSeriesQueryAggregator_name, int32(x))
 }
 func (x *TimeSeriesQueryAggregator) UnmarshalJSON(data []byte) error {
 	value, err := proto1.UnmarshalJSONEnum(TimeSeriesQueryAggregator_value, data, "TimeSeriesQueryAggregator")
@@ -64,8 +71,7 @@ type TimeSeriesDatapoint struct {
 	// since the unix epoch.
 	TimestampNanos int64 `protobuf:"varint,1,opt,name=timestamp_nanos" json:"timestamp_nanos"`
 	// A floating point representation of the value of this datapoint.
-	Value            float64 `protobuf:"fixed64,2,opt,name=value" json:"value"`
-	XXX_unrecognized []byte  `json:"-"`
+	Value float64 `protobuf:"fixed64,2,opt,name=value" json:"value"`
 }
 
 func (m *TimeSeriesDatapoint) Reset()         { *m = TimeSeriesDatapoint{} }
@@ -97,8 +103,7 @@ type TimeSeriesData struct {
 	// A string which identifies the unique source from which the variable was measured.
 	Source string `protobuf:"bytes,2,opt,name=source" json:"source"`
 	// Datapoints representing one or more measurements taken from the variable.
-	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,3,rep,name=datapoints" json:"datapoints,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Datapoints []*TimeSeriesDatapoint `protobuf:"bytes,3,rep,name=datapoints" json:"datapoints,omitempty"`
 }
 
 func (m *TimeSeriesData) Reset()         { *m = TimeSeriesData{} }
@@ -137,8 +142,7 @@ type TimeSeriesQueryRequest struct {
 	EndNanos int64 `protobuf:"varint,2,opt,name=end_nanos" json:"end_nanos"`
 	// A set of Queries for this request. A request must have at least one
 	// Query.
-	Queries          []TimeSeriesQueryRequest_Query `protobuf:"bytes,3,rep,name=queries" json:"queries"`
-	XXX_unrecognized []byte                         `json:"-"`
+	Queries []TimeSeriesQueryRequest_Query `protobuf:"bytes,3,rep,name=queries" json:"queries"`
 }
 
 func (m *TimeSeriesQueryRequest) Reset()         { *m = TimeSeriesQueryRequest{} }
@@ -172,8 +176,7 @@ type TimeSeriesQueryRequest_Query struct {
 	// The name of the time series to query.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// The aggregation function to apply to points in the result.
-	Aggregator       *TimeSeriesQueryAggregator `protobuf:"varint,2,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
-	XXX_unrecognized []byte                     `json:"-"`
+	Aggregator *TimeSeriesQueryAggregator `protobuf:"varint,2,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
 }
 
 func (m *TimeSeriesQueryRequest_Query) Reset()         { *m = TimeSeriesQueryRequest_Query{} }
@@ -202,8 +205,7 @@ type TimeSeriesQueryResponse struct {
 	// A set of Results; there will be one result for each Query in the matching
 	// TimeSeriesQueryRequest, in the same order. A Result will be present for
 	// each Query even if there are zero datapoints to return.
-	Results          []*TimeSeriesQueryResponse_Result `protobuf:"bytes,1,rep,name=results" json:"results,omitempty"`
-	XXX_unrecognized []byte                            `json:"-"`
+	Results []*TimeSeriesQueryResponse_Result `protobuf:"bytes,1,rep,name=results" json:"results,omitempty"`
 }
 
 func (m *TimeSeriesQueryResponse) Reset()         { *m = TimeSeriesQueryResponse{} }
@@ -227,8 +229,7 @@ type TimeSeriesQueryResponse_Result struct {
 	// The aggregation function applied to points in the result.
 	Aggregator *TimeSeriesQueryAggregator `protobuf:"varint,3,opt,name=aggregator,enum=cockroach.proto.TimeSeriesQueryAggregator,def=1" json:"aggregator,omitempty"`
 	// Datapoints describing the queried data.
-	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,4,rep,name=datapoints" json:"datapoints,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Datapoints []*TimeSeriesDatapoint `protobuf:"bytes,4,rep,name=datapoints" json:"datapoints,omitempty"`
 }
 
 func (m *TimeSeriesQueryResponse_Result) Reset()         { *m = TimeSeriesQueryResponse_Result{} }
@@ -267,4 +268,903 @@ func (m *TimeSeriesQueryResponse_Result) GetDatapoints() []*TimeSeriesDatapoint 
 
 func init() {
 	proto1.RegisterEnum("cockroach.proto.TimeSeriesQueryAggregator", TimeSeriesQueryAggregator_name, TimeSeriesQueryAggregator_value)
+}
+func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TimestampNanos", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.TimestampNanos |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var v uint64
+			if (index + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += 8
+			v = uint64(data[index-8])
+			v |= uint64(data[index-7]) << 8
+			v |= uint64(data[index-6]) << 16
+			v |= uint64(data[index-5]) << 24
+			v |= uint64(data[index-4]) << 32
+			v |= uint64(data[index-3]) << 40
+			v |= uint64(data[index-2]) << 48
+			v |= uint64(data[index-1]) << 56
+			m.Value = float64(math.Float64frombits(v))
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TimeSeriesData) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[index:postIndex])
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Source = string(data[index:postIndex])
+			index = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Datapoints", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Datapoints = append(m.Datapoints, &TimeSeriesDatapoint{})
+			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StartNanos", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.StartNanos |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndNanos", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.EndNanos |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Queries", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Queries = append(m.Queries, TimeSeriesQueryRequest_Query{})
+			if err := m.Queries[len(m.Queries)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TimeSeriesQueryRequest_Query) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[index:postIndex])
+			index = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Aggregator", wireType)
+			}
+			var v TimeSeriesQueryAggregator
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				v |= (TimeSeriesQueryAggregator(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Aggregator = &v
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Results", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Results = append(m.Results, &TimeSeriesQueryResponse_Result{})
+			if err := m.Results[len(m.Results)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[index:postIndex])
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sources", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Sources = append(m.Sources, string(data[index:postIndex]))
+			index = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Aggregator", wireType)
+			}
+			var v TimeSeriesQueryAggregator
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				v |= (TimeSeriesQueryAggregator(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Aggregator = &v
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Datapoints", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Datapoints = append(m.Datapoints, &TimeSeriesDatapoint{})
+			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *TimeSeriesDatapoint) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovTimeseries(uint64(m.TimestampNanos))
+	n += 9
+	return n
+}
+
+func (m *TimeSeriesData) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovTimeseries(uint64(l))
+	l = len(m.Source)
+	n += 1 + l + sovTimeseries(uint64(l))
+	if len(m.Datapoints) > 0 {
+		for _, e := range m.Datapoints {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryRequest) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovTimeseries(uint64(m.StartNanos))
+	n += 1 + sovTimeseries(uint64(m.EndNanos))
+	if len(m.Queries) > 0 {
+		for _, e := range m.Queries {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryRequest_Query) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovTimeseries(uint64(l))
+	if m.Aggregator != nil {
+		n += 1 + sovTimeseries(uint64(*m.Aggregator))
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryResponse) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Results) > 0 {
+		for _, e := range m.Results {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *TimeSeriesQueryResponse_Result) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovTimeseries(uint64(l))
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			l = len(s)
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	if m.Aggregator != nil {
+		n += 1 + sovTimeseries(uint64(*m.Aggregator))
+	}
+	if len(m.Datapoints) > 0 {
+		for _, e := range m.Datapoints {
+			l = e.Size()
+			n += 1 + l + sovTimeseries(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovTimeseries(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozTimeseries(x uint64) (n int) {
+	return sovTimeseries(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *TimeSeriesDatapoint) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(m.TimestampNanos))
+	data[i] = 0x11
+	i++
+	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(m.Value)))
+	return i, nil
+}
+
+func (m *TimeSeriesData) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesData) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x12
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Source)))
+	i += copy(data[i:], m.Source)
+	if len(m.Datapoints) > 0 {
+		for _, msg := range m.Datapoints {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(m.StartNanos))
+	data[i] = 0x10
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(m.EndNanos))
+	if len(m.Queries) > 0 {
+		for _, msg := range m.Queries {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryRequest_Query) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryRequest_Query) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	if m.Aggregator != nil {
+		data[i] = 0x10
+		i++
+		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Results) > 0 {
+		for _, msg := range m.Results {
+			data[i] = 0xa
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *TimeSeriesQueryResponse_Result) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TimeSeriesQueryResponse_Result) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	if len(m.Sources) > 0 {
+		for _, s := range m.Sources {
+			data[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if m.Aggregator != nil {
+		data[i] = 0x18
+		i++
+		i = encodeVarintTimeseries(data, i, uint64(*m.Aggregator))
+	}
+	if len(m.Datapoints) > 0 {
+		for _, msg := range m.Datapoints {
+			data[i] = 0x22
+			i++
+			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func encodeFixed64Timeseries(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Timeseries(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintTimeseries(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
+}
+func (x TimeSeriesQueryAggregator) String() string {
+	s, ok := TimeSeriesQueryAggregator_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
 }

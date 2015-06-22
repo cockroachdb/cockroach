@@ -23,10 +23,6 @@ option go_package = "proto";
 import "cockroach/proto/config.proto";
 import "gogoproto/gogo.proto";
 
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {
   option (gogoproto.goproto_stringer) = false;
