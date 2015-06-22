@@ -24,11 +24,11 @@ import (
 // Parse parses the sql and returns a Statement, which is the AST
 // representation of the query.
 func Parse(sql string) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql)
+	tokenizer := newStringTokenizer(sql)
 	if yyParse(tokenizer) != 0 {
-		return nil, errors.New(tokenizer.LastError)
+		return nil, errors.New(tokenizer.lastError)
 	}
-	return tokenizer.ParseTree, nil
+	return tokenizer.parseTree, nil
 }
 
 // Statement represents a statement.
@@ -44,13 +44,11 @@ func (*Update) statement() {}
 func (*Delete) statement() {}
 func (*Set) statement()    {}
 func (*Use) statement()    {}
-func (*DDL) statement()    {}
 
 // SelectStatement any SELECT statement.
 type SelectStatement interface {
-	fmt.Stringer
+	Statement
 	selectStatement()
-	statement()
 	insertRows()
 }
 
@@ -182,49 +180,6 @@ type Use struct {
 
 func (node *Use) String() string {
 	return fmt.Sprintf("USE %v%s", node.Comments, node.Name)
-}
-
-// DDL represents a CREATE, ALTER, DROP or RENAME statement.
-// Table is set for astAlter, astDrop, astRename.
-// NewName is set for astAlter, astCreate, astRename.
-type DDL struct {
-	Action  string
-	Name    string
-	NewName string
-}
-
-const (
-	astCreateDatabase  = "CREATE DATABASE"
-	astCreateIndex     = "CREATE INDEX"
-	astCreateTable     = "CREATE TABLE"
-	astCreateView      = "CREATE VIEW"
-	astAlterTable      = "ALTER TABLE"
-	astAlterView       = "ALTER VIEW"
-	astDropDatabase    = "DROP DATABASE"
-	astDropIndex       = "DROP INDEX"
-	astDropTable       = "DROP TABLE"
-	astDropView        = "DROP VIEW"
-	astRenameTable     = "RENAME TABLE"
-	astShowTables      = "SHOW TABLES"
-	astShowIndex       = "SHOW INDEX FROM"
-	astShowColumns     = "SHOW COLUMNS FROM"
-	astShowFullColumns = "SHOW FULL COLUMNS FROM"
-	astTruncateTable   = "TRUNCATE TABLE"
-)
-
-func (node *DDL) String() string {
-	switch node.Action {
-	case astCreateIndex, astDropIndex:
-		return fmt.Sprintf("%s %s ON %s", node.Action, node.Name, node.NewName)
-	case astRenameTable:
-		return fmt.Sprintf("%s %s %s", node.Action, node.Name, node.NewName)
-	case astCreateDatabase, astCreateTable, astCreateView:
-		return fmt.Sprintf("%s %s", node.Action, node.NewName)
-	case astShowTables:
-		return node.Action
-	default:
-		return fmt.Sprintf("%s %s", node.Action, node.Name)
-	}
 }
 
 // Comments represents a list of comments.
@@ -611,12 +566,12 @@ type NullCheck struct {
 
 // NullCheck.Operator
 const (
-	astIsNull    = "IS NULL"
-	astIsNotNull = "IS NOT NULL"
+	astNull    = "NULL"
+	astNotNull = "NOT NULL"
 )
 
 func (node *NullCheck) String() string {
-	return fmt.Sprintf("%v %s", node.Expr, node.Operator)
+	return fmt.Sprintf("%v IS %s", node.Expr, node.Operator)
 }
 
 // ExistsExpr represents an EXISTS expression.

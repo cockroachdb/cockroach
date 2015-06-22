@@ -5,18 +5,30 @@
 %{
 package parser
 
-import "strings"
+import (
+  "strconv"
+  "strings"
+)
 
 func setParseTree(yylex interface{}, stmt Statement) {
-  yylex.(*Tokenizer).ParseTree = stmt
+  yylex.(*tokenizer).parseTree = stmt
 }
 
 func setAllowComments(yylex interface{}, allow bool) {
-  yylex.(*Tokenizer).AllowComments = allow
+  yylex.(*tokenizer).allowComments = allow
 }
 
 func forceEOF(yylex interface{}) {
-  yylex.(*Tokenizer).ForceEOF = true
+  yylex.(*tokenizer).forceEOF = true
+}
+
+func parseInt(yylex yyLexer, s string) (int, bool) {
+  i, err := strconv.Atoi(s)
+  if err != nil {
+    yylex.Error(err.Error())
+    return -1, false
+  }
+  return i, true
 }
 
 %}
@@ -53,11 +65,25 @@ func forceEOF(yylex interface{}) {
   insRows     InsertRows
   updateExprs UpdateExprs
   updateExpr  *UpdateExpr
+  tableDefs   TableDefs
+  tableDef    TableDef
+  columnType  ColumnType
+  intVal      int
+  intVal2     [2]int
+  boolVal     bool
 }
 
 %token tokLexError
 %token <empty> tokSelect tokInsert tokUpdate tokDelete tokFrom tokWhere tokGroup tokHaving tokOrder tokBy tokLimit tokOffset tokFor
 %token <empty> tokAll tokDistinct tokAs tokExists tokIn tokIs tokLike tokBetween tokNull tokAsc tokDesc tokValues tokInto tokDuplicate tokKey tokDefault tokSet tokLock
+%token tokInt tokTinyInt tokSmallInt tokMediumInt tokBigInt tokInteger
+%token tokReal tokDouble tokFloat tokDecimal tokNumeric
+%token tokDate tokTime tokDateTime tokTimestamp
+%token tokChar tokVarChar tokBinary tokVarBinary
+%token tokText tokTinyText tokMediumText tokLongText
+%token tokBlob tokTinyBlob tokMediumBlob tokLongBlob
+%token tokBit tokEnum
+
 %token <str> tokID tokString tokNumber tokValueArg tokComment
 %token <empty> tokLE tokGE tokNE tokNullSafeEqual
 %token <empty> '(' '=' '<' '>' '~'
@@ -78,7 +104,7 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <empty> tokCreate tokAlter tokDrop tokRename tokTruncate tokShow
-%token <empty> tokDatabase tokTable tokTables tokIndex tokView tokColumns tokFull tokTo tokIgnore tokIf tokUnique
+%token <empty> tokDatabase tokDatabases tokTable tokTables tokIndex tokView tokColumns tokFull tokTo tokIgnore tokIf tokUnique tokUnsigned tokPrimary
 
 %start any_command
 
@@ -127,8 +153,17 @@ func forceEOF(yylex interface{}) {
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
 %type <updateExpr> update_expression
-%type <empty> exists_opt not_exists_opt ignore_opt non_rename_operation to_opt constraint_opt using_opt
+%type <empty> ignore_opt non_rename_operation to_opt using_opt
+%type <boolVal> unsigned_opt if_exists_opt if_not_exists_opt unique_opt
+%type <str> from_opt
+%type <intVal> int_opt int_val precision_opt
+%type <intVal2> float_opt decimal_opt 
 %type <str> sql_id
+%type <tableDefs> table_def_list
+%type <tableDef> table_def
+%type <columnType> column_type
+%type <str> int_type float_type decimal_type char_type binary_type text_type blob_type
+%type <intVal> column_null_opt column_constraint_opt
 %type <empty> force_eof
 
 %%
@@ -207,84 +242,216 @@ use_statement:
   }
 
 show_statement:
-  tokShow tokTables
+  tokShow tokDatabases
   {
-    $$ = &DDL{Action: astShowTables}
+    $$ = &ShowDatabases{}
+  }
+| tokShow tokTables from_opt
+  {
+    $$ = &ShowTables{Name: $3}
   }
 | tokShow tokIndex tokFrom sql_id
   {
-    $$ = &DDL{Action: astShowIndex, Name: $4}
+    $$ = &ShowIndex{Name: $4}
   }
 | tokShow tokColumns tokFrom sql_id
   {
-    $$ = &DDL{Action: astShowColumns, Name: $4}
+    $$ = &ShowColumns{Name: $4}
   }
 | tokShow tokFull tokColumns tokFrom sql_id
   {
-    $$ = &DDL{Action: astShowFullColumns, Name: $5}
+    $$ = &ShowColumns{Name: $5, Full: true}
   }
 
 create_statement:
-  tokCreate tokTable not_exists_opt sql_id force_eof
+  tokCreate tokTable if_not_exists_opt sql_id '(' table_def_list ')' force_eof
   {
-    $$ = &DDL{Action: astCreateTable, NewName: $4}
+    $$ = &CreateTable{IfNotExists: $3, Name: $4, Defs: $6}
   }
-| tokCreate constraint_opt tokIndex sql_id using_opt tokOn sql_id force_eof
+| tokCreate unique_opt tokIndex sql_id using_opt tokOn sql_id force_eof
   {
-    $$ = &DDL{Action: astCreateIndex, Name: $4, NewName: $7}
+    $$ = &CreateIndex{Name: $4, TableName: $7, Unique: $2}
   }
 | tokCreate tokView sql_id force_eof
   {
-    $$ = &DDL{Action: astCreateView, NewName: $3}
+    $$ = &CreateView{Name: $3}
   }
-| tokCreate tokDatabase not_exists_opt sql_id force_eof
+| tokCreate tokDatabase if_not_exists_opt sql_id
   {
-    $$ = &DDL{Action: astCreateDatabase, NewName: $4}
+    $$ = &CreateDatabase{IfNotExists: $3, Name: $4}
   }
+
+table_def_list:
+  table_def
+  {
+    $$ = TableDefs{$1}
+  }
+| table_def_list ',' table_def
+  {
+    $$ = append($$, $3)
+  }
+
+table_def:
+  sql_id column_type column_null_opt column_constraint_opt
+  {
+    $$ = &ColumnTableDef{Name: $1, Type: $2, Nullable: Nullability($3), PrimaryKey: $4 == 1, Unique: $4 == 2}
+  }
+| unique_opt tokIndex sql_id '(' index_list ')'
+  {
+    $$ = &IndexTableDef{Name: $3, Unique: $1, Columns: $5}
+  }
+
+column_type:
+  tokBit int_opt
+  { $$ = &BitType{N: $2} }
+| int_type int_opt unsigned_opt
+  { $$ = &IntType{Name: $1, N: $2, Unsigned: $3} }
+| float_type float_opt unsigned_opt
+  { $$ = &FloatType{Name: $1, N: $2[0], Prec: $2[1], Unsigned: $3} }
+| decimal_type decimal_opt
+  { $$ = &DecimalType{Name: $1, N: $2[0], Prec: $2[1]} }
+| tokDate
+  { $$ = &DateType{} }
+| tokTime
+  { $$ = &TimeType{} }
+| tokDateTime
+  { $$ = &DateTimeType{} }
+| tokTimestamp
+  { $$ = &TimestampType{} }
+| char_type int_opt
+  { $$ = &CharType{Name: $1, N: $2} }
+| binary_type int_opt
+  { $$ = &BinaryType{Name: $1, N: $2} }
+| text_type
+  { $$ = &TextType{Name: $1} }
+| blob_type
+  { $$ = &BlobType{Name: $1} }
+| tokEnum '(' index_list ')'
+  { $$ = &EnumType{Vals: $3} }
+| tokSet '(' index_list ')'
+  { $$ = &SetType{Vals: $3} }
+
+int_type:
+  tokInt
+  { $$ = astInt }
+| tokTinyInt
+  { $$ = astTinyInt }
+| tokSmallInt
+  { $$ = astSmallInt }
+| tokMediumInt
+  { $$ = astMediumInt }
+| tokBigInt
+  { $$ = astBigInt }
+| tokInteger
+  { $$ = astInteger }
+
+float_type:
+  tokReal
+  { $$ = astReal }
+| tokDouble
+  { $$ = astDouble }
+| tokFloat
+  { $$ = astFloat }
+
+decimal_type:
+  tokDecimal
+  { $$ = astDecimal }
+| tokNumeric
+  { $$ = astNumeric }
+
+char_type:
+  tokChar
+  { $$ = astChar }
+| tokVarChar
+  { $$ = astVarChar }
+
+binary_type:
+  tokBinary
+  { $$ = astBinary }
+| tokVarBinary
+  { $$ = astVarBinary }
+
+text_type:
+  tokText
+  { $$ = astText }
+| tokTinyText
+  { $$ = astTinyText }
+| tokMediumText
+  { $$ = astMediumText }
+| tokLongText
+  { $$ = astLongText }
+
+blob_type:
+  tokBlob
+  { $$ = astBlob }
+| tokTinyBlob
+  { $$ = astTinyBlob }
+| tokMediumBlob
+  { $$ = astMediumBlob }
+| tokLongBlob
+  { $$ = astLongBlob }
+
+column_null_opt:
+  { $$ = int(SilentNull) }
+| tokNull
+  { $$ = int(Null) }
+| tokNot tokNull
+  { $$ = int(NotNull) }
+
+column_constraint_opt:
+  { $$ = 0 }
+| tokPrimary tokKey
+  { $$ = 1 }
+| tokKey
+  { $$ = 1 }
+| tokUnique
+  { $$ = 2 }
+| tokUnique tokKey
+  { $$ = 2 }
 
 alter_statement:
   tokAlter ignore_opt tokTable tokID non_rename_operation force_eof
   {
-    $$ = &DDL{Action: astAlterTable, Name: $4, NewName: $4}
+    $$ = &AlterTable{Name: $4}
   }
 | tokAlter ignore_opt tokTable tokID tokRename to_opt tokID
   {
     // Change this to a rename statement
-    $$ = &DDL{Action: astRenameTable, Name: $4, NewName: $7}
+    $$ = &RenameTable{Name: $4, NewName: $7}
   }
 | tokAlter tokView sql_id force_eof
   {
-    $$ = &DDL{Action: astAlterView, Name: $3, NewName: $3}
+    $$ = &AlterView{Name: $3}
   }
 
 rename_statement:
   tokRename tokTable tokID tokTo tokID
   {
-    $$ = &DDL{Action: astRenameTable, Name: $3, NewName: $5}
+    $$ = &RenameTable{Name: $3, NewName: $5}
   }
 
 truncate_statement:
   tokTruncate tokTable tokID
   {
-    $$ = &DDL{Action: astTruncateTable, Name: $3}
+    $$ = &TruncateTable{Name: $3}
   }
 
 drop_statement:
-  tokDrop tokTable exists_opt sql_id
+  tokDrop tokTable if_exists_opt sql_id
   {
-    $$ = &DDL{Action: astDropTable, Name: $4}
+    $$ = &DropTable{Name: $4, IfExists: $3}
   }
 | tokDrop tokIndex sql_id tokOn sql_id
   {
-    $$ = &DDL{Action: astDropIndex, Name: $3, NewName: $5}
+    $$ = &DropIndex{Name: $3, TableName: $5}
   }
-| tokDrop tokView exists_opt sql_id force_eof
+| tokDrop tokView if_exists_opt sql_id force_eof
   {
-    $$ = &DDL{Action: astDropView, Name: $4}
+    $$ = &DropView{Name: $4, IfExists: $3}
   }
-| tokDrop tokDatabase exists_opt sql_id force_eof
+| tokDrop tokDatabase if_exists_opt sql_id force_eof
   {
-    $$ = &DDL{Action: astDropDatabase, Name: $4}
+    $$ = &DropDatabase{Name: $4, IfExists: $3}
   }
 
 comment_opt:
@@ -577,11 +744,11 @@ condition:
   }
 | value_expression tokIs tokNull
   {
-    $$ = &NullCheck{Operator: astIsNull, Expr: $1}
+    $$ = &NullCheck{Operator: astNull, Expr: $1}
   }
 | value_expression tokIs tokNot tokNull
   {
-    $$ = &NullCheck{Operator: astIsNotNull, Expr: $1}
+    $$ = &NullCheck{Operator: astNotNull, Expr: $1}
   }
 | tokExists subquery
   {
@@ -975,15 +1142,15 @@ update_expression:
     $$ = &UpdateExpr{Name: $1, Expr: $3} 
   }
 
-exists_opt:
-  { $$ = struct{}{} }
+if_exists_opt:
+  { $$ = false }
 | tokIf tokExists
-  { $$ = struct{}{} }
+  { $$ = true }
 
-not_exists_opt:
-  { $$ = struct{}{} }
+if_not_exists_opt:
+  { $$ = false }
 | tokIf tokNot tokExists
-  { $$ = struct{}{} }
+  { $$ = true }
 
 ignore_opt:
   { $$ = struct{}{} }
@@ -1007,23 +1174,59 @@ to_opt:
 | tokTo
   { $$ = struct{}{} }
 
-constraint_opt:
-  { $$ = struct{}{} }
+unique_opt:
+  { $$ = false }
 | tokUnique
-  { $$ = struct{}{} }
+  { $$ = true }
+
+int_opt:
+  { $$ = -1 }
+| '(' int_val ')'
+  { $$ = $2 }
+
+int_val:
+  tokNumber
+  {
+    i, ok := parseInt(yylex, $1)
+    if !ok {
+      return 1
+    }
+    $$ = i
+  }
+
+float_opt:
+  { $$[0], $$[1] = -1, -1 }
+| '(' int_val ',' int_val ')'
+  { $$[0], $$[1] = $2, $4 }
+
+decimal_opt:
+  { $$[0], $$[1] = -1, -1 }
+| '(' int_val precision_opt ')'
+  { $$[0], $$[1] = $2, $3 }
+
+precision_opt:
+  { $$ = -1 }
+| ',' int_val
+  { $$ = $2 }
+
+unsigned_opt:
+  { $$ = false }
+| tokUnsigned
+  { $$ = true }
 
 using_opt:
   { $$ = struct{}{} }
 | tokUsing sql_id
   { $$ = struct{}{} }
 
+from_opt:
+  { $$ = "" }
+| tokFrom sql_id
+  { $$ = $2 }
+
 sql_id:
   tokID
-  {
-    $$ = strings.ToLower($1)
-  }
+  { $$ = strings.ToLower($1) }
 
 force_eof:
-{
-  forceEOF(yylex)
-}
+  { forceEOF(yylex) }
