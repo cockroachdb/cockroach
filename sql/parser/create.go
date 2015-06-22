@@ -85,13 +85,13 @@ func (node TableDefs) String() string {
 	return buf.String()
 }
 
-// NullType represents either NULL, NOT NULL or an unspecified value (silent
+// Nullability represents either NULL, NOT NULL or an unspecified value (silent
 // NULL).
-type NullType int
+type Nullability int
 
 // The values for NullType.
 const (
-	NotNull NullType = iota
+	NotNull Nullability = iota
 	Null
 	SilentNull
 )
@@ -101,7 +101,7 @@ const (
 type ColumnTableDef struct {
 	Name       string
 	Type       ColumnType
-	Null       NullType
+	Nullable   Nullability
 	PrimaryKey bool
 	Unique     bool
 }
@@ -109,7 +109,7 @@ type ColumnTableDef struct {
 func (node *ColumnTableDef) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
-	switch node.Null {
+	switch node.Nullable {
 	case Null:
 		buf.WriteString(" NULL")
 	case NotNull:

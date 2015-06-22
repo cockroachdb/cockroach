@@ -85,8 +85,8 @@ func TestParseColumnType(t *testing.T) {
 			t.Errorf("%d: expected CreateTable, but got %T", i, stmt)
 			continue
 		}
-		columnDef, ok := createTable.Defs[0].(*ColumnTableDef)
-		if !ok {
+		columnDef, ok2 := createTable.Defs[0].(*ColumnTableDef)
+		if !ok2 {
 			t.Errorf("%d: expected ColumnTableDef, but got %T", i, createTable.Defs[0])
 			continue
 		}

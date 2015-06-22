@@ -1037,7 +1037,7 @@ yydefault:
 	case 33:
 		//line sql.y:296
 		{
-			yyVAL.tableDef = &ColumnTableDef{Name: yyS[yypt-3].str, Type: yyS[yypt-2].columnType, Null: NullType(yyS[yypt-1].intVal), PrimaryKey: yyS[yypt-0].intVal == 1, Unique: yyS[yypt-0].intVal == 2}
+			yyVAL.tableDef = &ColumnTableDef{Name: yyS[yypt-3].str, Type: yyS[yypt-2].columnType, Nullable: Nullability(yyS[yypt-1].intVal), PrimaryKey: yyS[yypt-0].intVal == 1, Unique: yyS[yypt-0].intVal == 2}
 		}
 	case 34:
 		//line sql.y:300
@@ -2160,11 +2160,11 @@ yydefault:
 	case 254:
 		//line sql.y:1189
 		{
-			if i, ok := parseInt(yylex, yyS[yypt-0].str); !ok {
+			i, ok := parseInt(yylex, yyS[yypt-0].str)
+			if !ok {
 				return 1
-			} else {
-				yyVAL.intVal = i
 			}
+			yyVAL.intVal = i
 		}
 	case 255:
 		//line sql.y:1198

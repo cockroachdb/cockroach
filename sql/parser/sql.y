@@ -294,7 +294,7 @@ table_def_list:
 table_def:
   sql_id column_type column_null_opt column_constraint_opt
   {
-    $$ = &ColumnTableDef{Name: $1, Type: $2, Null: NullType($3), PrimaryKey: $4 == 1, Unique: $4 == 2}
+    $$ = &ColumnTableDef{Name: $1, Type: $2, Nullable: Nullability($3), PrimaryKey: $4 == 1, Unique: $4 == 2}
   }
 | unique_opt tokIndex sql_id '(' index_list ')'
   {
@@ -1187,11 +1187,11 @@ int_opt:
 int_val:
   tokNumber
   {
-    if i, ok := parseInt(yylex, $1); !ok {
+    i, ok := parseInt(yylex, $1)
+    if !ok {
       return 1
-    } else {
-      $$ = i
     }
+    $$ = i
   }
 
 float_opt:
