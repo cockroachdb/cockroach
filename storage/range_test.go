@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1334,50 +1335,38 @@ func TestRangeIdempotence(t *testing.T) {
 	// Run the same increment 100 times, 50 with identical command IDs,
 	// interleaved with 50 using a sequence of different command IDs.
 	goldenArgs, _ := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
-	incDones := make([]chan struct{}, 100)
+	const numIncs = 100
+	var wg sync.WaitGroup
 	var count int64
-	for i := range incDones {
-		incDones[i] = make(chan struct{})
+	incFunc := func(idx int) {
 		var args proto.IncrementRequest
 		var reply proto.IncrementResponse
 		args = *goldenArgs
 		args.Header().Timestamp = tc.clock.Now()
-		if i%2 == 0 {
+		if idx%2 == 0 {
 			args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
 		} else {
-			args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(i + 100)}
+			args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
 		}
-		if i == 0 {
-			if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: &args, Reply: &reply}, true); err != nil {
-				t.Fatal(err)
-			}
-			if reply.NewValue != 1 {
-				t.Errorf("expected first increment to be 1; got %d", reply.NewValue)
-			}
-			close(incDones[i])
-		} else {
-			go func(idx int, args *proto.IncrementRequest, reply *proto.IncrementResponse) {
-				if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: args, Reply: reply}, true); err != nil {
-					t.Fatal(err)
-				}
-				if idx%2 == 0 && reply.NewValue != 1 {
-					t.Errorf("expected all incremented values to be 1; got %d", reply.NewValue)
-				} else if idx%2 == 1 {
-					atomic.AddInt64(&count, reply.NewValue)
-				}
-				close(incDones[idx])
-			}(i, &args, &reply)
+		if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: &args, Reply: &reply}, true); err != nil {
+			t.Fatal(err)
 		}
+		if idx%2 == 0 && reply.NewValue != 1 {
+			t.Errorf("expected all incremented values to be 1; got %d", reply.NewValue)
+		} else if idx%2 == 1 {
+			atomic.AddInt64(&count, reply.NewValue)
+		}
+		wg.Done()
+	}
+
+	wg.Add(numIncs)
+	incFunc(0) // run first iteration without concurrency.
+	for i := 1; i < numIncs; i++ {
+		go incFunc(i)
 	}
 	// Wait for all to complete.
-	for _, done := range incDones {
-		select {
-		case <-done:
-			// Success.
-		case <-time.After(2000 * time.Millisecond):
-			t.Fatal("had to wait for increment to complete")
-		}
-	}
+	wg.Wait()
+
 	// Verify that all non-repeated client commands incremented the
 	// counter starting at 2 all the way to 51 (sum of sequence = 1325).
 	if count != 1325 {
