@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func newTestInfo(key string, val interface{}) *info {
@@ -41,6 +42,7 @@ func newTestInfo(key string, val interface{}) *info {
 // TestMinGroupShouldInclude tests MinGroup type groups
 // and group.shouldInclude() behavior.
 func TestMinGroupShouldInclude(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	group := newGroup("a", 2, MinGroup)
 
 	// First two inserts work fine.
@@ -74,6 +76,7 @@ func TestMinGroupShouldInclude(t *testing.T) {
 // TestMaxGroupShouldInclude tests MaxGroup type groups and
 // group.shouldInclude() behavior.
 func TestMaxGroupShouldInclude(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	group := newGroup("a", 2, MaxGroup)
 
 	// First two inserts work fine.
@@ -108,6 +111,7 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 // TestTypeMismatch inserts two infos of different types into a group
 // and verifies error response.
 func TestTypeMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	group := newGroup("a", 1, MinGroup)
 	info1 := newTestInfo("a.a", int64(1))
 	if _, err := group.addInfo(info1); err != nil {
@@ -127,6 +131,7 @@ func TestTypeMismatch(t *testing.T) {
 // TestSameKeyInserts inserts the same key into group and verifies
 // earlier timestamps are ignored and later timestamps always replace it.
 func TestSameKeyInserts(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	group := newGroup("a", 1, MinGroup)
 	info1 := newTestInfo("a.a", int64(1))
 	changed, err := group.addInfo(info1)
@@ -168,6 +173,7 @@ func TestSameKeyInserts(t *testing.T) {
 // TestGroupCompactAfterTTL verifies group compaction after TTL by
 // waiting and verifying a full group can be inserted into again.
 func TestGroupCompactAfterTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	group := newGroup("a", 2, MinGroup)
 
 	// First two inserts work fine.
@@ -221,6 +227,7 @@ func insertRandomInfos(t *testing.T, g *group, count int) infoSlice {
 // TestGroups100Keys verifies behavior of MinGroup and MaxGroup with a
 // limit of 100 keys after inserting 1000.
 func TestGroups100Keys(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Start by adding random infos to min group.
 	minGroup := newGroup("a", 100, MinGroup)
 	infos := insertRandomInfos(t, minGroup, 1000)
@@ -255,6 +262,7 @@ func TestGroups100Keys(t *testing.T) {
 // information. We don't want each new update with overlap to generate
 // unnecessary delta info.
 func TestSameKeySameTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	group := newGroup("a", 2, MinGroup)
 	info1 := newTestInfo("a.a", float64(1.0))
 	info2 := newTestInfo("a.a", float64(1.0))
@@ -270,6 +278,7 @@ func TestSameKeySameTimestamp(t *testing.T) {
 // TestSameKeyDifferentHops verifies that adding two infos with the
 // same key and different Hops values preserves the lower Hops count.
 func TestSameKeyDifferentHops(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	info1 := newTestInfo("a.a", float64(1.0))
 	info2 := newTestInfo("a.a", float64(1.0))
 	info1.Hops = 1
@@ -306,6 +315,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 
 // TestGroupGetInfo verifies info selection by key.
 func TestGroupGetInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	g := newGroup("a", 10, MinGroup)
 	infos := insertRandomInfos(t, g, 10)
 	for _, i := range infos {
@@ -322,6 +332,7 @@ func TestGroupGetInfo(t *testing.T) {
 
 // TestGroupGetInfoTTL verifies GetInfo with a short TTL.
 func TestGroupGetInfoTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	g := newGroup("a", 10, MinGroup)
 	i := newTestInfo("a.a", int64(1))
 	i.TTLStamp = i.Timestamp + int64(time.Nanosecond)
@@ -368,6 +379,7 @@ func (t *testValue) Less(o util.Ordered) bool {
 // TestGroupWithStructVal verifies group operation with a value which
 // is not a basic supported type.
 func TestGroupWithStructVal(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	g := newGroup("a", 10, MinGroup)
 	i1 := newTestInfo("a.a", &testValue{3, "a"})
 	i2 := newTestInfo("a.b", &testValue{1, "b"})

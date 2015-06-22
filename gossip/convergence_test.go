@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip/simulation"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // verifyConvergence verifies that info from each node is visible from
@@ -46,6 +47,7 @@ func verifyConvergence(numNodes, maxCycles int, interval time.Duration, t *testi
 // TestConvergence verifies a 10 node gossip network converges within
 // 8 cycles.
 func TestConvergence(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// 100 milliseconds to accommodate race tests on slower hardware.
 	verifyConvergence(10, 8, 100*time.Millisecond, t)
 }
