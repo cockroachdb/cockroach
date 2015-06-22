@@ -16,16 +16,17 @@ module Models {
      */
     export module Log {
         import promise = _mithril.MithrilPromise;
+        import property = _mithril.MithrilProperty;
 
         export interface LogResponseSet {
             d: Proto.LogEntry[]
         }
 
         export class Entries {
-            startTime = Utils.chainProp(this, <number>null);
-            endTime = Utils.chainProp(this, <number>null);
-            max = Utils.chainProp(this, <number>null);
-            level = Utils.chainProp(this, <string>null);
+            startTime = m.prop(<number>null);
+            endTime = m.prop(<number>null);
+            max = m.prop(<number>null);
+            level = m.prop(<string>null);
 
             private _url(): string {
                 var url = "/_status/local/log";
@@ -45,6 +46,13 @@ module Models {
                 return url;
             }
 
+            constructor() {
+                this.level(Utils.Format.Severity(2));
+                this.max(<number>null);
+                this.startTime(<number>null);
+                this.endTime(<number>null);
+            }
+
             private _innerQuery = () => {
                 return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
                     .then((results: LogResponseSet) => {
@@ -59,11 +67,11 @@ module Models {
                     });
             })
 
-            public refresh() {
+            refresh = () => {
                 this._data.refresh();
             }
 
-            public result(): Proto.LogEntry[] {
+            result = () => {
                 return this._data.result();
             }
         }
