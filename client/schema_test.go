@@ -38,13 +38,16 @@ func TestSchemaFromModel(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	intType := structured.ColumnType{
+		Kind: structured.ColumnType_INT,
+	}
 	expectedSchema := structured.TableSchema{
 		Table: structured.Table{Name: "foo"},
 		Columns: []structured.Column{
-			{Name: "a"},
-			{Name: "b"},
-			{Name: "c"},
-			{Name: "d"},
+			{Name: "a", Type: intType},
+			{Name: "b", Type: intType},
+			{Name: "c", Type: intType},
+			{Name: "d", Type: intType},
 		},
 		Indexes: []structured.TableSchema_IndexByName{
 			{Index: structured.Index{Name: "primary", Unique: true},

@@ -29,13 +29,39 @@ message Table {
   optional string name = 1 [(gogoproto.nullable) = false];
 }
 
-message Column {
-  enum ColumnType {
-    BYTES = 0;
+message ColumnType {
+  // These mirror the types supported by the sql/parser. See
+  // sql/parser/types.go.
+  enum Kind {
+    BIT = 0;        // BIT(width)
+    INT = 1;        // INT(width)
+    FLOAT = 2;      // FLOAT(width, precision)
+    DECIMAL = 3;    // DECIMAL(width, precision)
+    DATE = 4;
+    TIME = 5;
+    DATETIME = 6;
+    TIMESTAMP = 7;
+    CHAR = 8;       // CHAR(width)
+    BINARY = 9;     // BINARY(width)
+    TEXT = 10;
+    BLOB = 11;
+    ENUM = 12;      // ENUM(vals)
+    SET = 13;       // SET(vals)
   }
 
+  optional Kind kind = 1 [(gogoproto.nullable) = false];
+  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  optional int32 width = 2 [(gogoproto.nullable) = false];
+  // FLOAT and DECIMAL.
+  optional int32 precision = 3 [(gogoproto.nullable) = false];
+  // ENUM and SET.
+  repeated string vals = 4;
+}
+
+message Column {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional ColumnType type = 2 [(gogoproto.nullable) = false];
+  optional bool nullable = 3;
 }
 
 message Index {

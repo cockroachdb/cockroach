@@ -86,10 +86,28 @@ func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
 	s.Table.Name = strings.ToLower(reflect.TypeOf(obj).Name())
 
 	// Create the columns for the table.
-	for name := range m {
+	for name, sf := range m {
+		colType := structured.ColumnType{}
+
+		// TODO(pmattis): The mapping from Go-type Kind to column-type Kind is
+		// likely not complete or correct, but this is probably going away pretty
+		// soon with the move to SQL.
+		switch sf.Type.Kind() {
+		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
+			reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32,
+			reflect.Uint64, reflect.Uintptr:
+			colType.Kind = structured.ColumnType_INT
+
+		case reflect.Float32, reflect.Float64:
+			colType.Kind = structured.ColumnType_FLOAT
+
+		case reflect.String:
+			colType.Kind = structured.ColumnType_TEXT
+		}
+
 		col := structured.Column{
 			Name: name,
-			Type: structured.Column_BYTES,
+			Type: colType,
 		}
 		s.Columns = append(s.Columns, col)
 	}

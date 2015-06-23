@@ -17,33 +17,74 @@ import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 var _ = proto.Marshal
 var _ = math.Inf
 
-type Column_ColumnType int32
+// These mirror the types supported by the sql/parser. See
+// sql/parser/types.go.
+type ColumnType_Kind int32
 
 const (
-	Column_BYTES Column_ColumnType = 0
+	ColumnType_BIT       ColumnType_Kind = 0
+	ColumnType_INT       ColumnType_Kind = 1
+	ColumnType_FLOAT     ColumnType_Kind = 2
+	ColumnType_DECIMAL   ColumnType_Kind = 3
+	ColumnType_DATE      ColumnType_Kind = 4
+	ColumnType_TIME      ColumnType_Kind = 5
+	ColumnType_DATETIME  ColumnType_Kind = 6
+	ColumnType_TIMESTAMP ColumnType_Kind = 7
+	ColumnType_CHAR      ColumnType_Kind = 8
+	ColumnType_BINARY    ColumnType_Kind = 9
+	ColumnType_TEXT      ColumnType_Kind = 10
+	ColumnType_BLOB      ColumnType_Kind = 11
+	ColumnType_ENUM      ColumnType_Kind = 12
+	ColumnType_SET       ColumnType_Kind = 13
 )
 
-var Column_ColumnType_name = map[int32]string{
-	0: "BYTES",
+var ColumnType_Kind_name = map[int32]string{
+	0:  "BIT",
+	1:  "INT",
+	2:  "FLOAT",
+	3:  "DECIMAL",
+	4:  "DATE",
+	5:  "TIME",
+	6:  "DATETIME",
+	7:  "TIMESTAMP",
+	8:  "CHAR",
+	9:  "BINARY",
+	10: "TEXT",
+	11: "BLOB",
+	12: "ENUM",
+	13: "SET",
 }
-var Column_ColumnType_value = map[string]int32{
-	"BYTES": 0,
+var ColumnType_Kind_value = map[string]int32{
+	"BIT":       0,
+	"INT":       1,
+	"FLOAT":     2,
+	"DECIMAL":   3,
+	"DATE":      4,
+	"TIME":      5,
+	"DATETIME":  6,
+	"TIMESTAMP": 7,
+	"CHAR":      8,
+	"BINARY":    9,
+	"TEXT":      10,
+	"BLOB":      11,
+	"ENUM":      12,
+	"SET":       13,
 }
 
-func (x Column_ColumnType) Enum() *Column_ColumnType {
-	p := new(Column_ColumnType)
+func (x ColumnType_Kind) Enum() *ColumnType_Kind {
+	p := new(ColumnType_Kind)
 	*p = x
 	return p
 }
-func (x Column_ColumnType) String() string {
-	return proto.EnumName(Column_ColumnType_name, int32(x))
+func (x ColumnType_Kind) String() string {
+	return proto.EnumName(ColumnType_Kind_name, int32(x))
 }
-func (x *Column_ColumnType) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(Column_ColumnType_value, data, "Column_ColumnType")
+func (x *ColumnType_Kind) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(ColumnType_Kind_value, data, "ColumnType_Kind")
 	if err != nil {
 		return err
 	}
-	*x = Column_ColumnType(value)
+	*x = ColumnType_Kind(value)
 	return nil
 }
 
@@ -63,10 +104,54 @@ func (m *Table) GetName() string {
 	return ""
 }
 
+type ColumnType struct {
+	Kind ColumnType_Kind `protobuf:"varint,1,opt,name=kind,enum=cockroach.structured.ColumnType_Kind" json:"kind"`
+	// BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
+	// FLOAT and DECIMAL.
+	Precision int32 `protobuf:"varint,3,opt,name=precision" json:"precision"`
+	// ENUM and SET.
+	Vals             []string `protobuf:"bytes,4,rep,name=vals" json:"vals,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ColumnType) Reset()         { *m = ColumnType{} }
+func (m *ColumnType) String() string { return proto.CompactTextString(m) }
+func (*ColumnType) ProtoMessage()    {}
+
+func (m *ColumnType) GetKind() ColumnType_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return ColumnType_BIT
+}
+
+func (m *ColumnType) GetWidth() int32 {
+	if m != nil {
+		return m.Width
+	}
+	return 0
+}
+
+func (m *ColumnType) GetPrecision() int32 {
+	if m != nil {
+		return m.Precision
+	}
+	return 0
+}
+
+func (m *ColumnType) GetVals() []string {
+	if m != nil {
+		return m.Vals
+	}
+	return nil
+}
+
 type Column struct {
-	Name             string            `protobuf:"bytes,1,opt,name=name" json:"name"`
-	Type             Column_ColumnType `protobuf:"varint,2,opt,name=type,enum=cockroach.structured.Column_ColumnType" json:"type"`
-	XXX_unrecognized []byte            `json:"-"`
+	Name             string     `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Type             ColumnType `protobuf:"bytes,2,opt,name=type" json:"type"`
+	Nullable         *bool      `protobuf:"varint,3,opt,name=nullable" json:"nullable,omitempty"`
+	XXX_unrecognized []byte     `json:"-"`
 }
 
 func (m *Column) Reset()         { *m = Column{} }
@@ -80,11 +165,18 @@ func (m *Column) GetName() string {
 	return ""
 }
 
-func (m *Column) GetType() Column_ColumnType {
+func (m *Column) GetType() ColumnType {
 	if m != nil {
 		return m.Type
 	}
-	return Column_BYTES
+	return ColumnType{}
+}
+
+func (m *Column) GetNullable() bool {
+	if m != nil && m.Nullable != nil {
+		return *m.Nullable
+	}
+	return false
 }
 
 type Index struct {
@@ -257,7 +349,7 @@ func (m *TableDescriptor) GetNextIndexID() uint32 {
 }
 
 func init() {
-	proto.RegisterEnum("cockroach.structured.Column_ColumnType", Column_ColumnType_name, Column_ColumnType_value)
+	proto.RegisterEnum("cockroach.structured.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
 }
 func (m *Table) Unmarshal(data []byte) error {
 	l := len(data)
@@ -299,6 +391,116 @@ func (m *Table) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Name = string(data[index:postIndex])
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+
+	return nil
+}
+func (m *ColumnType) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Kind |= (ColumnType_Kind(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Width", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Width |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Precision", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Precision |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vals", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vals = append(m.Vals, string(data[index:postIndex]))
 			index = postIndex
 		default:
 			var sizeOfWire int
@@ -366,20 +568,47 @@ func (m *Column) Unmarshal(data []byte) error {
 			m.Name = string(data[index:postIndex])
 			index = postIndex
 		case 2:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
 			}
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				m.Type |= (Column_ColumnType(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Type.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nullable", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.Nullable = &b
 		default:
 			var sizeOfWire int
 			for {
@@ -1046,12 +1275,34 @@ func (m *Table) Size() (n int) {
 	return n
 }
 
+func (m *ColumnType) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovStructured(uint64(m.Kind))
+	n += 1 + sovStructured(uint64(m.Width))
+	n += 1 + sovStructured(uint64(m.Precision))
+	if len(m.Vals) > 0 {
+		for _, s := range m.Vals {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *Column) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
 	n += 1 + l + sovStructured(uint64(l))
-	n += 1 + sovStructured(uint64(m.Type))
+	l = m.Type.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	if m.Nullable != nil {
+		n += 2
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1203,6 +1454,51 @@ func (m *Table) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
+func (m *ColumnType) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ColumnType) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Kind))
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Width))
+	data[i] = 0x18
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Precision))
+	if len(m.Vals) > 0 {
+		for _, s := range m.Vals {
+			data[i] = 0x22
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *Column) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -1222,9 +1518,24 @@ func (m *Column) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
 	i += copy(data[i:], m.Name)
-	data[i] = 0x10
+	data[i] = 0x12
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Type))
+	i = encodeVarintStructured(data, i, uint64(m.Type.Size()))
+	n1, err := m.Type.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	if m.Nullable != nil {
+		data[i] = 0x18
+		i++
+		if *m.Nullable {
+			data[i] = 1
+		} else {
+			data[i] = 0
+		}
+		i++
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1282,11 +1593,11 @@ func (m *TableSchema) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
-	n1, err := m.Table.MarshalTo(data[i:])
+	n2, err := m.Table.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n1
+	i += n2
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
 			data[i] = 0x12
@@ -1335,11 +1646,11 @@ func (m *TableSchema_IndexByName) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Index.Size()))
-	n2, err := m.Index.MarshalTo(data[i:])
+	n3, err := m.Index.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
+	i += n3
 	if len(m.ColumnNames) > 0 {
 		for _, s := range m.ColumnNames {
 			data[i] = 0x12
@@ -1382,11 +1693,11 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Column.Size()))
-	n3, err := m.Column.MarshalTo(data[i:])
+	n4, err := m.Column.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n4
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1414,11 +1725,11 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Index.Size()))
-	n4, err := m.Index.MarshalTo(data[i:])
+	n5, err := m.Index.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n5
 	if len(m.ColumnIDs) > 0 {
 		for _, num := range m.ColumnIDs {
 			data[i] = 0x18
@@ -1453,11 +1764,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
-	n5, err := m.Table.MarshalTo(data[i:])
+	n6, err := m.Table.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n6
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
 			data[i] = 0x1a
