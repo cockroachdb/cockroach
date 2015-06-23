@@ -169,8 +169,10 @@ func (a *allocator) AllocateTarget(required proto.Attributes, existing []proto.R
 
 func (a *allocator) allocateTargetInternal(required proto.Attributes, existing []proto.Replica,
 	relaxConstraints bool, filter func(*proto.StoreDescriptor, *stat, *stat) bool) (*proto.StoreDescriptor, error) {
-	attrs := append([]string(nil), required.Attrs...)
-	for {
+	// Because more redundancy is better than less, if relaxConstraints, the
+	// matching here is lenient, and tries to find a target by relaxing an
+	// attribute constraint, from last attribute to first.
+	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
 		stores, sl := a.selectRandom(3, proto.Attributes{Attrs: attrs}, existing)
 
 		// Choose the store with the least fraction of bytes used.
@@ -198,15 +200,9 @@ func (a *allocator) allocateTargetInternal(required proto.Attributes, existing [
 		if leastStore != nil {
 			return leastStore, nil
 		}
-
-		// Otherwise, we have not found a store. Because more redundancy
-		// is better than less, if relaxConstraints, we still try to find
-		// a target by relaxing an attribute constraint, from last
-		// attribute to first.
 		if len(attrs) == 0 || !relaxConstraints {
 			return nil, util.Errorf("unable to allocate a target store for %s", required)
 		}
-		attrs = attrs[:len(attrs)-1]
 	}
 }
 
