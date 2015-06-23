@@ -29,14 +29,17 @@ import (
 )
 
 func makeTestSchema(name string) structured.TableSchema {
+	charType := structured.ColumnType{
+		Kind: structured.ColumnType_CHAR,
+	}
 	return structured.TableSchema{
 		Table: structured.Table{
 			Name: name,
 		},
 		Columns: []structured.Column{
-			{Name: "id", Type: structured.Column_BYTES},
-			{Name: "name", Type: structured.Column_BYTES},
-			{Name: "title", Type: structured.Column_BYTES},
+			{Name: "id", Type: charType},
+			{Name: "name", Type: charType},
+			{Name: "title", Type: charType},
 		},
 		Indexes: []structured.TableSchema_IndexByName{
 			{Index: structured.Index{Name: "primary", Unique: true},
