@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 const (
@@ -52,14 +51,6 @@ const (
 	publishStatusInterval = 10 * time.Second
 	mb                    = 1 << 20
 )
-
-var allocRetryOptions = retry.Options{
-	Tag:        "ID allocation",
-	Backoff:    time.Second,
-	MaxBackoff: 30 * time.Second,
-	Constant:   2,
-	UseV1Info:  true,
-}
 
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
@@ -89,44 +80,24 @@ type Node struct {
 type nodeServer Node
 
 // allocateNodeID increments the node id generator key to allocate
-// a new, unique node id. It will retry indefinitely on retryable
-// errors.
+// a new, unique node id.
 func allocateNodeID(db *client.DB) (proto.NodeID, error) {
-	var id proto.NodeID
-	err := retry.WithBackoff(allocRetryOptions, func() (retry.Status, error) {
-		r, err := db.Inc(keys.NodeIDGenerator, 1)
-		if err != nil {
-			status := retry.Break
-			if _, ok := err.(util.Retryable); ok {
-				status = retry.Continue
-			}
-			return status, util.Errorf("unable to allocate node ID: %s", err)
-		}
-		id = proto.NodeID(r.ValueInt())
-		return retry.Break, nil
-	})
-	return id, err
+	r, err := db.Inc(keys.NodeIDGenerator, 1)
+	if err != nil {
+		return 0, util.Errorf("unable to allocate node ID: %s", err)
+	}
+	return proto.NodeID(r.ValueInt()), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
-// first ID in a contiguous range is returned on success. The call
-// will retry indefinitely on retryable errors.
+// first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.StoreID, error) {
-	var id proto.StoreID
-	err := retry.WithBackoff(allocRetryOptions, func() (retry.Status, error) {
-		r, err := db.Inc(keys.StoreIDGenerator, inc)
-		if err != nil {
-			status := retry.Break
-			if _, ok := err.(util.Retryable); ok {
-				status = retry.Continue
-			}
-			return status, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
-		}
-		id = proto.StoreID(r.ValueInt() - inc + 1)
-		return retry.Break, nil
-	})
-	return id, err
+	r, err := db.Inc(keys.StoreIDGenerator, inc)
+	if err != nil {
+		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
+	}
+	return proto.StoreID(r.ValueInt() - inc + 1), nil
 }
 
 // BootstrapCluster bootstraps a multiple stores using the provided engines and

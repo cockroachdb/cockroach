@@ -660,7 +660,8 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// sendAttempt below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			desc, descNext, err = ds.getDescriptors(call)
-			// If getDescriptors fails, we don't fish for retryable errors.
+			// getDescriptors may fail retryably if the first range isn't
+			// available via Gossip.
 			if err != nil {
 				if rErr, ok := err.(util.Retryable); ok && rErr != nil && rErr.CanRetry() {
 					return retry.Continue, err

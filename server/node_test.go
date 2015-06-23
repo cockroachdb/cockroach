@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -499,43 +497,4 @@ func TestNodeStatus(t *testing.T) {
 	ts.node.waitForScanCompletion()
 	ts.node.waitForScanCompletion()
 	compareStoreStatus(t, ts.node, expectedNodeStatus, 3)
-}
-
-type testSender func(context.Context, proto.Call)
-
-func (ts testSender) Send(ctx context.Context, c proto.Call) {
-	ts(ctx, c)
-}
-
-func setAllocRetryBackoff(backoff time.Duration) func() {
-	savedBackoff := allocRetryOptions.Backoff
-	allocRetryOptions.Backoff = backoff
-	return func() {
-		allocRetryOptions.Backoff = savedBackoff
-	}
-}
-
-func TestIDAllocationRetry(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	defer setAllocRetryBackoff(0)()
-	i := 98
-	sender := func(_ context.Context, c proto.Call) {
-		if i%2 == 0 {
-			c.Reply.Header().Error = &proto.Error{Retryable: true}
-		}
-		c.Reply.(*proto.IncrementResponse).NewValue = int64(i)
-		i++
-	}
-	db, err := client.Open("//root@", client.SenderOpt(testSender(sender)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n, err := allocateNodeID(db); n != 99 || err != nil {
-		t.Fatalf("wanted NodeID 99, got %d (err=%s)", n, err)
-	}
-
-	if n, err := allocateStoreIDs(1, 1, db); n != 101 || err != nil {
-		t.Fatalf("wanted NodeID 101, got %d (err=%s)", n, err)
-	}
-
 }
