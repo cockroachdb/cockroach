@@ -136,7 +136,15 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		// the correct range. Using the start key would require using
 		// Floor() which is a possibility for our llrb-based OrderedCache
 		// but not possible for RocksDB.
-		rmc.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(rs[i].EndKey)), &rs[i])
+
+		// Before adding a new descriptor, make sure we clear out any
+		// pre-existing, overlapping descriptor which might have been
+		// re-inserted due to concurrent range lookups.
+		rangeKey := keys.RangeMetaKey(rs[i].EndKey)
+		if k, r := rmc.getCachedRangeDescriptorLocked(rangeKey, true); r != nil {
+			rmc.rangeCache.Del(k)
+		}
+		rmc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	if len(rs) == 0 {
 		log.Fatalf("no range descriptors returned for %s", key)
@@ -160,7 +168,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 	rmc.rangeCacheMu.Lock()
 	defer rmc.rangeCacheMu.Unlock()
 
-	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey)
+	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey, false)
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
@@ -183,7 +191,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
 		descKey = keys.RangeMetaKey(descKey)
-		rngKey, cachedDesc = rmc.getCachedRangeDescriptorLocked(descKey)
+		rngKey, cachedDesc = rmc.getCachedRangeDescriptorLocked(descKey, false)
 	}
 }
 
@@ -195,18 +203,21 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	rmc.rangeCacheMu.RLock()
 	defer rmc.rangeCacheMu.RUnlock()
-	return rmc.getCachedRangeDescriptorLocked(key)
+	return rmc.getCachedRangeDescriptorLocked(key, false)
 }
 
 // getCachedRangeDescriptorLocked is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in the
 // cache. It is assumed that the caller holds a read lock on rmc.rangeCacheMu.
-func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
+func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, inclusive bool) (
 	rangeCacheKey, *proto.RangeDescriptor) {
-	// We want to look up the range descriptor for key. The cache is
-	// indexed using the end-key of the range, but the end-key is
-	// non-inclusive. So we access the cache using key.Next().
-	metaKey := keys.RangeMetaKey(key.Next())
+	// The cache is indexed using the end-key of the range, but the
+	// end-key is non-inclusive. If inclusive is false, we access the
+	// cache using key.Next().
+	if !inclusive {
+		key = key.Next()
+	}
+	metaKey := keys.RangeMetaKey(key)
 
 	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
