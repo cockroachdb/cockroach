@@ -17,12 +17,7 @@
 
 package log
 
-import (
-	"fmt"
-	"os"
-
-	"golang.org/x/net/context"
-)
+import "golang.org/x/net/context"
 
 func init() {
 	// TODO(tschottdorf) this should go to our logger. Currently this will log
@@ -51,8 +46,7 @@ func EnableLogFileOutput(dir string) {
 // DisableLogFileOutput turns off logging. For unittesting only.
 func DisableLogFileOutput() {
 	if err := logging.removeFiles(); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to remove log files: %s", err)
-		os.Exit(1)
+		logging.exit(err)
 	}
 	*logDir = ""
 	logging.toStderr = true

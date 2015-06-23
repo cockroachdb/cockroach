@@ -161,20 +161,15 @@ func parseLogFilename(filename string) (FileDetails, error) {
 // errors.
 func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
 	if len(*logDir) == 0 {
-		return nil, "", errors.New("log: log directory empty")
+		return nil, "", errors.New("log: log directory not set")
 	}
 	name, link := logName(severity, t)
 	var lastErr error
 	fname := filepath.Join(*logDir, name)
-	fmt.Printf("trying to create log file %s\n", fname)
 
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
-	if err != nil {
-		return nil, "", fmt.Errorf("log: cannot create log: %v", err)
-	}
-
 	if err == nil {
 		symlink := filepath.Join(*logDir, link)
 		_ = os.Remove(symlink)        // ignore err
