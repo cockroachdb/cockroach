@@ -12,6 +12,7 @@
 - [Deploying Cockroach in production](#deploying-cockroach-in-production)
 - [Get in touch](#get-in-touch)
 - [Contributing](#contributing)
+- [Talks](#talks)
 - [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
 - [Architecture](#architecture) and [Client Architecture](#client-architecture)
 
@@ -153,16 +154,29 @@ see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod)
 
 See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md)
 
+## Talks
+
+* [Venue: Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball) on (06/16/2015), 23min.<br />
+  A short, less technical presentation of Cockroach.
+* [Venue: NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf) on (06/10/2015), 15min.<br />
+  A short, non-technical talk with a small cluster survivability demo.
+* [Venue: CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball) on (05/27/2015), 25min.<br />
+  An introduction to the goals and design of Cockroach DB. The recommended talk to watch if all you have time for is one.
+* [Venue: The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf) on (03/04/2015), 45min.<br />
+  The most technical talk given thus far, going through the implementation of transactions in some detail.
+
+### Older talks
+
+* [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014), 1h25min.
+* [Venue: Yelp!](http://www.youtube.com/watch?v=MEAuFgsmND0&feature=youtu.be), by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014), 1h.
+
+
 ## Design
 
 This is an overview. For an in depth discussion of the design, see the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
 For a quick design overview, see the [Cockroach tech talk slides](https://docs.google.com/presentation/d/1e3TOxImRg6_nyMZspXvzb2u43D6gnS5422vAIN7J1n8/edit?usp=sharing)
-or watch a presentation:
-* [Venue: Yelp!](http://www.youtube.com/watch?v=MEAuFgsmND0&feature=youtu.be), Presented by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014).
-* [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), Presented by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014).
-* [Venue: The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), Presented by [Tobias Schottdorf](https://github.com/tschottdorf) on (03/04/2015).
-* [Venue: CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), Presented by [Spencer Kimball](https://github.com/spencerkimball) on (27/05/2015).
+or watch a [presentation](#talks):
 
 
 Cockroach is a distributed key/value datastore which supports ACID
