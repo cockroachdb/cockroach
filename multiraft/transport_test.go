@@ -53,27 +53,9 @@ func (lt *localInterceptableTransport) start() {
 		for {
 			select {
 			case msg := <-lt.messages:
-				ack := make(chan struct{})
-				iMsg := &interceptMessage{
-					args: msg,
-					ack:  ack,
-				}
-				// The following channel ops are not protected by a select with ShouldStop
-				// since leaving things partially complete here could prevent other components
-				// from shutting down cleanly.
-				lt.Events <- iMsg
-				<-ack
-				lt.mu.Lock()
-				srv, ok := lt.listeners[proto.RaftNodeID(msg.Message.To)]
-				lt.mu.Unlock()
-				if !ok {
-					continue
-				}
-				err := srv.RaftMessage(msg, nil)
-				if err == ErrStopped {
-					return
-				} else if err != nil {
-					log.Fatal(err)
+				if lt.stopper.StartTask() {
+					lt.handleMessage(msg)
+					lt.stopper.FinishTask()
 				}
 
 			case <-lt.stopper.ShouldStop():
@@ -81,6 +63,32 @@ func (lt *localInterceptableTransport) start() {
 			}
 		}
 	})
+}
+
+func (lt *localInterceptableTransport) handleMessage(msg *RaftMessageRequest) {
+	ack := make(chan struct{})
+	iMsg := &interceptMessage{
+		args: msg,
+		ack:  ack,
+	}
+	// The following channel ops are not protected by a select with
+	// ShouldStop since we are running under a StartTask and leaving
+	// things partially complete here could prevent other components
+	// from shutting down cleanly.
+	lt.Events <- iMsg
+	<-ack
+	lt.mu.Lock()
+	srv, ok := lt.listeners[proto.RaftNodeID(msg.Message.To)]
+	lt.mu.Unlock()
+	if !ok {
+		return
+	}
+	err := srv.RaftMessage(msg, nil)
+	if err == ErrStopped {
+		return
+	} else if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (lt *localInterceptableTransport) Listen(id proto.RaftNodeID, server ServerInterface) error {
