@@ -102,9 +102,9 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 // it is being updated correctly.
 func TestStoreStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ctx := &storage.TestStoreContext
+	ctx := storage.TestStoreContext
 	ctx.ScanInterval = time.Duration(10 * time.Millisecond)
-	store, stopper := createTestStoreWithEngine(t, engine.NewInMem(proto.Attributes{}, 10<<20), hlc.NewClock(hlc.NewManualClock(0).UnixNano), true, ctx)
+	store, stopper := createTestStoreWithEngine(t, engine.NewInMem(proto.Attributes{}, 10<<20), hlc.NewClock(hlc.NewManualClock(0).UnixNano), true, &ctx)
 	defer stopper.Stop()
 	splitKey := proto.Key("b")
 	content := proto.Key("test content")
