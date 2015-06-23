@@ -16,8 +16,8 @@
 // Author: Vivek Menezes (vivek@cockroachlabs.com) 
 
 syntax = "proto2";
-package cockroach.structured;
-option go_package = "structured";
+package cockroach.sqlwire;
+option go_package = "sqlwire";
 
 import "cockroach/proto/api.proto";
 import "cockroach/proto/errors.proto";

@@ -2,6 +2,21 @@
 // source: cockroach/structured/structured.proto
 // DO NOT EDIT!
 
+/*
+	Package structured is a generated protocol buffer package.
+
+	It is generated from these files:
+		cockroach/structured/structured.proto
+
+	It has these top-level messages:
+		Table
+		Column
+		Index
+		TableSchema
+		ColumnDescriptor
+		IndexDescriptor
+		TableDescriptor
+*/
 package structured
 
 import proto "github.com/gogo/protobuf/proto"
