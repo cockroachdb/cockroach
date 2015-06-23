@@ -663,7 +663,7 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if err != nil {
-				if rErr, ok := err.(util.Retryable); ok && rErr != nil && rErr.CanRetry() {
+				if rErr, ok := err.(util.Retryable); ok && rErr.CanRetry() {
 					return retry.Continue, err
 				}
 				return retry.Break, err
