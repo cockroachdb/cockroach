@@ -82,6 +82,8 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 		r.InternalPushTxn(batch, ms, tArgs, reply.(*proto.InternalPushTxnResponse))
 	case *proto.InternalResolveIntentRequest:
 		r.InternalResolveIntent(batch, ms, tArgs, reply.(*proto.InternalResolveIntentResponse))
+	case *proto.InternalResolveIntentRangeRequest:
+		r.InternalResolveIntentRange(batch, ms, tArgs, reply.(*proto.InternalResolveIntentRangeResponse))
 	case *proto.InternalMergeRequest:
 		r.InternalMerge(batch, ms, tArgs, reply.(*proto.InternalMergeResponse))
 	case *proto.InternalTruncateLogRequest:
