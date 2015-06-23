@@ -10,6 +10,7 @@
 
 	It has these top-level messages:
 		Table
+		ColumnType
 		Column
 		Index
 		TableSchema
