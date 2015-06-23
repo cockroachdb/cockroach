@@ -234,7 +234,7 @@ func (m *SQLRequest_Cmd) GetParams() []*Datum {
 
 type SQLResponse struct {
 	SQLResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// The result set.
+	// The result set for the last Cmd in the request.
 	Results          []*Result `protobuf:"bytes,2,rep,name=results" json:"results,omitempty"`
 	XXX_unrecognized []byte    `json:"-"`
 }
