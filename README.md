@@ -147,8 +147,11 @@ see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod)
 
 ## Get in touch
 
-+ cockroach-db@googlegroups.com
-+ \#cockroachdb on freenode
+We spend almost all of our time here on GitHub, and use the [issue
+tracker](https://github.com/cockroachdb/cockroach/issues) for
+bug reports and development-related questions.
+
+For anything else, message our mailing list cockroach-db@googlegroups.com.
 
 ## Contributing
 
