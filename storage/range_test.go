@@ -1360,7 +1360,14 @@ func TestRangeIdempotence(t *testing.T) {
 	}
 
 	wg.Add(numIncs)
-	incFunc(0) // run first iteration without concurrency.
+	// The assertions for the even-numbered half of this test look for a
+	// hardcoded value of 1, so we have to make sure the first iteration
+	// that actually runs is even-numbered so that the cached response
+	// for that command ID has a value of 1. Otherwise, N odd-numbered
+	// operations may get scheduled first, run with a different command
+	// ID, and cause even-numbered operations to report something other
+	// than 1, depending on the value of N.
+	incFunc(0)
 	for i := 1; i < numIncs; i++ {
 		go incFunc(i)
 	}
