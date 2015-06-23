@@ -1009,9 +1009,11 @@ func TestRangeCommandQueue(t *testing.T) {
 	defer func() { TestingCommandFilter = nil }()
 
 	// Intercept commands with matching command IDs and block them.
+	blockingStart := make(chan struct{}, 1)
 	blockingDone := make(chan struct{}, 1)
 	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
 		if args.Header().User == "Foo" {
+			blockingStart <- struct{}{}
 			<-blockingDone
 		}
 		return false
@@ -1046,6 +1048,8 @@ func TestRangeCommandQueue(t *testing.T) {
 			}
 			close(cmd1Done)
 		}()
+		// Wait for cmd1 to get into the command queue.
+		<-blockingStart
 
 		// First, try a command for same key as cmd1 to verify it blocks.
 		cmd2Done := make(chan struct{})
@@ -1117,9 +1121,11 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	defer tc.Stop()
 
 	key := proto.Key("key1")
+	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
 		if args.Header().CmdID.Random == 1 {
+			blockingStart <- struct{}{}
 			<-blockingDone
 		}
 		return false
@@ -1136,6 +1142,8 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 		}
 		close(cmd1Done)
 	}()
+	// Wait for cmd1 to get into the command queue.
+	<-blockingStart
 
 	// An inconsistent read to the key won't wait.
 	cmd2Done := make(chan struct{})
