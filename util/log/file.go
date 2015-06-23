@@ -33,7 +33,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -47,9 +46,6 @@ var MaxSize uint64 = 1024 * 1024 * 10
 // See createLogDirs for the full list of possible destinations.
 var logDir *string
 
-// logDirs lists the candidate directories for new log files.
-var logDirs []string
-
 // logFileRE matches log files to avoid exposing non-log files accidentally
 // and it splits the details of the filename into groups for easy parsing.
 // The log file format is {process}.{host}.{username}.log.{severity}.{timestamp}
@@ -59,12 +55,6 @@ var logDirs []string
 // For compatibility with Windows filenames, all colons from the timestamp
 // (RFC3339) are converted to underscores.
 var logFileRE = regexp.MustCompile(`([^\.]+)\.([^\.]+)\.([^\.]+)\.log\.(ERROR|WARNING|INFO)\.([^\.]+)\.(\d+)`)
-
-func createLogDirs() {
-	if *logDir != "" {
-		logDirs = append(logDirs, *logDir)
-	}
-}
 
 var (
 	pid      = os.Getpid()
@@ -165,37 +155,33 @@ func parseLogFilename(filename string) (FileDetails, error) {
 	}, nil
 }
 
-var onceLogDirs sync.Once
-
 // create creates a new log file and returns the file and its filename, which
-// contains severity ("INFO", "FATAL", etc.) and t.  If the file is created
+// contains severity ("INFO", "FATAL", etc.) and t. If the file is created
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
 func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
-	onceLogDirs.Do(createLogDirs)
-	if len(logDirs) == 0 {
-		return nil, "", errors.New("log: no log dirs")
+	if len(*logDir) == 0 {
+		return nil, "", errors.New("log: log directory empty")
 	}
 	name, link := logName(severity, t)
 	var lastErr error
-	for _, dir := range logDirs {
-		fname := filepath.Join(dir, name)
+	fname := filepath.Join(*logDir, name)
+	fmt.Printf("trying to create log file %s\n", fname)
 
-		// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
-		// Append is almost always more efficient than O_RDRW on most modern file systems.
-		f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
-		if err != nil {
-			return nil, "", fmt.Errorf("log: cannot create log: %v", err)
-		}
-
-		if err == nil {
-			symlink := filepath.Join(dir, link)
-			_ = os.Remove(symlink)        // ignore err
-			_ = os.Symlink(name, symlink) // ignore err
-			return f, fname, nil
-		}
-		lastErr = err
+	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
+	// Append is almost always more efficient than O_RDRW on most modern file systems.
+	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	if err != nil {
+		return nil, "", fmt.Errorf("log: cannot create log: %v", err)
 	}
+
+	if err == nil {
+		symlink := filepath.Join(*logDir, link)
+		_ = os.Remove(symlink)        // ignore err
+		_ = os.Symlink(name, symlink) // ignore err
+		return f, fname, nil
+	}
+	lastErr = err
 	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
 }
 
@@ -236,21 +222,19 @@ type FileInfo struct {
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	for _, dir := range logDirs {
-		infos, err := ioutil.ReadDir(dir)
-		if err != nil {
-			return results, err
-		}
-		for _, info := range infos {
-			details, err := getFileDetails(info)
-			if err == nil {
-				results = append(results, FileInfo{
-					Name:         info.Name(),
-					SizeBytes:    info.Size(),
-					ModTimeNanos: info.ModTime().UnixNano(),
-					Details:      details,
-				})
-			}
+	infos, err := ioutil.ReadDir(*logDir)
+	if err != nil {
+		return results, err
+	}
+	for _, info := range infos {
+		details, err := getFileDetails(info)
+		if err == nil {
+			results = append(results, FileInfo{
+				Name:         info.Name(),
+				SizeBytes:    info.Size(),
+				ModTimeNanos: info.ModTime().UnixNano(),
+				Details:      details,
+			})
 		}
 	}
 	return results, nil
@@ -280,13 +264,11 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 	}
 	var reader io.ReadCloser
 	var err error
-	for _, dir := range logDirs {
-		filename = path.Join(dir, filename)
-		if verifyFile(filename) == nil {
-			reader, err = os.Open(filename)
-			if err == nil {
-				return reader, err
-			}
+	filename = path.Join(*logDir, filename)
+	if verifyFile(filename) == nil {
+		reader, err = os.Open(filename)
+		if err == nil {
+			return reader, err
 		}
 	}
 	return nil, err
