@@ -65,7 +65,7 @@ func (*BitType) columnType() {}
 func (node *BitType) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "BIT")
-	if node.N >= 0 {
+	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}
 	return buf.String()
@@ -84,7 +84,7 @@ func (*IntType) columnType() {}
 func (node *IntType) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(node.Name)
-	if node.N >= 0 {
+	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}
 	if node.Unsigned {
@@ -106,7 +106,7 @@ func (*FloatType) columnType() {}
 func (node *FloatType) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(node.Name)
-	if node.N >= 0 {
+	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d,%d)", node.N, node.Prec)
 	}
 	if node.Unsigned {
@@ -127,9 +127,9 @@ func (*DecimalType) columnType() {}
 func (node *DecimalType) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(node.Name)
-	if node.N >= 0 {
+	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d", node.N)
-		if node.Prec >= 0 {
+		if node.Prec > 0 {
 			fmt.Fprintf(&buf, ",%d", node.Prec)
 		}
 		buf.WriteString(")")
@@ -188,7 +188,7 @@ func (*CharType) columnType() {}
 func (node *CharType) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(node.Name)
-	if node.N >= 0 {
+	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}
 	return buf.String()
@@ -205,7 +205,7 @@ func (*BinaryType) columnType() {}
 func (node *BinaryType) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(node.Name)
-	if node.N >= 0 {
+	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}
 	return buf.String()

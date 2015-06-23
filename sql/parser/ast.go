@@ -10,7 +10,7 @@ import (
 	"fmt"
 )
 
-//go:generate go tool yacc -o sql.go sql.y
+//go:generate make
 
 // Instructions for creating new types: If a type needs to satisfy an
 // interface, declare that function along with that interface. This

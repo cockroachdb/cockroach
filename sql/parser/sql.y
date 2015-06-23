@@ -123,7 +123,7 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <tableExpr> table_expression
 %type <str> join_type
 %type <smTableExpr> simple_table_expression
-%type <tableName> dml_table_expression
+%type <tableName> dml_table_expression ddl_table_expression
 %type <indexHints> index_hint_list
 %type <str2> index_list
 %type <boolExpr> where_expression_opt
@@ -264,7 +264,7 @@ show_statement:
   }
 
 create_statement:
-  tokCreate tokTable if_not_exists_opt sql_id '(' table_def_list ')' force_eof
+  tokCreate tokTable if_not_exists_opt ddl_table_expression '(' table_def_list ')' force_eof
   {
     $$ = &CreateTable{IfNotExists: $3, Name: $4, Defs: $6}
   }
@@ -299,6 +299,10 @@ table_def:
 | unique_opt tokIndex sql_id '(' index_list ')'
   {
     $$ = &IndexTableDef{Name: $3, Unique: $1, Columns: $5}
+  }
+| tokPrimary tokKey '(' index_list ')'
+  {
+    $$ = &IndexTableDef{Name: "primary", PrimaryKey: true, Unique: true, Columns: $4}
   }
 
 column_type:
@@ -654,6 +658,16 @@ tokID
     $$ = &TableName{Name: $1}
   }
 | tokID '.' tokID
+  {
+    $$ = &TableName{Qualifier: $1, Name: $3}
+  }
+
+ddl_table_expression:
+sql_id
+  {
+    $$ = &TableName{Name: $1}
+  }
+| sql_id '.' sql_id
   {
     $$ = &TableName{Qualifier: $1, Name: $3}
   }
@@ -1180,7 +1194,7 @@ unique_opt:
   { $$ = true }
 
 int_opt:
-  { $$ = -1 }
+  { $$ = 0 }
 | '(' int_val ')'
   { $$ = $2 }
 
@@ -1195,17 +1209,17 @@ int_val:
   }
 
 float_opt:
-  { $$[0], $$[1] = -1, -1 }
+  { $$[0], $$[1] = 0, 0 }
 | '(' int_val ',' int_val ')'
   { $$[0], $$[1] = $2, $4 }
 
 decimal_opt:
-  { $$[0], $$[1] = -1, -1 }
+  { $$[0], $$[1] = 0, 0 }
 | '(' int_val precision_opt ')'
   { $$[0], $$[1] = $2, $3 }
 
 precision_opt:
-  { $$ = -1 }
+  { $$ = 0 }
 | ',' int_val
   { $$ = $2 }
 

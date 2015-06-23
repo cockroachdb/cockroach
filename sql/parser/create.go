@@ -126,25 +126,30 @@ func (node *ColumnTableDef) String() string {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name    string
-	Unique  bool
-	Columns []string
+	Name       string
+	PrimaryKey bool
+	Unique     bool
+	Columns    []string
 }
 
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
-	if node.Unique {
-		buf.WriteString("UNIQUE ")
+	if node.PrimaryKey {
+		fmt.Fprintf(&buf, "PRIMARY KEY (%s)", strings.Join(node.Columns, ", "))
+	} else {
+		if node.Unique {
+			buf.WriteString("UNIQUE ")
+		}
+		fmt.Fprintf(&buf, "INDEX %s (%s)",
+			node.Name, strings.Join(node.Columns, ", "))
 	}
-	fmt.Fprintf(&buf, "INDEX %s (%s)",
-		node.Name, strings.Join(node.Columns, ", "))
 	return buf.String()
 }
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists bool
-	Name        string
+	Name        *TableName
 	Defs        TableDefs
 }
 

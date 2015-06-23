@@ -61,7 +61,7 @@ message ColumnType {
 message Column {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional ColumnType type = 2 [(gogoproto.nullable) = false];
-  optional bool nullable = 3;
+  optional bool nullable = 3 [(gogoproto.nullable) = false];
 }
 
 message Index {
