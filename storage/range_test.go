@@ -2019,7 +2019,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	// Do a consistent scan to verify intents have been cleared.
 	sArgs, sReply := scanArgs(proto.Key("a"), proto.Key("c"), 1, tc.store.StoreID())
 	if err := tc.store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err != nil {
-		t.Fatal("unexpected error on scan: %s", err)
+		t.Fatalf("unexpected error on scan: %s", err)
 	}
 	if len(sReply.Rows) != 2 {
 		t.Errorf("expected 2 rows; got %v", sReply.Rows)
