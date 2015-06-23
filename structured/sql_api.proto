@@ -16,7 +16,7 @@
 // Author: Vivek Menezes (vivek@cockroachlabs.com) 
 
 syntax = "proto2";
-package cockroach.proto;
+package cockroach.structured;
 option go_package = "structured";
 
 import "cockroach/proto/api.proto";
@@ -37,13 +37,13 @@ message SQLRequestHeader {
   optional bytes txn = 2;
   // CmdID is optionally specified for request idempotence
   // (i.e. replay protection).
-  optional ClientCmdID cmd_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
+  optional proto.ClientCmdID cmd_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
 }
 
 // SQLResponseHeader is returned with every Cmd response.
 message SQLResponseHeader {
   // Error is non-nil if an error occurred.
-  optional Error error = 1;
+  optional proto.Error error = 1;
   // Setting that should be reflected back in all subsequent requests.
   // When not set, future requests should continue to use existing settings.
   optional bytes settings = 2;
@@ -82,7 +82,7 @@ message Result {
 message SQLRequest {
   // Request header.
   optional SQLRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-    // SQL commands/queries to be serially executed by the server.
+  // SQL commands/queries to be serially executed by the server.
   message Cmd {
     optional string sql = 1;
     // parameters are referred to in the above sql command/query using "?".
@@ -93,6 +93,6 @@ message SQLRequest {
 
 message SQLResponse {
   optional SQLResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The result set.
+  // The result set for the last Cmd in the request.
   repeated Result results = 2;
 }
