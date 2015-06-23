@@ -90,6 +90,17 @@ module AdminViews {
                 entries.refresh();
             };
 
+            function onChangeMax(val: string):void {
+                var result = parseInt(val);
+                if (result > 0) {
+                    entries.max(result);
+                } else {
+                    entries.max(null);
+                }
+                entries.refresh();
+            }
+
+
             export function view(ctrl: Controller) {
                 var rows: _mithril.MithrilVirtualElement[] = []
                 if (entries.result() != null) {
@@ -100,12 +111,15 @@ module AdminViews {
                 }
 
                 return m("div", [
-                    m("p", [
+                    m("form", [
+                        m.trust("Severity: "),
                         m.component(Components.Select, {
                             items: _severitySelectOptions,
                             value: entries.level,
                             onChange: onChangeSeverity
-                        })
+                        }),
+                        m.trust("&nbsp;&nbsp;Max Results: "),
+                        m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() })
                     ]),
                     m("p", rows.length + " log entries retrieved"),
                     m("table", { style: _tableStyle }, [
@@ -128,3 +142,4 @@ module AdminViews {
         }
     }
 }
+

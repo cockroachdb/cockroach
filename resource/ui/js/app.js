@@ -760,6 +760,16 @@ var AdminViews;
                 entries.refresh();
             }
             ;
+            function onChangeMax(val) {
+                var result = parseInt(val);
+                if (result > 0) {
+                    entries.max(result);
+                }
+                else {
+                    entries.max(null);
+                }
+                entries.refresh();
+            }
             function view(ctrl) {
                 var rows = [];
                 if (entries.result() != null) {
@@ -770,12 +780,15 @@ var AdminViews;
                     ;
                 }
                 return m("div", [
-                    m("p", [
+                    m("form", [
+                        m.trust("Severity: "),
                         m.component(Components.Select, {
                             items: _severitySelectOptions,
                             value: entries.level,
                             onChange: onChangeSeverity
-                        })
+                        }),
+                        m.trust("&nbsp;&nbsp;Max Results: "),
+                        m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() })
                     ]),
                     m("p", rows.length + " log entries retrieved"),
                     m("table", { style: _tableStyle }, [
