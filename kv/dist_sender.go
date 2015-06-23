@@ -655,14 +655,17 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 
 		var desc, descNext *proto.RangeDescriptor
 		err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-			var descErr error
+			var err error
 			// Get range descriptor (or, when spanning range, descriptors).
 			// sendAttempt below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			desc, descNext, descErr = ds.getDescriptors(call)
+			desc, descNext, err = ds.getDescriptors(call)
 			// If getDescriptors fails, we don't fish for retryable errors.
-			if descErr != nil {
-				return retry.Break, descErr
+			if err != nil {
+				if rErr, ok := err.(util.Retryable); ok && rErr != nil && rErr.CanRetry() {
+					return retry.Continue, err
+				}
+				return retry.Break, err
 			}
 			// Truncate the request to our current range, making sure not to
 			// touch it unless we have to (it is illegal to send EndKey on
