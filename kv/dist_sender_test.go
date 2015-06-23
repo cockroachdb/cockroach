@@ -350,6 +350,54 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 }
 
+// TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
+// lookup on retryable errors.
+func TestRetryOnDescriptorLookupError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+
+	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		return []interface{}{getReply()}, nil
+	}
+
+	errors := []error{
+		&proto.Error{
+			Message:   "fatal boom",
+			Retryable: false,
+		},
+		&proto.Error{
+			Message:   "temporary boom",
+			Retryable: true,
+		},
+		nil,
+	}
+
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) (_ []proto.RangeDescriptor, err error) {
+			err, errors = errors[0], errors[1:]
+			return []proto.RangeDescriptor{testRangeDescriptor}, err
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	call := proto.PutCall(proto.Key("a"), proto.Value{Bytes: []byte("value")})
+	reply := call.Reply.(*proto.PutResponse)
+	// Fatal error on descriptor lookup, propagated to reply.
+	ds.Send(context.Background(), call)
+	if err := reply.Header().Error; err.GetMessage() != "fatal boom" {
+		t.Errorf("unexpected error: %s", err)
+	}
+	// Retryable error on descriptor lookup, second attempt successful.
+	ds.Send(context.Background(), call)
+	if err := reply.GoError(); err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+	if len(errors) != 0 {
+		t.Fatalf("expected more descriptor lookups, leftover errors: %+v", errors)
+	}
+}
+
 func TestEvictCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// if rpcError is true, the first attempt gets an RPC error, otherwise
