@@ -1982,6 +1982,50 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	}
 }
 
+// TestRangeResolveIntentRange verifies resolving a range of intents.
+func TestRangeResolveIntentRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Put two values transactionally.
+	txn := &proto.Transaction{ID: util.NewUUID4(), Timestamp: tc.clock.Now()}
+	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
+		pArgs, pReply := putArgs(key, []byte("value1"), 1, tc.store.StoreID())
+		pArgs.Txn = txn
+		if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: pArgs, Reply: pReply}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Resolve the intents.
+	rArgs := &proto.InternalResolveIntentRangeRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: txn.Timestamp,
+			Key:       proto.Key("a"),
+			EndKey:    proto.Key("c"),
+			RaftID:    tc.rng.Desc().RaftID,
+			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
+			Txn:       txn,
+		},
+	}
+	rArgs.Txn.Status = proto.COMMITTED
+	rReply := &proto.InternalResolveIntentRangeResponse{}
+	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rArgs, Reply: rReply}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Do a consistent scan to verify intents have been cleared.
+	sArgs, sReply := scanArgs(proto.Key("a"), proto.Key("c"), 1, tc.store.StoreID())
+	if err := tc.store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err != nil {
+		t.Fatal("unexpected error on scan: %s", err)
+	}
+	if len(sReply.Rows) != 2 {
+		t.Errorf("expected 2 rows; got %v", sReply.Rows)
+	}
+}
+
 func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS engine.MVCCStats, t *testing.T) {
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
