@@ -45,6 +45,9 @@ func EnableLogFileOutput(dir string) {
 
 // DisableLogFileOutput turns off logging. For unittesting only.
 func DisableLogFileOutput() {
+	if err := logging.removeFiles(); err != nil {
+		logging.exit(err)
+	}
 	*logDir = ""
 	logging.toStderr = true
 	logging.alsoToStderr = false

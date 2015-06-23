@@ -989,6 +989,24 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 // on disk I/O. The flushDaemon will block instead.
 const bufferSize = 256 * 1024
 
+// removeFiles clears all the log files.
+func (l *loggingT) removeFiles() error {
+	l.mu.Lock()
+	for s := FatalLog; s >= InfoLog; s-- {
+		if sb, ok := l.file[s].(*syncBuffer); ok {
+			if err := sb.file.Close(); err != nil {
+				return err
+			}
+			if err := os.Remove(sb.file.Name()); err != nil {
+				return err
+			}
+		}
+		l.file[s] = nil
+	}
+	l.mu.Unlock()
+	return nil
+}
+
 // createFiles creates all the log files for severity from sev down to InfoLog.
 // l.mu is held.
 func (l *loggingT) createFiles(sev Severity) error {
