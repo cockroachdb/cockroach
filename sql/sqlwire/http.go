@@ -17,8 +17,49 @@
 
 package sqlwire
 
+import (
+	gogoproto "github.com/gogo/protobuf/proto"
+)
+
 const (
 	// Endpoint is the URL path prefix which accepts incoming
 	// HTTP requests for the SQL API.
 	Endpoint = "/sql/"
 )
+
+// Request is an interface for RPC requests.
+type Request interface {
+	gogoproto.Message
+	Header() *SQLRequestHeader
+	// Method returns the request method.
+	Method() Method
+	// CreateReply creates a new response object.
+	CreateReply() Response
+}
+
+// Response is an interface for RPC responses.
+type Response interface {
+	gogoproto.Message
+	// Header returns the response header.
+	Header() *SQLResponseHeader
+}
+
+// Header returns the request header.
+func (r *SQLRequest) Header() *SQLRequestHeader {
+	return r.Header()
+}
+
+// Method returns the method.
+func (*SQLRequest) Method() Method {
+	return Execute
+}
+
+// CreateReply creates an empty response for the request.
+func (*SQLRequest) CreateReply() Response {
+	return &SQLResponse{}
+}
+
+// Header returns the response header.
+func (r *SQLResponse) Header() *SQLResponseHeader {
+	return r.Header()
+}

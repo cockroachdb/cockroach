@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/sql/sqlserver"
+	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
@@ -61,6 +63,7 @@ type Server struct {
 	gossip        *gossip.Gossip
 	db            *client.DB
 	kvDB          *kv.DBServer
+	sqlDB         *sqlserver.DBServer
 	node          *Node
 	admin         *adminServer
 	status        *statusServer
@@ -128,6 +131,10 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 			return nil, err
 		}
 	}
+
+	//
+	s.sqlDB = sqlserver.NewDBServer(s.db)
+
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Clock:           s.clock,
@@ -197,6 +204,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(statusKeyPrefix, s.status)
 
 	s.mux.HandleFunc(kv.DBPrefix, s.authenticateRequest(s.kvDB))
+	s.mux.HandleFunc(sqlwire.Endpoint, s.authenticateRequest(s.sqlDB))
 	s.mux.HandleFunc(ts.URLPrefix, s.authenticateRequest(s.tsServer))
 }
 
