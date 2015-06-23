@@ -2438,7 +2438,6 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 
 	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: pArgs, Reply: pReply}, true); err != nil {
-
 		t.Fatal(err)
 	}
 
@@ -2455,10 +2454,12 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
 	}
 
-	// Try 100 lookups with IgnoreIntents. Expect roughly 50/50.
+	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
 	rlArgs.IgnoreIntents = true
-	var origCount, newCount int
-	for i := 0; i < 100; i++ {
+	var origSeen, newSeen bool
+	const count = 100
+
+	for i := 0; i < count && !(origSeen && newSeen); i++ {
 		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.InternalRangeLookupRequest)
 		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 		rlReply.Reset()
@@ -2466,16 +2467,17 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		if err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: clonedRLArgs, Reply: rlReply}, true); err != nil {
 			t.Fatal(err)
 		}
-		if reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
-			origCount++
-		} else if reflect.DeepEqual(rlReply.Ranges[0], newDesc) {
-			newCount++
+		seen := rlReply.Ranges[0]
+		if reflect.DeepEqual(seen, origDesc) {
+			origSeen = true
+		} else if reflect.DeepEqual(seen, newDesc) {
+			newSeen = true
 		} else {
-			t.Errorf("expected orig/new descriptor %s/%s; got %s", &origDesc, &newDesc, &rlReply.Ranges[0])
+			t.Errorf("expected orig/new descriptor %s/%s; got %s", &origDesc, &newDesc, &seen)
 		}
 	}
-	if origCount > newCount+20 || origCount < newCount-20 {
-		t.Errorf("expected close to 50/50 counts; got %d/%d", origCount, newCount)
+	if !(origSeen && newSeen) {
+		t.Errorf("didn't see both descriptors after %d attempts", count)
 	}
 }
 
