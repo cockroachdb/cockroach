@@ -24,9 +24,11 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -102,12 +104,13 @@ func createArgsAndReply(method string) (proto.Request, proto.Response) {
 // A DBServer provides an HTTP server endpoint serving the key-value API.
 // It accepts either JSON or serialized protobuf content types.
 type DBServer struct {
-	sender client.Sender
+	context *base.Context
+	sender  client.Sender
 }
 
 // NewDBServer allocates and returns a new DBServer.
-func NewDBServer(sender client.Sender) *DBServer {
-	return &DBServer{sender: sender}
+func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
+	return &DBServer{context: ctx, sender: sender}
 }
 
 // ServeHTTP serves the key-value API by treating the request URL path
@@ -119,6 +122,13 @@ func NewDBServer(sender client.Sender) *DBServer {
 // present, in the same format as the request's incoming Content-Type
 // header.
 func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check TLS settings before anything else.
+	authenticationHook, err := security.AuthenticationHook(s.context.Insecure, r.TLS)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	method := r.URL.Path
 	if !strings.HasPrefix(method, DBPrefix) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -146,6 +156,12 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Verify the request for public API.
 	if err := verifyRequest(args); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check request user against client certificate user.
+	if err := authenticationHook(args); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 

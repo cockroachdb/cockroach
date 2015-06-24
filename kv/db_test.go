@@ -234,3 +234,35 @@ func TestKVDBTransaction(t *testing.T) {
 		t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 	}
 }
+
+// TestHTTPAuthentication tests authentication for the KV http endpoint.
+func TestHTTPAuthentication(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	// createTestClient creates a "root" client.
+	db := createTestClient(t, s.ServingAddr())
+
+	// We call Run() on the client which lets us build our own request,
+	// specifying the user.
+	arg := &proto.PutRequest{}
+	arg.Header().Key = proto.Key("a")
+	arg.Header().User = security.RootUser
+	reply := &proto.PutResponse{}
+	b := &client.Batch{}
+	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
+	err := db.Run(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Try again, but this time with arg.User = "foo".
+	arg.Header().User = "foo"
+	b = &client.Batch{}
+	b.InternalAddCall(proto.Call{Args: arg, Reply: reply})
+	err = db.Run(b)
+	if err == nil {
+		t.Fatal("Expected error!")
+	}
+}
