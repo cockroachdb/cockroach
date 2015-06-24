@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -349,9 +350,9 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	nodeStatuses := []NodeStatus{}
+	nodeStatuses := []status.NodeStatus{}
 	for _, row := range rows {
-		nodeStatus := &NodeStatus{}
+		nodeStatus := &status.NodeStatus{}
 		if err := row.ValueProto(nodeStatus); err != nil {
 			log.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -380,7 +381,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	}
 	key := keys.NodeStatusKey(int32(id))
 
-	nodeStatus := &NodeStatus{}
+	nodeStatus := &status.NodeStatus{}
 	if err := s.db.GetProto(key, nodeStatus); err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
