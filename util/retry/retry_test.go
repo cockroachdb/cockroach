@@ -19,6 +19,7 @@ package retry
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,10 +101,11 @@ func TestRetryReset(t *testing.T) {
 
 func TestRetryStop(t *testing.T) {
 	stopper := util.NewStopper()
+	var once sync.Once
 	// Create a retry loop which will never stop without stopper.
 	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 0, false, stopper}
 	if err := WithBackoff(opts, func() (Status, error) {
-		go stopper.Stop()
+		go once.Do(stopper.Stop)
 		return Continue, nil
 	}); err == nil {
 		t.Errorf("expected retry loop to exit from being stopped")
