@@ -655,14 +655,18 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 
 		var desc, descNext *proto.RangeDescriptor
 		err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-			var descErr error
+			var err error
 			// Get range descriptor (or, when spanning range, descriptors).
 			// sendAttempt below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			desc, descNext, descErr = ds.getDescriptors(call)
-			// If getDescriptors fails, we don't fish for retryable errors.
-			if descErr != nil {
-				return retry.Break, descErr
+			desc, descNext, err = ds.getDescriptors(call)
+			// getDescriptors may fail retryably if the first range isn't
+			// available via Gossip.
+			if err != nil {
+				if rErr, ok := err.(util.Retryable); ok && rErr.CanRetry() {
+					return retry.Continue, err
+				}
+				return retry.Break, err
 			}
 			// Truncate the request to our current range, making sure not to
 			// touch it unless we have to (it is illegal to send EndKey on
@@ -732,15 +736,11 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 
 		// In next iteration, query next range.
 		args.Header().Key = descNext.StartKey
-		log.Infof("starting next range: %s", descNext.StartKey)
-		log.Infof("desc: %s", desc)
-		log.Infof("descNext: %s", descNext)
 
 		// This is a multi-range request, make a new reply object for
 		// subsequent iterations of the loop.
 		curReply = args.CreateReply()
 	}
-	log.Infof("done with dist sender loop: %s", call.Method().String())
 	call.Reply = finalReply
 }
 

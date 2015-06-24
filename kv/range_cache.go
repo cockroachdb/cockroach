@@ -234,6 +234,12 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified key or descriptor.
 func (rmc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey proto.Key, desc *proto.RangeDescriptor) {
+	if desc.StartKey.Equal(desc.EndKey) { // True for some unittests.
+		return
+	}
+	// Clear out any descriptors which subsume the key which we're going
+	// to cache. For example, if an existing KeyMin->KeyMax descriptor
+	// should be cleared out in favor of a KeyMin->"m" descriptor.
 	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		desc := v.(*proto.RangeDescriptor)
@@ -248,11 +254,14 @@ func (rmc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 			rmc.rangeCache.Del(k.(rangeCacheKey))
 		}
 	}
+	// Also clear any descriptors which are subsumed by the one we're
+	// going to cache. This could happen on a merge (and also happens
+	// when there's a lot of concurrency). Iterate from StartKey.Next().
 	rmc.rangeCache.DoRange(func(k, v interface{}) {
 		if log.V(1) {
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*proto.RangeDescriptor))
 		}
 		rmc.rangeCache.Del(k.(rangeCacheKey))
-	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey)),
+	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey.Next())),
 		rangeCacheKey(keys.RangeMetaKey(desc.EndKey)))
 }

@@ -376,7 +376,9 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ctx := &DistSenderContext{
 		rpcSend: testFn,
 		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, _ lookupOptions) (_ []proto.RangeDescriptor, err error) {
-			err, errors = errors[0], errors[1:]
+			// Return next error and truncate the prefix of the errors array.
+			err = errors[0]
+			errors = errors[1:]
 			return []proto.RangeDescriptor{testRangeDescriptor}, err
 		}),
 	}

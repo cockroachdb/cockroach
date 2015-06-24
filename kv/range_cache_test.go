@@ -29,9 +29,9 @@ import (
 )
 
 type testDescriptorDB struct {
-	data     llrb.Tree
-	cache    *rangeDescriptorCache
-	hitCount int
+	data        llrb.Tree
+	cache       *rangeDescriptorCache
+	lookupCount int
 }
 
 type testDescriptorNode struct {
@@ -61,14 +61,14 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 		if response[i].EndKey.Equal(proto.KeyMax) {
 			break
 		}
-		key = proto.Key(response[i].EndKey).Next()
+		key = proto.Key(response[i].EndKey)
 	}
 	return response
 }
 
 func (db *testDescriptorDB) getRangeDescriptors(key proto.Key,
 	options lookupOptions) ([]proto.RangeDescriptor, error) {
-	db.hitCount++
+	db.lookupCount++
 	metadataKey := keys.RangeMetaKey(key)
 
 	var err error
@@ -114,18 +114,18 @@ func newTestDescriptorDB() *testDescriptorDB {
 	})
 	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
-			StartKey: keys.MetaMax,
+			StartKey: proto.KeyMin,
 			EndKey:   proto.KeyMax,
 		},
 	})
 	return db
 }
 
-func (db *testDescriptorDB) assertHitCount(t *testing.T, expected int) {
-	if db.hitCount != expected {
-		t.Errorf("Expected hit count to be %d, was %d", expected, db.hitCount)
+func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key string) {
+	if db.lookupCount != expected {
+		t.Errorf("Expected lookup count to be %d after %s, was %d", expected, key, db.lookupCount)
 	}
-	db.hitCount = 0
+	db.lookupCount = 0
 }
 
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDescriptor {
@@ -143,7 +143,7 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDe
 // TestRangeCache is a simple test which verifies that metadata ranges
 // are being cached and retrieved properly. It sets up a fake backing
 // store for the cache, and measures how often that backing store is
-// accessed when looking up metadata keys through the cache.
+// lookuped when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(proto.Key("test"))))
@@ -162,57 +162,57 @@ func TestRangeCache(t *testing.T) {
 	db.cache = newRangeDescriptorCache(db, 2<<10)
 
 	doLookup(t, db.cache, "aa")
-	db.assertHitCount(t, 2)
+	db.assertLookupCount(t, 2, "aa")
 
-	// Descriptors for the following ranges should be cached
+	// Descriptors for the following ranges should be cached.
 	doLookup(t, db.cache, "ab")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "ab")
 	doLookup(t, db.cache, "ba")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "ba")
 	doLookup(t, db.cache, "cz")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "cz")
 
-	// Metadata two ranges weren't cached, same metadata 1 range
+	// Metadata two ranges weren't cached, same metadata 1 range.
 	doLookup(t, db.cache, "d")
-	db.assertHitCount(t, 1)
+	db.assertLookupCount(t, 1, "d")
 	doLookup(t, db.cache, "fa")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "fa")
 
 	// Metadata two ranges weren't cached, metadata 1 was aggressively cached
 	doLookup(t, db.cache, "ij")
-	db.assertHitCount(t, 1)
+	db.assertLookupCount(t, 1, "ij")
 	doLookup(t, db.cache, "jk")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "jk")
 	doLookup(t, db.cache, "pn")
-	db.assertHitCount(t, 1)
+	db.assertLookupCount(t, 1, "pn")
 
 	// Totally uncached ranges
 	doLookup(t, db.cache, "vu")
-	db.assertHitCount(t, 2)
+	db.assertLookupCount(t, 2, "vu")
 	doLookup(t, db.cache, "xx")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "xx")
 
 	// Evict clears one level 1 and one level 2 cache
 	db.cache.EvictCachedRangeDescriptor(proto.Key("da"), nil)
 	doLookup(t, db.cache, "fa")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "fa")
 	doLookup(t, db.cache, "da")
-	db.assertHitCount(t, 2)
+	db.assertLookupCount(t, 2, "da")
 
 	// Looking up a descriptor that lands on an end-key should work
 	// without a cache miss.
 	doLookup(t, db.cache, "a")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "a")
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
 	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), &proto.RangeDescriptor{})
 	doLookup(t, db.cache, "cz")
-	db.assertHitCount(t, 0)
+	db.assertLookupCount(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
 	db.cache.EvictCachedRangeDescriptor(proto.Key("cz"), doLookup(t, db.cache, "cz"))
 	doLookup(t, db.cache, "cz")
-	db.assertHitCount(t, 2)
+	db.assertLookupCount(t, 2, "cz")
 
 }
