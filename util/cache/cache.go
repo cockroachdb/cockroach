@@ -327,6 +327,14 @@ func (oc *OrderedCache) Do(f func(k, v interface{})) {
 	})
 }
 
+// DoRange invokes f on all cache entries in the range of from -> to.
+func (oc *OrderedCache) DoRange(f func(k, v interface{}), from, to interface{}) {
+	oc.llrb.DoRange(func(e llrb.Comparable) (done bool) {
+		f(e.(*entry).key, e.(*entry).value)
+		return
+	}, &entry{key: from}, &entry{key: to})
+}
+
 // IntervalCache is a cache which supports querying of intervals which
 // match a key or range of keys. It is backed by an interval tree. See
 // comments in UnorderedCache for more details on cache functionality.

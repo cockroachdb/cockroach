@@ -141,9 +141,10 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
 		rangeKey := keys.RangeMetaKey(rs[i].EndKey)
-		if k, r := rmc.getCachedRangeDescriptorLocked(rangeKey, true); r != nil {
-			rmc.rangeCache.Del(k)
+		if log.V(1) {
+			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
+		rmc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
 		rmc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	if len(rs) == 0 {
@@ -168,7 +169,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 	rmc.rangeCacheMu.Lock()
 	defer rmc.rangeCacheMu.Unlock()
 
-	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey, false)
+	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey)
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
@@ -191,7 +192,7 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
 		descKey = keys.RangeMetaKey(descKey)
-		rngKey, cachedDesc = rmc.getCachedRangeDescriptorLocked(descKey, false)
+		rngKey, cachedDesc = rmc.getCachedRangeDescriptorLocked(descKey)
 	}
 }
 
@@ -203,21 +204,18 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	rmc.rangeCacheMu.RLock()
 	defer rmc.rangeCacheMu.RUnlock()
-	return rmc.getCachedRangeDescriptorLocked(key, false)
+	return rmc.getCachedRangeDescriptorLocked(key)
 }
 
 // getCachedRangeDescriptorLocked is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in the
 // cache. It is assumed that the caller holds a read lock on rmc.rangeCacheMu.
-func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, inclusive bool) (
+func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inclusive. If inclusive is false, we access the
 	// cache using key.Next().
-	if !inclusive {
-		key = key.Next()
-	}
-	metaKey := keys.RangeMetaKey(key)
+	metaKey := keys.RangeMetaKey(key.Next())
 
 	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
@@ -231,4 +229,30 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key, i
 		return nil, nil
 	}
 	return metaEndKey, rd
+}
+
+// clearOverlappingCachedRangeDescriptors looks up and clears any
+// cache entries which overlap the specified key or descriptor.
+func (rmc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey proto.Key, desc *proto.RangeDescriptor) {
+	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
+	if ok {
+		desc := v.(*proto.RangeDescriptor)
+		if log.V(1) {
+			log.Infof("considering overlapping descriptor: key=%s desc=%s", k, desc)
+		}
+		addrKey := keys.KeyAddress(key)
+		if !addrKey.Less(desc.StartKey) && !desc.EndKey.Less(addrKey) {
+			if log.V(1) {
+				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, desc)
+			}
+			rmc.rangeCache.Del(k.(rangeCacheKey))
+		}
+	}
+	rmc.rangeCache.DoRange(func(k, v interface{}) {
+		if log.V(1) {
+			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*proto.RangeDescriptor))
+		}
+		rmc.rangeCache.Del(k.(rangeCacheKey))
+	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey)),
+		rangeCacheKey(keys.RangeMetaKey(desc.EndKey)))
 }
