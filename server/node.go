@@ -250,7 +250,9 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
 
-	// Initialize publisher for Node Events.
+	// Initialize publisher for Node Events. This requires the NodeID, which is
+	// initialized by initStores(); because of this, some Store initialization
+	// events will precede the StartNodeEvent on the feed.
 	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
 	n.feed.StartNode(n.Descriptor, n.startedAt)
 

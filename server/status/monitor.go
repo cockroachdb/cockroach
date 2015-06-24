@@ -191,6 +191,8 @@ func (nsm *NodeStatusMonitor) OnReplicationStatus(event *storage.ReplicationStat
 // OnStartNode receives StartNodeEvents from a node event subscription. This
 // method is part of the implementation of NodeEventListener.
 func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
+	nsm.Lock()
+	defer nsm.Unlock()
 	nsm.startedAt = event.StartedAt
 	nsm.desc = event.Desc
 }
