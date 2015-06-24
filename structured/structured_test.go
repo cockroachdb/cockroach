@@ -165,3 +165,41 @@ func TestTableDescFromSchema(t *testing.T) {
 		}
 	}
 }
+
+func TestColumnTypeSQLString(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testData := []struct {
+		colType     ColumnType
+		expectedSQL string
+	}{
+		{ColumnType{Kind: ColumnType_BIT}, "BIT"},
+		{ColumnType{Kind: ColumnType_BIT, Width: 1}, "BIT(1)"},
+		{ColumnType{Kind: ColumnType_INT}, "INT"},
+		{ColumnType{Kind: ColumnType_INT, Width: 2}, "INT(2)"},
+		{ColumnType{Kind: ColumnType_FLOAT}, "FLOAT"},
+		{ColumnType{Kind: ColumnType_FLOAT, Width: 3}, "FLOAT(3)"},
+		{ColumnType{Kind: ColumnType_FLOAT, Width: 4, Precision: 5}, "FLOAT(4,5)"},
+		{ColumnType{Kind: ColumnType_DECIMAL}, "DECIMAL"},
+		{ColumnType{Kind: ColumnType_DECIMAL, Width: 6}, "DECIMAL(6)"},
+		{ColumnType{Kind: ColumnType_DECIMAL, Width: 7, Precision: 8}, "DECIMAL(7,8)"},
+		{ColumnType{Kind: ColumnType_DATE}, "DATE"},
+		{ColumnType{Kind: ColumnType_TIME}, "TIME"},
+		{ColumnType{Kind: ColumnType_DATETIME}, "DATETIME"},
+		{ColumnType{Kind: ColumnType_TIMESTAMP}, "TIMESTAMP"},
+		{ColumnType{Kind: ColumnType_CHAR}, "CHAR"},
+		{ColumnType{Kind: ColumnType_CHAR, Width: 10}, "CHAR(10)"},
+		{ColumnType{Kind: ColumnType_BINARY}, "BINARY"},
+		{ColumnType{Kind: ColumnType_BINARY, Width: 11}, "BINARY(11)"},
+		{ColumnType{Kind: ColumnType_TEXT}, "TEXT"},
+		{ColumnType{Kind: ColumnType_BLOB}, "BLOB"},
+		{ColumnType{Kind: ColumnType_ENUM, Vals: []string{"a"}}, "ENUM(a)"},
+		{ColumnType{Kind: ColumnType_SET, Vals: []string{"b", "c"}}, "SET(b,c)"},
+	}
+	for i, d := range testData {
+		sql := d.colType.SQLString()
+		if d.expectedSQL != sql {
+			t.Errorf("%d: expected %s, but got %s", i, d.expectedSQL, sql)
+		}
+	}
+}

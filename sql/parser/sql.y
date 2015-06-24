@@ -250,15 +250,15 @@ show_statement:
   {
     $$ = &ShowTables{Name: $3}
   }
-| tokShow tokIndex tokFrom sql_id
+| tokShow tokIndex tokFrom ddl_table_expression
   {
     $$ = &ShowIndex{Name: $4}
   }
-| tokShow tokColumns tokFrom sql_id
+| tokShow tokColumns tokFrom ddl_table_expression
   {
     $$ = &ShowColumns{Name: $4}
   }
-| tokShow tokFull tokColumns tokFrom sql_id
+| tokShow tokFull tokColumns tokFrom ddl_table_expression
   {
     $$ = &ShowColumns{Name: $5, Full: true}
   }

@@ -100,17 +100,38 @@ func (c *conn) query(stmt parser.Statement, args []driver.Value) (*rows, error) 
 		return c.Insert(p, args)
 	case *parser.Select:
 		return c.Select(p, args)
+	case *parser.ShowColumns:
+		return c.ShowColumns(p, args)
 	case *parser.ShowDatabases:
 		return c.ShowDatabases(p, args)
+	case *parser.ShowIndex:
+		return c.ShowIndex(p, args)
 	case *parser.ShowTables:
 		return c.ShowTables(p, args)
 	case *parser.Update:
 		return c.Update(p, args)
 	case *parser.Use:
 		return c.Use(p, args)
+
+	case *parser.AlterTable:
+	case *parser.AlterView:
+	case *parser.CreateIndex:
+	case *parser.CreateView:
+	case *parser.DropDatabase:
+	case *parser.DropIndex:
+	case *parser.DropTable:
+	case *parser.DropView:
+	case *parser.RenameTable:
+	case *parser.Set:
+	case *parser.TruncateTable:
+	case *parser.Union:
+		// Various unimplemented statements.
+
 	default:
-		return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", stmt, stmt)
+		return nil, fmt.Errorf("unknown statement type: %T", stmt)
 	}
+
+	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", stmt, stmt)
 }
 
 func (c *conn) CreateDatabase(p *parser.CreateDatabase, args []driver.Value) (*rows, error) {
@@ -140,14 +161,8 @@ func (c *conn) CreateDatabase(p *parser.CreateDatabase, args []driver.Value) (*r
 }
 
 func (c *conn) CreateTable(p *parser.CreateTable, args []driver.Value) (*rows, error) {
-	if p.Name.Qualifier == "" {
-		if c.database == "" {
-			return nil, fmt.Errorf("no database specified")
-		}
-		p.Name.Qualifier = c.database
-	}
-	if p.Name.Name == "" {
-		return nil, fmt.Errorf("empty table name: %s", p.Name.Name)
+	if err := c.normalizeTableName(p.Name); err != nil {
+		return nil, err
 	}
 
 	dbID, err := c.lookupDatabase(p.Name.Qualifier)
@@ -213,6 +228,32 @@ func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
 	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
+func (c *conn) ShowColumns(p *parser.ShowColumns, args []driver.Value) (*rows, error) {
+	desc, err := c.getTableDesc(p.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	schema := structured.TableSchemaFromDesc(*desc)
+
+	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
+	r := &rows{
+		columns: []string{"Field", "Type", "Null"},
+		rows:    make([]row, len(schema.Columns)),
+		pos:     -1,
+	}
+
+	for i, col := range schema.Columns {
+		t := make(row, len(r.columns))
+		t[0] = col.Name
+		t[1] = col.Type.SQLString()
+		t[2] = col.Nullable
+		r.rows[i] = t
+	}
+
+	return r, nil
+}
+
 func (c *conn) ShowDatabases(p *parser.ShowDatabases, args []driver.Value) (*rows, error) {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := c.db.Scan(prefix, prefix.PrefixEnd(), 0)
@@ -223,11 +264,35 @@ func (c *conn) ShowDatabases(p *parser.ShowDatabases, args []driver.Value) (*row
 	for i, row := range sr {
 		names[i] = string(bytes.TrimPrefix(row.Key, prefix))
 	}
-	return &rows{
-		columns: []string{"database"},
-		rows:    names,
+	return newSingleColumnRows("database", names), nil
+}
+
+func (c *conn) ShowIndex(p *parser.ShowIndex, args []driver.Value) (*rows, error) {
+	desc, err := c.getTableDesc(p.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	schema := structured.TableSchemaFromDesc(*desc)
+
+	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
+	r := &rows{
+		columns: []string{"Table", "Name", "Unique", "Seq", "Column"},
 		pos:     -1,
-	}, nil
+	}
+	for _, index := range schema.Indexes {
+		for j, col := range index.ColumnNames {
+			t := make(row, len(r.columns))
+			t[0] = p.Name.Name
+			t[1] = index.Name
+			t[2] = index.Unique
+			t[3] = j + 1
+			t[4] = col
+			r.rows = append(r.rows, t)
+		}
+	}
+
+	return r, nil
 }
 
 func (c *conn) ShowTables(p *parser.ShowTables, args []driver.Value) (*rows, error) {
@@ -250,11 +315,7 @@ func (c *conn) ShowTables(p *parser.ShowTables, args []driver.Value) (*rows, err
 	for i, row := range sr {
 		names[i] = string(bytes.TrimPrefix(row.Key, prefix))
 	}
-	return &rows{
-		columns: []string{"tables"},
-		rows:    names,
-		pos:     -1,
-	}, nil
+	return newSingleColumnRows("tables", names), nil
 }
 
 func (c *conn) Update(p *parser.Update, args []driver.Value) (*rows, error) {
@@ -264,6 +325,45 @@ func (c *conn) Update(p *parser.Update, args []driver.Value) (*rows, error) {
 func (c *conn) Use(p *parser.Use, args []driver.Value) (*rows, error) {
 	c.database = p.Name
 	return &rows{}, nil
+}
+
+func (c *conn) getTableDesc(name *parser.TableName) (*structured.TableDescriptor, error) {
+	if err := c.normalizeTableName(name); err != nil {
+		return nil, err
+	}
+	dbID, err := c.lookupDatabase(name.Qualifier)
+	if err != nil {
+		return nil, err
+	}
+	gr, err := c.db.Get(keys.MakeNameMetadataKey(dbID, name.Name))
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		return nil, fmt.Errorf("table \"%s\" does not exist", name)
+	}
+	descKey := gr.ValueBytes()
+	desc := structured.TableDescriptor{}
+	if err := c.db.GetProto(descKey, &desc); err != nil {
+		return nil, err
+	}
+	if err := structured.ValidateTableDesc(desc); err != nil {
+		return nil, err
+	}
+	return &desc, nil
+}
+
+func (c *conn) normalizeTableName(name *parser.TableName) error {
+	if name.Qualifier == "" {
+		if c.database == "" {
+			return fmt.Errorf("no database specified")
+		}
+		name.Qualifier = c.database
+	}
+	if name.Name == "" {
+		return fmt.Errorf("empty table name: %s", name.Name)
+	}
+	return nil
 }
 
 func (c *conn) lookupDatabase(name string) (uint32, error) {
