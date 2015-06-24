@@ -27,7 +27,7 @@ downloaded and installed which can be somewhat time consuming. Be patient.
 
 Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
 `go generate` requires the typescript transpiler `tsc`, which you can get from [typescript](http://www.typescriptlang.org/) or using `npm` with:
-`npm install -g typescript` 
+`npm install -g typescript`
 If you don't have npm, it comes with node. To get it via homebrew:
 `brew install node`
 
@@ -36,6 +36,10 @@ To add or update a dependency:
 - `glock save github.com/cockroachdb/cockroach` to update the GLOCKFILE
 - `make listdeps` and take the output of that and replace the dependancy list in build/devbase/godeps.sh
 - create a PR with all the changes
+
+To update all the dependencies:
+- make .bootstrap && make listdeps | xargs go get -u && glock save github.com/cockroachdb/cockroach && glock sync github.com/cockroachdb/cockroach && go generate ./... && make check test
+- create a PR with all the changes (if the above passed)
 
 ### Style guide
 We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.
