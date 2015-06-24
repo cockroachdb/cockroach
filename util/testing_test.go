@@ -83,7 +83,7 @@ func TestSucceedsWithin(t *testing.T) {
 
 	// Try a method which suceeds on 5th invocation.
 	count := 0
-	SucceedsWithin(t, 1*time.Millisecond, func() error {
+	SucceedsWithin(t, 10*time.Millisecond, func() error {
 		count++
 		if count >= 5 {
 			return nil

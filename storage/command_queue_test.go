@@ -166,8 +166,8 @@ func TestCommandQueueClear(t *testing.T) {
 	// Clear the queue and verify both commands are signaled.
 	cq.Clear()
 
-	if !testCmdDone(cmdDone1, 1*time.Millisecond) ||
-		!testCmdDone(cmdDone2, 1*time.Millisecond) {
+	if !testCmdDone(cmdDone1, 100*time.Millisecond) ||
+		!testCmdDone(cmdDone2, 100*time.Millisecond) {
 		t.Fatal("commands should finish when clearing queue")
 	}
 }
