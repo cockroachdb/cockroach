@@ -166,7 +166,7 @@ func (m *ColumnType) GetVals() []string {
 type Column struct {
 	Name             string     `protobuf:"bytes,1,opt,name=name" json:"name"`
 	Type             ColumnType `protobuf:"bytes,2,opt,name=type" json:"type"`
-	Nullable         *bool      `protobuf:"varint,3,opt,name=nullable" json:"nullable,omitempty"`
+	Nullable         bool       `protobuf:"varint,3,opt,name=nullable" json:"nullable"`
 	XXX_unrecognized []byte     `json:"-"`
 }
 
@@ -189,8 +189,8 @@ func (m *Column) GetType() ColumnType {
 }
 
 func (m *Column) GetNullable() bool {
-	if m != nil && m.Nullable != nil {
-		return *m.Nullable
+	if m != nil {
+		return m.Nullable
 	}
 	return false
 }
@@ -623,8 +623,7 @@ func (m *Column) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			b := bool(v != 0)
-			m.Nullable = &b
+			m.Nullable = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {
@@ -1316,9 +1315,7 @@ func (m *Column) Size() (n int) {
 	n += 1 + l + sovStructured(uint64(l))
 	l = m.Type.Size()
 	n += 1 + l + sovStructured(uint64(l))
-	if m.Nullable != nil {
-		n += 2
-	}
+	n += 2
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1542,16 +1539,14 @@ func (m *Column) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n1
-	if m.Nullable != nil {
-		data[i] = 0x18
-		i++
-		if *m.Nullable {
-			data[i] = 1
-		} else {
-			data[i] = 0
-		}
-		i++
+	data[i] = 0x18
+	i++
+	if m.Nullable {
+		data[i] = 1
+	} else {
+		data[i] = 0
 	}
+	i++
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
