@@ -189,7 +189,11 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 		// Create group, elect leader, then send ticks as we want them.
 		cluster.createGroup(1, 0, nc)
 		cluster.triggerElection(leaderIndex, 1)
-		cluster.waitForElection(leaderIndex)
+		for i := 0; i < nodeCount; i++ {
+			// Wait for the electon to resolve on all nodes, since fanout behavior
+			// is affected by a node's belief about who the leader is.
+			cluster.waitForElection(i)
+		}
 		cluster.tickers[leaderIndex+1].Tick() // Single tick for first follower.
 		for i := 0; i < ltc; i++ {
 			<-readyForTick
