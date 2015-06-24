@@ -192,3 +192,23 @@ func TableSchemaFromDesc(desc TableDescriptor) TableSchema {
 	}
 	return schema
 }
+
+// SQLString returns the SQL string corresponding to the type.
+func (c *ColumnType) SQLString() string {
+	switch c.Kind {
+	case ColumnType_BIT, ColumnType_INT, ColumnType_CHAR, ColumnType_BINARY:
+		if c.Width > 0 {
+			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
+		}
+	case ColumnType_FLOAT, ColumnType_DECIMAL:
+		if c.Width > 0 {
+			if c.Precision > 0 {
+				return fmt.Sprintf("%s(%d,%d)", c.Kind.String(), c.Width, c.Precision)
+			}
+			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
+		}
+	case ColumnType_ENUM, ColumnType_SET:
+		return fmt.Sprintf("%s(%s)", c.Kind.String(), strings.Join(c.Vals, ","))
+	}
+	return c.Kind.String()
+}

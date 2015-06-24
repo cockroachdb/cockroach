@@ -43,6 +43,33 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 	s.Stop()
 }
 
+func readAll(t *testing.T, rows *sql.Rows) [][]string {
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var results [][]string
+	results = append(results, cols)
+
+	for rows.Next() {
+		strs := make([]string, len(cols))
+		vals := make([]interface{}, len(cols))
+		for i := range vals {
+			vals[i] = &strs[i]
+		}
+		if err := rows.Scan(vals...); err != nil {
+			t.Fatal(err)
+		}
+		results = append(results, strs)
+	}
+
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	return results
+}
+
 func TestCreateDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setup(t)
@@ -85,7 +112,6 @@ func TestShowDatabases(t *testing.T) {
 			}
 			databases = append(databases, n)
 		}
-		_ = rows.Close()
 
 		expectedDatabases := names[:i+1]
 		if !reflect.DeepEqual(expectedDatabases, databases) {
@@ -152,7 +178,6 @@ func TestShowTables(t *testing.T) {
 			}
 			tables = append(tables, n)
 		}
-		_ = rows.Close()
 
 		expectedTables := names[:i+1]
 		if !reflect.DeepEqual(expectedTables, tables) {
@@ -171,9 +196,99 @@ func TestShowTables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = rows.Close()
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
-// TODO(pmattis)
-// func TestShowColumnsFromTable(t *testing.T) {
-// }
+func TestShowColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	const schema = `
+CREATE TABLE t.users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR
+)`
+
+	if _, err := db.Query("SHOW COLUMNS FROM t.users"); !isError(err, "database .* does not exist") {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SHOW COLUMNS FROM t.users"); !isError(err, "table .* does not exist") {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SHOW COLUMNS FROM users"); !isError(err, "no database specified") {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := db.Query("SHOW COLUMNS FROM t.users")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := readAll(t, rows)
+	expectedResults := [][]string{
+		{"Field", "Type", "Null"},
+		{"id", "INT", "true"},
+		{"name", "CHAR", "false"},
+		{"title", "CHAR", "true"},
+	}
+	if !reflect.DeepEqual(expectedResults, results) {
+		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	}
+}
+
+func TestShowIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	const schema = `
+CREATE TABLE t.users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
+)`
+
+	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "database .* does not exist") {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "table .* does not exist") {
+		t.Fatal(err)
+	}
+	if _, err := db.Query("SHOW INDEX FROM users"); !isError(err, "no database specified") {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := db.Query("SHOW INDEX FROM t.users")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := readAll(t, rows)
+	expectedResults := [][]string{
+		{"Table", "Name", "Unique", "Seq", "Column"},
+		{"users", "primary", "true", "1", "id"},
+		{"users", "foo", "false", "1", "name"},
+		{"users", "bar", "true", "1", "id"},
+		{"users", "bar", "true", "2", "name"},
+	}
+	if !reflect.DeepEqual(expectedResults, results) {
+		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	}
+}

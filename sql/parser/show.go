@@ -29,7 +29,7 @@ func (*ShowTables) statement()    {}
 
 // ShowColumns represents a SHOW [FULL] COLUMNS statement.
 type ShowColumns struct {
-	Name string
+	Name *TableName
 	Full bool
 }
 
@@ -53,7 +53,7 @@ func (node *ShowDatabases) String() string {
 
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
-	Name string
+	Name *TableName
 }
 
 func (node *ShowIndex) String() string {

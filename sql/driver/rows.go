@@ -22,12 +22,27 @@ import (
 	"io"
 )
 
+type row []driver.Value
+
 type rows struct {
 	columns []string
-	// TODO(pmattis): This is unfinished. Each row needs to have len(columns)
-	// entries.
-	rows []string
-	pos  int // Current iteration index into rows.
+	rows    []row
+	pos     int // Current iteration index into rows.
+}
+
+// newSingleColumnRows returns a rows structure initialized with a single
+// column of values using the specified column name and values. This is a
+// convenience routine used by operations which return only a single column.
+func newSingleColumnRows(column string, vals []string) *rows {
+	r := make([]row, len(vals))
+	for i, v := range vals {
+		r[i] = row{v}
+	}
+	return &rows{
+		columns: []string{column},
+		rows:    r,
+		pos:     -1,
+	}
 }
 
 func (r *rows) Columns() []string {
@@ -43,6 +58,8 @@ func (r *rows) Next(dest []driver.Value) error {
 	if r.pos >= len(r.rows) {
 		return io.EOF
 	}
-	dest[0] = r.rows[r.pos]
+	for i, v := range r.rows[r.pos] {
+		dest[i] = v
+	}
 	return nil
 }
