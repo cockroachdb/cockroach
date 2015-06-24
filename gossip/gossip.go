@@ -518,7 +518,6 @@ func (g *Gossip) maybeSignalStalledLocked() {
 		log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID)
 		g.signalStalled()
 	}
-	return
 }
 
 func (g *Gossip) signalStalled() {
@@ -526,7 +525,6 @@ func (g *Gossip) signalStalled() {
 	case g.stalled <- struct{}{}:
 	default:
 	}
-	return
 }
 
 // maybeWarnAboutInit looks for signs indicating a cluster which
