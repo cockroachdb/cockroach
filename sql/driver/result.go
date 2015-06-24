@@ -17,6 +17,8 @@
 
 package driver
 
+// TODO(pmattis): Currently unused, but will be needed when we support
+// LastInsertId.
 type result struct {
 	lastInsertID int64
 	rowsAffected int64

@@ -80,12 +80,12 @@ func (c *conn) Begin() (driver.Tx, error) {
 	return &tx{conn: c}, nil
 }
 
-func (c *conn) exec(stmt parser.Statement, args []driver.Value) (*result, error) {
+func (c *conn) exec(stmt parser.Statement, args []driver.Value) (driver.Result, error) {
 	rows, err := c.query(stmt, args)
 	if err != nil {
 		return nil, err
 	}
-	return &result{rowsAffected: int64(len(rows.rows))}, nil
+	return driver.RowsAffected(len(rows.rows)), nil
 }
 
 func (c *conn) query(stmt parser.Statement, args []driver.Value) (*rows, error) {
