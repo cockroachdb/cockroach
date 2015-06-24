@@ -140,17 +140,20 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDe
 	return r
 }
 
+func TestRangeCacheAssumptions(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(proto.Key("test"))))
+	if !bytes.Equal(expKeyMin, proto.KeyMin) {
+		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)
+	}
+}
+
 // TestRangeCache is a simple test which verifies that metadata ranges
 // are being cached and retrieved properly. It sets up a fake backing
 // store for the cache, and measures how often that backing store is
 // lookuped when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(proto.Key("test"))))
-	if !bytes.Equal(expKeyMin, proto.KeyMin) {
-		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)
-	}
-
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		db.splitRange(t, proto.Key(string(char)))
@@ -215,4 +218,47 @@ func TestRangeCache(t *testing.T) {
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 2, "cz")
 
+}
+
+// TestRangeCacheClearOverlapping verifies that existing, overlapping
+// cached entries are cleared when adding a new entry.
+func TestRangeCacheClearOverlapping(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	defDesc := &proto.RangeDescriptor{
+		StartKey: proto.KeyMin,
+		EndKey:   proto.KeyMax,
+	}
+
+	cache := newRangeDescriptorCache(nil, 2<<10)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
+
+	// Now, add a new, overlapping set of descriptors.
+	minToADesc := &proto.RangeDescriptor{
+		StartKey: proto.KeyMin,
+		EndKey:   proto.Key("b"),
+	}
+	aToMaxDesc := &proto.RangeDescriptor{
+		StartKey: proto.Key("b"),
+		EndKey:   proto.KeyMax,
+	}
+	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToADesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToADesc)
+	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != nil {
+		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
+	}
+	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), aToMaxDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), aToMaxDesc)
+	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != aToMaxDesc {
+		t.Errorf("expected descriptor %s; got %s", aToMaxDesc, desc)
+	}
+
+	// Add default descriptor back which should remove two split descriptors.
+	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), defDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
+	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
+		if _, desc := cache.getCachedRangeDescriptor(key); desc != defDesc {
+			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
+		}
+	}
 }

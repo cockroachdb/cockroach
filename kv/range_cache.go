@@ -81,15 +81,15 @@ func newRangeDescriptorCache(db rangeDescriptorDB, size int) *rangeDescriptorCac
 	}
 }
 
-func (rmc *rangeDescriptorCache) String() string {
-	rmc.rangeCacheMu.RLock()
-	defer rmc.rangeCacheMu.RUnlock()
-	return rmc.stringLocked()
+func (rdc *rangeDescriptorCache) String() string {
+	rdc.rangeCacheMu.RLock()
+	defer rdc.rangeCacheMu.RUnlock()
+	return rdc.stringLocked()
 }
 
-func (rmc *rangeDescriptorCache) stringLocked() string {
+func (rdc *rangeDescriptorCache) stringLocked() string {
 	var buf bytes.Buffer
-	rmc.rangeCache.Do(func(k, v interface{}) {
+	rdc.rangeCache.Do(func(k, v interface{}) {
 		fmt.Fprintf(&buf, "key=%s desc=%+v\n", proto.Key(k.(rangeCacheKey)), v)
 	})
 	return buf.String()
@@ -108,19 +108,19 @@ func (rmc *rangeDescriptorCache) stringLocked() string {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
+func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	options lookupOptions) (*proto.RangeDescriptor, error) {
-	if _, r := rmc.getCachedRangeDescriptor(key); r != nil {
+	if _, r := rdc.getCachedRangeDescriptor(key); r != nil {
 		return r, nil
 	}
 
 	if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	} else if log.V(2) {
-		log.Infof("lookup range descriptor: key=%s\n%s", key, rmc)
+		log.Infof("lookup range descriptor: key=%s\n%s", key, rdc)
 	}
 
-	rs, err := rmc.db.getRangeDescriptors(key, options)
+	rs, err := rdc.db.getRangeDescriptors(key, options)
 	if err != nil {
 		return nil, err
 	}
@@ -129,10 +129,10 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 	// Locking over the getRangeDescriptors call is even worse though, because
 	// that blocks the cache completely for the duration of a slow query to the
 	// cluster.
-	rmc.rangeCacheMu.Lock()
+	rdc.rangeCacheMu.Lock()
 	for i := range rs {
 		// Note: we append the end key of each range to meta[12] records
-		// so that calls to rmc.rangeCache.Ceil() for a key will return
+		// so that calls to rdc.rangeCache.Ceil() for a key will return
 		// the correct range. Using the start key would require using
 		// Floor() which is a possibility for our llrb-based OrderedCache
 		// but not possible for RocksDB.
@@ -144,13 +144,13 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 		if log.V(1) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
-		rmc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
-		rmc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
+		rdc.clearOverlappingCachedRangeDescriptors(rs[i].EndKey, rangeKey, &rs[i])
+		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	if len(rs) == 0 {
 		log.Fatalf("no range descriptors returned for %s", key)
 	}
-	rmc.rangeCacheMu.Unlock()
+	rdc.rangeCacheMu.Unlock()
 	return &rs[0], nil
 }
 
@@ -161,15 +161,15 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key,
 // seenDesc should always be passed in and is used as the basis of a
 // compare-and-evict (as pointers); if it is nil, eviction is unconditional
 // but a warning will be logged.
-func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, seenDesc *proto.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, seenDesc *proto.RangeDescriptor) {
 	if seenDesc == nil {
 		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
 	}
 
-	rmc.rangeCacheMu.Lock()
-	defer rmc.rangeCacheMu.Unlock()
+	rdc.rangeCacheMu.Lock()
+	defer rdc.rangeCacheMu.Unlock()
 
-	rngKey, cachedDesc := rmc.getCachedRangeDescriptorLocked(descKey)
+	rngKey, cachedDesc := rdc.getCachedRangeDescriptorLocked(descKey)
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
@@ -181,43 +181,43 @@ func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey proto.Key, s
 
 	for !bytes.Equal(descKey, proto.KeyMin) {
 		if log.V(2) {
-			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rmc.stringLocked())
+			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rdc.stringLocked())
 		}
 		if log.V(1) {
 			log.Infof("evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 		}
-		rmc.rangeCache.Del(rngKey)
+		rdc.rangeCache.Del(rngKey)
 
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
 		descKey = keys.RangeMetaKey(descKey)
-		rngKey, cachedDesc = rmc.getCachedRangeDescriptorLocked(descKey)
+		rngKey, cachedDesc = rdc.getCachedRangeDescriptorLocked(descKey)
 	}
 }
 
 // getCachedRangeDescriptor is a helper function to retrieve the descriptor of
 // the range which contains the given key, if present in the cache. It
-// acquires a read lock on rmc.rangeCacheMu before delegating to
+// acquires a read lock on rdc.rangeCacheMu before delegating to
 // getCachedRangeDescriptorLocked.
-func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
-	rmc.rangeCacheMu.RLock()
-	defer rmc.rangeCacheMu.RUnlock()
-	return rmc.getCachedRangeDescriptorLocked(key)
+	rdc.rangeCacheMu.RLock()
+	defer rdc.rangeCacheMu.RUnlock()
+	return rdc.getCachedRangeDescriptorLocked(key)
 }
 
 // getCachedRangeDescriptorLocked is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in the
-// cache. It is assumed that the caller holds a read lock on rmc.rangeCacheMu.
-func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
+// cache. It is assumed that the caller holds a read lock on rdc.rangeCacheMu.
+func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inclusive. If inclusive is false, we access the
 	// cache using key.Next().
 	metaKey := keys.RangeMetaKey(key.Next())
 
-	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
+	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
 		return nil, nil
 	}
@@ -233,35 +233,32 @@ func (rmc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key proto.Key) (
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified key or descriptor.
-func (rmc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey proto.Key, desc *proto.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, metaKey proto.Key, desc *proto.RangeDescriptor) {
 	if desc.StartKey.Equal(desc.EndKey) { // True for some unittests.
 		return
 	}
 	// Clear out any descriptors which subsume the key which we're going
 	// to cache. For example, if an existing KeyMin->KeyMax descriptor
 	// should be cleared out in favor of a KeyMin->"m" descriptor.
-	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
+	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
 		desc := v.(*proto.RangeDescriptor)
-		if log.V(1) {
-			log.Infof("considering overlapping descriptor: key=%s desc=%s", k, desc)
-		}
 		addrKey := keys.KeyAddress(key)
 		if !addrKey.Less(desc.StartKey) && !desc.EndKey.Less(addrKey) {
 			if log.V(1) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, desc)
 			}
-			rmc.rangeCache.Del(k.(rangeCacheKey))
+			rdc.rangeCache.Del(k.(rangeCacheKey))
 		}
 	}
 	// Also clear any descriptors which are subsumed by the one we're
 	// going to cache. This could happen on a merge (and also happens
 	// when there's a lot of concurrency). Iterate from StartKey.Next().
-	rmc.rangeCache.DoRange(func(k, v interface{}) {
+	rdc.rangeCache.DoRange(func(k, v interface{}) {
 		if log.V(1) {
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*proto.RangeDescriptor))
 		}
-		rmc.rangeCache.Del(k.(rangeCacheKey))
+		rdc.rangeCache.Del(k.(rangeCacheKey))
 	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey.Next())),
 		rangeCacheKey(keys.RangeMetaKey(desc.EndKey)))
 }
