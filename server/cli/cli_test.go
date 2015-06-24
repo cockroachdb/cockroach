@@ -59,9 +59,9 @@ func (c cliTest) Run(line string) {
 	args = append(args, a[1:]...)
 
 	fmt.Fprintf(os.Stderr, "%s\n", args)
-	fmt.Printf("%s\n", line)
+	fmt.Println(line)
 	if err := Run(args); err != nil {
-		fmt.Printf("%s\n", err)
+		fmt.Println(err)
 	}
 }
 
