@@ -42,7 +42,7 @@ var (
 )
 
 func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {
-	ctx := testutils.NewServerTestBaseContext()
+	ctx := testutils.NewNodeTestBaseContext()
 
 	httpServer := httptest.NewUnstartedServer(handler)
 	tlsConfig, err := ctx.GetServerTLSConfig()
@@ -87,7 +87,7 @@ func TestHTTPSenderSend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender, err := newHTTPSender(addr, testutils.NewTestBaseContext(), defaultRetryOptions)
+	sender, err := newHTTPSender(addr, testutils.NewRootTestBaseContext(), defaultRetryOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			w.Write(body)
 		}))
 
-		sender, err := newHTTPSender(addr, testutils.NewTestBaseContext(), retryOptions)
+		sender, err := newHTTPSender(addr, testutils.NewRootTestBaseContext(), retryOptions)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -207,7 +207,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		}))
 
 		s = server
-		sender, err := newHTTPSender(addr, testutils.NewTestBaseContext(), retryOptions)
+		sender, err := newHTTPSender(addr, testutils.NewRootTestBaseContext(), retryOptions)
 		if err != nil {
 			t.Fatal(err)
 		}

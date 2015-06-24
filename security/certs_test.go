@@ -115,7 +115,7 @@ func TestUseCerts(t *testing.T) {
 	defer s.Stop()
 
 	// Insecure mode.
-	clientContext := testutils.NewTestBaseContext()
+	clientContext := testutils.NewRootTestBaseContext()
 	clientContext.Insecure = true
 	httpClient, err := clientContext.GetHTTPClient()
 	if err != nil {
@@ -132,7 +132,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// Secure mode but no Certs directory: permissive config.
-	clientContext = testutils.NewTestBaseContext()
+	clientContext = testutils.NewRootTestBaseContext()
 	clientContext.Certs = ""
 	httpClient, err = clientContext.GetHTTPClient()
 	if err != nil {
@@ -167,7 +167,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewTestBaseContext()
+	clientContext = testutils.NewRootTestBaseContext()
 	clientContext.Certs = certsDir
 	httpClient, err = clientContext.GetHTTPClient()
 	if err != nil {

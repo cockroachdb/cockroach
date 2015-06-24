@@ -117,7 +117,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = util.NewStopper()
-	rpcContext := rpc.NewContext(testutils.NewTestBaseContext(), ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(testutils.NewRootTestBaseContext(), ltc.Clock, ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())

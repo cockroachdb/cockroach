@@ -28,22 +28,22 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// NewTestContext returns a rpc.Context for testing.
-// It is meant to be used by rpc clients.
-func NewTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
+// NewRootTestContext returns a rpc.Context for testing.
+// It is meant to be used by clients.
+func NewRootTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
-	return NewContext(testutils.NewTestBaseContext(), clock, stopper)
+	return NewContext(testutils.NewRootTestBaseContext(), clock, stopper)
 }
 
-// NewServerTestContext returns a rpc.Context for testing.
-// It is meant to be used by rpc servers.
-func NewServerTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
+// NewNodeTestContext returns a rpc.Context for testing.
+// It is meant to be used by nodes.
+func NewNodeTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
-	return NewContext(testutils.NewServerTestBaseContext(), clock, stopper)
+	return NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
 }
 
 func init() {

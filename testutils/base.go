@@ -24,30 +24,29 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 )
 
-// NewTestBaseContext creates a base context for testing.
+// NewRootTestBaseContext creates a base context for testing.
 // This uses embedded certs and the "root" user (default client user).
-// The certs file loader is overriden in individual main_test files.
-// This is meant to be used by external clients (as opposed to nodes).
-func NewTestBaseContext() *base.Context {
-	return &base.Context{
-		Certs: security.EmbeddedCertsDir,
-		User:  security.RootUser,
-	}
+// The "root" user has client certificates only.
+func NewRootTestBaseContext() *base.Context {
+	return newTestBaseContext(security.RootUser)
 }
 
-// NewServerTestBaseContext creates a base context for testing.
+// NewNodeTestBaseContext creates a base context for testing.
 // This uses embedded certs and the "node" user (default node user).
-// The certs file loader is overriden in individual main_test files.
-// This is meant to be used by nodes and node-clients (node-node requests).
-func NewServerTestBaseContext() *base.Context {
+// The "node" user has both server and client certificates.
+func NewNodeTestBaseContext() *base.Context {
+	return newTestBaseContext(security.NodeUser)
+}
+
+func newTestBaseContext(user string) *base.Context {
 	return &base.Context{
 		Certs: security.EmbeddedCertsDir,
-		User:  security.NodeUser,
+		User:  user,
 	}
 }
 
 // NewTestHTTPClient creates a HTTP client on the fly using a test context.
 // Useful when contexts don't need to be reused.
 func NewTestHTTPClient() (*http.Client, error) {
-	return NewTestBaseContext().GetHTTPClient()
+	return NewRootTestBaseContext().GetHTTPClient()
 }

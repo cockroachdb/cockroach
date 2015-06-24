@@ -119,7 +119,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.stopper = util.NewStopper()
 	}
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), tc.stopper)
+		rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if tc.manualClock == nil {

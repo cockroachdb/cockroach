@@ -52,14 +52,13 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 
 	stopper := util.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	serverContext := rpc.NewContext(serverTestBaseContext, ctx.Clock, stopper)
+	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, ctx.Clock, stopper)
 	ctx.ScanInterval = 10 * time.Hour
-	rpcServer := rpc.NewServer(addr, serverContext)
+	rpcServer := rpc.NewServer(addr, nodeRPCContext)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	rpcContext := rpc.NewContext(serverTestBaseContext, ctx.Clock, stopper)
-	g := gossip.New(rpcContext, testContext.GossipInterval, testContext.GossipBootstrapResolvers)
+	g := gossip.New(nodeRPCContext, testContext.GossipInterval, testContext.GossipBootstrapResolvers)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {

@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-var testBaseContext = testutils.NewTestBaseContext()
+var rootTestBaseContext = testutils.NewRootTestBaseContext()
 
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for closing the store on exit.
@@ -58,7 +58,7 @@ func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool, context *storage.StoreContext) (*storage.Store, *util.Stopper) {
 	stopper := util.NewStopper()
-	rpcContext := rpc.NewContext(testBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	if context == nil {
 		// make a copy
 		ctx := storage.TestStoreContext
@@ -135,7 +135,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clock = hlc.NewClock(m.manualClock.UnixNano)
 	}
 	if m.gossip == nil {
-		rpcContext := rpc.NewContext(testBaseContext, m.clock, nil)
+		rpcContext := rpc.NewContext(rootTestBaseContext, m.clock, nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if m.transport == nil {
