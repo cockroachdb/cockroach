@@ -19,14 +19,16 @@ package client_test
 
 import (
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
+
+var isError = testutils.IsError
 
 func makeTestSchema(name string) structured.TableSchema {
 	charType := structured.ColumnType{
@@ -46,17 +48,6 @@ func makeTestSchema(name string) structured.TableSchema {
 				ColumnNames: []string{"id"}},
 		},
 	}
-}
-
-func isError(err error, re string) bool {
-	if err == nil {
-		return false
-	}
-	matched, merr := regexp.MatchString(re, err.Error())
-	if merr != nil {
-		return false
-	}
-	return matched
 }
 
 func TestCreateNamespace(t *testing.T) {

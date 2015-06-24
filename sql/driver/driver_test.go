@@ -20,12 +20,14 @@ package driver
 import (
 	"database/sql"
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
+
+var isError = testutils.IsError
 
 func setup(t *testing.T) (*server.TestServer, *sql.DB) {
 	s := server.StartTestServer(nil)
@@ -39,17 +41,6 @@ func setup(t *testing.T) (*server.TestServer, *sql.DB) {
 func cleanup(s *server.TestServer, db *sql.DB) {
 	_ = db.Close()
 	s.Stop()
-}
-
-func isError(err error, re string) bool {
-	if err == nil {
-		return false
-	}
-	matched, merr := regexp.MatchString(re, err.Error())
-	if merr != nil {
-		return false
-	}
-	return matched
 }
 
 func TestCreateDatabase(t *testing.T) {
