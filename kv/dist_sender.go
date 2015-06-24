@@ -559,10 +559,10 @@ func (ds *DistSender) sendAttempt(desc *proto.RangeDescriptor, call proto.Call) 
 	return retry.Break, nil
 }
 
-// getDescriptors takes a call and looks up the corresponding range descriptors
-// associated to it. First, the range descriptor for call.Args.Key is looked up;
-// second, if call.Args.EndKey exceeds that of the returned descriptor, the
-// next descriptor is obtained as well.
+// getDescriptors takes a call and looks up the corresponding range
+// descriptors associated with it. First, the range descriptor for
+// call.Args.Key is looked up. If call.Args.EndKey exceeds that of the
+// returned descriptor, the next descriptor is obtained as well.
 func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
 	// If this is an InternalPushTxn, set ignoreIntents option as
 	// necessary. This prevents a potential infinite loop; see the
