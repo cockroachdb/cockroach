@@ -83,38 +83,54 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 }
 
 // setupMultipleRanges creates a test server and splits the
-// key range at key "b". Returns the test server and client.
+// key range at the given key. Returns the test server and client.
 // The caller is responsible for stopping the server and
 // closing the client.
-func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.DB) {
+func setupMultipleRanges(t *testing.T, splitAt string) (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.ServingAddr())
 
-	// Split the keyspace at "b".
-	if err := db.AdminSplit("b"); err != nil {
+	// Split the keyspace at the given key.
+	if err := db.AdminSplit(splitAt); err != nil {
 		t.Fatal(err)
 	}
 
 	return s, db
 }
 
-// TestMultiRangeScan verifies operation of a scan across ranges.
-func TestMultiRangeScan(t *testing.T) {
+// TestMultiRangeScan verifies that Scan, DeleteRange and ResolveIntentRange
+// work across ranges.
+func TestMultiRangeScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := setupMultipleRanges(t)
+	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
 
-	// Write keys "a" and "b".
-	for _, key := range []string{"a", "b"} {
+	// Write keys before, at, and after the split key.
+	for _, key := range []string{"a", "b", "c"} {
 		if err := db.Put(key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
-
-	if rows, err := db.Scan("a", "c", 0); err != nil {
-		t.Fatalf("unexpected error on scan: %s", err)
-	} else if l := len(rows); l != 2 {
-		t.Errorf("expected 2 rows; got %d", l)
+	// Scan to retrieve the keys just written.
+	if rows, err := db.Scan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on Scan: %s", err)
+	} else if l := len(rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+	// Delete the keys within a transaction. Implicitly, the intents are
+	// resolved via ResolveIntentRange upon completion.
+	if err := db.Txn(func(txn *client.Txn) error {
+		b := &client.Batch{}
+		b.DelRange("a", "d")
+		return txn.Commit(b)
+	}); err != nil {
+		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
+	}
+	// Scan consistently to make sure the intents are gone.
+	if rows, err := db.Scan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on Scan: %s", err)
+	} else if l := len(rows); l != 0 {
+		t.Errorf("expected 0 rows; got %d", l)
 	}
 }
 
@@ -123,10 +139,11 @@ func TestMultiRangeScan(t *testing.T) {
 // the clock local to the distributed sender.
 func TestMultiRangeScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := setupMultipleRanges(t)
+	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
 
-	// Write keys "a" and "b".
+	// Write keys "a" and "b", the latter of which is the first key in the
+	// second range.
 	keys := []string{"a", "b"}
 	ts := []time.Time{}
 	b := &client.Batch{}
