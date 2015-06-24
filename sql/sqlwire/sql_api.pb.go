@@ -185,7 +185,7 @@ func (m *Result) GetValues() []*Datum {
 	return nil
 }
 
-// A SQLRequest to cockroach. A transaction can consists of multiple
+// A SQLRequest to cockroach. A transaction can consist of multiple
 // SQLRequests.
 type SQLRequest struct {
 	// Request header.
@@ -233,14 +233,25 @@ func (m *SQLRequest_Cmd) GetParams() []*Datum {
 
 type SQLResponse struct {
 	SQLResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// The names of the columns returned in the result set in the order
+	// specified (when specified) in the SQL statement. The number of
+	// columns must equal the number of Datum in each Result.
+	Columns []string `protobuf:"bytes,2,rep,name=columns" json:"columns,omitempty"`
 	// The result set for the last Cmd in the request.
-	Results          []*Result `protobuf:"bytes,2,rep,name=results" json:"results,omitempty"`
+	Results          []*Result `protobuf:"bytes,3,rep,name=results" json:"results,omitempty"`
 	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *SQLResponse) Reset()         { *m = SQLResponse{} }
 func (m *SQLResponse) String() string { return proto.CompactTextString(m) }
 func (*SQLResponse) ProtoMessage()    {}
+
+func (m *SQLResponse) GetColumns() []string {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
 
 func (m *SQLResponse) GetResults() []*Result {
 	if m != nil {
@@ -905,6 +916,28 @@ func (m *SQLResponse) Unmarshal(data []byte) error {
 			index = postIndex
 		case 2:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, string(data[index:postIndex]))
+			index = postIndex
+		case 3:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Results", wireType)
 			}
 			var msglen int
@@ -1109,6 +1142,12 @@ func (m *SQLResponse) Size() (n int) {
 	_ = l
 	l = m.SQLResponseHeader.Size()
 	n += 1 + l + sovSqlApi(uint64(l))
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			l = len(s)
+			n += 1 + l + sovSqlApi(uint64(l))
+		}
+	}
 	if len(m.Results) > 0 {
 		for _, e := range m.Results {
 			l = e.Size()
@@ -1406,9 +1445,24 @@ func (m *SQLResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n4
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			data[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
 	if len(m.Results) > 0 {
 		for _, msg := range m.Results {
-			data[i] = 0x12
+			data[i] = 0x1a
 			i++
 			i = encodeVarintSqlApi(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
