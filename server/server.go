@@ -63,7 +63,7 @@ type Server struct {
 	gossip        *gossip.Gossip
 	db            *client.DB
 	kvDB          *kv.DBServer
-	sqlDB         *sqlserver.DBServer
+	sqlServer     *sqlserver.Server
 	node          *Node
 	admin         *adminServer
 	status        *statusServer
@@ -133,7 +133,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	}
 
 	//
-	s.sqlDB = sqlserver.NewDBServer(s.db)
+	s.sqlServer = sqlserver.NewServer(s.db)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -204,7 +204,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(statusKeyPrefix, s.status)
 
 	s.mux.HandleFunc(kv.DBPrefix, s.authenticateRequest(s.kvDB))
-	s.mux.HandleFunc(sqlwire.Endpoint, s.authenticateRequest(s.sqlDB))
+	s.mux.HandleFunc(sqlwire.Endpoint, s.authenticateRequest(s.sqlServer))
 	s.mux.HandleFunc(ts.URLPrefix, s.authenticateRequest(s.tsServer))
 }
 

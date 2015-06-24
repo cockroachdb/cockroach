@@ -18,6 +18,7 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -31,12 +32,14 @@ import (
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var testContext = NewTestContext()
@@ -456,5 +459,45 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			}
 		}
 		defer s.Stop()
+	}
+}
+
+func TestSQLServer(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+	baseURL := testContext.RequestScheme() + "://" + s.ServingAddr() + sqlwire.Endpoint
+	// sendURL sends a request to the server and returns a StatusCode
+	sendURL := func(t *testing.T, url string, body []byte) int {
+		httpClient, _ := testContext.GetHTTPClient()
+		req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
+		req.Header.Add(util.AcceptHeader, util.ProtoContentType)
+		req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	body, _ := gogoproto.Marshal(&sqlwire.SQLRequest{})
+	testCases := []struct {
+		command       string
+		body          []byte
+		expStatusCode int
+	}{
+		// Bad command.
+		{"Execu", []byte(""), http.StatusNotFound},
+		// Request with garbage payload.
+		{"Execute", []byte("garbage"), http.StatusBadRequest},
+		// Valid request.
+		{"Execute", body, http.StatusNotImplemented},
+	}
+	for _, test := range testCases {
+		statusCode := sendURL(t, baseURL+test.command, test.body)
+		if statusCode != test.expStatusCode {
+			t.Fatalf("Expected status: %d, received status %d", test.expStatusCode, statusCode)
+		}
 	}
 }

@@ -45,8 +45,8 @@ type Response interface {
 }
 
 // Header returns the request header.
-func (r *SQLRequest) Header() *SQLRequestHeader {
-	return r.Header()
+func (r *SQLRequestHeader) Header() *SQLRequestHeader {
+	return r
 }
 
 // Method returns the method.
@@ -60,6 +60,6 @@ func (*SQLRequest) CreateReply() Response {
 }
 
 // Header returns the response header.
-func (r *SQLResponse) Header() *SQLResponseHeader {
-	return r.Header()
+func (r *SQLResponseHeader) Header() *SQLResponseHeader {
+	return r
 }

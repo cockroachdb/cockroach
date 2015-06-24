@@ -30,7 +30,7 @@ import (
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 
-var allPublicMethods = map[string]sqlwire.Method{
+var allMethods = map[string]sqlwire.Method{
 	sqlwire.Execute.String(): sqlwire.Execute,
 }
 
@@ -38,9 +38,9 @@ var allPublicMethods = map[string]sqlwire.Method{
 // according to the specified method. Note that createArgsAndReply
 // only knows about public methods and explicitly returns nil for
 // internal methods. Do not change this behavior without also fixing
-// DBServer.ServeHTTP.
+// Server.ServeHTTP.
 func createArgsAndReply(method string) (sqlwire.Request, sqlwire.Response) {
-	if m, ok := allPublicMethods[method]; ok {
+	if m, ok := allMethods[method]; ok {
 		switch m {
 		case sqlwire.Execute:
 			return &sqlwire.SQLRequest{}, &sqlwire.SQLResponse{}
@@ -49,15 +49,15 @@ func createArgsAndReply(method string) (sqlwire.Request, sqlwire.Response) {
 	return nil, nil
 }
 
-// A DBServer provides an HTTP server endpoint serving the SQL API.
+// A Server provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.
-type DBServer struct {
+type Server struct {
 	clientDB *client.DB
 }
 
-// NewDBServer allocates and returns a new DBServer.
-func NewDBServer(db *client.DB) *DBServer {
-	return &DBServer{clientDB: db}
+// NewServer allocates and returns a new Server.
+func NewServer(db *client.DB) *Server {
+	return &Server{clientDB: db}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path
@@ -68,7 +68,7 @@ func NewDBServer(db *client.DB) *DBServer {
 // encoded according to the request's Accept header, or if not
 // present, in the same format as the request's incoming Content-Type
 // header.
-func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	method := r.URL.Path
 	if !strings.HasPrefix(method, sqlwire.Endpoint) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -109,6 +109,6 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func (s *DBServer) execute(args sqlwire.Request, reply sqlwire.Response) (int, error) {
+func (s *Server) execute(args sqlwire.Request, reply sqlwire.Response) (int, error) {
 	return http.StatusNotImplemented, errors.New("Not implemented")
 }
