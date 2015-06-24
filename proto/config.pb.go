@@ -24,9 +24,8 @@ type Attributes struct {
 	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *Attributes) Reset()         { *m = Attributes{} }
-func (m *Attributes) String() string { return proto1.CompactTextString(m) }
-func (*Attributes) ProtoMessage()    {}
+func (m *Attributes) Reset()      { *m = Attributes{} }
+func (*Attributes) ProtoMessage() {}
 
 func (m *Attributes) GetAttrs() []string {
 	if m != nil {

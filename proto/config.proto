@@ -29,6 +29,8 @@ option (gogoproto.unmarshaler_all) = true;
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 message Attributes {
+  option (gogoproto.goproto_stringer) = false;
+
   repeated string attrs = 1 [(gogoproto.moretags) = "yaml:\"attrs,flow\""];
 }
 

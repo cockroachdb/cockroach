@@ -86,17 +86,26 @@ func (a Attributes) IsSubset(b Attributes) bool {
 	return true
 }
 
+func (a Attributes) uniqueAttrs() []string {
+	var attrs []string
+	m := map[string]struct{}{}
+	for _, s := range a.Attrs {
+		if _, ok := m[s]; !ok {
+			m[s] = struct{}{}
+			attrs = append(attrs, s)
+		}
+	}
+	return attrs
+}
+
+func (a Attributes) String() string {
+	return strings.Join(a.uniqueAttrs(), ",")
+}
+
 // SortedString returns a sorted, de-duplicated, comma-separated list
 // of the attributes.
 func (a Attributes) SortedString() string {
-	m := map[string]struct{}{}
-	for _, s := range a.Attrs {
-		m[s] = struct{}{}
-	}
-	var attrs []string
-	for a := range m {
-		attrs = append(attrs, a)
-	}
+	attrs := a.uniqueAttrs()
 	sort.Strings(attrs)
 	return strings.Join(attrs, ",")
 }

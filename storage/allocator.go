@@ -200,8 +200,10 @@ func (a *allocator) allocateTargetInternal(required proto.Attributes, existing [
 		if leastStore != nil {
 			return leastStore, nil
 		}
-		if len(attrs) == 0 || !relaxConstraints {
-			return nil, util.Errorf("unable to allocate a target store for %s", required)
+		if len(attrs) == 0 {
+			return nil, util.Errorf("unable to allocate a target store; no candidates available")
+		} else if !relaxConstraints {
+			return nil, util.Errorf("unable to allocate a target store; no candidates available with attributes %s", required)
 		}
 	}
 }
