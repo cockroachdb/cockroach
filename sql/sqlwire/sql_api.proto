@@ -77,7 +77,7 @@ message Result {
   repeated Datum values = 1;
 }
 
-// A SQLRequest to cockroach. A transaction can consists of multiple
+// A SQLRequest to cockroach. A transaction can consist of multiple
 // SQLRequests.
 message SQLRequest {
   // Request header.
@@ -93,6 +93,10 @@ message SQLRequest {
 
 message SQLResponse {
   optional SQLResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The names of the columns returned in the result set in the order
+  // specified (when specified) in the SQL statement. The number of
+  // columns must equal the number of Datum in each Result.
+  repeated string columns = 2;
   // The result set for the last Cmd in the request.
-  repeated Result results = 2;
+  repeated Result results = 3;
 }
