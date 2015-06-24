@@ -46,9 +46,9 @@ func (node *CreateDatabase) String() string {
 
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
-	Name      string
-	TableName string
-	Unique    bool
+	Name   string
+	Table  *TableName
+	Unique bool
 }
 
 func (node *CreateIndex) String() string {
@@ -57,7 +57,7 @@ func (node *CreateIndex) String() string {
 	if node.Unique {
 		buf.WriteString("UNIQUE ")
 	}
-	fmt.Fprintf(&buf, "INDEX %s ON %s", node.Name, node.TableName)
+	fmt.Fprintf(&buf, "INDEX %s ON %s", node.Name, node.Table)
 	return buf.String()
 }
 
@@ -149,7 +149,7 @@ func (node *IndexTableDef) String() string {
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists bool
-	Name        *TableName
+	Table       *TableName
 	Defs        TableDefs
 }
 
@@ -159,7 +159,7 @@ func (node *CreateTable) String() string {
 	if node.IfNotExists {
 		buf.WriteString(" IF NOT EXISTS")
 	}
-	fmt.Fprintf(&buf, " %s (%s)", node.Name, node.Defs)
+	fmt.Fprintf(&buf, " %s (%s)", node.Table, node.Defs)
 	return buf.String()
 }
 

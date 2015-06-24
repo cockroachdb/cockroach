@@ -29,8 +29,8 @@ func (*ShowTables) statement()    {}
 
 // ShowColumns represents a SHOW [FULL] COLUMNS statement.
 type ShowColumns struct {
-	Name *TableName
-	Full bool
+	Table *TableName
+	Full  bool
 }
 
 func (node *ShowColumns) String() string {
@@ -39,7 +39,7 @@ func (node *ShowColumns) String() string {
 	if node.Full {
 		buf.WriteString("FULL ")
 	}
-	fmt.Fprintf(&buf, "COLUMNS FROM %s", node.Name)
+	fmt.Fprintf(&buf, "COLUMNS FROM %s", node.Table)
 	return buf.String()
 }
 
@@ -53,11 +53,11 @@ func (node *ShowDatabases) String() string {
 
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
-	Name *TableName
+	Table *TableName
 }
 
 func (node *ShowIndex) String() string {
-	return fmt.Sprintf("SHOW INDEX FROM %s", node.Name)
+	return fmt.Sprintf("SHOW INDEX FROM %s", node.Table)
 }
 
 // ShowTables represents a SHOW TABLES statement.

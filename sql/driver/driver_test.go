@@ -292,3 +292,52 @@ CREATE TABLE t.users (
 		t.Fatalf("expected %s, but got %s", expectedResults, results)
 	}
 }
+
+func TestInsert(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	schema := `
+CREATE TABLE t.kv (
+  k CHAR PRIMARY KEY,
+  v CHAR
+)`
+
+	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ("a", "b")`); !isError(err, "table .* does not exist") {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ("a")`); !isError(err, "invalid values for columns") {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv (v) VALUES ("a")`); !isError(err, "missing .* primary key column") {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv (k,v) VALUES ("a", "b"), ("c", "d")`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ("e", "f")`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := db.Query("SELECT * FROM t.kv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := readAll(t, rows)
+	expectedResults := [][]string{
+		{"k", "v"},
+		{"a", "b"},
+		{"c", "d"},
+		{"e", "f"},
+	}
+	if !reflect.DeepEqual(expectedResults, results) {
+		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	}
+}

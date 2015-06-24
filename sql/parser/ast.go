@@ -620,19 +620,6 @@ func (node BytesVal) String() string {
 	return string(encodeSQLBytes(scratch[0:0], []byte(node)))
 }
 
-// ErrVal represents an error condition that occurred while
-// constructing a tree.
-type ErrVal struct {
-	Err error
-}
-
-func (ErrVal) expr()    {}
-func (ErrVal) valExpr() {}
-
-func (v ErrVal) String() string {
-	return fmt.Sprintf("<ERROR: %s>", v.Err)
-}
-
 // NumVal represents a number.
 type NumVal string
 

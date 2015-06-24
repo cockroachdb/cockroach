@@ -252,25 +252,25 @@ show_statement:
   }
 | tokShow tokIndex tokFrom ddl_table_expression
   {
-    $$ = &ShowIndex{Name: $4}
+    $$ = &ShowIndex{Table: $4}
   }
 | tokShow tokColumns tokFrom ddl_table_expression
   {
-    $$ = &ShowColumns{Name: $4}
+    $$ = &ShowColumns{Table: $4}
   }
 | tokShow tokFull tokColumns tokFrom ddl_table_expression
   {
-    $$ = &ShowColumns{Name: $5, Full: true}
+    $$ = &ShowColumns{Table: $5, Full: true}
   }
 
 create_statement:
   tokCreate tokTable if_not_exists_opt ddl_table_expression '(' table_def_list ')' force_eof
   {
-    $$ = &CreateTable{IfNotExists: $3, Name: $4, Defs: $6}
+    $$ = &CreateTable{IfNotExists: $3, Table: $4, Defs: $6}
   }
-| tokCreate unique_opt tokIndex sql_id using_opt tokOn sql_id force_eof
+| tokCreate unique_opt tokIndex sql_id using_opt tokOn ddl_table_expression force_eof
   {
-    $$ = &CreateIndex{Name: $4, TableName: $7, Unique: $2}
+    $$ = &CreateIndex{Name: $4, Table: $7, Unique: $2}
   }
 | tokCreate tokView sql_id force_eof
   {
