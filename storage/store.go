@@ -1372,7 +1372,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 
 	// We pushed the transaction(s) successfully, so resolve the intent(s).
 	for i, intent := range wiErr.Intents {
-		pushReply := bReply.Responses[i].GetValue().(*proto.InternalPushTxnResponse)
+		pushReply := bReply.Responses[i].InternalPushTxn
 		resolveArgs := &proto.InternalResolveIntentRequest{
 			RequestHeader: proto.RequestHeader{
 				// Use the pushee's timestamp, which might be lower than the

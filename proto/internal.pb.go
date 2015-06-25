@@ -312,7 +312,7 @@ func (m *InternalPushTxnRequest) GetRangeLookup() bool {
 // otherwise.
 type InternalPushTxnResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// Txn is non-nil if the transaction could be heartbeat and contains
+	// pushee_txn is non-nil if the transaction was pushed and contains
 	// the current value of the transaction.
 	PusheeTxn        *Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn,omitempty"`
 	XXX_unrecognized []byte       `json:"-"`
