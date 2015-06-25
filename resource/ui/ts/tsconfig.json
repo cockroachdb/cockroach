@@ -1,38 +1,34 @@
 {
-    "version": "1.4.1",
-    "compilerOptions": {
-        "target": "ES5",
-        "module": "commonjs",
-        "declaration": false,
-        "noImplicitAny": false,
-        "noEmitOnError": true,
-        "removeComments": true,
-        "noLib": false,
-        "out": "./ui/js/app.js",
-        "sourceMap": false
-    },
-    "files": [
-        "./header.ts",
-        "./app.ts",
-
-        "./components/metrics.ts",
-        "./components/select.ts",
-
-        "./models/log.ts",
-        "./models/proto.ts",
-        "./models/stats.ts",
-        "./models/status.ts",
-        "./models/metrics.ts",
-
-        "./pages/graph.ts",
-        "./pages/log.ts",
-        "./pages/monitor.ts",
-        "./pages/nodes.ts",
-        "./pages/stores.ts",
-
-        "./util/chainprop.ts",
-        "./util/convert.ts",
-        "./util/format.ts",
-        "./util/querycache.ts"
-    ]
+  "version": "1.4.1",
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "commonjs",
+    "declaration": false,
+    "noImplicitAny": false,
+    "noEmitOnError": true,
+    "removeComments": true,
+    "noLib": false,
+    "out": "./ui/js/app.js",
+    "sourceMap": false
+  },
+  "files": [
+    "./header.ts",
+    "./app.ts",
+    "./components/metrics.ts",
+    "./components/select.ts",
+    "./models/log.ts",
+    "./models/proto.ts",
+    "./models/stats.ts",
+    "./models/status.ts",
+    "./models/metrics.ts",
+    "./pages/graph.ts",
+    "./pages/log.ts",
+    "./pages/monitor.ts",
+    "./pages/nodes.ts",
+    "./pages/stores.ts",
+    "./util/chainprop.ts",
+    "./util/convert.ts",
+    "./util/format.ts",
+    "./util/querycache.ts"
+  ]
 }
