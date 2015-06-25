@@ -27,7 +27,7 @@ type row []driver.Value
 type rows struct {
 	columns []string
 	rows    []row
-	pos     int // Current iteration index into rows.
+	pos     int // Next iteration index into rows.
 }
 
 // newSingleColumnRows returns a rows structure initialized with a single
@@ -41,7 +41,6 @@ func newSingleColumnRows(column string, vals []string) *rows {
 	return &rows{
 		columns: []string{column},
 		rows:    r,
-		pos:     -1,
 	}
 }
 
@@ -54,12 +53,12 @@ func (r *rows) Close() error {
 }
 
 func (r *rows) Next(dest []driver.Value) error {
-	r.pos++
 	if r.pos >= len(r.rows) {
 		return io.EOF
 	}
 	for i, v := range r.rows[r.pos] {
 		dest[i] = v
 	}
+	r.pos++
 	return nil
 }
