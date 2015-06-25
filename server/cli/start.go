@@ -19,6 +19,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -214,6 +215,8 @@ completed, the server exits.
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) {
 	if err := server.SendQuit(Context); err != nil {
-		log.Error(err)
+		fmt.Fprintf(osStderr, "quit failed: %s\n", err)
+		osExit(1)
+		return
 	}
 }
