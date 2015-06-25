@@ -33,6 +33,10 @@ import (
 // RangeCache.
 type rangeCacheKey proto.Key
 
+func (a rangeCacheKey) String() string {
+	return proto.Key(a).String()
+}
+
 // Compare implements the llrb.Comparable interface for rangeCacheKey, so that
 // it can be used as a key for util.OrderedCache.
 func (a rangeCacheKey) Compare(b llrb.Comparable) int {
