@@ -301,11 +301,25 @@ func TestSlowStorage(t *testing.T) {
 
 	// After unblocking the third node, it will catch up.
 	cluster.storages[2].Unblock()
-	cluster.tickers[0].Tick()
 	log.Infof("waiting for event to be commited on node 2")
-	commit := <-cluster.events[2].CommandCommitted
-	if string(commit.Command) != "command" {
-		t.Errorf("unexpected value in committed command: %v", commit.Command)
+	// When we unblock, the backlog is not guaranteed to be processed in order,
+	// and in some cases the leader may need to retransmit some messages.
+	for i := 0; i < 3; i++ {
+		select {
+		case commit := <-cluster.events[2].CommandCommitted:
+			if string(commit.Command) != "command" {
+				t.Errorf("unexpected value in committed command: %v", commit.Command)
+			}
+			return
+
+		case <-time.After(5 * time.Millisecond):
+			// Tick both node's clocks. The ticks on the follower node don't
+			// really do anything, but they do ensure that that goroutine is
+			// getting scheduled (and the real-time delay allows rpc responses
+			// to pass between the nodes)
+			cluster.tickers[0].Tick()
+			cluster.tickers[2].Tick()
+		}
 	}
 }
 
