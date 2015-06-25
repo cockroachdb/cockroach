@@ -83,6 +83,18 @@ test:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -cpu $(CPUS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
+.PHONY: testslow
+testslow: TESTFLAGS += -v
+testslow:
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -cpu $(CPUS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+
+.PHONY: testraceslow
+testraceslow: TESTFLAGS += -v
+testraceslow:
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) -cpu $(CPUS) $(PKG) -timeout $(RACETIMEOUT) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
 # "make build", and so they would be built from scratch every time (including the
