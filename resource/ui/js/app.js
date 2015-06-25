@@ -1139,18 +1139,17 @@ var AdminViews;
                 return new Controller();
             }
             NodesPage.controller = controller;
-            function _singleNodeView(nodeId) {
-                var desc = nodeStatuses.GetDesc(nodeId);
-                return m("li", { key: desc.node_id }, m("div", [
-                    m.trust("&nbsp;&bull;&nbsp;"),
-                    m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
-                    " with Address:" + desc.address.network + "-" + desc.address.address
-                ]));
-            }
             function view(ctrl) {
                 return m("div", [
                     m("h2", "Nodes List"),
-                    m("ul", [nodeStatuses.GetNodeIds().map(_singleNodeView)]),
+                    m("ul", [nodeStatuses.GetNodeIds().map(function (nodeId) {
+                            var desc = nodeStatuses.GetDesc(nodeId);
+                            return m("li", { key: desc.node_id }, m("div", [
+                                m.trust("&nbsp;&bull;&nbsp;"),
+                                m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
+                                " with Address:" + desc.address.network + "-" + desc.address.address
+                            ]));
+                        })]),
                     nodeStatuses.AllDetails()
                 ]);
             }
@@ -1249,20 +1248,19 @@ var AdminViews;
                 return new Controller();
             }
             StoresPage.controller = controller;
-            function _singleStoreView(storeId) {
-                var desc = storeStatuses.GetDesc(storeId);
-                return m("li", { key: desc.store_id }, m("div", [
-                    m.trust("&nbsp;&bull;&nbsp;"),
-                    m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
-                    " on ",
-                    m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
-                    " with Address:" + desc.node.address.network + "-" + desc.node.address.address
-                ]));
-            }
             function view(ctrl) {
                 return m("div", [
                     m("h2", "Nodes List"),
-                    m("ul", [storeStatuses.GetStoreIds().map(_singleStoreView)]),
+                    m("ul", [storeStatuses.GetStoreIds().map(function (storeId) {
+                            var desc = storeStatuses.GetDesc(storeId);
+                            return m("li", { key: desc.store_id }, m("div", [
+                                m.trust("&nbsp;&bull;&nbsp;"),
+                                m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
+                                " on ",
+                                m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
+                                " with Address:" + desc.node.address.network + "-" + desc.node.address.address
+                            ]));
+                        })]),
                     storeStatuses.AllDetails()
                 ]);
             }

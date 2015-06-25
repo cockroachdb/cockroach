@@ -49,21 +49,19 @@ module AdminViews {
         return new Controller();
       }
 
-      function _singleStoreView(storeId: string): _mithril.MithrilVirtualElement {
-        let desc: Models.Proto.StoreDescriptor = storeStatuses.GetDesc(storeId);
-        return m("li", { key: desc.store_id }, m("div", [
-          m.trust("&nbsp;&bull;&nbsp;"),
-          m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
-          " on ",
-          m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
-          " with Address:" + desc.node.address.network + "-" + desc.node.address.address
-        ]));
-      }
-
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         return m("div", [
           m("h2", "Nodes List"),
-          m("ul", [storeStatuses.GetStoreIds().map(_singleStoreView)]),
+          m("ul", [storeStatuses.GetStoreIds().map((storeId: string): _mithril.MithrilVirtualElement => {
+            let desc: Models.Proto.StoreDescriptor = storeStatuses.GetDesc(storeId);
+            return m("li", { key: desc.store_id }, m("div", [
+              m.trust("&nbsp;&bull;&nbsp;"),
+              m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
+              " on ",
+              m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
+              " with Address:" + desc.node.address.network + "-" + desc.node.address.address
+            ]));
+          })]),
           storeStatuses.AllDetails()
         ]);
       }

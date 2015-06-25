@@ -49,19 +49,17 @@ module AdminViews {
         return new Controller();
       }
 
-      function _singleNodeView(nodeId: string): _mithril.MithrilVirtualElement {
-        let desc: Models.Proto.NodeDescriptor = nodeStatuses.GetDesc(nodeId);
-        return m("li", { key: desc.node_id }, m("div", [
-          m.trust("&nbsp;&bull;&nbsp;"),
-          m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
-          " with Address:" + desc.address.network + "-" + desc.address.address
-        ]));
-      }
-
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         return m("div", [
           m("h2", "Nodes List"),
-          m("ul", [nodeStatuses.GetNodeIds().map(_singleNodeView)]),
+          m("ul", [nodeStatuses.GetNodeIds().map((nodeId: string): _mithril.MithrilVirtualElement => {
+            let desc: Models.Proto.NodeDescriptor = nodeStatuses.GetDesc(nodeId);
+            return m("li", { key: desc.node_id }, m("div", [
+              m.trust("&nbsp;&bull;&nbsp;"),
+              m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
+              " with Address:" + desc.address.network + "-" + desc.address.address
+            ]));
+          })]),
           nodeStatuses.AllDetails()
         ]);
       }
