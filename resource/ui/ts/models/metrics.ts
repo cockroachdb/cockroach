@@ -122,7 +122,7 @@ module Models {
        */
       class AvgSelector implements Selector {
         constructor(private seriesName: string) { }
-        title: Utils.ChainProperty<string, AvgSelector> = Utils.chainProp(this, this.seriesName);
+        title: Utils.ChainProperty<string, AvgSelector> = Utils.ChainProp(this, this.seriesName);
         series: () => string = () => { return this.seriesName; };
         request: () => Proto.QueryRequest = (): Proto.QueryRequest => {
           return {
@@ -138,7 +138,7 @@ module Models {
        */
       class AvgRateSelector implements Selector {
         constructor(private seriesName: string) { }
-        title: Utils.ChainProperty<string, AvgRateSelector> = Utils.chainProp(this, this.seriesName);
+        title: Utils.ChainProperty<string, AvgRateSelector> = Utils.ChainProp(this, this.seriesName);
         series: () => string = () => { return this.seriesName; };
         request: () => Proto.QueryRequest = (): Proto.QueryRequest => {
           return {
@@ -207,19 +207,19 @@ module Models {
        * label is a string value which labels the axis. This should
        * describe the units for values on the axis.
        */
-      label: Utils.ChainProperty<string, Axis> = Utils.chainProp(this, null);
+      label: Utils.ChainProperty<string, Axis> = Utils.ChainProp(this, null);
 
       /**
        * format is a function which formats numerical values on the axis
        * for display.
        */
-      format: Utils.ChainProperty<(n: number) => string, Axis> = Utils.chainProp(this, null);
+      format: Utils.ChainProperty<(n: number) => string, Axis> = Utils.ChainProp(this, null);
 
       /**
        * selectors is an array of selectors which should be displayed on this
        * axis.
        */
-      selectors: Utils.ChainProperty<Select.Selector[], Axis> = Utils.chainProp(this, []);
+      selectors: Utils.ChainProperty<Select.Selector[], Axis> = Utils.ChainProp(this, []);
 
       /**
        * Title returns an appropriate title for a chart displaying this
@@ -255,19 +255,19 @@ module Models {
        * queried. By default, the query will return the last ten minutes
        * of data.
        */
-      timespan: Utils.ChainProperty<Time.TimeSpan, Query> = Utils.chainProp(this, Time.Recent(10 * 60 * 1000));
+      timespan: Utils.ChainProperty<Time.TimeSpan, Query> = Utils.ChainProp(this, Time.Recent(10 * 60 * 1000));
 
       /**
        * title gets or sets the title of this query, which can be applied
        * to visualizations of the data from this query.
        */
-      title: Utils.ChainProperty<string, Query> = Utils.chainProp(this, "Query Title");
+      title: Utils.ChainProperty<string, Query> = Utils.ChainProp(this, "Query Title");
 
       /**
        * selectors is a set of selectors which should be displayed on this
        * axis.
        */
-      selectors: Utils.ChainProperty<Select.Selector[], Query> = Utils.chainProp(this, []);
+      selectors: Utils.ChainProperty<Select.Selector[], Query> = Utils.ChainProp(this, []);
 
       /**
        * execute dispatches a query to the server and returns a promise

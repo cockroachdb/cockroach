@@ -138,7 +138,7 @@ var Models;
 var Utils;
 (function (Utils) {
     "use strict";
-    function chainProp(_this, val) {
+    function ChainProp(_this, val) {
         var obj = val;
         return function (value) {
             if (value === undefined) {
@@ -148,7 +148,7 @@ var Utils;
             return _this;
         };
     }
-    Utils.chainProp = chainProp;
+    Utils.ChainProp = ChainProp;
 })(Utils || (Utils = {}));
 // source: util/convert.ts
 // Author: Matt Tracy (matt@cockroachlabs.com)
@@ -238,7 +238,7 @@ var Models;
                 function AvgSelector(seriesName) {
                     var _this = this;
                     this.seriesName = seriesName;
-                    this.title = Utils.chainProp(this, this.seriesName);
+                    this.title = Utils.ChainProp(this, this.seriesName);
                     this.series = function () { return _this.seriesName; };
                     this.request = function () {
                         return {
@@ -253,7 +253,7 @@ var Models;
                 function AvgRateSelector(seriesName) {
                     var _this = this;
                     this.seriesName = seriesName;
-                    this.title = Utils.chainProp(this, this.seriesName);
+                    this.title = Utils.ChainProp(this, this.seriesName);
                     this.series = function () { return _this.seriesName; };
                     this.request = function () {
                         return {
@@ -288,9 +288,9 @@ var Models;
         })(Time = Metrics.Time || (Metrics.Time = {}));
         var Axis = (function () {
             function Axis() {
-                this.label = Utils.chainProp(this, null);
-                this.format = Utils.chainProp(this, null);
-                this.selectors = Utils.chainProp(this, []);
+                this.label = Utils.ChainProp(this, null);
+                this.format = Utils.ChainProp(this, null);
+                this.selectors = Utils.ChainProp(this, []);
             }
             Axis.prototype.title = function () {
                 var selectors = this.selectors();
@@ -313,9 +313,9 @@ var Models;
         var Query = (function () {
             function Query() {
                 var _this = this;
-                this.timespan = Utils.chainProp(this, Time.Recent(10 * 60 * 1000));
-                this.title = Utils.chainProp(this, "Query Title");
-                this.selectors = Utils.chainProp(this, []);
+                this.timespan = Utils.ChainProp(this, Time.Recent(10 * 60 * 1000));
+                this.title = Utils.ChainProp(this, "Query Title");
+                this.selectors = Utils.ChainProp(this, []);
                 this.execute = function () {
                     var s = _this.timespan().timespan();
                     var req = {

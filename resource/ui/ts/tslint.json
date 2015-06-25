@@ -1,37 +1,48 @@
 {
   "rules": {
-  "align": [true,
-        "parameters",
-        "arguments",
-        "statements"],
+    "align": [
+      true,
+      "parameters",
+      "arguments",
+      "statements"
+    ],
     "ban": false,
     "class-name": true,
-    "comment-format": [true,
-        "check-space"
+    "comment-format": [
+      true,
+      "check-space"
     ],
     "curly": true,
     "eofline": true,
     "forin": true,
-    "indent": [true, 4],
+    "indent": [
+      true,
+      2
+    ],
     "interface-name": false,
     "jsdoc-format": true,
     "label-position": true,
     "label-undefined": true,
-    "max-line-length": [false, 140],
-    "member-ordering": [true,
-        "public-before-private",
-        "static-before-instance",
-        "variables-before-functions"
+    "max-line-length": [
+      false,
+      140
+    ],
+    "member-ordering": [
+      true,
+      "public-before-private",
+      "static-before-instance",
+      "variables-before-functions"
     ],
     "no-any": false,
     "no-arg": true,
     "no-bitwise": true,
-    "no-console": [true,
-        "debug",
-        "info",
-        "time",
-        "timeEnd",
-        "trace"
+    "no-console": [
+      true,
+      "debug",
+      "info",
+      "time",
+      "timeEnd",
+      "trace"
     ],
     "no-consecutive-blank-lines": true,
     "no-construct": true,
@@ -53,44 +64,58 @@
     "no-use-before-declare": true,
     "no-var-keyword": true,
     "no-var-requires": true,
-    "one-line": [true,
-        "check-catch",
-        "check-else",
-        "check-open-brace",
-        "check-whitespace"
+    "one-line": [
+      true,
+      "check-catch",
+      "check-else",
+      "check-open-brace",
+      "check-whitespace"
     ],
-    "quotemark": [true, "double"],
+    "quotemark": [
+      true,
+      "double"
+    ],
     "radix": true,
     "semicolon": true,
     "switch-default": true,
-    "triple-equals": [true, "allow-null-check"],
-    "typedef": [true,
-        "call-signature",
-        "parameter",
-        "property-declaration",
-        "variable-declaration",
-        "member-variable-declaration"
+    "triple-equals": [
+      true,
+      "allow-null-check"
     ],
-    "typedef-whitespace": [true, {
+    "typedef": [
+      true,
+      "call-signature",
+      "parameter",
+      "property-declaration",
+      "variable-declaration",
+      "member-variable-declaration"
+    ],
+    "typedef-whitespace": [
+      true,
+      {
         "call-signature": "nospace",
         "index-signature": "nospace",
         "parameter": "nospace",
         "property-declaration": "nospace",
         "variable-declaration": "nospace"
-    }],
-    "use-strict": [true,
-        "check-module",
-        "check-function"
+      }
     ],
-    "variable-name": [true,
-        "allow-leading-underscore"
+    "use-strict": [
+      true,
+      "check-module",
+      "check-function"
     ],
-    "whitespace": [true,
-        "check-branch",
-        "check-decl",
-        "check-operator",
-        "check-separator",
-        "check-type"
+    "variable-name": [
+      true,
+      "allow-leading-underscore"
+    ],
+    "whitespace": [
+      true,
+      "check-branch",
+      "check-decl",
+      "check-operator",
+      "check-separator",
+      "check-type"
     ]
   }
 }
