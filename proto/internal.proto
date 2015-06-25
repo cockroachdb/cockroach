@@ -147,7 +147,7 @@ message InternalPushTxnRequest {
 // otherwise.
 message InternalPushTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Txn is non-nil if the transaction could be heartbeat and contains
+  // pushee_txn is non-nil if the transaction was pushed and contains
   // the current value of the transaction.
   optional Transaction pushee_txn = 2;
 }
