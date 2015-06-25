@@ -72,32 +72,27 @@ func (bank *Bank) makeAccountID(id int) []byte {
 }
 
 // Read the balances in all the accounts and return them.
-func (bank *Bank) sumAllAccounts() int64 {
+func (bank *Bank) sumAllAccounts() ([]Account, int64) {
 	var result int64
-	err := bank.db.Txn(func(txn *client.Txn) error {
-		rows, err := txn.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
-		if err != nil {
-			return err
-		}
-		if len(rows) != bank.numAccounts {
-			return fmt.Errorf("Could only read %d of %d rows of the database.\n", len(rows), bank.numAccounts)
-		}
-		// Sum up the balances.
-		for i := 0; i < bank.numAccounts; i++ {
-			account := &Account{}
-			err := account.decode(rows[i].ValueBytes())
-			if err != nil {
-				return err
-			}
-			// fmt.Printf("Account %d contains %d$\n", bank.firstAccount+i, account.Balance)
-			result += account.Balance
-		}
-		return nil
-	})
+	var accounts []Account
+	rows, err := bank.db.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Scan error: %s", err)
 	}
-	return result
+	if len(rows) != bank.numAccounts {
+		log.Fatalf("Could only read %d of %d rows of the database.\n", len(rows), bank.numAccounts)
+	}
+	// Sum up the balances.
+	for i := 0; i < bank.numAccounts; i++ {
+		account := &Account{}
+		err := account.decode(rows[i].ValueBytes())
+		if err != nil {
+			log.Fatalf("decoding error: %s", err)
+		}
+		result += account.Balance
+		accounts = append(accounts, *account)
+	}
+	return accounts, result
 }
 
 // continuouslyTransferMoney() keeps moving random amounts between
@@ -167,8 +162,12 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 // bank. Returns the total cash in the existing bank accounts plus
 // any new accounts.
 func (bank *Bank) initBankAccounts(cash int64) int64 {
-	var totalCash int64
+	var oldCash int64
+	var newCash int64
 	if err := bank.db.Txn(func(txn *client.Txn) error {
+		// Need to reset on each Txn restart.
+		oldCash = 0
+		newCash = 0
 		// Check if the accounts have been initialized by another instance.
 		rows, err := txn.Scan(bank.makeAccountID(0), bank.makeAccountID(bank.numAccounts), int64(bank.numAccounts))
 		if err != nil {
@@ -182,7 +181,7 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 			if err := existAcct.decode(rows[i].ValueBytes()); err != nil {
 				log.Fatalf("error decoding existing account %s: %s", rows[i].Key, err)
 			}
-			totalCash += existAcct.Balance
+			oldCash += existAcct.Balance
 		}
 		// Let's initialize all the accounts.
 		batch := &client.Batch{}
@@ -195,23 +194,23 @@ func (bank *Bank) initBankAccounts(cash int64) int64 {
 			id := bank.makeAccountID(i)
 			if !accts[string(id)] {
 				batch.Put(id, value)
-				totalCash += cash
+				newCash += cash
 			}
 		}
 		return txn.Run(batch)
 	}); err != nil {
 		log.Fatal(err)
 	}
-	log.Info("done initializing all accounts")
-	return totalCash
+	log.Infof("done initializing all accounts, bank is worth $%d", oldCash+newCash)
+	return oldCash + newCash
 }
 
 func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
 	var lastNumTransfers int32
 	lastNow := time.Now()
-	for {
-		// Sleep for a bit to allow money transfers to happen in the background.
-		time.Sleep(time.Second)
+
+	// Wake up periodically to verify the balance and post an update.
+	for _ = range time.NewTicker(time.Second).C {
 		now := time.Now()
 		elapsed := now.Sub(lastNow)
 		numTransfers := atomic.LoadInt32(&bank.numTransfers)
@@ -220,9 +219,12 @@ func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
 		lastNumTransfers = numTransfers
 		lastNow = now
 		// Check that all the money is accounted for.
-		totalCash := bank.sumAllAccounts()
+		accounts, totalCash := bank.sumAllAccounts()
 		if totalCash != expTotalCash {
-			log.Fatalf("\nTotal cash in the bank $%d; expected $%d.\n", totalCash, expTotalCash)
+			for i := range accounts {
+				log.Infof("Account %d contains %d$", bank.firstAccount+i, accounts[i].Balance)
+			}
+			log.Fatalf("\nTotal cash in the bank $%d; expected $%d.", totalCash, expTotalCash)
 		}
 		fmt.Printf("The bank is in good order.\n")
 	}
