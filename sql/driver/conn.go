@@ -335,7 +335,7 @@ func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
 	// The TODOs here are too numerous to list. This is only performing a full
 	// table scan using the primary key.
 
-	r := &rows{pos: -1}
+	r := &rows{}
 	var primaryKey []byte
 	vals := map[string]driver.Value{}
 	for _, kv := range sr {
@@ -386,7 +386,6 @@ func (c *conn) ShowColumns(p *parser.ShowColumns, args []driver.Value) (*rows, e
 	r := &rows{
 		columns: []string{"Field", "Type", "Null"},
 		rows:    make([]row, len(schema.Columns)),
-		pos:     -1,
 	}
 
 	for i, col := range schema.Columns {
@@ -424,7 +423,6 @@ func (c *conn) ShowIndex(p *parser.ShowIndex, args []driver.Value) (*rows, error
 	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
 	r := &rows{
 		columns: []string{"Table", "Name", "Unique", "Seq", "Column"},
-		pos:     -1,
 	}
 	for _, index := range schema.Indexes {
 		for j, col := range index.ColumnNames {
@@ -556,7 +554,7 @@ func (c *conn) processColumns(desc *structured.TableDescriptor,
 func (c *conn) processInsertRows(node parser.InsertRows) (*rows, error) {
 	switch nt := node.(type) {
 	case parser.Values:
-		r := &rows{pos: -1}
+		r := &rows{}
 		for _, row := range nt {
 			switch rt := row.(type) {
 			case parser.ValTuple:
