@@ -222,7 +222,7 @@ func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
 		accounts, totalCash := bank.sumAllAccounts()
 		if totalCash != expTotalCash {
 			for i := range accounts {
-				log.Infof("Account %d contains %d$", bank.firstAccount+i, accounts[i].Balance)
+				log.Infof("Account %d contains $%d", bank.firstAccount+i, accounts[i].Balance)
 			}
 			log.Fatalf("\nTotal cash in the bank $%d; expected $%d.", totalCash, expTotalCash)
 		}

@@ -90,14 +90,11 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Respon
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
 	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
-	if ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp, true, nil, &rwResp); ok || err != nil {
-		if err == nil && rwResp.GetValue() != nil {
-			gogoproto.Merge(reply.(gogoproto.Message), rwResp.GetValue().(gogoproto.Message))
-		}
-		return ok, err
+	ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp, true, nil, &rwResp)
+	if ok && err == nil {
+		gogoproto.Merge(reply, rwResp.GetValue().(gogoproto.Message))
 	}
-	// There's no command result cached for this ID.
-	return false, nil
+	return ok, err
 }
 
 // CopyInto copies all the cached results from one response cache into
