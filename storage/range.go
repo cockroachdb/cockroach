@@ -1038,7 +1038,6 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 				log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
 				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
 					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
-					continue
 				}
 			}
 		}
