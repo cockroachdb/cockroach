@@ -18,6 +18,7 @@
 package sqlwire
 
 import (
+	"github.com/cockroachdb/cockroach/proto"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -44,6 +45,12 @@ type Response interface {
 	Header() *SQLResponseHeader
 }
 
+// A Call is a pending database API call.
+type Call struct {
+	Args  Request  // The argument to the command
+	Reply Response // The reply from the command
+}
+
 // Header returns the request header.
 func (r *SQLRequestHeader) Header() *SQLRequestHeader {
 	return r
@@ -62,4 +69,15 @@ func (*SQLRequest) CreateReply() Response {
 // Header returns the response header.
 func (r *SQLResponseHeader) Header() *SQLResponseHeader {
 	return r
+}
+
+// SetGoError converts the specified type into either one of the proto-
+// defined error types or into a Error for all other Go errors.
+func (r *SQLResponseHeader) SetGoError(err error) {
+	if err == nil {
+		r.Error = nil
+		return
+	}
+	r.Error = &proto.Error{}
+	r.Error.SetResponseGoError(err)
 }

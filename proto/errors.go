@@ -17,7 +17,11 @@
 
 package proto
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/util"
+)
 
 // TransactionRestartError is an interface implemented by errors that cause
 // a transaction to be restarted.
@@ -38,6 +42,22 @@ func (e *Error) CanRetry() bool {
 // CanRestartTransaction implements the TransactionRestartError interface.
 func (e *Error) CanRestartTransaction() TransactionRestart {
 	return e.TransactionRestart
+}
+
+// SetResponseGoError sets Error using err
+func (e *Error) SetResponseGoError(err error) {
+	e.Message = err.Error()
+	if r, ok := err.(util.Retryable); ok {
+		e.Retryable = r.CanRetry()
+	}
+	if r, ok := err.(TransactionRestartError); ok {
+		e.TransactionRestart = r.CanRestartTransaction()
+	}
+	// If the specific error type exists in the detail union, set it.
+	detail := &ErrorDetail{}
+	if detail.SetValue(err) {
+		e.Detail = detail
+	}
 }
 
 // Error formats error.
