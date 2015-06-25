@@ -617,16 +617,14 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	return err
 }
 
-// addWriteCmd first consults the response cache to determine whether
-// this command has already been sent to the range. If a response is
-// found, it's returned immediately and not submitted to raft. Next,
-// the timestamp cache is checked to determine if any newer accesses to
-// this command's affected keys have been made. If so, this command's
-// timestamp is moved forward. Finally the keys affected by this
-// command are added as pending writes to the read queue and the
-// command is submitted to Raft. Upon completion, the write is removed
-// from the read queue and the reply is added to the response cache.
-// If wait is true, will block until the command is complete.
+// addWriteCmd first adds the keys affected by this command as pending
+// writes to the command queue. Next, the timestamp cache is checked to
+// determine if any newer accesses to this command's affected keys
+// have been made. If so, this command's timestamp is moved forward.
+// Finally, the command is submitted to Raft. Upon completion, the
+// write is removed from the read queue and the reply is added to the
+// response cache.  If wait is true, will block until the command is
+// complete.
 func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
