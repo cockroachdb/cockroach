@@ -21,13 +21,13 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -36,9 +36,12 @@ import (
 type storeEventReader struct {
 	// If true, Update events will be recorded in full detail. If false, only a
 	// count of update events will be recorded.
-	recordUpdateDetail  bool
+	recordUpdateDetail bool
+
+	sync.Mutex
 	perStoreFeeds       map[proto.StoreID][]string
 	perStoreUpdateCount map[proto.StoreID]int
+	perStoreTotalCount  map[proto.StoreID]int
 }
 
 // recordEvent records the events received for all stores. Each event is
@@ -48,6 +51,9 @@ type storeEventReader struct {
 func (ser *storeEventReader) recordEvent(event interface{}) {
 	var sid proto.StoreID
 	eventStr := ""
+
+	ser.Lock()
+	defer ser.Unlock()
 	switch event := event.(type) {
 	case *storage.StartStoreEvent:
 		sid = event.StoreID
@@ -59,7 +65,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 	case *storage.UpdateRangeEvent:
 		if event.Method == proto.InternalResolveIntent || event.Method == proto.InternalResolveIntentRange {
 			// InternalResolveIntent is a best effort call that seems to make
-			// this test flaky. Ignore them.
+			// this test flaky. Ignore them completely.
 			break
 		}
 		if ser.recordUpdateDetail {
@@ -68,6 +74,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 				event.Desc.RaftID, event.Method.String(), event.Delta.LiveBytes)
 		} else {
 			ser.perStoreUpdateCount[event.StoreID]++
+			ser.perStoreTotalCount[event.StoreID]++
 		}
 	case *storage.RemoveRangeEvent:
 		sid = event.StoreID
@@ -92,21 +99,25 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 	}
 	if sid > 0 {
 		ser.perStoreFeeds[sid] = append(ser.perStoreFeeds[sid], eventStr)
+		ser.perStoreTotalCount[sid]++
 	}
 }
 
 func (ser *storeEventReader) readEvents(sub *util.Subscription) {
+	ser.Lock()
 	ser.perStoreFeeds = make(map[proto.StoreID][]string)
 	ser.perStoreUpdateCount = make(map[proto.StoreID]int)
+	ser.perStoreTotalCount = make(map[proto.StoreID]int)
+	ser.Unlock()
 	for e := range sub.Events() {
 		ser.recordEvent(e)
 	}
 }
 
-// eventFeedString describes the event information that was recorded by
+// eventFeedStringLocked describes the event information that was recorded by
 // storeEventReader. The formatting is appropriate to paste into this test if as
 // a new expected value.
-func (ser *storeEventReader) eventFeedString() string {
+func (ser *storeEventReader) eventFeedStringLocked() string {
 	var response string
 	for id, feed := range ser.perStoreFeeds {
 		response += fmt.Sprintf("proto.StoreID(%d): []string{\n", int64(id))
@@ -118,10 +129,10 @@ func (ser *storeEventReader) eventFeedString() string {
 	return response
 }
 
-// updateCountString describes the update counts that were recorded by
+// updateCountStringLocked describes the update counts that were recorded by
 // storeEventReader.  The formatting is appropriate to paste into this test if
 // as a new expected value.
-func (ser *storeEventReader) updateCountString() string {
+func (ser *storeEventReader) updateCountStringLocked() string {
 	var response string
 	for id, c := range ser.perStoreUpdateCount {
 		response += fmt.Sprintf("proto.StoreID(%d): %d,\n", int64(id), c)
@@ -129,7 +140,7 @@ func (ser *storeEventReader) updateCountString() string {
 	return response
 }
 
-func checkMatch(patternMap, lineMap map[proto.StoreID][]string) bool {
+func checkMatchLocked(patternMap, lineMap map[proto.StoreID][]string) bool {
 	if len(patternMap) != len(lineMap) {
 		return false
 	}
@@ -206,29 +217,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		t.Fatalf("error merging final range: %s", err)
 	}
 
-	// Add an additional put through the system and wait for all
-	// replicas to receive it.
-	if _, err := mtc.db.Inc("aa", 5); err != nil {
-		t.Fatalf("error putting data to db: %s", err)
-	}
-	util.SucceedsWithin(t, time.Second, func() error {
-		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(eng, proto.Key("aa"), mtc.clock.Now(), true, nil)
-			if err != nil {
-				return err
-			}
-			if a, e := mustGetInteger(val), int64(5); a != e {
-				return util.Errorf("expected aa = %d, got %d", e, a)
-			}
-		}
-		return nil
-	})
-
-	// Close feed and wait for reader to receive all events.
-	feed.Close()
-	readStopper.Stop()
-
-	// Compare events to expected values.
+	// Establish expected values for the store event recorder.
 	expected := map[proto.StoreID][]string{
 		proto.StoreID(1): {
 			"StartStore",
@@ -258,18 +247,43 @@ func TestMultiStoreEventFeed(t *testing.T) {
 			"MergeRange rid=2, subId=3, key=15, subKey=0",
 		},
 	}
-	if a, e := ser.perStoreFeeds, expected; !checkMatch(e, a) {
-		t.Errorf("event feed did not match expected value. Actual values have been printed to compare with above expectation.\n")
-		t.Logf("Event feed information:\n%s", ser.eventFeedString())
+	expectedUpdateCount := map[proto.StoreID]int{
+		proto.StoreID(1): 37,
+		proto.StoreID(2): 32,
+		proto.StoreID(3): 28,
+	}
+	expectedTotalCount := map[proto.StoreID]int{}
+	for k := range expected {
+		expectedTotalCount[k] = len(expected[k]) + expectedUpdateCount[k]
 	}
 
-	expectedUpdateCount := map[proto.StoreID]int{
-		proto.StoreID(1): 38,
-		proto.StoreID(2): 33,
-		proto.StoreID(3): 29,
+	// Wait for expected total counts to match.
+	util.SucceedsWithin(t, time.Second, func() error {
+		ser.Lock()
+		defer ser.Unlock()
+		if a, e := ser.perStoreTotalCount, expectedTotalCount; !reflect.DeepEqual(a, e) {
+			return util.Errorf(
+				"Total Counts did not match Expected Count: %v != %v.\n"+
+					"Event feed information:\n%s\n\n"+
+					"Update Count Information:\n%s\n\n",
+				a, e, ser.eventFeedStringLocked(), ser.updateCountStringLocked())
+		}
+		return nil
+	})
+
+	// Close feed and readers.
+	feed.Close()
+	readStopper.Stop()
+
+	// Verify that the events received by the reader are correct.
+	ser.Lock()
+	defer ser.Unlock()
+	if a, e := ser.perStoreFeeds, expected; !checkMatchLocked(e, a) {
+		t.Errorf("event feed did not match expected value. Actual values have been printed to compare with above expectation.\n")
+		t.Logf("Event feed information:\n%s", ser.eventFeedStringLocked())
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {
 		t.Errorf("update counts did not match expected value. Actual values have been printed to compare with above expectation.\n")
-		t.Logf("Update count information:\n%s", ser.updateCountString())
+		t.Logf("Update count information:\n%s", ser.updateCountStringLocked())
 	}
 }
