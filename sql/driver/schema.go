@@ -26,7 +26,7 @@ import (
 
 func makeSchema(p *parser.CreateTable) (structured.TableSchema, error) {
 	s := structured.TableSchema{}
-	s.Name = p.Name.String()
+	s.Name = p.Table.String()
 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
