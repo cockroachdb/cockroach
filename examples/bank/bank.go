@@ -210,7 +210,7 @@ func (bank *Bank) periodicallyCheckBalances(expTotalCash int64) {
 	lastNow := time.Now()
 
 	// Wake up periodically to verify the balance and post an update.
-	for _ = range time.NewTicker(time.Second).C {
+	for range time.NewTicker(time.Second).C {
 		now := time.Now()
 		elapsed := now.Sub(lastNow)
 		numTransfers := atomic.LoadInt32(&bank.numTransfers)
