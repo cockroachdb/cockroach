@@ -175,6 +175,12 @@ func (ner *nodeEventReader) recordEvent(event interface{}) {
 			// Ignore this best-effort method.
 			break
 		}
+		if event.Method == proto.InternalRangeLookup {
+			// Due to a race with the server's status recording system, we can't
+			// reliably depend on InternalRangeLookup to occur during the test.
+			// Ignore this method.
+			break
+		}
 		nid = event.NodeID
 		eventStr = event.Method.String()
 	case *status.CallErrorEvent:
@@ -257,8 +263,6 @@ func TestServerNodeEventFeed(t *testing.T) {
 
 	expectedNodeEvents := map[proto.NodeID][]string{
 		proto.NodeID(1): {
-			"InternalRangeLookup",
-			"InternalRangeLookup",
 			"Put",
 			"Put",
 			"EndTransaction",
