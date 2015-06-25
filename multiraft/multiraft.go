@@ -626,7 +626,7 @@ func (s *state) stop() {
 	}
 	s.MultiRaft.Transport.Stop(s.nodeID)
 
-	// Drain the create/remove group channels because other threads may be blocking
+	// Drain the input channels because other threads may be blocking
 	// on these operations.
 	done := false
 	for !done {
@@ -634,6 +634,8 @@ func (s *state) stop() {
 		case op := <-s.createGroupChan:
 			op.ch <- util.Errorf("shutting down")
 		case op := <-s.removeGroupChan:
+			op.ch <- util.Errorf("shutting down")
+		case op := <-s.proposalChan:
 			op.ch <- util.Errorf("shutting down")
 		default:
 			done = true
