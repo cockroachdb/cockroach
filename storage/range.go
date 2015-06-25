@@ -219,7 +219,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
-		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
+		respCache:   NewResponseCache(desc.RaftID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 	r.setDescWithoutProcessUpdate(desc)
@@ -664,15 +664,12 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 		}
 		// If there's a newer write timestamp...
 		if !wTS.Less(header.Timestamp) {
-			// If we're in a txn, set a write too old error in reply. We
-			// still go ahead and try the write because we want to avoid
-			// restarting the transaction in the event that there isn't an
-			// intent or the intent can be pushed by us.
-			if header.Txn != nil {
-				err := &proto.WriteTooOldError{Timestamp: header.Timestamp, ExistingTimestamp: wTS}
-				reply.Header().SetGoError(err)
-			} else {
-				// Otherwise, make sure we advance the request's timestamp.
+			// If we're in a txn, we still go ahead and try the write since
+			// we want to avoid restarting the transaction in the event that
+			// there isn't an intent or the intent can be pushed by us.
+			//
+			// If we're not in a txn, it's trivial to just advance our timestamp.
+			if header.Txn == nil {
 				header.Timestamp = wTS.Next()
 			}
 		}
@@ -789,32 +786,74 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request, reply proto.Response) (rErr error) {
+func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request, reply proto.Response) error {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
 
-	committed := false
-	// The very last thing we do before returning is move the applied index
-	// forward, unless that has already happened as part of a successfully
-	// committed batch.
-	defer func() {
-		if !committed {
-			// We didn't commit the batch, but advance the last applied index nonetheless.
-			if err := setAppliedIndex(r.rm.Engine(), r.Desc().RaftID, index); err != nil {
-				rErr = newReplicaCorruptionError(
-					util.Errorf("could not advance applied index"), err, rErr)
-				return
+	// If we have an out of order index, there's corruption. No sense in trying
+	// to update anything or run the command. Simply return a corruption error.
+	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
+		return newReplicaCorruptionError(
+			util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
+	}
+
+	// Call the helper, which returns a batch containing data written
+	// during command execution and any associated error.
+	batch, ms, rErr := r.applyRaftCommandHelper(ctx, index, originNode, args, reply)
+	defer batch.Close()
+
+	// Advance the last applied index.
+	if err := setAppliedIndex(batch, r.Desc().RaftID, index); err != nil {
+		rErr = newReplicaCorruptionError(
+			util.Errorf("could not advance applied index"), err, rErr)
+	}
+	if err := batch.Commit(); err != nil {
+		rErr = newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr)
+	}
+
+	// On successful write commands, flush to event feed, and handle other
+	// write-related triggers including splitting and config gossip updates.
+	if rErr == nil && proto.IsWrite(args) {
+		// Publish update to event feed.
+		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
+		// If the commit succeeded, potentially add range to split queue.
+		r.maybeAddToSplitQueue()
+		// Maybe update gossip configs on a put.
+		switch args.(type) {
+		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
+			if key := args.Header().Key; key.Less(keys.SystemMax) {
+				// We hold the lock already.
+				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
+					return bytes.HasPrefix(key, configPrefix)
+				})
 			}
-			atomic.StoreUint64(&r.appliedIndex, index)
 		}
-	}()
+	}
+
+	// Update cached appliedIndex on anything but a replica corruption error.
+	if _, ok := rErr.(*replicaCorruptionError); !ok {
+		atomic.StoreUint64(&r.appliedIndex, index)
+	}
+
+	return rErr
+}
+
+// applyRaftCommandHelper attempts to run the command and returns the
+// batch engine of committed results (empty if the command failed),
+// the MVCCStats updates associated with command execution, and the
+// error.
+func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request, reply proto.Response) (
+	engine.Engine, engine.MVCCStats, error) {
+	// Create a new batch for the command to ensure all or nothing semantics.
+	batch := r.rm.Engine().NewBatch()
+	ms := engine.MVCCStats{}
 
 	if lease := r.getLease(); args.Method() != proto.InternalLeaderLease &&
 		(!lease.OwnedBy(originNode) || !lease.Covers(args.Header().Timestamp)) {
 		// Verify the leader lease is held, unless this command is trying to
 		// obtain it. Any other Raft command has had the leader lease held
-		// by the replica at proposal time, but this may no more be the case.
+		// by the replica at proposal time, but this may no longer be the case.
 		// Corruption aside, the most likely reason is a leadership change (the
 		// most recent leader assumes responsibility for all past timestamps as
 		// well). In that case, it's not valid to go ahead with the execution:
@@ -822,121 +861,63 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 		// since reads are served locally by the lease holder without going
 		// through Raft, a read which was not taken into account may have been
 		// served. Hence, we must retry at the current leader.
-		//
-		// It's crucial that we don't update the response cache for the error
-		// returned below since the request is going to be retried with the
-		// same ClientCmdID and would get the distributed sender stuck in an
-		// infinite loop, retrieving a stale NotLeaderError over and over
-		// again, even when proposing at the correct replica.
-		err := r.newNotLeaderError(lease, originNode)
-		reply.Header().SetGoError(err)
-		return err
+		return batch, ms, r.newNotLeaderError(lease, originNode)
 	}
-
-	// Anything happening from now on needs to enter the response cache.
-	defer func() {
-		// TODO(tamird,tschottdorf): according to #1400 we intend to set the reply
-		// header's error as late as possible and in a central location. Range
-		// commands still write to the header directly, but once they don't this
-		// could be the authoritative location that sets the reply error for any-
-		// thing that makes it into Raft. Note that we must set this prior to
-		// signaling cmd.done below, or the waiting RPC handler might proceed
-		// before we've updated its reply.
-		//
-		// It is important that the error is set before the reply is saved into
-		// the response cache.
-		reply.Header().SetGoError(rErr)
-
-		if proto.IsWrite(args) {
-			// No matter the result, add result to the response cache if this
-			// is a write method. This must be done as part of the execution of
-			// raft commands so that every replica maintains the same responses
-			// to continue request idempotence, even if leadership changes.
-			if err := r.respCache.PutResponse(args.Header().CmdID, reply); err != nil {
-				rErr = newReplicaCorruptionError(
-					util.Errorf("could not put to response cache"), err, rErr)
-				return
-			}
-		}
-	}()
-
-	header := args.Header()
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok && err == nil {
+		if ok, err := r.respCache.GetResponse(batch, args.Header().CmdID, reply); ok && err == nil {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return reply.Header().GoError()
+			return batch, ms, reply.Header().GoError()
 		} else if ok && err != nil {
-			return newReplicaCorruptionError(
-				util.Errorf("could not read from response cache"), err)
+			return batch, ms, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
 		}
 	}
-
-	// Create a new batch for the command to ensure all or nothing semantics.
-	batch := r.rm.Engine().NewBatch()
-	defer batch.Close()
-
-	// Create a engine.MVCCStats instance.
-	ms := engine.MVCCStats{}
 
 	// Execute the command; the error will also be set in the reply header.
 	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
 	// touch the reply header's error field.
-	intents, err := r.executeCmd(batch, &ms, args, reply)
-	// If the execution of the command wasn't successful, stop here.
-	if err != nil {
-		return err
-	}
-
-	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-		return newReplicaCorruptionError(
-			util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
-	}
-
-	// Advance the applied index atomically within the batch.
-	if err := setAppliedIndex(batch, r.Desc().RaftID, index); err != nil {
-		return newReplicaCorruptionError(
-			util.Errorf("could not update applied index"), err)
-	}
-
+	intents, rErr := r.executeCmd(batch, &ms, args, reply)
+	// ALWAYS set the reply header error to the error returned by the
+	// helper. This is the definitive result of the execution. The
+	// error must be set before saving to the response cache.
+	reply.Header().SetGoError(rErr)
+	// No matter the result, add result to the response cache if this is
+	// a write method. This must be done as part of the execution of
+	// raft commands so that every replica maintains the same responses
+	// to continue request idempotence, even if leadership changes.
 	if proto.IsWrite(args) {
-		// On success, flush the MVCC stats to the batch and commit.
-		if err := r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime); err != nil {
-			return newReplicaCorruptionError(util.Errorf("could not merge MVCC stats"), err)
-		}
-		if err := batch.Commit(); err != nil {
-			return newReplicaCorruptionError(util.Errorf("could not commit batch"), err)
-		}
-		committed = true
-		// Publish update to event feed.
-		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
-		// After successful commit, update cached stats and appliedIndex value.
-		atomic.StoreUint64(&r.appliedIndex, index)
-		// If the commit succeeded, potentially add range to split queue.
-		r.maybeAddToSplitQueue()
-		// Maybe update gossip configs on a put.
-		switch args.(type) {
-		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-			if header.Key.Less(keys.SystemMax) {
-				// We hold the lock already.
-				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
-					return bytes.HasPrefix(header.Key, configPrefix)
-				})
-			}
+		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
+			return batch, ms, newReplicaCorruptionError(util.Errorf("could not put to response cache"), err, rErr)
 		}
 	}
+
+	// If the execution of the command wasn't successful, stop here.
+	if rErr != nil {
+		// Clear the batch if the command execution failed and return a fresh one.
+		batch.Close()
+		ms = engine.MVCCStats{}
+		return r.rm.Engine().NewBatch(), ms, rErr
+	}
+
+	// On write commands, flush the MVCC stats to the batch.
+	if proto.IsWrite(args) {
+		if err := r.stats.MergeMVCCStats(batch, &ms, args.Header().Timestamp.WallTime); err != nil {
+			return batch, ms, newReplicaCorruptionError(util.Errorf("could not merge MVCC stats"), err, rErr)
+		}
+	}
+
 	// On success and only on the replica on which this command originated,
 	// resolve skipped intents asynchronously.
 	if originNode == r.rm.RaftNodeID() {
 		r.handleSkippedIntents(args, intents)
 	}
 
-	return nil
+	return batch, ms, nil
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas

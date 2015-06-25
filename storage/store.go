@@ -1247,7 +1247,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 		}
 
 		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}, true); err == nil {
-			return retry.Break, err
+			return retry.Break, nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
