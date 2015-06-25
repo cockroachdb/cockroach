@@ -73,7 +73,12 @@ func TestNodeStatusRecorder(t *testing.T) {
 	monitor := NewNodeStatusMonitor()
 	manual := hlc.NewManualClock(100)
 	recorder := NewNodeStatusRecorder(monitor, hlc.NewClock(manual.UnixNano))
-	recorder.SetNodeID(proto.NodeID(1))
+	monitor.OnStartNode(&StartNodeEvent{
+		Desc: proto.NodeDescriptor{
+			NodeID: proto.NodeID(1),
+		},
+		StartedAt: 0,
+	})
 
 	// Add some data to the monitor by simulating incoming events.
 	monitor.OnBeginScanRanges(&storage.BeginScanRangesEvent{

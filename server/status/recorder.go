@@ -67,7 +67,7 @@ func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeSt
 func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 	data int64) proto.TimeSeriesData {
 	return proto.TimeSeriesData{
-		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.nodeID),
+		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.desc.NodeID),
 		Datapoints: []*proto.TimeSeriesDatapoint{
 			{
 				TimestampNanos: timestampNanos,
@@ -82,7 +82,7 @@ func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 	data := make([]proto.TimeSeriesData, 0, nsr.lastDataCount)
 	// Record node stats.
-	if nsr.nodeID > 0 {
+	if nsr.desc.NodeID > 0 {
 		now := nsr.clock.PhysicalNow()
 		data = append(data, nsr.recordInt(now, "calls.success", atomic.LoadInt64(&nsr.callCount)))
 		data = append(data, nsr.recordInt(now, "calls.error", atomic.LoadInt64(&nsr.callErrors)))

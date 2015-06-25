@@ -77,7 +77,8 @@ type MergeRangeEvent struct {
 
 // StartStoreEvent occurs whenever a store is initially started.
 type StartStoreEvent struct {
-	StoreID proto.StoreID
+	StoreID   proto.StoreID
+	StartedAt int64
 }
 
 // StoreStatusEvent contains the current descriptor for the given store.
@@ -186,12 +187,13 @@ func (sef StoreEventFeed) mergeRange(rngMerged, rngRemoved *Range) {
 }
 
 // startStore publishes a StartStoreEvent to this feed.
-func (sef StoreEventFeed) startStore() {
+func (sef StoreEventFeed) startStore(startedAt int64) {
 	if sef.f == nil {
 		return
 	}
 	sef.f.Publish(&StartStoreEvent{
-		StoreID: sef.id,
+		StoreID:   sef.id,
+		StartedAt: startedAt,
 	})
 }
 

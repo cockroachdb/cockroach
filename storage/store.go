@@ -430,10 +430,6 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		return util.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
 
-	// Start store event feed.
-	s.feed = NewStoreEventFeed(s.Ident.StoreID, s.ctx.EventFeed)
-	s.feed.startStore()
-
 	// Create ID allocators.
 	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
@@ -443,6 +439,10 @@ func (s *Store) Start(stopper *util.Stopper) error {
 
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
+
+	// Start store event feed.
+	s.feed = NewStoreEventFeed(s.Ident.StoreID, s.ctx.EventFeed)
+	s.feed.startStore(s.startedAt)
 
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and

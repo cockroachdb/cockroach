@@ -77,6 +77,10 @@ func waitForStopper(t testing.TB, stopper *util.Stopper) {
 func TestNodeEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
+	nodeDesc := proto.NodeDescriptor{
+		NodeID: proto.NodeID(99),
+	}
+
 	// A testCase corresponds to a single Store event type. Each case contains a
 	// method which publishes a single event to the given storeEventPublisher,
 	// and an expected result interface which should match the produced
@@ -86,6 +90,16 @@ func TestNodeEventFeed(t *testing.T) {
 		publishTo func(status.NodeEventFeed)
 		expected  interface{}
 	}{
+		{
+			name: "Start",
+			publishTo: func(nef status.NodeEventFeed) {
+				nef.StartNode(nodeDesc, 100)
+			},
+			expected: &status.StartNodeEvent{
+				Desc:      nodeDesc,
+				StartedAt: 100,
+			},
+		},
 		{
 			name: "Get",
 			publishTo: func(nef status.NodeEventFeed) {
