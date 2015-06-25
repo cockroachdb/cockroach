@@ -794,19 +794,18 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
 	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-		return newReplicaCorruptionError(
-			util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
+		return newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
 	}
 
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
-	batch, ms, rErr := r.applyRaftCommandHelper(ctx, index, originNode, args, reply)
+	ms := engine.MVCCStats{}
+	batch, rErr := r.applyRaftCommandHelper(ctx, index, originNode, args, reply, &ms)
 	defer batch.Close()
 
-	// Advance the last applied index.
+	// Advance the last applied index and commit the batch.
 	if err := setAppliedIndex(batch, r.Desc().RaftID, index); err != nil {
-		rErr = newReplicaCorruptionError(
-			util.Errorf("could not advance applied index"), err, rErr)
+		rErr = newReplicaCorruptionError(util.Errorf("could not advance applied index"), err, rErr)
 	}
 	if err := batch.Commit(); err != nil {
 		rErr = newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr)
@@ -840,14 +839,12 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 }
 
 // applyRaftCommandHelper attempts to run the command and returns the
-// batch engine of committed results (empty if the command failed),
-// the MVCCStats updates associated with command execution, and the
-// error.
-func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request, reply proto.Response) (
-	engine.Engine, engine.MVCCStats, error) {
+// batch engine of committed results (empty if the command failed) and
+// the error.
+func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, originNode proto.RaftNodeID,
+	args proto.Request, reply proto.Response, ms *engine.MVCCStats) (engine.Engine, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
-	ms := engine.MVCCStats{}
 
 	if lease := r.getLease(); args.Method() != proto.InternalLeaderLease &&
 		(!lease.OwnedBy(originNode) || !lease.Covers(args.Header().Timestamp)) {
@@ -861,7 +858,7 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 		// since reads are served locally by the lease holder without going
 		// through Raft, a read which was not taken into account may have been
 		// served. Hence, we must retry at the current leader.
-		return batch, ms, r.newNotLeaderError(lease, originNode)
+		return batch, r.newNotLeaderError(lease, originNode)
 	}
 
 	// Check the response cache to ensure idempotency.
@@ -872,43 +869,44 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 			}
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return batch, ms, reply.Header().GoError()
+			return batch, reply.Header().GoError()
 		} else if ok && err != nil {
-			return batch, ms, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
+			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
 		}
 	}
 
-	// Execute the command; the error will also be set in the reply header.
-	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
-	// touch the reply header's error field.
-	intents, rErr := r.executeCmd(batch, &ms, args, reply)
+	// Execute the command.
+	intents, rErr := r.executeCmd(batch, ms, args, reply)
 	// ALWAYS set the reply header error to the error returned by the
 	// helper. This is the definitive result of the execution. The
 	// error must be set before saving to the response cache.
+	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
+	// touch the reply header's error field.
 	reply.Header().SetGoError(rErr)
-	// No matter the result, add result to the response cache if this is
+	// Regardless of error, add result to the response cache if this is
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence, even if leadership changes.
 	if proto.IsWrite(args) {
+		if rErr == nil {
+			// If command was successful, flush the MVCC stats to the batch.
+			if err := r.stats.MergeMVCCStats(batch, ms, args.Header().Timestamp.WallTime); err != nil {
+				return batch, newReplicaCorruptionError(util.Errorf("could not merge MVCC stats"), err, rErr)
+			}
+		} else {
+			// Otherwise, reset the batch to clear out partial execution and
+			// prepare for the failed response cache entry.
+			batch.Close()
+			batch = r.rm.Engine().NewBatch()
+		}
 		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
-			return batch, ms, newReplicaCorruptionError(util.Errorf("could not put to response cache"), err, rErr)
+			return batch, newReplicaCorruptionError(util.Errorf("could not put to response cache"), err, rErr)
 		}
 	}
 
 	// If the execution of the command wasn't successful, stop here.
 	if rErr != nil {
-		// Clear the batch if the command execution failed and return a fresh one.
-		batch.Close()
-		ms = engine.MVCCStats{}
-		return r.rm.Engine().NewBatch(), ms, rErr
-	}
-
-	// On write commands, flush the MVCC stats to the batch.
-	if proto.IsWrite(args) {
-		if err := r.stats.MergeMVCCStats(batch, &ms, args.Header().Timestamp.WallTime); err != nil {
-			return batch, ms, newReplicaCorruptionError(util.Errorf("could not merge MVCC stats"), err, rErr)
-		}
+		return batch, rErr
 	}
 
 	// On success and only on the replica on which this command originated,
@@ -917,7 +915,7 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 		r.handleSkippedIntents(args, intents)
 	}
 
-	return batch, ms, nil
+	return batch, nil
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
