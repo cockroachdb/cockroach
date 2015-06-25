@@ -38,7 +38,7 @@ type storeEventReader struct {
 	// count of update events will be recorded.
 	recordUpdateDetail  bool
 	perStoreFeeds       map[proto.StoreID][]string
-	perStoreUpdateCount map[proto.StoreID]int
+	perStoreUpdateCount map[proto.StoreID]map[proto.Method]int
 }
 
 // recordEvent records the events received for all stores. Each event is
@@ -57,9 +57,10 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		eventStr = fmt.Sprintf("RegisterRange scan=%t, rid=%d, live=%d",
 			event.Scan, event.Desc.RaftID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
-		if event.Method == proto.InternalResolveIntent || event.Method == proto.InternalResolveIntentRange {
-			// InternalResolveIntent is a best effort call that seems to make
-			// this test flaky. Ignore them.
+		if event.Method == proto.InternalResolveIntent ||
+			event.Method == proto.InternalResolveIntentRange {
+			// Some Internal events are best effort calls that make this test
+			// flaky. Ignore them.
 			break
 		}
 		if ser.recordUpdateDetail {
@@ -67,7 +68,12 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 			eventStr = fmt.Sprintf("UpdateRange rid=%d, method=%s, livediff=%d",
 				event.Desc.RaftID, event.Method.String(), event.Delta.LiveBytes)
 		} else {
-			ser.perStoreUpdateCount[event.StoreID]++
+			m := ser.perStoreUpdateCount[event.StoreID]
+			if m == nil {
+				m = make(map[proto.Method]int)
+				ser.perStoreUpdateCount[event.StoreID] = m
+			}
+			m[event.Method]++
 		}
 	case *storage.RemoveRangeEvent:
 		sid = event.StoreID
@@ -97,7 +103,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 
 func (ser *storeEventReader) readEvents(sub *util.Subscription) {
 	ser.perStoreFeeds = make(map[proto.StoreID][]string)
-	ser.perStoreUpdateCount = make(map[proto.StoreID]int)
+	ser.perStoreUpdateCount = make(map[proto.StoreID]map[proto.Method]int)
 	for e := range sub.Events() {
 		ser.recordEvent(e)
 	}
@@ -113,7 +119,7 @@ func (ser *storeEventReader) eventFeedString() string {
 		for _, evt := range feed {
 			response += fmt.Sprintf("\t\t\"%s\",\n", evt)
 		}
-		response += fmt.Sprintf("},\n")
+		response += "},\n"
 	}
 	return response
 }
@@ -123,8 +129,12 @@ func (ser *storeEventReader) eventFeedString() string {
 // as a new expected value.
 func (ser *storeEventReader) updateCountString() string {
 	var response string
-	for id, c := range ser.perStoreUpdateCount {
-		response += fmt.Sprintf("proto.StoreID(%d): %d,\n", int64(id), c)
+	for id, countset := range ser.perStoreUpdateCount {
+		response += fmt.Sprintf("proto.StoreID(%d): map[proto.Method]int{\n", int64(id))
+		for k, count := range countset {
+			response += fmt.Sprintf("\t\tproto.Method(%d): %d, //%s\n", k, count, k)
+		}
+		response += "},\n"
 	}
 	return response
 }
@@ -263,10 +273,32 @@ func TestMultiStoreEventFeed(t *testing.T) {
 		t.Logf("Event feed information:\n%s", ser.eventFeedString())
 	}
 
-	expectedUpdateCount := map[proto.StoreID]int{
-		proto.StoreID(1): 38,
-		proto.StoreID(2): 33,
-		proto.StoreID(3): 29,
+	// Expected count of update events on a per-method basis.
+	expectedUpdateCount := map[proto.StoreID]map[proto.Method]int{
+		proto.StoreID(1): {
+			proto.Method(22): 3,  //InternalLeaderLease
+			proto.Method(2):  7,  //ConditionalPut
+			proto.Method(1):  18, //Put
+			proto.Method(7):  6,  //EndTransaction
+			proto.Method(3):  2,  //Increment
+			proto.Method(4):  2,  //Delete
+		},
+		proto.StoreID(2): {
+			proto.Method(22): 2,  //InternalLeaderLease
+			proto.Method(4):  2,  //Delete
+			proto.Method(2):  6,  //ConditionalPut
+			proto.Method(1):  16, //Put
+			proto.Method(7):  5,  //EndTransaction
+			proto.Method(3):  2,  //Increment
+		},
+		proto.StoreID(3): {
+			proto.Method(1):  14, //Put
+			proto.Method(7):  4,  //EndTransaction
+			proto.Method(3):  2,  //Increment
+			proto.Method(2):  5,  //ConditionalPut
+			proto.Method(22): 2,  //InternalLeaderLease
+			proto.Method(4):  2,  //Delete
+		},
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {
 		t.Errorf("update counts did not match expected value. Actual values have been printed to compare with above expectation.\n")
