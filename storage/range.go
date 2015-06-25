@@ -805,7 +805,7 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 
 	// Advance the last applied index and commit the batch.
 	if err := setAppliedIndex(batch, r.Desc().RaftID, index); err != nil {
-		rErr = newReplicaCorruptionError(util.Errorf("could not advance applied index"), err, rErr)
+		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 	if err := batch.Commit(); err != nil {
 		rErr = newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr)
@@ -891,7 +891,7 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 		if rErr == nil {
 			// If command was successful, flush the MVCC stats to the batch.
 			if err := r.stats.MergeMVCCStats(batch, ms, args.Header().Timestamp.WallTime); err != nil {
-				return batch, newReplicaCorruptionError(util.Errorf("could not merge MVCC stats"), err, rErr)
+				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 			}
 		} else {
 			// Otherwise, reset the batch to clear out partial execution and
@@ -900,7 +900,7 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 			batch = r.rm.Engine().NewBatch()
 		}
 		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
-			return batch, newReplicaCorruptionError(util.Errorf("could not put to response cache"), err, rErr)
+			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
 	}
 
