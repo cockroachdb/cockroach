@@ -19,6 +19,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -1389,10 +1390,10 @@ func TestRangeIdempotence(t *testing.T) {
 	}
 }
 
-// TestRangeResponseCacheError verifies that an error is returned to the
+// TestRangeResponseCacheReadError verifies that an error is returned to the
 // client in the event that a response cache entry is found but is not
 // decodable.
-func TestRangeResponseCacheError(t *testing.T) {
+func TestRangeResponseCacheReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1421,6 +1422,37 @@ func TestRangeResponseCacheError(t *testing.T) {
 
 	if err == nil {
 		t.Fatal(err)
+	}
+}
+
+// TestRangeResponseCacheStoredError verifies that if a cached entry contains
+// an error, that error is returned.
+func TestRangeResponseCacheStoredError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	cmdID := proto.ClientCmdID{WallTime: 1, Random: 1}
+
+	// Write an error into the response cache.
+	errorReply := &proto.ReadWriteCmdResponse{}
+	errorReply.Increment = &proto.IncrementResponse{}
+	errorReply.Increment.Header().SetGoError(errors.New("boom"))
+	key := keys.ResponseCacheKey(tc.rng.Desc().RaftID, &cmdID)
+	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.ZeroTimestamp, nil, errorReply); err != nil {
+		t.Fatal(err)
+	}
+
+	args, reply := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
+	args.CmdID = cmdID
+	err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: args, Reply: reply}, true)
+	if err == nil {
+		t.Fatal("expected to see cached error but got nil")
+	} else if ge, ok := err.(*proto.Error); !ok {
+		t.Fatalf("expected proto.Error but got %s", err)
+	} else if !reflect.DeepEqual(ge, &proto.Error{Message: "boom"}) {
+		t.Fatalf("expected error message 'boom' but got %s", ge)
 	}
 }
 

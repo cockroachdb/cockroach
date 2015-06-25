@@ -866,7 +866,9 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
-			return err
+			// We successfully read from the response cache, so return whatever error
+			// was present in the cached entry (if any).
+			return reply.Header().GoError()
 		} else if ok && err != nil {
 			return newReplicaCorruptionError(
 				util.Errorf("could not read from response cache"), err)
