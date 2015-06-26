@@ -85,7 +85,7 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 		return false, nil
 	}
 
-	// If the response is in the cache or we experienced an error, return.
+	// Pull response from the cache and read into reply if available.
 	rwResp := proto.ReadWriteCmdResponse{}
 	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rwResp)
