@@ -73,7 +73,8 @@ type cmd struct {
 	key, endKey string // key and optional endKey
 	debug       string // optional debug string
 	txnIdx      int    // transaction index in the history
-	historyIdx  int    // this suffixes key so tests get unique keys
+	verifierIdx int    // this prefixes key so tests get unique keys
+	historyIdx  int    // this prefixes key so tests get unique keys
 	fn          func(
 		c *cmd, txn *client.Txn, t *testing.T) error // execution function
 	ch   chan struct{}    // channel for other commands to wait
@@ -119,14 +120,14 @@ func (c *cmd) done() {
 }
 
 func (c *cmd) getKey() []byte {
-	return []byte(fmt.Sprintf("%d.%s", c.historyIdx, c.key))
+	return []byte(fmt.Sprintf("%d.%d.%s", c.verifierIdx, c.historyIdx, c.key))
 }
 
 func (c *cmd) getEndKey() []byte {
 	if len(c.endKey) == 0 {
 		return nil
 	}
-	return []byte(fmt.Sprintf("%d.%s", c.historyIdx, c.endKey))
+	return []byte(fmt.Sprintf("%d.%d.%s", c.verifierIdx, c.historyIdx, c.endKey))
 }
 
 func (c *cmd) String() string {
@@ -164,7 +165,7 @@ func scanCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 		return err
 	}
 	var vals []string
-	keyPrefix := []byte(fmt.Sprintf("%d.", c.historyIdx))
+	keyPrefix := []byte(fmt.Sprintf("%d.%d.", c.verifierIdx, c.historyIdx))
 	for _, kv := range rows {
 		key := bytes.TrimPrefix(kv.Key, keyPrefix)
 		c.env[string(key)] = kv.ValueInt()
@@ -464,7 +465,7 @@ func areHistoriesSymmetric(txns []string) bool {
 	return true
 }
 
-func (hv *historyVerifier) run(isolations []proto.IsolationType, db *client.DB, t *testing.T) {
+func (hv *historyVerifier) run(verifierIdx int, isolations []proto.IsolationType, db *client.DB, t *testing.T) {
 	log.Infof("verifying all possible histories for the %q anomaly", hv.name)
 	priorities := make([]int32, len(hv.txns))
 	for i := 0; i < len(hv.txns); i++ {
@@ -479,7 +480,7 @@ func (hv *historyVerifier) run(isolations []proto.IsolationType, db *client.DB, 
 	for _, p := range enumPri {
 		for _, i := range enumIso {
 			for _, h := range enumHis {
-				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
+				if err := hv.runHistory(verifierIdx, historyIdx, p, i, h, db, t); err != nil {
 					failures = append(failures, err)
 				}
 				historyIdx++
@@ -494,7 +495,7 @@ func (hv *historyVerifier) run(isolations []proto.IsolationType, db *client.DB, 
 	}
 }
 
-func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
+func (hv *historyVerifier) runHistory(verifierIdx, historyIdx int, priorities []int32,
 	isolations []proto.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	plannedStr := historyString(cmds)
 	if log.V(1) {
@@ -507,6 +508,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	var prev *cmd
 	for _, c := range cmds {
 		c.historyIdx = historyIdx
+		c.verifierIdx = verifierIdx
 		txnMap[c.txnIdx] = append(txnMap[c.txnIdx], c)
 		c.init(prev)
 		prev = c
@@ -528,6 +530,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	verifyEnv := map[string]int64{}
 	for _, c := range hv.verifyCmds {
 		c.historyIdx = historyIdx
+		c.verifierIdx = verifierIdx
 		c.env = verifyEnv
 		c.init(nil)
 		err := db.Txn(func(txn *client.Txn) error {
@@ -553,8 +556,8 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	}
 	if hv.expSuccess && err != nil {
 		verifyStr := strings.Join(verifyStrs, " ")
-		t.Errorf("%d: iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s",
-			historyIdx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
+		t.Errorf("%d.%d: iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s",
+			verifierIdx, historyIdx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
 	}
 	return err
 }
@@ -610,15 +613,31 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cm
 	return nil
 }
 
+const numDBs = 3
+const verifiersPerDB = 5
+
 // checkConcurrency creates a history verifier, starts a new database
 // and runs the verifier.
 func checkConcurrency(name string, isolations []proto.IsolationType, txns []string,
 	verify *verifier, expSuccess bool, t *testing.T) {
-	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	s := createTestDB(t)
-	defer s.Stop()
-	setCorrectnessRetryOptions(s.lSender)
-	verifier.run(isolations, s.DB, t)
+
+	var wg sync.WaitGroup
+	wg.Add(numDBs * verifiersPerDB)
+	for i := 0; i < numDBs; i++ {
+		s := createTestDB(t)
+		setCorrectnessRetryOptions(s.lSender)
+		defer s.Stop()
+
+		for j := 0; j < verifiersPerDB; j++ {
+			go func(verifierIdx int, db *client.DB) {
+				verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
+				verifier.run(verifierIdx, isolations, db, t)
+
+				wg.Done()
+			}(j, s.DB)
+		}
+	}
+	wg.Wait()
 }
 
 // The following tests for concurrency anomalies include documentation
