@@ -37,20 +37,24 @@ test:
     # Either `go generate` does not change any files or it does, in which case we print the diff and fail.
     - docker run cockroachdb/cockroach-dev shell make check | tee "${CIRCLE_ARTIFACTS}/check.log"; test ${PIPESTATUS[0]} -eq 0
     - docker run cockroachdb/cockroach-dev shell "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${CIRCLE_ARTIFACTS}/generate.log"; test ${PIPESTATUS[0]} -eq 0
-    - docker run "cockroachdb/cockroach-dev" test TESTTIMEOUT=30s TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/test.log"
-    - docker run "cockroachdb/cockroach-dev" testrace RACETIMEOUT=5m TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/testrace.log"
+    - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/test.log"
+    - docker run "cockroachdb/cockroach-dev" testrace TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/testrace.log"
     # TODO(pmattis): Use "make acceptance" again once we're using cockroachdb/builder on circleci
     - run/local-cluster.sh stop && run/local-cluster.sh start && run/local-cluster.sh stop
   post:
-      # Write the container's log output to artifacts.
+    # Write the container's log output to artifacts.
     - i=0; for cid in $(docker ps -aq); do i=$((i+1)); docker logs $cid &> "${CIRCLE_ARTIFACTS}/${i}_$(docker inspect -f '{{ .Config.Hostname }}' ${cid})_${cid}.log"; done
     - mkdir -p ${CIRCLE_TEST_REPORTS}/{go,race}
     - "[ -f ${CIRCLE_ARTIFACTS}/test.log ] && docker run -i cockroachdb/cockroach-dev shell /go/bin/go2xunit < ${CIRCLE_ARTIFACTS}/test.log > ${CIRCLE_TEST_REPORTS}/go/test.xml"
     - "[ -f ${CIRCLE_ARTIFACTS}/testrace.log ] && docker run -i cockroachdb/cockroach-dev shell /go/bin/go2xunit < ${CIRCLE_ARTIFACTS}/testrace.log > ${CIRCLE_TEST_REPORTS}/race/testrace.xml"
     - |
       find "${CIRCLE_ARTIFACTS}" -name '*.log' -type f -exec \
+        grep -F ': Test' {} ';' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $2, $1 }' | sort -rn | head -n 10 \
+        >> "${CIRCLE_ARTIFACTS}"/slow.txt
+    - |
+      find "${CIRCLE_ARTIFACTS}" -name '*.log' -type f -exec \
         grep -B 5 -A 10 -E '^\-{0,3} *FAIL|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE' {} ';' \
-        > "${CIRCLE_ARTIFACTS}/excerpt.txt"
+        >> "${CIRCLE_ARTIFACTS}"/excerpt.txt
     - |
       if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ] && [ -s "${CIRCLE_ARTIFACTS}/excerpt.txt" ]; then
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
