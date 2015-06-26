@@ -873,16 +873,16 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if ok, err := r.respCache.GetResponse(batch, args.Header().CmdID, reply); ok && err == nil {
+		if ok, err := r.respCache.GetResponse(batch, args.Header().CmdID, reply); err != nil {
+			// Any error encountered while fetching the response cache entry means corruption.
+			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
+		} else if ok {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
 			return batch, reply.Header().GoError()
-		} else if ok && err != nil {
-			// If the response cache entry was found but couldn't be decoded, return corrupt.
-			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
 		}
 	}
 
