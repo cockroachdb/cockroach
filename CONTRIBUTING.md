@@ -28,6 +28,8 @@ downloaded and installed which can be somewhat time consuming. Be patient.
 Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
 `go generate` requires the typescript transpiler `tsc`, which you can get from [typescript](http://www.typescriptlang.org/) or using `npm` with:
 `npm install -g typescript`
+`go generate` also requires a typescript linter `tslint`, which you can get from [tslint](https://github.com/palantir/tslint) or using `npm` with:
+`npm install -g tslint`
 If you don't have npm, it comes with node. To get it via homebrew:
 `brew install node`
 

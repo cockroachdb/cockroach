@@ -7,9 +7,9 @@ RUN apt-get update -y && \
 	apt-get dist-upgrade -y && \
 	apt-get install --no-install-recommends --auto-remove -y git build-essential pkg-config file npm && \
  	apt-get clean autoclean && \
- 	apt-get autoremove -y && \ 
+ 	apt-get autoremove -y && \
  	rm -rf /tmp/* /var/lib/{apt,dpkg,cache,log} && \
-	npm -g install typescript && \
+	npm -g install typescript tslint && \
 	ln -s /usr/bin/nodejs /usr/bin/node
 
 ENV GOPATH /go

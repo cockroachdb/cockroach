@@ -8,11 +8,12 @@
  * or multiple times on the same page.
  */
 module Components {
+	"use strict";
 	/**
 	 * Select is a basic html option select.
 	 */
 	export module Select {
-		import property = _mithril.MithrilProperty;
+		import Property = _mithril.MithrilProperty;
 
 		/**
 		 * Item represents each option that can be selected. The value is the
@@ -34,20 +35,20 @@ module Components {
 		 */
 		export interface Options {
 			items: Item[];
-			value: property<string>;
-			onChange: (string) => void;
+			value: Property<string>;
+			onChange: (val: string) => void;
 		}
 
 		export function controller(options: Options): Options {
 			return options;
 		}
 
-		export function view(ctrl: Options) {
+		export function view(ctrl: Options): _mithril.MithrilVirtualElement {
 			return m("select", { onchange: m.withAttr("value", ctrl.onChange) }, [
-					ctrl.items.map(function(item) {
-						return m('option', { value: item.value, selected: (item.value == ctrl.value()) }, item.text);
+				ctrl.items.map(function(item: Item): _mithril.MithrilVirtualElement {
+					return m("option", { value: item.value, selected: (item.value === ctrl.value()) }, item.text);
 				})
-			])
+			]);
 		}
 	}
 }

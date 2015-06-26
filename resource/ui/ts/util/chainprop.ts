@@ -5,6 +5,8 @@
  * Utils contains common utilities.
  */
 module Utils {
+  "use strict";
+
 	/**
 	 * ChainProperty is a function interface for chainable property setter.
 	 * The property itself contains an object of type T, and is part of a
@@ -16,29 +18,29 @@ module Utils {
 	 * be set in a chain.
 	 *
 	 * Example:
-	 *  var obj:chainObj = (new chainObj()).chainProp1("test").chainProp2("value");
-	 *  var val2:string = obj.chainProp2(); // "value"
+	 *  var obj:chainObj = (new chainObj()).ChainProp1("test").ChainProp2("value");
+	 *  var val2:string = obj.ChainProp2(); // "value"
 	 */
-	export interface ChainProperty<T, U> {
-		():T;
-		(arg:T):U;
-	}
+  export interface ChainProperty<T, U> {
+    (): T;
+    (arg: T): U;
+  }
 
 	/**
-	 * chainProp returns a function which implements the ChainProperty
+	 * ChainProp returns a function which implements the ChainProperty
 	 * interface.
 	 *
 	 * @param _this the object to which this property will be bound. Thi Thi
 	 * @param val the default value of the property.
 	 */
-	export function chainProp<T,U>(_this:U, val:T):ChainProperty<T,U> {
-		var obj:T = val;
-		return function(value?:T):any {
-			if (value === undefined) {
-				return obj;
-			}
-			obj = value;
-			return _this;
-		}
-	}
+  export function ChainProp<T, U>(_this: U, val: T): ChainProperty<T, U> {
+    let obj: T = val;
+    return function(value?: T): any {
+      if (value === undefined) {
+        return obj;
+      }
+      obj = value;
+      return _this;
+    };
+  }
 }

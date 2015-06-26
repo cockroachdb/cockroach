@@ -11,15 +11,15 @@
 
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/nodes", {
-    "/graph": AdminViews.Graph.Page,
-    "/log": AdminViews.Log.Page,
-    "/monitor": AdminViews.Monitor.Page,
-    "/node": AdminViews.Nodes.NodesPage,
-    "/nodes": AdminViews.Nodes.NodesPage,
-    "/node/:node_id": AdminViews.Nodes.NodePage,
-    "/nodes/:node_id": AdminViews.Nodes.NodePage,
-    "/store": AdminViews.Stores.StorePage,
-    "/stores": AdminViews.Stores.StoresPage,
-    "/store/:store_id": AdminViews.Stores.StorePage,
-    "/stores/:store_id": AdminViews.Stores.StorePage
+  "/graph": AdminViews.Graph.Page,
+  "/log": AdminViews.Log.Page,
+  "/monitor": AdminViews.Monitor.Page,
+  "/node": AdminViews.Nodes.NodesPage,
+  "/nodes": AdminViews.Nodes.NodesPage,
+  "/node/:node_id": AdminViews.Nodes.NodePage,
+  "/nodes/:node_id": AdminViews.Nodes.NodePage,
+  "/store": AdminViews.Stores.StorePage,
+  "/stores": AdminViews.Stores.StoresPage,
+  "/store/:store_id": AdminViews.Stores.StorePage,
+  "/stores/:store_id": AdminViews.Stores.StorePage
 });
