@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestMakeSchemaColumns(t *testing.T) {
+func TestMakeTableDescColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
@@ -115,7 +115,7 @@ func TestMakeSchemaColumns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeSchema(stmt.(*parser.CreateTable))
+		schema, err := makeTableDesc(stmt.(*parser.CreateTable))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -128,60 +128,50 @@ func TestMakeSchemaColumns(t *testing.T) {
 	}
 }
 
-func TestMakeSchemaIndexes(t *testing.T) {
+func TestMakeTableDescIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
 		sql   string
-		index structured.TableSchema_IndexByName
+		index structured.IndexDescriptor
 	}{
 		{
 			"a INT PRIMARY KEY",
-			structured.TableSchema_IndexByName{
-				Index: structured.Index{
-					Name:   "primary",
-					Unique: true,
-				},
+			structured.IndexDescriptor{
+				Name:        "primary",
+				Unique:      true,
 				ColumnNames: []string{"a"},
 			},
 		},
 		{
 			"a INT UNIQUE",
-			structured.TableSchema_IndexByName{
-				Index: structured.Index{
-					Name:   "",
-					Unique: true,
-				},
+			structured.IndexDescriptor{
+				Name:        "",
+				Unique:      true,
 				ColumnNames: []string{"a"},
 			},
 		},
 		{
 			"a INT, b INT, INDEX c (a, b)",
-			structured.TableSchema_IndexByName{
-				Index: structured.Index{
-					Name:   "c",
-					Unique: false,
-				},
+			structured.IndexDescriptor{
+				Name:        "c",
+				Unique:      false,
 				ColumnNames: []string{"a", "b"},
 			},
 		},
 		{
 			"a INT, b INT, UNIQUE INDEX c (a, b)",
-			structured.TableSchema_IndexByName{
-				Index: structured.Index{
-					Name:   "c",
-					Unique: true,
-				},
+			structured.IndexDescriptor{
+				Name:        "c",
+				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
 		},
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
-			structured.TableSchema_IndexByName{
-				Index: structured.Index{
-					Name:   "primary",
-					Unique: true,
-				},
+			structured.IndexDescriptor{
+				Name:        "primary",
+				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
 		},
@@ -191,7 +181,7 @@ func TestMakeSchemaIndexes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeSchema(stmt.(*parser.CreateTable))
+		schema, err := makeTableDesc(stmt.(*parser.CreateTable))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}

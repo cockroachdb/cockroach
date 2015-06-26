@@ -30,22 +30,23 @@ import (
 
 var isError = testutils.IsError
 
-func makeTestSchema(name string) structured.TableSchema {
+func makeTestSchema(name string) *structured.TableDescriptor {
 	charType := structured.ColumnType{
 		Kind: structured.ColumnType_CHAR,
 	}
-	return structured.TableSchema{
-		Table: structured.Table{
-			Name: name,
-		},
-		Columns: []structured.Column{
+	return &structured.TableDescriptor{
+		Name: name,
+		Columns: []structured.ColumnDescriptor{
 			{Name: "id", Type: charType},
 			{Name: "name", Type: charType},
 			{Name: "title", Type: charType},
 		},
-		Indexes: []structured.TableSchema_IndexByName{
-			{Index: structured.Index{Name: "primary", Unique: true},
-				ColumnNames: []string{"id"}},
+		Indexes: []structured.IndexDescriptor{
+			{
+				Name:        "primary",
+				Unique:      true,
+				ColumnNames: []string{"id"},
+			},
 		},
 	}
 }
@@ -110,7 +111,7 @@ func TestCreateTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(schema, *schema2) {
+	if !reflect.DeepEqual(schema, schema2) {
 		t.Errorf("expected %+v, but got %+v", schema, schema2)
 	}
 
@@ -222,7 +223,7 @@ func TestStruct(t *testing.T) {
 		t.Fatal(err)
 	}
 	schema.Name = "t.users"
-	if err := db.CreateTable(schema); err != nil {
+	if err := db.CreateTable(&schema); err != nil {
 		t.Fatal(err)
 	}
 

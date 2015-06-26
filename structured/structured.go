@@ -36,36 +36,89 @@ func validateName(name, typ string) error {
 		return fmt.Errorf("empty %s name", typ)
 	}
 	// TODO(pmattis): Do we want to be more restrictive than this?
-	if strings.Contains(name, "/") {
-		return fmt.Errorf("\"%s\" may not contain \"/\"", name)
-	}
 	return nil
 }
 
-// ValidateTableDesc validates that the table descriptor is well formed. Checks
-// include validating the table, column and index names, verifying that column
-// names and index names are unique and verifying that column IDs and index IDs
-// are consistent.
-func ValidateTableDesc(desc TableDescriptor) error {
+// AllocateIDs allocates column and index ids for any column or index which has
+// an ID of 0.
+func (desc *TableDescriptor) AllocateIDs() error {
+	if desc.NextColumnID == 0 {
+		desc.NextColumnID = 1
+	}
+	if desc.NextIndexID == 0 {
+		desc.NextIndexID = 1
+	}
+
+	columnNames := map[string]uint32{}
+	for i, column := range desc.Columns {
+		if column.ID == 0 {
+			column.ID = desc.NextColumnID
+			desc.NextColumnID++
+		}
+		columnNames[column.Name] = column.ID
+		// Mildly confusing: column is not a pointer so we need to set it back into
+		// the columns slice.
+		desc.Columns[i] = column
+	}
+
+	for i, index := range desc.Indexes {
+		if index.ID == 0 {
+			index.ID = desc.NextIndexID
+			desc.NextIndexID++
+		}
+		for j, colName := range index.ColumnNames {
+			if len(index.ColumnIDs) <= j {
+				index.ColumnIDs = append(index.ColumnIDs, 0)
+			}
+			if index.ColumnIDs[j] == 0 {
+				index.ColumnIDs[j] = columnNames[colName]
+			}
+		}
+		// Mildly confusing: index is not a pointer so we need to set it back into
+		// the index slice.
+		desc.Indexes[i] = index
+	}
+
+	// This is sort of ugly. We want to make sure the descriptor is valid, except
+	// for checking the table ID. So we whack in a valid table ID for the
+	// duration of the call to Validate.
+	savedID := desc.ID
+	desc.ID = 1
+	err := desc.Validate()
+	desc.ID = savedID
+	return err
+}
+
+// Validate validates that the table descriptor is well formed. Checks include
+// validating the table, column and index names, verifying that column names
+// and index names are unique and verifying that column IDs and index IDs are
+// consistent.
+func (desc *TableDescriptor) Validate() error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
+	}
+	if desc.ID == 0 {
+		return fmt.Errorf("invalid table ID 0")
 	}
 
 	if len(desc.Columns) == 0 {
 		return fmt.Errorf("table must contain at least 1 column")
 	}
 
-	columnNames := map[string]struct{}{}
+	columnNames := map[string]uint32{}
 	columnIDs := map[uint32]string{}
 	for _, column := range desc.Columns {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
 		}
+		if column.ID == 0 {
+			return fmt.Errorf("invalid column ID 0")
+		}
 
 		if _, ok := columnNames[column.Name]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
-		columnNames[column.Name] = struct{}{}
+		columnNames[column.Name] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {
 			return fmt.Errorf("column \"%s\" duplicate ID of column \"%s\": %d",
@@ -92,6 +145,9 @@ func ValidateTableDesc(desc TableDescriptor) error {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
 		}
+		if index.ID == 0 {
+			return fmt.Errorf("invalid index ID 0")
+		}
 
 		if _, ok := indexNames[index.Name]; ok {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
@@ -109,88 +165,27 @@ func ValidateTableDesc(desc TableDescriptor) error {
 				index.Name, index.ID, desc.NextIndexID)
 		}
 
+		if len(index.ColumnIDs) != len(index.ColumnNames) {
+			return fmt.Errorf("mismatched column IDs (%d) and names (%d)",
+				len(index.ColumnIDs), len(index.ColumnNames))
+		}
+
 		if len(index.ColumnIDs) == 0 {
 			return fmt.Errorf("index \"%s\" must contain at least 1 column", index.Name)
 		}
 
-		for _, columnID := range index.ColumnIDs {
-			if _, ok := columnIDs[columnID]; !ok {
-				return fmt.Errorf("index \"%s\" contains unknown column ID %d", index.Name, columnID)
+		for i, name := range index.ColumnNames {
+			colID, ok := columnNames[name]
+			if !ok {
+				return fmt.Errorf("index \"%s\" contains unknown column \"%s\"", index.Name, name)
+			}
+			if colID != index.ColumnIDs[i] {
+				return fmt.Errorf("index \"%s\" column \"%s\" should have ID %d, but found ID %d",
+					index.Name, name, colID, index.ColumnIDs[i])
 			}
 		}
 	}
 	return nil
-}
-
-// TableDescFromSchema initializes a TableDescriptor from a TableSchema. The
-// TableSchema is expected to be valid. An invalid table schema will result in
-// an invalid table descriptor. Call ValidateTableDesc on the resulting
-// descriptor to check for validity.
-//
-// Note that the resulting descriptor will not have a table ID set. Allocation
-// of the table ID is left to the caller.
-func TableDescFromSchema(schema TableSchema) TableDescriptor {
-	desc := TableDescriptor{
-		Table: schema.Table,
-	}
-	desc.Name = strings.ToLower(desc.Name)
-
-	columnIDsByName := map[string]uint32{}
-	for _, column := range schema.Columns {
-		columnDesc := ColumnDescriptor{
-			ID:     desc.NextColumnID,
-			Column: column,
-		}
-		columnDesc.Name = strings.ToLower(columnDesc.Name)
-		columnIDsByName[columnDesc.Name] = columnDesc.ID
-
-		desc.Columns = append(desc.Columns, columnDesc)
-		desc.NextColumnID++
-	}
-
-	for _, index := range schema.Indexes {
-		indexDesc := IndexDescriptor{
-			ID:    desc.NextIndexID,
-			Index: index.Index,
-		}
-		indexDesc.Name = strings.ToLower(indexDesc.Name)
-
-		for _, columnName := range index.ColumnNames {
-			indexDesc.ColumnIDs = append(indexDesc.ColumnIDs, columnIDsByName[columnName])
-		}
-
-		desc.Indexes = append(desc.Indexes, indexDesc)
-		desc.NextIndexID++
-	}
-
-	return desc
-}
-
-// TableSchemaFromDesc initializes a TableSchema from a TableDescriptor. The
-// TableDescriptor is expected to be valid. An invalid table descriptor will
-// result in an invalid table schema (e.g. a schema with an index referring to
-// an empty column name).
-func TableSchemaFromDesc(desc TableDescriptor) TableSchema {
-	schema := TableSchema{
-		Table: desc.Table,
-	}
-
-	columnNamesByID := map[uint32]string{}
-	for _, column := range desc.Columns {
-		schema.Columns = append(schema.Columns, column.Column)
-		columnNamesByID[column.ID] = column.Name
-	}
-
-	for _, index := range desc.Indexes {
-		i := TableSchema_IndexByName{
-			Index: index.Index,
-		}
-		for _, columnID := range index.ColumnIDs {
-			i.ColumnNames = append(i.ColumnNames, columnNamesByID[columnID])
-		}
-		schema.Indexes = append(schema.Indexes, i)
-	}
-	return schema
 }
 
 // SQLString returns the SQL string corresponding to the type.

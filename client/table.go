@@ -263,10 +263,9 @@ func (db *DB) lookupTable(path string) (nsID uint32, name string, err error) {
 // CreateTable creates a table from the specified schema. Table creation will
 // fail if the table name is already in use. The table name is required to have
 // the form "<namespace>.<table>".
-func (db *DB) CreateTable(schema structured.TableSchema) error {
-	schema.Name = strings.ToLower(schema.Name)
-	desc := structured.TableDescFromSchema(schema)
-	if err := structured.ValidateTableDesc(desc); err != nil {
+func (db *DB) CreateTable(desc *structured.TableDescriptor) error {
+	desc.Name = strings.ToLower(desc.Name)
+	if err := desc.AllocateIDs(); err != nil {
 		return err
 	}
 
@@ -301,20 +300,15 @@ func (db *DB) CreateTable(schema structured.TableSchema) error {
 		descKey := keys.MakeDescMetadataKey(desc.ID)
 		b := &Batch{}
 		b.CPut(nameKey, descKey, nil)
-		b.Put(descKey, &desc)
+		b.Put(descKey, desc)
 		return txn.Commit(b)
 	})
 }
 
 // DescribeTable retrieves the table schema for the specified table. Path has
 // the form "<namespace>.<table>".
-func (db *DB) DescribeTable(path string) (*structured.TableSchema, error) {
-	desc, err := db.getTableDesc(path)
-	if err != nil {
-		return nil, err
-	}
-	schema := structured.TableSchemaFromDesc(*desc)
-	return &schema, nil
+func (db *DB) DescribeTable(path string) (*structured.TableDescriptor, error) {
+	return db.getTableDesc(path)
 }
 
 // RenameTable renames a table. Old path and new path have the form
@@ -355,7 +349,7 @@ func (db *DB) RenameTable(oldPath, newPath string) error {
 			return err
 		}
 		desc.Name = strings.ToLower(newPath)
-		if err := structured.ValidateTableDesc(desc); err != nil {
+		if err := desc.Validate(); err != nil {
 			return err
 		}
 		newNameKey := keys.MakeNameMetadataKey(newNSID, newName)
@@ -506,7 +500,7 @@ func (db *DB) getTableDesc(path string) (*structured.TableDescriptor, error) {
 	if err := db.GetProto(descKey, &desc); err != nil {
 		return nil, err
 	}
-	if err := structured.ValidateTableDesc(desc); err != nil {
+	if err := desc.Validate(); err != nil {
 		return nil, err
 	}
 	return &desc, nil
