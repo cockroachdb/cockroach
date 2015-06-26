@@ -212,8 +212,7 @@ func ExampleGlogFlags() {
 	c.Run("kv --alsologtostderr=false scan")
 	c.Run("kv --log-backtrace-at=foo.go:1 scan")
 	c.Run("kv --log-dir='' scan")
-	c.Run("kv --logtostderr scan")
-	// c.Run("kv --stderrthreshold=2 scan")
+	c.Run("kv --logtostderr=true scan")
 	c.Run("kv --verbosity=0 scan")
 	c.Run("kv --vmodule=foo=1 scan")
 
@@ -221,7 +220,7 @@ func ExampleGlogFlags() {
 	// kv --alsologtostderr=false scan
 	// kv --log-backtrace-at=foo.go:1 scan
 	// kv --log-dir='' scan
-	// kv --logtostderr scan
+	// kv --logtostderr=true scan
 	// kv --verbosity=0 scan
 	// kv --vmodule=foo=1 scan
 }

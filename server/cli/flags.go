@@ -142,7 +142,9 @@ func initFlags(ctx *server.Context) {
 
 	if f := initCmd.Flags(); true {
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
-		initCmd.MarkFlagRequired("stores")
+		if err := initCmd.MarkFlagRequired("stores"); err != nil {
+			panic(err)
+		}
 	}
 
 	if f := startCmd.Flags(); true {
@@ -172,21 +174,31 @@ func initFlags(ctx *server.Context) {
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime,
 			flagUsage["scan-max-idle-time"])
 
-		startCmd.MarkFlagRequired("gossip")
-		startCmd.MarkFlagRequired("stores")
+		if err := startCmd.MarkFlagRequired("gossip"); err != nil {
+			panic(err)
+		}
+		if err := startCmd.MarkFlagRequired("stores"); err != nil {
+			panic(err)
+		}
 	}
 
 	if f := exterminateCmd.Flags(); true {
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
-		exterminateCmd.MarkFlagRequired("stores")
+		if err := exterminateCmd.MarkFlagRequired("stores"); err != nil {
+			panic(err)
+		}
 	}
 
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
 		f.IntVar(&keySize, "key-size", defaultKeySize, flagUsage["key-size"])
-		cmd.MarkFlagRequired("certs")
-		cmd.MarkFlagRequired("key-size")
+		if err := cmd.MarkFlagRequired("certs"); err != nil {
+			panic(err)
+		}
+		if err := cmd.MarkFlagRequired("key-size"); err != nil {
+			panic(err)
+		}
 	}
 
 	clientCmds := []*cobra.Command{kvCmd, rangeCmd, acctCmd, permCmd, zoneCmd, quitCmd}

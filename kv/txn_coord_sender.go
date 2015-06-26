@@ -277,12 +277,30 @@ func (tc *TxnCoordSender) startStats() {
 			}
 
 			num := len(curStats.durations)
-			dMax := time.Duration(stats.Max(curStats.durations))
-			dMean := time.Duration(stats.Mean(curStats.durations))
-			dDev := time.Duration(stats.StdDevP(curStats.durations))
-			rMax := stats.Max(curStats.restarts)
-			rMean := stats.Mean(curStats.restarts)
-			rDev := stats.StdDevP(curStats.restarts)
+			dMax, err := stats.Max(curStats.durations)
+			if err != nil {
+				panic(err)
+			}
+			dMean, err := stats.Mean(curStats.durations)
+			if err != nil {
+				panic(err)
+			}
+			dDev, err := stats.StdDevP(curStats.durations)
+			if err != nil {
+				panic(err)
+			}
+			rMax, err := stats.Max(curStats.restarts)
+			if err != nil {
+				panic(err)
+			}
+			rMean, err := stats.Mean(curStats.restarts)
+			if err != nil {
+				panic(err)
+			}
+			rDev, err := stats.StdDevP(curStats.restarts)
+			if err != nil {
+				panic(err)
+			}
 
 			rate := float64(int64(num)*int64(time.Second)) / float64(now-lastNow)
 			var pCommitted, pAbandoned, pAborted float32
@@ -291,10 +309,14 @@ func (tc *TxnCoordSender) startStats() {
 				pAbandoned = 100 * float32(curStats.abandoned) / float32(num)
 				pAborted = 100 * float32(curStats.aborted) / float32(num)
 			}
-			log.Infof("txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%.1f avg/σ/max restarts (%d samples)",
-				rate, pCommitted, pAborted, pAbandoned, util.TruncateDuration(dMean, res),
-				util.TruncateDuration(dDev, res), util.TruncateDuration(dMax, res),
-				rMean, rDev, rMax, num)
+			log.Infof(
+				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%.1f avg/σ/max restarts (%d samples)",
+				rate, pCommitted, pAborted, pAbandoned,
+				util.TruncateDuration(time.Duration(dMean), res),
+				util.TruncateDuration(time.Duration(dDev), res),
+				util.TruncateDuration(time.Duration(dMax), res),
+				rMean, rDev, rMax, num,
+			)
 			lastNow = now
 		case <-tc.stopper.ShouldStop():
 			return
