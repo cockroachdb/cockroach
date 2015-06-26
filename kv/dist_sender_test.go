@@ -802,3 +802,84 @@ func TestGetNodeDescriptor(t *testing.T) {
 		return util.Errorf("wanted NodeID 5, got %v", desc)
 	})
 }
+
+// TestMultiRangeMergeStaleDescriptor simulates the situation in which the
+// DistSender executes a multi-range scan which encounters the stale descriptor
+// of a range which has since incorporated its right neighbor by means of a
+// merge. It is verified that the DistSender scans the correct keyrange exactly
+// once.
+func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+	// Assume we have two ranges, [a-b) and [b-KeyMax).
+	merged := false
+	// The stale first range descriptor which is unaware of the merge.
+	var firstRange = proto.RangeDescriptor{
+		RaftID:   1,
+		StartKey: proto.Key("a"),
+		EndKey:   proto.Key("b"),
+		Replicas: []proto.Replica{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	// The merged descriptor, which will be looked up after having processed
+	// the stale range [a,b).
+	var mergedRange = proto.RangeDescriptor{
+		RaftID:   1,
+		StartKey: proto.Key("a"),
+		EndKey:   proto.KeyMax,
+		Replicas: []proto.Replica{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	// Assume we have two key-value pairs, a=1 and c=2.
+	existingKVs := []proto.KeyValue{
+		{Key: proto.Key("a"), Value: proto.Value{Bytes: []byte("1")}},
+		{Key: proto.Key("c"), Value: proto.Value{Bytes: []byte("2")}},
+	}
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		if method != "Node.Scan" {
+			t.Fatalf("unexpected method:%s", method)
+		}
+		header := getArgs(testAddress).(proto.Request).Header()
+		reply := getReply().(*proto.ScanResponse)
+		results := []proto.KeyValue{}
+		for _, curKV := range existingKVs {
+			if header.Key.Less(curKV.Key.Next()) && curKV.Key.Less(header.EndKey) {
+				results = append(results, curKV)
+			}
+		}
+		reply.Rows = results
+		return []interface{}{reply}, nil
+	}
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(key proto.Key, _ lookupOptions) ([]proto.RangeDescriptor, error) {
+			if !merged {
+				// Asume a range merge operation happened
+				merged = true
+				return []proto.RangeDescriptor{firstRange}, nil
+			}
+			return []proto.RangeDescriptor{mergedRange}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	call := proto.ScanCall(proto.Key("a"), proto.Key("d"), 10)
+	// Set the Txn info to avoid an OpRequiresTxnError.
+	call.Args.Header().Txn = &proto.Transaction{}
+	reply := call.Reply.(*proto.ScanResponse)
+	ds.Send(context.Background(), call)
+	if err := reply.GoError(); err != nil {
+		t.Fatalf("scan encountered error: %s", err)
+	}
+	if !reflect.DeepEqual(existingKVs, reply.Rows) {
+		t.Fatalf("expect get %v, actual get %v", existingKVs, reply.Rows)
+	}
+}
