@@ -18,7 +18,6 @@
 package sqlserver
 
 import (
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -94,10 +93,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the SQLRequest for SQL execution.
-	if httpStatus, err := s.execute(args, reply); err != nil {
-		http.Error(w, err.Error(), httpStatus)
-		return
-	}
+	s.Send(sqlwire.Call{Args: args, Reply: reply})
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
@@ -109,6 +105,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func (s *Server) execute(args sqlwire.Request, reply sqlwire.Response) (int, error) {
-	return http.StatusNotImplemented, errors.New("Not implemented")
+// Send forwards the call for further processing.
+func (s *Server) Send(call sqlwire.Call) {
+	switch call.Args.(type) {
+	case *sqlwire.SQLRequest:
+		reply := ""
+		if call.Args.(*sqlwire.SQLRequest).Cmds != nil {
+			reply = *(call.Args.(*sqlwire.SQLRequest).Cmds[0].Sql)
+		}
+		resp := call.Reply.(*sqlwire.SQLResponse)
+		resp.Columns = append(resp.Columns, "echo")
+		result := &sqlwire.Result{}
+		result.Values = append(result.Values, &sqlwire.Datum{Blobval: []byte(reply)})
+		resp.Results = append(resp.Results, result)
+	}
 }

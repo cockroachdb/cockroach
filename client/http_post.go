@@ -37,7 +37,6 @@ import (
 type PostContext struct {
 	Server    string // The host:port address of the Cockroach gateway node
 	Endpoint  string
-	Client    *http.Client  // The HTTP client
 	Context   *base.Context // The base context: needed for client setup.
 	RetryOpts retry.Options
 }
@@ -76,7 +75,12 @@ func HTTPPost(c PostContext, request, response gogoproto.Message, method fmt.Str
 		req.Header.Add(util.AcceptHeader, util.ProtoContentType)
 		req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
 
-		resp, err := c.Client.Do(req)
+		client, err := c.Context.GetHTTPClient()
+		if err != nil {
+			return retry.Break, err
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return retry.Continue, err
 		}

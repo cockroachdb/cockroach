@@ -62,9 +62,8 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 			RetryOpts: retryOpts,
 		},
 	}
-	var err error
-	sender.ctx.Client, err = ctx.GetHTTPClient()
-	if err != nil {
+	// Ensure that the context returns an HTTPClient.
+	if _, err := ctx.GetHTTPClient(); err != nil {
 		return nil, err
 	}
 	return sender, nil
