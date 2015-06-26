@@ -800,7 +800,13 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	ms := engine.MVCCStats{}
-	batch, rErr := r.applyRaftCommandHelper(ctx, index, originNode, args, reply, &ms)
+	batch, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, args, reply, &ms)
+	// ALWAYS set the reply header error to the error returned by the
+	// helper. This is the definitive result of the execution. The
+	// error must be set before saving to the response cache.
+	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
+	// touch the reply header's error field.
+	reply.Header().SetGoError(rErr)
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -809,6 +815,9 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	}
 	if err := batch.Commit(); err != nil {
 		rErr = newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr)
+	} else {
+		// Update cached appliedIndex if we were able to set the applied index on disk.
+		atomic.StoreUint64(&r.appliedIndex, index)
 	}
 
 	// On successful write commands, flush to event feed, and handle other
@@ -830,18 +839,13 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 		}
 	}
 
-	// Update cached appliedIndex on anything but a replica corruption error.
-	if _, ok := rErr.(*replicaCorruptionError); !ok {
-		atomic.StoreUint64(&r.appliedIndex, index)
-	}
-
 	return rErr
 }
 
-// applyRaftCommandHelper attempts to run the command and returns the
-// batch engine of committed results (empty if the command failed) and
-// the error.
-func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, originNode proto.RaftNodeID,
+// applyRaftCommandInBatch executes the command in a batch engine and
+// returns the batch containing the results. The caller is responsible
+// for committing the batch, even on error.
+func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
 	args proto.Request, reply proto.Response, ms *engine.MVCCStats) (engine.Engine, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
@@ -858,6 +862,12 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 		// since reads are served locally by the lease holder without going
 		// through Raft, a read which was not taken into account may have been
 		// served. Hence, we must retry at the current leader.
+		//
+		// It's crucial that we don't update the response cache for the error
+		// returned below since the request is going to be retried with the
+		// same ClientCmdID and would get the distributed sender stuck in an
+		// infinite loop, retrieving a stale NotLeaderError over and over
+		// again, even when proposing at the correct replica.
 		return batch, r.newNotLeaderError(lease, originNode)
 	}
 
@@ -871,18 +881,13 @@ func (r *Range) applyRaftCommandHelper(ctx context.Context, index uint64, origin
 			// was present in the cached entry (if any).
 			return batch, reply.Header().GoError()
 		} else if ok && err != nil {
+			// If the response cache entry was found but couldn't be decoded, return corrupt.
 			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
 		}
 	}
 
 	// Execute the command.
 	intents, rErr := r.executeCmd(batch, ms, args, reply)
-	// ALWAYS set the reply header error to the error returned by the
-	// helper. This is the definitive result of the execution. The
-	// error must be set before saving to the response cache.
-	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
-	// touch the reply header's error field.
-	reply.Header().SetGoError(rErr)
 	// Regardless of error, add result to the response cache if this is
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses

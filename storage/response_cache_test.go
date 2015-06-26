@@ -88,7 +88,7 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	}
 }
 
-// TestResponseCacheCopy tests that responses cached in one cache get
+// TestResponseCacheCopyInto tests that responses cached in one cache get
 // transferred correctly to another cache using CopyInto().
 func TestResponseCacheCopyInto(t *testing.T) {
 	defer leaktest.AfterTest(t)
