@@ -18,10 +18,13 @@
 package storage_test
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"testing"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -113,30 +116,66 @@ func (ser *storeEventReader) readEvents(sub *util.Subscription) {
 // storeEventReader. The formatting is appropriate to paste into this test if as
 // a new expected value.
 func (ser *storeEventReader) eventFeedString() string {
-	var response string
-	for id, feed := range ser.perStoreFeeds {
-		response += fmt.Sprintf("proto.StoreID(%d): []string{\n", int64(id))
-		for _, evt := range feed {
-			response += fmt.Sprintf("\t\t\"%s\",\n", evt)
-		}
-		response += "},\n"
+	var buffer bytes.Buffer
+	w := tabwriter.NewWriter(&buffer, 2, 1, 2, ' ', 0)
+
+	var storeIDs sort.IntSlice
+	for storeID := range ser.perStoreFeeds {
+		storeIDs = append(storeIDs, int(storeID))
 	}
-	return response
+	sort.Sort(storeIDs)
+
+	for _, storeID := range storeIDs {
+		if feed, ok := ser.perStoreFeeds[proto.StoreID(storeID)]; ok {
+			fmt.Fprintf(w, "proto.StoreID(%d): {\n", storeID)
+			for _, evt := range feed {
+				fmt.Fprintf(w, "\t\"%s\",\n", evt)
+			}
+			fmt.Fprintf(w, "},\n")
+		} else {
+			panic("unreachable!")
+		}
+	}
+	return buffer.String()
 }
 
 // updateCountString describes the update counts that were recorded by
 // storeEventReader.  The formatting is appropriate to paste into this test if
 // as a new expected value.
 func (ser *storeEventReader) updateCountString() string {
-	var response string
-	for id, countset := range ser.perStoreUpdateCount {
-		response += fmt.Sprintf("proto.StoreID(%d): map[proto.Method]int{\n", int64(id))
-		for k, count := range countset {
-			response += fmt.Sprintf("\t\tproto.Method(%d): %d, //%s\n", k, count, k)
-		}
-		response += "},\n"
+	var buffer bytes.Buffer
+	w := tabwriter.NewWriter(&buffer, 2, 1, 2, ' ', 0)
+
+	var storeIDs sort.IntSlice
+	for storeID := range ser.perStoreUpdateCount {
+		storeIDs = append(storeIDs, int(storeID))
 	}
-	return response
+	sort.Sort(storeIDs)
+
+	for _, storeID := range storeIDs {
+		if countset, ok := ser.perStoreUpdateCount[proto.StoreID(storeID)]; ok {
+			fmt.Fprintf(w, "proto.StoreID(%d): {\n", storeID)
+
+			var methodIDs sort.IntSlice
+			for methodID := range countset {
+				methodIDs = append(methodIDs, int(methodID))
+			}
+			sort.Sort(methodIDs)
+
+			for _, methodID := range methodIDs {
+				method := proto.Method(methodID)
+				if count, ok := countset[method]; ok {
+					fmt.Fprintf(w, "\tproto.%s:\t%d,\n", method, count)
+				} else {
+					panic("unreachable!")
+				}
+			}
+		} else {
+			panic("unreachable!")
+		}
+		fmt.Fprintf(w, "},\n")
+	}
+	return buffer.String()
 }
 
 func checkMatch(patternMap, lineMap map[proto.StoreID][]string) bool {
@@ -276,28 +315,28 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	// Expected count of update events on a per-method basis.
 	expectedUpdateCount := map[proto.StoreID]map[proto.Method]int{
 		proto.StoreID(1): {
-			proto.Method(22): 3,  //InternalLeaderLease
-			proto.Method(2):  7,  //ConditionalPut
-			proto.Method(1):  18, //Put
-			proto.Method(7):  6,  //EndTransaction
-			proto.Method(3):  2,  //Increment
-			proto.Method(4):  2,  //Delete
+			proto.Put:                 18,
+			proto.ConditionalPut:      7,
+			proto.Increment:           2,
+			proto.Delete:              2,
+			proto.EndTransaction:      6,
+			proto.InternalLeaderLease: 3,
 		},
 		proto.StoreID(2): {
-			proto.Method(22): 2,  //InternalLeaderLease
-			proto.Method(4):  2,  //Delete
-			proto.Method(2):  6,  //ConditionalPut
-			proto.Method(1):  16, //Put
-			proto.Method(7):  5,  //EndTransaction
-			proto.Method(3):  2,  //Increment
+			proto.Put:                 16,
+			proto.ConditionalPut:      6,
+			proto.Increment:           2,
+			proto.Delete:              2,
+			proto.EndTransaction:      5,
+			proto.InternalLeaderLease: 2,
 		},
 		proto.StoreID(3): {
-			proto.Method(1):  14, //Put
-			proto.Method(7):  4,  //EndTransaction
-			proto.Method(3):  2,  //Increment
-			proto.Method(2):  5,  //ConditionalPut
-			proto.Method(22): 2,  //InternalLeaderLease
-			proto.Method(4):  2,  //Delete
+			proto.Put:                 14,
+			proto.ConditionalPut:      5,
+			proto.Increment:           2,
+			proto.Delete:              2,
+			proto.EndTransaction:      4,
+			proto.InternalLeaderLease: 2,
 		},
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {
