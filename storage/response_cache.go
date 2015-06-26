@@ -51,7 +51,6 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 // A ResponseCache is safe for concurrent access.
 type ResponseCache struct {
 	raftID proto.RaftID
-	engine engine.Engine
 	sync.Mutex
 }
 
@@ -59,19 +58,18 @@ type ResponseCache struct {
 // maintains a response cache, not just the leader. However, when a
 // replica loses or gains leadership of the Raft consensus group, the
 // inflight map should be cleared.
-func NewResponseCache(raftID proto.RaftID, engine engine.Engine) *ResponseCache {
+func NewResponseCache(raftID proto.RaftID) *ResponseCache {
 	return &ResponseCache{
 		raftID: raftID,
-		engine: engine,
 	}
 }
 
 // ClearData removes all items stored in the persistent cache. It does not alter
 // the inflight map.
-func (rc *ResponseCache) ClearData() error {
+func (rc *ResponseCache) ClearData(e engine.Engine) error {
 	p := keys.ResponseCacheKey(rc.raftID, nil) // prefix for all response cache entries with this raft ID
 	end := p.PrefixEnd()
-	_, err := engine.ClearRange(rc.engine, engine.MVCCEncodeKey(p), engine.MVCCEncodeKey(end))
+	_, err := engine.ClearRange(e, engine.MVCCEncodeKey(p), engine.MVCCEncodeKey(end))
 	return err
 }
 
@@ -81,7 +79,7 @@ func (rc *ResponseCache) ClearData() error {
 // false. If a command is pending already for the cmdID, then this
 // method will block until the the command is completed or the
 // response cache is cleared.
-func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Response) (bool, error) {
+func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID, reply proto.Response) (bool, error) {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return false, nil
@@ -90,18 +88,18 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Respon
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
 	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
-	ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp, true, nil, &rwResp)
+	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rwResp)
 	if ok && err == nil {
 		gogoproto.Merge(reply, rwResp.GetValue().(gogoproto.Message))
 	}
 	return ok, err
 }
 
-// CopyInto copies all the cached results from one response cache into
-// another. The cache will be locked while copying is in progress;
-// failures decoding individual cache entries return an error. The
-// copy is done directly using the engine instead of interpreting
-// values through MVCC for efficiency.
+// CopyInto copies all the cached results from this response cache
+// into the destRaftID response cache. The cache will be locked while
+// copying is in progress; failures decoding individual cache entries
+// return an error. The copy is done directly using the engine instead
+// of interpreting values through MVCC for efficiency.
 func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) error {
 	rc.Lock()
 	defer rc.Unlock()
@@ -110,7 +108,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) erro
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
-	return rc.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+	return e.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
 		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
@@ -133,11 +131,11 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) erro
 	})
 }
 
-// CopyFrom copies all the cached results from another response cache
-// into this one. Note that the cache will not be locked while copying
-// is in progress. Failures decoding individual cache entries return an
-// error. The copy is done directly using the engine instead of interpreting
-// values through MVCC for efficiency.
+// CopyFrom copies all the cached results from the originRaftID
+// response cache into this one. Note that the cache will not be
+// locked while copying is in progress. Failures decoding individual
+// cache entries return an error. The copy is done directly using the
+// engine instead of interpreting values through MVCC for efficiency.
 func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RaftID) error {
 	prefix := keys.ResponseCacheKey(originRaftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
@@ -161,13 +159,13 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RaftID) er
 		}
 		meta.Value.Checksum = nil
 		meta.Value.InitChecksum(key)
-		_, _, err = engine.PutProto(rc.engine, encKey, meta)
+		_, _, err = engine.PutProto(e, encKey, meta)
 		return false, err
 	})
 }
 
 // PutResponse writes a response to the cache for the specified cmdID.
-func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply proto.Response) error {
+func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, reply proto.Response) error {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return nil
@@ -180,19 +178,19 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply proto.Respon
 		if !rwResp.SetValue(reply) {
 			log.Fatalf("response %T not supported by response cache", reply)
 		}
-		err = engine.MVCCPutProto(rc.engine, nil, key, proto.ZeroTimestamp, nil, rwResp)
+		err = engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, rwResp)
 	}
 
 	return err
 }
 
 // shouldCacheResponse returns whether the response should be cached.
-// Responses with write-too-old and write-intent errors are are
-// retried on the server, and so are not recorded in the response
+// Responses with write-too-old, write-intent and not leader errors
+// are retried on the server, and so are not recorded in the response
 // cache in the hopes of retrying to a successful outcome.
 func (rc *ResponseCache) shouldCacheResponse(reply proto.Response) bool {
 	switch reply.Header().GoError().(type) {
-	case *proto.WriteTooOldError, *proto.WriteIntentError:
+	case *proto.WriteTooOldError, *proto.WriteIntentError, *proto.NotLeaderError:
 		return false
 	}
 	return true
