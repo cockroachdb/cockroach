@@ -492,7 +492,7 @@ func TestSQLServer(t *testing.T) {
 		// Request with garbage payload.
 		{"Execute", []byte("garbage"), http.StatusBadRequest},
 		// Valid request.
-		{"Execute", body, http.StatusNotImplemented},
+		{"Execute", body, http.StatusOK},
 	}
 	for _, test := range testCases {
 		statusCode := sendURL(t, baseURL+test.command, test.body)

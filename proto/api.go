@@ -220,18 +220,7 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		return
 	}
 	rh.Error = &Error{}
-	rh.Error.Message = err.Error()
-	if r, ok := err.(util.Retryable); ok {
-		rh.Error.Retryable = r.CanRetry()
-	}
-	if r, ok := err.(TransactionRestartError); ok {
-		rh.Error.TransactionRestart = r.CanRestartTransaction()
-	}
-	// If the specific error type exists in the detail union, set it.
-	detail := &ErrorDetail{}
-	if detail.SetValue(err) {
-		rh.Error.Detail = detail
-	}
+	rh.Error.SetResponseGoError(err)
 }
 
 // Verify verifies the integrity of the get response value.
