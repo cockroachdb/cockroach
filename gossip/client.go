@@ -71,12 +71,12 @@ func newClient(addr net.Addr) *client {
 // returns immediately.
 func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		c.rpcClient = rpc.NewClient(c.addr, nil, context)
+		c.rpcClient = rpc.NewClient(c.addr, context)
 		select {
-		case <-c.rpcClient.Ready:
+		case <-c.rpcClient.Healthy():
 			// Success!
 		case <-c.rpcClient.Closed:
-			c.err = util.Errorf("gossip client failed to connect")
+			c.err = util.Errorf("gossip client was closed")
 			done <- c
 			return
 		}
@@ -84,7 +84,7 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 		// Start gossipping and wait for disconnect or error.
 		c.lastFresh = time.Now().UnixNano()
 		c.err = c.gossip(g, stopper)
-		if c.err != nil {
+		if context.DisableCache {
 			c.rpcClient.Close()
 		}
 		done <- c

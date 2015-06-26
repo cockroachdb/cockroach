@@ -49,12 +49,13 @@ func TestClientHeartbeat(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	c := NewClient(s.Addr(), nil, nodeContext)
-	<-c.Ready
-	if c != NewClient(s.Addr(), nil, nodeContext) {
+	c := NewClient(s.Addr(), nodeContext)
+	<-c.Healthy()
+	newC := NewClient(s.Addr(), nodeContext)
+	<-c.Healthy()
+	if newC != c {
 		t.Fatal("expected cached client to be returned while healthy")
 	}
-	<-c.Ready
 }
 
 func TestClientNoCache(t *testing.T) {
@@ -72,10 +73,10 @@ func TestClientNoCache(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	c1 := NewClient(s.Addr(), nil, rpcContext)
-	<-c1.Ready
-	c2 := NewClient(s.Addr(), nil, rpcContext)
-	<-c2.Ready
+	c1 := NewClient(s.Addr(), rpcContext)
+	<-c1.Healthy()
+	c2 := NewClient(s.Addr(), rpcContext)
+	<-c2.Healthy()
 	if c1 == c2 {
 		t.Errorf("expected different clients with cache disabled: %+v != %+v", c1, c2)
 	}
@@ -94,7 +95,7 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 	s := createTestServer(serverClock, stopper, t)
 
 	// Create a client. It should attempt a heartbeat and fail.
-	c := NewClient(s.Addr(), nil, s.context)
+	c := NewClient(s.Addr(), s.context)
 
 	// Register a heartbeat service.
 	heartbeat := &HeartbeatService{
@@ -102,17 +103,18 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
 
-	// The client should fail the heartbeat and be recycled.
-	<-c.Closed
+	select {
+	case <-c.Healthy():
+		t.Error("client became healthy before a successful heartbeat")
+	case <-time.After(10 * time.Millisecond):
+	}
 
 	if err := heartbeat.Register(s); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
 	}
-	// Same thing, but now the heartbeat service exists.
-	c = NewClient(s.Addr(), nil, s.context)
 
 	// A heartbeat should succeed and the client should become ready.
-	<-c.Ready
+	<-c.Healthy()
 }
 
 func TestOffsetMeasurement(t *testing.T) {
@@ -138,22 +140,17 @@ func TestOffsetMeasurement(t *testing.T) {
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
 	clientClock := hlc.NewClock(advancing.UnixNano)
 	context := NewNodeTestContext(clientClock, stopper)
-	c := NewClient(s.Addr(), nil, context)
-	<-c.Ready
-
-	// Ensure we get a good heartbeat before continuing.
-	if err := util.IsTrueWithin(c.IsHealthy, heartbeatInterval*10); err != nil {
-		t.Fatal(err)
-	}
+	c := NewClient(s.Addr(), context)
+	<-c.Healthy()
 
 	expectedOffset := proto.RemoteOffset{Offset: 5, Uncertainty: 5, MeasuredAt: 10}
-	if o := c.RemoteOffset(); !o.Equal(expectedOffset) {
+	if o := c.remoteOffset; !o.Equal(expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
 
 	// Ensure the offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
-	if o := context.RemoteClocks.offsets[c.addr.String()]; !o.Equal(expectedOffset) {
+	if o := context.RemoteClocks.offsets[c.RemoteAddr().String()]; !o.Equal(expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
 	context.RemoteClocks.mu.Unlock()
@@ -188,24 +185,19 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 	}
 	clientClock := hlc.NewClock(advancing.UnixNano)
 	context := NewNodeTestContext(clientClock, stopper)
-	c := NewClient(s.Addr(), nil, context)
-	<-c.Ready
-
-	// Ensure we get a good heartbeat before continuing.
-	if err := util.IsTrueWithin(c.IsHealthy, heartbeatInterval*10); err != nil {
-		t.Fatal(err)
-	}
+	c := NewClient(s.Addr(), context)
+	<-c.Healthy()
 
 	// Since the reply took too long, we should have a zero offset, even
 	// though the client is still healthy because it received a heartbeat
 	// reply.
-	if o := c.RemoteOffset(); !o.Equal(proto.RemoteOffset{}) {
+	if o := c.remoteOffset; !o.Equal(proto.RemoteOffset{}) {
 		t.Errorf("expected offset %v, actual %v", proto.RemoteOffset{}, o)
 	}
 
 	// Ensure the general offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
-	if o, ok := context.RemoteClocks.offsets[c.addr.String()]; ok {
+	if o, ok := context.RemoteClocks.offsets[c.RemoteAddr().String()]; ok {
 		t.Errorf("expected offset to not exist, but found %v", o)
 	}
 	context.RemoteClocks.mu.Unlock()
@@ -235,19 +227,23 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
 	context := NewNodeTestContext(clientClock, stopper)
-	c := NewClient(s.Addr(), nil, context)
+	c := NewClient(s.Addr(), context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
-	<-c.Ready
+	<-c.Healthy()
 	// Synchronously wait on missing the next heartbeat.
-	err := util.IsTrueWithin(func() bool {
-		return !c.IsHealthy()
-	}, heartbeatInterval*10)
-	if err != nil {
+	if err := util.IsTrueWithin(func() bool {
+		select {
+		case <-c.Healthy():
+			return false
+		default:
+			return true
+		}
+	}, heartbeatInterval*10); err != nil {
 		t.Fatal(err)
 	}
-	if !c.RemoteOffset().Equal(proto.RemoteOffset{}) {
+	if !c.remoteOffset.Equal(proto.RemoteOffset{}) {
 		t.Errorf("expected offset %v, actual %v",
-			proto.RemoteOffset{}, c.RemoteOffset())
+			proto.RemoteOffset{}, c.remoteOffset)
 	}
 }
 

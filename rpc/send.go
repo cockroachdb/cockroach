@@ -20,7 +20,6 @@ package rpc
 import (
 	"fmt"
 	"io"
-	"math"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -31,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracer"
+
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // OrderingPolicy is an enum for ordering strategies when there
@@ -66,11 +67,12 @@ type Options struct {
 // An rpcError indicates a failure to send the RPC. rpcErrors are
 // retryable.
 type rpcError struct {
-	errMsg string
+	error
 }
 
-// Error implements the error interface.
-func (r rpcError) Error() string { return r.errMsg }
+func newRPCError(err error) rpcError {
+	return rpcError{err}
+}
 
 // CanRetry implements the Retryable interface.
 // TODO(tschottdorf): the way this is used by rpc/send suggests that it
@@ -107,8 +109,8 @@ func (s SendError) CanRetry() bool { return s.canRetry }
 // opts.N. Otherwise, Send returns an error if and as soon as the
 // number of failed RPCs exceeds the available endpoints less the
 // number of required replies.
-func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
-	getReply func() interface{}, context *Context) ([]interface{}, error) {
+func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message,
+	getReply func() gogoproto.Message, context *Context) ([]gogoproto.Message, error) {
 	trace := opts.Trace // not thread safe!
 
 	if opts.N <= 0 {
@@ -125,28 +127,33 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		}
 	}
 
+	done := make(chan *rpc.Call, len(addrs))
+
 	var clients []*Client
+	for _, addr := range addrs {
+		clients = append(clients, NewClient(addr, context))
+	}
+
+	var orderedClients []*Client
 	switch opts.Ordering {
 	case OrderStable:
-		for _, addr := range addrs {
-			clients = append(clients, NewClient(addr, nil, context))
-		}
+		orderedClients = clients
 	case OrderRandom:
 		// Randomly permute order, but keep known-unhealthy clients last.
 		var healthy, unhealthy []*Client
-		for _, addr := range addrs {
-			client := NewClient(addr, nil, context)
-			if client.IsHealthy() {
+		for _, client := range clients {
+			select {
+			case <-client.Healthy():
 				healthy = append(healthy, client)
-			} else {
+			default:
 				unhealthy = append(unhealthy, client)
 			}
 		}
 		for _, idx := range rand.Perm(len(healthy)) {
-			clients = append(clients, healthy[idx])
+			orderedClients = append(orderedClients, healthy[idx])
 		}
 		for _, idx := range rand.Perm(len(unhealthy)) {
-			clients = append(clients, unhealthy[idx])
+			orderedClients = append(orderedClients, unhealthy[idx])
 		}
 	}
 	// TODO(spencer): going to need to also sort by affinity; closest
@@ -154,121 +161,99 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	// heartbeat measure ping times. With a bit of seasoning, each
 	// node will be able to order the healthy replicas based on latency.
 
-	replies := []interface{}(nil)
-	helperChan := make(chan interface{}, len(clients))
-	N := opts.N
-	errors := 0
-	retryableErrors := 0
-	successes := 0
-	index := 0
+	sendFn := func(client *Client) {
+		addr := client.RemoteAddr()
 
-	// Send RPCs to replicas as necessary to achieve opts.N successes.
-	for {
-		// Start clients up to N.
-		for ; index < N; index++ {
-			args := getArgs(clients[index].Addr())
-			if args == nil {
-				helperChan <- util.Errorf("nil arguments returned for client %s", clients[index].Addr())
-				continue
-			}
-			reply := getReply()
+		if args := getArgs(addr); args != nil {
 			if log.V(2) {
-				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
+				log.Infof("%s: sending request to %s: %+v", method, addr, args)
 			}
-
-			trace.Event(fmt.Sprintf("sending to %s", clients[index].Addr()))
-			go sendOneFn(clients[index], opts.Timeout, method, args, reply, helperChan)
+			trace.Event(fmt.Sprintf("sending to %s", addr))
+			go sendOneFn(client, opts.Timeout, method, args, getReply(), done)
+		} else {
+			done <- &rpc.Call{Error: newRPCError(util.Errorf("nil arguments returned for client %s", addr))}
 		}
-		// Wait for completions.
+	}
+
+	// Start clients up to opts.N.
+	head, tail := orderedClients[:opts.N], orderedClients[opts.N:]
+	for _, client := range head {
+		sendFn(client)
+	}
+
+	var replies []gogoproto.Message
+	var errors, retryableErrors int
+
+	// Wait for completions.
+	for len(replies) < opts.N {
 		select {
-		case r := <-helperChan:
-			switch t := r.(type) {
-			case error:
+		case call := <-done:
+			if call.Error == nil {
+				// Verify response data integrity if this is a proto response.
+				if resp, respOk := call.Reply.(proto.Response); respOk {
+					if req, reqOk := call.Args.(proto.Request); reqOk {
+						if err := resp.Verify(req); err != nil {
+							call.Error = err
+						}
+					}
+				}
+			}
+			if err := call.Error; err != nil {
+				if log.V(1) {
+					log.Warningf("%s: error reply: %s", method, err)
+				}
+
 				errors++
-				if retryErr, ok := t.(retry.Retryable); ok && retryErr.CanRetry() {
+				// since we have a reconnecting client here, disconnect errors are retryable
+				if retryErr, ok := err.(retry.Retryable); err == io.ErrUnexpectedEOF || ok && retryErr.CanRetry() {
 					retryableErrors++
 				}
-				if log.V(1) {
-					log.Warningf("%s: error reply: %+v", method, t)
-				}
-				remainingNonErrorRPCs := len(clients) - errors
-				if remainingNonErrorRPCs < opts.N {
+
+				if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < opts.N {
 					return nil, SendError{
-						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), t),
+						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), err),
 						canRetry: remainingNonErrorRPCs+retryableErrors >= opts.N,
 					}
 				}
 				// Send to additional replicas if available.
-				if N < len(clients) {
+				if len(tail) > 0 {
 					trace.Event("error, trying next peer")
-					N++
+					sendFn(tail[0])
+					tail = tail[1:]
 				}
-			default:
-				successes++
+			} else {
 				if log.V(2) {
-					log.Infof("%s: successful reply: %+v", method, t)
+					log.Infof("%s: successful reply: %+v", method, call.Reply)
 				}
-				replies = append(replies, t)
-				if successes == opts.N {
-					return replies, nil
-				}
+
+				replies = append(replies, call.Reply.(gogoproto.Message))
 			}
 		case <-time.After(opts.SendNextTimeout):
 			// On successive RPC timeouts, send to additional replicas if available.
-			if N < len(clients) {
+			if len(tail) > 0 {
 				trace.Event("timeout, trying next peer")
-				N++
+				sendFn(tail[0])
+				tail = tail[1:]
 			}
 		}
 	}
+	return replies, nil
 }
 
 // sendOne invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func sendOne(client *Client, timeout time.Duration, method string, args, reply interface{}, c chan interface{}) {
-	if timeout == 0 {
-		// Wait forever.
-		timeout = math.MaxInt64
+func sendOne(client *Client, timeout time.Duration, method string, args, reply gogoproto.Message, done chan *rpc.Call) {
+	var timeoutChan <-chan time.Time
+	if timeout != 0 {
+		timeoutChan = time.After(timeout)
 	}
 	select {
-	case <-client.Ready:
+	case <-client.Healthy():
+		client.Go(method, args, reply, done)
 	case <-client.Closed:
-		c <- rpcError{fmt.Sprintf("rpc to %s failed as client connection was closed", method)}
-		return
-	case <-time.After(timeout):
-		c <- rpcError{fmt.Sprintf("rpc to %s: client not ready after %s", method, timeout)}
-		return
-	}
-	call := client.Go(method, args, reply, nil)
-	select {
-	case <-call.Done:
-		if call.Error != nil {
-			// Handle cases which are retryable.
-			switch call.Error {
-			case rpc.ErrShutdown: // client connection fails: rpc/client.go
-				fallthrough
-			case io.ErrUnexpectedEOF: // server connection fails: rpc/client.go
-				c <- rpcError{call.Error.Error()}
-			default:
-				// Otherwise, not retryable; just return error.
-				c <- call.Error
-			}
-		} else {
-			// Verify response data integrity if this is a proto response.
-			if resp, respOk := reply.(proto.Response); respOk {
-				if req, reqOk := args.(proto.Request); reqOk {
-					if err := resp.Verify(req); err != nil {
-						c <- err
-						return
-					}
-				}
-			}
-			c <- reply
-		}
-	case <-client.Closed:
-		c <- rpcError{fmt.Sprintf("rpc to %s failed as client connection was closed", method)}
-	case <-time.After(timeout):
-		c <- rpcError{fmt.Sprintf("rpc to %s timed out after %s", method, timeout)}
+		done <- &rpc.Call{Error: newRPCError(util.Errorf("rpc to %s failed as client connection was closed", method))}
+	case <-timeoutChan:
+		done <- &rpc.Call{Error: newRPCError(util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
 	}
 }

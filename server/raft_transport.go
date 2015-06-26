@@ -139,23 +139,22 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 		log.Errorf("could not get address for node %d: %s", nodeID, err)
 		return
 	}
-	client := rpc.NewClient(addr, nil, t.rpcContext)
+	client := rpc.NewClient(addr, t.rpcContext)
 	select {
 	case <-t.rpcContext.Stopper.ShouldStop():
 		return
 	case <-client.Closed:
-		log.Warningf("raft client for node %d failed to connect", nodeID)
+		log.Warningf("raft client for node %d was closed", nodeID)
 		return
 	case <-time.After(raftIdleTimeout):
 		// Should never happen.
 		log.Errorf("raft client for node %d stuck connecting", nodeID)
 		return
-	case <-client.Ready:
+	case <-client.Healthy():
 	}
 
 	done := make(chan *gorpc.Call, cap(ch))
 	var req *multiraft.RaftMessageRequest
-	protoReq := &proto.RaftMessageRequest{}
 	protoResp := &proto.RaftMessageResponse{}
 	for {
 		select {
@@ -181,26 +180,16 @@ func (t *rpcTransport) processQueue(raftNodeID proto.RaftNodeID) {
 		}
 
 		// Convert to proto format.
-		protoReq.Reset()
-		protoReq.GroupID = req.GroupID
-		var err error
-		if protoReq.Msg, err = req.Message.Marshal(); err != nil {
+		msg, err := req.Message.Marshal()
+		if err != nil {
 			log.Errorf("could not marshal message: %s", err)
 			continue
 		}
 
-		if !client.IsHealthy() {
-			log.Warningf("raft client for node %d unhealthy", nodeID)
-			return
-		}
-		client.Go(raftMessageName, protoReq, protoResp, done)
-
-		// TODO(tschottdorf): work around #1176 by wasting just a little
-		// bit of time before moving to the next request.
-		select {
-		case <-done:
-		case <-time.After(10 * time.Millisecond):
-		}
+		client.Go(raftMessageName, &proto.RaftMessageRequest{
+			GroupID: req.GroupID,
+			Msg:     msg,
+		}, protoResp, done)
 	}
 }
 

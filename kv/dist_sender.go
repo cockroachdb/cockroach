@@ -126,8 +126,8 @@ var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
-	func(addr net.Addr) interface{}, func() interface{},
-	*rpc.Context) ([]interface{}, error)
+	func(addr net.Addr) gogoproto.Message, func() gogoproto.Message,
+	*rpc.Context) ([]gogoproto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
@@ -441,7 +441,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas
 	}
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
-	getArgs := func(addr net.Addr) interface{} {
+	getArgs := func(addr net.Addr) gogoproto.Message {
 		var a proto.Request
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
@@ -461,7 +461,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas
 	// we must not use it any more; the rpc call might still return
 	// and just write to it at any time.
 	// args.CreateReply() should be cheaper than gogoproto.Clone which use reflect.
-	getReply := func() interface{} {
+	getReply := func() gogoproto.Message {
 		return args.CreateReply()
 	}
 
