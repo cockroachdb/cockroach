@@ -828,7 +828,9 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 		// same ClientCmdID and would get the distributed sender stuck in an
 		// infinite loop, retrieving a stale NotLeaderError over and over
 		// again, even when proposing at the correct replica.
-		return r.newNotLeaderError(lease, originNode)
+		err := r.newNotLeaderError(lease, originNode)
+		reply.Header().SetGoError(err)
+		return err
 	}
 
 	// Anything happening from now on needs to enter the response cache.
