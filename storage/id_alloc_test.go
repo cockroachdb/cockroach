@@ -113,7 +113,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 // TestNewIDAllocatorInvalidArgs checks validation logic of newIDAllocator.
 func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	args := [][]int64{
+	args := [][]uint32{
 		{0, 10}, // minID <= 0
 		{2, 0},  // blockSize < 1
 	}
@@ -151,7 +151,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make Allocator invalid.
-	idAlloc.idKey.Store(proto.Key([]byte{}))
+	idAlloc.idKey.Store(proto.KeyMin)
 
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.
@@ -176,7 +176,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		go func() {
 			select {
 			case <-idAlloc.ids:
-				t.Errorf("Allocate() should be blocked until allocateBlock return ID")
+				t.Errorf("Allocate() should be blocked until idKey is valid")
 			case <-time.After(10 * time.Millisecond):
 			}
 			wg.Done()

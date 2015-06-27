@@ -19,6 +19,7 @@ package storage
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,17 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-// allocationTrigger is a special ID which if encountered,
-// causes allocation of the next block of IDs.
-const allocationTrigger = 0
-
 // idAllocationRetryOpts sets the retry options for handling RaftID
 // allocation errors.
 var idAllocationRetryOpts = retry.Options{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0,
+	Backoff:    50 * time.Millisecond,
+	MaxBackoff: 5 * time.Second,
+	Constant:   2,
 }
 
 // An idAllocator is used to increment a key in allocation blocks
@@ -47,97 +43,91 @@ var idAllocationRetryOpts = retry.Options{
 type idAllocator struct {
 	idKey     atomic.Value
 	db        *client.DB
-	minID     int64      // Minimum ID to return
-	blockSize int64      // Block allocation size
-	ids       chan int64 // Channel of available IDs
-	closed    int32      // Atomically updated closed "bool"
+	minID     uint32      // Minimum ID to return
+	blockSize uint32      // Block allocation size
+	ids       chan uint32 // Channel of available IDs
 	stopper   *util.Stopper
+	once      sync.Once
 }
 
 // newIDAllocator creates a new ID allocator which increments the
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func newIDAllocator(idKey proto.Key, db *client.DB, minID int64, blockSize int64,
-	stopper *util.Stopper) (*idAllocator, error) {
-	if minID <= allocationTrigger {
-		return nil, util.Errorf("minID must be > %d", allocationTrigger)
+func newIDAllocator(idKey proto.Key, db *client.DB, minID uint32, blockSize uint32, stopper *util.Stopper) (*idAllocator, error) {
+	// minID can't be the zero value because reads from closed channels return
+	// the zero value.
+	if minID == 0 {
+		return nil, util.Errorf("minID must be a positive integer: %d", minID)
 	}
-	if blockSize < 1 {
+	if blockSize == 0 {
 		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &idAllocator{
 		db:        db,
 		minID:     minID,
 		blockSize: blockSize,
-		ids:       make(chan int64, blockSize+blockSize/2+1),
+		ids:       make(chan uint32, blockSize/2+1),
 		stopper:   stopper,
 	}
 	ia.idKey.Store(idKey)
-	ia.ids <- allocationTrigger
+
 	return ia, nil
 }
 
 // Allocate allocates a new ID from the global KV DB.
-func (ia *idAllocator) Allocate() (int64, error) {
-	for {
-		id := <-ia.ids
-		if id == allocationTrigger {
-			if !ia.stopper.StartTask() {
-				if atomic.CompareAndSwapInt32(&ia.closed, 0, 1) {
-					close(ia.ids)
-				}
-				return 0, util.Errorf("could not allocate ID; system is draining")
-			}
-			go func() {
-				ia.allocateBlock(ia.blockSize)
-				ia.stopper.FinishTask()
-			}()
-		} else {
-			return id, nil
-		}
+func (ia *idAllocator) Allocate() (uint32, error) {
+	ia.once.Do(ia.start)
+
+	id := <-ia.ids
+	// when the channel is closed, the zero value is returned.
+	if id == 0 {
+		return id, util.Errorf("could not allocate ID; system is draining")
 	}
+	return id, nil
 }
 
-// allocateBlock allocates a block of IDs using db.Increment and
-// sends all IDs on the ids channel. Midway through the block, a
-// special allocationTrigger ID is inserted which causes allocation
-// to occur before IDs run out to hide Increment latency.
-func (ia *idAllocator) allocateBlock(incr int64) {
-	var newValue int64
-	retryOpts := idAllocationRetryOpts
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-		idKey := ia.idKey.Load().(proto.Key)
-		r, err := ia.db.Inc(idKey, incr)
-		if err != nil {
-			log.Warningf("unable to allocate %d ids from %s: %s", incr, idKey, err)
-			return retry.Continue, err
+func (ia *idAllocator) start() {
+	ia.stopper.RunWorker(func() {
+		defer close(ia.ids)
+
+		for {
+			var newValue int64
+			for newValue <= int64(ia.minID) {
+				if ia.stopper.StartTask() {
+					if err := retry.WithBackoff(idAllocationRetryOpts, func() (retry.Status, error) {
+						idKey := ia.idKey.Load().(proto.Key)
+						r, err := ia.db.Inc(idKey, int64(ia.blockSize))
+						if err != nil {
+							log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+							return retry.Continue, err
+						}
+						newValue = r.ValueInt()
+						return retry.Break, nil
+					}); err != nil {
+						panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
+					}
+					ia.stopper.FinishTask()
+				} else {
+					return
+				}
+			}
+
+			end := newValue + 1
+			start := end - int64(ia.blockSize)
+
+			if start < int64(ia.minID) {
+				start = int64(ia.minID)
+			}
+
+			// Add all new ids to the channel for consumption.
+			for i := start; i < end; i++ {
+				select {
+				case ia.ids <- uint32(i):
+				case <-ia.stopper.ShouldStop():
+					return
+				}
+			}
 		}
-		newValue = r.ValueInt()
-		return retry.Break, nil
 	})
-	if err != nil {
-		panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
-	}
-
-	if newValue <= ia.minID {
-		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
-			newValue, ia.minID, ia.minID-newValue)
-		ia.allocateBlock(ia.minID - newValue + ia.blockSize - 1)
-		return
-	}
-
-	// Add all new ids to the channel for consumption.
-	start := newValue - ia.blockSize + 1
-	end := newValue + 1
-	if start < ia.minID {
-		start = ia.minID
-	}
-
-	for i := start; i < end; i++ {
-		ia.ids <- i
-		if i == (start+end)/2 {
-			ia.ids <- allocationTrigger
-		}
-	}
 }
