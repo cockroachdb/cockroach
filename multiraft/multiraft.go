@@ -445,12 +445,7 @@ func newState(m *MultiRaft) *state {
 
 func (s *state) start() {
 	s.stopper.RunWorker(func() {
-		defer func() {
-			if log.V(6) {
-				log.Infof("node %v: stopping", s.nodeID)
-			}
-			s.stop()
-		}()
+		defer s.stop()
 		if log.V(1) {
 			log.Infof("node %v starting", s.nodeID)
 		}
