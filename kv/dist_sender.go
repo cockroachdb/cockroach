@@ -735,7 +735,13 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 		}
 
 		// In next iteration, query next range.
-		args.Header().Key = descNext.StartKey
+		// It's important that we use the EndKey of the current descriptor
+		// as opposed to the StartKey of the next one: if the former is stale,
+		// it's possible that the next range has since merged the subsequent
+		// one, and unless both descriptors are stale, the next descriptor's
+		// StartKey would move us to the beginning of the current range,
+		// resulting in a duplicate scan.
+		args.Header().Key = desc.EndKey
 
 		// This is a multi-range request, make a new reply object for
 		// subsequent iterations of the loop.
