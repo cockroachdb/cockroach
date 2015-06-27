@@ -29,13 +29,13 @@ import (
 
 var schemaOptRE = regexp.MustCompile(`\s*((?:\w|\s)+)(?:\(([^)]+)\))?\s*`)
 
-type columnsByName []structured.Column
+type columnsByName []structured.ColumnDescriptor
 
 func (s columnsByName) Len() int           { return len(s) }
 func (s columnsByName) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s columnsByName) Less(i, j int) bool { return s[i].Name < s[j].Name }
 
-type indexesByName []structured.TableSchema_IndexByName
+type indexesByName []structured.IndexDescriptor
 
 func (s indexesByName) Len() int      { return len(s) }
 func (s indexesByName) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
@@ -49,7 +49,7 @@ func (s indexesByName) Less(i, j int) bool {
 	return s[i].Name < s[j].Name
 }
 
-// SchemaFromModel allows the easy construction of a TableSchema from a Go
+// SchemaFromModel allows the easy construction of a TableDescriptor from a Go
 // struct. Columns are created for each exported field in the struct. The "db"
 // struct tag is used to control the mapping of field name to column name and
 // to indicate exported fields which should be skipped.
@@ -76,14 +76,14 @@ func (s indexesByName) Less(i, j int) bool {
 //   "index" [(columns...)]" - creates an index on <columns>.
 //
 //   "unique index" [(columns...)]" - creates a unique index on <columns>.
-func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
-	s := structured.TableSchema{}
+func SchemaFromModel(obj interface{}) (structured.TableDescriptor, error) {
+	desc := structured.TableDescriptor{}
 	m, err := getDBFields(deref(reflect.TypeOf(obj)))
 	if err != nil {
-		return s, err
+		return desc, err
 	}
 
-	s.Table.Name = strings.ToLower(reflect.TypeOf(obj).Name())
+	desc.Name = strings.ToLower(reflect.TypeOf(obj).Name())
 
 	// Create the columns for the table.
 	for name, sf := range m {
@@ -105,11 +105,11 @@ func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
 			colType.Kind = structured.ColumnType_TEXT
 		}
 
-		col := structured.Column{
+		col := structured.ColumnDescriptor{
 			Name: name,
 			Type: colType,
 		}
-		s.Columns = append(s.Columns, col)
+		desc.Columns = append(desc.Columns, col)
 	}
 
 	// Create the indexes for the table.
@@ -121,7 +121,7 @@ func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
 		for _, opt := range strings.Split(tag, ";") {
 			match := schemaOptRE.FindStringSubmatch(opt)
 			if match == nil {
-				return s, fmt.Errorf("invalid schema option: %s", opt)
+				return desc, fmt.Errorf("invalid schema option: %s", opt)
 			}
 			cmd := match[1]
 			var params []string
@@ -130,7 +130,7 @@ func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
 			} else {
 				params = []string{name}
 			}
-			var index structured.Index
+			var index structured.IndexDescriptor
 			switch strings.ToLower(cmd) {
 			case "primary key":
 				index.Name = structured.PrimaryKeyIndexName
@@ -141,15 +141,13 @@ func SchemaFromModel(obj interface{}) (structured.TableSchema, error) {
 			case "index":
 				index.Name = strings.Join(params, ":")
 			}
-			s.Indexes = append(s.Indexes, structured.TableSchema_IndexByName{
-				Index:       index,
-				ColumnNames: params,
-			})
+			index.ColumnNames = params
+			desc.Indexes = append(desc.Indexes, index)
 		}
 	}
 
 	// Normalize the column and index order.
-	sort.Sort(columnsByName(s.Columns))
-	sort.Sort(indexesByName(s.Indexes))
-	return s, nil
+	sort.Sort(columnsByName(desc.Columns))
+	sort.Sort(indexesByName(desc.Indexes))
+	return desc, nil
 }

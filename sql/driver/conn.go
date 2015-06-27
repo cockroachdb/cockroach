@@ -177,12 +177,11 @@ func (c *conn) CreateTable(p *parser.CreateTable, args []driver.Value) (*rows, e
 		return nil, err
 	}
 
-	schema, err := makeSchema(p)
+	desc, err := makeTableDesc(p)
 	if err != nil {
 		return nil, err
 	}
-	desc := structured.TableDescFromSchema(schema)
-	if err := structured.ValidateTableDesc(desc); err != nil {
+	if err := desc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
@@ -247,12 +246,10 @@ func (c *conn) Insert(p *parser.Insert, args []driver.Value) (*rows, error) {
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
-	for _, id := range desc.Indexes[0].ColumnIDs {
+	for i, id := range desc.Indexes[0].ColumnIDs {
 		if _, ok := colMap[id]; !ok {
-			// TODO(pmattis): Want the column name here, but all we have is the
-			// ID. Perhaps this is the motivation to merge TableSchema and
-			// TableDescriptor.
-			return nil, fmt.Errorf("missing \"%v\" primary key column", id)
+			return nil, fmt.Errorf("missing \"%s\" primary key column",
+				desc.Indexes[0].ColumnNames[i])
 		}
 	}
 
@@ -380,15 +377,13 @@ func (c *conn) ShowColumns(p *parser.ShowColumns, args []driver.Value) (*rows, e
 		return nil, err
 	}
 
-	schema := structured.TableSchemaFromDesc(*desc)
-
 	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
 	r := &rows{
 		columns: []string{"Field", "Type", "Null"},
-		rows:    make([]row, len(schema.Columns)),
+		rows:    make([]row, len(desc.Columns)),
 	}
 
-	for i, col := range schema.Columns {
+	for i, col := range desc.Columns {
 		t := make(row, len(r.columns))
 		t[0] = col.Name
 		t[1] = col.Type.SQLString()
@@ -418,13 +413,11 @@ func (c *conn) ShowIndex(p *parser.ShowIndex, args []driver.Value) (*rows, error
 		return nil, err
 	}
 
-	schema := structured.TableSchemaFromDesc(*desc)
-
 	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
 	r := &rows{
 		columns: []string{"Table", "Name", "Unique", "Seq", "Column"},
 	}
-	for _, index := range schema.Indexes {
+	for _, index := range desc.Indexes {
 		for j, col := range index.ColumnNames {
 			t := make(row, len(r.columns))
 			t[0] = p.Table.Name
@@ -491,7 +484,7 @@ func (c *conn) getTableDesc(table *parser.TableName) (*structured.TableDescripto
 	if err := c.db.GetProto(descKey, &desc); err != nil {
 		return nil, err
 	}
-	if err := structured.ValidateTableDesc(desc); err != nil {
+	if err := desc.Validate(); err != nil {
 		return nil, err
 	}
 	return &desc, nil
@@ -631,15 +624,16 @@ func encodeIndexKey(index structured.IndexDescriptor,
 	var key []byte
 	key = append(key, indexKey...)
 
-	for _, id := range index.ColumnIDs {
-		i, ok := colMap[id]
+	for i, id := range index.ColumnIDs {
+		j, ok := colMap[id]
 		if !ok {
-			return nil, fmt.Errorf("missing \"%v\" primary key column", id)
+			return nil, fmt.Errorf("missing \"%s\" primary key column",
+				index.ColumnNames[i])
 		}
 		// TOOD(pmattis): Need to convert the row[i] value to the type expected by
 		// the column.
 		var err error
-		key, err = encodeTableKey(key, row[i])
+		key, err = encodeTableKey(key, row[j])
 		if err != nil {
 			return nil, err
 		}

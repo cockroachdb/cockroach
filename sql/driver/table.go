@@ -24,14 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/structured"
 )
 
-func makeSchema(p *parser.CreateTable) (structured.TableSchema, error) {
-	s := structured.TableSchema{}
-	s.Name = p.Table.String()
+func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
+	desc := structured.TableDescriptor{}
+	desc.Name = p.Table.String()
 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
-			col := structured.Column{
+			col := structured.ColumnDescriptor{
 				Name:     d.Name,
 				Nullable: (d.Nullable != parser.NotNull),
 			}
@@ -75,33 +75,29 @@ func makeSchema(p *parser.CreateTable) (structured.TableSchema, error) {
 				col.Type.Kind = structured.ColumnType_SET
 				col.Type.Vals = t.Vals
 			}
-			s.Columns = append(s.Columns, col)
+			desc.Columns = append(desc.Columns, col)
 
 			// Create any associated index.
 			if d.PrimaryKey || d.Unique {
-				index := structured.TableSchema_IndexByName{
-					Index: structured.Index{
-						Unique: true,
-					},
+				index := structured.IndexDescriptor{
+					Unique:      true,
 					ColumnNames: []string{d.Name},
 				}
 				if d.PrimaryKey {
 					index.Name = "primary"
 				}
-				s.Indexes = append(s.Indexes, index)
+				desc.Indexes = append(desc.Indexes, index)
 			}
 		case *parser.IndexTableDef:
-			index := structured.TableSchema_IndexByName{
-				Index: structured.Index{
-					Name:   d.Name,
-					Unique: d.Unique,
-				},
+			index := structured.IndexDescriptor{
+				Name:        d.Name,
+				Unique:      d.Unique,
 				ColumnNames: d.Columns,
 			}
-			s.Indexes = append(s.Indexes, index)
+			desc.Indexes = append(desc.Indexes, index)
 		default:
-			return s, fmt.Errorf("unsupported table def: %T", def)
+			return desc, fmt.Errorf("unsupported table def: %T", def)
 		}
 	}
-	return s, nil
+	return desc, nil
 }

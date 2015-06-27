@@ -24,144 +24,227 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+func TestAllocateIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	desc := TableDescriptor{
+		ID:   1,
+		Name: "foo",
+		Columns: []ColumnDescriptor{
+			{Name: "a"},
+			{Name: "b"},
+		},
+		Indexes: []IndexDescriptor{
+			{Name: "c", ColumnNames: []string{"a"}},
+			{Name: "d", ColumnNames: []string{"b", "a"}},
+		},
+	}
+	if err := desc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := TableDescriptor{
+		ID:   1,
+		Name: "foo",
+		Columns: []ColumnDescriptor{
+			{ID: 1, Name: "a"},
+			{ID: 2, Name: "b"},
+		},
+		Indexes: []IndexDescriptor{
+			{ID: 1, Name: "c", ColumnIDs: []uint32{1}, ColumnNames: []string{"a"}},
+			{ID: 2, Name: "d", ColumnIDs: []uint32{2, 1}, ColumnNames: []string{"b", "a"}},
+		},
+		NextColumnID: 3,
+		NextIndexID:  3,
+	}
+	if !reflect.DeepEqual(expected, desc) {
+		t.Fatalf("expected %+v, but found %+v", expected, desc)
+	}
+}
+
 func TestValidateTableDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		err  string
 		desc TableDescriptor
 	}{
 		{`empty table name`,
 			TableDescriptor{}},
-		{`"foo/bar" may not contain "/"`,
-			TableDescriptor{Table: Table{Name: "foo/bar"}}},
+		{`invalid table ID 0`,
+			TableDescriptor{ID: 0, Name: "foo"}},
 		{`table must contain at least 1 column`,
-			TableDescriptor{Table: Table{Name: "foo"}}},
+			TableDescriptor{ID: 1, Name: "foo"}},
 		{`empty column name`,
 			TableDescriptor{
-				Table: Table{Name: "foo"},
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
 					{ID: 0},
 				},
-				NextColumnID: 1,
+				NextColumnID: 2,
+			}},
+		{`invalid column ID 0`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{ID: 0, Name: "bar"},
+				},
+				NextColumnID: 2,
 			}},
 		{`table must contain at least 1 index`,
 			TableDescriptor{
-				Table: Table{Name: "foo"},
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
-				NextColumnID: 1,
+				NextColumnID: 2,
 			}},
 		{`duplicate column name: "bar"`,
 			TableDescriptor{
-				Table: Table{Name: "foo"},
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
+					{ID: 1, Name: "bar"},
 				},
-				NextColumnID: 1,
+				NextColumnID: 2,
 			}},
-		{`column "blah" duplicate ID of column "bar": 0`,
+		{`column "blah" duplicate ID of column "bar": 1`,
 			TableDescriptor{
-				Table: Table{Name: "foo"},
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
-					{ID: 0, Column: Column{Name: "blah"}},
+					{ID: 1, Name: "bar"},
+					{ID: 1, Name: "blah"},
 				},
-				NextColumnID: 1,
+				NextColumnID: 2,
 			}},
 		{`empty index name`,
-			TableDescriptor{Table: Table{Name: "foo"},
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
 				Indexes: []IndexDescriptor{
 					{ID: 0},
 				},
-				NextColumnID: 1,
+				NextColumnID: 2,
+			}},
+		{`invalid index ID 0`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 0, Name: "bar"},
+				},
+				NextColumnID: 2,
 			}},
 		{`index "bar" must contain at least 1 column`,
-			TableDescriptor{Table: Table{Name: "foo"},
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
 				Indexes: []IndexDescriptor{
-					{ID: 0, Index: Index{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
-				NextColumnID: 1,
-				NextIndexID:  1,
+				NextColumnID: 2,
+				NextIndexID:  2,
+			}},
+		{`mismatched column IDs (1) and names (0)`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 1, Name: "bar", ColumnIDs: []uint32{0}},
+				},
+				NextColumnID: 2,
+				NextIndexID:  2,
+			}},
+		{`mismatched column IDs (0) and names (1)`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 1, Name: "bar", ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextIndexID:  2,
 			}},
 		{`duplicate index name: "bar"`,
-			TableDescriptor{Table: Table{Name: "foo"},
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
 				Indexes: []IndexDescriptor{
-					{ID: 0, Index: Index{Name: "bar"}, ColumnIDs: []uint32{0}},
-					{ID: 0, Index: Index{Name: "bar"}, ColumnIDs: []uint32{0}},
+					{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
 				},
-				NextColumnID: 1,
-				NextIndexID:  1,
+				NextColumnID: 2,
+				NextIndexID:  2,
 			}},
-		{`index "blah" duplicate ID of index "bar": 0`,
-			TableDescriptor{Table: Table{Name: "foo"},
+		{`index "blah" duplicate ID of index "bar": 1`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
 				Indexes: []IndexDescriptor{
-					{ID: 0, Index: Index{Name: "bar"}, ColumnIDs: []uint32{0}},
-					{ID: 0, Index: Index{Name: "blah"}, ColumnIDs: []uint32{0}},
+					{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "blah", ColumnIDs: []uint32{1}, ColumnNames: []string{"bar"}},
 				},
-				NextColumnID: 1,
-				NextIndexID:  1,
+				NextColumnID: 2,
+				NextIndexID:  2,
 			}},
-		{`index "bar" contains unknown column ID 1`,
-			TableDescriptor{Table: Table{Name: "foo"},
+		{`index "bar" column "bar" should have ID 1, but found ID 2`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
 				Columns: []ColumnDescriptor{
-					{ID: 0, Column: Column{Name: "bar"}},
+					{ID: 1, Name: "bar"},
 				},
 				Indexes: []IndexDescriptor{
-					{ID: 0, Index: Index{Name: "bar"}, ColumnIDs: []uint32{1}},
+					{ID: 1, Name: "bar", ColumnIDs: []uint32{2}, ColumnNames: []string{"bar"}},
 				},
-				NextColumnID: 1,
-				NextIndexID:  1,
+				NextColumnID: 2,
+				NextIndexID:  2,
+			}},
+		{`index "bar" contains unknown column "blah"`,
+			TableDescriptor{
+				ID:   1,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 1, Name: "bar", ColumnIDs: []uint32{1}, ColumnNames: []string{"blah"}},
+				},
+				NextColumnID: 2,
+				NextIndexID:  2,
 			}},
 	}
 	for i, d := range testData {
-		if err := ValidateTableDesc(d.desc); err == nil {
+		if err := d.desc.Validate(); err == nil {
 			t.Errorf("%d: expected error, but found success: %+v", i, d.desc)
 		} else if d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, d.err, err.Error())
-		}
-	}
-}
-
-func TestTableDescFromSchema(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	// Verify TableDescFromSchema and TableSchemaFromDesc by round-tripping a
-	// schema.
-	schemas := []TableSchema{
-		{Table: Table{Name: "foo"},
-			Columns: []Column{
-				{Name: "a"},
-				{Name: "b"},
-				{Name: "c"},
-			},
-			Indexes: []TableSchema_IndexByName{
-				{Index: Index{Name: "a", Unique: true},
-					ColumnNames: []string{"a"}},
-				{Index: Index{Name: "b"},
-					ColumnNames: []string{"a", "b"}},
-			}},
-	}
-	for i, schema := range schemas {
-		desc := TableDescFromSchema(schema)
-		if err := ValidateTableDesc(desc); err != nil {
-			t.Errorf("expected success, but found %s", err)
-		}
-		schema2 := TableSchemaFromDesc(desc)
-		if !reflect.DeepEqual(schema, schema2) {
-			t.Errorf("%d: expected %+v, but got %+v", i, schema, schema2)
 		}
 	}
 }

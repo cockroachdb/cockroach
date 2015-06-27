@@ -33,7 +33,7 @@ func TestSchemaFromModel(t *testing.T) {
 		C int `roach:"index(c,b)"`
 		D int // 0 options should not be an error
 	}
-	schema, err := SchemaFromModel(Foo{})
+	desc, err := SchemaFromModel(Foo{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,24 +41,32 @@ func TestSchemaFromModel(t *testing.T) {
 	intType := structured.ColumnType{
 		Kind: structured.ColumnType_INT,
 	}
-	expectedSchema := structured.TableSchema{
-		Table: structured.Table{Name: "foo"},
-		Columns: []structured.Column{
+	expectedDesc := structured.TableDescriptor{
+		Name: "foo",
+		Columns: []structured.ColumnDescriptor{
 			{Name: "a", Type: intType},
 			{Name: "b", Type: intType},
 			{Name: "c", Type: intType},
 			{Name: "d", Type: intType},
 		},
-		Indexes: []structured.TableSchema_IndexByName{
-			{Index: structured.Index{Name: "primary", Unique: true},
-				ColumnNames: []string{"a", "b"}},
-			{Index: structured.Index{Name: "b", Unique: true},
-				ColumnNames: []string{"b"}},
-			{Index: structured.Index{Name: "c:b"},
-				ColumnNames: []string{"c", "b"}},
+		Indexes: []structured.IndexDescriptor{
+			{
+				Name:        "primary",
+				Unique:      true,
+				ColumnNames: []string{"a", "b"},
+			},
+			{
+				Name:        "b",
+				Unique:      true,
+				ColumnNames: []string{"b"},
+			},
+			{
+				Name:        "c:b",
+				ColumnNames: []string{"c", "b"},
+			},
 		},
 	}
-	if !reflect.DeepEqual(expectedSchema, schema) {
-		t.Errorf("expected %+v, but got %+v", expectedSchema, schema)
+	if !reflect.DeepEqual(expectedDesc, desc) {
+		t.Errorf("expected %+v, but got %+v", expectedDesc, desc)
 	}
 }
