@@ -764,10 +764,10 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
 
-	// If this replica is a new holder of the lease, gossip configs as
-	// necessary. Update the low water mark in the timestamp cache. We
-	// add the maximum clock offset to account for any difference in
-	// clocks between the expiration (set by a remote node) and this
+	// If this replica is a new holder of the lease, update the
+	// low water mark in the timestamp cache. We add the maximum
+	// clock offset to account for any difference in clocks
+	// between the expiration (set by a remote node) and this
 	// node.
 	if r.getLease().RaftNodeID == r.rm.RaftNodeID() && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
