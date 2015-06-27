@@ -723,6 +723,9 @@ func TestReplicateAfterSplit(t *testing.T) {
 	// Now add the second replica.
 	mtc.replicateRange(raftID2, 0, 1)
 
+	if mtc.stores[1].LookupRange(key, nil).GetMaxBytes() == 0 {
+		t.Error("Range MaxBytes is not set after snapshot applied")
+	}
 	// Once it catches up, the effects of increment commands can be seen.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs(key, raftID2, mtc.stores[1].StoreID())
