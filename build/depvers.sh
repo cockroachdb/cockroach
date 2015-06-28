@@ -58,9 +58,6 @@ for (( i=0; i < ${#pkginfo[@]}; i+=2 )); do
   if test "${git}" -eq 1; then
     vers=$(git -C "${dir}" rev-parse HEAD 2>/dev/null )
   else
-    # file ownership sometimes doesn't work in docker and hg gets grumpy about
-    # this file, which is basically empty anyway, so just delete it
-    rm "${dir}/.hg/hgrc"
     vers=$(hg --cwd "${dir}" parent --template '{node}')
   fi
 
