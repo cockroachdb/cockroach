@@ -128,6 +128,7 @@ func TestBootstrapCluster(t *testing.T) {
 		proto.Key("\x00perm"),
 		proto.Key("\x00range-tree-root"),
 		proto.Key("\x00store-idgen"),
+		proto.Key("\x00user"),
 		proto.Key("\x00zone"),
 	}
 	if !reflect.DeepEqual(keys, expectedKeys) {

@@ -39,14 +39,13 @@ range_min_bytes: 1048576
 range_max_bytes: 67108864
 `
 
+var testZoneConfigBytes = []byte(testZoneConfig)
+
 // Example_setAndGetZone sets zone configs for a variety of key
 // prefixes and verifies they can be fetched directly.
 func Example_setAndGetZone() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
-
-	testConfigFn := createTestConfigFile(testZoneConfig)
-	defer util.CleanupDir(testConfigFn)
 
 	testData := []struct {
 		prefix proto.Key
@@ -60,7 +59,7 @@ func Example_setAndGetZone() {
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		RunSetZone(testContext, prefix, testConfigFn)
+		RunSetZone(testContext, prefix, testZoneConfigBytes)
 		RunGetZone(testContext, prefix)
 	}
 	// Output:
@@ -108,9 +107,6 @@ func Example_lsZones() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
-	testConfigFn := createTestConfigFile(testZoneConfig)
-	defer util.CleanupDir(testConfigFn)
-
 	keys := []proto.Key{
 		proto.KeyMin,
 		proto.Key("db1"),
@@ -127,7 +123,7 @@ func Example_lsZones() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		RunSetZone(testContext, prefix, testConfigFn)
+		RunSetZone(testContext, prefix, testZoneConfigBytes)
 	}
 
 	for i, regexp := range regexps {
@@ -167,9 +163,6 @@ func Example_rmZones() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
-	testConfigFn := createTestConfigFile(testZoneConfig)
-	defer util.CleanupDir(testConfigFn)
-
 	keys := []proto.Key{
 		proto.KeyMin,
 		proto.Key("db1"),
@@ -177,7 +170,7 @@ func Example_rmZones() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		RunSetZone(testContext, prefix, testConfigFn)
+		RunSetZone(testContext, prefix, testZoneConfigBytes)
 	}
 
 	for _, key := range keys {
@@ -202,7 +195,7 @@ func Example_zoneContentTypes() {
 	defer stopper.Stop()
 
 	config := &proto.ZoneConfig{}
-	err := yaml.Unmarshal([]byte(testZoneConfig), config)
+	err := yaml.Unmarshal(testZoneConfigBytes, config)
 	if err != nil {
 		fmt.Println(err)
 	}

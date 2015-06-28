@@ -45,6 +45,9 @@ const (
 	// KeyConfigPermission is the permission configuration map.
 	KeyConfigPermission = "permissions"
 
+	// KeyConfigUser is the user configuration map.
+	KeyConfigUser = "user"
+
 	// KeyConfigZone is the zone configuration map.
 	KeyConfigZone = "zones"
 

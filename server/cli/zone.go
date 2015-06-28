@@ -19,7 +19,10 @@
 package cli
 
 import (
+	"io/ioutil"
+
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
 )
@@ -143,7 +146,13 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunSetZone(Context, args[0], args[1])
+	// Read in the config file.
+	body, err := ioutil.ReadFile(args[1])
+	if err != nil {
+		log.Errorf("unable to read zone config file %q: %s", args[1], err)
+		return
+	}
+	server.RunSetZone(Context, args[0], body)
 }
 
 var zoneCmds = []*cobra.Command{

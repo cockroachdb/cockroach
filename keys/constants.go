@@ -148,6 +148,9 @@ var (
 	// ConfigPermissionPrefix specifies the key prefix for accounting
 	// configurations. The suffix is the affected key prefix.
 	ConfigPermissionPrefix = MakeKey(SystemPrefix, proto.Key("perm"))
+	// ConfigUserPrefix specified the key prefix for user configurations.
+	// The suffix is the username.
+	ConfigUserPrefix = MakeKey(SystemPrefix, proto.Key("user"))
 	// ConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
 	ConfigZonePrefix = MakeKey(SystemPrefix, proto.Key("zone"))

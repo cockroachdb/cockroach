@@ -39,6 +39,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* PermConfig_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   PermConfig_reflection_ = NULL;
+const ::google::protobuf::Descriptor* UserConfig_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  UserConfig_reflection_ = NULL;
 const ::google::protobuf::Descriptor* ZoneConfig_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ZoneConfig_reflection_ = NULL;
@@ -165,7 +168,22 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(PermConfig),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PermConfig, _internal_metadata_),
       -1);
-  ZoneConfig_descriptor_ = file->message_type(6);
+  UserConfig_descriptor_ = file->message_type(6);
+  static const int UserConfig_offsets_[1] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(UserConfig, hashed_password_),
+  };
+  UserConfig_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      UserConfig_descriptor_,
+      UserConfig::default_instance_,
+      UserConfig_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(UserConfig, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(UserConfig),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(UserConfig, _internal_metadata_),
+      -1);
+  ZoneConfig_descriptor_ = file->message_type(7);
   static const int ZoneConfig_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ZoneConfig, replica_attrs_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ZoneConfig, range_min_bytes_),
@@ -183,7 +201,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(ZoneConfig),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ZoneConfig, _internal_metadata_),
       -1);
-  RangeTree_descriptor_ = file->message_type(7);
+  RangeTree_descriptor_ = file->message_type(8);
   static const int RangeTree_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, root_key_),
   };
@@ -198,7 +216,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(RangeTree),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, _internal_metadata_),
       -1);
-  RangeTreeNode_descriptor_ = file->message_type(8);
+  RangeTreeNode_descriptor_ = file->message_type(9);
   static const int RangeTreeNode_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, black_),
@@ -217,7 +235,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(RangeTreeNode),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, _internal_metadata_),
       -1);
-  Addr_descriptor_ = file->message_type(9);
+  Addr_descriptor_ = file->message_type(10);
   static const int Addr_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, network_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, address_),
@@ -233,7 +251,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(Addr),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Addr, _internal_metadata_),
       -1);
-  StoreCapacity_descriptor_ = file->message_type(10);
+  StoreCapacity_descriptor_ = file->message_type(11);
   static const int StoreCapacity_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, capacity_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, available_),
@@ -250,7 +268,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(StoreCapacity),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, _internal_metadata_),
       -1);
-  NodeDescriptor_descriptor_ = file->message_type(11);
+  NodeDescriptor_descriptor_ = file->message_type(12);
   static const int NodeDescriptor_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, address_),
@@ -267,7 +285,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(NodeDescriptor),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeDescriptor, _internal_metadata_),
       -1);
-  StoreDescriptor_descriptor_ = file->message_type(12);
+  StoreDescriptor_descriptor_ = file->message_type(13);
   static const int StoreDescriptor_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreDescriptor, store_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreDescriptor, attrs_),
@@ -310,6 +328,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       PermConfig_descriptor_, &PermConfig::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      UserConfig_descriptor_, &UserConfig::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       ZoneConfig_descriptor_, &ZoneConfig::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       RangeTree_descriptor_, &RangeTree::default_instance());
@@ -340,6 +360,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto() {
   delete AcctConfig_reflection_;
   delete PermConfig::default_instance_;
   delete PermConfig_reflection_;
+  delete UserConfig::default_instance_;
+  delete UserConfig_reflection_;
   delete ZoneConfig::default_instance_;
   delete ZoneConfig_reflection_;
   delete RangeTree::default_instance_;
@@ -379,33 +401,35 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "d\030\001 \001(\tB#\310\336\037\000\362\336\037\033yaml:\"cluster_id,omitem"
     "pty\"\"`\n\nPermConfig\022\'\n\004read\030\001 \003(\tB\031\362\336\037\025ya"
     "ml:\"read,omitempty\"\022)\n\005write\030\002 \003(\tB\032\362\336\037\026"
-    "yaml:\"write,omitempty\"\"\257\002\n\nZoneConfig\022U\n"
-    "\rreplica_attrs\030\001 \003(\0132\033.cockroach.proto.A"
-    "ttributesB!\310\336\037\000\362\336\037\031yaml:\"replicas,omitem"
-    "pty\"\022A\n\017range_min_bytes\030\002 \001(\003B(\310\336\037\000\362\336\037 y"
-    "aml:\"range_min_bytes,omitempty\"\022A\n\017range"
-    "_max_bytes\030\003 \001(\003B(\310\336\037\000\362\336\037 yaml:\"range_ma"
-    "x_bytes,omitempty\"\022D\n\002gc\030\004 \001(\0132\031.cockroa"
-    "ch.proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023yaml:\"gc,om"
-    "itempty\"\"&\n\tRangeTree\022\031\n\010root_key\030\001 \001(\014B"
-    "\007\372\336\037\003Key\"\216\001\n\rRangeTreeNode\022\024\n\003key\030\001 \001(\014B"
-    "\007\372\336\037\003Key\022\023\n\005black\030\002 \001(\010B\004\310\336\037\000\022\033\n\nparent_"
-    "key\030\003 \001(\014B\007\372\336\037\003Key\022\031\n\010left_key\030\004 \001(\014B\007\332\336"
-    "\037\003Key\022\032\n\tright_key\030\005 \001(\014B\007\332\336\037\003Key\"4\n\004Add"
-    "r\022\025\n\007network\030\001 \001(\tB\004\310\336\037\000\022\025\n\007address\030\002 \001("
-    "\tB\004\310\336\037\000\"Z\n\rStoreCapacity\022\026\n\010Capacity\030\001 \001"
-    "(\003B\004\310\336\037\000\022\027\n\tAvailable\030\002 \001(\003B\004\310\336\037\000\022\030\n\nRan"
-    "geCount\030\003 \001(\005B\004\310\336\037\000\"\233\001\n\016NodeDescriptor\022)"
-    "\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeI"
-    "D\022,\n\007address\030\002 \001(\0132\025.cockroach.proto.Add"
-    "rB\004\310\336\037\000\0220\n\005attrs\030\003 \001(\0132\033.cockroach.proto"
-    ".AttributesB\004\310\336\037\000\"\336\001\n\017StoreDescriptor\022,\n"
-    "\010store_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007Stor"
-    "eID\0220\n\005attrs\030\002 \001(\0132\033.cockroach.proto.Att"
-    "ributesB\004\310\336\037\000\0223\n\004node\030\003 \001(\0132\037.cockroach."
-    "proto.NodeDescriptorB\004\310\336\037\000\0226\n\010capacity\030\004"
-    " \001(\0132\036.cockroach.proto.StoreCapacityB\004\310\336"
-    "\037\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 1663);
+    "yaml:\"write,omitempty\"\"K\n\nUserConfig\022=\n\017"
+    "hashed_password\030\001 \001(\014B$\362\336\037 yaml:\"hashed_"
+    "password,omitempty\"\"\257\002\n\nZoneConfig\022U\n\rre"
+    "plica_attrs\030\001 \003(\0132\033.cockroach.proto.Attr"
+    "ibutesB!\310\336\037\000\362\336\037\031yaml:\"replicas,omitempty"
+    "\"\022A\n\017range_min_bytes\030\002 \001(\003B(\310\336\037\000\362\336\037 yaml"
+    ":\"range_min_bytes,omitempty\"\022A\n\017range_ma"
+    "x_bytes\030\003 \001(\003B(\310\336\037\000\362\336\037 yaml:\"range_max_b"
+    "ytes,omitempty\"\022D\n\002gc\030\004 \001(\0132\031.cockroach."
+    "proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023yaml:\"gc,omite"
+    "mpty\"\"&\n\tRangeTree\022\031\n\010root_key\030\001 \001(\014B\007\372\336"
+    "\037\003Key\"\216\001\n\rRangeTreeNode\022\024\n\003key\030\001 \001(\014B\007\372\336"
+    "\037\003Key\022\023\n\005black\030\002 \001(\010B\004\310\336\037\000\022\033\n\nparent_key"
+    "\030\003 \001(\014B\007\372\336\037\003Key\022\031\n\010left_key\030\004 \001(\014B\007\332\336\037\003K"
+    "ey\022\032\n\tright_key\030\005 \001(\014B\007\332\336\037\003Key\"4\n\004Addr\022\025"
+    "\n\007network\030\001 \001(\tB\004\310\336\037\000\022\025\n\007address\030\002 \001(\tB\004"
+    "\310\336\037\000\"Z\n\rStoreCapacity\022\026\n\010Capacity\030\001 \001(\003B"
+    "\004\310\336\037\000\022\027\n\tAvailable\030\002 \001(\003B\004\310\336\037\000\022\030\n\nRangeC"
+    "ount\030\003 \001(\005B\004\310\336\037\000\"\233\001\n\016NodeDescriptor\022)\n\007n"
+    "ode_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,"
+    "\n\007address\030\002 \001(\0132\025.cockroach.proto.AddrB\004"
+    "\310\336\037\000\0220\n\005attrs\030\003 \001(\0132\033.cockroach.proto.At"
+    "tributesB\004\310\336\037\000\"\336\001\n\017StoreDescriptor\022,\n\010st"
+    "ore_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID"
+    "\0220\n\005attrs\030\002 \001(\0132\033.cockroach.proto.Attrib"
+    "utesB\004\310\336\037\000\0223\n\004node\030\003 \001(\0132\037.cockroach.pro"
+    "to.NodeDescriptorB\004\310\336\037\000\0226\n\010capacity\030\004 \001("
+    "\0132\036.cockroach.proto.StoreCapacityB\004\310\336\037\000B"
+    "\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 1740);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -414,6 +438,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
   GCPolicy::default_instance_ = new GCPolicy();
   AcctConfig::default_instance_ = new AcctConfig();
   PermConfig::default_instance_ = new PermConfig();
+  UserConfig::default_instance_ = new UserConfig();
   ZoneConfig::default_instance_ = new ZoneConfig();
   RangeTree::default_instance_ = new RangeTree();
   RangeTreeNode::default_instance_ = new RangeTreeNode();
@@ -427,6 +452,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
   GCPolicy::default_instance_->InitAsDefaultInstance();
   AcctConfig::default_instance_->InitAsDefaultInstance();
   PermConfig::default_instance_->InitAsDefaultInstance();
+  UserConfig::default_instance_->InitAsDefaultInstance();
   ZoneConfig::default_instance_->InitAsDefaultInstance();
   RangeTree::default_instance_->InitAsDefaultInstance();
   RangeTreeNode::default_instance_->InitAsDefaultInstance();
@@ -2584,6 +2610,300 @@ PermConfig::write() const {
 PermConfig::mutable_write() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.proto.PermConfig.write)
   return &write_;
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int UserConfig::kHashedPasswordFieldNumber;
+#endif  // !_MSC_VER
+
+UserConfig::UserConfig()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.UserConfig)
+}
+
+void UserConfig::InitAsDefaultInstance() {
+}
+
+UserConfig::UserConfig(const UserConfig& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.UserConfig)
+}
+
+void UserConfig::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  hashed_password_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+UserConfig::~UserConfig() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.UserConfig)
+  SharedDtor();
+}
+
+void UserConfig::SharedDtor() {
+  hashed_password_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != default_instance_) {
+  }
+}
+
+void UserConfig::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* UserConfig::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return UserConfig_descriptor_;
+}
+
+const UserConfig& UserConfig::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  return *default_instance_;
+}
+
+UserConfig* UserConfig::default_instance_ = NULL;
+
+UserConfig* UserConfig::New(::google::protobuf::Arena* arena) const {
+  UserConfig* n = new UserConfig;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void UserConfig::Clear() {
+  if (has_hashed_password()) {
+    hashed_password_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool UserConfig::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.UserConfig)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional bytes hashed_password = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_hashed_password()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.UserConfig)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.UserConfig)
+  return false;
+#undef DO_
+}
+
+void UserConfig::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.UserConfig)
+  // optional bytes hashed_password = 1;
+  if (has_hashed_password()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      1, this->hashed_password(), output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.UserConfig)
+}
+
+::google::protobuf::uint8* UserConfig::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.UserConfig)
+  // optional bytes hashed_password = 1;
+  if (has_hashed_password()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        1, this->hashed_password(), target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.UserConfig)
+  return target;
+}
+
+int UserConfig::ByteSize() const {
+  int total_size = 0;
+
+  // optional bytes hashed_password = 1;
+  if (has_hashed_password()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->hashed_password());
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void UserConfig::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const UserConfig* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const UserConfig>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void UserConfig::MergeFrom(const UserConfig& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_hashed_password()) {
+      set_has_hashed_password();
+      hashed_password_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.hashed_password_);
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void UserConfig::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void UserConfig::CopyFrom(const UserConfig& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool UserConfig::IsInitialized() const {
+
+  return true;
+}
+
+void UserConfig::Swap(UserConfig* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void UserConfig::InternalSwap(UserConfig* other) {
+  hashed_password_.Swap(&other->hashed_password_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata UserConfig::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = UserConfig_descriptor_;
+  metadata.reflection = UserConfig_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// UserConfig
+
+// optional bytes hashed_password = 1;
+bool UserConfig::has_hashed_password() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void UserConfig::set_has_hashed_password() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void UserConfig::clear_has_hashed_password() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void UserConfig::clear_hashed_password() {
+  hashed_password_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_hashed_password();
+}
+ const ::std::string& UserConfig::hashed_password() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.UserConfig.hashed_password)
+  return hashed_password_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void UserConfig::set_hashed_password(const ::std::string& value) {
+  set_has_hashed_password();
+  hashed_password_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.UserConfig.hashed_password)
+}
+ void UserConfig::set_hashed_password(const char* value) {
+  set_has_hashed_password();
+  hashed_password_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.UserConfig.hashed_password)
+}
+ void UserConfig::set_hashed_password(const void* value, size_t size) {
+  set_has_hashed_password();
+  hashed_password_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.UserConfig.hashed_password)
+}
+ ::std::string* UserConfig::mutable_hashed_password() {
+  set_has_hashed_password();
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.UserConfig.hashed_password)
+  return hashed_password_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* UserConfig::release_hashed_password() {
+  clear_has_hashed_password();
+  return hashed_password_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void UserConfig::set_allocated_hashed_password(::std::string* hashed_password) {
+  if (hashed_password != NULL) {
+    set_has_hashed_password();
+  } else {
+    clear_has_hashed_password();
+  }
+  hashed_password_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), hashed_password);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.UserConfig.hashed_password)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

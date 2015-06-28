@@ -38,29 +38,12 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var testContext = NewTestContext()
 var rootTestBaseContext = testutils.NewRootTestBaseContext()
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
-
-// createTestConfigFile creates a temporary file and writes the
-// testConfig yaml data to it. The caller is responsible for
-// removing it. Returns the filename for a subsequent call to
-// os.Remove().
-func createTestConfigFile(body string) string {
-	f, err := ioutil.TempFile("", "test-config")
-	if err != nil {
-		log.Fatalf("failed to open temporary file: %v", err)
-	}
-	defer f.Close()
-	if _, err = f.Write([]byte(body)); err != nil {
-		log.Fatalf("failed to write to temporary file: %v", err)
-	}
-	return f.Name()
-}
 
 // TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {

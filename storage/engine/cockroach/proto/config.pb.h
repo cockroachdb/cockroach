@@ -44,6 +44,7 @@ class RangeDescriptor;
 class GCPolicy;
 class AcctConfig;
 class PermConfig;
+class UserConfig;
 class ZoneConfig;
 class RangeTree;
 class RangeTreeNode;
@@ -674,6 +675,100 @@ class PermConfig : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static PermConfig* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class UserConfig : public ::google::protobuf::Message {
+ public:
+  UserConfig();
+  virtual ~UserConfig();
+
+  UserConfig(const UserConfig& from);
+
+  inline UserConfig& operator=(const UserConfig& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const UserConfig& default_instance();
+
+  void Swap(UserConfig* other);
+
+  // implements Message ----------------------------------------------
+
+  inline UserConfig* New() const { return New(NULL); }
+
+  UserConfig* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const UserConfig& from);
+  void MergeFrom(const UserConfig& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(UserConfig* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes hashed_password = 1;
+  bool has_hashed_password() const;
+  void clear_hashed_password();
+  static const int kHashedPasswordFieldNumber = 1;
+  const ::std::string& hashed_password() const;
+  void set_hashed_password(const ::std::string& value);
+  void set_hashed_password(const char* value);
+  void set_hashed_password(const void* value, size_t size);
+  ::std::string* mutable_hashed_password();
+  ::std::string* release_hashed_password();
+  void set_allocated_hashed_password(::std::string* hashed_password);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.UserConfig)
+ private:
+  inline void set_has_hashed_password();
+  inline void clear_has_hashed_password();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr hashed_password_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static UserConfig* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -1975,6 +2070,63 @@ PermConfig::mutable_write() {
 
 // -------------------------------------------------------------------
 
+// UserConfig
+
+// optional bytes hashed_password = 1;
+inline bool UserConfig::has_hashed_password() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void UserConfig::set_has_hashed_password() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void UserConfig::clear_has_hashed_password() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void UserConfig::clear_hashed_password() {
+  hashed_password_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_hashed_password();
+}
+inline const ::std::string& UserConfig::hashed_password() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.UserConfig.hashed_password)
+  return hashed_password_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void UserConfig::set_hashed_password(const ::std::string& value) {
+  set_has_hashed_password();
+  hashed_password_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.UserConfig.hashed_password)
+}
+inline void UserConfig::set_hashed_password(const char* value) {
+  set_has_hashed_password();
+  hashed_password_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.UserConfig.hashed_password)
+}
+inline void UserConfig::set_hashed_password(const void* value, size_t size) {
+  set_has_hashed_password();
+  hashed_password_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.UserConfig.hashed_password)
+}
+inline ::std::string* UserConfig::mutable_hashed_password() {
+  set_has_hashed_password();
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.UserConfig.hashed_password)
+  return hashed_password_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* UserConfig::release_hashed_password() {
+  clear_has_hashed_password();
+  return hashed_password_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void UserConfig::set_allocated_hashed_password(::std::string* hashed_password) {
+  if (hashed_password != NULL) {
+    set_has_hashed_password();
+  } else {
+    clear_has_hashed_password();
+  }
+  hashed_password_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), hashed_password);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.UserConfig.hashed_password)
+}
+
+// -------------------------------------------------------------------
+
 // ZoneConfig
 
 // repeated .cockroach.proto.Attributes replica_attrs = 1;
@@ -2853,6 +3005,8 @@ inline void StoreDescriptor::set_allocated_capacity(::cockroach::proto::StoreCap
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

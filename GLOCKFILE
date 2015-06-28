@@ -34,4 +34,5 @@ github.com/spf13/pflag 67cbc198fd11dab704b214c1e629a97af392c085
 github.com/tebeka/go2xunit c36d9abe091675dcdd8c291f3153c8d438dd788f
 golang.org/x/net 8bfde94a845cb31000de3266ac83edbda58dab09
 golang.org/x/tools a87e08b564e401b7961951e02f1cb2197c2cbb60
+golang.org/x/crypto cc04154d65fb9296747569b107cfd05380b1ea3e
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de

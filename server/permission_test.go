@@ -37,14 +37,13 @@ read: [readonly, readwrite]
 write: [readwrite, writeonly]
 `
 
+var testPermConfigBytes = []byte(testPermConfig)
+
 // Example_setAndGetPerm sets perm configs for a variety of key
 // prefixes and verifies they can be fetched directly.
 func Example_setAndGetPerms() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
-
-	testConfigFn := createTestConfigFile(testPermConfig)
-	defer util.CleanupDir(testConfigFn)
 
 	testData := []struct {
 		prefix proto.Key
@@ -58,7 +57,7 @@ func Example_setAndGetPerms() {
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		RunSetPerm(testContext, prefix, testConfigFn)
+		RunSetPerm(testContext, prefix, testPermConfigBytes)
 		RunGetPerm(testContext, prefix)
 	}
 	// Output:
@@ -106,9 +105,6 @@ func Example_lsPerms() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
-	testConfigFn := createTestConfigFile(testPermConfig)
-	defer util.CleanupDir(testConfigFn)
-
 	keys := []proto.Key{
 		proto.KeyMin,
 		proto.Key("db1"),
@@ -125,7 +121,7 @@ func Example_lsPerms() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		RunSetPerm(testContext, prefix, testConfigFn)
+		RunSetPerm(testContext, prefix, testPermConfigBytes)
 	}
 
 	for i, regexp := range regexps {
@@ -165,9 +161,6 @@ func Example_rmPerms() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
-	testConfigFn := createTestConfigFile(testPermConfig)
-	defer util.CleanupDir(testConfigFn)
-
 	keys := []proto.Key{
 		proto.KeyMin,
 		proto.Key("db1"),
@@ -175,7 +168,7 @@ func Example_rmPerms() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		RunSetPerm(testContext, prefix, testConfigFn)
+		RunSetPerm(testContext, prefix, testPermConfigBytes)
 	}
 
 	for _, key := range keys {
@@ -200,7 +193,7 @@ func Example_permContentTypes() {
 	defer stopper.Stop()
 
 	config := &proto.PermConfig{}
-	err := yaml.Unmarshal([]byte(testPermConfig), config)
+	err := yaml.Unmarshal(testPermConfigBytes, config)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -284,7 +277,7 @@ func TestPermEmptyKey(t *testing.T) {
 	defer stopper.Stop()
 
 	config := &proto.PermConfig{}
-	err := yaml.Unmarshal([]byte(testPermConfig), config)
+	err := yaml.Unmarshal(testPermConfigBytes, config)
 	if err != nil {
 		t.Fatal(err)
 	}

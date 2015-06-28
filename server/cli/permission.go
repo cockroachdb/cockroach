@@ -18,7 +18,10 @@
 package cli
 
 import (
+	"io/ioutil"
+
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
 )
@@ -145,8 +148,13 @@ func runSetPerms(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-
-	server.RunSetPerm(Context, args[0], args[1])
+	// Read in the config file.
+	body, err := ioutil.ReadFile(args[1])
+	if err != nil {
+		log.Errorf("unable to read permission config file %q: %s", args[1], err)
+		return
+	}
+	server.RunSetPerm(Context, args[0], body)
 }
 
 // TODO:(bram) Add inline json for setting
