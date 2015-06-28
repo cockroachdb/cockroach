@@ -38,6 +38,8 @@ func FatalOnPanic() {
 // EnableLogFileOutput turns on logging using the specified directory.
 // For unittesting only.
 func EnableLogFileOutput(dir string) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 	*logDir = dir
 	logging.toStderr = false
 	logging.alsoToStderr = true
@@ -45,7 +47,9 @@ func EnableLogFileOutput(dir string) {
 
 // DisableLogFileOutput turns off logging. For unittesting only.
 func DisableLogFileOutput() {
-	if err := logging.removeFiles(); err != nil {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	if err := logging.removeFilesLocked(); err != nil {
 		logging.exit(err)
 	}
 	*logDir = ""

@@ -992,6 +992,11 @@ const bufferSize = 256 * 1024
 // removeFiles clears all the log files.
 func (l *loggingT) removeFiles() error {
 	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.removeFilesLocked()
+}
+
+func (l *loggingT) removeFilesLocked() error {
 	for s := FatalLog; s >= InfoLog; s-- {
 		if sb, ok := l.file[s].(*syncBuffer); ok {
 			if err := sb.file.Close(); err != nil {
@@ -1003,7 +1008,6 @@ func (l *loggingT) removeFiles() error {
 		}
 		l.file[s] = nil
 	}
-	l.mu.Unlock()
 	return nil
 }
 
