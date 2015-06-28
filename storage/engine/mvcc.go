@@ -468,10 +468,8 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent
 	return mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 }
 
-// getEarlierFunc fetches an earlier version of a key starting at
-// start and ending at end. Returns the value as a byte slice, the
-// timestamp of the earlier version, a boolean indicating whether a
-// version value or metadata was found, and error, if applicable.
+// getValueFunc fetches a version of a key between start and end.
+// Returns the key as an encoded byte slice, and error, if applicable.
 type getValueFunc func(engine Engine, start, end proto.EncodedKey,
 	msg gogoproto.Message) (proto.EncodedKey, error)
 
