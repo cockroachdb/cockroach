@@ -619,12 +619,12 @@ func (s *state) stop() {
 	if log.V(6) {
 		log.Infof("node %v stopping", s.nodeID)
 	}
+	s.MultiRaft.multiNode.Stop()
 	s.MultiRaft.Transport.Stop(s.nodeID)
 
 	// Drain the input channels because other threads may be blocking
 	// on these operations.
-	done := false
-	for !done {
+	for {
 		select {
 		case op := <-s.createGroupChan:
 			op.ch <- util.Errorf("shutting down")
@@ -633,10 +633,12 @@ func (s *state) stop() {
 		case op := <-s.proposalChan:
 			op.ch <- util.Errorf("shutting down")
 		default:
-			done = true
+			close(s.createGroupChan)
+			close(s.removeGroupChan)
+			close(s.proposalChan)
+			return
 		}
 	}
-	s.MultiRaft.multiNode.Stop()
 }
 
 // addNode creates a node and registers the given groupIDs for that
