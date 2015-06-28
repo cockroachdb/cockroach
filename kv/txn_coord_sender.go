@@ -277,37 +277,45 @@ func (tc *TxnCoordSender) startStats() {
 			}
 
 			num := len(curStats.durations)
-			dMax, err := stats.Max(curStats.durations)
-			if err != nil {
-				panic(err)
-			}
-			dMean, err := stats.Mean(curStats.durations)
-			if err != nil {
-				panic(err)
-			}
-			dDev, err := stats.StdDevP(curStats.durations)
-			if err != nil {
-				panic(err)
-			}
-			rMax, err := stats.Max(curStats.restarts)
-			if err != nil {
-				panic(err)
-			}
-			rMean, err := stats.Mean(curStats.restarts)
-			if err != nil {
-				panic(err)
-			}
-			rDev, err := stats.StdDevP(curStats.restarts)
-			if err != nil {
-				panic(err)
+			// Only compute when non-empty input.
+			var dMax, dMean, dDev, rMax, rMean, rDev float64
+			var err error
+			if num > 0 {
+				// There should never be an error in the below
+				// computations.
+				dMax, err = stats.Max(curStats.durations)
+				if err != nil {
+					panic(err)
+				}
+				dMean, err = stats.Mean(curStats.durations)
+				if err != nil {
+					panic(err)
+				}
+				dDev, err = stats.StdDevP(curStats.durations)
+				if err != nil {
+					panic(err)
+				}
+				rMax, err = stats.Max(curStats.restarts)
+				if err != nil {
+					panic(err)
+				}
+				rMean, err = stats.Mean(curStats.restarts)
+				if err != nil {
+					panic(err)
+				}
+				rDev, err = stats.StdDevP(curStats.restarts)
+				if err != nil {
+					panic(err)
+				}
 			}
 
 			rate := float64(int64(num)*int64(time.Second)) / float64(now-lastNow)
 			var pCommitted, pAbandoned, pAborted float32
-			if num > 0 {
-				pCommitted = 100 * float32(curStats.committed) / float32(num)
-				pAbandoned = 100 * float32(curStats.abandoned) / float32(num)
-				pAborted = 100 * float32(curStats.aborted) / float32(num)
+
+			if fNum := float32(num); fNum > 0 {
+				pCommitted = 100 * float32(curStats.committed) / fNum
+				pAbandoned = 100 * float32(curStats.abandoned) / fNum
+				pAborted = 100 * float32(curStats.aborted) / fNum
 			}
 			log.Infof(
 				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%.1f avg/σ/max restarts (%d samples)",
