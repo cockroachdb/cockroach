@@ -34,7 +34,7 @@ If you don't have npm, it comes with node. To get it via homebrew:
 `brew install node`
 
 To add or update a dependency:
-- `cat GLOCKFILE | grep -oE '[^[:space:]]+\.[^[:space:]]+' | sort | uniq | xargs go get -u` to update the dependencies or `go get {package}` to add a dependency
+- `(cd $GOPATH/src && go get -u ./...)` to update the dependencies or `go get {package}` to add a dependency
 - `glock save github.com/cockroachdb/cockroach` to update the GLOCKFILE
 - `go generate ./...` to update generated files
 - create a PR with all the changes
