@@ -831,8 +831,7 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 		switch args.(type) {
 		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
 			if key := args.Header().Key; key.Less(keys.SystemMax) {
-				// We hold the lock already.
-				r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
+				r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 					return bytes.HasPrefix(key, configPrefix)
 				})
 			}

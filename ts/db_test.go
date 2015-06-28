@@ -19,6 +19,7 @@ package ts
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -207,6 +208,7 @@ type modelDataSource struct {
 	r           Resolution
 	stopper     *util.Stopper
 	calledCount int
+	once        sync.Once
 }
 
 // GetTimeSeriesData implements the DataSource interface, returning a predefined
@@ -216,7 +218,7 @@ type modelDataSource struct {
 func (mds *modelDataSource) GetTimeSeriesData() []proto.TimeSeriesData {
 	if len(mds.datasets) == 0 {
 		// Stop on goroutine to prevent deadlock.
-		go mds.stopper.Stop()
+		go mds.once.Do(mds.stopper.Stop)
 		return nil
 	}
 	mds.calledCount++

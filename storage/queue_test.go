@@ -211,17 +211,15 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
 
-	time.Sleep(5 * time.Millisecond)
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) == 1
-	}, 5*time.Millisecond); err != nil {
+	}, 250*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 
-	time.Sleep(5 * time.Millisecond)
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) == 2
-	}, 5*time.Millisecond); err != nil {
+	}, 250*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 }

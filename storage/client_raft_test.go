@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -352,10 +353,16 @@ func TestFailedReplicaChange(t *testing.T) {
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
+	var runFilter atomic.Value
+	runFilter.Store(true)
+
 	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
-		if et, ok := args.(*proto.EndTransactionRequest); ok && et.Commit {
-			reply.Header().SetGoError(util.Errorf("boom"))
-			return true
+		if runFilter.Load().(bool) {
+			if et, ok := args.(*proto.EndTransactionRequest); ok && et.Commit {
+				reply.Header().SetGoError(util.Errorf("boom"))
+				return true
+			}
+			return false
 		}
 		return false
 	}
@@ -382,7 +389,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// The pending config change flag was cleared, so a subsequent attempt
 	// can succeed.
-	storage.TestingCommandFilter = nil
+	runFilter.Store(false)
 
 	err = rng.ChangeReplicas(proto.ADD_REPLICA,
 		proto.Replica{

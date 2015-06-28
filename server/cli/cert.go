@@ -93,6 +93,10 @@ The certs directory should contain a CA cert and key.
 // runCreateClientCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateClientCert(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
 	err := security.RunCreateClientCert(Context.Certs, keySize, args[0])
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate clent certificate: %s\n", err)

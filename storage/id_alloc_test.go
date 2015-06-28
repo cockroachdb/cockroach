@@ -21,6 +21,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -112,7 +113,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 // TestNewIDAllocatorInvalidArgs checks validation logic of newIDAllocator.
 func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	args := [][]int64{
+	args := [][]uint32{
 		{0, 10}, // minID <= 0
 		{2, 0},  // blockSize < 1
 	}
@@ -150,7 +151,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make Allocator invalid.
-	idAlloc.idKey.Store(proto.Key([]byte{}))
+	idAlloc.idKey.Store(proto.KeyMin)
 
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.
@@ -164,10 +165,22 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		}
 	}
 
+	const routines = 10
+
+	var wg sync.WaitGroup
+	wg.Add(routines)
+
 	// Then the paralleled allocations should be blocked until Allocator
 	// is recovered.
-	for i := 0; i < 10; i++ {
+	for i := 0; i < routines; i++ {
 		go func() {
+			select {
+			case <-idAlloc.ids:
+				t.Errorf("Allocate() should be blocked until idKey is valid")
+			case <-time.After(10 * time.Millisecond):
+			}
+			wg.Done()
+
 			id, err := idAlloc.Allocate()
 			if err != nil {
 				t.Fatal(err)
@@ -175,28 +188,26 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 			allocd <- int(id)
 		}()
 	}
-	// Make sure no allocation returns.
-	time.Sleep(10 * time.Millisecond)
-	if len(allocd) != 0 {
-		t.Errorf("Allocate() should be blocked until allocateBlock return ID")
-	}
+
+	// Wait until all the allocations are blocked.
+	wg.Wait()
 
 	// Make the IDAllocator valid again.
 	idAlloc.idKey.Store(keys.RaftIDGenerator)
 	// Check if the blocked allocations return expected ID.
-	ids := make([]int, 10)
-	for i := 0; i < 10; i++ {
+	ids := make([]int, routines)
+	for i := 0; i < routines; i++ {
 		ids[i] = <-allocd
 	}
 	sort.Ints(ids)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < routines; i++ {
 		if ids[i] != i+11 {
 			t.Errorf("expected \"%d\"th ID to be %d; got %d", i, i+11, ids[i])
 		}
 	}
 
 	// Check if the following allocations return expected ID.
-	for i := 0; i < 10; i++ {
+	for i := 0; i < routines; i++ {
 		id, err := idAlloc.Allocate()
 		if err != nil {
 			t.Fatal(err)

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1190,11 +1191,21 @@ func TestStoreScanIntents(t *testing.T) {
 	defer func() { TestingCommandFilter = nil }()
 	defer stopper.Stop()
 
+	var count int32
+	countPtr := &count
+
+	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+		if _, ok := args.(*proto.ScanRequest); ok {
+			atomic.AddInt32(countPtr, 1)
+		}
+		return false
+	}
+
 	testCases := []struct {
 		consistent bool
-		canPush    bool // can the txn be pushed?
-		expFinish  bool // do we expect the scan to finish?
-		expCount   int  // how many times do we expect to scan?
+		canPush    bool  // can the txn be pushed?
+		expFinish  bool  // do we expect the scan to finish?
+		expCount   int32 // how many times do we expect to scan?
 	}{
 		// Consistent which can push will make two loops.
 		{true, true, true, 2},
@@ -1208,13 +1219,7 @@ func TestStoreScanIntents(t *testing.T) {
 	for i, test := range testCases {
 		// The command filter just counts the number of scan requests which are
 		// submitted to the range.
-		count := 0
-		TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
-			if _, ok := args.(*proto.ScanRequest); ok {
-				count++
-			}
-			return false
-		}
+		atomic.StoreInt32(countPtr, 0)
 
 		// Lay down 10 intents to scan over.
 		var txn *proto.Transaction
@@ -1260,8 +1265,8 @@ func TestStoreScanIntents(t *testing.T) {
 			if len(sReply.Rows) != 0 {
 				t.Errorf("expected empty scan result; got %+v", sReply.Rows)
 			}
-			if count != test.expCount {
-				t.Errorf("%d: expected scan count %d; got %d", i, test.expCount, count)
+			if countVal := atomic.LoadInt32(countPtr); countVal != test.expCount {
+				t.Errorf("%d: expected scan count %d; got %d", i, test.expCount, countVal)
 			}
 		case <-time.After(wait):
 			if test.expFinish {
@@ -1311,7 +1316,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// Scan the range repeatedly until we've verified count.
 	sArgs, sReply := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
 	sArgs.ReadConsistency = proto.INCONSISTENT
-	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+	util.SucceedsWithin(t, time.Second, func() error {
 		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err != nil {
 			return err
 		}

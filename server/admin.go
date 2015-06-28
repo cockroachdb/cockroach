@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 	// This is imported for its side-effect of registering pprof
 	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
@@ -115,7 +116,10 @@ func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	fmt.Fprintln(w, "ok")
-	go s.stopper.Stop()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		s.stopper.Stop()
+	}()
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default

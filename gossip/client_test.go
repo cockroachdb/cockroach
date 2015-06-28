@@ -155,7 +155,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 			return true
 		}
 		return false
-	}, 500*time.Millisecond); err != nil {
-		t.Fatalf("timeout reached before redundant client connection was closed")
+	}, 10*time.Second); err != nil {
+		t.Fatal(err)
 	}
 }

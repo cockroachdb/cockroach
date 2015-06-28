@@ -532,9 +532,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		// sentinel and first range metadata if we have a first range.
 		// This may wake up ranges and requires everything to be set up and
 		// running.
-		if err := s.startGossip(); err != nil {
-			return err
-		}
+		s.startGossip()
 
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
@@ -567,7 +565,7 @@ func (s *Store) WaitForInit() {
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
-func (s *Store) startGossip() error {
+func (s *Store) startGossip() {
 	ctx := s.Context(nil)
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
@@ -611,7 +609,6 @@ func (s *Store) startGossip() error {
 			}
 		}
 	})
-	return nil
 }
 
 // maybeGossipFirstRange checks whether the store has a replia of the first
