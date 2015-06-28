@@ -8,6 +8,8 @@
 # The output is sorted by package name:
 #   <package-repo-root>:<sha>
 
+set -eo pipefail
+
 dirs=()
 function visit() {
   local dir="$1"

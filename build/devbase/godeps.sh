@@ -1,7 +1,7 @@
 #!/bin/bash
 # Grab Go-related dependencies.
 
-set -e
+set -eu
 
 # Ensure we only have one entry in GOPATH (glock gets confused
 # by more).

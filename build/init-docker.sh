@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eu
+
 if [ "${DOCKER_HOST:-}" = "" -a "$(uname)" = "Darwin" ]; then
     if ! type -P "boot2docker" >& /dev/null; then
 	echo "boot2docker not found!"

@@ -9,7 +9,9 @@
 # tests all pass.
 #
 # Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-set -ex
+
+set -euo pipefail
+
 cd -P "$(dirname $0)"
 DIR=$(pwd -P)
 

@@ -12,6 +12,8 @@
 # Note that go:generate does not do expansion. So "go:generate add-leakest.sh
 # *_test.go" will call into here with a single argument of "*_test.go"
 
+set -eu
+
 sed -i'~' -e '
     /^func Test.*(t \*testing.T) {/ {
         # Skip past the test declaration

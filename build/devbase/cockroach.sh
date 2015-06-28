@@ -1,6 +1,9 @@
 #!/bin/sh
 # This file serves as an entrypoint for the docker image,
 # allowing injection of shell commands.
+
+set -eu
+
 cd "$(dirname $0)"
 
 if [ "$1" = "test" ] || [ "$1" = "testrace" ]; then
