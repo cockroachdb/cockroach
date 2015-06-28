@@ -6,6 +6,8 @@
 #
 # Author: Spencer Kimball (spencerkimball@gmail.com)
 
+set -eu
+
 cd "$(dirname $0)"
 
 source ../build/init-docker.sh
@@ -46,7 +48,9 @@ fi
 # Doing this here only so that after a cluster has been started and stopped,
 # the containers are still available for debugging.
 echo "Removing any old containers..."
-docker rm -f $CONTAINERS &> /dev/null
+if [[ -n "$CONTAINERS" ]]; then
+  docker rm -f $CONTAINERS > /dev/null
+fi
 
 # Default number of nodes.
 NODES=${NODES:-3}
@@ -74,12 +78,13 @@ trap finish EXIT
 
 # Shell script cleanup for failure.
 function fail {
+  # these exit non-zero because docker tries to remove the volumes, and they belong to another container.
   docker kill ${CIDS[*]} > /dev/null
-  docker rm -v ${CIDS[*]} > /dev/null
+  docker rm -v ${CIDS[*]} > /dev/null || true
   docker kill $DNS_CID > /dev/null
-  docker rm -v $DNS_CID > /dev/null
-  docker rm -v cockroach-init > /dev/null
-  docker rm -v cockroach-certs > /dev/null
+  docker rm -v $DNS_CID > /dev/null || true
+  docker rm -v cockroach-init > /dev/null || true
+  docker rm -v cockroach-certs > /dev/null || true
   exit 1
 }
 
@@ -105,8 +110,9 @@ for i in $(seq 1 $NODES); do
 done
 
 # Generate certs.
-docker run -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} cert create-ca --certs=${CERTS_DIR} 2> /dev/null
-docker run --rm --volumes-from=${CERTS_NAME} ${COCKROACH_IMAGE} cert create-node --certs=${CERTS_DIR} ${NODE_ADDRESSES} 2> /dev/null
+docker run -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} cert create-ca --certs=${CERTS_DIR} > /dev/null
+# this exits non-zero because docker tries to remove the volumes, and they belong to another container.
+docker run --rm --volumes-from=${CERTS_NAME} ${COCKROACH_IMAGE} cert create-node --certs=${CERTS_DIR} ${NODE_ADDRESSES} > /dev/null || true
 
 # Start all nodes.
 for i in $(seq 1 $NODES); do
@@ -122,7 +128,7 @@ for i in $(seq 1 $NODES); do
 
   # If this is the first node, initialize the cluster first.
   if [[ $i == 1 ]]; then
-      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init --stores=ssd=$VOL 2> /dev/null
+      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init --stores=ssd=$VOL > /dev/null
       NODE_ARGS="${NODE_ARGS} --volumes-from=cockroach-init"
   fi
 
@@ -152,7 +158,7 @@ fi
 
 # Fetch the local status contents from node 1 and verify build information is present.
 LOCAL_URL="https://$DOCKERHOST:${PORTS[1]}/_status/local/"
-LOCAL=$(curl --noproxy '*' -k -s $LOCAL_URL)
+LOCAL=$(curl --noproxy '*' -k -s $LOCAL_URL) || true
 if [[ -z $LOCAL ]]; then
 	echo "Failed to fetch status from node 1 (${LOCAL_URL})"
   docker logs ${CIDS[1]}
@@ -177,7 +183,7 @@ for ATTEMPT in $(seq 1 $MAX_WAIT); do
   for i in $(seq 1 $NODES); do
     FOUND_NAMES=""
     GOSSIP_URL="https://$DOCKERHOST:${PORTS[$i]}/_status/gossip"
-    GOSSIP=$(curl --noproxy '*' -k -s -m 1 $GOSSIP_URL)
+    GOSSIP=$(curl --noproxy '*' -k -s -m 1 $GOSSIP_URL) || true
     for j in $(seq 1 $((2*NODES))); do
       if [[ ! -z $(echo $GOSSIP | grep "node:$j") ]]; then
         FOUND=$((FOUND+1))

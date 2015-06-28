@@ -7,8 +7,11 @@
 # purpose mounted to /test/.out.
 #
 # Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+
+set -eu
+
 BUILD="../build"
 mkdir -p "${BUILD}"
 for f in $(find "${BUILD}" -name '*.test' -type f); do
   >&2 echo executing "$f" && ./$f || exit $?;
-done 
+done

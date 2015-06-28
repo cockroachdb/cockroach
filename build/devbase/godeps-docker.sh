@@ -5,7 +5,7 @@
 # we install our dependencies in a base image that does not include
 # the full cockroach repo, so we must copy GLOCKFILE by hand.
 
-set -e
+set -eu
 
 cd /go/src/github.com/cockroachdb/cockroach
 cp build/devbase/GLOCKFILE .

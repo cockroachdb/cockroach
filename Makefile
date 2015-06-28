@@ -142,14 +142,13 @@ clean:
 	$(GO) clean -tags '$(TAGS)' $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
-# List all of the dependencies which are not part of the standard
-# library or cockroachdb/cockroach.
-.PHONY: listdeps
-listdeps:
-	@go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
-	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
-	  egrep -v 'github.com/cockroachdb/cockroach'
 
+# Store all of the dependencies which are not part of the standard
+# library or cockroachdb/cockroach in build/devbase/deps
+.PHONY: storedeps
+storedeps:
+	go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | sort | uniq | \
+	 grep -E '[^/]+\.[^/]+/' | grep -vF 'github.com/cockroachdb/cockroach' > build/devbase/deps
 
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 .git/hooks/%: githooks/%
