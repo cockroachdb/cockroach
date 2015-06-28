@@ -18,6 +18,7 @@
 package main
 
 //go:generate make -C .. -f cockroach/build/protobuf.mk
+//go:generate make storedeps
 
 import (
 	"fmt"
