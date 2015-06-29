@@ -65,7 +65,7 @@ func (c cliTest) Run(line string) {
 	}
 }
 
-func ExampleBasic() {
+func Example_basic() {
 	c := newCLITest()
 
 	c.Run("kv put a 1 b 2")
@@ -105,7 +105,7 @@ func ExampleBasic() {
 	// node drained and shutdown: ok
 }
 
-func ExampleQuoted() {
+func Example_quoted() {
 	c := newCLITest()
 
 	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
@@ -140,7 +140,7 @@ func ExampleQuoted() {
 	// node drained and shutdown: ok
 }
 
-func ExampleInsecure() {
+func Example_insecure() {
 	c := cliTest{}
 	c.TestServer = &server.TestServer{}
 	c.Ctx = server.NewTestContext()
@@ -162,7 +162,7 @@ func ExampleInsecure() {
 	// node drained and shutdown: ok
 }
 
-func ExampleSplitMergeRanges() {
+func Example_ranges() {
 	c := newCLITest()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
@@ -206,7 +206,7 @@ func ExampleSplitMergeRanges() {
 	// node drained and shutdown: ok
 }
 
-func ExampleGlogFlags() {
+func Example_logging() {
 	c := newCLITest()
 
 	c.Run("kv --alsologtostderr=false scan")
