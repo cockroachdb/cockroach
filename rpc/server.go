@@ -154,14 +154,11 @@ func (s *Server) Serve(handler http.Handler) {
 
 			switch state {
 			case http.StateNew:
-				select {
-				case <-s.context.Stopper.ShouldStop():
-					// Shutting down? Just close the new connection immediately.
+				if s.closed {
 					conn.Close()
-				default:
-					s.activeConns[conn] = struct{}{}
+					return
 				}
-
+				s.activeConns[conn] = struct{}{}
 			case http.StateHijacked, http.StateClosed:
 				delete(s.activeConns, conn)
 			}
