@@ -43,8 +43,8 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
-	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+
+	if err := r.checkCmdHeader(header); err != nil {
 		reply.Header().SetGoError(err)
 		return nil, err
 	}

@@ -1380,6 +1380,8 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 	wiErr.Resolved = true // success!
 
+	var wg sync.WaitGroup
+
 	// We pushed the transaction(s) successfully, so resolve the intent(s).
 	for i, intent := range wiErr.Intents {
 		pushReply := bReply.Responses[i].InternalPushTxn
@@ -1398,8 +1400,10 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		resolveReply := &proto.InternalResolveIntentResponse{}
 
 		if s.stopper.StartTask() {
+			wg.Add(1)
+
 			go func() {
-				resolveErr := rng.AddCmd(ctx, proto.Call{Args: resolveArgs, Reply: resolveReply})
+				resolveErr := rng.addWriteCmd(ctx, resolveArgs, resolveReply, &wg)
 				if resolveErr != nil {
 					if log.V(1) {
 						log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
@@ -1409,6 +1413,8 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 			}()
 		}
 	}
+
+	wg.Wait() // wait until all the `ResolveIntent`s have been submitted to raft.
 
 	return wiErr
 }
