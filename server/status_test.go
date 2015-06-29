@@ -347,6 +347,10 @@ func TestStatusLocalLogs(t *testing.T) {
 	log.Infof("TestStatusLocalLogFile test message-Info")
 	timestampEWI := time.Now().UnixNano()
 
+	// Increase chances of everything having been persisted when we go
+	// checking for it.
+	log.Flush()
+
 	// Fetch a each listed log directly.
 	type logWrapper struct {
 		Data []proto.LogEntry `json:"d"`
