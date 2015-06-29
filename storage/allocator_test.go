@@ -655,9 +655,9 @@ func (ts *testStore) Rebalance(ots *testStore, bytes int64) {
 	ots.Capacity.Available -= bytes
 }
 
-// ExampleAllocatorRebalancing models a set of stores in a cluster,
-// randomly adding / removing stores and adding bytes.
-func ExampleAllocatorRebalancing() {
+func Example_rebalancing() {
+	// Model a set of stores in a cluster,
+	// randomly adding / removing stores and adding bytes.
 	g := gossip.New(nil, 0, nil)
 	alloc := newAllocator(g)
 	alloc.randGen = rand.New(rand.NewSource(0))
