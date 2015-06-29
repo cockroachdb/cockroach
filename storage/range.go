@@ -929,6 +929,11 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
+	if !r.rm.Stopper().StartTask() {
+		return false, util.Errorf("system is shutting down")
+	}
+	defer r.rm.Stopper().FinishTask()
+
 	timestamp := r.rm.Clock().Now()
 
 	// Check for or obtain the lease, if none active.
