@@ -4,7 +4,7 @@ machine:
 
 checkout:
   post:
-    - git fetch --unshallow 2>/dev/null || true
+    - git fetch --unshallow || true
     - git fetch --tags
     # Nasty hack: Because we get a freshly restored repo, timestamps do not
     # correspond any more to when the file was last changed. To rectify this,
@@ -59,7 +59,7 @@ test:
       if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ] && [ -s "${CIRCLE_ARTIFACTS}/excerpt.txt" ]; then
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
           "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues" \
-          -d "{ \"title\": \"Test failure in CI build ${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${CIRCLE_ARTIFACTS}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }" &> /dev/null
+          -d "{ \"title\": \"Test failure in CI build ${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${CIRCLE_ARTIFACTS}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }" > /dev/null
         echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
       else
         echo "Not posting an issue."
@@ -76,20 +76,8 @@ deployment:
     commands:
       - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resource/deploy_templates/.dockercfg.template" > ~/.dockercfg
       - |
-          VERSION=$(git describe 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+          export VERSION=$(git describe || git rev-parse --short HEAD)
           echo "Deploying ${VERSION}..."
           if [ -n "$DOCKER_EMAIL" ]; then
-            ./build/build-docker-deploy.sh && \
-            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh stop && \
-            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh start && \
-            COCKROACH_IMAGE="cockroachdb/cockroach" run/local-cluster.sh stop && \
-            docker tag cockroachdb/cockroach:latest cockroachdb/cockroach:${VERSION} && \
-            docker tag cockroachdb/cockroach-dev:latest cockroachdb/cockroach-dev:${VERSION} && \
-            # Pushing to the registry just fails sometimes, so for the time
-            # being just make this a best-effort action.
-            (docker push cockroachdb/cockroach:latest; \
-            docker push cockroachdb/cockroach:${VERSION}; \
-            docker push cockroachdb/cockroach-dev:latest; \
-            docker push cockroachdb/cockroach-dev:${VERSION}; \
-            true)
+            ./build/push-docker-deploy.sh
           fi
