@@ -32,9 +32,9 @@ import (
 
 const testAcctConfig = `cluster_id: test`
 
-// ExampleSetAndGetAccts sets acct configs for a variety of key
+// Example_setAndGetAccts sets acct configs for a variety of key
 // prefixes and verifies they can be fetched directly.
-func ExampleSetAndGetAccts() {
+func Example_setAndGetAccts() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -74,10 +74,10 @@ func ExampleSetAndGetAccts() {
 	// cluster_id: test
 }
 
-// ExampleLsAccts creates a series of acct configs and verifies
+// Example_lsAccts creates a series of acct configs and verifies
 // acct-ls works. First, no regexp lists all acct configs. Second,
 // regexp properly matches results.
-func ExampleLsAccts() {
+func Example_lsAccts() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -132,11 +132,11 @@ func ExampleLsAccts() {
 	// db2
 }
 
-// ExampleRmAccts creates a series of acct configs and verifies
+// Example_rmAccts creates a series of acct configs and verifies
 // acct-rm works by deleting some and then all and verifying entries
 // have been removed via acct-ls. Also verify the default acct config
 // cannot be removed.
-func ExampleRmAccts() {
+func Example_rmAccts() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -167,10 +167,10 @@ func ExampleRmAccts() {
 	// [default]
 }
 
-// ExampleAcctContentTypes verifies that the Accept header can be used
+// Example_acctContentTypes verifies that the Accept header can be used
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
-func ExampleAcctContentTypes() {
+func Example_acctContentTypes() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
