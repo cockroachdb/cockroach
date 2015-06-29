@@ -31,7 +31,7 @@ docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockr
 # Make sure the created binary is statically linked.
 # Seems awkward to do this programmatically, but
 # this should work.
-file build/cockroach | grep 'statically linked' &>/dev/null
+file build/cockroach | grep -F 'statically linked' > /dev/null
 
 docker build -t cockroachdb/cockroach .
 docker run -v "${DIR}/build":/build cockroachdb/cockroach

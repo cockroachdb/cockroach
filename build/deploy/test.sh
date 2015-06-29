@@ -13,5 +13,5 @@ set -eu
 BUILD="../build"
 mkdir -p "${BUILD}"
 for f in $(find "${BUILD}" -name '*.test' -type f); do
-  >&2 echo executing "$f" && ./$f || exit $?;
+  >&2 echo executing "$f" && ./$f
 done

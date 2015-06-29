@@ -49,7 +49,8 @@ fi
 # the containers are still available for debugging.
 echo "Removing any old containers..."
 if [[ -n "$CONTAINERS" ]]; then
-  docker rm -f $CONTAINERS > /dev/null
+  # this exits non-zero because docker tries to remove the volumes, and they belong to another container.
+  docker rm -f $CONTAINERS > /dev/null || true
 fi
 
 # Default number of nodes.
@@ -89,7 +90,7 @@ function fail {
 }
 
 # Create temporary file for DNS hosts.
-DNS_DIR=$(mktemp -d "/tmp/dnsmasq.hosts.XXXXXXXX" || exit 1)
+DNS_DIR=$(mktemp -d "/tmp/dnsmasq.hosts.XXXXXXXX")
 DNS_FILE="$DNS_DIR/addn-hosts"
 
 # Start dnsmasq container. We wait in a loop until the DNS additional
