@@ -628,8 +628,6 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 // response cache.  If wait is true, will block until the command is
 // complete.
 func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wait bool) error {
-	// Check the response cache in case this is a replay. This call
-	// may block if the same command is already underway.
 	header := args.Header()
 
 	// Add the write to the command queue to gate subsequent overlapping
