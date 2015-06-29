@@ -121,72 +121,85 @@ func (m *SQLResponseHeader) GetTxn() []byte {
 }
 
 type Datum struct {
-	Bval    *bool    `protobuf:"varint,1,opt,name=bval" json:"bval,omitempty"`
-	Ival    *int64   `protobuf:"varint,2,opt,name=ival" json:"ival,omitempty"`
-	Dval    *float64 `protobuf:"fixed64,3,opt,name=dval" json:"dval,omitempty"`
-	Blobval []byte   `protobuf:"bytes,4,opt,name=blobval" json:"blobval,omitempty"`
-	// Checksum is a CRC-32-IEEE checksum of the value.
-	// If this is an integer value, then the value is interpreted as an 8
-	// byte, big-endian encoded value. This value is set by the client on
-	// updates to do end-to-end integrity verification. If the checksum is
-	// incorrect, the update operation will fail. If the client does not
-	// wish to use end-to-end checksumming, this value should be nil.
-	Checksum         *uint32 `protobuf:"fixed32,9,opt,name=checksum" json:"checksum,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	IntVal           *int64   `protobuf:"varint,1,opt,name=int_val" json:"int_val,omitempty"`
+	FloatVal         *float64 `protobuf:"fixed64,2,opt,name=float_val" json:"float_val,omitempty"`
+	BytesVal         []byte   `protobuf:"bytes,3,opt,name=bytes_val" json:"bytes_val,omitempty"`
+	StringVal        *string  `protobuf:"bytes,4,opt,name=string_val" json:"string_val,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *Datum) Reset()         { *m = Datum{} }
 func (m *Datum) String() string { return proto.CompactTextString(m) }
 func (*Datum) ProtoMessage()    {}
 
-func (m *Datum) GetBval() bool {
-	if m != nil && m.Bval != nil {
-		return *m.Bval
-	}
-	return false
-}
-
-func (m *Datum) GetIval() int64 {
-	if m != nil && m.Ival != nil {
-		return *m.Ival
+func (m *Datum) GetIntVal() int64 {
+	if m != nil && m.IntVal != nil {
+		return *m.IntVal
 	}
 	return 0
 }
 
-func (m *Datum) GetDval() float64 {
-	if m != nil && m.Dval != nil {
-		return *m.Dval
+func (m *Datum) GetFloatVal() float64 {
+	if m != nil && m.FloatVal != nil {
+		return *m.FloatVal
 	}
 	return 0
 }
 
-func (m *Datum) GetBlobval() []byte {
+func (m *Datum) GetBytesVal() []byte {
 	if m != nil {
-		return m.Blobval
+		return m.BytesVal
 	}
 	return nil
 }
 
-func (m *Datum) GetChecksum() uint32 {
-	if m != nil && m.Checksum != nil {
-		return *m.Checksum
+func (m *Datum) GetStringVal() string {
+	if m != nil && m.StringVal != nil {
+		return *m.StringVal
 	}
-	return 0
+	return ""
 }
 
-// A Result is a collection of values representing a row
-// in a result view. A column value not present in a row
-// has Nil Bytes in the value.
+// A Result is a collection of rows.
 type Result struct {
-	Values           []*Datum `protobuf:"bytes,1,rep,name=values" json:"values,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	// The names of the columns returned in the result set in the order specified
+	// in the SQL statement. The number of columns will equal the number of
+	// values in each Row.
+	Columns []string `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
+	// The rows in the result set.
+	Rows             []Result_Row `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+	XXX_unrecognized []byte       `json:"-"`
 }
 
 func (m *Result) Reset()         { *m = Result{} }
 func (m *Result) String() string { return proto.CompactTextString(m) }
 func (*Result) ProtoMessage()    {}
 
-func (m *Result) GetValues() []*Datum {
+func (m *Result) GetColumns() []string {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+func (m *Result) GetRows() []Result_Row {
+	if m != nil {
+		return m.Rows
+	}
+	return nil
+}
+
+// A Row is a collection of values representing a row in a result.
+type Result_Row struct {
+	Values           []Datum `protobuf:"bytes,1,rep,name=values" json:"values"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Result_Row) Reset()         { *m = Result_Row{} }
+func (m *Result_Row) String() string { return proto.CompactTextString(m) }
+func (*Result_Row) ProtoMessage()    {}
+
+func (m *Result_Row) GetValues() []Datum {
 	if m != nil {
 		return m.Values
 	}
@@ -198,41 +211,26 @@ func (m *Result) GetValues() []*Datum {
 type SQLRequest struct {
 	// Request header.
 	SQLRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Cmds             []*SQLRequest_Cmd `protobuf:"bytes,2,rep,name=cmds" json:"cmds,omitempty"`
-	XXX_unrecognized []byte            `json:"-"`
+	// SQL statement(s) to be serially executed by the server. Multiple
+	// statements are passed as a single string separated by semicolons.
+	Sql string `protobuf:"bytes,2,opt,name=sql" json:"sql"`
+	// Parameters referred to in the above SQL statement(s) using "?".
+	Params           []Datum `protobuf:"bytes,3,rep,name=params" json:"params"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *SQLRequest) Reset()         { *m = SQLRequest{} }
 func (m *SQLRequest) String() string { return proto.CompactTextString(m) }
 func (*SQLRequest) ProtoMessage()    {}
 
-func (m *SQLRequest) GetCmds() []*SQLRequest_Cmd {
-	if m != nil {
-		return m.Cmds
-	}
-	return nil
-}
-
-// SQL commands/queries to be serially executed by the server.
-type SQLRequest_Cmd struct {
-	Sql string `protobuf:"bytes,1,opt,name=sql" json:"sql"`
-	// parameters are referred to in the above sql command/query using "?".
-	Params           []*Datum `protobuf:"bytes,2,rep,name=params" json:"params,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
-}
-
-func (m *SQLRequest_Cmd) Reset()         { *m = SQLRequest_Cmd{} }
-func (m *SQLRequest_Cmd) String() string { return proto.CompactTextString(m) }
-func (*SQLRequest_Cmd) ProtoMessage()    {}
-
-func (m *SQLRequest_Cmd) GetSql() string {
+func (m *SQLRequest) GetSql() string {
 	if m != nil {
 		return m.Sql
 	}
 	return ""
 }
 
-func (m *SQLRequest_Cmd) GetParams() []*Datum {
+func (m *SQLRequest) GetParams() []Datum {
 	if m != nil {
 		return m.Params
 	}
@@ -241,27 +239,17 @@ func (m *SQLRequest_Cmd) GetParams() []*Datum {
 
 type SQLResponse struct {
 	SQLResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// The names of the columns returned in the result set in the order
-	// specified (when specified) in the SQL statement. The number of
-	// columns must equal the number of Datum in each Result.
-	Columns []string `protobuf:"bytes,2,rep,name=columns" json:"columns,omitempty"`
-	// The result set for the last Cmd in the request.
-	Results          []*Result `protobuf:"bytes,3,rep,name=results" json:"results,omitempty"`
-	XXX_unrecognized []byte    `json:"-"`
+	// The list of results. There is one result object per SQL statement in the
+	// request.
+	Results          []Result `protobuf:"bytes,2,rep,name=results" json:"results"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *SQLResponse) Reset()         { *m = SQLResponse{} }
 func (m *SQLResponse) String() string { return proto.CompactTextString(m) }
 func (*SQLResponse) ProtoMessage()    {}
 
-func (m *SQLResponse) GetColumns() []string {
-	if m != nil {
-		return m.Columns
-	}
-	return nil
-}
-
-func (m *SQLResponse) GetResults() []*Result {
+func (m *SQLResponse) GetResults() []Result {
 	if m != nil {
 		return m.Results
 	}
@@ -538,25 +526,7 @@ func (m *Datum) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Bval", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			b := bool(v != 0)
-			m.Bval = &b
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Ival", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field IntVal", wireType)
 			}
 			var v int64
 			for shift := uint(0); ; shift += 7 {
@@ -570,10 +540,10 @@ func (m *Datum) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.Ival = &v
-		case 3:
+			m.IntVal = &v
+		case 2:
 			if wireType != 1 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Dval", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field FloatVal", wireType)
 			}
 			var v uint64
 			if (iNdEx + 8) > l {
@@ -589,10 +559,10 @@ func (m *Datum) Unmarshal(data []byte) error {
 			v |= uint64(data[iNdEx-2]) << 48
 			v |= uint64(data[iNdEx-1]) << 56
 			v2 := float64(math.Float64frombits(v))
-			m.Dval = &v2
-		case 4:
+			m.FloatVal = &v2
+		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Blobval", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field BytesVal", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -610,22 +580,31 @@ func (m *Datum) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Blobval = append([]byte{}, data[iNdEx:postIndex]...)
+			m.BytesVal = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
-		case 9:
-			if wireType != 5 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Checksum", wireType)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StringVal", wireType)
 			}
-			var v uint32
-			if (iNdEx + 4) > l {
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			iNdEx += 4
-			v = uint32(data[iNdEx-4])
-			v |= uint32(data[iNdEx-3]) << 8
-			v |= uint32(data[iNdEx-2]) << 16
-			v |= uint32(data[iNdEx-1]) << 24
-			m.Checksum = &v
+			s := string(data[iNdEx:postIndex])
+			m.StringVal = &s
+			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -671,6 +650,96 @@ func (m *Result) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Rows = append(m.Rows, Result_Row{})
+			if err := m.Rows[len(m.Rows)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipSqlApi(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *Result_Row) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Values", wireType)
 			}
 			var msglen int
@@ -689,7 +758,7 @@ func (m *Result) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Values = append(m.Values, &Datum{})
+			m.Values = append(m.Values, Datum{})
 			if err := m.Values[len(m.Values)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -763,74 +832,6 @@ func (m *SQLRequest) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Cmds", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Cmds = append(m.Cmds, &SQLRequest_Cmd{})
-			if err := m.Cmds[len(m.Cmds)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipSqlApi(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *SQLRequest_Cmd) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Sql", wireType)
 			}
 			var stringLen uint64
@@ -851,7 +852,7 @@ func (m *SQLRequest_Cmd) Unmarshal(data []byte) error {
 			}
 			m.Sql = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 2:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Params", wireType)
 			}
@@ -871,7 +872,7 @@ func (m *SQLRequest_Cmd) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Params = append(m.Params, &Datum{})
+			m.Params = append(m.Params, Datum{})
 			if err := m.Params[len(m.Params)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -945,28 +946,6 @@ func (m *SQLResponse) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Columns = append(m.Columns, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Results", wireType)
 			}
 			var msglen int
@@ -985,7 +964,7 @@ func (m *SQLResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Results = append(m.Results, &Result{})
+			m.Results = append(m.Results, Result{})
 			if err := m.Results[len(m.Results)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1099,36 +1078,31 @@ func skipSqlApi(data []byte) (n int, err error) {
 	panic("unreachable")
 }
 func (this *Datum) GetValue() interface{} {
-	if this.Bval != nil {
-		return this.Bval
+	if this.IntVal != nil {
+		return this.IntVal
 	}
-	if this.Ival != nil {
-		return this.Ival
+	if this.FloatVal != nil {
+		return this.FloatVal
 	}
-	if this.Dval != nil {
-		return this.Dval
+	if this.BytesVal != nil {
+		return this.BytesVal
 	}
-	if this.Blobval != nil {
-		return this.Blobval
-	}
-	if this.Checksum != nil {
-		return this.Checksum
+	if this.StringVal != nil {
+		return this.StringVal
 	}
 	return nil
 }
 
 func (this *Datum) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
-	case *bool:
-		this.Bval = vt
 	case *int64:
-		this.Ival = vt
+		this.IntVal = vt
 	case *float64:
-		this.Dval = vt
+		this.FloatVal = vt
 	case []byte:
-		this.Blobval = vt
-	case *uint32:
-		this.Checksum = vt
+		this.BytesVal = vt
+	case *string:
+		this.StringVal = vt
 	default:
 		return false
 	}
@@ -1179,21 +1153,19 @@ func (m *SQLResponseHeader) Size() (n int) {
 func (m *Datum) Size() (n int) {
 	var l int
 	_ = l
-	if m.Bval != nil {
-		n += 2
+	if m.IntVal != nil {
+		n += 1 + sovSqlApi(uint64(*m.IntVal))
 	}
-	if m.Ival != nil {
-		n += 1 + sovSqlApi(uint64(*m.Ival))
-	}
-	if m.Dval != nil {
+	if m.FloatVal != nil {
 		n += 9
 	}
-	if m.Blobval != nil {
-		l = len(m.Blobval)
+	if m.BytesVal != nil {
+		l = len(m.BytesVal)
 		n += 1 + l + sovSqlApi(uint64(l))
 	}
-	if m.Checksum != nil {
-		n += 5
+	if m.StringVal != nil {
+		l = len(*m.StringVal)
+		n += 1 + l + sovSqlApi(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -1202,6 +1174,27 @@ func (m *Datum) Size() (n int) {
 }
 
 func (m *Result) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			l = len(s)
+			n += 1 + l + sovSqlApi(uint64(l))
+		}
+	}
+	if len(m.Rows) > 0 {
+		for _, e := range m.Rows {
+			l = e.Size()
+			n += 1 + l + sovSqlApi(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Result_Row) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.Values) > 0 {
@@ -1221,21 +1214,6 @@ func (m *SQLRequest) Size() (n int) {
 	_ = l
 	l = m.SQLRequestHeader.Size()
 	n += 1 + l + sovSqlApi(uint64(l))
-	if len(m.Cmds) > 0 {
-		for _, e := range m.Cmds {
-			l = e.Size()
-			n += 1 + l + sovSqlApi(uint64(l))
-		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *SQLRequest_Cmd) Size() (n int) {
-	var l int
-	_ = l
 	l = len(m.Sql)
 	n += 1 + l + sovSqlApi(uint64(l))
 	if len(m.Params) > 0 {
@@ -1255,12 +1233,6 @@ func (m *SQLResponse) Size() (n int) {
 	_ = l
 	l = m.SQLResponseHeader.Size()
 	n += 1 + l + sovSqlApi(uint64(l))
-	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			l = len(s)
-			n += 1 + l + sovSqlApi(uint64(l))
-		}
-	}
 	if len(m.Results) > 0 {
 		for _, e := range m.Results {
 			l = e.Size()
@@ -1389,36 +1361,27 @@ func (m *Datum) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Bval != nil {
+	if m.IntVal != nil {
 		data[i] = 0x8
 		i++
-		if *m.Bval {
-			data[i] = 1
-		} else {
-			data[i] = 0
-		}
-		i++
+		i = encodeVarintSqlApi(data, i, uint64(*m.IntVal))
 	}
-	if m.Ival != nil {
-		data[i] = 0x10
+	if m.FloatVal != nil {
+		data[i] = 0x11
 		i++
-		i = encodeVarintSqlApi(data, i, uint64(*m.Ival))
+		i = encodeFixed64SqlApi(data, i, uint64(math.Float64bits(*m.FloatVal)))
 	}
-	if m.Dval != nil {
-		data[i] = 0x19
+	if m.BytesVal != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeFixed64SqlApi(data, i, uint64(math.Float64bits(*m.Dval)))
+		i = encodeVarintSqlApi(data, i, uint64(len(m.BytesVal)))
+		i += copy(data[i:], m.BytesVal)
 	}
-	if m.Blobval != nil {
+	if m.StringVal != nil {
 		data[i] = 0x22
 		i++
-		i = encodeVarintSqlApi(data, i, uint64(len(m.Blobval)))
-		i += copy(data[i:], m.Blobval)
-	}
-	if m.Checksum != nil {
-		data[i] = 0x4d
-		i++
-		i = encodeFixed32SqlApi(data, i, uint32(*m.Checksum))
+		i = encodeVarintSqlApi(data, i, uint64(len(*m.StringVal)))
+		i += copy(data[i:], *m.StringVal)
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -1437,6 +1400,54 @@ func (m *Result) Marshal() (data []byte, err error) {
 }
 
 func (m *Result) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, s := range m.Columns {
+			data[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if len(m.Rows) > 0 {
+		for _, msg := range m.Rows {
+			data[i] = 0x12
+			i++
+			i = encodeVarintSqlApi(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Result_Row) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Result_Row) MarshalTo(data []byte) (n int, err error) {
 	var i int
 	_ = i
 	var l int
@@ -1482,46 +1493,13 @@ func (m *SQLRequest) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n3
-	if len(m.Cmds) > 0 {
-		for _, msg := range m.Cmds {
-			data[i] = 0x12
-			i++
-			i = encodeVarintSqlApi(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *SQLRequest_Cmd) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *SQLRequest_Cmd) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
+	data[i] = 0x12
 	i++
 	i = encodeVarintSqlApi(data, i, uint64(len(m.Sql)))
 	i += copy(data[i:], m.Sql)
 	if len(m.Params) > 0 {
 		for _, msg := range m.Params {
-			data[i] = 0x12
+			data[i] = 0x1a
 			i++
 			i = encodeVarintSqlApi(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -1560,24 +1538,9 @@ func (m *SQLResponse) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n4
-	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			data[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
 	if len(m.Results) > 0 {
 		for _, msg := range m.Results {
-			data[i] = 0x1a
+			data[i] = 0x12
 			i++
 			i = encodeVarintSqlApi(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])

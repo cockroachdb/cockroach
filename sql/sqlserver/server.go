@@ -109,14 +109,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Send(call sqlwire.Call) {
 	switch call.Args.(type) {
 	case *sqlwire.SQLRequest:
-		reply := ""
-		if call.Args.(*sqlwire.SQLRequest).Cmds != nil {
-			reply = call.Args.(*sqlwire.SQLRequest).Cmds[0].Sql
-		}
 		resp := call.Reply.(*sqlwire.SQLResponse)
-		resp.Columns = append(resp.Columns, "echo")
-		result := &sqlwire.Result{}
-		result.Values = append(result.Values, &sqlwire.Datum{Blobval: []byte(reply)})
-		resp.Results = append(resp.Results, result)
+		resp.Results = []sqlwire.Result{
+			{
+				Columns: []string{"echo"},
+				Rows: []sqlwire.Result_Row{
+					{
+						Values: []sqlwire.Datum{
+							{
+								StringVal: &call.Args.(*sqlwire.SQLRequest).Sql,
+							},
+						},
+					},
+				},
+			},
+		}
 	}
 }

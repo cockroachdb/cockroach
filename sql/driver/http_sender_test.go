@@ -45,13 +45,12 @@ func TestSend(t *testing.T) {
 		{"default", "default"},
 	}
 	for _, test := range testCases {
-		request := &sqlwire.SQLRequest{}
-		request.Cmds = append(request.Cmds, &sqlwire.SQLRequest_Cmd{Sql: test.req})
+		request := &sqlwire.SQLRequest{Sql: test.req}
 		call := sqlwire.Call{Args: request, Reply: &sqlwire.SQLResponse{}}
 		sender.Send(context.TODO(), call)
-		reply := string(call.Reply.(*sqlwire.SQLResponse).Results[0].Values[0].Blobval)
+		reply := *call.Reply.(*sqlwire.SQLResponse).Results[0].Rows[0].Values[0].StringVal
 		if reply != test.reply {
-			log.Fatalf("Server sent back reply:%s", reply)
+			log.Fatalf("Server sent back reply: %s", reply)
 		}
 	}
 }
