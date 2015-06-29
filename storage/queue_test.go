@@ -34,6 +34,7 @@ type testQueueImpl struct {
 	shouldQueueFn func(proto.Timestamp, *Range) (bool, float64)
 	processed     int32
 	duration      time.Duration
+	blocker       chan struct{} // timer() blocks on this if not nil
 }
 
 func (tq *testQueueImpl) needsLeaderLease() bool { return false }
@@ -48,6 +49,9 @@ func (tq *testQueueImpl) process(now proto.Timestamp, r *Range) error {
 }
 
 func (tq *testQueueImpl) timer() time.Duration {
+	if tq.blocker != nil {
+		<-tq.blocker
+	}
 	if tq.duration != 0 {
 		return tq.duration
 	}
@@ -191,12 +195,12 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}),
 		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.Desc().RaftID)
 			return
 		},
-		duration: 5 * time.Millisecond,
 	}
 	bq := newBaseQueue("test", testQueue, 2)
 	stopper := util.NewStopper()
@@ -211,14 +215,17 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
 
+	testQueue.blocker <- struct{}{}
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) == 1
 	}, 250*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 
+	close(testQueue.blocker)
+
 	if err := util.IsTrueWithin(func() bool {
-		return atomic.LoadInt32(&testQueue.processed) == 2
+		return atomic.LoadInt32(&testQueue.processed) >= 2
 	}, 250*time.Millisecond); err != nil {
 		t.Error(err)
 	}
