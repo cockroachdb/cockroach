@@ -53,6 +53,8 @@ const (
 	acctPathPrefix = adminEndpoint + "acct"
 	// permPathPrefix is the prefix for permission configuration changes.
 	permPathPrefix = adminEndpoint + "perms"
+	// userPathPrefix is the prefix for zone configuration changes.
+	userPathPrefix = adminEndpoint + "users"
 	// zonePathPrefix is the prefix for zone configuration changes.
 	zonePathPrefix = adminEndpoint + "zones"
 )
@@ -72,6 +74,7 @@ type adminServer struct {
 	stopper *util.Stopper // Used to shutdown the server
 	acct    *acctHandler
 	perm    *permHandler
+	user    *userHandler
 	zone    *zoneHandler
 	mux     *http.ServeMux
 }
@@ -84,6 +87,7 @@ func newAdminServer(db *client.DB, stopper *util.Stopper) *adminServer {
 		stopper: stopper,
 		acct:    &acctHandler{db: db},
 		perm:    &permHandler{db: db},
+		user:    &userHandler{db: db},
 		zone:    &zoneHandler{db: db},
 		mux:     http.NewServeMux(),
 	}
@@ -95,6 +99,8 @@ func newAdminServer(db *client.DB, stopper *util.Stopper) *adminServer {
 	server.mux.HandleFunc(quitPath, server.handleQuit)
 	server.mux.HandleFunc(permPathPrefix, server.handlePermAction)
 	server.mux.HandleFunc(permPathPrefix+"/", server.handlePermAction)
+	server.mux.HandleFunc(userPathPrefix, server.handleUserAction)
+	server.mux.HandleFunc(userPathPrefix+"/", server.handleUserAction)
 	server.mux.HandleFunc(zonePathPrefix, server.handleZoneAction)
 	server.mux.HandleFunc(zonePathPrefix+"/", server.handleZoneAction)
 	return server
@@ -138,6 +144,11 @@ func (s *adminServer) handleAcctAction(w http.ResponseWriter, r *http.Request) {
 // handlePermAction handles actions for perm configuration by method.
 func (s *adminServer) handlePermAction(w http.ResponseWriter, r *http.Request) {
 	s.handleRESTAction(s.perm, w, r, permPathPrefix)
+}
+
+// handleUserAction handles actions for user configuration by method.
+func (s *adminServer) handleUserAction(w http.ResponseWriter, r *http.Request) {
+	s.handleRESTAction(s.user, w, r, userPathPrefix)
 }
 
 // handleZoneAction handles actions for zone configuration by method.

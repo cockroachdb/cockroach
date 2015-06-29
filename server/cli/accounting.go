@@ -18,7 +18,10 @@
 package cli
 
 import (
+	"io/ioutil"
+
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
 )
@@ -133,7 +136,13 @@ func runSetAcct(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunSetAcct(Context, args[0], args[1])
+	// Read in the config file.
+	body, err := ioutil.ReadFile(args[1])
+	if err != nil {
+		log.Errorf("unable to read accounting config file %q: %s", args[1], err)
+		return
+	}
+	server.RunSetAcct(Context, args[0], body)
 }
 
 // TODO:(bram) Add inline json for setting

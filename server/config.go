@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -42,6 +41,8 @@ func getFriendlyNameFromPrefix(prefix string) string {
 		return "accounting"
 	case permPathPrefix:
 		return "permission"
+	case userPathPrefix:
+		return "user"
 	case zonePathPrefix:
 		return "zone"
 	default:
@@ -74,6 +75,11 @@ func RunGetAcct(ctx *Context, keyPrefix string) {
 // RunGetPerm gets the permission from the given key.
 func RunGetPerm(ctx *Context, keyPrefix string) {
 	runGetConfig(ctx, permPathPrefix, keyPrefix)
+}
+
+// RunGetUser gets the user from the given key.
+func RunGetUser(ctx *Context, keyPrefix string) {
+	runGetConfig(ctx, userPathPrefix, keyPrefix)
 }
 
 // RunGetZone gets the zone from the given key.
@@ -137,6 +143,11 @@ func RunLsPerm(ctx *Context, pattern string) {
 	runLsConfigs(ctx, permPathPrefix, pattern)
 }
 
+// RunLsUser lists users.
+func RunLsUser(ctx *Context, pattern string) {
+	runLsConfigs(ctx, userPathPrefix, pattern)
+}
+
 // RunLsZone lists zones.
 func RunLsZone(ctx *Context, pattern string) {
 	runLsConfigs(ctx, zonePathPrefix, pattern)
@@ -170,26 +181,24 @@ func RunRmPerm(ctx *Context, keyPrefix string) {
 	runRmConfig(ctx, permPathPrefix, keyPrefix)
 }
 
+// RunRmUser removes the user with the given key.
+func RunRmUser(ctx *Context, keyPrefix string) {
+	runRmConfig(ctx, userPathPrefix, keyPrefix)
+}
+
 // RunRmZone removes the zone with the given key.
 func RunRmZone(ctx *Context, keyPrefix string) {
 	runRmConfig(ctx, zonePathPrefix, keyPrefix)
 }
 
-// runSetConfig invokes the REST API with POST action and key prefix as
-// path. The specified configuration file is read from disk and sent
-// as the POST body.
+// runSetConfig invokes the REST API with POST action, key prefix as
+// path, and contents as the body.
 // The type of config that is set is based on the passed in prefix.
-func runSetConfig(ctx *Context, prefix, keyPrefix, configFileName string) {
+func runSetConfig(ctx *Context, prefix, keyPrefix string, contents []byte) {
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	// Read in the config file.
-	body, err := ioutil.ReadFile(configFileName)
-	if err != nil {
-		log.Errorf("unable to read %s config file %q: %s", friendlyName, configFileName, err)
-		return
-	}
 	// Send to admin REST API.
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", ctx.RequestScheme(), ctx.Addr, prefix, keyPrefix),
-		bytes.NewReader(body))
+		bytes.NewReader(contents))
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -203,19 +212,24 @@ func runSetConfig(ctx *Context, prefix, keyPrefix, configFileName string) {
 	fmt.Fprintf(os.Stdout, "set %s config for key prefix %q\n", friendlyName, keyPrefix)
 }
 
-// RunSetAcct sets the account to the key given the yaml filename.
-func RunSetAcct(ctx *Context, keyPrefix, configFileName string) {
-	runSetConfig(ctx, acctPathPrefix, keyPrefix, configFileName)
+// RunSetAcct writes 'contents' to the accounting entry for 'keyPrefix'.
+func RunSetAcct(ctx *Context, keyPrefix string, contents []byte) {
+	runSetConfig(ctx, acctPathPrefix, keyPrefix, contents)
 }
 
-// RunSetPerm sets the permission to the key given the yaml filename.
-func RunSetPerm(ctx *Context, keyPrefix, configFileName string) {
-	runSetConfig(ctx, permPathPrefix, keyPrefix, configFileName)
+// RunSetPerm writes 'contents' to the permission entry for 'keyPrefix'.
+func RunSetPerm(ctx *Context, keyPrefix string, contents []byte) {
+	runSetConfig(ctx, permPathPrefix, keyPrefix, contents)
 }
 
-// RunSetZone sets the zone to the key given the yaml filename.
-func RunSetZone(ctx *Context, keyPrefix, configFileName string) {
-	runSetConfig(ctx, zonePathPrefix, keyPrefix, configFileName)
+// RunSetUser writes 'contents' to the user entry for 'keyPrefix'.
+func RunSetUser(ctx *Context, keyPrefix string, contents []byte) {
+	runSetConfig(ctx, userPathPrefix, keyPrefix, contents)
+}
+
+// RunSetZone writes 'contents' to the zone entry for 'keyPrefix'.
+func RunSetZone(ctx *Context, keyPrefix string, contents []byte) {
+	runSetConfig(ctx, zonePathPrefix, keyPrefix, contents)
 }
 
 // putConfig writes a config for the specified key prefix (which is

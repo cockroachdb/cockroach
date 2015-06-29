@@ -891,6 +891,13 @@ func (s *Store) BootstrapRange() error {
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, permConfig); err != nil {
 		return err
 	}
+	// User config.
+	// TODO(marc): instead of a root entry, maybe we should have a default "node".
+	userConfig := &proto.UserConfig{}
+	key = keys.MakeKey(keys.ConfigUserPrefix, proto.KeyMin)
+	if err := engine.MVCCPutProto(batch, ms, key, now, nil, userConfig); err != nil {
+		return err
+	}
 	// Zone config.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{

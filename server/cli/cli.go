@@ -70,6 +70,7 @@ func init() {
 		kvCmd,
 		acctCmd,
 		permCmd,
+		userCmd,
 		rangeCmd,
 		zoneCmd,
 

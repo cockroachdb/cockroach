@@ -51,6 +51,7 @@ func init() {
 	gob.Register(PrefixConfigMap{})
 	gob.Register(&proto.AcctConfig{})
 	gob.Register(&proto.PermConfig{})
+	gob.Register(&proto.UserConfig{})
 	gob.Register(&proto.ZoneConfig{})
 	gob.Register(proto.RangeDescriptor{})
 	gob.Register(proto.Transaction{})
@@ -114,11 +115,12 @@ type configDescriptor struct {
 	configI   interface{} // Config struct interface
 }
 
-// configDescriptors is an array containing the accounting, permissions
-// and zone configuration descriptors.
+// configDescriptors is an array containing the accounting, permissions,
+// user, and zone configuration descriptors.
 var configDescriptors = [...]*configDescriptor{
 	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
 	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
+	{keys.ConfigUserPrefix, gossip.KeyConfigUser, proto.UserConfig{}},
 	{keys.ConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
 }
 

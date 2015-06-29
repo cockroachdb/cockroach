@@ -90,6 +90,12 @@ message PermConfig {
   repeated string write = 2 [(gogoproto.moretags) = "yaml:\"write,omitempty\""];
 }
 
+// UserConfig holds per-user configuration needed for authentication.
+message UserConfig {
+  // Output of bcrypt: contains hash, salt, and cost.
+  optional bytes hashed_password = 1 [(gogoproto.moretags) = "yaml:\"hashed_password,omitempty\""];
+}
+
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 message ZoneConfig {
   // ReplicaAttrs is a slice of Attributes, each describing required attributes

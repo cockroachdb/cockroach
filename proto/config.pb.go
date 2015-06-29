@@ -143,6 +143,24 @@ func (m *PermConfig) GetWrite() []string {
 	return nil
 }
 
+// UserConfig holds per-user configuration needed for authentication.
+type UserConfig struct {
+	// Output of bcrypt: contains hash, salt, and cost.
+	HashedPassword   []byte `protobuf:"bytes,1,opt,name=hashed_password" json:"hashed_password,omitempty" yaml:"hashed_password,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *UserConfig) Reset()         { *m = UserConfig{} }
+func (m *UserConfig) String() string { return proto1.CompactTextString(m) }
+func (*UserConfig) ProtoMessage()    {}
+
+func (m *UserConfig) GetHashedPassword() []byte {
+	if m != nil {
+		return m.HashedPassword
+	}
+	return nil
+}
+
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 type ZoneConfig struct {
 	// ReplicaAttrs is a slice of Attributes, each describing required attributes
@@ -796,6 +814,71 @@ func (m *PermConfig) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Write = append(m.Write, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *UserConfig) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HashedPassword", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.HashedPassword = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -1754,6 +1837,19 @@ func (m *PermConfig) Size() (n int) {
 	return n
 }
 
+func (m *UserConfig) Size() (n int) {
+	var l int
+	_ = l
+	if m.HashedPassword != nil {
+		l = len(m.HashedPassword)
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *ZoneConfig) Size() (n int) {
 	var l int
 	_ = l
@@ -2086,6 +2182,33 @@ func (m *PermConfig) MarshalTo(data []byte) (n int, err error) {
 			i++
 			i += copy(data[i:], s)
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *UserConfig) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *UserConfig) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.HashedPassword != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintConfig(data, i, uint64(len(m.HashedPassword)))
+		i += copy(data[i:], m.HashedPassword)
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
