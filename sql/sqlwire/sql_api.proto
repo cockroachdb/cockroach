@@ -56,27 +56,34 @@ message SQLResponseHeader {
 }
 
 message Datum {
+  // Using explicit proto types provides convenient access when using json. If
+  // we used a Kind+Bytes approach the json interface would involve base64
+  // encoded data.
   option (gogoproto.onlyone) = true;
   oneof value {
-    bool bval = 1;
-    int64 ival = 2;
-    double dval = 3;
-    bytes blobval = 4;
+    int64 int_val = 1;
+    double float_val = 2;
+    bytes bytes_val = 3;
+    string string_val = 4;
   }
-  // Checksum is a CRC-32-IEEE checksum of the value.
-  // If this is an integer value, then the value is interpreted as an 8
-  // byte, big-endian encoded value. This value is set by the client on
-  // updates to do end-to-end integrity verification. If the checksum is
-  // incorrect, the update operation will fail. If the client does not
-  // wish to use end-to-end checksumming, this value should be nil.
-  optional fixed32 checksum = 9;
+
+  // TODO(pmattis): How to add end-to-end checksumming? Just adding a checksum
+  // field here is insufficient because we won't be storing the data above
+  // directly in the database.
 }
 
-// A Result is a collection of values representing a row
-// in a result view. A column value not present in a row
-// has Nil Bytes in the value.
+// A Result is a collection of rows.
 message Result {
-  repeated Datum values = 1;
+  // A Row is a collection of values representing a row in a result.
+  message Row {
+    repeated Datum values = 1 [(gogoproto.nullable) = false];
+  }
+  // The names of the columns returned in the result set in the order specified
+  // in the SQL statement. The number of columns will equal the number of
+  // values in each Row.
+  repeated string columns = 1;
+  // The rows in the result set.
+  repeated Row rows = 2 [(gogoproto.nullable) = false];
 }
 
 // A SQLRequest to cockroach. A transaction can consist of multiple
@@ -84,21 +91,16 @@ message Result {
 message SQLRequest {
   // Request header.
   optional SQLRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // SQL commands/queries to be serially executed by the server.
-  message Cmd {
-    optional string sql = 1 [(gogoproto.nullable) = false];
-    // parameters are referred to in the above sql command/query using "?".
-    repeated Datum params = 2;
-  }
-  repeated Cmd cmds = 2;
+  // SQL statement(s) to be serially executed by the server. Multiple
+  // statements are passed as a single string separated by semicolons.
+  optional string sql = 2 [(gogoproto.nullable) = false];
+  // Parameters referred to in the above SQL statement(s) using "?".
+  repeated Datum params = 3 [(gogoproto.nullable) = false];
 }
 
 message SQLResponse {
   optional SQLResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The names of the columns returned in the result set in the order
-  // specified (when specified) in the SQL statement. The number of
-  // columns must equal the number of Datum in each Result.
-  repeated string columns = 2;
-  // The result set for the last Cmd in the request.
-  repeated Result results = 3;
+  // The list of results. There is one result object per SQL statement in the
+  // request.
+  repeated Result results = 2 [(gogoproto.nullable) = false];
 }
