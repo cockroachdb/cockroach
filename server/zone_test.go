@@ -39,9 +39,9 @@ range_min_bytes: 1048576
 range_max_bytes: 67108864
 `
 
-// ExampleSetAndGetZone sets zone configs for a variety of key
+// Example_setAndGetZone sets zone configs for a variety of key
 // prefixes and verifies they can be fetched directly.
-func ExampleSetAndGetZone() {
+func Example_setAndGetZone() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -101,10 +101,10 @@ func ExampleSetAndGetZone() {
 	// range_max_bytes: 67108864
 }
 
-// ExampleLsZones creates a series of zone configs and verifies
+// Example_lsZones creates a series of zone configs and verifies
 // zone-ls works. First, no regexp lists all zone configs. Second,
 // regexp properly matches results.
-func ExampleLsZones() {
+func Example_lsZones() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -159,11 +159,11 @@ func ExampleLsZones() {
 	// db2
 }
 
-// ExampleRmZones creates a series of zone configs and verifies
+// Example_rmZones creates a series of zone configs and verifies
 // zone-rm works by deleting some and then all and verifying entries
 // have been removed via zone-ls. Also verify the default zone cannot
 // be removed.
-func ExampleRmZones() {
+func Example_rmZones() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -194,10 +194,10 @@ func ExampleRmZones() {
 	// [default]
 }
 
-// ExampleZoneContentTypes verifies that the Accept header can be used
+// Example_zoneContentTypes verifies that the Accept header can be used
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
-func ExampleZoneContentTypes() {
+func Example_zoneContentTypes() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
