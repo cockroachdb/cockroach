@@ -37,9 +37,9 @@ read: [readonly, readwrite]
 write: [readwrite, writeonly]
 `
 
-// ExampleSetAndGetPerm sets perm configs for a variety of key
+// Example_setAndGetPerm sets perm configs for a variety of key
 // prefixes and verifies they can be fetched directly.
-func ExampleSetAndGetPerms() {
+func Example_setAndGetPerms() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -99,10 +99,10 @@ func ExampleSetAndGetPerms() {
 	// - writeonly
 }
 
-// ExampleLsPerms creates a series of perm configs and verifies
+// Example_lsPerms creates a series of perm configs and verifies
 // perm-ls works. First, no regexp lists all perm configs. Second,
 // regexp properly matches results.
-func ExampleLsPerms() {
+func Example_lsPerms() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -157,11 +157,11 @@ func ExampleLsPerms() {
 	// db2
 }
 
-// ExampleRmPerms creates a series of perm configs and verifies
+// Example_rmPerms creates a series of perm configs and verifies
 // perm-rm works by deleting some and then all and verifying entries
 // have been removed via perm-ls. Also verify the default perm config
 // cannot be removed.
-func ExampleRmPerms() {
+func Example_rmPerms() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -192,10 +192,10 @@ func ExampleRmPerms() {
 	// [default]
 }
 
-// ExamplePermContentTypes verifies that the Accept header can be used
+// Example_permContentTypes verifies that the Accept header can be used
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
-func ExamplePermContentTypes() {
+func Example_permContentTypes() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
