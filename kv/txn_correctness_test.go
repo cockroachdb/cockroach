@@ -44,8 +44,8 @@ import (
 func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	client.DefaultTxnRetryOptions = retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     5 * time.Millisecond,
-		Multiplier:     2,
+		MaxBackoff:     50 * time.Millisecond,
+		Multiplier:     10,
 		MaxRetries:     2,
 	}
 
@@ -513,7 +513,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
 			if err := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); err != nil {
-				t.Errorf("unexpected failure running transaction %d (%s): %v", i, cmds, err)
+				t.Errorf("(%s): unexpected failure running %s: %v", cmds, cmds[i], err)
 			}
 		}(i, txnCmds)
 	}

@@ -140,6 +140,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer func() { storage.TestingCommandFilter = nil }()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
@@ -152,9 +153,6 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		}
 		return false
 	}
-	defer func() {
-		storage.TestingCommandFilter = nil
-	}()
 
 	func() {
 		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
@@ -344,9 +342,8 @@ func TestRestoreReplicas(t *testing.T) {
 
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	defer func() {
-		storage.TestingCommandFilter = nil
-	}()
+	defer func() { storage.TestingCommandFilter = nil }()
+
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 

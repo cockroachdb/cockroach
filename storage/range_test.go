@@ -1041,10 +1041,11 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // range.
 func TestRangeCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer func() { TestingCommandFilter = nil }()
+
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	defer func() { TestingCommandFilter = nil }()
 
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{}, 1)
@@ -1153,9 +1154,10 @@ func TestRangeCommandQueue(t *testing.T) {
 // not wait for pending commands to complete through Raft.
 func TestRangeCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer func() { TestingCommandFilter = nil }()
+
 	tc := testContext{}
 	tc.Start(t)
-	defer func() { TestingCommandFilter = nil }()
 	defer tc.Stop()
 
 	key := proto.Key("key1")
