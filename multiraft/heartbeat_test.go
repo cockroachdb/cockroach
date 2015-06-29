@@ -188,12 +188,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 	go func() {
 		// Create group, elect leader, then send ticks as we want them.
 		cluster.createGroup(1, 0, nc)
-		cluster.triggerElection(leaderIndex, 1)
-		for i := 0; i < nodeCount; i++ {
-			// Wait for the electon to resolve on all nodes, since fanout behavior
-			// is affected by a node's belief about who the leader is.
-			cluster.waitForElection(i)
-		}
+		cluster.elect(leaderIndex, 1)
 		cluster.tickers[leaderIndex+1].Tick() // Single tick for first follower.
 		for i := 0; i < ltc; i++ {
 			<-readyForTick
@@ -250,19 +245,8 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		cluster.createGroup(2, 2, 3)
 		// The node at index 2 (nodeID 3) is contained in both groups
 		// Two requests to #1, #2, #4, #5 (from #3).
-		cluster.triggerElection(2, 1)
-		cluster.triggerElection(2, 2)
-		// Wait until it winds up elected twice
-		for i := 0; i < 2; i++ {
-			if el := cluster.waitForElection(2); el.NodeID != 3 {
-				t.Fatalf("wrong leader elected, wanted node 3 but got event %v", el)
-			}
-		}
-		// Same on #4, but mostly to clean out the events channel; this node
-		// will be leader later and we want a clean slate.
-		if el := cluster.waitForElection(3); el.NodeID != 3 {
-			t.Fatalf("wrong leader elected, wanted node 3 but got event %v", el)
-		}
+		cluster.elect(2, 1)
+		cluster.elect(2, 2)
 		// Request to #2, #3 but no response.
 		cluster.tickers[0].Tick()
 		// We don't tick node 2 to get some asymmetry.
@@ -280,15 +264,7 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		<-firstPhase
 		// Elect a new leader for the second group.
 		// Two requests to #3, #4
-		cluster.triggerElection(3, 2)
-		if el := cluster.waitForElection(3); el.NodeID != 4 {
-			t.Fatalf("wrong leader elected, wanted node 4 but got event %v", el)
-		}
-		// Same on #3, but mostly to clean out the events channel; this node
-		// will be leader later and we want a clean slate.
-		if el := cluster.waitForElection(2); el.NodeID != 4 {
-			t.Fatalf("wrong leader elected, wanted node 4 but got event %v", el)
-		}
+		cluster.elect(3, 2)
 		// Requests to #2, #3 without responses.
 		cluster.tickers[0].Tick()
 		// Requests to #1, #2 with and #4, #5 without responses.
@@ -301,10 +277,7 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		// Create the third group
 		cluster.createGroup(3, 0, 3)
 		// The node at index 2 (NodeID 3) will be leader for both group 1 and 3
-		cluster.triggerElection(2, 3)
-		if el := cluster.waitForElection(2); el.NodeID != 3 {
-			t.Fatalf("wrong leader elected, wanted node 3 but got event %v", el)
-		}
+		cluster.elect(2, 3)
 		// Requests to #1, #2 with and #4, #5 without responses.
 		cluster.tickers[2].Tick()
 		close(done)
@@ -386,33 +359,12 @@ func TestHeartbeatResponseFanout(t *testing.T) {
 
 	leaderIndex := 0
 
-	cluster.triggerElection(leaderIndex, groupID1)
-	event := cluster.waitForElection(leaderIndex)
-	// Drain off the election event from other nodes.
-	_ = cluster.waitForElection((leaderIndex + 1) % 3)
-	_ = cluster.waitForElection((leaderIndex + 2) % 3)
-
-	if event.GroupID != groupID1 {
-		t.Fatalf("election event had incorrect groupid %v", event.GroupID)
-	}
-	if event.NodeID != cluster.nodes[leaderIndex].nodeID {
-		t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
-	}
+	cluster.elect(leaderIndex, groupID1)
 	// GroupID2 will have 3 round of election, so it will have different
 	// term with groupID1, but both leader on the same node.
 	for i := 2; i >= 0; i-- {
 		leaderIndex = i
-		cluster.triggerElection(leaderIndex, groupID2)
-		event = cluster.waitForElection(leaderIndex)
-		_ = cluster.waitForElection((leaderIndex + 1) % 3)
-		_ = cluster.waitForElection((leaderIndex + 2) % 3)
-
-		if event.GroupID != groupID2 {
-			t.Fatalf("election event had incorrect groupid %v", event.GroupID)
-		}
-		if event.NodeID != cluster.nodes[leaderIndex].nodeID {
-			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, event.NodeID)
-		}
+		cluster.elect(leaderIndex, groupID2)
 	}
 	// Send a coalesced heartbeat.
 	// Heartbeat response from groupID2 will have a big term than which from groupID1.
