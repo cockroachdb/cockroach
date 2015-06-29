@@ -127,7 +127,6 @@ func TestClientRetryNonTxn(t *testing.T) {
 	// key. Try this twice--once with priorities which will allow the
 	// intent to be pushed and once with priorities which will not.
 	for i, test := range testCases {
-		log.Infof("starting test case %d", i)
 		key := proto.Key(fmt.Sprintf("key-%d", i))
 		txnPri := 1
 		clientPri := 1

@@ -15,10 +15,10 @@
 package client
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -98,10 +98,9 @@ func TestMappingEmbedded(t *testing.T) {
 		B int64 `db:"a"`
 	}
 	m, err = getDBFields(reflect.TypeOf(Blah{}))
-	if err == nil {
+	if !testutils.IsError(err, "both map to") {
 		t.Errorf("expected error, but found success")
 	}
-	fmt.Printf("%s\n", err)
 }
 
 func TestDBFields(t *testing.T) {
