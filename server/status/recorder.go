@@ -22,7 +22,9 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -50,8 +52,9 @@ const (
 // set of time series data.
 type NodeStatusRecorder struct {
 	*NodeStatusMonitor
-	clock         *hlc.Clock
-	lastDataCount int
+	clock            *hlc.Clock
+	lastDataCount    int
+	lastSummaryCount int
 }
 
 // NewNodeStatusRecorder instantiates a recorder for the supplied monitor.
@@ -67,7 +70,7 @@ func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeSt
 func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 	data int64) proto.TimeSeriesData {
 	return proto.TimeSeriesData{
-		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.nodeID),
+		Name: fmt.Sprintf(nodeTimeSeriesNameFmt, name, nsr.desc.NodeID),
 		Datapoints: []*proto.TimeSeriesDatapoint{
 			{
 				TimestampNanos: timestampNanos,
@@ -80,13 +83,23 @@ func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 // GetTimeSeriesData returns a slice of interesting TimeSeriesData from the
 // encapsulated NodeStatusMonitor.
 func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
-	data := make([]proto.TimeSeriesData, 0, nsr.lastDataCount)
-	// Record node stats.
-	if nsr.nodeID > 0 {
-		now := nsr.clock.PhysicalNow()
-		data = append(data, nsr.recordInt(now, "calls.success", atomic.LoadInt64(&nsr.callCount)))
-		data = append(data, nsr.recordInt(now, "calls.error", atomic.LoadInt64(&nsr.callErrors)))
+	nsr.RLock()
+	if nsr.desc.NodeID == 0 {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Warning("NodeStatusRecorder.GetTimeSeriesData called before StartNode event received.")
+		}
+		return nil
 	}
+	nsr.RUnlock()
+
+	data := make([]proto.TimeSeriesData, 0, nsr.lastDataCount)
+
+	// Record node stats.
+	now := nsr.clock.PhysicalNow()
+	data = append(data, nsr.recordInt(now, "calls.success", atomic.LoadInt64(&nsr.callCount)))
+	data = append(data, nsr.recordInt(now, "calls.error", atomic.LoadInt64(&nsr.callErrors)))
+
 	// Record per store stats.
 	nsr.VisitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		now := nsr.clock.PhysicalNow()
@@ -116,6 +129,63 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 	})
 	nsr.lastDataCount = len(data)
 	return data
+}
+
+// GetStatusSummaries returns a status summary messages for the node, along with
+// a status summary for every individual store within the node.
+func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.StoreStatus) {
+	nsr.RLock()
+	if nsr.desc.NodeID == 0 {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Warning("NodeStatusRecorder.GetStatusSummaries called before StartNode event received.")
+		}
+		return nil, nil
+	}
+
+	now := nsr.clock.PhysicalNow()
+
+	// Generate an node status with no store data.
+	nodeStat := &NodeStatus{
+		Desc:      nsr.desc,
+		UpdatedAt: now,
+		StartedAt: nsr.startedAt,
+		StoreIDs:  make([]proto.StoreID, 0, nsr.lastSummaryCount),
+	}
+	nsr.RUnlock()
+
+	storeStats := make([]storage.StoreStatus, 0, nsr.lastSummaryCount)
+	// Generate status summaries for stores, while accumulating data into the
+	// NodeStatus.
+	nsr.VisitStoreMonitors(func(ssm *StoreStatusMonitor) {
+		// Accumulate per-store values into node status.
+		nodeStat.StoreIDs = append(nodeStat.StoreIDs, ssm.ID)
+		nodeStat.Stats.Add(&ssm.stats)
+		nodeStat.RangeCount += int32(ssm.rangeCount)
+		nodeStat.LeaderRangeCount += ssm.leaderRangeCount
+		nodeStat.ReplicatedRangeCount += ssm.replicatedRangeCount
+		nodeStat.AvailableRangeCount += ssm.availableRangeCount
+
+		// Its difficult to guarantee that we have the store descriptor yet; we
+		// may not have processed a StoreStatusEvent yet for this store. Just
+		// skip the store summary in this case.
+		if ssm.desc == nil {
+			return
+		}
+		status := storage.StoreStatus{
+			Desc:                 *ssm.desc,
+			NodeID:               nsr.desc.NodeID,
+			UpdatedAt:            now,
+			StartedAt:            ssm.startedAt,
+			Stats:                ssm.stats,
+			RangeCount:           int32(ssm.rangeCount),
+			LeaderRangeCount:     ssm.leaderRangeCount,
+			ReplicatedRangeCount: ssm.replicatedRangeCount,
+			AvailableRangeCount:  ssm.availableRangeCount,
+		}
+		storeStats = append(storeStats, status)
+	})
+	return nodeStat, storeStats
 }
 
 // storeStatusRecorder is a helper class for recording time series datapoints

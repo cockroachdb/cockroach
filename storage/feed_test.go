@@ -298,10 +298,11 @@ func TestStoreEventFeed(t *testing.T) {
 		{
 			"StartStore",
 			func(feed StoreEventFeed) {
-				feed.startStore()
+				feed.startStore(100)
 			},
 			&StartStoreEvent{
-				StoreID: proto.StoreID(1),
+				StoreID:   proto.StoreID(1),
+				StartedAt: 100,
 			},
 		},
 		{

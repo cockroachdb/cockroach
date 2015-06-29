@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -449,7 +450,7 @@ func TestNodeStatusResponse(t *testing.T) {
 
 	// First fetch all the node statuses.
 	type nsWrapper struct {
-		Data []NodeStatus `json:"d"`
+		Data []status.NodeStatus `json:"d"`
 	}
 	wrapper := nsWrapper{}
 	if err := json.Unmarshal(body, &wrapper); err != nil {
@@ -467,7 +468,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
-		nodeStatus := &NodeStatus{}
+		nodeStatus := &status.NodeStatus{}
 		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodeKeyPrefix, oldNodeStatus.Desc.NodeID))
 		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
 			t.Fatal(err)

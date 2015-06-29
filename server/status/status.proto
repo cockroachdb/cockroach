@@ -16,8 +16,8 @@
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.server;
-option go_package = "server";
+package cockroach.server.status;
+option go_package = "status";
 
 import "cockroach/proto/config.proto";
 import "cockroach/storage/engine/mvcc.proto";

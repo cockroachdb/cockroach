@@ -22,6 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+// StartNodeEvent is published when a node is started.
+type StartNodeEvent struct {
+	Desc      proto.NodeDescriptor
+	StartedAt int64
+}
+
 // CallSuccessEvent is published when a call to a node completes without error.
 type CallSuccessEvent struct {
 	NodeID proto.NodeID
@@ -50,6 +56,17 @@ func NewNodeEventFeed(id proto.NodeID, feed *util.Feed) NodeEventFeed {
 	}
 }
 
+// StartNode is called by a node when it has started.
+func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
+	if nef.f == nil {
+		return
+	}
+	nef.f.Publish(&StartNodeEvent{
+		Desc:      desc,
+		StartedAt: startedAt,
+	})
+}
+
 // CallComplete is called by a node whenever it completes a request. This will
 // publish an appropriate event to the feed based on the results of the call.
 func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
@@ -73,6 +90,7 @@ func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) 
 // NodeEventListener is an interface that can be implemented by objects which
 // listen for events published by nodes.
 type NodeEventListener interface {
+	OnStartNode(event *StartNodeEvent)
 	OnCallSuccess(event *CallSuccessEvent)
 	OnCallError(event *CallErrorEvent)
 }
@@ -84,6 +102,8 @@ func ProcessNodeEvents(l NodeEventListener, sub *util.Subscription) {
 	for event := range sub.Events() {
 		// TODO(tamird): https://github.com/barakmich/go-nyet/issues/7
 		switch specificEvent := event.(type) {
+		case *StartNodeEvent:
+			l.OnStartNode(specificEvent)
 		case *CallSuccessEvent:
 			l.OnCallSuccess(specificEvent)
 		case *CallErrorEvent:

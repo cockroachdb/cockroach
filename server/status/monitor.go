@@ -32,8 +32,9 @@ import (
 // components.
 type StoreStatusMonitor struct {
 	rangeDataAccumulator
-	ID   proto.StoreID
-	desc *proto.StoreDescriptor
+	ID        proto.StoreID
+	desc      *proto.StoreDescriptor
+	startedAt int64
 
 	// replication counts.
 	leaderRangeCount     int32
@@ -50,7 +51,8 @@ type StoreStatusMonitor struct {
 type NodeStatusMonitor struct {
 	sync.RWMutex
 	stores     map[proto.StoreID]*StoreStatusMonitor
-	nodeID     proto.NodeID
+	desc       proto.NodeDescriptor
+	startedAt  int64
 	callCount  int64
 	callErrors int64
 }
@@ -107,11 +109,6 @@ func (nsm *NodeStatusMonitor) StartMonitorFeed(feed *util.Feed) {
 	go ProcessNodeEvents(nsm, feed.Subscribe())
 }
 
-// SetNodeID sets the NodeID for the node being monitored.
-func (nsm *NodeStatusMonitor) SetNodeID(id proto.NodeID) {
-	nsm.nodeID = id
-}
-
 // OnRegisterRange receives RegisterRangeEvents retrieved from a storage event
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
@@ -151,7 +148,8 @@ func (nsm *NodeStatusMonitor) OnMergeRange(event *storage.MergeRangeEvent) {
 // subscription. This method is part of the implementation of
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnStartStore(event *storage.StartStoreEvent) {
-	nsm.GetStoreMonitor(event.StoreID)
+	ssm := nsm.GetStoreMonitor(event.StoreID)
+	atomic.StoreInt64(&ssm.startedAt, event.StartedAt)
 }
 
 // OnBeginScanRanges receives BeginScanRangesEvents retrieved from a storage
@@ -188,6 +186,15 @@ func (nsm *NodeStatusMonitor) OnReplicationStatus(event *storage.ReplicationStat
 	ssm.leaderRangeCount = event.LeaderRangeCount
 	ssm.replicatedRangeCount = event.ReplicatedRangeCount
 	ssm.availableRangeCount = event.AvailableRangeCount
+}
+
+// OnStartNode receives StartNodeEvents from a node event subscription. This
+// method is part of the implementation of NodeEventListener.
+func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
+	nsm.Lock()
+	defer nsm.Unlock()
+	nsm.startedAt = event.StartedAt
+	nsm.desc = event.Desc
 }
 
 // OnCallSuccess receives CallSuccessEvents from a node event subscription. This

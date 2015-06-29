@@ -248,14 +248,14 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 		return err
 	}
 
-	// Pass NodeID to status monitor - this value is initialized in initStores,
-	// but the StatusMonitor must be active before initStores.
-	n.status.SetNodeID(n.Descriptor.NodeID)
-
-	// Initialize publisher for Node Events.
-	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
-
 	n.startedAt = n.ctx.Clock.Now().WallTime
+
+	// Initialize publisher for Node Events. This requires the NodeID, which is
+	// initialized by initStores(); because of this, some Store initialization
+	// events will precede the StartNodeEvent on the feed.
+	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
+	n.feed.StartNode(n.Descriptor, n.startedAt)
+
 	n.startStoresScanner(stopper)
 	n.startPublishStatuses(stopper)
 	n.startGossip(stopper)
@@ -479,7 +479,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 
 				// Store the combined stats in the db.
 				now := n.ctx.Clock.Now().WallTime
-				status := &NodeStatus{
+				status := &status.NodeStatus{
 					Desc:                 n.Descriptor,
 					StoreIDs:             accessedStoreIDs,
 					UpdatedAt:            now,
