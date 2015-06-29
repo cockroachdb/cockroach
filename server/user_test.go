@@ -41,9 +41,9 @@ func fakeUserConfig() []byte {
 	return contents
 }
 
-// ExampleSetAndGetUsers sets user configs for a variety of key
+// Example_setAndGetUsers sets user configs for a variety of key
 // prefixes and verifies they can be fetched directly.
-func ExampleSetAndGetUsers() {
+func Example_setAndGetUsers() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -81,10 +81,10 @@ func ExampleSetAndGetUsers() {
 	// - 20
 }
 
-// ExampleLsUsers creates a series of user configs and verifies
+// Example_lsUsers creates a series of user configs and verifies
 // user-ls works. First, no regexp lists all user configs. Second,
 // regexp properly matches results.
-func ExampleLsUsers() {
+func Example_lsUsers() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -134,11 +134,11 @@ func ExampleLsUsers() {
 	// user2
 }
 
-// ExampleRmUsers creates a series of user configs and verifies
+// Example_rmUsers creates a series of user configs and verifies
 // user-rm works by deleting some and then all and verifying entries
 // have been removed via user-ls. Also verify the default user config
 // cannot be removed.
-func ExampleRmUsers() {
+func Example_rmUsers() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
@@ -167,10 +167,10 @@ func ExampleRmUsers() {
 	// [default]
 }
 
-// ExampleUserContentTypes verifies that the Accept header can be used
+// Example_userContentTypes verifies that the Accept header can be used
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
-func ExampleUserContentTypes() {
+func Example_userContentTypes() {
 	_, stopper := startAdminServer()
 	defer stopper.Stop()
 
