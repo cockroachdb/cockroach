@@ -264,9 +264,10 @@ func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *util.Stopper) {
 		}
 		if err := bq.impl.process(now, rng); err != nil {
 			log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
-		}
-		if log.V(1) {
-			log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+		} else {
+			if log.V(2) {
+				log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+			}
 		}
 	}
 }
