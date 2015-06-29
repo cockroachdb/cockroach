@@ -44,8 +44,8 @@ import (
 func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	client.DefaultTxnRetryOptions = retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     5 * time.Millisecond,
-		Multiplier:     2,
+		MaxBackoff:     50 * time.Millisecond,
+		Multiplier:     10,
 		MaxRetries:     2,
 	}
 
