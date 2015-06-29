@@ -106,7 +106,7 @@ func TestHTTPSenderSend(t *testing.T) {
 func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	retryOptions := defaultRetryOptions
-	retryOptions.Backoff = 1 * time.Millisecond
+	retryOptions.InitialBackoff = 1 * time.Millisecond
 
 	testCases := []struct {
 		code  int
@@ -174,7 +174,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	retryOptions := defaultRetryOptions
-	retryOptions.Backoff = 1 * time.Millisecond
+	retryOptions.InitialBackoff = 1 * time.Millisecond
 
 	testCases := []func(*httptest.Server, http.ResponseWriter){
 		// Send back an unparseable response but a success code on first try.

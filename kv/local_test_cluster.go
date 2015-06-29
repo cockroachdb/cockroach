@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -56,33 +57,32 @@ func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
 func (rls *retryableLocalSender) Send(_ context.Context, call proto.Call) {
 	// Instant retry to handle the case of a range split, which is
 	// exposed here as a RangeKeyMismatchError.
-	retryOpts := retry.Options{
-		Tag: fmt.Sprintf("routing %s locally", call.Method()),
-	}
+	retryOpts := retry.Options{}
 	// In local tests, the RPCs are not actually sent over the wire. We
 	// need to clone the Txn in order to avoid unexpected sharing
 	// between TxnCoordSender and client.Txn.
 	if header := call.Args.Header(); header.Txn != nil {
 		header.Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
 	}
-	err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+
+	var err error
+	for r := retry.Start(retryOpts); r.Next(); {
 		call.Reply.Header().Error = nil
 		rls.LocalSender.Send(context.TODO(), call)
 		// Check for range key mismatch error (this could happen if
 		// range was split between lookup and execution). In this case,
 		// reset header.Replica and engage retry loop.
-		if err := call.Reply.Header().GoError(); err != nil {
+		if err = call.Reply.Header().GoError(); err != nil {
 			if _, ok := err.(*proto.RangeKeyMismatchError); ok {
 				// Clear request replica.
 				call.Args.Header().Replica = proto.Replica{}
-				return retry.Continue, err
+				log.Warning(err)
+				continue
 			}
 		}
-		return retry.Break, nil
-	})
-	if err != nil {
-		panic(fmt.Sprintf("local sender did not succeed: %s", err))
+		return
 	}
+	panic(fmt.Sprintf("local sender did not succeed: %s", err))
 }
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a

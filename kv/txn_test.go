@@ -220,7 +220,7 @@ func TestTxnDBUncertainty(t *testing.T) {
 	defer func() {
 		client.DefaultTxnRetryOptions = defaultRetryOptions
 	}()
-	client.DefaultTxnRetryOptions.Backoff = 100 * time.Second
+	client.DefaultTxnRetryOptions.InitialBackoff = 100 * time.Second
 	client.DefaultTxnRetryOptions.MaxBackoff = 100 * time.Second
 
 	// < 5ns means no uncertainty & no restarts.

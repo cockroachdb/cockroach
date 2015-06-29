@@ -1476,6 +1476,7 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	errorReply := &proto.ReadWriteCmdResponse{}
 	errorReply.Increment = &proto.IncrementResponse{}
 	errorReply.Increment.Header().SetGoError(errors.New("boom"))
+	expError := errorReply.Increment.Header().Error
 	key := keys.ResponseCacheKey(tc.rng.Desc().RaftID, &cmdID)
 	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.ZeroTimestamp, nil, errorReply); err != nil {
 		t.Fatal(err)
@@ -1488,8 +1489,8 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 		t.Fatal("expected to see cached error but got nil")
 	} else if ge, ok := err.(*proto.Error); !ok {
 		t.Fatalf("expected proto.Error but got %s", err)
-	} else if !reflect.DeepEqual(ge, &proto.Error{Message: "boom"}) {
-		t.Fatalf("expected error message 'boom' but got %s", ge)
+	} else if !reflect.DeepEqual(ge, expError) {
+		t.Fatalf("expected %s but got %s", expError, ge)
 	}
 }
 

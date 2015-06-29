@@ -198,8 +198,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	mtc := multiTestContext{}
-	mtc.Start(t, 2)
+	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
 	// Issue a command on the first node before replicating.
@@ -261,8 +260,7 @@ func TestReplicateRange(t *testing.T) {
 // persisted to disk and restored when a node is stopped and restarted.
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	mtc := multiTestContext{}
-	mtc.Start(t, 2)
+	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
 	firstRng, err := mtc.stores[0].GetRange(1)
@@ -349,8 +347,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	defer func() {
 		storage.TestingCommandFilter = nil
 	}()
-	mtc := multiTestContext{}
-	mtc.Start(t, 2)
+	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
 	var runFilter atomic.Value
@@ -421,8 +418,7 @@ func TestFailedReplicaChange(t *testing.T) {
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	mtc := multiTestContext{}
-	mtc.Start(t, 2)
+	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
 	rng, err := mtc.stores[0].GetRange(1)
@@ -512,8 +508,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 // under-replicated ranges and replicate them.
 func TestStoreRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	mtc := multiTestContext{}
-	mtc.Start(t, 3)
+	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
 	// Initialize the gossip network.
@@ -704,8 +699,7 @@ func TestRaftHeartbeats(t *testing.T) {
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	mtc := multiTestContext{}
-	mtc.Start(t, 2)
+	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
 	raftID := proto.RaftID(1)

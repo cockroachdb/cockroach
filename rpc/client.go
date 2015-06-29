@@ -18,7 +18,6 @@
 package rpc
 
 import (
-	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -50,10 +49,9 @@ var (
 // clientRetryOptions specifies exponential backoff starting
 // at 1s and ending at 30s with indefinite retries.
 var clientRetryOptions = retry.Options{
-	Backoff:     1 * time.Second,  // first backoff at 1s
-	MaxBackoff:  30 * time.Second, // max backoff is 30s
-	Constant:    2,                // doubles
-	MaxAttempts: 0,                // indefinite retries
+	InitialBackoff: 1 * time.Second,  // first backoff at 1s
+	MaxBackoff:     30 * time.Second, // max backoff is 30s
+	Multiplier:     2,                // doubles
 }
 
 // init creates a new client RPC cache.
@@ -136,23 +134,25 @@ func (c *Client) connect(opts *retry.Options, context *Context) error {
 	if opts != nil {
 		retryOpts = *opts
 	}
-	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
 	retryOpts.Stopper = context.Stopper
 
-	if err := retry.WithBackoff(retryOpts, func() (retry.Status, error) {
+	for r := retry.Start(retryOpts); r.Next(); {
 		tlsConfig, err := context.GetClientTLSConfig()
 		if err != nil {
 			// Problem loading the TLS config. Retrying will not help.
-			return retry.Break, err
+			return err
 		}
 
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
 		if err != nil {
 			// Retry if the error is temporary, otherwise fail fast.
 			if t, ok := err.(net.Error); ok && t.Temporary() {
-				return retry.Continue, err
+				if log.V(1) {
+					log.Warning(err)
+				}
+				continue
 			}
-			return retry.Break, err
+			return err
 		}
 
 		c.mu.Lock()
@@ -164,12 +164,10 @@ func (c *Client) connect(opts *retry.Options, context *Context) error {
 		// retry loop. If it fails, don't retry: The node is probably
 		// dead.
 		if err = c.heartbeat(); err != nil {
-			return retry.Break, err
+			return err
 		}
 
-		return retry.Break, nil
-	}); err != nil {
-		return err
+		break
 	}
 
 	return nil

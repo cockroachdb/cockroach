@@ -33,9 +33,9 @@ import (
 // idAllocationRetryOpts sets the retry options for handling RaftID
 // allocation errors.
 var idAllocationRetryOpts = retry.Options{
-	Backoff:    50 * time.Millisecond,
-	MaxBackoff: 5 * time.Second,
-	Constant:   2,
+	InitialBackoff: 50 * time.Millisecond,
+	MaxBackoff:     5 * time.Second,
+	Multiplier:     2,
 }
 
 // An idAllocator is used to increment a key in allocation blocks
@@ -94,22 +94,28 @@ func (ia *idAllocator) start() {
 		for {
 			var newValue int64
 			for newValue <= int64(ia.minID) {
-				if ia.stopper.StartTask() {
-					if err := retry.WithBackoff(idAllocationRetryOpts, func() (retry.Status, error) {
+				var (
+					err error
+					res client.KeyValue
+				)
+				for r := retry.Start(idAllocationRetryOpts); r.Next(); {
+					if ia.stopper.StartTask() {
 						idKey := ia.idKey.Load().(proto.Key)
-						r, err := ia.db.Inc(idKey, int64(ia.blockSize))
-						if err != nil {
-							log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
-							return retry.Continue, err
+						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
+						ia.stopper.FinishTask()
+
+						if err == nil {
+							newValue = res.ValueInt()
+							break
 						}
-						newValue = r.ValueInt()
-						return retry.Break, nil
-					}); err != nil {
-						panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
+
+						log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+					} else {
+						return
 					}
-					ia.stopper.FinishTask()
-				} else {
-					return
+				}
+				if err != nil {
+					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
 				}
 			}
 

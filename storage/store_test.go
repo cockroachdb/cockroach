@@ -59,10 +59,10 @@ var rootTestBaseContext = testutils.NewRootTestBaseContext()
 // loops.
 func setTestRetryOptions(s *Store) {
 	s.SetRangeRetryOptions(retry.Options{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  2 * time.Millisecond,
-		Constant:    2,
-		MaxAttempts: 2,
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     2 * time.Millisecond,
+		Multiplier:     2,
+		MaxRetries:     1,
 	})
 }
 

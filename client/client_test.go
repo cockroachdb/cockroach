@@ -100,10 +100,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	s.SetRangeRetryOptions(retry.Options{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  5 * time.Millisecond,
-		Constant:    2,
-		MaxAttempts: 2,
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     5 * time.Millisecond,
+		Multiplier:     2,
+		MaxRetries:     1,
 	})
 
 	testCases := []struct {
@@ -213,10 +213,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 }
 
 func setTxnRetryBackoff(backoff time.Duration) func() {
-	savedBackoff := client.DefaultTxnRetryOptions.Backoff
-	client.DefaultTxnRetryOptions.Backoff = backoff
+	savedBackoff := client.DefaultTxnRetryOptions.InitialBackoff
+	client.DefaultTxnRetryOptions.InitialBackoff = backoff
 	return func() {
-		client.DefaultTxnRetryOptions.Backoff = savedBackoff
+		client.DefaultTxnRetryOptions.InitialBackoff = savedBackoff
 	}
 }
 

@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -34,7 +33,7 @@ func TestSend(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	sender, err := newHTTPSender(s.ServingAddr(), testutils.NewRootTestBaseContext(), client.DefaultTxnRetryOptions)
+	sender, err := newHTTPSender(s.ServingAddr(), testutils.NewRootTestBaseContext(), defaultRetryOptions)
 	if err != nil {
 		log.Fatalf("Couldn't create HTTPSender for server:(%s)", s.ServingAddr())
 	}

@@ -29,6 +29,7 @@ import (
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -55,36 +56,41 @@ type PostContext struct {
 // retry here to eventually get through with the same client command ID and be
 // given the cached response.
 func HTTPPost(c PostContext, request, response gogoproto.Message, method fmt.Stringer) error {
-	retryOpts := c.RetryOpts
-	retryOpts.Tag = fmt.Sprintf("%s %s", c.Context.RequestScheme(), method)
-
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(request)
 	if err != nil {
 		return err
 	}
 
+	client, err := c.Context.GetHTTPClient()
+	if err != nil {
+		return err
+	}
+
 	url := c.Context.RequestScheme() + "://" + c.Server + c.Endpoint + method.String()
 
-	return retry.WithBackoff(retryOpts, func() (retry.Status, error) {
-		req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	var (
+		req  *http.Request
+		resp *http.Response
+		b    []byte
+	)
+
+	for r := retry.Start(c.RetryOpts); r.Next(); {
+		req, err = http.NewRequest("POST", url, bytes.NewReader(body))
 		if err != nil {
-			return retry.Break, err
+			return err
 		}
 		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
 		req.Header.Add(util.AcceptHeader, util.ProtoContentType)
 		req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
 
-		client, err := c.Context.GetHTTPClient()
+		resp, err = client.Do(req)
 		if err != nil {
-			return retry.Break, err
+			if log.V(1) {
+				log.Warning(err)
+			}
+			continue
 		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return retry.Continue, err
-		}
-
 		defer resp.Body.Close()
 
 		switch resp.StatusCode {
@@ -94,27 +100,33 @@ func HTTPPost(c PostContext, request, response gogoproto.Message, method fmt.Str
 			// Retry on service unavailable and request timeout.
 			// TODO(spencer): consider respecting the Retry-After header for
 			// backoff / retry duration.
-			return retry.Continue, errors.New(resp.Status)
+			continue
 		default:
 			// Can't recover from all other errors.
-			return retry.Break, errors.New(resp.Status)
+			return errors.New(resp.Status)
 		}
 
 		if resp.Header.Get(util.ContentEncodingHeader) == util.SnappyEncoding {
 			resp.Body = &snappyReader{body: resp.Body}
 		}
 
-		b, err := ioutil.ReadAll(resp.Body)
+		b, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return retry.Continue, err
+			if log.V(1) {
+				log.Warning(err)
+			}
+			continue
+		}
+		if err = gogoproto.Unmarshal(b, response); err != nil {
+			if log.V(1) {
+				log.Warning(err)
+			}
+			continue
 		}
 
-		if err := gogoproto.Unmarshal(b, response); err != nil {
-			return retry.Continue, err
-		}
-
-		return retry.Break, nil
-	})
+		break
+	}
+	return err
 }
 
 // snappyReader wraps a response body so it can lazily

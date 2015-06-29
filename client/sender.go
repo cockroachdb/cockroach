@@ -34,11 +34,9 @@ import (
 // defaultRetryOptions sets the retry options for handling retryable errors and
 // connection I/O errors.
 var defaultRetryOptions = retry.Options{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-	UseV1Info:   true,
+	InitialBackoff: 50 * time.Millisecond,
+	MaxBackoff:     5 * time.Second,
+	Multiplier:     2,
 }
 
 // Sender is an interface for sending a request to a Key-Value
