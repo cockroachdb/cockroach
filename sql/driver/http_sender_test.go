@@ -46,7 +46,7 @@ func TestSend(t *testing.T) {
 	}
 	for _, test := range testCases {
 		request := &sqlwire.SQLRequest{}
-		request.Cmds = append(request.Cmds, &sqlwire.SQLRequest_Cmd{Sql: &test.req})
+		request.Cmds = append(request.Cmds, &sqlwire.SQLRequest_Cmd{Sql: test.req})
 		call := sqlwire.Call{Args: request, Reply: &sqlwire.SQLResponse{}}
 		sender.Send(context.TODO(), call)
 		reply := string(call.Reply.(*sqlwire.SQLResponse).Results[0].Values[0].Blobval)

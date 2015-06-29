@@ -29,6 +29,8 @@ option (gogoproto.unmarshaler_all) = true;
 
 // SQLRequestHeader is supplied with every CmdRequest.
 message SQLRequestHeader {
+  // User is the originating user.
+  optional string user = 5 [(gogoproto.nullable) = false];
   // Session settings that were returned in the last response that
   // contained them, being reflected back to the server.
   optional bytes session = 1;
@@ -46,7 +48,7 @@ message SQLResponseHeader {
   optional proto.Error error = 1;
   // Setting that should be reflected back in all subsequent requests.
   // When not set, future requests should continue to use existing settings.
-  optional bytes settings = 2;
+  optional bytes session = 2;
   // Transaction message returned in a response; not to be interpreted by
   // the recipient and reflected in a subsequent request. When not set,
   // the subsequent request should not contain a transaction object.
@@ -84,7 +86,7 @@ message SQLRequest {
   optional SQLRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // SQL commands/queries to be serially executed by the server.
   message Cmd {
-    optional string sql = 1;
+    optional string sql = 1 [(gogoproto.nullable) = false];
     // parameters are referred to in the above sql command/query using "?".
     repeated Datum params = 2;
   }
