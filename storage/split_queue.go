@@ -103,13 +103,12 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
-		if err = rng.AddCmd(rng.context(),
-			proto.Call{
-				Args: &proto.AdminSplitRequest{
-					RequestHeader: proto.RequestHeader{Key: rng.Desc().StartKey},
-				},
-				Reply: &proto.AdminSplitResponse{},
-			}, true); err != nil {
+		if err = rng.AddCmd(rng.context(), proto.Call{
+			Args: &proto.AdminSplitRequest{
+				RequestHeader: proto.RequestHeader{Key: rng.Desc().StartKey},
+			},
+			Reply: &proto.AdminSplitResponse{},
+		}); err != nil {
 			return err
 		}
 	}

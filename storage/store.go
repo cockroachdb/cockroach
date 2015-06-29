@@ -1245,7 +1245,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 			return err
 		}
 
-		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}, true); err == nil {
+		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}); err == nil {
 			return nil
 		}
 
@@ -1260,7 +1260,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 			} else {
 				pushType = proto.PUSH_TIMESTAMP
 			}
-			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType, false /* wait */)
+			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType)
 			reply.Header().SetGoError(err)
 		}
 
@@ -1314,8 +1314,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 // Resolved flag to true so the client retries the command
 // immediately. If the push fails, we set the error's Resolved flag to
 // false so that the client backs off before reissuing the command.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteIntentError, rng *Range, args proto.Request,
-	pushType proto.PushTxnType, wait bool) error {
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteIntentError, rng *Range, args proto.Request, pushType proto.PushTxnType) error {
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
@@ -1381,30 +1380,41 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 	wiErr.Resolved = true // success!
 
+	var wg sync.WaitGroup
+
 	// We pushed the transaction(s) successfully, so resolve the intent(s).
 	for i, intent := range wiErr.Intents {
 		pushReply := bReply.Responses[i].InternalPushTxn
+		intentKey := intent.Key
 		resolveArgs := &proto.InternalResolveIntentRequest{
 			RequestHeader: proto.RequestHeader{
 				// Use the pushee's timestamp, which might be lower than the
 				// pusher's request timestamp. No need to push the intent higher
 				// than the pushee's txn!
 				Timestamp: pushReply.PusheeTxn.Timestamp,
-				Key:       intent.Key,
+				Key:       intentKey,
 				User:      UserRoot,
 				Txn:       pushReply.PusheeTxn,
 			},
 		}
 		resolveReply := &proto.InternalResolveIntentResponse{}
-		// Add resolve command with wait=false to add to Raft but not wait for completion.
-		waitForResolve := wait && i == len(wiErr.Intents)-1
-		if resolveErr := rng.AddCmd(ctx, proto.Call{Args: resolveArgs, Reply: resolveReply}, waitForResolve); resolveErr != nil {
-			if log.V(1) {
-				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, resolveErr)
-			}
-			return resolveErr
+
+		if s.stopper.StartTask() {
+			wg.Add(1)
+
+			go func() {
+				resolveErr := rng.addWriteCmd(ctx, resolveArgs, resolveReply, &wg)
+				if resolveErr != nil {
+					if log.V(1) {
+						log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
+					}
+				}
+				s.stopper.FinishTask()
+			}()
 		}
 	}
+
+	wg.Wait() // wait until all the `ResolveIntent`s have been submitted to raft.
 
 	return wiErr
 }

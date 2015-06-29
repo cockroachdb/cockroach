@@ -173,7 +173,7 @@ type rangeManager interface {
 	Stopper() *util.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Range, proto.Request, proto.PushTxnType, bool) error
+	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Range, proto.Request, proto.PushTxnType) error
 
 	// Range manipulation methods.
 	LookupRange(start, end proto.Key) *Range
@@ -496,14 +496,8 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
-func (r *Range) AddCmd(ctx context.Context, call proto.Call, wait bool) error {
+func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 	args, reply := call.Args, call.Reply
-	header := args.Header()
-	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
-		reply.Header().SetGoError(err)
-		return err
-	}
 
 	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
@@ -511,7 +505,14 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call, wait bool) error {
 	} else if proto.IsReadOnly(args) {
 		return r.addReadOnlyCmd(ctx, args, reply)
 	}
-	return r.addWriteCmd(ctx, args, reply, wait)
+	return r.addWriteCmd(ctx, args, reply, nil)
+}
+
+func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
+	if !r.ContainsKeyRange(header.Key, header.EndKey) {
+		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+	}
+	return nil
 }
 
 // beginCmd waits for any overlapping, already-executing commands via
@@ -553,8 +554,15 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
 func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
+	header := args.Header()
+
+	if err := r.checkCmdHeader(header); err != nil {
+		reply.Header().SetGoError(err)
+		return err
+	}
+
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -575,6 +583,11 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto
 // clear via the read queue.
 func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
 	header := args.Header()
+
+	if err := r.checkCmdHeader(args.Header()); err != nil {
+		reply.Header().SetGoError(err)
+		return err
+	}
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
@@ -627,10 +640,24 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 // write is removed from the read queue and the reply is added to the
 // response cache.  If wait is true, will block until the command is
 // complete.
-func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wait bool) error {
-	// Check the response cache in case this is a replay. This call
-	// may block if the same command is already underway.
+func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wg *sync.WaitGroup) error {
+	signal := func() {
+		if wg != nil {
+			wg.Done()
+			wg = nil
+		}
+	}
+
+	// This happens more eagerly below, but it's important to guarantee that
+	// early returns do not skip this.
+	defer signal()
+
 	header := args.Header()
+
+	if err := r.checkCmdHeader(args.Header()); err != nil {
+		reply.Header().SetGoError(err)
+		return err
+	}
 
 	// Add the write to the command queue to gate subsequent overlapping
 	// Commands until this command completes. Note that this must be
@@ -679,38 +706,23 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 
 	errChan, pendingCmd := r.proposeRaftCommand(ctx, args, reply)
 
-	// Create a completion func for mandatory cleanups which we either
-	// run synchronously if we're waiting or in a goroutine otherwise.
-	completionFunc := func() error {
-		// First wait for raft to commit or abort the command.
-		var err error
-		if err = <-errChan; err == nil {
-			// Next if the command was committed, wait for the range to apply it.
-			err = <-pendingCmd.done
-		} else if err == multiraft.ErrGroupDeleted {
-			// This error needs to be converted appropriately so that
-			// clients will retry.
-			err = proto.NewRangeNotFoundError(r.Desc().RaftID)
-		}
-		// As for reads, update timestamp cache with the timestamp
-		// of this write on success. This ensures a strictly higher
-		// timestamp for successive writes to the same key or key range.
-		r.endCmd(cmdKey, args, err, false /* !readOnly */)
-		return err
-	}
+	signal()
 
-	if wait {
-		return completionFunc()
+	// First wait for raft to commit or abort the command.
+	var err error
+	if err = <-errChan; err == nil {
+		// Next if the command was committed, wait for the range to apply it.
+		err = <-pendingCmd.done
+	} else if err == multiraft.ErrGroupDeleted {
+		// This error needs to be converted appropriately so that
+		// clients will retry.
+		err = proto.NewRangeNotFoundError(r.Desc().RaftID)
 	}
-	go func() {
-		// If the original client didn't wait (e.g. resolve write intent),
-		// log execution errors so they're surfaced somewhere.
-		if err := completionFunc(); err != nil {
-			// TODO(tschottdorf): possible security risk to log args.
-			log.Warningc(ctx, "async execution of %v failed: %s", args, err)
-		}
-	}()
-	return nil
+	// As for reads, update timestamp cache with the timestamp
+	// of this write on success. This ensures a strictly higher
+	// timestamp for successive writes to the same key or key range.
+	r.endCmd(cmdKey, args, err, false /* !readOnly */)
+	return err
 }
 
 // proposeRaftCommand prepares necessary pending command struct and
@@ -1046,7 +1058,7 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 		go func() {
 			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 				Intents: intents,
-			}, r, args, proto.CLEANUP_TXN, true /* wait */)
+			}, r, args, proto.CLEANUP_TXN)
 			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 			}
