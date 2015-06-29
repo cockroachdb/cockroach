@@ -204,6 +204,7 @@ func checkMatch(patternMap, lineMap map[proto.StoreID][]string) bool {
 // recieved by a single event reader.
 func TestMultiStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("disabled until #1531 is fixed")
 
 	// Create a multiTestContext which publishes all store events to the given
 	// feed.
