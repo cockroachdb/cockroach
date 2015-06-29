@@ -616,7 +616,6 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 	args := call.Args
 	finalReply := call.Reply
-	endKey := args.Header().EndKey
 
 	// Verify permissions.
 	if err := ds.verifyPermissions(call.Args); err != nil {
@@ -636,13 +635,17 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 
 	// If this is a bounded request, we will change its bound as we receive
 	// replies. This undoes that when we return.
-	boundedArgs, _ := args.(proto.Bounded)
+	boundedArgs, argsBounded := args.(proto.Bounded)
 
-	if boundedArgs != nil {
-		defer func(n int64) {
-			boundedArgs.SetBound(n)
+	if argsBounded {
+		defer func(bound int64) {
+			boundedArgs.SetBound(bound)
 		}(boundedArgs.GetBound())
 	}
+
+	defer func(key proto.Key) {
+		args.Header().Key = key
+	}(args.Header().Key)
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	retryOpts := ds.rpcRetryOptions
@@ -672,11 +675,10 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// touch it unless we have to (it is illegal to send EndKey on
 			// commands which do not operate on ranges).
 			if descNext != nil {
-				args.Header().EndKey = desc.EndKey
-				defer func() {
-					// "Untruncate" EndKey to original.
+				defer func(endKey proto.Key) {
 					args.Header().EndKey = endKey
-				}()
+				}(args.Header().EndKey)
+				args.Header().EndKey = desc.EndKey
 			}
 			return ds.sendAttempt(desc, call)
 		})
@@ -703,7 +705,7 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 
 		// If this request has a bound, such as MaxResults in
 		// ScanRequest, check whether enough rows have been retrieved.
-		if boundedArgs != nil {
+		if argsBounded {
 			if prevBound := boundedArgs.GetBound(); prevBound > 0 {
 				if cReply, ok := curReply.(proto.Countable); ok {
 					if nextBound := prevBound - cReply.Count(); nextBound > 0 {
@@ -721,17 +723,6 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 		// If this was the last range accessed by this call, exit loop.
 		if descNext == nil {
 			break
-		}
-
-		if curReply == finalReply {
-			// This is the end of the first iteration in a multi-range query,
-			// so it's a convenient place to clean up changes to the args in
-			// the case of multi-range requests.
-			// Reset original start key (the EndKey is taken care of without
-			// defer above).
-			defer func(k proto.Key) {
-				args.Header().Key = k
-			}(args.Header().Key)
 		}
 
 		// In next iteration, query next range.
