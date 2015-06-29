@@ -111,7 +111,7 @@ func (s *Server) Send(call sqlwire.Call) {
 	case *sqlwire.SQLRequest:
 		reply := ""
 		if call.Args.(*sqlwire.SQLRequest).Cmds != nil {
-			reply = *(call.Args.(*sqlwire.SQLRequest).Cmds[0].Sql)
+			reply = call.Args.(*sqlwire.SQLRequest).Cmds[0].Sql
 		}
 		resp := call.Reply.(*sqlwire.SQLResponse)
 		resp.Columns = append(resp.Columns, "echo")

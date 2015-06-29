@@ -35,9 +35,11 @@ var _ = math.Inf
 
 // SQLRequestHeader is supplied with every CmdRequest.
 type SQLRequestHeader struct {
+	// User is the originating user.
+	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
 	// Session settings that were returned in the last response that
 	// contained them, being reflected back to the server.
-	Session []byte `protobuf:"bytes,1,opt,name=session" json:"session,omitempty"`
+	Settings []byte `protobuf:"bytes,1,opt,name=settings" json:"settings,omitempty"`
 	// The transaction state returned in the previous response being
 	// reflected back.
 	Txn []byte `protobuf:"bytes,2,opt,name=txn" json:"txn,omitempty"`
@@ -51,9 +53,16 @@ func (m *SQLRequestHeader) Reset()         { *m = SQLRequestHeader{} }
 func (m *SQLRequestHeader) String() string { return proto.CompactTextString(m) }
 func (*SQLRequestHeader) ProtoMessage()    {}
 
-func (m *SQLRequestHeader) GetSession() []byte {
+func (m *SQLRequestHeader) GetUser() string {
 	if m != nil {
-		return m.Session
+		return m.User
+	}
+	return ""
+}
+
+func (m *SQLRequestHeader) GetSettings() []byte {
+	if m != nil {
+		return m.Settings
 	}
 	return nil
 }
@@ -206,7 +215,7 @@ func (m *SQLRequest) GetCmds() []*SQLRequest_Cmd {
 
 // SQL commands/queries to be serially executed by the server.
 type SQLRequest_Cmd struct {
-	Sql *string `protobuf:"bytes,1,opt,name=sql" json:"sql,omitempty"`
+	Sql string `protobuf:"bytes,1,opt,name=sql" json:"sql"`
 	// parameters are referred to in the above sql command/query using "?".
 	Params           []*Datum `protobuf:"bytes,2,rep,name=params" json:"params,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
@@ -217,8 +226,8 @@ func (m *SQLRequest_Cmd) String() string { return proto.CompactTextString(m) }
 func (*SQLRequest_Cmd) ProtoMessage()    {}
 
 func (m *SQLRequest_Cmd) GetSql() string {
-	if m != nil && m.Sql != nil {
-		return *m.Sql
+	if m != nil {
+		return m.Sql
 	}
 	return ""
 }
@@ -280,9 +289,31 @@ func (m *SQLRequestHeader) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		switch fieldNum {
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.User = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Settings", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -300,7 +331,7 @@ func (m *SQLRequestHeader) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Settings = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -818,8 +849,7 @@ func (m *SQLRequest_Cmd) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(data[iNdEx:postIndex])
-			m.Sql = &s
+			m.Sql = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -1107,8 +1137,10 @@ func (this *Datum) SetValue(value interface{}) bool {
 func (m *SQLRequestHeader) Size() (n int) {
 	var l int
 	_ = l
-	if m.Session != nil {
-		l = len(m.Session)
+	l = len(m.User)
+	n += 1 + l + sovSqlApi(uint64(l))
+	if m.Settings != nil {
+		l = len(m.Settings)
 		n += 1 + l + sovSqlApi(uint64(l))
 	}
 	if m.Txn != nil {
@@ -1204,10 +1236,8 @@ func (m *SQLRequest) Size() (n int) {
 func (m *SQLRequest_Cmd) Size() (n int) {
 	var l int
 	_ = l
-	if m.Sql != nil {
-		l = len(*m.Sql)
-		n += 1 + l + sovSqlApi(uint64(l))
-	}
+	l = len(m.Sql)
+	n += 1 + l + sovSqlApi(uint64(l))
 	if len(m.Params) > 0 {
 		for _, e := range m.Params {
 			l = e.Size()
@@ -1271,11 +1301,11 @@ func (m *SQLRequestHeader) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Session != nil {
+	if m.Settings != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintSqlApi(data, i, uint64(len(m.Session)))
-		i += copy(data[i:], m.Session)
+		i = encodeVarintSqlApi(data, i, uint64(len(m.Settings)))
+		i += copy(data[i:], m.Settings)
 	}
 	if m.Txn != nil {
 		data[i] = 0x12
@@ -1291,6 +1321,10 @@ func (m *SQLRequestHeader) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n1
+	data[i] = 0x2a
+	i++
+	i = encodeVarintSqlApi(data, i, uint64(len(m.User)))
+	i += copy(data[i:], m.User)
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1481,12 +1515,10 @@ func (m *SQLRequest_Cmd) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Sql != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintSqlApi(data, i, uint64(len(*m.Sql)))
-		i += copy(data[i:], *m.Sql)
-	}
+	data[i] = 0xa
+	i++
+	i = encodeVarintSqlApi(data, i, uint64(len(m.Sql)))
+	i += copy(data[i:], m.Sql)
 	if len(m.Params) > 0 {
 		for _, msg := range m.Params {
 			data[i] = 0x12

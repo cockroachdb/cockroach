@@ -29,9 +29,11 @@ option (gogoproto.unmarshaler_all) = true;
 
 // SQLRequestHeader is supplied with every CmdRequest.
 message SQLRequestHeader {
+  // User is the originating user.
+  optional string user = 5 [(gogoproto.nullable) = false];
   // Session settings that were returned in the last response that
   // contained them, being reflected back to the server.
-  optional bytes session = 1;
+  optional bytes settings = 1;
   // The transaction state returned in the previous response being
   // reflected back.
   optional bytes txn = 2;
@@ -84,7 +86,7 @@ message SQLRequest {
   optional SQLRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // SQL commands/queries to be serially executed by the server.
   message Cmd {
-    optional string sql = 1;
+    optional string sql = 1 [(gogoproto.nullable) = false];
     // parameters are referred to in the above sql command/query using "?".
     repeated Datum params = 2;
   }
