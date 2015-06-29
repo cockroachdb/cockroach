@@ -47,6 +47,9 @@ type testCluster struct {
 	events    []*eventDemux
 	storages  []*BlockableStorage
 	transport Transport
+	// groups maps group IDs to a list of members; members are
+	// specified in terms of node index, not node ID.
+	groups map[proto.RaftID][]int
 }
 
 func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *testing.T) *testCluster {
@@ -57,6 +60,7 @@ func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *tes
 	cluster := &testCluster{
 		t:         t,
 		transport: transport,
+		groups:    map[proto.RaftID][]int{},
 	}
 
 	for i := 0; i < size; i++ {
@@ -98,7 +102,9 @@ func (c *testCluster) start() {
 func (c *testCluster) createGroup(groupID proto.RaftID, firstNode, numReplicas int) {
 	var replicaIDs []uint64
 	for i := 0; i < numReplicas; i++ {
-		replicaIDs = append(replicaIDs, uint64(c.nodes[firstNode+i].nodeID))
+		nodeIndex := firstNode + i
+		replicaIDs = append(replicaIDs, uint64(c.nodes[nodeIndex].nodeID))
+		c.groups[groupID] = append(c.groups[groupID], nodeIndex)
 	}
 	for i := 0; i < numReplicas; i++ {
 		gs := c.storages[firstNode+i].GroupStorage(groupID)
@@ -129,14 +135,17 @@ func (c *testCluster) createGroup(groupID proto.RaftID, firstNode, numReplicas i
 	}
 }
 
+// triggerElection starts an election in the specified group. In most situations
+// the given node will win the election. Unlike elect(), triggerElection() does not
+// wait for the election to resolve.
 func (c *testCluster) triggerElection(nodeIndex int, groupID proto.RaftID) {
 	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
 		c.t.Fatal(err)
 	}
 }
 
-// Trigger an election on node i and wait for it to complete.
-// TODO(bdarnell): once we have better leader discovery and forwarding/queuing, remove this.
+// waitForElection waits for the given node to see that an election has been completed.
+// Returns the election event, which can be used to see which node was elected.
 func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 	for {
 		e := <-c.events[i].LeaderElection
@@ -146,6 +155,22 @@ func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 		// Ignore events with NodeID 0; these mark elections that are in progress.
 		if e.NodeID != 0 {
 			return e
+		}
+	}
+}
+
+// elect is a simplified wrapper around triggerElection and waitForElection which
+// waits for the election to complete on all members of a group.
+// TODO(bdarnell): make this work when membership has been changed after creation.
+func (c *testCluster) elect(leaderIndex int, groupID proto.RaftID) {
+	c.triggerElection(leaderIndex, groupID)
+	for _, i := range c.groups[groupID] {
+		el := c.waitForElection(i)
+		if el.NodeID != c.nodes[leaderIndex].nodeID {
+			c.t.Fatalf("wrong leader elected; wanted node %d but got event %v", leaderIndex, el)
+		}
+		if el.GroupID != groupID {
+			c.t.Fatalf("expected election event for group %d but got %d", groupID, el.GroupID)
 		}
 	}
 }
@@ -161,15 +186,7 @@ func TestInitialLeaderElection(t *testing.T) {
 		groupID := proto.RaftID(1)
 		cluster.createGroup(groupID, 0, 3)
 
-		cluster.triggerElection(leaderIndex, groupID)
-		event := cluster.waitForElection(leaderIndex)
-		if event.GroupID != groupID {
-			t.Fatalf("election event had incorrect group id %v", event.GroupID)
-		}
-		if event.NodeID != cluster.nodes[leaderIndex].nodeID {
-			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID,
-				event.NodeID)
-		}
+		cluster.elect(leaderIndex, groupID)
 		stopper.Stop()
 	}
 }
@@ -247,7 +264,6 @@ func TestCommand(t *testing.T) {
 	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
-	cluster.waitForElection(0)
 
 	// Submit a command to the leader
 	cluster.nodes[0].SubmitCommand(groupID, makeCommandID(), []byte("command"))
@@ -269,13 +285,9 @@ func TestSlowStorage(t *testing.T) {
 	defer stopper.Stop()
 	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 3)
-
 	cluster.triggerElection(0, groupID)
-	cluster.waitForElection(0)
 
 	// Block the storage on the last node.
-	// TODO(bdarnell): there appear to still be issues if the storage is blocked during
-	// the election.
 	cluster.storages[2].Block()
 
 	// Submit a command to the leader
@@ -332,8 +344,8 @@ func TestMembershipChange(t *testing.T) {
 	// Create a group with a single member, cluster.nodes[0].
 	groupID := proto.RaftID(1)
 	cluster.createGroup(groupID, 0, 1)
-	// An automatic election is triggered since this is a single-node Raft group.
-	cluster.waitForElection(0)
+	// An automatic election is triggered since this is a single-node Raft group,
+	// so we don't need to call triggerElection.
 
 	// Consume and apply the membership change events.
 	for i := 0; i < 4; i++ {
