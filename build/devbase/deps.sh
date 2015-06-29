@@ -1,5 +1,5 @@
 #!/bin/bash
-# Grab Go-related dependencies.
+# Grab dependencies.
 
 set -eu
 
@@ -36,3 +36,5 @@ set -x
 # into GOPATH/pkg. Install both race and non-race builds here.
 go install ${pkgs}
 go install -race ${pkgs}
+
+(cd ui && npm install)

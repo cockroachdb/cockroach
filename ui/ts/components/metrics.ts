@@ -73,7 +73,7 @@ module Components {
 				 * after it is added to DOM. We use NVD3 to draw the data from
 				 * the query.
 				 */
-				drawGraph = (element: Element, isInitialized: boolean, context: any) => {
+				drawGraph: any = (element: Element, isInitialized: boolean, context: any) => {
 					if (!isInitialized) {
 						nv.addGraph(this.chart);
 					}

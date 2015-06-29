@@ -37,6 +37,10 @@ _testmain.go
 /cockroach
 *.swp
 
+
+# NPM node modules
+node_modules
+
 # That file is present in the cockroach-dev Docker container, required to avoid
 # untracked files.
 cockroach.sh

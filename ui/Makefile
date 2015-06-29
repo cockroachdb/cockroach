@@ -15,9 +15,11 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
-REPO_ROOT      := $(realpath ..)
-ORG_ROOT       := $(REPO_ROOT)/..
-GITHUB_ROOT    := $(ORG_ROOT)/..
+REPO_ROOT    := $(realpath ..)
+ORG_ROOT     := $(REPO_ROOT)/..
+GITHUB_ROOT  := $(ORG_ROOT)/..
+NODE_MODULES := node_modules
+TS_ROOT      := ts
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -41,9 +43,11 @@ all: $(GOBINDATA_TARGET)
 debug: $(GOBINDATA_DEBUG_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
-$(TYPESCRIPT_TARGET): $(shell find ts)
-	tsc -p ts
-	tslint -c ts/tslint.json $(addprefix -f, $(shell find ts -name *.ts -not -path *typings*))
+$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT))
+	@# This runs in under half a second, so a new target is unneeded.
+	npm install
+	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
+	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(addprefix -f , $(shell find $(TS_ROOT) -name *.ts -not -path *typings*))
 
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^

@@ -8,6 +8,9 @@ cd "$(dirname $0)/.."
 source ./build/init-docker.sh
 
 cp -p GLOCKFILE build/devbase
+mkdir -p build/devbase/ui
+cp -p ui/package.json build/devbase/ui
+cp -p ui/npm-shrinkwrap.json build/devbase/ui
 # Creating this here helps to not break the cache during deployment runs.
 mkdir -p build/deploy/build
 

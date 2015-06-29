@@ -317,10 +317,10 @@ var Models;
                 this.title = Utils.ChainProp(this, "Query Title");
                 this.selectors = Utils.ChainProp(this, []);
                 this.execute = function () {
-                    var s = _this.timespan().timespan();
+                    var ts = _this.timespan().timespan();
                     var req = {
-                        start_nanos: Utils.Convert.MilliToNano(s[0]),
-                        end_nanos: Utils.Convert.MilliToNano(s[1]),
+                        start_nanos: Utils.Convert.MilliToNano(ts[0]),
+                        end_nanos: Utils.Convert.MilliToNano(ts[1]),
                         queries: []
                     };
                     var requestSet = new QueryInfoSet();

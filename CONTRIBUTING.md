@@ -26,14 +26,17 @@ offer. Note that the first time you run `make` various dependent libraries and t
 downloaded and installed which can be somewhat time consuming. Be patient.
 
 Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
-`go generate` requires the typescript transpiler `tsc`, which you can get from [typescript](http://www.typescriptlang.org/) or using `npm` with:
-`npm install -g typescript`
-`go generate` also requires a typescript linter `tslint`, which you can get from [tslint](https://github.com/palantir/tslint) or using `npm` with:
-`npm install -g tslint`
-If you don't have npm, it comes with node. To get it via homebrew:
+`go generate` requires a collection of node modules which are installed via npm. If you don't have npm, it typically comes with node. To get it via homebrew:
 `brew install node`
+If you're not using homebrew, make sure you install both [node.js](https://nodejs.org/) and [npm](https://www.npmjs.com/).
+To install the modules, in the `/ui` directory call `npm install`.
+If you need to add or update an npm dependency, in the `ui/` directory:
+- `npm install --save NEWDEP` - installs the new or updated dependency and also updates the `package.json` file
+- `npm shrinkwrap` - locks the versions
+- create a PR with all the changes
+More details on this can be found in the [shrinkwrap docs](https://docs.npmjs.com/cli/shrinkwrap).
 
-To add or update a dependency:
+To add or update a go dependency:
 - `(cd $GOPATH/src && go get -u ./...)` to update the dependencies or `go get {package}` to add a dependency
 - `glock save github.com/cockroachdb/cockroach` to update the GLOCKFILE
 - `go generate ./...` to update generated files
