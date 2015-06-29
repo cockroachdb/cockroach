@@ -1187,8 +1187,9 @@ func TestStoreReadInconsistent(t *testing.T) {
 // them in one fell swoop using both consistent and inconsistent reads.
 func TestStoreScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, _, stopper := createTestStore(t)
 	defer func() { TestingCommandFilter = nil }()
+
+	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
 	var count int32
