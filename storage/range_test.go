@@ -349,6 +349,43 @@ func TestRangeReadConsistency(t *testing.T) {
 	}
 }
 
+// TestApplyCmdLeaseError verifies that when during application of a Raft
+// command the proposing node no longer holds the leader lease, an error is
+// returned. This prevents regression of #1483.
+func TestApplyCmdLeaseError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	pArgs, pReply := putArgs(proto.Key("a"), []byte("asd"),
+		tc.rng.Desc().RaftID, tc.store.StoreID())
+	pArgs.Timestamp = tc.clock.Now()
+
+	// Lose the lease.
+	start := tc.rng.getLease().Expiration.Add(1, 0)
+	tc.manualClock.Set(start.WallTime)
+	setLeaderLease(t, tc.rng, &proto.Lease{
+		Start:      start,
+		Expiration: start.Add(10, 0),
+		RaftNodeID: proto.MakeRaftNodeID(2, 2), // a different node
+	})
+
+	// Submit a proposal to Raft.
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), pArgs, pReply)
+	if err := <-errChan; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-pendingCmd.done; err == nil {
+		t.Fatalf("expected an error")
+	} else if _, ok := err.(*proto.NotLeaderError); !ok {
+		t.Fatalf("expected not leader error in return, got %s", err)
+	}
+	if _, ok := pReply.GoError().(*proto.NotLeaderError); !ok {
+		t.Errorf("expected not leader error in reply header; got %s", pReply.GoError())
+	}
+}
+
 func TestRangeRangeBoundsChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
