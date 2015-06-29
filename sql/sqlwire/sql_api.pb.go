@@ -39,7 +39,7 @@ type SQLRequestHeader struct {
 	User string `protobuf:"bytes,5,opt,name=user" json:"user"`
 	// Session settings that were returned in the last response that
 	// contained them, being reflected back to the server.
-	Settings []byte `protobuf:"bytes,1,opt,name=settings" json:"settings,omitempty"`
+	Session []byte `protobuf:"bytes,1,opt,name=session" json:"session,omitempty"`
 	// The transaction state returned in the previous response being
 	// reflected back.
 	Txn []byte `protobuf:"bytes,2,opt,name=txn" json:"txn,omitempty"`
@@ -60,9 +60,9 @@ func (m *SQLRequestHeader) GetUser() string {
 	return ""
 }
 
-func (m *SQLRequestHeader) GetSettings() []byte {
+func (m *SQLRequestHeader) GetSession() []byte {
 	if m != nil {
-		return m.Settings
+		return m.Session
 	}
 	return nil
 }
@@ -87,7 +87,7 @@ type SQLResponseHeader struct {
 	Error *cockroach_proto2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 	// Setting that should be reflected back in all subsequent requests.
 	// When not set, future requests should continue to use existing settings.
-	Settings []byte `protobuf:"bytes,2,opt,name=settings" json:"settings,omitempty"`
+	Session []byte `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
 	// Transaction message returned in a response; not to be interpreted by
 	// the recipient and reflected in a subsequent request. When not set,
 	// the subsequent request should not contain a transaction object.
@@ -106,9 +106,9 @@ func (m *SQLResponseHeader) GetError() *cockroach_proto2.Error {
 	return nil
 }
 
-func (m *SQLResponseHeader) GetSettings() []byte {
+func (m *SQLResponseHeader) GetSession() []byte {
 	if m != nil {
-		return m.Settings
+		return m.Session
 	}
 	return nil
 }
@@ -313,7 +313,7 @@ func (m *SQLRequestHeader) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Settings", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -331,7 +331,7 @@ func (m *SQLRequestHeader) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Settings = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -451,7 +451,7 @@ func (m *SQLResponseHeader) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Settings", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Session", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -469,7 +469,7 @@ func (m *SQLResponseHeader) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Settings = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -1139,8 +1139,8 @@ func (m *SQLRequestHeader) Size() (n int) {
 	_ = l
 	l = len(m.User)
 	n += 1 + l + sovSqlApi(uint64(l))
-	if m.Settings != nil {
-		l = len(m.Settings)
+	if m.Session != nil {
+		l = len(m.Session)
 		n += 1 + l + sovSqlApi(uint64(l))
 	}
 	if m.Txn != nil {
@@ -1162,8 +1162,8 @@ func (m *SQLResponseHeader) Size() (n int) {
 		l = m.Error.Size()
 		n += 1 + l + sovSqlApi(uint64(l))
 	}
-	if m.Settings != nil {
-		l = len(m.Settings)
+	if m.Session != nil {
+		l = len(m.Session)
 		n += 1 + l + sovSqlApi(uint64(l))
 	}
 	if m.Txn != nil {
@@ -1301,11 +1301,11 @@ func (m *SQLRequestHeader) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Settings != nil {
+	if m.Session != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintSqlApi(data, i, uint64(len(m.Settings)))
-		i += copy(data[i:], m.Settings)
+		i = encodeVarintSqlApi(data, i, uint64(len(m.Session)))
+		i += copy(data[i:], m.Session)
 	}
 	if m.Txn != nil {
 		data[i] = 0x12
@@ -1356,11 +1356,11 @@ func (m *SQLResponseHeader) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n2
 	}
-	if m.Settings != nil {
+	if m.Session != nil {
 		data[i] = 0x12
 		i++
-		i = encodeVarintSqlApi(data, i, uint64(len(m.Settings)))
-		i += copy(data[i:], m.Settings)
+		i = encodeVarintSqlApi(data, i, uint64(len(m.Session)))
+		i += copy(data[i:], m.Session)
 	}
 	if m.Txn != nil {
 		data[i] = 0x1a

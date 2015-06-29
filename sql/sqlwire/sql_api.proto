@@ -33,7 +33,7 @@ message SQLRequestHeader {
   optional string user = 5 [(gogoproto.nullable) = false];
   // Session settings that were returned in the last response that
   // contained them, being reflected back to the server.
-  optional bytes settings = 1;
+  optional bytes session = 1;
   // The transaction state returned in the previous response being
   // reflected back.
   optional bytes txn = 2;
@@ -48,7 +48,7 @@ message SQLResponseHeader {
   optional proto.Error error = 1;
   // Setting that should be reflected back in all subsequent requests.
   // When not set, future requests should continue to use existing settings.
-  optional bytes settings = 2;
+  optional bytes session = 2;
   // Transaction message returned in a response; not to be interpreted by
   // the recipient and reflected in a subsequent request. When not set,
   // the subsequent request should not contain a transaction object.
