@@ -140,16 +140,8 @@ func (ts *TestServer) Start() error {
 	if ts.StoresPerNode < 1 {
 		ts.StoresPerNode = 1
 	}
-	if ts.Engines == nil {
-		ts.Engines = []engine.Engine{}
-	}
-	for i := 0; i < ts.StoresPerNode; i++ {
-		if len(ts.Engines) < i+1 {
-			ts.Engines = append(ts.Engines, nil)
-		}
-		if ts.Engines[i] == nil {
-			ts.Engines[i] = engine.NewInMem(proto.Attributes{}, 100<<20)
-		}
+	for i := len(ts.Engines); i < ts.StoresPerNode; i++ {
+		ts.Engines = append(ts.Engines, engine.NewInMem(proto.Attributes{}, 100<<20))
 	}
 	ts.Ctx.Engines = ts.Engines
 
