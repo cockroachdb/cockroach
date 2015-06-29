@@ -49,21 +49,6 @@ func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user strin
 	return db
 }
 
-// setDefaultRangeMaxBytes sets the range-max-bytes value for the default zone.
-func setDefaultRangeMaxBytes(t *testing.T, db *client.DB, maxBytes int64) {
-	zone := &proto.ZoneConfig{}
-	if err := db.GetProto(keys.ConfigZonePrefix, zone); err != nil {
-		t.Fatal(err)
-	}
-	if zone.RangeMaxBytes == maxBytes {
-		return
-	}
-	zone.RangeMaxBytes = maxBytes
-	if err := db.Put(keys.ConfigZonePrefix, zone); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // getPermConfig fetches the permissions config for 'prefix'.
 func getPermConfig(db *client.DB, prefix string) (*proto.PermConfig, error) {
 	config := &proto.PermConfig{}
