@@ -15,8 +15,8 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-// Package resource embeds into the Cockroach certain data such as web html
-// and stylesheets.
-package resource
+// Package ui embeds into the Cockroach certain data such as web html and
+// stylesheets.
+package ui
 
 //go:generate make

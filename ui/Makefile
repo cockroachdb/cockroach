@@ -28,8 +28,8 @@ GOPATH_BIN := $(GOPATH)/bin
 
 GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
-TYPESCRIPT_TARGET      := ui/js/app.js
-GOBINDATA_SOURCES      := $(TYPESCRIPT_TARGET) ui/index.html $(shell find ui/css ui/js/libs -type f)
+TYPESCRIPT_TARGET      := js/app.js
+GOBINDATA_SOURCES      := $(TYPESCRIPT_TARGET) index.html $(shell find css js/libs -type f)
 GOBINDATA_TARGET       := ./embedded.go
 GOBINDATA_DEBUG_TARGET := ./embedded_debug.go
 
@@ -41,14 +41,14 @@ all: $(GOBINDATA_TARGET)
 debug: $(GOBINDATA_DEBUG_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
-$(TYPESCRIPT_TARGET): $(shell find ui/ts)
-	tsc -p ui/ts
-	tslint -c ui/ts/tslint.json $(addprefix -f, $(shell find ui/ts -name *.ts -not -path *typings*))
+$(TYPESCRIPT_TARGET): $(shell find ts)
+	tsc -p ts
+	tslint -c ts/tslint.json $(addprefix -f, $(shell find ts -name *.ts -not -path *typings*))
 
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
-	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg resource -o $@ $^
+	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^
 	gofmt -s -w $@
 	goimports -w $@
 
 $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_SOURCES)
-	$(GO_BINDATA) -pkg resource -o $@ -debug $^
+	$(GO_BINDATA) -pkg ui -o $@ -debug $^

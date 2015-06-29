@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/resource"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
@@ -40,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -195,7 +195,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
 	s.mux.Handle("/", http.FileServer(
-		&assetfs.AssetFS{Asset: resource.Asset, AssetDir: resource.AssetDir, Prefix: "./ui/"}))
+		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir}))
 
 	// The admin server handles both /debug/ and /_admin/
 	s.mux.Handle(adminEndpoint, s.admin)

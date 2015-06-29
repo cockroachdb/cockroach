@@ -8,7 +8,7 @@
     "noEmitOnError": true,
     "removeComments": true,
     "noLib": false,
-    "out": "./ui/js/app.js",
+    "out": "./js/app.js",
     "sourceMap": false
   },
   "files": [
