@@ -464,7 +464,7 @@ func TestSQLServer(t *testing.T) {
 		defer resp.Body.Close()
 		return resp.StatusCode
 	}
-	body, _ := gogoproto.Marshal(&sqlwire.SQLRequest{})
+	body, _ := gogoproto.Marshal(&sqlwire.Request{})
 	testCases := []struct {
 		command       string
 		body          []byte

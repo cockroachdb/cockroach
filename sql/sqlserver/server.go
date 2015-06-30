@@ -38,11 +38,11 @@ var allMethods = map[string]sqlwire.Method{
 // only knows about public methods and explicitly returns nil for
 // internal methods. Do not change this behavior without also fixing
 // Server.ServeHTTP.
-func createArgsAndReply(method string) (sqlwire.Request, sqlwire.Response) {
+func createArgsAndReply(method string) (*sqlwire.Request, *sqlwire.Response) {
 	if m, ok := allMethods[method]; ok {
 		switch m {
 		case sqlwire.Execute:
-			return &sqlwire.SQLRequest{}, &sqlwire.SQLResponse{}
+			return &sqlwire.Request{}, &sqlwire.Response{}
 		}
 	}
 	return nil, nil
@@ -107,22 +107,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Send forwards the call for further processing.
 func (s *Server) Send(call sqlwire.Call) {
-	switch call.Args.(type) {
-	case *sqlwire.SQLRequest:
-		resp := call.Reply.(*sqlwire.SQLResponse)
-		resp.Results = []sqlwire.Result{
-			{
-				Columns: []string{"echo"},
-				Rows: []sqlwire.Result_Row{
-					{
-						Values: []sqlwire.Datum{
-							{
-								StringVal: &call.Args.(*sqlwire.SQLRequest).Sql,
-							},
+	resp := call.Reply
+	resp.Results = []sqlwire.Result{
+		{
+			Columns: []string{"echo"},
+			Rows: []sqlwire.Result_Row{
+				{
+					Values: []sqlwire.Datum{
+						{
+							StringVal: &call.Args.Sql,
 						},
 					},
 				},
 			},
-		}
+		},
 	}
 }

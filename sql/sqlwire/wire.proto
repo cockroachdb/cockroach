@@ -27,8 +27,8 @@ option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-// SQLRequestHeader is supplied with every CmdRequest.
-message SQLRequestHeader {
+// RequestHeader is supplied with every Request.
+message RequestHeader {
   // User is the originating user.
   optional string user = 5 [(gogoproto.nullable) = false];
   // Session settings that were returned in the last response that
@@ -42,8 +42,8 @@ message SQLRequestHeader {
   optional proto.ClientCmdID cmd_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
 }
 
-// SQLResponseHeader is returned with every Cmd response.
-message SQLResponseHeader {
+// ResponseHeader is returned with every Response.
+message ResponseHeader {
   // Error is non-nil if an error occurred.
   optional proto.Error error = 1;
   // Setting that should be reflected back in all subsequent requests.
@@ -86,11 +86,11 @@ message Result {
   repeated Row rows = 2 [(gogoproto.nullable) = false];
 }
 
-// A SQLRequest to cockroach. A transaction can consist of multiple
-// SQLRequests.
-message SQLRequest {
+// An SQL request to cockroach. A transaction can consist of multiple
+// requests.
+message Request {
   // Request header.
-  optional SQLRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // SQL statement(s) to be serially executed by the server. Multiple
   // statements are passed as a single string separated by semicolons.
   optional string sql = 2 [(gogoproto.nullable) = false];
@@ -98,8 +98,8 @@ message SQLRequest {
   repeated Datum params = 3 [(gogoproto.nullable) = false];
 }
 
-message SQLResponse {
-  optional SQLResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+message Response {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The list of results. There is one result object per SQL statement in the
   // request.
   repeated Result results = 2 [(gogoproto.nullable) = false];
