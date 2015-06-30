@@ -65,22 +65,6 @@ func (c *conn) Prepare(query string) (driver.Stmt, error) {
 	return &stmt{conn: c, stmt: s}, nil
 }
 
-func (c *conn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	stmt, err := parser.Parse(query)
-	if err != nil {
-		return nil, err
-	}
-	return c.exec(stmt, args)
-}
-
-func (c *conn) Query(query string, args []driver.Value) (driver.Rows, error) {
-	stmt, err := parser.Parse(query)
-	if err != nil {
-		return nil, err
-	}
-	return c.query(stmt, args)
-}
-
 func (c *conn) Begin() (driver.Tx, error) {
 	return &tx{conn: c}, nil
 }
