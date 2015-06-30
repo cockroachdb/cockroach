@@ -494,8 +494,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
-// command queue. If wait is false, read-write commands are added to
-// Raft without waiting for their completion.
+// command queue.
 func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 	args, reply := call.Args, call.Reply
 
@@ -584,7 +583,7 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto
 func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
 	header := args.Header()
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
+	if err := r.checkCmdHeader(header); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -614,7 +613,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	cmdKey := r.beginCmd(header, true)
 
 	// This replica must have leader lease to process a consistent read.
-	if err := r.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, true /* readOnly */)
 		reply.Header().SetGoError(err)
 		return err
@@ -632,14 +631,14 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	return err
 }
 
-// addWriteCmd first adds the keys affected by this command as pending
-// writes to the command queue. Next, the timestamp cache is checked to
-// determine if any newer accesses to this command's affected keys
-// have been made. If so, this command's timestamp is moved forward.
-// Finally, the command is submitted to Raft. Upon completion, the
-// write is removed from the read queue and the reply is added to the
-// response cache.  If wait is true, will block until the command is
-// complete.
+// addWriteCmd first adds the keys affected by this command as pending writes
+// to the command queue. Next, the timestamp cache is checked to determine if
+// any newer accesses to this command's affected keys have been made. If so,
+// the command's timestamp is moved forward. Finally, the command is submitted
+// to Raft. Upon completion, the write is removed from the read queue and any
+// error returned. If a WaitGroup is supplied, it is signaled when the command
+// enters Raft or the function returns with a preprocessing error, whichever
+// happens earlier.
 func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wg *sync.WaitGroup) error {
 	signal := func() {
 		if wg != nil {
