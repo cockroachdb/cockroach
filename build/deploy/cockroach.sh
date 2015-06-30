@@ -7,6 +7,7 @@ if [ -f ./test.sh ]; then
 fi
 
 if [ "${1:-}" = "shell" ]; then
+  shift
   /bin/bash "$@"
 else
   /cockroach/cockroach "$@"
