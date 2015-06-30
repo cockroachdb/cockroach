@@ -158,34 +158,29 @@ func TestRejectFutureCommand(t *testing.T) {
 
 // TestTxnPutOutOfOrder tests a case where a put operation of an older
 // timestamp comes after a put operation of a newer timestamp in a
-// txn. The test makes sure such an out-of-order put succeeds and
-// overrides an old value.
+// txn. The test ensures such an out-of-order put succeeds and
+// overrides an old value. The test uses a "Writer" and a "Reader"
+// to reproduce an out-of-order put.
 //
-// The test uses a "Writer" and a "Reader" to reproduce an
-// out-of-order put. The Writer executes a put operation in a txn and
-// commits it. The Reader executes two get operations on the same key
-// with higher priority (outside of a txn), which pushes the Writer's
-// intent forward in time, so that the Writer's retry happens in the
-// previous attempt's past.
-//
-// 1) The Writer executes a put operation with time T in a txn.
-// 2) Before the Writer's txn is committed, the Reader sends a get
-//    operation with time T+100. This pushes the Writer txn timestamp to
-//    T+100 and triggers the restart of the Writer's txn. A write intent
-//    at timestamp T+100 is written.
-// 3) Before the Writer starts a new epoch of the txn, the Reader sends
-//    another get operation with time T+200. The Writer txn timestamp is
-//    pushed again to T+200 by updating the timestamp of the write
-//    intent to T+200. The test deliberately fails the get operation, so
-//    cockroach doesn't update its read timestamp cache.
-// 4) The Writer restarts its txn and executes the put operation
-//    again. This put operation becomes out-of-order since its
-//    timestamp is T+100 while the intent timestamp pushed at Step 3
-//    is T+200.
-// 5) The put operation still succeeds and overrides the old value using
-//    timestamp T+100. (When the Writer attempts to commit its txn, the
-//    txn will be restarted again. The txn will start a new epoch with
-//    timestamp T+200, and then it finally succeeds.)
+// 1) The Writer executes a put operation and writes a write intent with
+//    time T in a txn.
+// 2) Before the Writer's txn is committed, the Reader sends a high priority
+//    get operation with time T+100. This pushes the Writer txn timestamp to
+//    T+100 and triggers the restart of the Writer's txn. The original
+//    write intent timestamp is also updated to T+100.
+// 3) The Writer starts a new epoch of the txn, but before it writes, the
+//    Reader sends another high priority get operation with time T+200. This
+//    pushes the Writer txn timestamp to T+200 to trigger a restart of the
+//    Writer txn. The Writer will not actually restart until it tries to commit
+//    the current epoch of the transaction. The Reader updates the timestamp of
+//    the write intent to T+200. The test deliberately fails the Reader get
+//    operation, and cockroach doesn't update its read timestamp cache.
+// 4) The Writer executes the put operation again. This put operation comes
+//    out-of-order since its timestamp is T+100, while the intent timestamp
+//    updated at Step 3 is T+200.
+// 5) The put operation overrides the old value using timestamp T+100.
+// 6) When the Writer attempts to commit its txn, the txn will be restarted
+//    again at a new epoch timestamp T+200, which will finally succeed.
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
