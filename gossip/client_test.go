@@ -38,13 +38,13 @@ const (
 
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
-// We use insecure contexts since we do not have certificates for unix sockets.
+// TODO(mberhault): use a secure context, if possible.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
 	stopper = util.NewStopper()
 	lRPCContext := rpc.NewContext(insecureTestBaseContext, lclock, stopper)
 
-	laddr := util.CreateTestAddr("unix")
+	laddr := util.CreateTestAddr("tcp")
 	lserver := rpc.NewServer(laddr, lRPCContext)
 	if err := lserver.Start(); err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 		t.Fatal(err)
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
-	raddr := util.CreateTestAddr("unix")
+	raddr := util.CreateTestAddr("tcp")
 	rRPCContext := rpc.NewContext(insecureTestBaseContext, rclock, stopper)
 	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
