@@ -54,7 +54,7 @@ var testRangeDescriptor = proto.RangeDescriptor{
 var testAddress = util.MakeUnresolvedAddr("tcp", "node1:8080")
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
-	n := simulation.NewNetwork(1, "unix", gossip.TestInterval)
+	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	g := n.Nodes[0].Gossip
 	permConfig := &proto.PermConfig{
 		Read:  []string{""},
@@ -553,7 +553,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	n := simulation.NewNetwork(3, "unix", gossip.TestInterval)
+	n := simulation.NewNetwork(3, "tcp", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	if _, err := ds.getFirstRangeDescriptor(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
@@ -593,7 +593,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 // are checked hierarchically.
 func TestVerifyPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	n := simulation.NewNetwork(1, "unix", gossip.TestInterval)
+	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	config1 := &proto.PermConfig{
 		Read:  []string{"read1", "readAll", "rw1", "rwAll"},
