@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -264,7 +265,7 @@ func TestCorruptedClusterID(t *testing.T) {
 // the bytes and counts for Live, Key and Val are at least the expected value.
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
-func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
+func compareNodeStatus(t *testing.T, node *Node, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
 	nodeStatusKey := keys.NodeStatusKey(int32(node.Descriptor.NodeID))
 	request := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
@@ -274,67 +275,67 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *status.Nod
 	ns := (*nodeServer)(node)
 	response := &proto.GetResponse{}
 	if err := ns.Get(request, response); err != nil {
-		t.Fatalf("%v: failure getting node status: %s", testNumber, err)
+		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
 	if response.Value == nil {
-		t.Errorf("%v: could not find node status at: %s", testNumber, nodeStatusKey)
+		t.Errorf("%d: could not find node status at: %s", testNumber, nodeStatusKey)
 	}
 	nodeStatus := &status.NodeStatus{}
 	if err := gogoproto.Unmarshal(response.Value.GetBytes(), nodeStatus); err != nil {
-		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, response)
+		t.Fatalf("%d: could not unmarshal store status: %s", testNumber, err)
 	}
 
 	// There values must be equal.
-	if expectedNodeStatus.RangeCount != nodeStatus.RangeCount {
-		t.Errorf("%v: RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.RangeCount, expectedNodeStatus.RangeCount; a != e {
+		t.Errorf("%d: RangeCount does not match expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if !reflect.DeepEqual(expectedNodeStatus.Desc, nodeStatus.Desc) {
-		t.Errorf("%v: Description does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Desc, expectedNodeStatus.Desc; !reflect.DeepEqual(a, e) {
+		t.Errorf("%d: Descriptor does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
 	}
-	if expectedNodeStatus.ReplicatedRangeCount != nodeStatus.ReplicatedRangeCount {
-		t.Errorf("%v: ReplicatedRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.ReplicatedRangeCount, expectedNodeStatus.ReplicatedRangeCount; a != e {
+		t.Errorf("%d: ReplicatedRangeCount does not match expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
 
 	// There values must >= to the older value.
 	// If StartedAt is 0, we skip this test as we don't have the base value yet.
-	if expectedNodeStatus.StartedAt > 0 && expectedNodeStatus.StartedAt != nodeStatus.StartedAt {
-		t.Errorf("%v: StartedAt does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.StartedAt, expectedNodeStatus.StartedAt; e > 0 && e != a {
+		t.Errorf("%d: StartedAt does not match expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.Stats.LiveBytes < expectedNodeStatus.Stats.LiveBytes {
-		t.Errorf("%v: LiveBytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Stats.LiveBytes, expectedNodeStatus.Stats.LiveBytes; a < e {
+		t.Errorf("%d: LiveBytes is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.Stats.KeyBytes < expectedNodeStatus.Stats.KeyBytes {
-		t.Errorf("%v: KeyBytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Stats.KeyBytes, expectedNodeStatus.Stats.KeyBytes; a < e {
+		t.Errorf("%d: KeyBytes is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.Stats.ValBytes < expectedNodeStatus.Stats.ValBytes {
-		t.Errorf("%v: ValBytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Stats.ValBytes, expectedNodeStatus.Stats.ValBytes; a < e {
+		t.Errorf("%d: ValBytes is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.Stats.LiveCount < expectedNodeStatus.Stats.LiveCount {
-		t.Errorf("%v: LiveCount is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Stats.LiveCount, expectedNodeStatus.Stats.LiveCount; a < e {
+		t.Errorf("%d: LiveCount is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.Stats.KeyCount < expectedNodeStatus.Stats.KeyCount {
-		t.Errorf("%v: KeyCount is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Stats.KeyCount, expectedNodeStatus.Stats.KeyCount; a < e {
+		t.Errorf("%d: KeyCount is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.Stats.ValCount < expectedNodeStatus.Stats.ValCount {
-		t.Errorf("%v: ValCount is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.Stats.ValCount, expectedNodeStatus.Stats.ValCount; a < e {
+		t.Errorf("%d: ValCount is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
-	if nodeStatus.UpdatedAt < expectedNodeStatus.UpdatedAt {
-		t.Errorf("%v: UpdatedAt is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	if a, e := nodeStatus.UpdatedAt, expectedNodeStatus.UpdatedAt; a < e {
+		t.Errorf("%d: UpdatedAt is not greater or equal to expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
 
 	// Compare the store ids.
-	storeIDs := make(map[proto.StoreID]int)
-	for _, id := range expectedNodeStatus.StoreIDs {
-		storeIDs[id]++
-	}
+	var actualStoreIDs, expectedStoreIDs sort.IntSlice
 	for _, id := range nodeStatus.StoreIDs {
-		storeIDs[id]--
+		actualStoreIDs = append(actualStoreIDs, int(id))
 	}
-	for _, count := range storeIDs {
-		if count != 0 {
-			t.Errorf("%v: actual Store IDs don't match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
-			break
-		}
+	sort.Sort(actualStoreIDs)
+	for _, id := range expectedNodeStatus.StoreIDs {
+		expectedStoreIDs = append(expectedStoreIDs, int(id))
+	}
+	sort.Sort(expectedStoreIDs)
+
+	if !reflect.DeepEqual(actualStoreIDs, expectedStoreIDs) {
+		t.Errorf("%d: actual Store IDs don't match expected.\nexpected: %d actual: %d", testNumber, expectedStoreIDs, actualStoreIDs)
 	}
 
 	return nodeStatus
@@ -390,7 +391,7 @@ func TestNodeStatus(t *testing.T) {
 	s.WaitForRangeScanCompletion()
 	ts.node.waitForScanCompletion()
 	ts.node.waitForScanCompletion()
-	oldStats := compareStoreStatus(t, ts.node, expectedNodeStatus, 0)
+	oldStats := compareNodeStatus(t, ts.node, expectedNodeStatus, 0)
 
 	// Write some values left and right of the proposed split key.
 	if err := ts.db.Put("a", content); err != nil {
@@ -422,7 +423,7 @@ func TestNodeStatus(t *testing.T) {
 	s.WaitForRangeScanCompletion()
 	ts.node.waitForScanCompletion()
 	ts.node.waitForScanCompletion()
-	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 1)
+	oldStats = compareNodeStatus(t, ts.node, expectedNodeStatus, 1)
 
 	// Split the range.
 	rng := s.LookupRange(splitKey, nil)
@@ -465,7 +466,7 @@ func TestNodeStatus(t *testing.T) {
 	s.WaitForRangeScanCompletion()
 	ts.node.waitForScanCompletion()
 	ts.node.waitForScanCompletion()
-	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 2)
+	oldStats = compareNodeStatus(t, ts.node, expectedNodeStatus, 2)
 
 	// Write some values left and right of the proposed split key.
 	if err := ts.db.Put("aa", content); err != nil {
@@ -497,5 +498,5 @@ func TestNodeStatus(t *testing.T) {
 	s.WaitForRangeScanCompletion()
 	ts.node.waitForScanCompletion()
 	ts.node.waitForScanCompletion()
-	compareStoreStatus(t, ts.node, expectedNodeStatus, 3)
+	compareNodeStatus(t, ts.node, expectedNodeStatus, 3)
 }
