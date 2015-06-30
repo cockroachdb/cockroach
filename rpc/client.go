@@ -18,6 +18,7 @@
 package rpc
 
 import (
+	"errors"
 	"net"
 	"net/rpc"
 	"sync"
@@ -44,6 +45,7 @@ var (
 	clientMu          sync.Mutex         // Protects access to the client cache.
 	clients           map[string]*Client // Cache of RPC clients by server address.
 	heartbeatInterval time.Duration
+	errClosed         = errors.New("client is closed")
 )
 
 // clientRetryOptions specifies exponential backoff starting
@@ -159,6 +161,9 @@ func (c *Client) connect(opts *retry.Options, context *Context) error {
 		c.Client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
 		c.lAddr = conn.LocalAddr()
 		c.mu.Unlock()
+		if c.lAddr == nil {
+			return errClosed
+		}
 
 		// Ensure at least one heartbeat succeeds before exiting the
 		// retry loop. If it fails, don't retry: The node is probably
@@ -298,6 +303,6 @@ func (c *Client) heartbeat() error {
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 		return util.Errorf("client timeout")
 	case <-c.Closed:
-		return util.Errorf("client is closed")
+		return errClosed
 	}
 }
