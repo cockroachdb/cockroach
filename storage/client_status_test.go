@@ -43,57 +43,57 @@ func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus 
 	storeStatusKey := keys.StoreStatusKey(int32(store.Ident.StoreID))
 	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
 	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
-		t.Fatalf("%v: failure getting store status: %s", testNumber, err)
+		t.Fatalf("%d: failure getting store status: %s", testNumber, err)
 	}
 	if gReply.Value == nil {
-		t.Errorf("%v: could not find store status at: %s", testNumber, storeStatusKey)
+		t.Fatalf("%d: could not find store status at: %s", testNumber, storeStatusKey)
 	}
 	storeStatus := &storage.StoreStatus{}
 	if err := gogoproto.Unmarshal(gReply.Value.GetBytes(), storeStatus); err != nil {
-		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, gReply)
+		t.Fatalf("%d: could not unmarshal store status: %s", testNumber, err)
 	}
 
 	// Values much match exactly.
-	if expectedStoreStatus.Desc.StoreID != storeStatus.Desc.StoreID {
-		t.Errorf("%v: actual Desc.StoreID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Desc.StoreID, expectedStoreStatus.Desc.StoreID; a != e {
+		t.Errorf("%d: actual Desc.StoreID does not match expected. expected: %d actual: %d", testNumber, e, a)
 	}
-	if !reflect.DeepEqual(expectedStoreStatus.Desc.Attrs, storeStatus.Desc.Attrs) {
-		t.Errorf("%v: actual Desc.Attrs does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Desc.Attrs, expectedStoreStatus.Desc.Attrs; !reflect.DeepEqual(a, e) {
+		t.Errorf("%d: actual Desc.Attrs does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
 	}
-	if !reflect.DeepEqual(expectedStoreStatus.Desc.Node, storeStatus.Desc.Node) {
-		t.Errorf("%v: actual Desc.Attrs does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Desc.Node, expectedStoreStatus.Desc.Node; !reflect.DeepEqual(a, e) {
+		t.Errorf("%d: actual Desc.Attrs does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
 	}
-	if storeStatus.Desc.Capacity.Capacity != expectedStoreStatus.Desc.Capacity.Capacity {
-		t.Errorf("%v: actual Desc.Capacity.Capacity does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Desc.Capacity.Capacity, expectedStoreStatus.Desc.Capacity.Capacity; a != e {
+		t.Errorf("%d: actual Desc.Capacity.Capacity does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if expectedStoreStatus.NodeID != storeStatus.NodeID {
-		t.Errorf("%v: actual node ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.NodeID, expectedStoreStatus.NodeID; a != e {
+		t.Errorf("%d: actual node ID does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if expectedStoreStatus.RangeCount != storeStatus.RangeCount {
-		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.RangeCount, expectedStoreStatus.RangeCount; a != e {
+		t.Errorf("%d: actual RangeCount does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if expectedStoreStatus.ReplicatedRangeCount != storeStatus.ReplicatedRangeCount {
-		t.Errorf("%v: actual ReplicatedRangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.ReplicatedRangeCount, expectedStoreStatus.ReplicatedRangeCount; a != e {
+		t.Errorf("%d: actual ReplicatedRangeCount does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
 
 	// Values should be >= to expected values.
-	if storeStatus.Stats.LiveBytes < expectedStoreStatus.Stats.LiveBytes {
-		t.Errorf("%v: actual Live Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Stats.LiveBytes, expectedStoreStatus.Stats.LiveBytes; a < e {
+		t.Errorf("%d: actual Live Bytes is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if storeStatus.Stats.KeyBytes < expectedStoreStatus.Stats.KeyBytes {
-		t.Errorf("%v: actual Key Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Stats.KeyBytes, expectedStoreStatus.Stats.KeyBytes; a < e {
+		t.Errorf("%d: actual Key Bytes is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if storeStatus.Stats.ValBytes < expectedStoreStatus.Stats.ValBytes {
-		t.Errorf("%v: actual Val Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Stats.ValBytes, expectedStoreStatus.Stats.ValBytes; a < e {
+		t.Errorf("%d: actual Val Bytes is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if storeStatus.Stats.LiveCount < expectedStoreStatus.Stats.LiveCount {
-		t.Errorf("%v: actual Live Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Stats.LiveCount, expectedStoreStatus.Stats.LiveCount; a < e {
+		t.Errorf("%d: actual Live Count is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if storeStatus.Stats.KeyCount < expectedStoreStatus.Stats.KeyCount {
-		t.Errorf("%v: actual Key Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Stats.KeyCount, expectedStoreStatus.Stats.KeyCount; a < e {
+		t.Errorf("%d: actual Key Count is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
-	if storeStatus.Stats.ValCount < expectedStoreStatus.Stats.ValCount {
-		t.Errorf("%v: actual Val Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	if a, e := storeStatus.Stats.ValCount, expectedStoreStatus.Stats.ValCount; a < e {
+		t.Errorf("%d: actual Val Count is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
 	}
 	return storeStatus
 }
