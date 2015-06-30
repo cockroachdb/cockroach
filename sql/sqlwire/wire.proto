@@ -56,12 +56,14 @@ message ResponseHeader {
 }
 
 message Datum {
+  option (gogoproto.goproto_stringer) = false;
+
   // Using explicit proto types provides convenient access when using json. If
   // we used a Kind+Bytes approach the json interface would involve base64
   // encoded data.
   option (gogoproto.onlyone) = true;
   oneof value {
-    bool  bool_val = 1;
+    bool bool_val = 1;
     int64 int_val = 2;
     uint64 uint_val = 3;
     double float_val = 4;

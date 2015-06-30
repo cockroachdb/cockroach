@@ -31,6 +31,15 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
   return i, true
 }
 
+func parseUint64(yylex yyLexer, s string) (uint64, bool) {
+  i, err := strconv.ParseUint(s, 0, 64)
+  if err != nil {
+    yylex.Error(err.Error())
+    return 0, false
+  }
+  return i, true
+}
+
 %}
 
 %union {
@@ -82,9 +91,9 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %token tokChar tokVarChar tokBinary tokVarBinary
 %token tokText tokTinyText tokMediumText tokLongText
 %token tokBlob tokTinyBlob tokMediumBlob tokLongBlob
-%token tokBit tokEnum
+%token tokBit tokEnum tokTrue tokFalse
 
-%token <str> tokID tokString tokNumber tokValueArg tokComment
+%token <str> tokID tokString tokInteger tokNumber tokValueArg tokComment
 %token <empty> tokLE tokGE tokNE tokNullSafeEqual
 %token <empty> '(' '=' '<' '>' '~'
 
@@ -92,7 +101,7 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %left <empty> ','
 %left <empty> tokJoin tokStraightJoin tokLeft tokRight tokInner tokOuter tokCross tokNatural tokUse tokForce
 %left <empty> tokOn tokUsing
-%left <str> tokAnd tokOr
+%left <str> tokAnd tokOr tokConcat
 %right <str> tokNot
 %left <empty> '&' '|' '^'
 %left <empty> '+' '-'
@@ -119,7 +128,7 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <selectExpr> select_expression
 %type <str> as_lower_opt as_opt
 %type <expr> expression
-%type <tableExprs> table_expression_list
+%type <tableExprs> table_expression_opt table_expression_list
 %type <tableExpr> table_expression
 %type <str> join_type
 %type <smTableExpr> simple_table_expression
@@ -128,7 +137,7 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <str2> index_list
 %type <boolExpr> where_expression_opt
 %type <boolExpr> boolean_expression condition
-%type <str> compare
+%type <intVal> compare
 %type <insRows> row_list
 %type <valExpr> value value_expression
 %type <tuple> tuple
@@ -136,7 +145,7 @@ func parseInt(yylex yyLexer, s string) (int, bool) {
 %type <values> tuple_list
 %type <str> keyword_as_func
 %type <subquery> subquery
-%type <byt> unary_operator
+%type <intVal> unary_operator
 %type <colName> column_name
 %type <caseExpr> case_expression
 %type <whens> when_expression_list
@@ -192,9 +201,9 @@ command:
 | drop_statement
 
 select_statement:
-  tokSelect comment_opt distinct_opt select_expression_list tokFrom table_expression_list where_expression_opt group_by_opt having_opt order_by_opt limit_opt lock_opt
+  tokSelect comment_opt distinct_opt select_expression_list table_expression_opt where_expression_opt group_by_opt having_opt order_by_opt limit_opt lock_opt
   {
-    $$ = &Select{Comments: Comments($2), Distinct: $3, Exprs: $4, From: $6, Where: NewWhere(astWhere, $7), GroupBy: GroupBy($8), Having: NewWhere(astHaving, $9), OrderBy: $10, Limit: $11, Lock: $12}
+    $$ = &Select{Comments: Comments($2), Distinct: $3, Exprs: $4, From: $5, Where: NewWhere(astWhere, $6), GroupBy: GroupBy($7), Having: NewWhere(astHaving, $8), OrderBy: $9, Limit: $10, Lock: $11}
   }
 | select_statement union_op select_statement %prec tokUnion
   {
@@ -555,6 +564,15 @@ as_lower_opt:
     $$ = $2
   }
 
+table_expression_opt:
+  {
+    $$ = nil
+  }
+| tokFrom table_expression_list
+  {
+    $$ = $2
+  }
+
 table_expression_list:
   table_expression
   {
@@ -708,8 +726,21 @@ where_expression_opt:
     $$ = $2
   }
 
+// TODO(pmattis): The use of tok{True,False} as boolean_expressions
+// below causes a number of reduce/reduce conflicts because those
+// tokens are also valid "values". Need to determine if this is a real
+// problem and if it is how to fix.
+
 boolean_expression:
   condition
+| tokTrue
+  {
+    $$ = BoolVal(true)
+  }
+| tokFalse
+  {
+    $$ = BoolVal(false)
+  }
 | boolean_expression tokAnd boolean_expression
   {
     $$ = &AndExpr{Op: string($2), Left: $1, Right: $3}
@@ -730,39 +761,39 @@ boolean_expression:
 condition:
   value_expression compare value_expression
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $3}
+    $$ = &ComparisonExpr{Left: $1, Operator: ComparisonOp($2), Right: $3}
   }
 | value_expression tokIn tuple
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: astIn, Right: $3}
+    $$ = &ComparisonExpr{Left: $1, Operator: In, Right: $3}
   }
 | value_expression tokNot tokIn tuple
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: astNotIn, Right: $4}
+    $$ = &ComparisonExpr{Left: $1, Operator: NotIn, Right: $4}
   }
 | value_expression tokLike value_expression
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: astLike, Right: $3}
+    $$ = &ComparisonExpr{Left: $1, Operator: Like, Right: $3}
   }
 | value_expression tokNot tokLike value_expression
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: astNotLike, Right: $4}
+    $$ = &ComparisonExpr{Left: $1, Operator: NotLike, Right: $4}
   }
 | value_expression tokBetween value_expression tokAnd value_expression
   {
-    $$ = &RangeCond{Left: $1, Operator: astBetween, From: $3, To: $5}
+    $$ = &RangeCond{Not: false, Left: $1, From: $3, To: $5}
   }
 | value_expression tokNot tokBetween value_expression tokAnd value_expression
   {
-    $$ = &RangeCond{Left: $1, Operator: astNotBetween, From: $4, To: $6}
+    $$ = &RangeCond{Not: true, Left: $1, From: $4, To: $6}
   }
 | value_expression tokIs tokNull
   {
-    $$ = &NullCheck{Operator: astNull, Expr: $1}
+    $$ = &NullCheck{Not: false, Expr: $1}
   }
 | value_expression tokIs tokNot tokNull
   {
-    $$ = &NullCheck{Operator: astNotNull, Expr: $1}
+    $$ = &NullCheck{Not: true, Expr: $1}
   }
 | tokExists subquery
   {
@@ -772,31 +803,31 @@ condition:
 compare:
   '='
   {
-    $$ = astEQ
+    $$ = int(EQ)
   }
 | '<'
   {
-    $$ = astLT
+    $$ = int(LT)
   }
 | '>'
   {
-    $$ = astGT
+    $$ = int(GT)
   }
 | tokLE
   {
-    $$ = astLE
+    $$ = int(LE)
   }
 | tokGE
   {
-    $$ = astGE
+    $$ = int(GE)
   }
 | tokNE
   {
-    $$ = astNE
+    $$ = int(NE)
   }
 | tokNullSafeEqual
   {
-    $$ = astNSE
+    $$ = int(NullSafeEqual)
   }
 
 row_list:
@@ -860,50 +891,43 @@ value_expression:
   }
 | value_expression '&' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astBitand, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Bitand, Right: $3}
   }
 | value_expression '|' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astBitor, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Bitor, Right: $3}
   }
 | value_expression '^' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astBitxor, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Bitxor, Right: $3}
   }
 | value_expression '+' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astPlus, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Plus, Right: $3}
   }
 | value_expression '-' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astMinus, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Minus, Right: $3}
   }
 | value_expression '*' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astMult, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Mult, Right: $3}
   }
 | value_expression '/' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astDiv, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Div, Right: $3}
   }
 | value_expression '%' value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: astMod, Right: $3}
+    $$ = &BinaryExpr{Left: $1, Operator: Mod, Right: $3}
+  }
+| value_expression tokConcat value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: Concat, Right: $3}
   }
 | unary_operator value_expression %prec tokUnary
   {
-    if num, ok := $2.(NumVal); ok {
-      switch $1 {
-      case '-':
-        $$ = NumVal("-" + string(num))
-      case '+':
-        $$ = num
-      default:
-        $$ = &UnaryExpr{Operator: $1, Expr: $2}
-      }
-    } else {
-      $$ = &UnaryExpr{Operator: $1, Expr: $2}
-    }
+    $$ = &UnaryExpr{Operator: UnaryOp($1), Expr: $2}
   }
 | sql_id '(' ')'
   {
@@ -939,15 +963,15 @@ keyword_as_func:
 unary_operator:
   '+'
   {
-    $$ = astUnaryPlus
+    $$ = int(UnaryPlus)
   }
 | '-'
   {
-    $$ = astUnaryMinus
+    $$ = int(UnaryMinus)
   }
 | '~'
   {
-    $$ = astTilda
+    $$ = int(UnaryComplement)
   }
 
 case_expression:
@@ -1005,6 +1029,14 @@ value:
   {
     $$ = StrVal($1)
   }
+| tokInteger
+  {
+    i, ok := parseUint64(yylex, $1)
+    if !ok {
+      return 1
+    }
+    $$ = IntVal(i)
+  }
 | tokNumber
   {
     $$ = NumVal($1)
@@ -1012,6 +1044,14 @@ value:
 | tokValueArg
   {
     $$ = ValArg($1)
+  }
+| tokTrue
+  {
+    $$ = BoolVal(true)
+  }
+| tokFalse
+  {
+    $$ = BoolVal(false)
   }
 | tokNull
   {
@@ -1199,7 +1239,7 @@ int_opt:
   { $$ = $2 }
 
 int_val:
-  tokNumber
+  tokInteger
   {
     i, ok := parseInt(yylex, $1)
     if !ok {

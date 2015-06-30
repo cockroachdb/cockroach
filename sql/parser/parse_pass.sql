@@ -1,3 +1,6 @@
+SELECT 1+1
+SELECT true AND false
+SELECT true = false
 SELECT 1 FROM t
 SELECT .1 FROM t
 SELECT 1.2e1 FROM t
@@ -61,11 +64,12 @@ SELECT /* WHERE */ 1 FROM t WHERE a = b
 SELECT /* AND */ 1 FROM t WHERE a = b AND a = c
 SELECT /* && */ 1 FROM t WHERE a = b && a = c
 SELECT /* OR */ 1 FROM t WHERE a = b OR a = c
-SELECT /* || */ 1 FROM t WHERE a = b || a = c
 SELECT /* NOT */ 1 FROM t WHERE NOT a = b
 SELECT /* ! */ 1 FROM t WHERE ! a = b
 SELECT /* EXISTS */ 1 FROM t WHERE EXISTS (SELECT 1 FROM t)
 SELECT /* (boolean) */ 1 FROM t WHERE NOT (a = b)
+SELECT /* (boolean) */ 1 FROM t WHERE NOT true
+SELECT /* (boolean) */ 1 FROM t WHERE NOT false
 SELECT /* IN value list */ 1 FROM t WHERE a IN (b, c)
 SELECT /* IN SELECT */ 1 FROM t WHERE a IN (SELECT 1 FROM t)
 SELECT /* NOT IN */ 1 FROM t WHERE a NOT IN (b, c)
@@ -94,6 +98,7 @@ SELECT /* - */ 1 FROM t WHERE a = b-c
 SELECT /* * */ 1 FROM t WHERE a = b*c
 SELECT /* / */ 1 FROM t WHERE a = b/c
 SELECT /* % */ 1 FROM t WHERE a = b%c
+SELECT /* || */ 1 FROM t WHERE a = b||c
 SELECT /* u+ */ 1 FROM t WHERE a = +b
 SELECT /* u- */ 1 FROM t WHERE a = -b
 SELECT /* u~ */ 1 FROM t WHERE a = ~b
@@ -119,9 +124,9 @@ SELECT /* value argument with dot */ :a.b FROM t
 SELECT /* positional argument */ ? FROM t#SELECT /* positional argument */ :v1 FROM t
 SELECT /* multiple positional arguments */ ?, ? FROM t#SELECT /* multiple positional arguments */ :v1, :v2 FROM t
 SELECT /* NULL */ NULL FROM t
-SELECT /* octal */ 010 FROM t
-SELECT /* hex */ 0xf0 FROM t
-SELECT /* hex caps */ 0xF0 FROM t
+SELECT /* octal */ 010 FROM t#SELECT /* octal */ 8 FROM t
+SELECT /* hex */ 0xf0 FROM t#SELECT /* hex */ 240 FROM t
+SELECT /* hex caps */ 0xF0 FROM t#SELECT /* hex caps */ 240 FROM t
 SELECT /* float */ 0.1 FROM t
 SELECT /* GROUP BY */ 1 FROM t GROUP BY a
 SELECT /* HAVING */ 1 FROM t HAVING a = b
