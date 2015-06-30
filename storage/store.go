@@ -362,10 +362,10 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	}
 
 	// Add range scanner and configure with queues.
-	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s), s.updateStoreStatus)
+	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
 	s.gcQueue = newGCQueue()
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
-	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
+	s.verifyQueue = newVerifyQueue(s.RangeCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
 	s.rangeGCQueue = newRangeGCQueue(s.db)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue(), s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
@@ -1189,9 +1189,7 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.mu.RLock()
-	capacity.RangeCount = int32(len(s.ranges))
-	s.mu.RUnlock()
+	capacity.RangeCount = int32(s.RangeCount())
 	// Initialize the store descriptor.
 	return &proto.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
@@ -1199,6 +1197,13 @@ func (s *Store) Descriptor() (*proto.StoreDescriptor, error) {
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
 	}, nil
+}
+
+// RangeCount returns the number of ranges contained by this store.
+func (s *Store) RangeCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.ranges)
 }
 
 // ExecuteCmd fetches a range based on the header's replica, assembles
@@ -1592,13 +1597,6 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 	return status, nil
 }
 
-// WaitForRangeScanCompletion waits until the next range scan is complete and
-// returns the total number of scans completed so far.  This is exposed for use
-// in unit tests.
-func (s *Store) WaitForRangeScanCompletion() int64 {
-	return s.scanner.WaitForScanCompletion()
-}
-
 // computeReplicationStatus counts a number of simple replication statistics for
 // the ranges in this store.
 // TODO(bram): It may be appropriate to compute these statistics while scanning
@@ -1653,38 +1651,6 @@ func (s *Store) computeReplicationStatus(now int64) (
 		}
 	}
 	return
-}
-
-// updateStoreStatus updates the store's status proto.
-func (s *Store) updateStoreStatus() {
-	now := s.ctx.Clock.Now().WallTime
-	scannerStats := s.scanner.Stats()
-
-	// Get the leader count and replication count.
-	leaderRangeCount, replicatedRangeCount, availableRangeCount :=
-		s.computeReplicationStatus(now)
-
-	// Generate and store a StoreStatus object.
-	desc, err := s.Descriptor()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	status := &StoreStatus{
-		Desc:                 *desc,
-		NodeID:               s.Ident.NodeID,
-		UpdatedAt:            now,
-		StartedAt:            s.startedAt,
-		RangeCount:           int32(scannerStats.RangeCount),
-		Stats:                engine.MVCCStats(scannerStats.MVCC),
-		LeaderRangeCount:     leaderRangeCount,
-		ReplicatedRangeCount: replicatedRangeCount,
-		AvailableRangeCount:  availableRangeCount,
-	}
-	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
-	if err := s.db.Put(key, status); err != nil {
-		log.Error(err)
-	}
 }
 
 // PublishStatus publishes periodically computed status events to the store's

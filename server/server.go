@@ -25,11 +25,13 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -65,6 +67,7 @@ type Server struct {
 	kvDB          *kv.DBServer
 	sqlServer     *sqlserver.Server
 	node          *Node
+	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
 	status        *statusServer
 	tsDB          *ts.DB
@@ -177,13 +180,16 @@ func (s *Server) Start(selfBootstrap bool) error {
 		return err
 	}
 
-	// Begin recording time series data collected by the status monitor.
-	recorder := status.NewNodeStatusRecorder(s.node.status, s.clock)
-	s.tsDB.PollSource(recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
-
 	// Begin recording runtime statistics.
 	runtime := status.NewRuntimeStatRecorder(s.node.Descriptor.NodeID, s.clock)
 	s.tsDB.PollSource(runtime, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
+
+	// Begin recording time series data collected by the status monitor.
+	s.recorder = status.NewNodeStatusRecorder(s.node.status, s.clock)
+	s.tsDB.PollSource(s.recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
+
+	// Begin recording status summaries.
+	s.startWriteSummaries()
 
 	log.Infof("starting %s server at %s", s.ctx.RequestScheme(), s.rpc.Addr())
 	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.
@@ -233,6 +239,56 @@ func (s *Server) authenticateRequest(handler http.Handler) func(http.ResponseWri
 		}
 		handler.ServeHTTP(w, r)
 	}
+}
+
+// startWriteSummaries begins periodically persisting status summaries for the
+// node and its stores.
+func (s *Server) startWriteSummaries() {
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(s.ctx.MetricsFrequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := s.writeSummaries(); err != nil {
+					log.Error(err)
+				}
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// writeSummaries retrieves status summaries from the supplied
+// NodeStatusRecorder and persists them to the cockroach data store.
+func (s *Server) writeSummaries() error {
+	if !s.stopper.StartTask() {
+		return nil
+	}
+	defer s.stopper.FinishTask()
+
+	nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
+	if nodeStatus != nil {
+		key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
+		if err := s.db.Put(key, nodeStatus); err != nil {
+			return err
+		}
+		if log.V(1) {
+			log.Infof("recorded status for node %d", nodeStatus.Desc.NodeID)
+		}
+	}
+
+	for _, ss := range storeStatuses {
+		key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
+		if err := s.db.Put(key, &ss); err != nil {
+			return err
+		}
+	}
+	if log.V(1) {
+		log.Infof("recorded status for %d stores", len(storeStatuses))
+	}
+	return nil
 }
 
 // Stop stops the server.

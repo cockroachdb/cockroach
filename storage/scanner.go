@@ -19,9 +19,7 @@ package storage
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -72,13 +70,11 @@ type storeStats struct {
 // interval).  Each range is tested for inclusion in a sequence of
 // prioritized range queues.
 type rangeScanner struct {
-	targetInterval time.Duration  // Target duration interval for scan loop
-	maxIdleTime    time.Duration  // Max idle time for scan loop
-	ranges         rangeSet       // Ranges to be scanned
-	queues         []rangeQueue   // Range queues managed by this scanner
-	removed        chan *Range    // Ranges to remove from queues
-	stats          unsafe.Pointer // Latest store stats object; updated atomically
-	scanFn         func()         // Function called at each complete scan iteration
+	targetInterval time.Duration // Target duration interval for scan loop
+	maxIdleTime    time.Duration // Max idle time for scan loop
+	ranges         rangeSet      // Ranges to be scanned
+	queues         []rangeQueue  // Range queues managed by this scanner
+	removed        chan *Range   // Ranges to remove from queues
 	// Count of times and total duration through the scanning loop but locked by the completedScan
 	// mutex.
 	completedScan *sync.Cond
@@ -89,15 +85,12 @@ type rangeScanner struct {
 // newRangeScanner creates a new range scanner with the provided loop intervals,
 // range set, and range queues.  If scanFn is not nil, after a complete
 // loop that function will be called.
-func newRangeScanner(targetInterval, maxIdleTime time.Duration, ranges rangeSet,
-	scanFn func()) *rangeScanner {
+func newRangeScanner(targetInterval, maxIdleTime time.Duration, ranges rangeSet) *rangeScanner {
 	return &rangeScanner{
 		targetInterval: targetInterval,
 		maxIdleTime:    maxIdleTime,
 		ranges:         ranges,
 		removed:        make(chan *Range, 10),
-		stats:          unsafe.Pointer(&storeStats{RangeCount: ranges.EstimatedCount()}),
-		scanFn:         scanFn,
 		completedScan:  sync.NewCond(&sync.Mutex{}),
 	}
 }
@@ -114,14 +107,6 @@ func (rs *rangeScanner) Start(clock *hlc.Clock, stopper *util.Stopper) {
 		queue.Start(clock, stopper)
 	}
 	rs.scanLoop(clock, stopper)
-}
-
-// Stats returns store stats from the most recently completed scan of
-// all ranges. A scanner which hasn't fully scanned the ranges will
-// return a stats object with MVCC stats empty and only an estimate
-// for RangeCount.
-func (rs *rangeScanner) Stats() storeStats {
-	return *(*storeStats)(atomic.LoadPointer(&rs.stats))
 }
 
 // Count returns the number of times the scanner has cycled through
@@ -182,7 +167,7 @@ func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 // to be stopped. The method also removes a range from queues when it
 // is signaled via the removed channel.
 func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *util.Stopper,
-	stats *storeStats, rng *Range) bool {
+	rng *Range) bool {
 	waitInterval := rs.paceInterval(start, time.Now())
 	nextTime := time.After(waitInterval)
 	if log.V(6) {
@@ -201,9 +186,6 @@ func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stoppe
 			for _, q := range rs.queues {
 				q.MaybeAdd(rng, clock.Now())
 			}
-			stats.RangeCount++
-			ms := rng.stats.GetMVCC()
-			stats.MVCC.Add(&ms)
 			stopper.FinishTask()
 			return false
 		case rng := <-rs.removed:
@@ -226,18 +208,17 @@ func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stoppe
 func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		start := time.Now()
-		stats := &storeStats{}
 
 		for {
 			if rs.ranges.EstimatedCount() == 0 {
 				// Just wait without processing any range.
-				if rs.waitAndProcess(start, clock, stopper, stats, nil) {
+				if rs.waitAndProcess(start, clock, stopper, nil) {
 					break
 				}
 			} else {
 				shouldStop := true
 				rs.ranges.Visit(func(rng *Range) bool {
-					shouldStop = rs.waitAndProcess(start, clock, stopper, stats, rng)
+					shouldStop = rs.waitAndProcess(start, clock, stopper, rng)
 					return !shouldStop
 				})
 				if shouldStop {
@@ -250,13 +231,6 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				break
 			}
 
-			// We're done with the iteration.
-			// Store the most recent scan results in the scanner's stats.
-			atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
-			stats = &storeStats{}
-			if rs.scanFn != nil {
-				rs.scanFn()
-			}
 			// Increment iteration count.
 			rs.completedScan.L.Lock()
 			rs.count++
