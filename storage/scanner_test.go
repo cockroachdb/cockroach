@@ -189,7 +189,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	// We don't want to actually consume entries from the queues during this test.
 	q1.setDisabled(true)
 	q2.setDisabled(true)
-	s := newRangeScanner(1*time.Millisecond, 0, ranges, nil)
+	s := newRangeScanner(1*time.Millisecond, 0, ranges)
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -239,7 +239,7 @@ func TestScannerTiming(t *testing.T) {
 	for i, duration := range durations {
 		ranges := newTestRangeSet(count, t)
 		q := &testQueue{}
-		s := newRangeScanner(duration, 0, ranges, nil)
+		s := newRangeScanner(duration, 0, ranges)
 		s.AddQueues(q)
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
@@ -277,16 +277,16 @@ func TestScannerPaceInterval(t *testing.T) {
 	for _, duration := range durations {
 		startTime := time.Now()
 		ranges := newTestRangeSet(count, t)
-		s := newRangeScanner(duration, 0, ranges, nil)
+		s := newRangeScanner(duration, 0, ranges)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
 		// The range set is empty
 		ranges = newTestRangeSet(0, t)
-		s = newRangeScanner(duration, 0, ranges, nil)
+		s = newRangeScanner(duration, 0, ranges)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
 		ranges = newTestRangeSet(count, t)
-		s = newRangeScanner(duration, 0, ranges, nil)
+		s = newRangeScanner(duration, 0, ranges)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
@@ -298,7 +298,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
-	s := newRangeScanner(1*time.Millisecond, 0, ranges, nil)
+	s := newRangeScanner(1*time.Millisecond, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -308,39 +308,5 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	time.Sleep(3 * time.Millisecond)
 	if count := s.Count(); count > 3 {
 		t.Errorf("expected three loops; got %d", count)
-	}
-}
-
-// TestScannerStats verifies that stats accumulate from all ranges.
-func TestScannerStats(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	const count = 3
-	ranges := newTestRangeSet(count, t)
-	q := &testQueue{}
-	stopper := util.NewStopper()
-	defer stopper.Stop()
-	s := newRangeScanner(1*time.Millisecond, 0, ranges, nil)
-	s.AddQueues(q)
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
-	// At start, scanner stats should be blank for MVCC, but have accurate number of ranges.
-	if rc := s.Stats().RangeCount; rc != count {
-		t.Errorf("range count expected %d; got %d", count, rc)
-	}
-	if vb := s.Stats().MVCC.ValBytes; vb != 0 {
-		t.Errorf("value bytes expected %d; got %d", 0, vb)
-	}
-	s.Start(clock, stopper)
-	// We expect a full run to accumulate stats from all ranges.
-	if err := util.IsTrueWithin(func() bool {
-		if rc := s.Stats().RangeCount; rc != count {
-			return false
-		}
-		if vb := s.Stats().MVCC.ValBytes; vb != count*2 {
-			return false
-		}
-		return true
-	}, 100*time.Millisecond); err != nil {
-		t.Error(err)
 	}
 }

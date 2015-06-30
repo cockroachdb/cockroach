@@ -18,6 +18,9 @@
 package status
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -38,6 +41,43 @@ type CallSuccessEvent struct {
 type CallErrorEvent struct {
 	NodeID proto.NodeID
 	Method proto.Method
+}
+
+// TestSyncEvent is intended for testing only; it can be used by tests to
+// synchronize with feed consumers.
+type TestSyncEvent struct {
+	count  int32
+	closer chan struct{}
+}
+
+// NewTestSyncEvent creates a new TestSyncEvent which expects to be consumed by
+// the given number of consumers.
+func NewTestSyncEvent(expectedConsumers int32) *TestSyncEvent {
+	return &TestSyncEvent{
+		count:  expectedConsumers,
+		closer: make(chan struct{}),
+	}
+}
+
+// Sync will wait for the TestSyncEvent to be consumed by the expected number of
+// consumers, returning an error if the event is not consumed within the
+// specified timeout. If the TestSyncEvent has already been sufficiently
+// consumed, Sync will return immediately.
+func (tse *TestSyncEvent) Sync(timeout time.Duration) error {
+	select {
+	case <-tse.closer:
+		return nil
+	case <-time.After(timeout):
+		return util.Errorf("failed to synchronize with feed after specified timeout (%s)", timeout)
+	}
+}
+
+// consume is called by NodeEventListener when it receives a TestSyncEvent.
+func (tse *TestSyncEvent) consume() {
+	val := atomic.AddInt32(&tse.count, -1)
+	if val == 0 {
+		close(tse.closer)
+	}
 }
 
 // NodeEventFeed is a helper structure which publishes node-specific events to a
@@ -108,6 +148,8 @@ func ProcessNodeEvents(l NodeEventListener, sub *util.Subscription) {
 			l.OnCallSuccess(specificEvent)
 		case *CallErrorEvent:
 			l.OnCallError(specificEvent)
+		case *TestSyncEvent:
+			specificEvent.consume()
 		}
 	}
 }

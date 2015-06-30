@@ -32,21 +32,21 @@ const (
 	verificationInterval = 60 * 24 * time.Hour // 60 days
 )
 
-// storeStatsFn returns the store stats for the store which owns this
-// verification queue.
-type storeStatsFn func() storeStats
+// rangeCountFn should return the total number of ranges on the store providing
+// ranges to this queue.
+type rangeCountFn func() int
 
 // verifyQueue periodically verifies on-disk checksums to identify
 // bit-rot in read-only data sets. See
 // http://en.wikipedia.org/wiki/Data_degradation.
 type verifyQueue struct {
-	stats storeStatsFn
+	countFn rangeCountFn
 	*baseQueue
 }
 
 // newVerifyQueue returns a new instance of verifyQueue.
-func newVerifyQueue(stats storeStatsFn) *verifyQueue {
-	vq := &verifyQueue{stats: stats}
+func newVerifyQueue(countFn rangeCountFn) *verifyQueue {
+	vq := &verifyQueue{countFn: countFn}
 	vq.baseQueue = newBaseQueue("verify", vq, verifyQueueMaxSize)
 	return vq
 }
@@ -103,5 +103,5 @@ func (vq *verifyQueue) process(now proto.Timestamp, rng *Range) error {
 // verification scans. The durations are sized so that the full
 // complement of ranges can be scanned within verificationInterval.
 func (vq *verifyQueue) timer() time.Duration {
-	return time.Duration(verificationInterval.Nanoseconds() / int64((vq.stats().RangeCount + 1)))
+	return time.Duration(verificationInterval.Nanoseconds() / int64((vq.countFn() + 1)))
 }

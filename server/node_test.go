@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // createTestNode creates an rpc server using the specified address,
@@ -265,27 +264,14 @@ func TestCorruptedClusterID(t *testing.T) {
 // the bytes and counts for Live, Key and Val are at least the expected value.
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
-func compareNodeStatus(t *testing.T, node *Node, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
-	nodeStatusKey := keys.NodeStatusKey(int32(node.Descriptor.NodeID))
-	request := &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: nodeStatusKey,
-		},
-	}
-	ns := (*nodeServer)(node)
-	response := &proto.GetResponse{}
-	if err := ns.Get(request, response); err != nil {
-		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
-	}
-	if response.Value == nil {
-		t.Errorf("%d: could not find node status at: %s", testNumber, nodeStatusKey)
-	}
+func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
+	nodeStatusKey := keys.NodeStatusKey(int32(ts.node.Descriptor.NodeID))
 	nodeStatus := &status.NodeStatus{}
-	if err := gogoproto.Unmarshal(response.Value.GetBytes(), nodeStatus); err != nil {
-		t.Fatalf("%d: could not unmarshal store status: %s", testNumber, err)
+	if err := ts.db.GetProto(nodeStatusKey, nodeStatus); err != nil {
+		t.Fatalf("%v: failure getting node status: %s", testNumber, err)
 	}
 
-	// There values must be equal.
+	// These values must be equal.
 	if a, e := nodeStatus.RangeCount, expectedNodeStatus.RangeCount; a != e {
 		t.Errorf("%d: RangeCount does not match expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
@@ -296,7 +282,7 @@ func compareNodeStatus(t *testing.T, node *Node, expectedNodeStatus *status.Node
 		t.Errorf("%d: ReplicatedRangeCount does not match expected.\nexpected: %d actual: %d", testNumber, e, a)
 	}
 
-	// There values must >= to the older value.
+	// These values must >= to the older value.
 	// If StartedAt is 0, we skip this test as we don't have the base value yet.
 	if a, e := nodeStatus.StartedAt, expectedNodeStatus.StartedAt; e > 0 && e != a {
 		t.Errorf("%d: StartedAt does not match expected.\nexpected: %d actual: %d", testNumber, e, a)
@@ -341,20 +327,78 @@ func compareNodeStatus(t *testing.T, node *Node, expectedNodeStatus *status.Node
 	return nodeStatus
 }
 
-// TestNodeStatus verifies that the store scanner correctly updates the node's
-// status.
-func TestNodeStatus(t *testing.T) {
+// compareStoreStatus ensures that the actual store status for the passed in
+// store is updated correctly. It checks that the Desc.StoreID, Desc.Attrs,
+// Desc.Node, Desc.Capacity.Capacity, NodeID, RangeCount, ReplicatedRangeCount
+// are exactly correct and that the bytes and counts for Live, Key and Val are
+// at least the expected value.
+// The latest actual stats are returned.
+func compareStoreStatus(t *testing.T, ts *TestServer, store *storage.Store, expectedStoreStatus *storage.StoreStatus, testNumber int) *storage.StoreStatus {
+	// Retrieve store status from database.
+	storeStatusKey := keys.StoreStatusKey(int32(store.Ident.StoreID))
+	storeStatus := &storage.StoreStatus{}
+	if err := ts.db.GetProto(storeStatusKey, storeStatus); err != nil {
+		t.Fatalf("%v: failure getting store status: %s", testNumber, err)
+	}
+
+	// Values must match exactly.
+	if a, e := storeStatus.Desc.StoreID, expectedStoreStatus.Desc.StoreID; a != e {
+		t.Errorf("%d: actual Desc.StoreID does not match expected. expected: %d actual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.Desc.Attrs, expectedStoreStatus.Desc.Attrs; !reflect.DeepEqual(a, e) {
+		t.Errorf("%d: actual Desc.Attrs does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
+	}
+	if a, e := storeStatus.Desc.Node, expectedStoreStatus.Desc.Node; !reflect.DeepEqual(a, e) {
+		t.Errorf("%d: actual Desc.Attrs does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
+	}
+	if a, e := storeStatus.Desc.Capacity.Capacity, expectedStoreStatus.Desc.Capacity.Capacity; a != e {
+		t.Errorf("%d: actual Desc.Capacity.Capacity does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.NodeID, expectedStoreStatus.NodeID; a != e {
+		t.Errorf("%d: actual node ID does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.RangeCount, expectedStoreStatus.RangeCount; a != e {
+		t.Errorf("%d: actual RangeCount does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.ReplicatedRangeCount, expectedStoreStatus.ReplicatedRangeCount; a != e {
+		t.Errorf("%d: actual ReplicatedRangeCount does not match expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+
+	// Values should be >= to expected values.
+	if a, e := storeStatus.Stats.LiveBytes, expectedStoreStatus.Stats.LiveBytes; a < e {
+		t.Errorf("%d: actual Live Bytes is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.Stats.KeyBytes, expectedStoreStatus.Stats.KeyBytes; a < e {
+		t.Errorf("%d: actual Key Bytes is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.Stats.ValBytes, expectedStoreStatus.Stats.ValBytes; a < e {
+		t.Errorf("%d: actual Val Bytes is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.Stats.LiveCount, expectedStoreStatus.Stats.LiveCount; a < e {
+		t.Errorf("%d: actual Live Count is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.Stats.KeyCount, expectedStoreStatus.Stats.KeyCount; a < e {
+		t.Errorf("%d: actual Key Count is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	if a, e := storeStatus.Stats.ValCount, expectedStoreStatus.Stats.ValCount; a < e {
+		t.Errorf("%d: actual Val Count is not greater or equal to expected.\nexpected: %d\nactual: %d", testNumber, e, a)
+	}
+	return storeStatus
+}
+
+// TestStatusSummaries verifies that status summaries are written correctly for
+// both the Node and stores within the node.
+func TestStatusSummaries(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ts := &TestServer{}
 	ts.Ctx = NewTestContext()
-	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
 	ts.StoresPerNode = 3
 	if err := ts.Start(); err != nil {
 		t.Fatal(err)
 	}
 	defer ts.Stop()
-	splitKey := proto.Key("b")
-	content := proto.Key("test content")
+
+	// Retrieve the first store from the Node.
 	s, err := ts.node.lSender.GetStore(proto.StoreID(1))
 	if err != nil {
 		t.Fatal(err)
@@ -362,8 +406,13 @@ func TestNodeStatus(t *testing.T) {
 
 	s.WaitForInit()
 	// Perform a read from the range to ensure that the raft election has
-	// completed.  We do not expect an response.
+	// completed.  We do not expect a response.
 	if _, err := ts.db.Get("a"); err != nil {
+		t.Fatal(err)
+	}
+
+	storeDesc, err := s.Descriptor()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -385,15 +434,54 @@ func TestNodeStatus(t *testing.T) {
 			ValCount:  1,
 		},
 	}
+	expectedStoreStatus := &storage.StoreStatus{
+		Desc:                 *storeDesc,
+		NodeID:               1,
+		RangeCount:           1,
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  1,
+		ReplicatedRangeCount: 0,
+		Stats: engine.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: 1,
+			KeyCount:  1,
+			ValCount:  1,
+		},
+	}
 
-	// Always wait twice, to ensure a full scan has occurred.
-	s.WaitForRangeScanCompletion()
-	s.WaitForRangeScanCompletion()
-	ts.node.waitForScanCompletion()
-	ts.node.waitForScanCompletion()
-	oldStats := compareNodeStatus(t, ts.node, expectedNodeStatus, 0)
+	// Function to ensure that the event feed has been fully flushed.
+	syncFeed := func() {
+		syncEvent := status.NewTestSyncEvent(1)
+		ts.EventFeed().Publish(syncEvent)
+		if err := syncEvent.Sync(5 * time.Second); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Function to force summaries to be written synchronously, including all
+	// data currently in the event pipeline. Only one of the stores has
+	// replicas, so there are no concerns related to quorum writes; if there
+	// were multiple replicas, more care would need to be taken in the initial
+	// syncFeed().
+	forceWriteStatus := func() {
+		syncFeed()
+		if err := ts.node.publishStoreStatuses(); err != nil {
+			t.Fatalf("error publishing store statuses: %s", err)
+		}
+		syncFeed()
+		if err := ts.writeSummaries(); err != nil {
+			t.Fatalf("error writing summaries: %s", err)
+		}
+	}
+
+	forceWriteStatus()
+	oldNodeStats := compareNodeStatus(t, ts, expectedNodeStatus, 0)
+	oldStoreStats := compareStoreStatus(t, ts, s, expectedStoreStatus, 0)
 
 	// Write some values left and right of the proposed split key.
+	content := proto.Key("test content")
 	if err := ts.db.Put("a", content); err != nil {
 		t.Fatal(err)
 	}
@@ -404,8 +492,8 @@ func TestNodeStatus(t *testing.T) {
 	expectedNodeStatus = &status.NodeStatus{
 		RangeCount:           1,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
-		StartedAt:            oldStats.StartedAt,
-		UpdatedAt:            oldStats.UpdatedAt,
+		StartedAt:            oldNodeStats.StartedAt,
+		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
@@ -414,18 +502,34 @@ func TestNodeStatus(t *testing.T) {
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
-			LiveCount: oldStats.Stats.LiveCount + 1,
-			KeyCount:  oldStats.Stats.KeyCount + 1,
-			ValCount:  oldStats.Stats.ValCount + 1,
+			LiveCount: oldNodeStats.Stats.LiveCount + 1,
+			KeyCount:  oldNodeStats.Stats.KeyCount + 1,
+			ValCount:  oldNodeStats.Stats.ValCount + 1,
 		},
 	}
-	s.WaitForRangeScanCompletion()
-	s.WaitForRangeScanCompletion()
-	ts.node.waitForScanCompletion()
-	ts.node.waitForScanCompletion()
-	oldStats = compareNodeStatus(t, ts.node, expectedNodeStatus, 1)
+	expectedStoreStatus = &storage.StoreStatus{
+		Desc:                 oldStoreStats.Desc,
+		NodeID:               1,
+		RangeCount:           1,
+		LeaderRangeCount:     1,
+		AvailableRangeCount:  1,
+		ReplicatedRangeCount: 0,
+		Stats: engine.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldStoreStats.Stats.LiveCount + 1,
+			KeyCount:  oldStoreStats.Stats.KeyCount + 1,
+			ValCount:  oldStoreStats.Stats.ValCount + 1,
+		},
+	}
+
+	forceWriteStatus()
+	oldNodeStats = compareNodeStatus(t, ts, expectedNodeStatus, 1)
+	oldStoreStats = compareStoreStatus(t, ts, s, expectedStoreStatus, 1)
 
 	// Split the range.
+	splitKey := proto.Key("b")
 	rng := s.LookupRange(splitKey, nil)
 	args := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
@@ -447,8 +551,8 @@ func TestNodeStatus(t *testing.T) {
 	expectedNodeStatus = &status.NodeStatus{
 		RangeCount:           2,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
-		StartedAt:            oldStats.StartedAt,
-		UpdatedAt:            oldStats.UpdatedAt,
+		StartedAt:            oldNodeStats.StartedAt,
+		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
@@ -457,16 +561,30 @@ func TestNodeStatus(t *testing.T) {
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
-			LiveCount: oldStats.Stats.LiveCount,
-			KeyCount:  oldStats.Stats.KeyCount,
-			ValCount:  oldStats.Stats.ValCount,
+			LiveCount: oldNodeStats.Stats.LiveCount,
+			KeyCount:  oldNodeStats.Stats.KeyCount,
+			ValCount:  oldNodeStats.Stats.ValCount,
 		},
 	}
-	s.WaitForRangeScanCompletion()
-	s.WaitForRangeScanCompletion()
-	ts.node.waitForScanCompletion()
-	ts.node.waitForScanCompletion()
-	oldStats = compareNodeStatus(t, ts.node, expectedNodeStatus, 2)
+	expectedStoreStatus = &storage.StoreStatus{
+		Desc:                 oldStoreStats.Desc,
+		NodeID:               1,
+		RangeCount:           2,
+		LeaderRangeCount:     2,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
+		Stats: engine.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldStoreStats.Stats.LiveCount,
+			KeyCount:  oldStoreStats.Stats.KeyCount,
+			ValCount:  oldStoreStats.Stats.ValCount,
+		},
+	}
+	forceWriteStatus()
+	oldNodeStats = compareNodeStatus(t, ts, expectedNodeStatus, 2)
+	oldStoreStats = compareStoreStatus(t, ts, s, expectedStoreStatus, 2)
 
 	// Write some values left and right of the proposed split key.
 	if err := ts.db.Put("aa", content); err != nil {
@@ -479,8 +597,8 @@ func TestNodeStatus(t *testing.T) {
 	expectedNodeStatus = &status.NodeStatus{
 		RangeCount:           2,
 		StoreIDs:             []proto.StoreID{1, 2, 3},
-		StartedAt:            oldStats.StartedAt,
-		UpdatedAt:            oldStats.UpdatedAt,
+		StartedAt:            oldNodeStats.StartedAt,
+		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
@@ -489,14 +607,28 @@ func TestNodeStatus(t *testing.T) {
 			LiveBytes: 1,
 			KeyBytes:  1,
 			ValBytes:  1,
-			LiveCount: oldStats.Stats.LiveCount + 1,
-			KeyCount:  oldStats.Stats.KeyCount + 1,
-			ValCount:  oldStats.Stats.ValCount + 1,
+			LiveCount: oldNodeStats.Stats.LiveCount + 1,
+			KeyCount:  oldNodeStats.Stats.KeyCount + 1,
+			ValCount:  oldNodeStats.Stats.ValCount + 1,
 		},
 	}
-	s.WaitForRangeScanCompletion()
-	s.WaitForRangeScanCompletion()
-	ts.node.waitForScanCompletion()
-	ts.node.waitForScanCompletion()
-	compareNodeStatus(t, ts.node, expectedNodeStatus, 3)
+	expectedStoreStatus = &storage.StoreStatus{
+		Desc:                 oldStoreStats.Desc,
+		NodeID:               1,
+		RangeCount:           2,
+		LeaderRangeCount:     2,
+		AvailableRangeCount:  2,
+		ReplicatedRangeCount: 0,
+		Stats: engine.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldStoreStats.Stats.LiveCount + 1,
+			KeyCount:  oldStoreStats.Stats.KeyCount + 1,
+			ValCount:  oldStoreStats.Stats.ValCount + 1,
+		},
+	}
+	forceWriteStatus()
+	compareNodeStatus(t, ts, expectedNodeStatus, 3)
+	compareStoreStatus(t, ts, s, expectedStoreStatus, 3)
 }

@@ -294,10 +294,26 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 		t.Fatal(err)
 	}
 
-	// Make sure the node is spun up and that a full scan of the ranges in the
-	// stores is complete.  The best way to do that is to wait twice.
-	ts.node.waitForScanCompletion()
-	ts.node.waitForScanCompletion()
+	// Make sure the range is spun up with an arbitrary read command. We do not
+	// expect a specific response.
+	if _, err := ts.db.Get("a"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure the node status is available. This is done by forcing stores to
+	// publish their status, synchronizing to the event feed with a canary
+	// event, and then forcing the server to write summaries immediately.
+	if err := ts.node.publishStoreStatuses(); err != nil {
+		t.Fatalf("error publishing store statuses: %s", err)
+	}
+	syncEvent := status.NewTestSyncEvent(1)
+	ts.EventFeed().Publish(syncEvent)
+	if err := syncEvent.Sync(5 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.writeSummaries(); err != nil {
+		t.Fatalf("error writing summaries: %s", err)
+	}
 
 	body := getRequest(t, ts, keyPrefix)
 	return ts, body

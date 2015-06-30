@@ -20,7 +20,6 @@ package server
 import (
 	"container/list"
 	"net"
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -47,7 +46,7 @@ const (
 	// gossipInterval is the interval for gossiping storage-related info.
 	gossipInterval = 1 * time.Minute
 	// publishStatusInterval is the interval for publishing periodic statistics
-	// from stores.
+	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
 	mb                    = 1 << 20
 )
@@ -69,10 +68,6 @@ type Node struct {
 	feed       status.NodeEventFeed // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
-	// ScanCount is the number of times through the store scanning loop locked
-	// by the completedScan mutex.
-	completedScan *sync.Cond
-	scanCount     int64
 }
 
 // nodeServer is a type alias to separate RPC methods
@@ -170,10 +165,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 // NewNode returns a new instance of Node.
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		ctx:           ctx,
-		status:        status.NewNodeStatusMonitor(),
-		lSender:       kv.NewLocalSender(),
-		completedScan: sync.NewCond(&sync.Mutex{}),
+		ctx:     ctx,
+		status:  status.NewNodeStatusMonitor(),
+		lSender: kv.NewLocalSender(),
 	}
 }
 
@@ -256,7 +250,6 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
 	n.feed.StartNode(n.Descriptor, n.startedAt)
 
-	n.startStoresScanner(stopper)
 	n.startPublishStatuses(stopper)
 	n.startGossip(stopper)
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
@@ -433,84 +426,6 @@ func (n *Node) gossipCapacities() {
 	})
 }
 
-// startStoresScanner will walk through all the stores in the node every
-// ctx.ScanInterval and store the status in the db.
-func (n *Node) startStoresScanner(stopper *util.Stopper) {
-	stopper.RunWorker(func() {
-		// Pick the smaller of the two intervals.
-		var minScanInterval time.Duration
-		if n.ctx.ScanInterval <= n.ctx.ScanMaxIdleTime || n.ctx.ScanMaxIdleTime == 0 {
-			minScanInterval = n.ctx.ScanInterval
-		} else {
-			minScanInterval = n.ctx.ScanMaxIdleTime
-		}
-
-		// TODO(bram): The number of stores is small. The node status should be
-		// updated whenever a store status is updated.
-		for interval := time.Duration(0); true; interval = minScanInterval {
-			select {
-			case <-time.After(interval):
-				if !stopper.StartTask() {
-					continue
-				}
-				// Walk through all the stores on this node.
-				var rangeCount, leaderRangeCount, replicatedRangeCount, availableRangeCount int32
-				stats := &engine.MVCCStats{}
-				accessedStoreIDs := []proto.StoreID{}
-				// will never error because `return nil` below
-				_ = n.lSender.VisitStores(func(store *storage.Store) error {
-					storeStatus, err := store.GetStatus()
-					if err != nil {
-						log.Error(err)
-						return nil
-					}
-					if storeStatus == nil {
-						// The store scanner hasn't run on this node yet.
-						return nil
-					}
-					accessedStoreIDs = append(accessedStoreIDs, store.Ident.StoreID)
-					rangeCount += storeStatus.RangeCount
-					leaderRangeCount += storeStatus.LeaderRangeCount
-					replicatedRangeCount += storeStatus.ReplicatedRangeCount
-					availableRangeCount += storeStatus.AvailableRangeCount
-					stats.Add(&storeStatus.Stats)
-					return nil
-				})
-
-				// Store the combined stats in the db.
-				now := n.ctx.Clock.Now().WallTime
-				status := &status.NodeStatus{
-					Desc:                 n.Descriptor,
-					StoreIDs:             accessedStoreIDs,
-					UpdatedAt:            now,
-					StartedAt:            n.startedAt,
-					RangeCount:           rangeCount,
-					Stats:                *stats,
-					LeaderRangeCount:     leaderRangeCount,
-					ReplicatedRangeCount: replicatedRangeCount,
-					AvailableRangeCount:  availableRangeCount,
-				}
-				key := keys.NodeStatusKey(int32(n.Descriptor.NodeID))
-				if err := n.ctx.DB.Put(key, status); err != nil {
-					log.Error(err)
-				}
-				// Increment iteration count.
-				n.completedScan.L.Lock()
-				n.scanCount++
-				n.completedScan.Broadcast()
-				n.completedScan.L.Unlock()
-				if log.V(6) {
-					log.Infof("store scan iteration completed")
-				}
-				stopper.FinishTask()
-			case <-stopper.ShouldStop():
-				// Exit the loop.
-				return
-			}
-		}
-	})
-}
-
 // startPublishStatuses starts a loop which periodically instructs each store to
 // publish its current status to the event feed.
 func (n *Node) startPublishStatuses(stopper *util.Stopper) {
@@ -537,19 +452,6 @@ func (n *Node) publishStoreStatuses() error {
 	return n.lSender.VisitStores(func(store *storage.Store) error {
 		return store.PublishStatus()
 	})
-}
-
-// waitForScanCompletion waits until the end of the next store scan and returns
-// the total number of scans completed so far.  This is exposed for use in unit
-// tests only.
-func (n *Node) waitForScanCompletion() int64 {
-	n.completedScan.L.Lock()
-	defer n.completedScan.L.Unlock()
-	initalValue := n.scanCount
-	for n.scanCount == initalValue {
-		n.completedScan.Wait()
-	}
-	return n.scanCount
 }
 
 // executeCmd creates a proto.Call struct and sends it via our local sender.
