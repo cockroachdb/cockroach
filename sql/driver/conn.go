@@ -20,15 +20,19 @@ package driver
 import (
 	"bytes"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -50,11 +54,17 @@ import (
 // https://golang.org/pkg/database/sql/driver/#Conn.
 type conn struct {
 	db       *client.DB
+	sender   *httpSender
 	database string
 }
 
 func (c *conn) Close() error {
 	return nil
+}
+
+func createCall(sql string, args []driver.Value) sqlwire.Call {
+	// TODO(vivek): Add arguments later
+	return sqlwire.Call{Args: &sqlwire.Request{Sql: sql}, Reply: &sqlwire.Response{}}
 }
 
 func (c *conn) Prepare(query string) (driver.Stmt, error) {
@@ -95,7 +105,6 @@ func (c *conn) exec(stmt parser.Statement, args []driver.Value) (driver.Result, 
 
 func (c *conn) query(stmt parser.Statement, args []driver.Value) (*rows, error) {
 	// TODO(pmattis): Apply the args to the statement.
-
 	switch p := stmt.(type) {
 	case *parser.CreateDatabase:
 		return c.CreateDatabase(p, args)
@@ -108,18 +117,18 @@ func (c *conn) query(stmt parser.Statement, args []driver.Value) (*rows, error) 
 	case *parser.Select:
 		return c.Select(p, args)
 	case *parser.ShowColumns:
-		return c.ShowColumns(p, args)
+		return c.Send(createCall(stmt.String(), args))
 	case *parser.ShowDatabases:
-		return c.ShowDatabases(p, args)
+		return c.Send(createCall(stmt.String(), args))
 	case *parser.ShowIndex:
-		return c.ShowIndex(p, args)
+		return c.Send(createCall(stmt.String(), args))
 	case *parser.ShowTables:
-		return c.ShowTables(p, args)
+		return c.Send(createCall(stmt.String(), args))
 	case *parser.Update:
 		return c.Update(p, args)
 	case *parser.Use:
-		return c.Use(p, args)
-
+		c.database = p.Name
+		return c.Send(createCall(stmt.String(), args))
 	case *parser.AlterTable:
 	case *parser.AlterView:
 	case *parser.CreateIndex:
@@ -139,6 +148,48 @@ func (c *conn) query(stmt parser.Statement, args []driver.Value) (*rows, error) 
 	}
 
 	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", stmt, stmt)
+}
+
+// Send sends the call to the server.
+func (c *conn) Send(call sqlwire.Call) (*rows, error) {
+	c.sender.Send(context.TODO(), call)
+	resp := call.Reply
+	if resp.Error != nil {
+		return nil, errors.New(resp.Error.Error())
+	}
+	// Translate into rows
+	r := &rows{}
+	// Only use the last result to populate the response
+	index := len(resp.Results) - 1
+	if index < 0 {
+		return r, nil
+	}
+	result := resp.Results[index]
+	r.columns = make([]string, len(result.Columns))
+	for i, column := range result.Columns {
+		r.columns[i] = column
+	}
+	r.rows = make([]row, len(result.Rows))
+	for i, p := range result.Rows {
+		t := make(row, len(p.Values))
+		for j, datum := range p.Values {
+			if datum.BoolVal != nil {
+				t[j] = *datum.BoolVal
+			} else if datum.IntVal != nil {
+				t[j] = *datum.IntVal
+			} else if datum.UintVal != nil {
+				t[j] = *datum.UintVal
+			} else if datum.FloatVal != nil {
+				t[j] = *datum.FloatVal
+			} else if datum.BytesVal != nil {
+				t[j] = datum.BytesVal
+			} else if datum.StringVal != nil {
+				t[j] = *datum.StringVal
+			}
+		}
+		r.rows[i] = t
+	}
+	return r, nil
 }
 
 func (c *conn) CreateDatabase(p *parser.CreateDatabase, args []driver.Value) (*rows, error) {
@@ -371,97 +422,8 @@ func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
 	return r, nil
 }
 
-func (c *conn) ShowColumns(p *parser.ShowColumns, args []driver.Value) (*rows, error) {
-	desc, err := c.getTableDesc(p.Table)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
-	r := &rows{
-		columns: []string{"Field", "Type", "Null"},
-		rows:    make([]row, len(desc.Columns)),
-	}
-
-	for i, col := range desc.Columns {
-		t := make(row, len(r.columns))
-		t[0] = col.Name
-		t[1] = col.Type.SQLString()
-		t[2] = col.Nullable
-		r.rows[i] = t
-	}
-
-	return r, nil
-}
-
-func (c *conn) ShowDatabases(p *parser.ShowDatabases, args []driver.Value) (*rows, error) {
-	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
-	sr, err := c.db.Scan(prefix, prefix.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, len(sr))
-	for i, row := range sr {
-		names[i] = string(bytes.TrimPrefix(row.Key, prefix))
-	}
-	return newSingleColumnRows("database", names), nil
-}
-
-func (c *conn) ShowIndex(p *parser.ShowIndex, args []driver.Value) (*rows, error) {
-	desc, err := c.getTableDesc(p.Table)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
-	r := &rows{
-		columns: []string{"Table", "Name", "Unique", "Seq", "Column"},
-	}
-	for _, index := range desc.Indexes {
-		for j, col := range index.ColumnNames {
-			t := make(row, len(r.columns))
-			t[0] = p.Table.Name
-			t[1] = index.Name
-			t[2] = index.Unique
-			t[3] = j + 1
-			t[4] = col
-			r.rows = append(r.rows, t)
-		}
-	}
-
-	return r, nil
-}
-
-func (c *conn) ShowTables(p *parser.ShowTables, args []driver.Value) (*rows, error) {
-	if p.Name == "" {
-		if c.database == "" {
-			return nil, fmt.Errorf("no database specified")
-		}
-		p.Name = c.database
-	}
-	dbID, err := c.lookupDatabase(p.Name)
-	if err != nil {
-		return nil, err
-	}
-	prefix := keys.MakeNameMetadataKey(dbID, "")
-	sr, err := c.db.Scan(prefix, prefix.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, len(sr))
-	for i, row := range sr {
-		names[i] = string(bytes.TrimPrefix(row.Key, prefix))
-	}
-	return newSingleColumnRows("tables", names), nil
-}
-
 func (c *conn) Update(p *parser.Update, args []driver.Value) (*rows, error) {
 	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
-}
-
-func (c *conn) Use(p *parser.Use, args []driver.Value) (*rows, error) {
-	c.database = p.Name
-	return &rows{}, nil
 }
 
 func (c *conn) getTableDesc(table *parser.TableName) (*structured.TableDescriptor, error) {

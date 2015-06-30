@@ -121,10 +121,12 @@ func (m *ResponseHeader) GetTxn() []byte {
 }
 
 type Datum struct {
-	IntVal           *int64   `protobuf:"varint,1,opt,name=int_val" json:"int_val,omitempty"`
-	FloatVal         *float64 `protobuf:"fixed64,2,opt,name=float_val" json:"float_val,omitempty"`
-	BytesVal         []byte   `protobuf:"bytes,3,opt,name=bytes_val" json:"bytes_val,omitempty"`
-	StringVal        *string  `protobuf:"bytes,4,opt,name=string_val" json:"string_val,omitempty"`
+	BoolVal          *bool    `protobuf:"varint,1,opt,name=bool_val" json:"bool_val,omitempty"`
+	IntVal           *int64   `protobuf:"varint,2,opt,name=int_val" json:"int_val,omitempty"`
+	UintVal          *uint64  `protobuf:"varint,3,opt,name=uint_val" json:"uint_val,omitempty"`
+	FloatVal         *float64 `protobuf:"fixed64,4,opt,name=float_val" json:"float_val,omitempty"`
+	BytesVal         []byte   `protobuf:"bytes,5,opt,name=bytes_val" json:"bytes_val,omitempty"`
+	StringVal        *string  `protobuf:"bytes,6,opt,name=string_val" json:"string_val,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -132,9 +134,23 @@ func (m *Datum) Reset()         { *m = Datum{} }
 func (m *Datum) String() string { return proto.CompactTextString(m) }
 func (*Datum) ProtoMessage()    {}
 
+func (m *Datum) GetBoolVal() bool {
+	if m != nil && m.BoolVal != nil {
+		return *m.BoolVal
+	}
+	return false
+}
+
 func (m *Datum) GetIntVal() int64 {
 	if m != nil && m.IntVal != nil {
 		return *m.IntVal
+	}
+	return 0
+}
+
+func (m *Datum) GetUintVal() uint64 {
+	if m != nil && m.UintVal != nil {
+		return *m.UintVal
 	}
 	return 0
 }
@@ -526,6 +542,24 @@ func (m *Datum) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BoolVal", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.BoolVal = &b
+		case 2:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntVal", wireType)
 			}
 			var v int64
@@ -541,7 +575,24 @@ func (m *Datum) Unmarshal(data []byte) error {
 				}
 			}
 			m.IntVal = &v
-		case 2:
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UintVal", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.UintVal = &v
+		case 4:
 			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field FloatVal", wireType)
 			}
@@ -560,7 +611,7 @@ func (m *Datum) Unmarshal(data []byte) error {
 			v |= uint64(data[iNdEx-1]) << 56
 			v2 := float64(math.Float64frombits(v))
 			m.FloatVal = &v2
-		case 3:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BytesVal", wireType)
 			}
@@ -582,7 +633,7 @@ func (m *Datum) Unmarshal(data []byte) error {
 			}
 			m.BytesVal = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
-		case 4:
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StringVal", wireType)
 			}
@@ -1078,8 +1129,14 @@ func skipWire(data []byte) (n int, err error) {
 	panic("unreachable")
 }
 func (this *Datum) GetValue() interface{} {
+	if this.BoolVal != nil {
+		return this.BoolVal
+	}
 	if this.IntVal != nil {
 		return this.IntVal
+	}
+	if this.UintVal != nil {
+		return this.UintVal
 	}
 	if this.FloatVal != nil {
 		return this.FloatVal
@@ -1095,8 +1152,12 @@ func (this *Datum) GetValue() interface{} {
 
 func (this *Datum) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
+	case *bool:
+		this.BoolVal = vt
 	case *int64:
 		this.IntVal = vt
+	case *uint64:
+		this.UintVal = vt
 	case *float64:
 		this.FloatVal = vt
 	case []byte:
@@ -1153,8 +1214,14 @@ func (m *ResponseHeader) Size() (n int) {
 func (m *Datum) Size() (n int) {
 	var l int
 	_ = l
+	if m.BoolVal != nil {
+		n += 2
+	}
 	if m.IntVal != nil {
 		n += 1 + sovWire(uint64(*m.IntVal))
+	}
+	if m.UintVal != nil {
+		n += 1 + sovWire(uint64(*m.UintVal))
 	}
 	if m.FloatVal != nil {
 		n += 9
@@ -1361,24 +1428,39 @@ func (m *Datum) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	if m.IntVal != nil {
+	if m.BoolVal != nil {
 		data[i] = 0x8
+		i++
+		if *m.BoolVal {
+			data[i] = 1
+		} else {
+			data[i] = 0
+		}
+		i++
+	}
+	if m.IntVal != nil {
+		data[i] = 0x10
 		i++
 		i = encodeVarintWire(data, i, uint64(*m.IntVal))
 	}
+	if m.UintVal != nil {
+		data[i] = 0x18
+		i++
+		i = encodeVarintWire(data, i, uint64(*m.UintVal))
+	}
 	if m.FloatVal != nil {
-		data[i] = 0x11
+		data[i] = 0x21
 		i++
 		i = encodeFixed64Wire(data, i, uint64(math.Float64bits(*m.FloatVal)))
 	}
 	if m.BytesVal != nil {
-		data[i] = 0x1a
+		data[i] = 0x2a
 		i++
 		i = encodeVarintWire(data, i, uint64(len(m.BytesVal)))
 		i += copy(data[i:], m.BytesVal)
 	}
 	if m.StringVal != nil {
-		data[i] = 0x22
+		data[i] = 0x32
 		i++
 		i = encodeVarintWire(data, i, uint64(len(*m.StringVal)))
 		i += copy(data[i:], *m.StringVal)
