@@ -943,7 +943,7 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
 	if !r.rm.Stopper().StartTask() {
-		return false, util.Errorf("system is shutting down")
+		return false, util.Errorf("node is stopping")
 	}
 	defer r.rm.Stopper().FinishTask()
 
@@ -1053,17 +1053,19 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 	}
 
 	ctx := r.context()
-	if stopper := r.rm.Stopper(); stopper.StartTask() {
-		go func() {
-			err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
-				Intents: intents,
-			}, r, args, proto.CLEANUP_TXN)
-			if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
-				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
-			}
-			stopper.FinishTask()
-		}()
+	stopper := r.rm.Stopper()
+	if !stopper.StartTask() {
+		return
 	}
+	go func() {
+		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
+			Intents: intents,
+		}, r, args, proto.CLEANUP_TXN)
+		if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
+			log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
+		}
+		stopper.FinishTask()
+	}()
 }
 
 // TODO(spencerkimball): move to util.

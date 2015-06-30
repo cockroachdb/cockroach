@@ -36,11 +36,11 @@ const (
 
 // An ErrGroupDeleted is returned for commands which are pending while their
 // group is deleted.
-var ErrGroupDeleted = errors.New("group deleted")
+var ErrGroupDeleted = errors.New("raft group deleted")
 
 // ErrStopped is returned for commands that could not be completed before the
 // node was stopped.
-var ErrStopped = errors.New("stopped")
+var ErrStopped = errors.New("raft processing stopped")
 
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
@@ -621,24 +621,6 @@ func (s *state) stop() {
 	}
 	s.MultiRaft.multiNode.Stop()
 	s.MultiRaft.Transport.Stop(s.nodeID)
-
-	// Drain the input channels because other threads may be blocking
-	// on these operations.
-	for {
-		select {
-		case op := <-s.createGroupChan:
-			op.ch <- util.Errorf("shutting down")
-		case op := <-s.removeGroupChan:
-			op.ch <- util.Errorf("shutting down")
-		case op := <-s.proposalChan:
-			op.ch <- util.Errorf("shutting down")
-		default:
-			close(s.createGroupChan)
-			close(s.removeGroupChan)
-			close(s.proposalChan)
-			return
-		}
-	}
 }
 
 // addNode creates a node and registers the given groupIDs for that

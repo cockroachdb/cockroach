@@ -99,20 +99,19 @@ func (ia *idAllocator) start() {
 					res client.KeyValue
 				)
 				for r := retry.Start(idAllocationRetryOpts); r.Next(); {
-					if ia.stopper.StartTask() {
-						idKey := ia.idKey.Load().(proto.Key)
-						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
-						ia.stopper.FinishTask()
-
-						if err == nil {
-							newValue = res.ValueInt()
-							break
-						}
-
-						log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
-					} else {
+					if !ia.stopper.StartTask() {
 						return
 					}
+					idKey := ia.idKey.Load().(proto.Key)
+					res, err = ia.db.Inc(idKey, int64(ia.blockSize))
+					ia.stopper.FinishTask()
+
+					if err == nil {
+						newValue = res.ValueInt()
+						break
+					}
+
+					log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
 				}
 				if err != nil {
 					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
