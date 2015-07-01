@@ -20,7 +20,9 @@ package driver
 import (
 	"database/sql"
 	"database/sql/driver"
+	"net/url"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 )
 
@@ -37,5 +39,23 @@ func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &conn{db: db}, nil
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, err
+	}
+	ctx := &base.Context{}
+	ctx.InitDefaults()
+	if u.User != nil {
+		ctx.User = u.User.Username()
+	}
+	q := u.Query()
+	if dir := q["certs"]; len(dir) > 0 {
+		ctx.Certs = dir[0]
+	}
+
+	sender, err := newHTTPSender(u.Host, ctx, client.DefaultTxnRetryOptions)
+	if err != nil {
+		return nil, err
+	}
+	return &conn{db: db, sender: sender}, nil
 }

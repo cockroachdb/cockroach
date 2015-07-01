@@ -18,12 +18,18 @@
 package sqlserver
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -51,6 +57,7 @@ func createArgsAndReply(method string) (*sqlwire.Request, *sqlwire.Response) {
 // A Server provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.
 type Server struct {
+	database string
 	clientDB *client.DB
 }
 
@@ -92,8 +99,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the SQLRequest for SQL execution.
-	s.Send(sqlwire.Call{Args: args, Reply: reply})
+	// Send the Request for SQL execution.
+	s.send(sqlwire.Call{Args: args, Reply: reply})
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
@@ -105,9 +112,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-// Send forwards the call for further processing.
-func (s *Server) Send(call sqlwire.Call) {
-	resp := call.Reply
+func echo(sql string, resp *sqlwire.Response) {
 	resp.Results = []sqlwire.Result{
 		{
 			Columns: []string{"echo"},
@@ -115,11 +120,216 @@ func (s *Server) Send(call sqlwire.Call) {
 				{
 					Values: []sqlwire.Datum{
 						{
-							StringVal: &call.Args.Sql,
+							StringVal: &sql,
 						},
 					},
 				},
 			},
 		},
 	}
+}
+
+// Send forwards the call for further processing.
+func (s *Server) send(call sqlwire.Call) {
+	req := call.Args
+	resp := call.Reply
+	stmt, err := parser.Parse(req.Sql)
+	if err != nil {
+		echo(req.Sql, resp)
+		return
+	}
+	switch p := stmt.(type) {
+	case *parser.ShowColumns:
+		s.ShowColumns(p, req.Params, resp)
+	case *parser.ShowDatabases:
+		s.ShowDatabases(p, req.Params, resp)
+	case *parser.ShowIndex:
+		s.ShowIndex(p, req.Params, resp)
+	case *parser.ShowTables:
+		s.ShowTables(p, req.Params, resp)
+	case *parser.Use:
+		s.Use(p, req.Params, resp)
+	default:
+		echo(req.Sql, resp)
+	}
+}
+
+// ShowColumns of a table
+func (s *Server) ShowColumns(p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) {
+	desc, err := s.getTableDesc(p.Table)
+	if err != nil {
+		resp.SetGoError(err)
+		return
+	}
+	var rows []sqlwire.Result_Row
+	for i, col := range desc.Columns {
+		t := col.Type.SQLString()
+		rows = append(rows, sqlwire.Result_Row{
+			Values: []sqlwire.Datum{
+				{StringVal: &desc.Columns[i].Name},
+				{StringVal: &t},
+				{BoolVal: &desc.Columns[i].Nullable},
+			},
+		})
+	}
+	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
+	resp.Results = []sqlwire.Result{
+		{
+			Columns: []string{"Field", "Type", "Null"},
+			Rows:    rows,
+		},
+	}
+}
+
+// ShowDatabases returns all the databases.
+func (s *Server) ShowDatabases(p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) {
+	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
+	sr, err := s.clientDB.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		resp.SetGoError(err)
+		return
+	}
+	var rows []sqlwire.Result_Row
+	for _, row := range sr {
+		name := string(bytes.TrimPrefix(row.Key, prefix))
+		rows = append(rows, sqlwire.Result_Row{
+			Values: []sqlwire.Datum{
+				{StringVal: &name},
+			},
+		})
+	}
+	resp.Results = []sqlwire.Result{
+		{
+			Columns: []string{"Database"},
+			Rows:    rows,
+		},
+	}
+}
+
+// ShowIndex returns all the indexes for a table.
+func (s *Server) ShowIndex(p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) {
+	desc, err := s.getTableDesc(p.Table)
+	if err != nil {
+		resp.SetGoError(err)
+		return
+	}
+
+	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
+	var rows []sqlwire.Result_Row
+
+	for i, index := range desc.Indexes {
+		for j, col := range index.ColumnNames {
+			seq := int64(j + 1)
+			c := col
+			rows = append(rows, sqlwire.Result_Row{
+				Values: []sqlwire.Datum{
+					{StringVal: &p.Table.Name},
+					{StringVal: &desc.Indexes[i].Name},
+					{BoolVal: &desc.Indexes[i].Unique},
+					{IntVal: &seq},
+					{StringVal: &c},
+				},
+			})
+		}
+	}
+	resp.Results = []sqlwire.Result{
+		{
+			// TODO(pmattis): This output doesn't match up with MySQL. Should it?
+			Columns: []string{"Table", "Name", "Unique", "Seq", "Column"},
+			Rows:    rows,
+		},
+	}
+}
+
+// ShowTables returns all the tables.
+func (s *Server) ShowTables(p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) {
+	if p.Name == "" {
+		if s.database == "" {
+			resp.SetGoError(errors.New("no database specified"))
+			return
+		}
+		p.Name = s.database
+	}
+	dbID, err := s.lookupDatabase(p.Name)
+	if err != nil {
+		resp.SetGoError(err)
+		return
+	}
+	prefix := keys.MakeNameMetadataKey(dbID, "")
+	sr, err := s.clientDB.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		resp.SetGoError(err)
+		return
+	}
+	var rows []sqlwire.Result_Row
+
+	for _, row := range sr {
+		name := string(bytes.TrimPrefix(row.Key, prefix))
+		rows = append(rows, sqlwire.Result_Row{
+			Values: []sqlwire.Datum{
+				{StringVal: &name},
+			},
+		})
+	}
+	resp.Results = []sqlwire.Result{
+		{
+			Columns: []string{"tables"},
+			Rows:    rows,
+		},
+	}
+}
+
+// Use sets the database being operated on.
+func (s *Server) Use(p *parser.Use, args []sqlwire.Datum, resp *sqlwire.Response) {
+	s.database = p.Name
+}
+
+func (s *Server) getTableDesc(table *parser.TableName) (*structured.TableDescriptor, error) {
+	if err := s.normalizeTableName(table); err != nil {
+		return nil, err
+	}
+	dbID, err := s.lookupDatabase(table.Qualifier)
+	if err != nil {
+		return nil, err
+	}
+	gr, err := s.clientDB.Get(keys.MakeNameMetadataKey(dbID, table.Name))
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		return nil, fmt.Errorf("table \"%s\" does not exist", table)
+	}
+	descKey := gr.ValueBytes()
+	desc := structured.TableDescriptor{}
+	if err := s.clientDB.GetProto(descKey, &desc); err != nil {
+		return nil, err
+	}
+	if err := desc.Validate(); err != nil {
+		return nil, err
+	}
+	return &desc, nil
+}
+
+func (s *Server) normalizeTableName(table *parser.TableName) error {
+	if table.Qualifier == "" {
+		if s.database == "" {
+			return fmt.Errorf("no database specified")
+		}
+		table.Qualifier = s.database
+	}
+	if table.Name == "" {
+		return fmt.Errorf("empty table name: %s", table)
+	}
+	return nil
+}
+
+func (s *Server) lookupDatabase(name string) (uint32, error) {
+	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, name)
+	gr, err := s.clientDB.Get(nameKey)
+	if err != nil {
+		return 0, err
+	} else if !gr.Exists() {
+		return 0, fmt.Errorf("database \"%s\" does not exist", name)
+	}
+	return uint32(gr.ValueInt()), nil
 }
