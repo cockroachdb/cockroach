@@ -27,18 +27,15 @@
 #include "rocksdb/options.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
-#include "mvcc.pb.h"
 #include "cockroach/proto/api.pb.h"
 #include "cockroach/proto/data.pb.h"
 #include "cockroach/proto/internal.pb.h"
+#include "cockroach/storage/engine/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
 
 extern "C" {
 #include "_cgo_export.h"
-}  // extern "C"
-
-extern "C" {
 
 struct DBBatch {
   int updates;

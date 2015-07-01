@@ -23,7 +23,7 @@ REPO_ROOT      := $(ORG_ROOT)/cockroach
 GITHUB_ROOT    := $(ORG_ROOT)/..
 GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
 
-ENGINE_ROOT := $(REPO_ROOT)/storage/engine
+NATIVE_ROOT := $(REPO_ROOT)/storage/engine/rocksdb
 
 # Ensure we have an unambiguous GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -40,11 +40,11 @@ GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
 GO_PROTOS  := $(sort $(shell find $(REPO_ROOT) -not -path '*/.*' -name *.proto -type f))
 GO_SOURCES  := $(GO_PROTOS:%.proto=%.pb.go)
 
-CPP_PROTOS := $(filter %/api.proto %/data.proto %/internal.proto %/config.proto %/errors.proto,$(GO_PROTOS))
-CPP_HEADERS := $(subst ./,$(ENGINE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(ENGINE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
-CPP_SOURCES := $(subst ./,$(ENGINE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(ENGINE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
+CPP_PROTOS := $(filter %/api.proto %/config.proto %/data.proto %/errors.proto %/internal.proto %/mvcc.proto,$(GO_PROTOS))
+CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
+CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
 
-ENGINE_CPP_PROTOS := $(filter $(ENGINE_ROOT)%,$(GO_PROTOS))
+ENGINE_CPP_PROTOS := $(filter $(NATIVE_ROOT)%,$(GO_PROTOS))
 ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
 ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 
@@ -63,13 +63,13 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.h -o -name *.pb.cc | xargs rm
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ENGINE_ROOT) $(CPP_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ENGINE_ROOT) $(GOGOPROTO_PROTO)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(NATIVE_ROOT) $(CPP_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(NATIVE_ROOT) $(GOGOPROTO_PROTO)
 	# For c++, protoc generates a directory structure mirroring the package
 	# structure (and these directories must be in the include path), but cgo can
 	# only compile a single directory so we symlink the generated pb.cc files
 	# into the storage/engine directory.
-	(cd $(ENGINE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
+	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
 
 $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(ORG_ROOT) $(ENGINE_CPP_PROTOS)

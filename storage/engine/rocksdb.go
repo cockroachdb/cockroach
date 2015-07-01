@@ -20,9 +20,6 @@
 
 package engine
 
-// #include <stdlib.h>
-// #include "db.h"
-import "C"
 import (
 	"bytes"
 	"errors"
@@ -31,11 +28,25 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo linux LDFLAGS: -lrt
+//
+// #include <stdlib.h>
+// #include "rocksdb/db.h"
+import "C"
+
+func init() {
+	rocksdb.Logger = log.Infof
+}
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
@@ -756,11 +767,4 @@ func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
 
 func (r *rocksDBIterator) Error() error {
 	return statusToError(C.DBIterError(r.iter))
-}
-
-//export rocksDBLog
-func rocksDBLog(s *C.char, n C.int) {
-	// Note that rocksdb logging is only enabled if log.V(1) is true
-	// when RocksDB.Open() is called.
-	log.Infof("%s", C.GoStringN(s, n))
 }
