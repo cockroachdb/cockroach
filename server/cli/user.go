@@ -18,9 +18,12 @@
 package cli
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
@@ -43,7 +46,13 @@ func runGetUser(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunGetUser(Context, args[0])
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	body, err := client.GetYAML(args[0])
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("User config for %q:\n%s\n", args[0], body)
 }
 
 // A lsUsersCmd command displays a list of user configs.
@@ -59,11 +68,18 @@ List all user configs.
 // runLsUsers invokes the REST API with GET action and no path, which
 // fetches a list of all user configuration.
 func runLsUsers(cmd *cobra.Command, args []string) {
-	if len(args) > 1 {
+	if len(args) > 0 {
 		cmd.Usage()
 		return
 	}
-	server.RunLsUser(Context, "")
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	list, err := client.List()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Users:\n%s\n", strings.Join(list, "\n  "))
+
 }
 
 // A rmUserCmd command removes the user config for the specified username.
@@ -82,7 +98,13 @@ func runRmUser(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunRmUser(Context, args[0])
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	if err := client.Delete(args[0]); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Deleted user %q\n", args[0])
+
 }
 
 // A setUserCmd command creates a new or updates an existing user config.
@@ -118,7 +140,12 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-	server.RunSetUser(Context, args[0], contents)
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.User)
+	if err := client.SetYAML(args[0], string(contents)); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Wrote user config for %q\n", args[0])
 }
 
 var userCmds = []*cobra.Command{

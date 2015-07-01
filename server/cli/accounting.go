@@ -18,9 +18,11 @@
 package cli
 
 import (
+	"fmt"
 	"io/ioutil"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
@@ -35,9 +37,7 @@ var getAcctCmd = &cobra.Command{
 	Use:   "get [options] <key-prefix>",
 	Short: "fetches and displays an accounting config",
 	Long: `
-Fetches and displays the accounting configuration for <key-prefix>. The key
-prefix should be escaped via URL query escaping if it contains
-non-ascii bytes or spaces.
+Fetches and displays the accounting configuration for <key-prefix>.
 `,
 	Run: runGetAcct,
 }
@@ -48,37 +48,39 @@ func runGetAcct(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunGetAcct(Context, args[0])
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	body, err := client.GetYAML(args[0])
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Accounting config for prefix %q:\n%s\n", args[0], body)
 }
 
 // A lsAcctsCmd command displays a list of acct configs by prefix.
 var lsAcctsCmd = &cobra.Command{
-	Use:   "ls [options] [key-regexp]",
+	Use:   "ls [options]",
 	Short: "list all accounting configs by key prefix",
 	Long: `
-List accounting configs. If a regular expression is given, the results of
-the listing are filtered by key prefixes matching the regexp. The key
-prefix should be escaped via URL query escaping if it contains
-non-ascii bytes or spaces.
+List accounting configs.
 `,
 	Run: runLsAccts,
 }
 
 // runLsAccts invokes the REST API with GET action and no path, which
-// fetches a list of all acct configuration prefixes. The optional
-// regexp is applied to the complete list and matching prefixes
-// displayed.
+// fetches a list of all acct configuration prefixes.
 func runLsAccts(cmd *cobra.Command, args []string) {
-	if len(args) > 1 {
+	if len(args) > 0 {
 		cmd.Usage()
 		return
 	}
-	pattern := ""
-	if len(args) == 1 {
-		pattern = args[0]
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	list, err := client.List()
+	if err != nil {
+		log.Error(err)
+		return
 	}
-	server.RunLsAcct(Context, pattern)
-
+	fmt.Printf("Accounting keys:\n%s\n", strings.Join(list, "\n  "))
 }
 
 // A rmAcctCmd command removes an acct config by prefix.
@@ -89,8 +91,7 @@ var rmAcctCmd = &cobra.Command{
 Remove an existing accounting config by key prefix. No action is taken if no
 accounting configuration exists for the specified key prefix. Note that this
 command can affect only a single accounting config with an exactly matching
-prefix. The key prefix should be escaped via URL query escaping if it
-contains non-ascii bytes or spaces.
+prefix.
 `,
 	Run: runRmAcct,
 }
@@ -102,7 +103,12 @@ func runRmAcct(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunRmAcct(Context, args[0])
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	if err := client.Delete(args[0]); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Deleted accounting key %q\n", args[0])
 }
 
 // A setAcctCmd command creates a new or updates an existing acct
@@ -113,9 +119,7 @@ var setAcctCmd = &cobra.Command{
 	Long: `
 Create or update a accounting config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
-(second argument: <acct-config-file>). The key prefix should be
-escaped via URL query escaping if it contains non-ascii bytes or
-spaces.
+(second argument: <acct-config-file>).
 
 The accounting config format has the following YAML schema:
 
@@ -142,7 +146,12 @@ func runSetAcct(cmd *cobra.Command, args []string) {
 		log.Errorf("unable to read accounting config file %q: %s", args[1], err)
 		return
 	}
-	server.RunSetAcct(Context, args[0], body)
+	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	if err := client.SetYAML(args[0], string(body)); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Wrote accounting config to %q\n", args[0])
 }
 
 // TODO:(bram) Add inline json for setting
