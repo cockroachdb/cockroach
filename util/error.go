@@ -19,20 +19,29 @@ package util
 
 import (
 	"fmt"
-	"path/filepath"
+	"os"
 	"runtime"
+	"strings"
 )
 
 const defaultSkip = 2
 const errorPrefixFormat string = "%s:%d: "
 
+// Caller returns the file and line of the Caller or, in case of error,
+// the placeholder ('???', 1).
+func Caller(depth int) (string, int) {
+	if _, file, line, ok := runtime.Caller(1 + depth); ok {
+		list := strings.Split(file, "cockroach"+string(os.PathSeparator))
+		return list[len(list)-1], line
+	}
+	return "???", 1
+}
+
 // getPrefix skips "skip" stack frames to get the file & line number
 // of original caller.
 func getPrefix(skip int, format string) string {
-	if _, file, line, ok := runtime.Caller(skip); ok {
-		return fmt.Sprintf(format, filepath.Base(file), line)
-	}
-	return ""
+	file, line := Caller(skip)
+	return fmt.Sprintf(format, file, line)
 }
 
 // Errorf is a passthrough to fmt.Errorf, with an additional prefix
