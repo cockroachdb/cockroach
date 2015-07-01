@@ -130,9 +130,8 @@ type Datum struct {
 	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *Datum) Reset()         { *m = Datum{} }
-func (m *Datum) String() string { return proto.CompactTextString(m) }
-func (*Datum) ProtoMessage()    {}
+func (m *Datum) Reset()      { *m = Datum{} }
+func (*Datum) ProtoMessage() {}
 
 func (m *Datum) GetBoolVal() bool {
 	if m != nil && m.BoolVal != nil {

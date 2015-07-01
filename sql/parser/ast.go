@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 //go:generate make
@@ -81,7 +82,7 @@ const (
 )
 
 func (node *Select) String() string {
-	return fmt.Sprintf("SELECT %v%s%v FROM %v%v%v%v%v%v%s",
+	return fmt.Sprintf("SELECT %v%s%v%v%v%v%v%v%v%s",
 		node.Comments, node.Distinct, node.Exprs,
 		node.From, node.Where,
 		node.GroupBy, node.Having, node.OrderBy,
@@ -260,8 +261,13 @@ func (node Columns) String() string {
 type TableExprs []TableExpr
 
 func (node TableExprs) String() string {
+	if len(node) == 0 {
+		return ""
+	}
+
 	var prefix string
 	var buf bytes.Buffer
+	buf.WriteString(" FROM ")
 	for _, n := range node {
 		fmt.Fprintf(&buf, "%s%v", prefix, n)
 		prefix = ", "
@@ -450,7 +456,9 @@ func (*RangeCond) expr()      {}
 func (*NullCheck) expr()      {}
 func (*ExistsExpr) expr()     {}
 func (StrVal) expr()          {}
+func (IntVal) expr()          {}
 func (NumVal) expr()          {}
+func (BoolVal) expr()         {}
 func (ValArg) expr()          {}
 func (*NullVal) expr()        {}
 func (*ColName) expr()        {}
@@ -467,6 +475,7 @@ type BoolExpr interface {
 	Expr
 }
 
+func (BoolVal) boolExpr()         {}
 func (*AndExpr) boolExpr()        {}
 func (*OrExpr) boolExpr()         {}
 func (*NotExpr) boolExpr()        {}
@@ -515,27 +524,50 @@ func (node *ParenBoolExpr) String() string {
 	return fmt.Sprintf("(%v)", node.Expr)
 }
 
-// ComparisonExpr represents a two-value comparison expression.
-type ComparisonExpr struct {
-	Operator    string
-	Left, Right ValExpr
-}
+// ComparisonOp represents a binary operator.
+type ComparisonOp int
 
 // ComparisonExpr.Operator
 const (
-	astEQ      = "="
-	astLT      = "<"
-	astGT      = ">"
-	astLE      = "<="
-	astGE      = ">="
-	astNE      = "!="
-	astNSE     = "<=>"
-	astIn      = "IN"
-	astNot     = "NOT"
-	astNotIn   = "NOT IN"
-	astLike    = "LIKE"
-	astNotLike = "NOT LIKE"
+	EQ ComparisonOp = iota
+	LT
+	GT
+	LE
+	GE
+	NE
+	NullSafeEqual
+	In
+	NotIn
+	Like
+	NotLike
 )
+
+var comparisonOpName = [...]string{
+	EQ:            "=",
+	LT:            "<",
+	GT:            ">",
+	LE:            "<=",
+	GE:            ">=",
+	NE:            "!=",
+	NullSafeEqual: "<=>",
+	In:            "IN",
+	NotIn:         "NOT IN",
+	Like:          "LIKE",
+	NotLike:       "NOT LIKE",
+}
+
+func (i ComparisonOp) String() string {
+	if i < 0 || i > ComparisonOp(len(comparisonOpName)-1) {
+		return fmt.Sprintf("ComparisonOp(%d)", i)
+	}
+	return comparisonOpName[i]
+}
+
+// ComparisonExpr represents a two-value comparison expression.
+type ComparisonExpr struct {
+	Operator    ComparisonOp
+	Left, Right ValExpr
+}
 
 func (node *ComparisonExpr) String() string {
 	return fmt.Sprintf("%v %s %v", node.Left, node.Operator, node.Right)
@@ -543,7 +575,7 @@ func (node *ComparisonExpr) String() string {
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
 type RangeCond struct {
-	Operator string
+	Not      bool
 	Left     ValExpr
 	From, To ValExpr
 }
@@ -555,23 +587,23 @@ const (
 )
 
 func (node *RangeCond) String() string {
-	return fmt.Sprintf("%v %s %v AND %v", node.Left, node.Operator, node.From, node.To)
+	if node.Not {
+		return fmt.Sprintf("%v NOT BETWEEN %v AND %v", node.Left, node.From, node.To)
+	}
+	return fmt.Sprintf("%v BETWEEN %v AND %v", node.Left, node.From, node.To)
 }
 
 // NullCheck represents an IS NULL or an IS NOT NULL expression.
 type NullCheck struct {
-	Operator string
-	Expr     ValExpr
+	Not  bool
+	Expr ValExpr
 }
 
-// NullCheck.Operator
-const (
-	astNull    = "NULL"
-	astNotNull = "NOT NULL"
-)
-
 func (node *NullCheck) String() string {
-	return fmt.Sprintf("%v IS %s", node.Expr, node.Operator)
+	if node.Not {
+		return fmt.Sprintf("%v IS NOT NULL", node.Expr)
+	}
+	return fmt.Sprintf("%v IS NULL", node.Expr)
 }
 
 // ExistsExpr represents an EXISTS expression.
@@ -590,7 +622,9 @@ type ValExpr interface {
 }
 
 func (StrVal) valExpr()      {}
+func (IntVal) valExpr()      {}
 func (NumVal) valExpr()      {}
+func (BoolVal) valExpr()     {}
 func (ValArg) valExpr()      {}
 func (*NullVal) valExpr()    {}
 func (*ColName) valExpr()    {}
@@ -620,11 +654,28 @@ func (node BytesVal) String() string {
 	return string(encodeSQLBytes(scratch[0:0], []byte(node)))
 }
 
+// IntVal represents an integer.
+type IntVal uint64
+
+func (node IntVal) String() string {
+	return strconv.FormatUint(uint64(node), 10)
+}
+
 // NumVal represents a number.
 type NumVal string
 
 func (node NumVal) String() string {
-	return fmt.Sprintf("%s", string(node))
+	return string(node)
+}
+
+// BoolVal represents a boolean.
+type BoolVal bool
+
+func (node BoolVal) String() string {
+	if node {
+		return "true"
+	}
+	return "false"
 }
 
 // ValArg represents a named bind var argument.
@@ -704,43 +755,82 @@ func (node *Subquery) String() string {
 	return fmt.Sprintf("(%v)", node.Select)
 }
 
-// BinaryExpr represents a binary value expression.
-type BinaryExpr struct {
-	Operator    byte
-	Left, Right Expr
-}
+// BinaryOp represents a binary operator.
+type BinaryOp int
 
 // BinaryExpr.Operator
 const (
-	astBitand = '&'
-	astBitor  = '|'
-	astBitxor = '^'
-	astPlus   = '+'
-	astMinus  = '-'
-	astMult   = '*'
-	astDiv    = '/'
-	astMod    = '%'
+	Bitand BinaryOp = iota
+	Bitor
+	Bitxor
+	Plus
+	Minus
+	Mult
+	Div
+	Mod
+	Concat
 )
 
+var binaryOpName = [...]string{
+	Bitand: "&",
+	Bitor:  "|",
+	Bitxor: "^",
+	Plus:   "+",
+	Minus:  "-",
+	Mult:   "*",
+	Div:    "/",
+	Mod:    "%",
+	Concat: "||",
+}
+
+func (i BinaryOp) String() string {
+	if i < 0 || i > BinaryOp(len(binaryOpName)-1) {
+		return fmt.Sprintf("BinaryOp(%d)", i)
+	}
+	return binaryOpName[i]
+}
+
+// BinaryExpr represents a binary value expression.
+type BinaryExpr struct {
+	Operator    BinaryOp
+	Left, Right Expr
+}
+
 func (node *BinaryExpr) String() string {
-	return fmt.Sprintf("%v%c%v", node.Left, node.Operator, node.Right)
+	return fmt.Sprintf("%v%s%v", node.Left, node.Operator, node.Right)
+}
+
+// UnaryOp represents a binary operator.
+type UnaryOp int
+
+// UnaryExpr.Operator
+const (
+	UnaryPlus UnaryOp = iota
+	UnaryMinus
+	UnaryComplement
+)
+
+var unaryOpName = [...]string{
+	UnaryPlus:       "+",
+	UnaryMinus:      "-",
+	UnaryComplement: "~",
+}
+
+func (i UnaryOp) String() string {
+	if i < 0 || i > UnaryOp(len(unaryOpName)-1) {
+		return fmt.Sprintf("UnaryOp(%d)", i)
+	}
+	return unaryOpName[i]
 }
 
 // UnaryExpr represents a unary value expression.
 type UnaryExpr struct {
-	Operator byte
+	Operator UnaryOp
 	Expr     Expr
 }
 
-// UnaryExpr.Operator
-const (
-	astUnaryPlus  = '+'
-	astUnaryMinus = '-'
-	astTilda      = '~'
-)
-
 func (node *UnaryExpr) String() string {
-	return fmt.Sprintf("%c%v", node.Operator, node.Expr)
+	return fmt.Sprintf("%s%v", node.Operator, node.Expr)
 }
 
 // FuncExpr represents a function call.
