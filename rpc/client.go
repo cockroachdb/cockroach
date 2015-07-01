@@ -172,10 +172,10 @@ func (c *Client) connect(opts *retry.Options, context *Context) error {
 			return err
 		}
 
-		break
+		return nil
 	}
 
-	return nil
+	return util.Errorf("system is stopping")
 }
 
 // IsConnected returns whether the client is connected.
