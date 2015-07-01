@@ -37,8 +37,8 @@ test:
     # Either `go generate` does not change any files or it does, in which case we print the diff and fail.
     - docker run cockroachdb/cockroach-dev shell make check | tee "${CIRCLE_ARTIFACTS}/check.log"; test ${PIPESTATUS[0]} -eq 0
     - docker run cockroachdb/cockroach-dev shell "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${CIRCLE_ARTIFACTS}/generate.log"; test ${PIPESTATUS[0]} -eq 0
-    - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/test.log"
-    - docker run "cockroachdb/cockroach-dev" testrace TESTFLAGS='-v' > "${CIRCLE_ARTIFACTS}/testrace.log"
+    - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' > "${CIRCLE_ARTIFACTS}/test.log"
+    - docker run "cockroachdb/cockroach-dev" testrace TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' > "${CIRCLE_ARTIFACTS}/testrace.log"
     # TODO(pmattis): Use "make acceptance" again once we're using cockroachdb/builder on circleci
     - run/local-cluster.sh stop && run/local-cluster.sh start && run/local-cluster.sh stop
   post:
