@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // DB provides Cockroach's Time Series API.
@@ -41,8 +41,8 @@ func NewDB(db *client.DB) *DB {
 // PollSource begins a Goroutine which periodically queries the supplied
 // DataSource for time series data, storing the returned data in the server.
 // Stored data will be sampled using the provided Resolution. The polling
-// process will continue until the provided util.Stopper is stopped.
-func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolution, stopper *util.Stopper) {
+// process will continue until the provided stop.Stopper is stopped.
+func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolution, stopper *stop.Stopper) {
 	p := &poller{
 		db:        db,
 		source:    source,
@@ -64,7 +64,7 @@ type poller struct {
 	source    DataSource
 	frequency time.Duration
 	r         Resolution
-	stopper   *util.Stopper
+	stopper   *stop.Stopper
 }
 
 // start begins the goroutine for this poller, which will periodically request

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type storeEventConsumer struct {
@@ -48,8 +49,8 @@ func (sec *storeEventConsumer) process() {
 
 // startConsumerSet starts a StoreEventFeed and a number of associated
 // consumers.
-func startConsumerSet(count int) (*util.Stopper, *util.Feed, []*storeEventConsumer) {
-	stopper := util.NewStopper()
+func startConsumerSet(count int) (*stop.Stopper, *util.Feed, []*storeEventConsumer) {
+	stopper := stop.NewStopper()
 	feed := &util.Feed{}
 	consumers := make([]*storeEventConsumer, count)
 	for i := range consumers {
@@ -59,9 +60,9 @@ func startConsumerSet(count int) (*util.Stopper, *util.Feed, []*storeEventConsum
 	return stopper, feed, consumers
 }
 
-// waitForStopper stops the supplied util.Stopper and waits up to five seconds
+// waitForStopper stops the supplied stop.Stopper and waits up to five seconds
 // for it to complete.
-func waitForStopper(t testing.TB, stopper *util.Stopper) {
+func waitForStopper(t testing.TB, stopper *stop.Stopper) {
 	stopper.Stop()
 	select {
 	case <-stopper.IsStopped():

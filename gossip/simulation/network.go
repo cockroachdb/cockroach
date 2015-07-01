@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Node represents a node used in a Network. It includes information
@@ -43,7 +44,7 @@ type Network struct {
 	Nodes          []*Node
 	NetworkType    string        // "tcp" or "unix"
 	GossipInterval time.Duration // The length of a round of gossip
-	Stopper        *util.Stopper
+	Stopper        *stop.Stopper
 }
 
 // NewNetwork creates nodeCount gossip nodes. The networkType should
@@ -59,7 +60,7 @@ func NewNetwork(nodeCount int, networkType string,
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 

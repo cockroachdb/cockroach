@@ -15,11 +15,12 @@
 //
 // Author: Ben Darnell
 
-package util
+package randhelper
 
 import (
 	crypto_rand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 )
 
@@ -28,7 +29,7 @@ func NewPseudoSeed() int64 {
 	var seed int64
 	err := binary.Read(crypto_rand.Reader, binary.LittleEndian, &seed)
 	if err != nil {
-		panic(Errorf("could not read from crypto/rand: %s", err))
+		panic(fmt.Errorf("could not read from crypto/rand: %s", err))
 	}
 	return seed
 }

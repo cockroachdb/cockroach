@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -330,7 +331,7 @@ func (g *Gossip) Outgoing() []proto.NodeID {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, stopper *util.Stopper) {
+func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	g.server.start(rpcServer, stopper) // serve gossip protocol
 	g.bootstrap(stopper)               // bootstrap gossip client
 	g.manage(stopper)                  // manage gossip clients
@@ -408,7 +409,7 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 // connection, this method will block on the stalled condvar, which
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
-func (g *Gossip) bootstrap(stopper *util.Stopper) {
+func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		for {
 			g.mu.Lock()
@@ -448,7 +449,7 @@ func (g *Gossip) bootstrap(stopper *util.Stopper) {
 // the outgoing address set. If there are no longer any outgoing
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
-func (g *Gossip) manage(stopper *util.Stopper) {
+func (g *Gossip) manage(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		// Loop until closed and there are no remaining outgoing connections.
 		for {
@@ -464,7 +465,7 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 	})
 }
 
-func (g *Gossip) doCheckTimeout(stopper *util.Stopper) {
+func (g *Gossip) doCheckTimeout(stopper *stop.Stopper) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// Check whether the graph needs to be tightened to
@@ -493,7 +494,7 @@ func (g *Gossip) doCheckTimeout(stopper *util.Stopper) {
 	g.maybeSignalStalledLocked()
 }
 
-func (g *Gossip) doDisconnected(stopper *util.Stopper, c *client) {
+func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if c.err != nil {
@@ -537,7 +538,7 @@ func (g *Gossip) signalStalled() {
 // This method checks whether all gossip bootstrap hosts are
 // connected, and whether the node itself is a bootstrap host, but
 // there is still no sentinel gossip.
-func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
+func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		// Wait 5s before first check.
 		select {
@@ -585,7 +586,7 @@ func (g *Gossip) checkHasConnected() {
 // startClient launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr, context *rpc.Context, stopper *util.Stopper) {
+func (g *Gossip) startClient(addr net.Addr, context *rpc.Context, stopper *stop.Stopper) {
 	log.Infof("starting client to %s", addr)
 	c := newClient(addr)
 	g.clientsMu.Lock()

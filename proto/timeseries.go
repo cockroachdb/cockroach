@@ -17,7 +17,7 @@
 
 package proto
 
-import "github.com/cockroachdb/cockroach/util"
+import "fmt"
 
 // ToInternal places the datapoints in a TimeSeriesData message into one or
 // more InternalTimeSeriesData messages. The structure and number of messages
@@ -51,13 +51,13 @@ import "github.com/cockroachdb/cockroach/util"
 func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 	[]*InternalTimeSeriesData, error) {
 	if keyDuration%sampleDuration != 0 {
-		return nil, util.Errorf(
-			"sample duration %d does not evenly divide key duration %d.",
+		return nil, fmt.Errorf(
+			"sample duration %d does not evenly divide key duration %d",
 			sampleDuration, keyDuration)
 	}
 	if keyDuration < sampleDuration {
-		return nil, util.Errorf(
-			"sample duration %d is not less than or equal to key duration %d.",
+		return nil, fmt.Errorf(
+			"sample duration %d is not less than or equal to key duration %d",
 			sampleDuration, keyDuration)
 	}
 

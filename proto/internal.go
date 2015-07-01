@@ -21,7 +21,6 @@ package proto
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -43,12 +42,12 @@ func (ts *InternalTimeSeriesData) ToValue() (*Value, error) {
 // message from the "bytes" field of the given value.
 func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, error) {
 	if value.GetTag() != _CR_TS.String() {
-		return nil, util.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
+		return nil, fmt.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
 	}
 	var ts InternalTimeSeriesData
 	err := gogoproto.Unmarshal(value.Bytes, &ts)
 	if err != nil {
-		return nil, util.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)
+		return nil, fmt.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)
 	}
 	return &ts, nil
 }

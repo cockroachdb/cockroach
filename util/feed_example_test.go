@@ -19,10 +19,12 @@ package util
 
 import (
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func ExampleFeed() {
-	stopper := NewStopper()
+	stopper := stop.NewStopper()
 	feed := Feed{}
 
 	output := make([][]string, 5)

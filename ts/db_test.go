@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -201,12 +201,12 @@ func (tm *testModel) storeTimeSeriesData(r Resolution, data []proto.TimeSeriesDa
 // modelDataSource is used to create a mock DataSource. It returns a
 // deterministic set of data to GetTimeSeriesData, storing the returned data in
 // the model whenever GetTimeSeriesData is called. Data is returned until all
-// sets are exhausted, at which point the supplied util.Stopper is stopped.
+// sets are exhausted, at which point the supplied stop.Stopper is stopped.
 type modelDataSource struct {
 	model       *testModel
 	datasets    [][]proto.TimeSeriesData
 	r           Resolution
-	stopper     *util.Stopper
+	stopper     *stop.Stopper
 	calledCount int
 	once        sync.Once
 }
@@ -312,7 +312,7 @@ func TestPollSource(t *testing.T) {
 	testSource := &modelDataSource{
 		model:   tm,
 		r:       Resolution10s,
-		stopper: util.NewStopper(),
+		stopper: stop.NewStopper(),
 		datasets: [][]proto.TimeSeriesData{
 			{
 				{

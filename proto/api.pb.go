@@ -13,7 +13,6 @@
 		cockroach/proto/gossip.proto
 		cockroach/proto/heartbeat.proto
 		cockroach/proto/internal.proto
-		cockroach/proto/log.proto
 		cockroach/proto/timeseries.proto
 
 	It has these top-level messages:

@@ -26,18 +26,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 )
 
-var testRand, _ = util.NewPseudoRand()
+var testRand, _ = randhelper.NewPseudoRand()
 
 func makeCommandID() string {
-	return string(util.RandBytes(testRand, commandIDLen))
+	return string(randhelper.RandBytes(testRand, commandIDLen))
 }
 
 type testCluster struct {
@@ -52,7 +53,7 @@ type testCluster struct {
 	groups map[proto.RaftID][]int
 }
 
-func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *testing.T) *testCluster {
+func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *testing.T) *testCluster {
 	if transport == nil {
 		transport = NewLocalRPCTransport()
 	}
@@ -181,7 +182,7 @@ func TestInitialLeaderElection(t *testing.T) {
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		log.Infof("testing leader election for node %v", leaderIndex)
-		stopper := util.NewStopper()
+		stopper := stop.NewStopper()
 		cluster := newTestCluster(nil, 3, stopper, t)
 		groupID := proto.RaftID(1)
 		cluster.createGroup(groupID, 0, 3)
@@ -194,7 +195,7 @@ func TestInitialLeaderElection(t *testing.T) {
 // TestProposeBadGroup ensures that unknown group IDs are an error, not a panic.
 func TestProposeBadGroup(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
 	err := <-cluster.nodes[1].SubmitCommand(7, "asdf", []byte{})
@@ -207,7 +208,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Leader election events are fired when the leader commits an entry, not when it
 	// issues a call for votes.
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
 	groupID := proto.RaftID(1)
@@ -258,7 +259,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
 	groupID := proto.RaftID(1)
@@ -280,7 +281,7 @@ func TestCommand(t *testing.T) {
 
 func TestSlowStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
 	groupID := proto.RaftID(1)
@@ -337,7 +338,7 @@ func TestSlowStorage(t *testing.T) {
 
 func TestMembershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 4, stopper, t)
 	defer stopper.Stop()
 
@@ -393,7 +394,7 @@ func TestMembershipChange(t *testing.T) {
 
 func TestRapidMembershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	var wg sync.WaitGroup

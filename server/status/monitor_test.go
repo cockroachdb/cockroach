@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func TestNodeStatusMonitor(t *testing.T) {
@@ -54,8 +55,8 @@ func TestNodeStatusMonitor(t *testing.T) {
 		LastUpdateNanos: 1 * 1E9,
 	}
 
-	monitorStopper := util.NewStopper()
-	storeStopper := util.NewStopper()
+	monitorStopper := stop.NewStopper()
+	storeStopper := stop.NewStopper()
 	feed := &util.Feed{}
 	monitor := NewNodeStatusMonitor()
 	storeSub := feed.Subscribe()

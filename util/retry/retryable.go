@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package retry
 
 // Retryable is an interface for conditions which may be retried.
 type Retryable interface {

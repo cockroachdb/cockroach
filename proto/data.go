@@ -28,8 +28,8 @@ import (
 
 	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -315,7 +315,7 @@ func (v *Value) Verify(key []byte) error {
 	if v.Checksum != nil {
 		cksum := v.computeChecksum(key)
 		if v.GetChecksum() != cksum {
-			return util.Errorf("invalid checksum (%d) for key %s, value [% x]",
+			return fmt.Errorf("invalid checksum (%d) for key %s, value [% x]",
 				cksum, Key(key), v)
 		}
 	}
@@ -390,7 +390,7 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 	return &Transaction{
 		Name:          name,
 		Key:           baseKey,
-		ID:            util.NewUUID4(),
+		ID:            uuid.NewUUID4(),
 		Priority:      priority,
 		Isolation:     isolation,
 		Timestamp:     now,
@@ -418,7 +418,7 @@ func (t *Transaction) TraceID() string {
 	if t == nil || len(t.ID) == 0 {
 		return ""
 	}
-	s := util.UUID(t.ID).String()
+	s := uuid.UUID(t.ID).String()
 	return "t" + s
 }
 
@@ -529,15 +529,15 @@ func (t Transaction) String() string {
 	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
 	if len(t.Name) > 0 {
 		return fmt.Sprintf("%q id=%s key=%s pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-			t.Name, util.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+			t.Name, uuid.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 	}
 	return fmt.Sprintf("id=%s key=%s pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		util.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		uuid.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
 
 // Short returns the short form of the Transaction's UUID.
 func (t *Transaction) Short() string {
-	return util.UUID(t.GetID()).Short()
+	return uuid.UUID(t.GetID()).Short()
 }
 
 // NewGCMetadata returns a GCMetadata initialized to have a ByteCounts

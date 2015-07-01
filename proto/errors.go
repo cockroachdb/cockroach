@@ -20,7 +20,7 @@ package proto
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // TransactionRestartError is an interface implemented by errors that cause
@@ -34,7 +34,7 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-// CanRetry implements the util/Retryable interface.
+// CanRetry implements the retry.Retryable interface.
 func (e *Error) CanRetry() bool {
 	return e.Retryable
 }
@@ -47,7 +47,7 @@ func (e *Error) CanRestartTransaction() TransactionRestart {
 // SetResponseGoError sets Error using err
 func (e *Error) SetResponseGoError(err error) {
 	e.Message = err.Error()
-	if r, ok := err.(util.Retryable); ok {
+	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
 	if r, ok := err.(TransactionRestartError); ok {

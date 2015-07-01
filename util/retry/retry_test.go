@@ -21,8 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
-	_ "github.com/cockroachdb/cockroach/util/log" // enable flags
+	"github.com/cockroachdb/cockroach/util/stop" // enable flags
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
@@ -99,7 +98,7 @@ func TestRetryStop(t *testing.T) {
 		InitialBackoff: time.Microsecond * 10,
 		MaxBackoff:     time.Second,
 		Multiplier:     2,
-		Stopper:        util.NewStopper(),
+		Stopper:        stop.NewStopper(),
 	}
 
 	var attempts int

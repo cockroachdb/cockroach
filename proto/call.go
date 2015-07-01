@@ -18,7 +18,8 @@
 package proto
 
 import (
-	"github.com/cockroachdb/cockroach/util"
+	"fmt"
+
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -54,7 +55,7 @@ func GetProtoCall(key Key, msg gogoproto.Message) Call {
 	c.Post = func() error {
 		reply := c.Reply.(*GetResponse)
 		if reply.Value == nil {
-			return util.Errorf("%s: no value present", key)
+			return fmt.Errorf("%s: no value present", key)
 		}
 		return gogoproto.Unmarshal(reply.Value.Bytes, msg)
 	}

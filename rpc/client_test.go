@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func init() {
@@ -37,7 +38,7 @@ func init() {
 func TestClientHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	addr := util.CreateTestAddr("tcp")
@@ -60,7 +61,7 @@ func TestClientHeartbeat(t *testing.T) {
 func TestClientNoCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	rpcContext := NewNodeTestContext(nil, stopper)
@@ -86,7 +87,7 @@ func TestClientNoCache(t *testing.T) {
 func TestClientHeartbeatBadServer(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	// Create a server without registering a heartbeat service.
@@ -118,7 +119,7 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	serverManual := hlc.NewManualClock(10)
@@ -165,7 +166,7 @@ func TestOffsetMeasurement(t *testing.T) {
 func TestDelayedOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	serverManual := hlc.NewManualClock(10)
@@ -214,7 +215,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 func TestFailedOffestMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	serverManual := hlc.NewManualClock(0)
@@ -265,7 +266,7 @@ func (ac *AdvancingClock) UnixNano() int64 {
 // createTestServer creates and starts a new server with a test tlsConfig and
 // addr. Be sure to close the server when done. Building the server manually
 // like this allows for manual registration of the heartbeat service.
-func createTestServer(serverClock *hlc.Clock, stopper *util.Stopper, t *testing.T) *Server {
+func createTestServer(serverClock *hlc.Clock, stopper *stop.Stopper, t *testing.T) *Server {
 	// Create a test context, but override the clock.
 	nodeContext := NewNodeTestContext(serverClock, stopper)
 

@@ -76,7 +76,7 @@ func (f firstRangeMissingError) Error() string {
 	return "the descriptor for the first range is not available via gossip"
 }
 
-// CanRetry implements the Retryable interface.
+// CanRetry implements the retry.Retryable interface.
 func (f firstRangeMissingError) CanRetry() bool { return true }
 
 // A noNodesAvailError specifies that no node addresses in a replica set
@@ -88,7 +88,7 @@ func (n noNodeAddrsAvailError) Error() string {
 	return "no replica node addresses available via gossip"
 }
 
-// CanRetry implements the Retryable interface.
+// CanRetry implements the retry.Retryable interface.
 func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 
 // A DistSender provides methods to access Cockroach's monolithic,
@@ -620,7 +620,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if err != nil {
-				if rErr, ok := err.(util.Retryable); ok && rErr.CanRetry() {
+				if rErr, ok := err.(retry.Retryable); ok && rErr.CanRetry() {
 					if log.V(1) {
 						log.Warning(err)
 					}
@@ -688,7 +688,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 				}
 				r.Reset()
 				continue
-			case util.Retryable:
+			case retry.Retryable:
 				if tErr.CanRetry() {
 					if log.V(1) {
 						log.Warning(err)

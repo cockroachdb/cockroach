@@ -29,11 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/log/logpb"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -202,8 +202,8 @@ func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request
 	}
 	defer reader.Close()
 
-	entry := proto.LogEntry{}
-	var entries []proto.LogEntry
+	entry := logpb.LogEntry{}
+	var entries []logpb.LogEntry
 	decoder := log.NewEntryDecoder(reader)
 	for {
 		if err := decoder.Decode(&entry); err != nil {

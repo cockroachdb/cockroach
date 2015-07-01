@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 )
 
@@ -747,7 +748,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	mtc := startMultiTestContext(t, 1)
 	defer mtc.Stop()
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	// Call Snapshot() in a loop and ensure it never fails.
 	stopper.RunWorker(func() {

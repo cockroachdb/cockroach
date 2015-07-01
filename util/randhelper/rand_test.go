@@ -15,7 +15,7 @@
 //
 // Author: Ben Darnell
 
-package util
+package randhelper
 
 import "testing"
 

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -224,7 +224,7 @@ func (rh *ResponseHeader) GoError() error {
 	// Make sure that the flags in the generic portion of the error
 	// match the methods of the specific error type.
 	if rh.Error.Retryable {
-		if r, ok := err.(util.Retryable); !ok || !r.CanRetry() {
+		if r, ok := err.(retry.Retryable); !ok || !r.CanRetry() {
 			panic(fmt.Sprintf("inconsistent error proto; expected %T to be retryable", err))
 		}
 	}

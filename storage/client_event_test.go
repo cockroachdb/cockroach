@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type storeEventReader struct {
@@ -217,7 +218,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	ser := &storeEventReader{
 		recordUpdateDetail: false,
 	}
-	readStopper := util.NewStopper()
+	readStopper := stop.NewStopper()
 	sub := feed.Subscribe()
 	readStopper.RunWorker(func() {
 		ser.readEvents(sub)

@@ -26,8 +26,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -40,7 +40,7 @@ func newDB(sender Sender) *DB {
 
 func newTestSender(handler func(proto.Call)) SenderFunc {
 	txnKey := proto.Key("test-txn")
-	txnID := []byte(util.NewUUID4())
+	txnID := []byte(uuid.NewUUID4())
 
 	return func(_ context.Context, call proto.Call) {
 		header := call.Args.Header()

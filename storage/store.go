@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -264,7 +265,7 @@ type Store struct {
 	feed           StoreEventFeed  // Event Feed
 	multiraft      *multiraft.MultiRaft
 	started        int32
-	stopper        *util.Stopper
+	stopper        *stop.Stopper
 	startedAt      int64
 	nodeDesc       *proto.NodeDescriptor
 	initComplete   sync.WaitGroup // Signaled by async init tasks
@@ -404,7 +405,7 @@ func (s *Store) StartedAt() int64 {
 }
 
 // Start the engine, set the GC and read the StoreIdent.
-func (s *Store) Start(stopper *util.Stopper) error {
+func (s *Store) Start(stopper *stop.Stopper) error {
 	s.stopper = stopper
 
 	if s.Ident.NodeID == 0 {
@@ -769,7 +770,7 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
+func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *stop.Stopper) error {
 	if s.Ident.NodeID != 0 {
 		return util.Errorf("engine already bootstrapped")
 	}
@@ -975,7 +976,7 @@ func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 func (s *Store) splitQueue() *splitQueue { return s._splitQueue }
 
 // Stopper accessor.
-func (s *Store) Stopper() *util.Stopper { return s.stopper }
+func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
 // EventFeed accessor.
 func (s *Store) EventFeed() StoreEventFeed { return s.feed }

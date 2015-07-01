@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type localInterceptableTransport struct {
@@ -30,14 +30,14 @@ type localInterceptableTransport struct {
 	listeners map[proto.RaftNodeID]ServerInterface
 	messages  chan *RaftMessageRequest
 	Events    chan *interceptMessage
-	stopper   *util.Stopper
+	stopper   *stop.Stopper
 }
 
 // NewLocalInterceptableTransport creates a Transport for local testing use.
 // MultiRaft instances sharing the same instance of this Transport can find and
 // communicate with each other by ID. Messages are transmitted in the order in
 // which they are queued, intercepted and blocked until acknowledged.
-func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
+func NewLocalInterceptableTransport(stopper *stop.Stopper) Transport {
 	lt := &localInterceptableTransport{
 		listeners: make(map[proto.RaftNodeID]ServerInterface),
 		messages:  make(chan *RaftMessageRequest, 100),

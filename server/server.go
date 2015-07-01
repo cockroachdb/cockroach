@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
@@ -74,11 +75,11 @@ type Server struct {
 	tsDB          *ts.DB
 	tsServer      *ts.Server
 	raftTransport multiraft.Transport
-	stopper       *util.Stopper
+	stopper       *stop.Stopper
 }
 
 // NewServer creates a Server from a server.Context.
-func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
+func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	if ctx == nil {
 		return nil, util.Error("ctx must not be null")
 	}

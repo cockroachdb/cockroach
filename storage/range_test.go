@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -108,7 +110,7 @@ type testContext struct {
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
 	clock         *hlc.Clock
-	stopper       *util.Stopper
+	stopper       *stop.Stopper
 	bootstrapMode bootstrapMode
 	feed          *util.Feed
 }
@@ -117,7 +119,7 @@ type testContext struct {
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB) {
 	if tc.stopper == nil {
-		tc.stopper = util.NewStopper()
+		tc.stopper = stop.NewStopper()
 	}
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), tc.stopper)
@@ -2062,7 +2064,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	defer tc.Stop()
 
 	// Put two values transactionally.
-	txn := &proto.Transaction{ID: util.NewUUID4(), Timestamp: tc.clock.Now()}
+	txn := &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}
 	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
 		pArgs, pReply := putArgs(key, []byte("value1"), 1, tc.store.StoreID())
 		pArgs.Txn = txn
@@ -2135,7 +2137,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// Put a 2nd value transactionally.
 	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
-	pArgs.Txn = &proto.Transaction{ID: util.NewUUID4(), Timestamp: pArgs.Timestamp}
+	pArgs.Txn = &proto.Transaction{ID: uuid.NewUUID4(), Timestamp: pArgs.Timestamp}
 
 	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 
@@ -2598,7 +2600,7 @@ func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
 		tc.feed = &util.Feed{}
 	}
 	eventC := 0
-	consumeStopper := util.NewStopper()
+	consumeStopper := stop.NewStopper()
 	if consumeEvents {
 		sub := tc.feed.Subscribe()
 		consumeStopper.RunWorker(func() {

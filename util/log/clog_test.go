@@ -28,8 +28,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // Test that shortHostname works as advertised.
@@ -450,7 +448,7 @@ func TestLogBacktraceAt(t *testing.T) {
 	}
 	{
 		// Start of tracing block. These lines know about each other's relative position.
-		file, line := util.Caller(0)
+		file, line := Caller(0)
 		setTraceLocation(file, line, +2) // Two lines between Caller and Info calls.
 		Info("we want a stack trace here")
 		if err := logging.traceLocation.Set(""); err != nil {
@@ -479,7 +477,7 @@ func TestCaller(t *testing.T) {
 	filename := "util/log/clog_test.go" // could obtain this, but KISS
 
 	fn := func() {
-		files[i], lines[i] = logging.Caller(1)
+		files[i], lines[i] = Caller(1)
 		i++
 	}
 

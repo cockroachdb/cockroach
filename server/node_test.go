@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // createTestNode creates an rpc server using the specified address,
@@ -47,11 +48,11 @@ import (
 // of engines. The server, clock and node are returned. If gossipBS is
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *hlc.Clock, *Node, *util.Stopper) {
+	*rpc.Server, *hlc.Clock, *Node, *stop.Stopper) {
 	var err error
 	ctx := storage.StoreContext{}
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, ctx.Clock, stopper)
 	ctx.ScanInterval = 10 * time.Hour
@@ -82,7 +83,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *Node, *util.Stopper) {
+	*rpc.Server, *Node, *stop.Stopper) {
 	rpcServer, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	if err := node.start(rpcServer, engines, proto.Attributes{}, stopper); err != nil {
 		t.Fatal(err)
@@ -102,7 +103,7 @@ func formatKeys(keys []proto.Key) string {
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	localDB, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
 	if err != nil {
@@ -143,7 +144,7 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	eagerStopper := util.NewStopper()
+	eagerStopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper); err != nil {
 		t.Fatal(err)
@@ -182,7 +183,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
 	if err != nil {
@@ -232,7 +233,7 @@ func TestNodeJoin(t *testing.T) {
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	eagerStopper := util.NewStopper()
+	eagerStopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper)
 	if err != nil {

@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var (
@@ -150,7 +150,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset
 // clock from the true cluster time is within MaxOffset. If the offset exceeds
 // MaxOffset, then this method will trigger a fatal error, causing the node to
 // suicide.
-func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *util.Stopper) {
+func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 	if log.V(1) {
 		log.Infof("monitoring cluster offset")
 	}

@@ -36,9 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log/logpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -370,7 +369,7 @@ func NewEntryDecoder(in io.Reader) *EntryDecoder {
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
-func (lr *EntryDecoder) Decode(entry *proto.LogEntry) error {
+func (lr *EntryDecoder) Decode(entry *logpb.LogEntry) error {
 	// Read the next log entry.
 	szBuf := make([]byte, 4)
 	n, err := lr.in.Read(szBuf)
@@ -392,7 +391,7 @@ func (lr *EntryDecoder) Decode(entry *proto.LogEntry) error {
 type baseEntryReader struct {
 	buf    []byte
 	ld     *EntryDecoder
-	format func(entry *proto.LogEntry) []byte
+	format func(entry *logpb.LogEntry) []byte
 }
 
 // Read implements the io.Reader interface.
@@ -408,7 +407,7 @@ func (hr *baseEntryReader) Read(p []byte) (int, error) {
 				return n, nil
 			}
 		}
-		entry := &proto.LogEntry{}
+		entry := &logpb.LogEntry{}
 		if err := hr.ld.Decode(entry); err != nil {
 			return n, err
 		}
@@ -423,7 +422,7 @@ func (hr *baseEntryReader) Read(p []byte) (int, error) {
 func NewTermEntryReader(reader io.Reader) io.Reader {
 	tr := &baseEntryReader{ld: NewEntryDecoder(reader)}
 	colors := logging.shouldColorize()
-	tr.format = func(entry *proto.LogEntry) []byte { return formatLogEntry(entry, colors) }
+	tr.format = func(entry *logpb.LogEntry) []byte { return formatLogEntry(entry, colors) }
 	return tr
 }
 
@@ -431,7 +430,7 @@ func NewTermEntryReader(reader io.Reader) io.Reader {
 // encoded entries in JSON format.
 func NewJSONEntryReader(reader io.Reader) io.Reader {
 	jr := &baseEntryReader{ld: NewEntryDecoder(reader)}
-	jr.format = func(entry *proto.LogEntry) []byte {
+	jr.format = func(entry *logpb.LogEntry) []byte {
 		data, err := json.MarshalIndent(entry, "", "  ")
 		if err != nil {
 			return []byte(fmt.Sprintf("{\"error\": %q}", err))
@@ -573,7 +572,7 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry *proto.LogEntry, colors *colorProfile) []byte {
+func formatLogEntry(entry *logpb.LogEntry, colors *colorProfile) []byte {
 	buf := formatHeader(Severity(entry.Severity), time.Unix(entry.Time/1E9, entry.Time%1E9), entry.ThreadID, entry.File, entry.Line, colors)
 	var args []interface{}
 	for _, arg := range entry.Args {
@@ -713,13 +712,19 @@ func (l *loggingT) putBuffer(b *buffer) {
 
 var timeNow = time.Now // Stubbed out for testing.
 
-func (l *loggingT) Caller(depth int) (file string, line int) {
-	return util.Caller(depth + 1)
+// Caller returns the file and line of the Caller or, in case of error,
+// the placeholder ('???', 1).
+func Caller(depth int) (string, int) {
+	if _, file, line, ok := runtime.Caller(1 + depth); ok {
+		list := strings.Split(file, "cockroach"+string(os.PathSeparator))
+		return list[len(list)-1], line
+	}
+	return "???", 1
 }
 
 func (l *loggingT) print(s Severity, args ...interface{}) {
-	file, line := l.Caller(1)
-	entry := proto.LogEntry{}
+	file, line := Caller(1)
+	entry := logpb.LogEntry{}
 	setLogEntry(nil, "", args, &entry)
 	l.outputLogEntry(s, file, line, false, &entry)
 }
@@ -727,7 +732,7 @@ func (l *loggingT) print(s Severity, args ...interface{}) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStderr bool, entry *proto.LogEntry) {
+func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStderr bool, entry *logpb.LogEntry) {
 	l.mu.Lock()
 
 	// Set additional details in log entry.
@@ -794,7 +799,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStder
 	}
 }
 
-func encodeLogEntry(entry *proto.LogEntry) []byte {
+func encodeLogEntry(entry *logpb.LogEntry) []byte {
 	// Marshal log entry.
 	entryData, err := gogoproto.Marshal(entry)
 	if err != nil {
@@ -806,7 +811,7 @@ func encodeLogEntry(entry *proto.LogEntry) []byte {
 }
 
 // processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry *proto.LogEntry) []byte {
+func (l *loggingT) processForStderr(entry *logpb.LogEntry) []byte {
 	return formatLogEntry(entry, l.shouldColorize())
 }
 
@@ -947,13 +952,13 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
 	// Write header.
-	file, line := logging.Caller(0)
+	file, line := Caller(0)
 	for _, format := range []string{
 		fmt.Sprintf("Running on machine: %s", host),
 		fmt.Sprintf("Binary: Built with %s %s for %s/%s",
 			runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
 	} {
-		entry := proto.LogEntry{
+		entry := logpb.LogEntry{
 			Time:   time.Now().UnixNano(),
 			File:   file,
 			Line:   int32(line),
@@ -1088,7 +1093,7 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	}
 	// printWithFileLine with alsoToStderr=true, so standard log messages
 	// always appear on standard error.
-	entry := &proto.LogEntry{
+	entry := &logpb.LogEntry{
 		Format: text,
 	}
 	logging.outputLogEntry(Severity(lb), file, line, true, entry)

@@ -18,9 +18,8 @@
 package proto
 
 import (
+	"fmt"
 	"net"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // FromNetAddr returns an Addr object based on the supplied net.Addr.
@@ -41,7 +40,7 @@ func (a Addr) NetAddr() (net.Addr, error) {
 	case "unix", "unixgram", "unixpacket":
 		return net.ResolveUnixAddr(a.Network, a.Address)
 	}
-	return nil, util.Errorf("network %s not supported", a.Network)
+	return nil, fmt.Errorf("network %s not supported", a.Network)
 }
 
 // GetUser implements UserRequest.

@@ -19,28 +19,17 @@ package util
 
 import (
 	"fmt"
-	"os"
-	"runtime"
-	"strings"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const defaultSkip = 2
 const errorPrefixFormat string = "%s:%d: "
 
-// Caller returns the file and line of the Caller or, in case of error,
-// the placeholder ('???', 1).
-func Caller(depth int) (string, int) {
-	if _, file, line, ok := runtime.Caller(1 + depth); ok {
-		list := strings.Split(file, "cockroach"+string(os.PathSeparator))
-		return list[len(list)-1], line
-	}
-	return "???", 1
-}
-
 // getPrefix skips "skip" stack frames to get the file & line number
 // of original caller.
 func getPrefix(skip int, format string) string {
-	file, line := Caller(skip)
+	file, line := log.Caller(skip)
 	return fmt.Sprintf(format, file, line)
 }
 

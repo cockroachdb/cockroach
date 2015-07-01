@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // idAllocationRetryOpts sets the retry options for handling RaftID
@@ -46,7 +47,7 @@ type idAllocator struct {
 	minID     uint32      // Minimum ID to return
 	blockSize uint32      // Block allocation size
 	ids       chan uint32 // Channel of available IDs
-	stopper   *util.Stopper
+	stopper   *stop.Stopper
 	once      sync.Once
 }
 
@@ -54,7 +55,7 @@ type idAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func newIDAllocator(idKey proto.Key, db *client.DB, minID uint32, blockSize uint32, stopper *util.Stopper) (*idAllocator, error) {
+func newIDAllocator(idKey proto.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper) (*idAllocator, error) {
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
 	if minID == 0 {

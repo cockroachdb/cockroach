@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/randhelper"
 )
 
 // TODO(bram): Increase TotalSplits drastically if performance allows.
@@ -644,7 +645,7 @@ func TestRandomSplits(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()
-	rng, seed := util.NewPseudoRand()
+	rng, seed := randhelper.NewPseudoRand()
 	t.Logf("using pseudo random number generator with seed %d", seed)
 
 	tree := &llrb.Tree{}

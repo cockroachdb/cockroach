@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -105,7 +106,7 @@ type LocalTestCluster struct {
 	DB      *client.DB
 	lSender *retryableLocalSender
 	Sender  *TxnCoordSender
-	Stopper *util.Stopper
+	Stopper *stop.Stopper
 }
 
 // Start starts the test cluster by bootstrapping an in-memory store
@@ -116,7 +117,7 @@ type LocalTestCluster struct {
 func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
-	ltc.Stopper = util.NewStopper()
+	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(testutils.NewRootTestBaseContext(), ltc.Clock, ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)

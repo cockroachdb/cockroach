@@ -17,7 +17,7 @@
 //
 // Based on code from http://code.google.com/p/go-uuid/uuid
 
-package util
+package uuid
 
 import (
 	"crypto/rand"
