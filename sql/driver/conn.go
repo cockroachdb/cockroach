@@ -402,11 +402,11 @@ func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
 		if err != nil {
 			return nil, err
 		}
-		col, err := findColumnByID(desc, uint32(colID))
+		col, err := desc.FindColumnByID(uint32(colID))
 		if err != nil {
 			return nil, err
 		}
-		vals[col.Name] = unmarshalValue(col, kv)
+		vals[col.Name] = unmarshalValue(*col, kv)
 
 		if log.V(2) {
 			log.Infof("Scan %q -> %v", kv.Key, vals[col.Name])
@@ -492,11 +492,11 @@ func (c *conn) processColumns(desc *structured.TableDescriptor,
 			case *parser.ColName:
 				// TODO(pmattis): If et.Qualifier is not empty, verify it matches the
 				// table name.
-				var err error
-				cols[i], err = findColumnByName(desc, et.Name)
+				col, err := desc.FindColumnByName(et.Name)
 				if err != nil {
 					return nil, err
 				}
+				cols[i] = *col
 			default:
 				return nil, fmt.Errorf("unexpected node: %T", nt.Expr)
 			}
@@ -540,32 +540,6 @@ func (c *conn) processInsertRows(node parser.InsertRows) (*rows, error) {
 		return c.query(nt, nil)
 	}
 	return nil, fmt.Errorf("TODO(pmattis): unsupported node: %T", node)
-}
-
-func findColumnByName(desc *structured.TableDescriptor, name string) (
-	structured.ColumnDescriptor, error) {
-	// TODO(pmattis): This should really be done using a map from column name to
-	// column descriptor.
-	for _, c := range desc.Columns {
-		if c.Name == name {
-			return c, nil
-		}
-	}
-	c := structured.ColumnDescriptor{}
-	return c, fmt.Errorf("column \"%s\" does not exist", name)
-}
-
-func findColumnByID(desc *structured.TableDescriptor, id uint32) (
-	structured.ColumnDescriptor, error) {
-	// TODO(pmattis): This should really be done using a map from column id to
-	// column descriptor.
-	for _, c := range desc.Columns {
-		if c.ID == id {
-			return c, nil
-		}
-	}
-	c := structured.ColumnDescriptor{}
-	return c, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
 // TODO(pmattis): The key encoding and decoding routines belong in either
@@ -651,7 +625,7 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 	}
 
 	for _, id := range index.ColumnIDs {
-		col, err := findColumnByID(desc, id)
+		col, err := desc.FindColumnByID(id)
 		if err != nil {
 			return nil, err
 		}
