@@ -17,7 +17,15 @@
 
 package randhelper
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/testutils/fakeflags"
+)
+
+func init() {
+	fakeflags.InitLogFlags()
+}
 
 func TestPseudoRand(t *testing.T) {
 	numbers := make(map[int]bool)

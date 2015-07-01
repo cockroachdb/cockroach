@@ -15,10 +15,22 @@
 //
 // Author: Tobias Schottdorf
 
-package log
+package fakeflags
 
 import "github.com/cockroachdb/cockroach/util/log/logflags"
 
-func init() {
-	logflags.InitFlags(&logging.toStderr, &logging.alsoToStderr, logDir, &logging.color, &logging.verbosity, &logging.vmodule, &logging.traceLocation)
+type fakeValue struct{}
+
+func (*fakeValue) String() string     { return "" }
+func (*fakeValue) Set(_ string) error { return nil }
+
+// InitLogFlags sets fake flags which mimick those of the logging package.
+// This is necessary since some packages are not allowed to import `util/log`,
+// but still need to be able to run tests with logging flags.
+func InitLogFlags() {
+	var toStderr, alsoToStderr bool
+	var color, logDir string
+	var verbosity, vmodule, traceLocation fakeValue
+	logflags.InitFlags(&toStderr, &alsoToStderr, &logDir,
+		&color, &verbosity, &vmodule, &traceLocation)
 }

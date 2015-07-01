@@ -20,7 +20,13 @@ package stop
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/testutils/fakeflags"
 )
+
+func init() {
+	fakeflags.InitLogFlags()
+}
 
 func TestStopper(t *testing.T) {
 	s := NewStopper()

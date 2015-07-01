@@ -20,7 +20,13 @@ package uuid
 import (
 	"bytes"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/testutils/fakeflags"
 )
+
+func init() {
+	fakeflags.InitLogFlags()
+}
 
 func TestUUID(t *testing.T) {
 	uuid1 := NewUUID4()

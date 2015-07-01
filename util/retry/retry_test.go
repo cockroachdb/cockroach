@@ -21,8 +21,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/testutils/fakeflags"
 	"github.com/cockroachdb/cockroach/util/stop" // enable flags
 )
+
+func init() {
+	fakeflags.InitLogFlags()
+}
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
 	opts := Options{
