@@ -807,3 +807,118 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		}
 	}
 }
+
+// TestIgnoreCommandFromOldLeader tests that a Raft command from a previous leader replica
+// will get a NotLeaderError error.
+//
+// 1) Leader lease expires on a replica (store ID 1). The lease
+//    expiration time is T.
+// 2) A new replica (store ID 2) acquires the lease when processing a
+//    read request whose timestamp is > T. The leader lease request is
+//    committed in Raft.
+// 3) Before the previous leader replica processes the lease request,
+//    the replica receives a write request whose timestamp is earlier
+//    than T. Since the write request's timestamp is within the previous
+//    leader's lease duration, the previous leader replica attempts to
+//    process the write request and proposes a put command to Raft.
+// 4) When replaying commands from the Raft log, other replicas find
+//    the put command coming from the previous leader and rejects it.
+// 5) The previous leader replica eventually receives a NotLeaderError error.
+func TestIgnoreCommandFromOldLeader(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Set up a filter so that the old leader replica will not
+	// execute a leader lease request until a write request is
+	// sent to it.
+	var numLeaseRequests int32
+	waitForLeaderLeaseRequest := make(chan struct{})
+	waitForWrite := make(chan struct{})
+	newLeaderStoreID := proto.StoreID(2)
+	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+		if req, ok := args.(*proto.InternalLeaderLeaseRequest); ok {
+			_, storeID := proto.DecodeRaftNodeID(req.Lease.RaftNodeID)
+			if storeID == newLeaderStoreID && atomic.AddInt32(&numLeaseRequests, 1) == 1 {
+				close(waitForLeaderLeaseRequest)
+				<-waitForWrite
+			}
+		}
+		return false
+	}
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+
+	// Build three stores.
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+	raftID := proto.RaftID(1)
+	mtc.replicateRange(raftID, 0, 1, 2)
+
+	prevLeaderStore := mtc.stores[0]
+	newLeaderStore := mtc.stores[1]
+	if newLeaderStore.StoreID() != newLeaderStoreID {
+		log.Fatalf("unexpected store ID %s for the new leader store", newLeaderStore.StoreID())
+	}
+
+	// Increment the clock's timestamp to expire the leader lease.
+	oldTimestamp := mtc.clock.Now()
+	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
+
+	// Store of ID 2 acquires a new leader lease when processing a get request.
+	go func() {
+		// Send a get request with the current time.
+		requestHeader := proto.RequestHeader{
+			Key:       proto.Key("key"),
+			RaftID:    raftID,
+			Replica:   proto.Replica{StoreID: newLeaderStore.StoreID()},
+			Timestamp: mtc.clock.Now(),
+		}
+		getCall := proto.Call{
+			Args: &proto.GetRequest{
+				RequestHeader: requestHeader,
+			},
+			Reply: &proto.GetResponse{},
+		}
+		err := newLeaderStore.ExecuteCmd(context.Background(), getCall)
+		if err != nil {
+			t.Fatalf("failed to get: %s", err)
+		}
+	}()
+
+	// Wait until a leader lease request is committed in Raft, and
+	// the command is being processed by the Store of ID 1.
+	<-waitForLeaderLeaseRequest
+
+	// Attempt to execute a put request on the previous leader
+	// replica before the replica processes the new leader lease
+	// request. The replica accepts the request and proposes a
+	// Raft command since the timestamp of the put request is
+	// earlier than the previous lease's expiration time.
+	requestHeader := proto.RequestHeader{
+		Key:       proto.Key("key"),
+		RaftID:    raftID,
+		Replica:   proto.Replica{StoreID: prevLeaderStore.StoreID()},
+		Timestamp: oldTimestamp,
+	}
+	putCall := proto.Call{
+		Args: &proto.PutRequest{
+			RequestHeader: requestHeader,
+			Value:         proto.Value{Bytes: []byte("val")},
+		},
+		Reply: &proto.PutResponse{},
+	}
+	// TODO(kkaneda): Close waitForWrite after making sure that
+	// the put command is being executed and a Raft command is proposed
+	// before the leader lease request is processed. Currently there is
+	// a chance that the replica finishes processing the leader lease
+	// request is processed before processing the put request.
+	close(waitForWrite)
+	err := prevLeaderStore.ExecuteCmd(context.Background(), putCall)
+	// The other replicas have already processed the leader
+	// request and has a new leader.  So, they will reject the
+	// command from the previous leader replica and return a
+	// NotLeaderError.
+	if _, ok := err.(*proto.NotLeaderError); !ok {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+}
