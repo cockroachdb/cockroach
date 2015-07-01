@@ -73,6 +73,12 @@ func (r *Retry) Reset() {
 	r.isReset = true
 }
 
+// CurrentAttempt it is zero initally and increases with each call to Next()
+// which does not immediately follow a Reset().
+func (r *Retry) CurrentAttempt() int {
+	return r.currentAttempt
+}
+
 func (r Retry) retryIn() time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {

@@ -91,6 +91,9 @@ type Feed struct {
 // all Subscribers to the feed. Events published to a closed feed, or to a feed
 // with no Subscribers, will be ignored.
 func (f *Feed) Publish(event interface{}) {
+	if f == nil {
+		return
+	}
 	f.Lock()
 	defer f.Unlock()
 	if f.closed || len(f.subscribers) == 0 {
@@ -124,7 +127,7 @@ func (f *Feed) Subscribe() *Subscription {
 
 	f.Lock()
 	defer f.Unlock()
-	if !f.closed {
+	if f != nil && !f.closed {
 		f.subscribers = append(f.subscribers, sub)
 	} else {
 		close(sub.events)
@@ -136,6 +139,9 @@ func (f *Feed) Subscribe() *Subscription {
 // immediately when the Feed is closed. After closure, any new Subscribers will
 // be closed immediately and attempts to Publish will be ignored.
 func (f *Feed) Close() {
+	if f == nil {
+		return
+	}
 	f.Lock()
 	defer f.Unlock()
 	if !f.closed {
@@ -151,6 +157,9 @@ func (f *Feed) Close() {
 // channel; however, there may still be unprocessed Events remaining in the
 // channel.
 func (s *Subscription) Unsubscribe() {
+	if s == nil {
+		return
+	}
 	s.feed.Lock()
 	defer s.feed.Unlock()
 	if !s.feed.closed {

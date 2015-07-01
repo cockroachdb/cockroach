@@ -301,7 +301,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
-	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
+	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 
 	if err := s.node.ctx.DB.AdminSplit("m"); err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		s := StartTestServer(t)
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
-		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
+		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 
 		for _, sk := range tc.splitKeys {
 			if err := s.node.ctx.DB.AdminSplit(sk); err != nil {

@@ -149,3 +149,12 @@ func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
 	}
 	t.Fatal(ErrorfSkipFrames(1, "condition failed to evaluate within %s: %s", duration, lastErr))
 }
+
+// Panics calls the supplied function and returns true if and only if it panics.
+func Panics(f func()) (panics bool) {
+	defer func() {
+		panics = recover() != nil
+	}()
+	f()
+	return
+}

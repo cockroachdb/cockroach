@@ -430,7 +430,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
-	err := tc.rng.redirectOnOrAcquireLeaderLease(tc.clock.Now())
+	err := tc.rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now())
 	if lErr, ok := err.(*proto.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", err)
 	}

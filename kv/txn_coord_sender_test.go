@@ -558,7 +558,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		defer stopper.Stop()
 		ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 			call.Reply.Header().SetGoError(test.err)
-		}), clock, false, stopper)
+		}), clock, false, nil, stopper)
 		reply := &proto.PutResponse{}
 		ts.Send(context.Background(), proto.Call{Args: testPutReq, Reply: reply})
 
@@ -600,7 +600,7 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 		called = true
 		return
-	}), clock, false, stopper)
+	}), clock, false, nil, stopper)
 
 	testCases := []struct{ batch, arg, ok bool }{
 		{false, false, true},

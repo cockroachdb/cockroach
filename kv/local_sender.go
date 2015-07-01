@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // A LocalSender provides methods to access a collection of local stores.
@@ -123,6 +124,8 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	var err error
 	var store *storage.Store
 
+	trace := tracer.FromCtx(ctx)
+
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	header := call.Args.Header()
@@ -151,6 +154,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 		// accomplishes that. See proto.Transaction.CertainNodes for details.
 		if header.Txn != nil && header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
 			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+			trace.Event("read has no clock uncertainty")
 			header.Txn.MaxTimestamp = header.Txn.Timestamp
 		}
 		err = store.ExecuteCmd(ctx, call)

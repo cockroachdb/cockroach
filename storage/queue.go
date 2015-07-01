@@ -255,7 +255,7 @@ func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *util.Stopper) {
 		if bq.impl.needsLeaderLease() {
 			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
-			if err := rng.redirectOnOrAcquireLeaderLease(args.Header().Timestamp); err != nil {
+			if err := rng.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
 				if log.V(1) {
 					log.Infof("this replica of %s could not acquire leader lease; skipping...", rng)
 				}

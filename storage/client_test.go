@@ -66,7 +66,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	}
 	context.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()
-	sender := kv.NewTxnCoordSender(lSender, clock, false, stopper)
+	sender := kv.NewTxnCoordSender(lSender, clock, false, nil, stopper)
 	context.Clock = clock
 	var err error
 	if context.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
@@ -150,7 +150,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = append(m.senders, kv.NewLocalSender())
 
 	if m.db == nil {
-		sender := kv.NewTxnCoordSender(m.senders[0], m.clock, false, m.clientStopper)
+		sender := kv.NewTxnCoordSender(m.senders[0], m.clock, false, nil, m.clientStopper)
 		var err error
 		if m.db, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
 			t.Fatal(err)
