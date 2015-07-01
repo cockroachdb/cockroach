@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // StartNodeEvent is published when a node is started.
@@ -133,6 +134,8 @@ type NodeEventListener interface {
 	OnStartNode(event *StartNodeEvent)
 	OnCallSuccess(event *CallSuccessEvent)
 	OnCallError(event *CallErrorEvent)
+	// TODO(tschottdorf): break this out into a TraceEventListener.
+	OnTrace(event *tracer.Trace)
 }
 
 // ProcessNodeEvents reads node events from the supplied channel and passes them
@@ -144,6 +147,8 @@ func ProcessNodeEvents(l NodeEventListener, sub *util.Subscription) {
 		switch specificEvent := event.(type) {
 		case *StartNodeEvent:
 			l.OnStartNode(specificEvent)
+		case *tracer.Trace:
+			l.OnTrace(specificEvent)
 		case *CallSuccessEvent:
 			l.OnCallSuccess(specificEvent)
 		case *CallErrorEvent:

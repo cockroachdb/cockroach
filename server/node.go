@@ -19,6 +19,7 @@ package server
 
 import (
 	"container/list"
+	"fmt"
 	"net"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 const (
@@ -107,7 +109,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.S
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	sender := kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper)
+	sender := kv.NewTxnCoordSender(lSender, ctx.Clock, false, nil, stopper)
 	var err error
 	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
 		return nil, err
@@ -458,8 +460,18 @@ func (n *Node) publishStoreStatuses() error {
 func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
-	n.lSender.Send((*Node)(n).context(), proto.Call{Args: args, Reply: reply})
+	header := args.Header()
+	header.CmdID = header.GetOrCreateCmdID(n.ctx.Clock.PhysicalNow())
+	trace := n.ctx.Tracer.NewTrace(header)
+	defer trace.Finalize()
+	defer trace.Epoch("node")()
+	ctx := tracer.ToCtx((*Node)(n).context(), trace)
+
+	n.lSender.Send(ctx, proto.Call{Args: args, Reply: reply})
 	n.feed.CallComplete(args, reply)
+	if err := reply.Header().GoError(); err != nil {
+		trace.Event(fmt.Sprintf("error: %T", err))
+	}
 	return nil
 }
 

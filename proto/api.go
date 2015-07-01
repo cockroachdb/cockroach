@@ -33,6 +33,18 @@ func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
 }
 
+// TraceID implements tracer.Traceable and returns the ClientCmdID in the
+// format "c<WallTime>.<Random>".
+func (ccid ClientCmdID) TraceID() string {
+	return fmt.Sprint("c", ccid.WallTime, ".", ccid.Random)
+}
+
+// TraceName implements tracer.Traceable.
+func (ccid ClientCmdID) TraceName() string {
+	// 1 day = 8.64*10E13ns
+	return fmt.Sprint("c", ccid.WallTime%10E14, ".", ccid.Random%100)
+}
+
 const (
 	isAdmin = 1 << iota
 	isRead
@@ -118,6 +130,24 @@ func (rh *RequestHeader) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
 		}
 	}
 	return
+}
+
+// TraceID implements tracer.Traceable by returning the first nontrivial
+// TraceID of the Transaction and CmdID.
+func (rh *RequestHeader) TraceID() string {
+	if r := rh.Txn.TraceID(); r != "" {
+		return r
+	}
+	return rh.CmdID.TraceID()
+}
+
+// TraceName implements tracer.Traceable and behaves like TraceID, but using
+// the TraceName of the object delegated to.
+func (rh *RequestHeader) TraceName() string {
+	if r := rh.Txn.TraceID(); r != "" {
+		return rh.Txn.TraceName()
+	}
+	return rh.CmdID.TraceName()
 }
 
 // Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)

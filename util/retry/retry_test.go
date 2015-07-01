@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	_ "github.com/cockroachdb/cockroach/util/log" // enable flags
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {

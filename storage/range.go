@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
@@ -182,6 +183,7 @@ type rangeManager interface {
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
 	RemoveRange(rng *Range) error
+	Tracer() *tracer.Tracer
 	SplitRange(origRng, newRng *Range) error
 	processRangeDescriptorUpdate(rng *Range) error
 }
@@ -344,6 +346,8 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	}
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).
+	// Note that the command itself isn't traced, but usually the caller
+	// waiting for the result has an active Trace.
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args, &proto.InternalLeaderLeaseResponse{})
 	var err error
 	if err = <-errChan; err == nil {
@@ -369,7 +373,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error {
+func (r *Range) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp proto.Timestamp) error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
@@ -383,6 +387,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(timestamp proto.Timestamp) error 
 		// If lease is currently held by another, redirect to holder.
 		return r.newNotLeaderError(lease, raftNodeID)
 	}
+	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
 	err := r.requestLeaderLease(timestamp)
 
@@ -497,11 +502,15 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue.
 func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 	args, reply := call.Args, call.Reply
-
+	// TODO(tschottdorf) Some (internal) requests go here directly, so they
+	// won't be traced.
+	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
+		defer trace.Epoch("admin path")()
 		return r.addAdminCmd(ctx, args, reply)
 	} else if proto.IsReadOnly(args) {
+		defer trace.Epoch("read path")()
 		return r.addReadOnlyCmd(ctx, args, reply)
 	}
 	return r.addWriteCmd(ctx, args, reply, nil)
@@ -561,7 +570,7 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto
 	}
 
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -613,7 +622,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	cmdKey := r.beginCmd(header, true)
 
 	// This replica must have leader lease to process a consistent read.
-	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, true /* readOnly */)
 		reply.Header().SetGoError(err)
 		return err
@@ -658,15 +667,19 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 		return err
 	}
 
+	trace := tracer.FromCtx(ctx)
+
 	// Add the write to the command queue to gate subsequent overlapping
 	// Commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
+	qDone := trace.Epoch("command queue")
 	cmdKey := r.beginCmd(header, false)
+	qDone()
 
 	// This replica must have leader lease to process a write.
-	if err := r.redirectOnOrAcquireLeaderLease(header.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(trace, header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
 		reply.Header().SetGoError(err)
 		return err
@@ -702,6 +715,8 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 			}
 		}
 	}
+
+	defer trace.Epoch("raft")()
 
 	errChan, pendingCmd := r.proposeRaftCommand(ctx, args, reply)
 
@@ -776,15 +791,18 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	} else {
 		// This command originated elsewhere so we must create a new reply buffer.
 		reply = args.CreateReply()
+		// TODO(tschottdorf): consider the Trace situation here.
 		ctx = r.context()
 	}
 
+	execDone := tracer.FromCtx(ctx).Epoch(fmt.Sprintf("applying %s", args.Method()))
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
 	err := r.maybeSetCorrupt(
 		r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, reply),
 	)
+	execDone()
 
 	if cmd != nil {
 		cmd.done <- err
@@ -950,7 +968,7 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 	timestamp := r.rm.Clock().Now()
 
 	// Check for or obtain the lease, if none active.
-	err := r.redirectOnOrAcquireLeaderLease(timestamp)
+	err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), timestamp)
 	if err != nil {
 		switch e := err.(type) {
 		// NotLeaderError means there is an active lease, leaseRejectedError

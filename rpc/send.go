@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // OrderingPolicy is an enum for ordering strategies when there
@@ -57,6 +58,8 @@ type Options struct {
 	// Timeout is the maximum duration of an RPC before failure.
 	// 0 for no timeout.
 	Timeout time.Duration
+	// If not nil, information about the request is added to this trace.
+	Trace *tracer.Trace
 }
 
 // An rpcError indicates a failure to send the RPC. rpcErrors are
@@ -105,6 +108,7 @@ func (s SendError) CanRetry() bool { return s.canRetry }
 // number of required replies.
 func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
 	getReply func() interface{}, context *Context) ([]interface{}, error) {
+	trace := opts.Trace // not thread safe!
 
 	if opts.N <= 0 {
 		return nil, SendError{
@@ -170,6 +174,8 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			if log.V(2) {
 				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
 			}
+
+			trace.Event(fmt.Sprintf("sending to %s", clients[index].Addr()))
 			go sendOneFn(clients[index], opts.Timeout, method, args, reply, helperChan)
 		}
 		// Wait for completions.
@@ -193,6 +199,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				}
 				// Send to additional replicas if available.
 				if N < len(clients) {
+					trace.Event("error, trying next peer")
 					N++
 				}
 			default:
@@ -208,6 +215,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		case <-time.After(opts.SendNextTimeout):
 			// On successive RPC timeouts, send to additional replicas if available.
 			if N < len(clients) {
+				trace.Event("timeout, trying next peer")
 				N++
 			}
 		}

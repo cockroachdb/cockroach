@@ -19,6 +19,7 @@ package kv
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"reflect"
 	"sync/atomic"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/tracer"
 
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -289,7 +291,9 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	}
 	reply := &proto.InternalRangeLookupResponse{}
 	replicas := newReplicaSlice(ds.gossip, desc)
-	if err := ds.sendRPC(desc.RaftID, replicas, rpc.OrderRandom, args, reply); err != nil {
+	// TODO(tschottdorf) consider a Trace here, potentially that of the request
+	// that had the cache miss and waits for the result.
+	if err := ds.sendRPC(nil /* Trace */, desc.RaftID, replicas, rpc.OrderRandom, args, reply); err != nil {
 		return nil, err
 	}
 	if reply.Error != nil {
@@ -402,7 +406,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order rpc.OrderingPolicy,
+func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request, reply proto.Response) error {
 	if len(replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", args.Method())
@@ -432,6 +436,7 @@ func (ds *DistSender) sendRPC(raftID proto.RaftID, replicas replicaSlice, order 
 		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         defaultRPCTimeout,
+		Trace:           trace,
 	}
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
@@ -519,7 +524,8 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 // replicas before making a single attempt at sending the request. It returns
 // the result of sending the RPC; a potential error contained in the reply has
 // to be handled separately by the caller.
-func (ds *DistSender) sendAttempt(args proto.Request, reply proto.Response, desc *proto.RangeDescriptor) error {
+func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, reply proto.Response, desc *proto.RangeDescriptor) error {
+	defer trace.Epoch("sending RPC")()
 	// Truncate the request to our current range, making sure not to
 	// touch it unless we have to (it is illegal to send EndKey on
 	// commands which do not operate on ranges).
@@ -547,7 +553,7 @@ func (ds *DistSender) sendAttempt(args proto.Request, reply proto.Response, desc
 		}
 	}
 
-	return ds.sendRPC(desc.RaftID, replicas, order, args, reply)
+	return ds.sendRPC(trace, desc.RaftID, replicas, order, args, reply)
 }
 
 // Send implements the client.Sender interface. It verifies
@@ -560,7 +566,7 @@ func (ds *DistSender) sendAttempt(args proto.Request, reply proto.Response, desc
 //
 // This may temporarily adjust the request headers, so the proto.Call
 // must not be used concurrently until Send has returned.
-func (ds *DistSender) Send(_ context.Context, call proto.Call) {
+func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 	args := call.Args
 	finalReply := call.Reply
 
@@ -569,6 +575,8 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 		call.Reply.Header().SetGoError(err)
 		return
 	}
+
+	trace := tracer.FromCtx(ctx)
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
@@ -606,7 +614,9 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
+			descDone := trace.Epoch("meta descriptor lookup")
 			desc, descNext, err = ds.getDescriptors(call)
+			descDone()
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if err != nil {
@@ -618,8 +628,9 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 				}
 				break
 			}
-			err = ds.sendAttempt(args, curReply, desc)
+			err = ds.sendAttempt(trace, args, curReply, desc)
 			if err != nil {
+				trace.Event(fmt.Sprintf("send error: %T", err))
 				// For an RPC error to occur, we must've been unable to contact any
 				// replicas. In this case, likely all nodes are down (or not getting back
 				// to us within a reasonable amount of time).
@@ -646,6 +657,7 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 			// but reset the backoff loop so we can retry immediately.
 			switch tErr := err.(type) {
 			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
+				trace.Event(fmt.Sprintf("reply error: %T", err))
 				// Range descriptor might be out of date - evict it.
 				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
 				// On addressing errors, don't backoff; retry immediately.
@@ -655,6 +667,7 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 				}
 				continue
 			case *proto.NotLeaderError:
+				trace.Event(fmt.Sprintf("reply error: %T", err))
 				newLeader := tErr.GetLeader()
 				// Verify that leader is a known replica according to the
 				// descriptor. If not, we've got a stale replica; evict cache.
@@ -680,6 +693,7 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 					if log.V(1) {
 						log.Warning(err)
 					}
+					trace.Event(fmt.Sprintf("reply error: %T", err))
 					continue
 				}
 			}
@@ -740,6 +754,7 @@ func (ds *DistSender) Send(_ context.Context, call proto.Call) {
 		// This is a multi-range request, make a new reply object for
 		// subsequent iterations of the loop.
 		curReply = args.CreateReply()
+		trace.Event("querying next range")
 	}
 	call.Reply = finalReply
 }

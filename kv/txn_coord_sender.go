@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"github.com/montanaflynn/stats"
 )
@@ -137,13 +138,15 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // transaction has covered, clears the keys cache and closes the
 // metadata heartbeat. Any keys listed in the resolved slice have
 // already been resolved and do not receive resolve intent commands.
-func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.Sender, stopper *util.Stopper) {
+func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolved []proto.Key, sender client.Sender, stopper *util.Stopper) {
 	close(tm.txnEnd) // stop heartbeat
+	trace.Event("coordinator stops")
 	if tm.keys.Len() > 0 {
 		if log.V(2) {
 			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 		}
 	}
+	// TODO(tschottdorf): Should create a Batch here.
 	for _, o := range tm.keys.GetOverlaps(proto.KeyMin, proto.KeyMax) {
 		// If the op was range based, end key != start key: resolve a range.
 		var call proto.Call
@@ -184,16 +187,16 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.
 		if stopper.StartTask() {
-			go func() {
+			go func(ctx context.Context) {
 				if log.V(2) {
 					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
 				}
-				sender.Send(context.TODO(), call)
+				sender.Send(ctx, call)
 				if call.Reply.Header().Error != nil {
 					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
 				}
 				stopper.FinishTask()
-			}()
+			}(tracer.ToCtx(context.Background(), trace.Fork()))
 		}
 	}
 	tm.keys.Clear()
@@ -227,6 +230,7 @@ type TxnCoordSender struct {
 	txns              map[string]*txnMetadata // txn key to metadata
 	txnStats          txnCoordStats           // statistics of recent txns
 	linearizable      bool                    // enables linearizable behaviour
+	tracer            *tracer.Tracer
 	stopper           *util.Stopper
 }
 
@@ -234,7 +238,7 @@ type TxnCoordSender struct {
 // distributed DB instance. A TxnCoordSender should be closed when no
 // longer in use via Close(), which also closes the wrapped sender
 // supplied here.
-func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, stopper *util.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *util.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
@@ -242,6 +246,7 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[string]*txnMetadata{},
 		linearizable:      linearizable,
+		tracer:            tracer,
 		stopper:           stopper,
 	}
 
@@ -335,14 +340,28 @@ func (tc *TxnCoordSender) startStats() {
 // Send implements the client.Sender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
-func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
+func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 	header := call.Args.Header()
 	tc.maybeBeginTxn(header)
+	header.CmdID = header.GetOrCreateCmdID(tc.clock.PhysicalNow())
+
+	// This is the earliest point at which the request has a ClientCmdID and/or
+	// TxnID (if applicable). Begin a Trace which follows this request.
+	trace := tc.tracer.NewTrace(call.Args.Header())
+	defer trace.Finalize()
+	defer trace.Epoch(fmt.Sprintf("sending %s", call.Method()))()
+	defer func() {
+		if err := call.Reply.Header().GoError(); err != nil {
+			trace.Event(fmt.Sprintf("reply error: %T", err))
+		}
+	}()
+	ctx = tracer.ToCtx(ctx, trace)
 
 	// Process batch specially; otherwise, send via wrapped sender.
 	switch args := call.Args.(type) {
 	case *proto.InternalBatchRequest:
-		tc.sendBatch(args, call.Reply.(*proto.InternalBatchResponse))
+		trace.Event("batch processing")
+		tc.sendBatch(ctx, args, call.Reply.(*proto.InternalBatchResponse))
 	case *proto.BatchRequest:
 		// Convert the batch request to internal-batch request.
 		internalArgs := &proto.InternalBatchRequest{RequestHeader: args.RequestHeader}
@@ -350,15 +369,15 @@ func (tc *TxnCoordSender) Send(_ context.Context, call proto.Call) {
 		for i := range args.Requests {
 			internalArgs.Add(args.Requests[i].GetValue().(proto.Request))
 		}
-		tc.sendBatch(internalArgs, internalReply)
+		tc.sendBatch(ctx, internalArgs, internalReply)
 		reply := call.Reply.(*proto.BatchResponse)
 		reply.ResponseHeader = internalReply.ResponseHeader
-		// Convert form internal-batch response to batch response.
+		// Convert from internal-batch response to batch response.
 		for i := range internalReply.Responses {
 			reply.Add(internalReply.Responses[i].GetValue().(proto.Response))
 		}
 	default:
-		tc.sendOne(call)
+		tc.sendOne(ctx, call)
 	}
 }
 
@@ -394,9 +413,10 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 // key range is recorded as live intents for eventual cleanup upon
 // transaction commit. Upon successful txn commit, initiates cleanup
 // of intents.
-func (tc *TxnCoordSender) sendOne(call proto.Call) {
+func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	var startNS int64
 	header := call.Args.Header()
+	trace := tracer.FromCtx(ctx)
 	// If this call is part of a transaction...
 	if header.Txn != nil {
 		// Set the timestamp to the original timestamp for read-only
@@ -417,7 +437,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 	}
 
 	// Send the command through wrapped sender.
-	tc.wrapped.Send(context.TODO(), call)
+	tc.wrapped.Send(ctx, call)
 
 	if header.Txn != nil {
 		// If not already set, copy the request txn.
@@ -436,6 +456,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 		if call.Reply.Header().GoError() == nil {
 			if proto.IsTransactionWrite(call.Args) {
 				if txnMeta == nil {
+					trace.Event("coordinator spawns")
 					txnMeta = &txnMetadata{
 						txn:              *txn,
 						keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
@@ -464,15 +485,18 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 	case *proto.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider it dead.
-		tc.cleanupTxn(t.Txn, nil)
+		tc.cleanupTxn(trace, t.Txn, nil)
 	case *proto.TransactionAbortedError:
 		// If already aborted, cleanup the txn on this TxnCoordSender.
-		tc.cleanupTxn(t.Txn, nil)
+		tc.cleanupTxn(trace, t.Txn, nil)
 	case *proto.OpRequiresTxnError:
 		// Run a one-off transaction with that single command.
 		if log.V(1) {
 			log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
 		}
+		// TODO(tschottdorf): this part is awkward. Consider resending here
+		// without starting a new call, which is hard to trace. Plus, the
+		// below depends on default configuration.
 		tmpDB, err := client.Open(
 			fmt.Sprintf("//%s?priority=%d",
 				call.Args.Header().User, call.Args.Header().GetUserPriority()),
@@ -517,7 +541,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 				}
 				resolved = call.Reply.(*proto.EndTransactionResponse).Resolved
 				if txn.Status != proto.PENDING {
-					tc.cleanupTxn(*txn, resolved)
+					tc.cleanupTxn(trace, *txn, resolved)
 				}
 
 			}
@@ -527,7 +551,7 @@ func (tc *TxnCoordSender) sendOne(call proto.Call) {
 
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
-func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batchReply *proto.InternalBatchResponse) {
+func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.InternalBatchRequest, batchReply *proto.InternalBatchResponse) {
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies
 	// as needed.
@@ -562,7 +586,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.InternalBatchRequest, batch
 		} else {
 			call.Reply = batchReply.Responses[i].GetValue().(proto.Response)
 		}
-		tc.sendOne(call)
+		tc.sendOne(ctx, call)
 		// Amalgamate transaction updates and propagate first error, if applicable.
 		if batchReply.Txn != nil {
 			batchReply.Txn.Update(call.Reply.Header().Txn)
@@ -631,7 +655,7 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 // cleanupTxn is called to resolve write intents which were set down over
 // the course of the transaction. The txnMetadata object is removed from
 // the txns map and taken into account for statistics.
-func (tc *TxnCoordSender) cleanupTxn(txn proto.Transaction, resolved []proto.Key) {
+func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction, resolved []proto.Key) {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
@@ -643,7 +667,8 @@ func (tc *TxnCoordSender) cleanupTxn(txn proto.Transaction, resolved []proto.Key
 	// for stats.
 	txnMeta.txn = txn
 	tc.unregisterTxnLocked(txnMeta)
-	txnMeta.close(&txn, resolved, tc.wrapped, tc.stopper)
+
+	txnMeta.close(trace, &txn, resolved, tc.wrapped, tc.stopper)
 }
 
 // unregisterTxnLocked idempotently deletes a txnMetadata object from the sender
@@ -735,14 +760,21 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 				if !tc.stopper.StartTask() {
 					continue
 				}
-				tc.wrapped.Send(context.TODO(), call)
+
+				// Each heartbeat gets its own Trace.
+				trace := tc.tracer.NewTrace(&txn)
+				ctx := tracer.ToCtx(context.Background(), trace)
+				epochEnds := trace.Epoch("heartbeat")
+				epochEnds()
+				trace.Finalize()
+				tc.wrapped.Send(ctx, call)
 				// If the transaction is not in pending state, then we can stop
 				// the heartbeat. It's either aborted or committed, and we resolve
 				// write intents accordingly.
 				if reply.GoError() != nil {
 					log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
 				} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-					tc.cleanupTxn(*reply.Txn, nil)
+					tc.cleanupTxn(trace, *reply.Txn, nil)
 					proceed = false
 				}
 				tc.stopper.FinishTask()

@@ -411,6 +411,26 @@ func (t *Transaction) Equal(s *Transaction) bool {
 	return TxnIDEqual(t.ID, s.ID)
 }
 
+// TraceID implements tracer.Traceable. For a nontrivial Transaction, it
+// returns 't', followed by the transaction ID. Otherwise, the empty string is
+// returned.
+func (t *Transaction) TraceID() string {
+	if t == nil || len(t.ID) == 0 {
+		return ""
+	}
+	s := util.UUID(t.ID).String()
+	return "t" + s
+}
+
+// TraceName implements tracer.Traceable. It returns TraceID, but using the
+// short version of the UUID.
+func (t *Transaction) TraceName() string {
+	if t == nil || len(t.ID) == 0 {
+		return "(none)"
+	}
+	return "t" + t.Short()
+}
+
 // MakePriority generates a random priority value, biased by the
 // specified userPriority. If userPriority=100, the resulting
 // priority is 100x more likely to be probabilistically greater
@@ -516,8 +536,8 @@ func (t Transaction) String() string {
 }
 
 // Short returns the short form of the Transaction's UUID.
-func (t Transaction) Short() string {
-	return util.UUID(t.ID).Short()
+func (t *Transaction) Short() string {
+	return util.UUID(t.GetID()).Short()
 }
 
 // NewGCMetadata returns a GCMetadata initialized to have a ByteCounts

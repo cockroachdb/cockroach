@@ -175,7 +175,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(s.lSender, txnClock, false, s.Stopper)
+			sender := NewTxnCoordSender(s.lSender, txnClock, false, nil, s.Stopper)
 			txnDB, err := client.Open("//root@", client.SenderOpt(sender))
 			if err != nil {
 				t.Fatal(err)
