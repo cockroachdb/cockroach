@@ -153,13 +153,13 @@ func (s *Server) Serve(handler http.Handler) {
 			defer s.mu.Unlock()
 
 			switch state {
-			case http.StateNew:
+			case http.StateNew, http.StateHijacked:
 				if s.closed {
 					conn.Close()
 					return
 				}
 				s.activeConns[conn] = struct{}{}
-			case http.StateHijacked, http.StateClosed:
+			case http.StateClosed:
 				delete(s.activeConns, conn)
 			}
 		},
