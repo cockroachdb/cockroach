@@ -424,7 +424,7 @@ func TestStatusSummaries(t *testing.T) {
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
-		ReplicatedRangeCount: 0,
+		ReplicatedRangeCount: 1,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -497,7 +497,7 @@ func TestStatusSummaries(t *testing.T) {
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     1,
 		AvailableRangeCount:  1,
-		ReplicatedRangeCount: 0,
+		ReplicatedRangeCount: 1,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -556,7 +556,7 @@ func TestStatusSummaries(t *testing.T) {
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 0,
+		ReplicatedRangeCount: 2,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -602,7 +602,7 @@ func TestStatusSummaries(t *testing.T) {
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 0,
+		ReplicatedRangeCount: 2,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
