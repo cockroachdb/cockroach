@@ -53,6 +53,7 @@ func ReleaseCRC32Checksum(crc hash.Hash32) {
 // of k prepended to b.
 // Returns the slice with the checksum removed in case of success and an error
 // otherwise.
+// TODO(petermattis) remove this: the only use is in Encode/Decode.
 func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 	// Compute the first part of the expected checksum.
 	c := NewCRC32Checksum(k)
@@ -75,6 +76,7 @@ func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 
 // wrapChecksum computes the checksum of the byte slice b appended to k.
 // The output is b with the checksum appended.
+// TODO(petermattis) remove this: the only use is in Encode/Decode.
 func wrapChecksum(k []byte, b []byte) []byte {
 	chk := NewCRC32Checksum(k)
 	chk.Write(b)
@@ -86,6 +88,7 @@ func wrapChecksum(k []byte, b []byte) []byte {
 // keys, but not to keys operated on internally, such as accounting keys.
 // It returns a byte slice containing, in order, the internal representation
 // of v and a checksum of (k+v).
+// TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.
 func Encode(k []byte, v interface{}) ([]byte, error) {
 	result := []byte(nil)
 	switch value := v.(type) {
@@ -104,6 +107,7 @@ func Encode(k []byte, v interface{}) ([]byte, error) {
 
 // Decode decodes a Go datatype from a value stored in the key-value store. It returns
 // either an error or a variable of the decoded value.
+// TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.
 func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
 	v, err := unwrapChecksum(k, wrappedValue)
 	if err != nil {
