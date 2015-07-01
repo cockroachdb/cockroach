@@ -765,9 +765,8 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 				trace := tc.tracer.NewTrace(&txn)
 				ctx := tracer.ToCtx(context.Background(), trace)
 				epochEnds := trace.Epoch("heartbeat")
-				epochEnds()
-				trace.Finalize()
 				tc.wrapped.Send(ctx, call)
+				epochEnds()
 				// If the transaction is not in pending state, then we can stop
 				// the heartbeat. It's either aborted or committed, and we resolve
 				// write intents accordingly.
@@ -777,6 +776,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 					tc.cleanupTxn(trace, *reply.Txn, nil)
 					proceed = false
 				}
+				trace.Finalize()
 				tc.stopper.FinishTask()
 				if !proceed {
 					return
