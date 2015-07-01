@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/uuid"
 
 	"github.com/spf13/cobra"
 )
@@ -64,8 +66,8 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
-	clusterID := util.NewUUID4().String()
-	stopper := util.NewStopper()
+	clusterID := uuid.NewUUID4().String()
+	stopper := stop.NewStopper()
 	if _, err := server.BootstrapCluster(clusterID, Context.Engines, stopper); err != nil {
 		log.Errorf("unable to bootstrap cluster: %s", err)
 		return
@@ -117,7 +119,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	}
 
 	log.Info("starting cockroach cluster")
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	stopper.AddWorker()
 	s, err := server.NewServer(Context, stopper)
 	if err != nil {

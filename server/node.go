@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
@@ -103,7 +104,7 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.DB) (proto.Stor
 //
 // Returns a KV client for unittest purposes. Caller should close the returned
 // client.
-func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *util.Stopper) (*client.DB, error) {
+func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.Stopper) (*client.DB, error) {
 	ctx := storage.StoreContext{}
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
@@ -229,7 +230,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
-	attrs proto.Attributes, stopper *util.Stopper) error {
+	attrs proto.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	if err := rpcServer.RegisterName("Node", (*nodeServer)(n)); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
@@ -264,7 +265,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 // the Store doesn't yet have a valid ident, it's added to the
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
-func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error {
+func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error {
 	bootstraps := list.New()
 
 	if len(engines) == 0 {
@@ -340,7 +341,7 @@ func (n *Node) validateStores() error {
 // and node IDs have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per
 // node.
-func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
+func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 	log.Infof("bootstrapping %d store(s)", bootstraps.Len())
 	if n.ClusterID == "" {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
@@ -402,7 +403,7 @@ func (n *Node) connectGossip() {
 
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
-func (n *Node) startGossip(stopper *util.Stopper) {
+func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		ticker := time.NewTicker(gossipInterval)
 		defer ticker.Stop()
@@ -430,7 +431,7 @@ func (n *Node) gossipCapacities() {
 
 // startPublishStatuses starts a loop which periodically instructs each store to
 // publish its current status to the event feed.
-func (n *Node) startPublishStatuses(stopper *util.Stopper) {
+func (n *Node) startPublishStatuses(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		// Publish status at the same frequency as metrics are collected.
 		ticker := time.NewTicker(publishStatusInterval)

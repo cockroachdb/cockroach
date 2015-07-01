@@ -19,8 +19,8 @@ package rpc
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // A HeartbeatService exposes a method to echo its request params. It doubles
@@ -56,7 +56,7 @@ type ManualHeartbeatService struct {
 	remoteClockMonitor *RemoteClockMonitor
 	// Heartbeats are processed when a value is sent here.
 	ready   chan struct{}
-	stopper *util.Stopper
+	stopper *stop.Stopper
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.

@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // A rangeItem holds a range and its priority for use with a priority queue.
@@ -133,7 +133,7 @@ func (bq *baseQueue) Length() int {
 
 // Start launches a goroutine to process entries in the queue. The
 // provided stopper is used to finish processing.
-func (bq *baseQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
+func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	bq.processLoop(clock, stopper)
 }
 
@@ -197,7 +197,7 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 // stopper signals exit.
 //
 // TODO(spencer): current load should factor into range processing timer.
-func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
+func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		// nextTime is initially nil; we don't start any timers until the queue
 		// becomes non-empty.
@@ -234,7 +234,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 	})
 }
 
-func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *util.Stopper) {
+func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *stop.Stopper) {
 	if !stopper.StartTask() {
 		return
 	}

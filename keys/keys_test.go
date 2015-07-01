@@ -22,9 +22,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // TestLocalKeySorting is a sanity check to make sure that
@@ -62,8 +62,8 @@ func TestKeyAddress(t *testing.T) {
 		{proto.Key("123"), proto.Key("123")},
 		{MakeKey(ConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
-		{TransactionKey(proto.Key("baz"), proto.Key(util.NewUUID4())), proto.Key("baz")},
-		{TransactionKey(proto.KeyMax, proto.Key(util.NewUUID4())), proto.KeyMax},
+		{TransactionKey(proto.Key("baz"), proto.Key(uuid.NewUUID4())), proto.Key("baz")},
+		{TransactionKey(proto.KeyMax, proto.Key(uuid.NewUUID4())), proto.KeyMax},
 		{MakeNameMetadataKey(0, "foo"), proto.Key("\x00name-\bfoo")},
 		{MakeDescMetadataKey(123), proto.Key("\x00desc-\t{")},
 		{nil, nil},

@@ -28,10 +28,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -95,11 +96,11 @@ func TestRocksDBCompaction(t *testing.T) {
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(proto.Key("a"), proto.Key(util.NewUUID4())),
+			Key:   keys.TransactionKey(proto.Key("a"), proto.Key(uuid.NewUUID4())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		{
-			Key:   keys.TransactionKey(proto.Key("b"), proto.Key(util.NewUUID4())),
+			Key:   keys.TransactionKey(proto.Key("b"), proto.Key(uuid.NewUUID4())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}
@@ -163,7 +164,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 		return rocksdb
 	}
 
-	rng, _ := util.NewPseudoRand()
+	rng, _ := randhelper.NewPseudoRand()
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
@@ -178,7 +179,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				value := proto.Value{Bytes: util.RandBytes(rng, 1024)}
+				value := proto.Value{Bytes: randhelper.RandBytes(rng, 1024)}
 				value.InitChecksum(keys[i])
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
@@ -346,8 +347,8 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
-	rng, _ := util.NewPseudoRand()
-	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+	rng, _ := randhelper.NewPseudoRand()
+	value := proto.Value{Bytes: randhelper.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
@@ -384,8 +385,8 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 }
 
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
-	rng, _ := util.NewPseudoRand()
-	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+	rng, _ := randhelper.NewPseudoRand()
+	value := proto.Value{Bytes: randhelper.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)

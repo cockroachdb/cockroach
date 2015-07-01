@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
@@ -171,7 +172,7 @@ type rangeManager interface {
 	allocator() *allocator
 	Gossip() *gossip.Gossip
 	splitQueue() *splitQueue
-	Stopper() *util.Stopper
+	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
 	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Range, proto.Request, proto.PushTxnType) error

@@ -1,4 +1,5 @@
 // Copyright 2015 The Cockroach Authors.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,12 +14,11 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+package proto
 
-package log
-
-import "github.com/cockroachdb/cockroach/util/log/logflags"
+import "github.com/cockroachdb/cockroach/testutils/fakeflags"
 
 func init() {
-	logflags.InitFlags(&logging.toStderr, &logging.alsoToStderr, logDir, &logging.color, &logging.verbosity, &logging.vmodule, &logging.traceLocation)
+	fakeflags.InitLogFlags()
 }

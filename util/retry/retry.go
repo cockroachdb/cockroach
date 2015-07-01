@@ -22,7 +22,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Options provides reusable configuration of Retry objects.
@@ -32,7 +32,7 @@ type Options struct {
 	Multiplier          float64       // Default backoff constant
 	MaxRetries          int           // Maximum number of attempts (0 for infinite)
 	RandomizationFactor float64       // Randomize the backoff interval by constant
-	Stopper             *util.Stopper // Optionally end retry loop on stopper signal
+	Stopper             *stop.Stopper // Optionally end retry loop on stopper signal
 }
 
 // Retry implements the public methods necessary to control an exponential-

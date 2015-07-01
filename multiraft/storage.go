@@ -21,8 +21,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -138,7 +138,7 @@ func newWriteTask(storage Storage) *writeTask {
 }
 
 // start runs the storage loop in a goroutine.
-func (w *writeTask) start(stopper *util.Stopper) {
+func (w *writeTask) start(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		for {
 			var request *writeRequest

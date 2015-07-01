@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -71,7 +72,7 @@ type actionHandler interface {
 // the cockroach cluster.
 type adminServer struct {
 	db      *client.DB    // Key-value database client
-	stopper *util.Stopper // Used to shutdown the server
+	stopper *stop.Stopper // Used to shutdown the server
 	acct    *acctHandler
 	perm    *permHandler
 	user    *userHandler
@@ -81,7 +82,7 @@ type adminServer struct {
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db *client.DB, stopper *util.Stopper) *adminServer {
+func newAdminServer(db *client.DB, stopper *stop.Stopper) *adminServer {
 	server := &adminServer{
 		db:      db,
 		stopper: stopper,

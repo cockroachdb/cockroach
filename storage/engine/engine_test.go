@@ -29,8 +29,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/randhelper"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -776,12 +776,12 @@ func TestApproximateSize(t *testing.T) {
 			count    = 10000
 			keys     = make([]proto.EncodedKey, count)
 			values   = make([][]byte, count) // Random values to prevent compression
-			rand, _  = util.NewPseudoRand()
+			rand, _  = randhelper.NewPseudoRand()
 			valueLen = 10
 		)
 		for i := 0; i < count; i++ {
 			keys[i] = []byte(fmt.Sprintf("key%8d", i))
-			values[i] = util.RandBytes(rand, valueLen)
+			values[i] = randhelper.RandBytes(rand, valueLen)
 		}
 
 		insertKeysAndValues(keys, values, engine, t)

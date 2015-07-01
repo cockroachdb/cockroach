@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -39,9 +40,9 @@ const (
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 // TODO(mberhault): use a secure context, if possible.
-func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
+func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
-	stopper = util.NewStopper()
+	stopper = stop.NewStopper()
 	lRPCContext := rpc.NewContext(insecureTestBaseContext, lclock, stopper)
 
 	laddr := util.CreateTestAddr("tcp")

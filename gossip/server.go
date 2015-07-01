@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type clientInfo struct {
@@ -143,7 +144,7 @@ func (s *server) jitteredGossipInterval() time.Duration {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(rpcServer *rpc.Server, stopper *util.Stopper) {
+func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	s.is.NodeAddr = rpcServer.Addr()
 	if err := rpcServer.RegisterName("Gossip", s); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
@@ -97,7 +98,7 @@ func (c *Config) validate() error {
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
-	stopper         *util.Stopper
+	stopper         *stop.Stopper
 	multiNode       raft.MultiNode
 	Events          chan interface{}
 	nodeID          proto.RaftNodeID
@@ -114,7 +115,7 @@ type MultiRaft struct {
 type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *util.Stopper) (*MultiRaft, error) {
+func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper) (*MultiRaft, error) {
 	if nodeID == 0 {
 		return nil, util.Error("Invalid RaftNodeID")
 	}

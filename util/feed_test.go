@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type testSubscriber struct {
@@ -60,7 +62,7 @@ func TestFeed(t *testing.T) {
 		numSubs  = 10
 		events   = []interface{}{1, 1, 2, 3, 5, 8, 13, 21, 34}
 		testSubs = make([]*testSubscriber, 0, numSubs)
-		stopper  = NewStopper()
+		stopper  = stop.NewStopper()
 	)
 
 	feed := &Feed{}
@@ -98,7 +100,7 @@ func TestFeedUnsubscription(t *testing.T) {
 	var (
 		events   = []interface{}{1, 1, 2, 3, 5, 8, 13, 21, 34}
 		testSubs = make([]*testSubscriber, len(events))
-		stopper  = NewStopper()
+		stopper  = stop.NewStopper()
 	)
 
 	feed := &Feed{}
@@ -157,7 +159,7 @@ func TestMultipleFeed(t *testing.T) {
 		stringEvents = []interface{}{"one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 		intSubs      = make([]*testSubscriber, 0, numSubs)
 		stringSubs   = make([]*testSubscriber, 0, numSubs)
-		stopper      = NewStopper()
+		stopper      = stop.NewStopper()
 	)
 
 	intFeed := &Feed{}

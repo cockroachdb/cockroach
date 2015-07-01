@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
-	_ "github.com/cockroachdb/cockroach/util/log" // enable flags
 )
 
 type traceID int

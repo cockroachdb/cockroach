@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -148,8 +150,8 @@ func (db *testSender) sendOne(call proto.Call) {
 // engine without starting the store. It returns the store, the store
 // clock's manual unix nanos time and a stopper. The caller is
 // responsible for stopping the stopper upon completion.
-func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
-	stopper := util.NewStopper()
+func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
+	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
@@ -178,7 +180,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *util.
 // engine. It returns the store, the store clock's manual unix nanos time
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
-func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
+func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	store, manual, stopper := createTestStoreWithoutStart(t)
 	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
@@ -195,7 +197,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
 	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
@@ -245,7 +247,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
 	store := NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: 1})
@@ -523,7 +525,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs, pReply = putArgs(keys.TransactionKey(meta2KeyMax, []byte(util.NewUUID4())),
+	pArgs, pReply = putArgs(keys.TransactionKey(meta2KeyMax, []byte(uuid.NewUUID4())),
 		[]byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", err)
@@ -1379,7 +1381,7 @@ type fakeRangeQueue struct {
 	maybeRemovedRngs chan *Range
 }
 
-func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
+func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	// Do nothing
 }
 

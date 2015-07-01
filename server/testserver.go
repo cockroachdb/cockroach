@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // StartTestServer starts a in-memory test server.
@@ -130,7 +131,7 @@ func (ts *TestServer) Start() error {
 	}
 
 	var err error
-	ts.Server, err = NewServer(ts.Ctx, util.NewStopper())
+	ts.Server, err = NewServer(ts.Ctx, stop.NewStopper())
 	if err != nil {
 		return err
 	}
@@ -146,7 +147,7 @@ func (ts *TestServer) Start() error {
 	ts.Ctx.Engines = ts.Engines
 
 	if !ts.SkipBootstrap {
-		stopper := util.NewStopper()
+		stopper := stop.NewStopper()
 		_, err := BootstrapCluster("cluster-1", ts.Ctx.Engines, stopper)
 		if err != nil {
 			return util.Errorf("could not bootstrap cluster: %s", err)

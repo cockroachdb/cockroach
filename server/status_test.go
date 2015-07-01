@@ -40,14 +40,16 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/log/logpb"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // startStatusServer launches a new status server using minimal engine
 // and local database setup. Returns the new http test server, which
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
-func startStatusServer() (*httptest.Server, *util.Stopper) {
-	stopper := util.NewStopper()
+func startStatusServer() (*httptest.Server, *stop.Stopper) {
+	stopper := stop.NewStopper()
 	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
 	if err != nil {
 		log.Fatal(err)
@@ -365,7 +367,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Fetch a each listed log directly.
 	type logWrapper struct {
-		Data []proto.LogEntry `json:"d"`
+		Data []logpb.LogEntry `json:"d"`
 	}
 	// Check each individual log can be fetched and is non-empty.
 	for _, log := range logs.Data {
@@ -388,7 +390,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Fetch the full list of log entries.
 	type entryWrapper struct {
-		Data []proto.LogEntry `json:"d"`
+		Data []logpb.LogEntry `json:"d"`
 	}
 
 	testCases := []struct {

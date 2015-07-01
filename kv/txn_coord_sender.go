@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	gogoproto "github.com/gogo/protobuf/proto"
 	"github.com/montanaflynn/stats"
@@ -138,7 +139,7 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // transaction has covered, clears the keys cache and closes the
 // metadata heartbeat. Any keys listed in the resolved slice have
 // already been resolved and do not receive resolve intent commands.
-func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolved []proto.Key, sender client.Sender, stopper *util.Stopper) {
+func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolved []proto.Key, sender client.Sender, stopper *stop.Stopper) {
 	close(tm.txnEnd) // stop heartbeat
 	trace.Event("coordinator stops")
 	if tm.keys.Len() > 0 {
@@ -231,14 +232,14 @@ type TxnCoordSender struct {
 	txnStats          txnCoordStats           // statistics of recent txns
 	linearizable      bool                    // enables linearizable behaviour
 	tracer            *tracer.Tracer
-	stopper           *util.Stopper
+	stopper           *stop.Stopper
 }
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance. A TxnCoordSender should be closed when no
 // longer in use via Close(), which also closes the wrapped sender
 // supplied here.
-func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *util.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,

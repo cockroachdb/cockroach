@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
@@ -184,7 +185,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			switch t := r.(type) {
 			case error:
 				errors++
-				if retryErr, ok := t.(util.Retryable); ok && retryErr.CanRetry() {
+				if retryErr, ok := t.(retry.Retryable); ok && retryErr.CanRetry() {
 					retryableErrors++
 				}
 				if log.V(1) {

@@ -20,7 +20,7 @@ package multiraft
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // eventDemux turns the unified MultiRaft.Events stream into a set of type-safe
@@ -43,7 +43,7 @@ func newEventDemux(events <-chan interface{}) *eventDemux {
 	}
 }
 
-func (e *eventDemux) start(stopper *util.Stopper) {
+func (e *eventDemux) start(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		for {
 			select {

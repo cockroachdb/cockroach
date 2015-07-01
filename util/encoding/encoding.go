@@ -27,8 +27,6 @@ import (
 	"reflect"
 	"sync"
 	"unsafe"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 var crc32Pool = sync.Pool{
@@ -55,12 +53,13 @@ func ReleaseCRC32Checksum(crc hash.Hash32) {
 // of k prepended to b.
 // Returns the slice with the checksum removed in case of success and an error
 // otherwise.
+// TODO(petermattis) remove this: the only use is in Encode/Decode.
 func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 	// Compute the first part of the expected checksum.
 	c := NewCRC32Checksum(k)
 	size := c.Size()
 	if size > len(b) {
-		return nil, util.Errorf("not enough bytes for %d character checksum", size)
+		return nil, fmt.Errorf("not enough bytes for %d character checksum", size)
 	}
 	// Add the second part.
 	c.Write(b[:len(b)-size])
@@ -70,13 +69,14 @@ func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 	bActual := b[len(b)-size:]
 
 	if !bytes.Equal(bWanted, bActual) {
-		return nil, util.Errorf("CRC integrity error: %v != %v", bActual, bWanted)
+		return nil, fmt.Errorf("CRC integrity error: %v != %v", bActual, bWanted)
 	}
 	return b[:len(b)-size], nil
 }
 
 // wrapChecksum computes the checksum of the byte slice b appended to k.
 // The output is b with the checksum appended.
+// TODO(petermattis) remove this: the only use is in Encode/Decode.
 func wrapChecksum(k []byte, b []byte) []byte {
 	chk := NewCRC32Checksum(k)
 	chk.Write(b)
@@ -88,6 +88,7 @@ func wrapChecksum(k []byte, b []byte) []byte {
 // keys, but not to keys operated on internally, such as accounting keys.
 // It returns a byte slice containing, in order, the internal representation
 // of v and a checksum of (k+v).
+// TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.
 func Encode(k []byte, v interface{}) ([]byte, error) {
 	result := []byte(nil)
 	switch value := v.(type) {
@@ -106,10 +107,11 @@ func Encode(k []byte, v interface{}) ([]byte, error) {
 
 // Decode decodes a Go datatype from a value stored in the key-value store. It returns
 // either an error or a variable of the decoded value.
+// TODO(petermattis) remove this: the only use is in storage/engine.go:Increment.
 func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
 	v, err := unwrapChecksum(k, wrappedValue)
 	if err != nil {
-		return nil, util.Errorf("integrity error: %v", err)
+		return nil, fmt.Errorf("integrity error: %v", err)
 	}
 
 	// TODO(Tobias): This is highly provisional, interpreting everything as a
@@ -117,9 +119,9 @@ func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
 	// If the value exists, attempt to decode it as a varint.
 	int64Val, numBytes := binary.Varint(v)
 	if numBytes == 0 {
-		return nil, util.Errorf("%v cannot be decoded; not varint-encoded", v)
+		return nil, fmt.Errorf("%v cannot be decoded; not varint-encoded", v)
 	} else if numBytes < 0 {
-		return nil, util.Errorf("%v cannot be decoded; integer overflow", v)
+		return nil, fmt.Errorf("%v cannot be decoded; integer overflow", v)
 	}
 	return int64Val, nil
 }

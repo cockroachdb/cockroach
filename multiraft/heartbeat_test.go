@@ -24,16 +24,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // processEventsUntil reads and acknowledges messages from the given channel
 // until either the given conditional returns true, the channel is closed or a
 // read on the channel times out.
-func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper, f func(*RaftMessageRequest) bool) {
+func processEventsUntil(ch <-chan *interceptMessage, stopper *stop.Stopper, f func(*RaftMessageRequest) bool) {
 	for {
 		select {
 		case e, ok := <-ch:
@@ -130,7 +130,7 @@ func countHeartbeats(ch <-chan *interceptMessage,
 
 // newBlockingCluster creates and returns a variant of testCluster
 // which intercepts and acknowledges all inter-node traffic.
-func newBlockingCluster(nodeCount int, stopper *util.Stopper, t *testing.T) *testCluster {
+func newBlockingCluster(nodeCount int, stopper *stop.Stopper, t *testing.T) *testCluster {
 	transport := NewLocalInterceptableTransport(stopper)
 	cluster := newTestCluster(transport, nodeCount, stopper, t)
 	// Outgoing messages block the client until we acknowledge them, and
@@ -174,7 +174,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 		expCnt[uint64(i+1)] = heartbeatCount{reqOut: 0, reqIn: ltc + ftc, respOut: ltc, respIn: 0}
 	}
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newBlockingCluster(nc, stopper, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	blocker := make(chan struct{})
@@ -233,7 +233,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 
 func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	cluster := newBlockingCluster(6, stopper, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	done := make(chan struct{})
@@ -347,7 +347,7 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 // not disturb other group's Term or Leadership
 func TestHeartbeatResponseFanout(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	cluster := newTestCluster(nil, 3, stopper, t)

@@ -2,8 +2,8 @@ package rpc
 
 import (
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Context contains the fields required by the rpc framework.
@@ -12,13 +12,13 @@ type Context struct {
 	base.Context
 
 	localClock   *hlc.Clock
-	Stopper      *util.Stopper
+	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
 	DisableCache bool // Disable client cache when calling NewClient()
 }
 
 // NewContext creates an rpc Context with the supplied values.
-func NewContext(context *base.Context, clock *hlc.Clock, stopper *util.Stopper) *Context {
+func NewContext(context *base.Context, clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	ctx := &Context{
 		Context:      *context,
 		localClock:   clock,

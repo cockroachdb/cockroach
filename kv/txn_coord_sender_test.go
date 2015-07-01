@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -554,7 +555,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		stopper := util.NewStopper()
+		stopper := stop.NewStopper()
 		defer stopper.Stop()
 		ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 			call.Reply.Header().SetGoError(test.err)
@@ -593,7 +594,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 // transaction for all contained calls instead).
 func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool

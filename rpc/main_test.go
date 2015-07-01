@@ -23,14 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // NewRootTestContext returns a rpc.Context for testing.
 // It is meant to be used by clients.
-func NewRootTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
+func NewRootTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
@@ -39,7 +39,7 @@ func NewRootTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
 
 // NewNodeTestContext returns a rpc.Context for testing.
 // It is meant to be used by nodes.
-func NewNodeTestContext(clock *hlc.Clock, stopper *util.Stopper) *Context {
+func NewNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}

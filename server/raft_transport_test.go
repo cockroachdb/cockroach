@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -41,7 +42,7 @@ func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 
 func TestSendAndReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestInterval, gossip.TestBootstrap)

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -68,7 +69,7 @@ func newClient(addr net.Addr) *client {
 // channel. If the client experienced an error, its err field will
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
-func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *util.Stopper) {
+func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		c.rpcClient = rpc.NewClient(c.addr, nil, context)
 		select {
@@ -98,7 +99,7 @@ func (c *client) close() {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
+func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	localMaxSeq := int64(0)
 	remoteMaxSeq := int64(-1)
 	for {

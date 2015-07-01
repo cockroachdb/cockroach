@@ -27,8 +27,8 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/server/cli"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randhelper"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	// production workloads.
 	numCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPU)
-	rand.Seed(util.NewPseudoSeed())
+	rand.Seed(randhelper.NewPseudoSeed())
 	if log.V(1) {
 		log.Infof("running using %d processor cores", numCPU)
 	}

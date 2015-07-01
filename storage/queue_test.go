@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -203,7 +204,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		},
 	}
 	bq := newBaseQueue("test", testQueue, 2)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -246,7 +247,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 		},
 	}
 	bq := newBaseQueue("test", testQueue, 2)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)

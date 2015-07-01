@@ -40,13 +40,14 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var rootTestBaseContext = testutils.NewRootTestBaseContext()
 
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for closing the store on exit.
-func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
+func createTestStore(t *testing.T) (*storage.Store, *stop.Stopper) {
 	return createTestStoreWithEngine(t,
 		engine.NewInMem(proto.Attributes{}, 10<<20),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
@@ -56,8 +57,8 @@ func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool, context *storage.StoreContext) (*storage.Store, *util.Stopper) {
-	stopper := util.NewStopper()
+	bootstrap bool, context *storage.StoreContext) (*storage.Store, *stop.Stopper) {
+	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(rootTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	if context == nil {
 		// make a copy
@@ -113,9 +114,9 @@ type multiTestContext struct {
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
 	// 'stores'.
-	clientStopper    *util.Stopper
-	stoppers         []*util.Stopper
-	transportStopper *util.Stopper
+	clientStopper    *stop.Stopper
+	stoppers         []*stop.Stopper
+	transportStopper *stop.Stopper
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -143,7 +144,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	if m.clientStopper == nil {
-		m.clientStopper = util.NewStopper()
+		m.clientStopper = stop.NewStopper()
 	}
 
 	// Always create the first sender.
@@ -161,13 +162,13 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.addStore()
 	}
 	if m.transportStopper == nil {
-		m.transportStopper = util.NewStopper()
+		m.transportStopper = stop.NewStopper()
 	}
 	m.transportStopper.AddCloser(m.transport)
 }
 
 func (m *multiTestContext) Stop() {
-	stoppers := append([]*util.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
+	stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
 	// Quiesce all the stoppers so that we can stop all stoppers in unison.
 	for _, s := range stoppers {
 		s.Quiesce()
@@ -222,7 +223,7 @@ func (m *multiTestContext) addStore() {
 		}
 	}
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	ctx := m.makeContext(idx)
 	store := storage.NewStore(ctx, eng, &proto.NodeDescriptor{NodeID: proto.NodeID(idx + 1)})
 	if needBootstrap {
@@ -267,7 +268,7 @@ func (m *multiTestContext) stopStore(i int) {
 
 // restartStore restarts a store previously stopped with StopStore.
 func (m *multiTestContext) restartStore(i int) {
-	m.stoppers[i] = util.NewStopper()
+	m.stoppers[i] = stop.NewStopper()
 
 	ctx := m.makeContext(i)
 	m.stores[i] = storage.NewStore(ctx, m.engines[i], &proto.NodeDescriptor{NodeID: proto.NodeID(i + 1)})

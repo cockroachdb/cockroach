@@ -23,9 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // A rangeQueue is a prioritized queue of ranges for which work is
@@ -36,7 +36,7 @@ import (
 type rangeQueue interface {
 	// Start launches a goroutine to process the contents of the queue.
 	// The provided stopper is used to signal that the goroutine should exit.
-	Start(*hlc.Clock, *util.Stopper)
+	Start(*hlc.Clock, *stop.Stopper)
 	// MaybeAdd adds the range to the queue if the range meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
@@ -102,7 +102,7 @@ func (rs *rangeScanner) AddQueues(queues ...rangeQueue) {
 }
 
 // Start spins up the scanning loop. Call Stop() to exit the loop.
-func (rs *rangeScanner) Start(clock *hlc.Clock, stopper *util.Stopper) {
+func (rs *rangeScanner) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	for _, queue := range rs.queues {
 		queue.Start(clock, stopper)
 	}
@@ -166,7 +166,7 @@ func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 // if rng is not nil. The method returns true when the scanner needs
 // to be stopped. The method also removes a range from queues when it
 // is signaled via the removed channel.
-func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *util.Stopper,
+func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *stop.Stopper,
 	rng *Range) bool {
 	waitInterval := rs.paceInterval(start, time.Now())
 	nextTime := time.After(waitInterval)
@@ -205,7 +205,7 @@ func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stoppe
 // scanLoop loops endlessly, scanning through ranges available via
 // the range set, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
-func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
+func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		start := time.Now()
 

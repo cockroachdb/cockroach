@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/google/btree"
 )
 
@@ -121,7 +122,7 @@ func (tq *testQueue) setDisabled(d bool) {
 	tq.disabled = d
 }
 
-func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
+func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		for {
 			select {
@@ -193,7 +194,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 
 	// Start queue and verify that all ranges are added to both queues.
 	s.Start(clock, stopper)
@@ -243,7 +244,7 @@ func TestScannerTiming(t *testing.T) {
 		s.AddQueues(q)
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
-		stopper := util.NewStopper()
+		stopper := stop.NewStopper()
 		defer stopper.Stop()
 		s.Start(clock, stopper)
 		time.Sleep(runTime)
@@ -302,7 +303,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	s.Start(clock, stopper)
 	time.Sleep(3 * time.Millisecond)

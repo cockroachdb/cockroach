@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
@@ -47,7 +49,7 @@ func TestInvalidAddrLength(t *testing.T) {
 func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	nodeContext := NewNodeTestContext(nil, stopper)
@@ -73,7 +75,7 @@ func TestSendToOneClient(t *testing.T) {
 func TestSendToMultipleClients(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	nodeContext := NewNodeTestContext(nil, stopper)
@@ -107,7 +109,7 @@ func TestSendToMultipleClients(t *testing.T) {
 func TestRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	nodeContext := NewNodeTestContext(nil, stopper)
@@ -128,7 +130,7 @@ func TestRetryableError(t *testing.T) {
 		Timeout:         1 * time.Second,
 	}
 	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {
-		retryErr, ok := err.(util.Retryable)
+		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
 		}
@@ -145,7 +147,7 @@ func TestRetryableError(t *testing.T) {
 func TestUnretryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	nodeContext := NewNodeTestContext(nil, stopper)
@@ -169,7 +171,7 @@ func TestUnretryableError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
-	retryErr, ok := err.(util.Retryable)
+	retryErr, ok := err.(retry.Retryable)
 	if !ok {
 		t.Fatalf("Unexpected error type: %v", err)
 	}
@@ -190,7 +192,7 @@ func (h *Heartbeat) Ping(args *proto.PingRequest, reply *proto.PingResponse) err
 func TestClientNotReady(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	nodeContext := NewNodeTestContext(nil, stopper)
@@ -219,7 +221,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Send RPC to an address where no server is running.
 	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {
-		retryErr, ok := err.(util.Retryable)
+		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
 		}
@@ -264,7 +266,7 @@ func TestClientNotReady(t *testing.T) {
 func TestComplexScenarios(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := util.NewStopper()
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
 	nodeContext := NewNodeTestContext(nil, stopper)
@@ -359,7 +361,7 @@ func TestComplexScenarios(t *testing.T) {
 			continue
 		}
 
-		retryErr, ok := err.(util.Retryable)
+		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("%d: Unexpected error type: %v", i, err)
 		}

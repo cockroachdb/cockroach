@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -237,7 +238,7 @@ func (c *Client) Close() {
 // runHeartbeat sends periodic heartbeats to client. Closes the
 // connection on error. Heartbeats are sent in an infinite loop until
 // an error is encountered.
-func (c *Client) runHeartbeat(stopper *util.Stopper) {
+func (c *Client) runHeartbeat(stopper *stop.Stopper) {
 	if log.V(2) {
 		log.Infof("client %s starting heartbeat", c.Addr())
 	}

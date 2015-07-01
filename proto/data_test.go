@@ -23,7 +23,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -306,7 +306,7 @@ func TestTxnEqual(t *testing.T) {
 }
 
 func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := util.NewUUID4(), util.NewUUID4()
+	txn1, txn2 := uuid.NewUUID4(), uuid.NewUUID4()
 	txn1Copy := append([]byte(nil), txn1...)
 
 	testCases := []struct {
