@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -712,25 +713,8 @@ func (l *loggingT) putBuffer(b *buffer) {
 
 var timeNow = time.Now // Stubbed out for testing.
 
-// Caller returns the file and line of the Caller or, in case of error,
-// the placeholder ('???', 1).
-func Caller(depth int) (string, int) {
-	return logging.Caller(depth + 1)
-}
-
 func (l *loggingT) Caller(depth int) (file string, line int) {
-	var ok bool
-	_, file, line, ok = runtime.Caller(1 + depth)
-	if !ok {
-		file = "???"
-		line = 1
-	} else {
-		slash := strings.LastIndex(file, "/")
-		if slash >= 0 {
-			file = file[slash+1:]
-		}
-	}
-	return
+	return util.Caller(depth + 1)
 }
 
 func (l *loggingT) print(s Severity, args ...interface{}) {

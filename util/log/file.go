@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
@@ -125,12 +124,12 @@ type FileDetails struct {
 func parseLogFilename(filename string) (FileDetails, error) {
 	matches := logFileRE.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 7 {
-		return FileDetails{}, util.Errorf("malformed log filename")
+		return FileDetails{}, errors.New("malformed log filename")
 	}
 
 	sev, sevFound := SeverityByName(matches[4])
 	if !sevFound {
-		return FileDetails{}, util.Errorf("malformed severity")
+		return FileDetails{}, errors.New("malformed severity")
 	}
 
 	// Replace the '_'s with ':'s to restore the correct time format.
@@ -185,7 +184,7 @@ func create(severity Severity, t time.Time) (f *os.File, filename string, err er
 // Returns the log file details success; otherwise error.
 func getFileDetails(info os.FileInfo) (FileDetails, error) {
 	if info.Mode()&os.ModeType != 0 {
-		return FileDetails{}, util.Errorf("not a regular file")
+		return FileDetails{}, errors.New("not a regular file")
 	}
 
 	details, err := parseLogFilename(info.Name())
@@ -244,7 +243,7 @@ func ListLogFiles() ([]FileInfo, error) {
 func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 	if path.IsAbs(filename) {
 		if !allowAbsolute {
-			return nil, util.Errorf("absolute pathnames are forbidden: %s", filename)
+			return nil, fmt.Errorf("absolute pathnames are forbidden: %s", filename)
 		}
 		if verifyFile(filename) == nil {
 			return os.Open(filename)
@@ -252,10 +251,10 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 	}
 	// Verify there are no path separators in the a non-absolute pathname.
 	if path.Base(filename) != filename {
-		return nil, util.Errorf("pathnames must be basenames only: %s", filename)
+		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
 	}
 	if !logFileRE.MatchString(filename) {
-		return nil, util.Errorf("filename is not a cockroach log file: %s", filename)
+		return nil, fmt.Errorf("filename is not a cockroach log file: %s", filename)
 	}
 	var reader io.ReadCloser
 	var err error
