@@ -153,7 +153,7 @@ func (s *Server) Serve(handler http.Handler) {
 			defer s.mu.Unlock()
 
 			switch state {
-			case http.StateNew, http.StateHijacked:
+			case http.StateNew:
 				if s.closed {
 					conn.Close()
 					return
