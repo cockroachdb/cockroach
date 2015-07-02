@@ -100,12 +100,13 @@ func (ia *idAllocator) start() {
 					res client.KeyValue
 				)
 				for r := retry.Start(idAllocationRetryOpts); r.Next(); {
-					if !ia.stopper.StartTask() {
+					task := ia.stopper.StartTask()
+					if !task.Ok() {
 						return
 					}
 					idKey := ia.idKey.Load().(proto.Key)
 					res, err = ia.db.Inc(idKey, int64(ia.blockSize))
-					ia.stopper.FinishTask()
+					task.Done()
 
 					if err == nil {
 						newValue = res.ValueInt()

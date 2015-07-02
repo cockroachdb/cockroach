@@ -269,10 +269,11 @@ func (s *Server) startWriteSummaries() {
 // writeSummaries retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
 func (s *Server) writeSummaries() error {
-	if !s.stopper.StartTask() {
+	task := s.stopper.StartTask()
+	if !task.Ok() {
 		return nil
 	}
-	defer s.stopper.FinishTask()
+	defer task.Done()
 
 	nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
 	if nodeStatus != nil {
@@ -306,11 +307,12 @@ func (s *Server) Stop() {
 // will snappy a response if the appropriate request headers are set.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if we're draining; if so return 503, service unavailable.
-	if !s.stopper.StartTask() {
+	task := s.stopper.StartTask()
+	if !task.Ok() {
 		http.Error(w, "service is draining", http.StatusServiceUnavailable)
 		return
 	}
-	defer s.stopper.FinishTask()
+	defer task.Done()
 
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")

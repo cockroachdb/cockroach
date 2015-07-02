@@ -235,10 +235,11 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 }
 
 func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *stop.Stopper) {
-	if !stopper.StartTask() {
+	task := stopper.StartTask()
+	if !task.Ok() {
 		return
 	}
-	defer stopper.FinishTask()
+	defer task.Done()
 
 	start := time.Now()
 	bq.Lock()

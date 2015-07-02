@@ -179,14 +179,16 @@ func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stoppe
 			if rng == nil {
 				return false
 			}
-			if !stopper.StartTask() {
+
+			task := stopper.StartTask()
+			if !task.Ok() {
 				return true
 			}
 			// Try adding range to all queues.
 			for _, q := range rs.queues {
 				q.MaybeAdd(rng, clock.Now())
 			}
-			stopper.FinishTask()
+			task.Done()
 			return false
 		case rng := <-rs.removed:
 			// Remove range from all queues as applicable.
@@ -226,7 +228,8 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				}
 			}
 
-			if !stopper.StartTask() {
+			task := stopper.StartTask()
+			if !task.Ok() {
 				// Exit the loop.
 				break
 			}
@@ -243,7 +246,7 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 
 			// Reset iteration and start time.
 			start = time.Now()
-			stopper.FinishTask()
+			task.Done()
 		}
 	})
 }

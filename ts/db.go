@@ -87,10 +87,11 @@ func (p *poller) start() {
 // poll retrieves data from the underlying DataSource a single time, storing any
 // returned time series data on the server.
 func (p *poller) poll() {
-	if !p.stopper.StartTask() {
+	task := p.stopper.StartTask()
+	if !task.Ok() {
 		return
 	}
-	defer p.stopper.FinishTask()
+	defer task.Done()
 
 	data := p.source.GetTimeSeriesData()
 	if len(data) == 0 {

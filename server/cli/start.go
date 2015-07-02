@@ -151,12 +151,27 @@ func runStart(cmd *cobra.Command, args []string) {
 		}()
 	}
 
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if log.V(1) {
+					log.Infof("running tasks:\n%s", stopper.RunningTasks())
+				}
+				log.Infof("%d running tasks", stopper.NumTasks())
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	}()
+
 	select {
 	case <-signalCh:
 		log.Warningf("second signal received, initiating hard shutdown")
 	case <-time.After(time.Minute):
 		log.Warningf("time limit reached, initiating hard shutdown")
-		return
 	case <-stopper.IsStopped():
 		log.Infof("server drained and shutdown completed")
 	}

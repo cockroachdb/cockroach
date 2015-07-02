@@ -124,7 +124,8 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	s := stop.NewStopper()
 	s.AddWorker()
 
-	if !s.StartTask() {
+	task := s.StartTask()
+	if !task.Ok() {
 		t.Error("expected StartTask to succeed")
 	}
 	go s.Stop()
@@ -135,7 +136,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	case <-time.After(1 * time.Millisecond):
 		// Expected.
 	}
-	s.FinishTask()
+	task.Done()
 	select {
 	case <-s.ShouldStop():
 		// Success.
@@ -186,7 +187,8 @@ func TestStopperQuiesce(t *testing.T) {
 		go func() {
 			// Wait until Quiesce() is called.
 			<-qc
-			if s.StartTask() {
+			if task := s.StartTask(); task.Ok() {
+				task.Done()
 				t.Error("expected StartTask to fail")
 			}
 			// Make the stoppers call Stop().
@@ -211,9 +213,6 @@ func TestStopperQuiesce(t *testing.T) {
 			<-sc
 		}
 
-		for _, s := range stoppers {
-			s.Stop()
-		}
 		close(done)
 	}()
 
@@ -239,4 +238,52 @@ func TestStopperClosers(t *testing.T) {
 	if bool(tc1) != true || bool(tc2) != true {
 		t.Errorf("expected true & true; got %t & %t", tc1, tc2)
 	}
+}
+
+func TestStopperNumTasks(t *testing.T) {
+	s := stop.NewStopper()
+
+	var tasks []stop.PendingTask
+	for i := 0; i < 3; i++ {
+		tasks = append(tasks, s.StartTask())
+		tm := s.RunningTasks()
+		if numTypes, numTasks := len(tm), s.NumTasks(); numTypes != 1 || numTasks != i+1 {
+			t.Errorf("stopper should have %d running tasks, got %d / %+v", i+1, numTasks, tm)
+		}
+		m := s.RunningTasks()
+		if len(m) != 1 {
+			t.Fatalf("expected exactly one task map entry: %+v", m)
+		}
+		for _, v := range m {
+			if expNum := len(tasks); v != expNum {
+				t.Fatalf("%d: expected %d tasks, got %d", i, expNum, v)
+			}
+		}
+	}
+
+	for i, task := range tasks {
+		if !task.Ok() {
+			t.Fatalf("%d: task should have been allowed", i)
+		}
+		m := s.RunningTasks()
+		if len(m) != 1 {
+			t.Fatalf("%d: expected exactly one task map entry: %+v", i, m)
+		}
+		for _, v := range m {
+			if expNum := len(tasks[i:]); v != expNum {
+				t.Fatalf("%d: expected %d tasks, got %d:\n%s", i, expNum, v, m)
+			}
+		}
+		task.Done()
+		expNum := len(tasks[i+1:])
+		if numTasks := s.NumTasks(); numTasks != expNum {
+			t.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, numTasks)
+		}
+	}
+	// Done() on the last task should've cleared out the map.
+	if m := s.RunningTasks(); len(m) != 0 {
+		t.Fatalf("task map not empty: %+v", m)
+	}
+
+	s.Stop()
 }
