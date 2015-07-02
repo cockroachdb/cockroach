@@ -22,7 +22,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestIntMandE(t *testing.T) {
@@ -233,7 +233,7 @@ func TestEncodeNumericFloat(t *testing.T) {
 }
 
 func BenchmarkEncodeNumericInt(b *testing.B) {
-	rng, _ := randhelper.NewPseudoRand()
+	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([]int64, 10000)
 	for i := range vals {
@@ -249,7 +249,7 @@ func BenchmarkEncodeNumericInt(b *testing.B) {
 }
 
 func BenchmarkDecodeNumericInt(b *testing.B) {
-	rng, _ := randhelper.NewPseudoRand()
+	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -263,7 +263,7 @@ func BenchmarkDecodeNumericInt(b *testing.B) {
 }
 
 func BenchmarkEncodeNumericFloat(b *testing.B) {
-	rng, _ := randhelper.NewPseudoRand()
+	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([]float64, 10000)
 	for i := range vals {
@@ -279,7 +279,7 @@ func BenchmarkEncodeNumericFloat(b *testing.B) {
 }
 
 func BenchmarkDecodeNumericFloat(b *testing.B) {
-	rng, _ := randhelper.NewPseudoRand()
+	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {

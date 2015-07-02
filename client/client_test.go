@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -553,7 +553,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 		return s, db
 	}
 
-	rng, _ := randhelper.NewPseudoRand()
+	rng, _ := randutil.NewPseudoRand()
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
@@ -566,7 +566,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				batch.Put(proto.Key(keys[i]), randhelper.RandBytes(rng, valueSize))
+				batch.Put(proto.Key(keys[i]), randutil.RandBytes(rng, valueSize))
 			}
 			if (i+1)%1000 == 0 {
 				if err := db.Run(batch); err != nil {

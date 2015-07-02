@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -68,8 +68,8 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 				}
 				first = false
 				for j := 0; j <= int(src.Int31n(10)); j++ {
-					key := randhelper.RandBytes(src, 10)
-					val := randhelper.RandBytes(src, int(src.Int31n(valBytes)))
+					key := randutil.RandBytes(src, 10)
+					val := randutil.RandBytes(src, int(src.Int31n(valBytes)))
 					if err := txn.Put(key, val); err != nil {
 						log.Infof("experienced an error in routine %d: %s", i, err)
 						return err

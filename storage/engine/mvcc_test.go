@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -2083,7 +2083,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 // underlying engine.
 func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rng, seed := randhelper.NewPseudoRand()
+	rng, seed := randutil.NewPseudoRand()
 	log.Infof("using pseudo random number generator with seed %d", seed)
 	engine := createTestEngine()
 	defer engine.Close()
@@ -2100,7 +2100,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Same for aggregate gc'able bytes age.
 		ms.GCBytesAge += ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 
-		key := []byte(fmt.Sprintf("%s-%d", randhelper.RandBytes(rng, int(rng.Int31n(32))), i))
+		key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
 		var txn *proto.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
@@ -2138,7 +2138,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				}
 			}
 		} else {
-			rngVal := proto.Value{Bytes: randhelper.RandBytes(rng, int(rng.Int31n(128)))}
+			rngVal := proto.Value{Bytes: randutil.RandBytes(rng, int(rng.Int31n(128)))}
 			if log.V(1) {
 				log.Infof("*** PUT index %d; TXN=%t", i, txn != nil)
 			}

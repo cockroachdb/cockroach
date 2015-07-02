@@ -28,17 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 )
 
-var testRand, _ = randhelper.NewPseudoRand()
+var testRand, _ = randutil.NewPseudoRand()
 
 func makeCommandID() string {
-	return string(randhelper.RandBytes(testRand, commandIDLen))
+	return string(randutil.RandBytes(testRand, commandIDLen))
 }
 
 type testCluster struct {
