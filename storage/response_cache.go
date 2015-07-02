@@ -19,7 +19,6 @@ package storage
 
 import (
 	"bytes"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -48,10 +47,10 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 // The ResponseCache stores responses in the underlying engine, using
 // keys derived from the Raft ID and the ClientCmdID.
 //
-// A ResponseCache is safe for concurrent access.
+// A ResponseCache is not thread safe. Access to it is serialized
+// through Raft.
 type ResponseCache struct {
 	raftID proto.RaftID
-	sync.Mutex
 }
 
 // NewResponseCache returns a new response cache. Every range replica
@@ -96,14 +95,9 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 }
 
 // CopyInto copies all the cached results from this response cache
-// into the destRaftID response cache. The cache will be locked while
-// copying is in progress; failures decoding individual cache entries
-// return an error. The copy is done directly using the engine instead
-// of interpreting values through MVCC for efficiency.
+// into the destRaftID response cache. Failures decoding individual
+// cache entries return an error.
 func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) error {
-	rc.Lock()
-	defer rc.Unlock()
-
 	prefix := keys.ResponseCacheKey(rc.raftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
