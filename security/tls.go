@@ -24,7 +24,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
-	"path"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -58,15 +58,15 @@ func ResetReadFileFn() {
 // We should never have username != "node", but this is a good way to
 // catch tests that use the wrong users.
 func LoadServerTLSConfig(certDir, username string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, username+".server.crt"))
+	certPEM, err := readFileFn(filepath.Join(certDir, username+".server.crt"))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, username+".server.key"))
+	keyPEM, err := readFileFn(filepath.Join(certDir, username+".server.key"))
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := readFileFn(path.Join(certDir, "ca.crt"))
+	caPEM, err := readFileFn(filepath.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}
@@ -121,15 +121,15 @@ func LoadInsecureTLSConfig() *tls.Config {
 // - <username>.client.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadClientTLSConfig(certDir, username string) (*tls.Config, error) {
-	certPEM, err := readFileFn(path.Join(certDir, clientCertFile(username)))
+	certPEM, err := readFileFn(filepath.Join(certDir, clientCertFile(username)))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(path.Join(certDir, clientKeyFile(username)))
+	keyPEM, err := readFileFn(filepath.Join(certDir, clientKeyFile(username)))
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := readFileFn(path.Join(certDir, "ca.crt"))
+	caPEM, err := readFileFn(filepath.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}

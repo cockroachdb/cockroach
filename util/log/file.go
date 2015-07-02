@@ -27,7 +27,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/user"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -239,7 +238,7 @@ func ListLogFiles() ([]FileInfo, error) {
 // command, which provides human readable output from an arbitrary file,
 // and is intended to be run locally in a terminal.
 func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
-	if path.IsAbs(filename) {
+	if filepath.IsAbs(filename) {
 		if !allowAbsolute {
 			return nil, fmt.Errorf("absolute pathnames are forbidden: %s", filename)
 		}
@@ -248,7 +247,7 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 		}
 	}
 	// Verify there are no path separators in the a non-absolute pathname.
-	if path.Base(filename) != filename {
+	if filepath.Base(filename) != filename {
 		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
 	}
 	if !logFileRE.MatchString(filename) {
@@ -256,7 +255,7 @@ func GetLogReader(filename string, allowAbsolute bool) (io.ReadCloser, error) {
 	}
 	var reader io.ReadCloser
 	var err error
-	filename = path.Join(*logDir, filename)
+	filename = filepath.Join(*logDir, filename)
 	if verifyFile(filename) == nil {
 		reader, err = os.Open(filename)
 		if err == nil {

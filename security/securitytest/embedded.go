@@ -19,7 +19,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -361,7 +360,7 @@ func RestoreAsset(dir, name string) error {
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(_filePath(dir, path.Dir(name)), os.FileMode(0755))
+	err = os.MkdirAll(_filePath(dir, filepath.Dir(name)), os.FileMode(0755))
 	if err != nil {
 		return err
 	}
@@ -385,7 +384,7 @@ func RestoreAssets(dir, name string) error {
 	}
 	// Dir
 	for _, child := range children {
-		err = RestoreAssets(dir, path.Join(name, child))
+		err = RestoreAssets(dir, filepath.Join(name, child))
 		if err != nil {
 			return err
 		}

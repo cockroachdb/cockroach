@@ -23,7 +23,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -45,8 +45,8 @@ func clientKeyFile(username string) string {
 // directory, parses them, and returns the x509 certificate and private key.
 func loadCACertAndKey(certsDir string) (*x509.Certificate, crypto.PrivateKey, error) {
 	// Load the CA certificate.
-	caCertPath := path.Join(certsDir, "ca.crt")
-	caKeyPath := path.Join(certsDir, "ca.key")
+	caCertPath := filepath.Join(certsDir, "ca.crt")
+	caKeyPath := filepath.Join(certsDir, "ca.key")
 
 	// LoadX509KeyPair does a bunch of validation, including len(Certificates) != 0.
 	caCert, err := tls.LoadX509KeyPair(caCertPath, caKeyPath)
@@ -81,7 +81,7 @@ func writeCertificateAndKey(certsDir string, prefix string,
 	}
 
 	// Write certificate to file.
-	certFilePath := path.Join(certsDir, prefix+".crt")
+	certFilePath := filepath.Join(certsDir, prefix+".crt")
 	certFile, err := os.OpenFile(certFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return util.Errorf("error creating certificate file %s: %s", certFilePath, err)
@@ -98,7 +98,7 @@ func writeCertificateAndKey(certsDir string, prefix string,
 	}
 
 	// Write key to file.
-	keyFilePath := path.Join(certsDir, prefix+".key")
+	keyFilePath := filepath.Join(certsDir, prefix+".key")
 	keyFile, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return util.Errorf("error create key file %s: %s", keyFilePath, err)
