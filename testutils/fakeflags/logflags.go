@@ -27,6 +27,9 @@ func (*fakeValue) Set(_ string) error { return nil }
 // InitLogFlags sets fake flags which mimick those of the logging package.
 // This is necessary since some packages are not allowed to import `util/log`,
 // but still need to be able to run tests with logging flags.
+// TODO(bdarnell via tschottdorf): Ben didn't seem to like this very much and
+// may want to do something else, for example pulling the log settings from
+// the environment.
 func InitLogFlags() {
 	var toStderr, alsoToStderr bool
 	var color, logDir string
