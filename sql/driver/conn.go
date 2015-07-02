@@ -178,13 +178,20 @@ func (c *conn) Send(call sqlwire.Call) (*rows, error) {
 			} else if datum.IntVal != nil {
 				t[j] = *datum.IntVal
 			} else if datum.UintVal != nil {
-				t[j] = *datum.UintVal
+				// uint64 not supported by the driver.Value interface.
+				if *datum.UintVal >= math.MaxInt64 {
+					return &rows{}, fmt.Errorf("cannot convert very large uint64 %d returned by database", *datum.UintVal)
+				}
+				t[j] = int64(*datum.UintVal)
 			} else if datum.FloatVal != nil {
 				t[j] = *datum.FloatVal
 			} else if datum.BytesVal != nil {
 				t[j] = datum.BytesVal
 			} else if datum.StringVal != nil {
-				t[j] = *datum.StringVal
+				t[j] = []byte(*datum.StringVal)
+			}
+			if !driver.IsScanValue(t[j]) {
+				panic(fmt.Sprintf("unsupported type %T returned by database", t[j]))
 			}
 		}
 		r.rows[i] = t
