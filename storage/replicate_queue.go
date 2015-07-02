@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	// replicateQueueMaxSize is the max size of the split queue.
+	// replicateQueueMaxSize is the max size of the replicate queue.
 	replicateQueueMaxSize = 100
 
 	// replicateQueueTimerDuration is the duration between replication of queued ranges.
