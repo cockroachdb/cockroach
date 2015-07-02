@@ -800,7 +800,7 @@ func (node *BinaryExpr) String() string {
 	return fmt.Sprintf("%v%s%v", node.Left, node.Operator, node.Right)
 }
 
-// UnaryOp represents a binary operator.
+// UnaryOp represents a unary operator.
 type UnaryOp int
 
 // UnaryExpr.Operator

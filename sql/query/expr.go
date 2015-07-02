@@ -312,6 +312,8 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			v = *left.FloatVal == *right.FloatVal
 		case stringOp:
 			v = *left.StringVal == *right.StringVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
 	case parser.LT:
@@ -325,6 +327,8 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			v = *left.FloatVal < *right.FloatVal
 		case stringOp:
 			v = *left.StringVal < *right.StringVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
 	case parser.LE:
@@ -338,6 +342,8 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			v = *left.FloatVal <= *right.FloatVal
 		case stringOp:
 			v = *left.StringVal <= *right.StringVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
 	case parser.GT:
@@ -351,6 +357,8 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			v = *left.FloatVal > *right.FloatVal
 		case stringOp:
 			v = *left.StringVal > *right.StringVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
 	case parser.GE:
@@ -364,6 +372,8 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			v = *left.FloatVal >= *right.FloatVal
 		case stringOp:
 			v = *left.StringVal >= *right.StringVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
 	case parser.NE:
@@ -377,6 +387,8 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			v = *left.FloatVal != *right.FloatVal
 		case stringOp:
 			v = *left.StringVal != *right.StringVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
 	case parser.In, parser.NotIn, parser.Like, parser.NotLike:
@@ -387,7 +399,10 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 }
 
 // Prepare the arguments for a binary operation. The returned arguments will
-// have the same type.
+// have the same type. The typ parameter specifies the allowed types for the
+// operation. For example, bit-operations should specify intOp or uintOp to
+// indicate that they do not operate on floating point arguments. Float
+// operations may still reduce to intOp or uintOp if the operands support it.
 func prepareBinaryArgs(typ opType, left, right sqlwire.Datum) (opType, sqlwire.Datum, sqlwire.Datum, error) {
 	var err error
 
@@ -468,6 +483,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.UintVal &= *right.UintVal
 		case intOp:
 			*left.IntVal &= *right.IntVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
@@ -481,6 +498,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.UintVal |= *right.UintVal
 		case intOp:
 			*left.IntVal |= *right.IntVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
@@ -494,6 +513,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.UintVal ^= *right.UintVal
 		case intOp:
 			*left.IntVal ^= *right.IntVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
@@ -509,6 +530,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.IntVal += *right.IntVal
 		case floatOp:
 			*left.FloatVal += *right.FloatVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
@@ -531,6 +554,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.IntVal -= *right.IntVal
 		case floatOp:
 			*left.FloatVal -= *right.FloatVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
@@ -546,6 +571,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.IntVal *= *right.IntVal
 		case floatOp:
 			*left.FloatVal *= *right.FloatVal
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
@@ -574,6 +601,8 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 			*left.IntVal %= *right.IntVal
 		case floatOp:
 			*left.FloatVal = math.Mod(*left.FloatVal, *right.FloatVal)
+		default:
+			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 		return left, nil
 
