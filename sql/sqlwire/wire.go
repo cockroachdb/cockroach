@@ -125,7 +125,7 @@ func (d Datum) ToInt() (Datum, error) {
 	return Datum{IntVal: new(int64)}, nil
 }
 
-// ToUint converts the datum type to int.
+// ToUint converts the datum type to uint.
 func (d Datum) ToUint() (Datum, error) {
 	if d.BoolVal != nil {
 		var v uint64
