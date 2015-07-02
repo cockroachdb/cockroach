@@ -15,11 +15,6 @@
 // for names of contributors.
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-package proto
+package proto_test
 
-import "github.com/cockroachdb/cockroach/testutils/fakeflags"
-
-func init() {
-	// Required since `util/log`->`proto`.
-	fakeflags.InitLogFlags()
-}
+import _ "github.com/cockroachdb/cockroach/util/log" // for flags
