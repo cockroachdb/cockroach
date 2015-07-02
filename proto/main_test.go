@@ -20,5 +20,6 @@ package proto
 import "github.com/cockroachdb/cockroach/testutils/fakeflags"
 
 func init() {
+	// Required since `util/log`->`proto`.
 	fakeflags.InitLogFlags()
 }

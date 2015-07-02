@@ -22,10 +22,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/testutils/fakeflags"
-	"github.com/cockroachdb/cockroach/util/stop" // enable flags
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func init() {
+	// Required since `util/log`->`proto`->`util/retry.Retryable`.
 	fakeflags.InitLogFlags()
 }
 

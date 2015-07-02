@@ -25,6 +25,7 @@ import (
 )
 
 func init() {
+	// Required since `util/log`->`proto`->`uuid`.
 	fakeflags.InitLogFlags()
 }
 

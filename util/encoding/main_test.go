@@ -20,5 +20,6 @@ package encoding
 import "github.com/cockroachdb/cockroach/testutils/fakeflags"
 
 func init() {
+	// Required since `util/log`->`util/encoding`.
 	fakeflags.InitLogFlags()
 }

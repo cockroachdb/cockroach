@@ -17,8 +17,4 @@
 
 package sqlwire
 
-import "github.com/cockroachdb/cockroach/testutils/fakeflags"
-
-func init() {
-	fakeflags.InitLogFlags()
-}
+import _ "github.com/cockroachdb/cockroach/util/log" // for flags

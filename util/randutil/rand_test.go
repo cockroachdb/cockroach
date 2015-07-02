@@ -20,12 +20,8 @@ package randutil
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils/fakeflags"
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
-
-func init() {
-	fakeflags.InitLogFlags()
-}
 
 func TestPseudoRand(t *testing.T) {
 	numbers := make(map[int]bool)
