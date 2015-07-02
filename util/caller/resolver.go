@@ -19,7 +19,7 @@ package caller
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -86,7 +86,7 @@ func (cr *CallResolver) Lookup(depth int) (file string, line int, fun string) {
 		if len(matches) == 1 {
 			file = matches[0]
 		} else {
-			file = path.Join(matches[1:]...)
+			file = filepath.Join(matches[1:]...)
 		}
 	}
 

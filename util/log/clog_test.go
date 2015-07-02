@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	stdLog "log"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -321,12 +320,12 @@ func TestListLogFiles(t *testing.T) {
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
-	infoName := path.Base(info.file.Name())
+	infoName := filepath.Base(info.file.Name())
 	warn, ok = logging.file[WarningLog].(*syncBuffer)
 	if !ok {
 		t.Fatal("warning wasn't created")
 	}
-	warnName := path.Base(warn.file.Name())
+	warnName := filepath.Base(warn.file.Name())
 	results, err := ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
@@ -354,7 +353,7 @@ func TestGetLogReader(t *testing.T) {
 	if !ok {
 		t.Fatal("warning wasn't created")
 	}
-	warnName := path.Base(warn.file.Name())
+	warnName := filepath.Base(warn.file.Name())
 
 	testCases := []struct {
 		filename string
@@ -370,8 +369,8 @@ func TestGetLogReader(t *testing.T) {
 		// File not matching log RE.
 		{"cockroach.WARNING", false, true},
 		{"cockroach.WARNING", true, true},
-		{path.Join(*logDir, "cockroach.WARNING"), false, true},
-		{path.Join(*logDir, "cockroach.WARNING"), true, true},
+		{filepath.Join(*logDir, "cockroach.WARNING"), false, true},
+		{filepath.Join(*logDir, "cockroach.WARNING"), true, true},
 		// Relative filename is specified.
 		{warnName, true, false},
 		{warnName, false, false},
