@@ -27,9 +27,7 @@ import (
 	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
 
-	// Define -logtostderr which is required by 'make test'`
-	// TODO(bdarnell): remove this once we've gotten our log situation straightened out.
-	_ "github.com/cockroachdb/cockroach/util/log"
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
 type testKey string

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
 type traceID int
@@ -125,7 +126,7 @@ func TestTracer(t *testing.T) {
 			if v.Origin != origin {
 				t.Fatalf("unexpected origin %s", v.Origin)
 			}
-			tc[i].Func, tc[i].File, tc[i].Origin = "", "", ""
+			tc[i].Func, tc[i].File, tc[i].Line, tc[i].Origin = "", "", 0, ""
 		}
 		if !reflect.DeepEqual(expTrace.Content, trace.Content) {
 			t.Fatalf("unexpected content:\n%+v\nwanted:\n%+v", trace, expTrace)

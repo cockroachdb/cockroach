@@ -21,11 +21,13 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/caller"
 )
 
 // A Traceable object has a Trace identifier attached to it.
@@ -39,13 +41,15 @@ type Traceable interface {
 
 // A TraceItem is an entry in a Trace.
 type TraceItem struct {
-	depth      int32
-	Origin     string
-	Name       string
-	Timestamp  time.Time
-	Duration   time.Duration
-	Func, File string
-	HLC        time.Time // TODO(tschottdorf) HLC timestamp
+	depth     int32
+	Origin    string
+	Name      string
+	Timestamp time.Time
+	Duration  time.Duration
+	File      string
+	Line      int
+	Func      string
+	HLC       time.Time // TODO(tschottdorf) HLC timestamp
 }
 
 // A Trace is created by a Tracer and records the path of a request within (a
@@ -129,11 +133,12 @@ func (t *Trace) Finalize() {
 func (t *Trace) add(name string) int {
 	// Must be called with two callers to the client.
 	// (Client->Event|Epoch->epoch->add)
-	file, fun := t.tracer.callers.Lookup(3)
+	file, line, fun := caller.Lookup(3)
 	t.Content = append(t.Content, TraceItem{
 		depth:     t.depth,
 		Origin:    t.tracer.origin,
 		File:      file,
+		Line:      line,
 		Func:      fun,
 		Timestamp: t.tracer.now(),
 		Name:      name,
@@ -167,7 +172,7 @@ func (t Trace) String() string {
 		}
 		fmt.Fprintln(w, t.Name, tab, c.Origin, tab,
 			c.Timestamp.Format(traceTimeFormat), tab, c.Duration, tab,
-			namePrefix+c.Name, tab, c.File)
+			namePrefix+c.Name, tab, c.File+":"+strconv.Itoa(c.Line))
 	}
 
 	_ = w.Flush()
@@ -179,20 +184,18 @@ func (t Trace) String() string {
 // NewTrace(), which returns a Trace object initialized to publish itself to a
 // util.Feed registered by the Tracer on completion.
 type Tracer struct {
-	origin  string // owner of this Tracer, i.e. Host ID
-	callers *CallResolver
-	feed    *util.Feed
-	now     func() time.Time
+	origin string // owner of this Tracer, i.e. Host ID
+	feed   *util.Feed
+	now    func() time.Time
 }
 
 // NewTracer returns a new Tracer whose created Traces publish to the given feed.
 // The origin is an identifier of the system, for instance a host ID.
 func NewTracer(f *util.Feed, origin string) *Tracer {
 	return &Tracer{
-		origin:  origin,
-		now:     time.Now,
-		callers: NewCallResolver(1 /* stack offset */, 1),
-		feed:    f,
+		origin: origin,
+		now:    time.Now,
+		feed:   f,
 	}
 }
 
