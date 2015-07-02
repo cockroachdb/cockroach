@@ -25,8 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
 
@@ -45,105 +43,36 @@ import (
 // be stateful and is not used concurrently by multiple goroutines; See
 // https://golang.org/pkg/database/sql/driver/#Conn.
 type conn struct {
-	db       *client.DB
-	sender   *httpSender
-	database string
+	sender *httpSender
 }
 
 func (c *conn) Close() error {
 	return nil
 }
 
-func createCall(sql string, args []driver.Value) sqlwire.Call {
-	// TODO(vivek): Add arguments later
-	return sqlwire.Call{Args: &sqlwire.Request{Sql: sql}, Reply: &sqlwire.Response{}}
-}
-
 func (c *conn) Prepare(query string) (driver.Stmt, error) {
-	s, err := parser.Parse(query)
-	if err != nil {
-		return nil, err
-	}
-	return &stmt{conn: c, stmt: s}, nil
-}
-
-func (c *conn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	stmt, err := parser.Parse(query)
-	if err != nil {
-		return nil, err
-	}
-	return c.exec(stmt, args)
-}
-
-func (c *conn) Query(query string, args []driver.Value) (driver.Rows, error) {
-	stmt, err := parser.Parse(query)
-	if err != nil {
-		return nil, err
-	}
-	return c.query(stmt, args)
+	return &stmt{conn: c, stmt: query}, nil
 }
 
 func (c *conn) Begin() (driver.Tx, error) {
 	return &tx{conn: c}, nil
 }
 
-func (c *conn) exec(stmt parser.Statement, args []driver.Value) (driver.Result, error) {
-	rows, err := c.query(stmt, args)
+func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
+	rows, err := c.Query(stmt, args)
 	if err != nil {
 		return nil, err
 	}
 	return driver.RowsAffected(len(rows.rows)), nil
 }
 
-func (c *conn) query(stmt parser.Statement, args []driver.Value) (*rows, error) {
-	// TODO(pmattis): Apply the args to the statement.
-	switch p := stmt.(type) {
-	case *parser.CreateDatabase:
-		return c.CreateDatabase(p, args)
-	case *parser.CreateTable:
-		return c.CreateTable(p, args)
-	case *parser.Delete:
-		return c.Delete(p, args)
-	case *parser.Insert:
-		return c.Insert(p, args)
-	case *parser.Select:
-		return c.Select(p, args)
-	case *parser.ShowColumns:
-		return c.Send(createCall(stmt.String(), args))
-	case *parser.ShowDatabases:
-		return c.Send(createCall(stmt.String(), args))
-	case *parser.ShowIndex:
-		return c.Send(createCall(stmt.String(), args))
-	case *parser.ShowTables:
-		return c.Send(createCall(stmt.String(), args))
-	case *parser.Update:
-		return c.Update(p, args)
-	case *parser.Use:
-		c.database = p.Name
-		return c.Send(createCall(stmt.String(), args))
-	case *parser.AlterTable:
-	case *parser.AlterView:
-	case *parser.CreateIndex:
-	case *parser.CreateView:
-	case *parser.DropDatabase:
-	case *parser.DropIndex:
-	case *parser.DropTable:
-	case *parser.DropView:
-	case *parser.RenameTable:
-	case *parser.Set:
-	case *parser.TruncateTable:
-	case *parser.Union:
-		// Various unimplemented statements.
-
-	default:
-		return nil, fmt.Errorf("unknown statement type: %T", stmt)
-	}
-
-	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", stmt, stmt)
+func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
+	// TODO(vivek): Add the args to the Call.
+	return c.send(sqlwire.Call{Args: &sqlwire.Request{Sql: stmt}, Reply: &sqlwire.Response{}})
 }
 
 // Send sends the call to the server.
-func (c *conn) Send(call sqlwire.Call) (*rows, error) {
+func (c *conn) send(call sqlwire.Call) (*rows, error) {
 	c.sender.Send(context.TODO(), call)
 	resp := call.Reply
 	if resp.Error != nil {

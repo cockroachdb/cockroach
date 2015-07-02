@@ -17,15 +17,11 @@
 
 package driver
 
-import (
-	"database/sql/driver"
-
-	"github.com/cockroachdb/cockroach/sql/parser"
-)
+import "database/sql/driver"
 
 type stmt struct {
 	conn *conn
-	stmt parser.Statement
+	stmt string
 }
 
 func (s *stmt) Close() error {
@@ -38,9 +34,9 @@ func (s *stmt) NumInput() int {
 }
 
 func (s *stmt) Exec(args []driver.Value) (driver.Result, error) {
-	return s.conn.exec(s.stmt, args)
+	return s.conn.Exec(s.stmt, args)
 }
 
 func (s *stmt) Query(args []driver.Value) (driver.Rows, error) {
-	return s.conn.query(s.stmt, args)
+	return s.conn.Query(s.stmt, args)
 }

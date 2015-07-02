@@ -13,20 +13,19 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
+// Author: Peter Mattis (peter@cockroachlabs.com)
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 package sqlserver
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -106,7 +105,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the Request for SQL execution.
-	s.send(sqlwire.Call{Args: args, Reply: reply})
+	s.execute(sqlwire.Call{Args: args, Reply: reply})
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
@@ -118,33 +117,26 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func echo(sql string, resp *sqlwire.Response) {
-	resp.Results = []sqlwire.Result{
-		{
-			Columns: []string{"echo"},
-			Rows: []sqlwire.Result_Row{
-				{
-					Values: []sqlwire.Datum{
-						{
-							StringVal: &sql,
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
 // Send forwards the call for further processing.
-func (s *Server) send(call sqlwire.Call) {
+func (s *Server) execute(call sqlwire.Call) {
 	req := call.Args
 	resp := call.Reply
 	stmt, err := parser.Parse(req.Sql)
 	if err != nil {
-		echo(req.Sql, resp)
+		resp.SetGoError(err)
 		return
 	}
 	switch p := stmt.(type) {
+	case *parser.CreateDatabase:
+		s.CreateDatabase(p, req.Params, resp)
+	case *parser.CreateTable:
+		s.CreateTable(p, req.Params, resp)
+	case *parser.Delete:
+		s.Delete(p, req.Params, resp)
+	case *parser.Insert:
+		s.Insert(p, req.Params, resp)
+	case *parser.Select:
+		s.Select(p, req.Params, resp)
 	case *parser.ShowColumns:
 		s.ShowColumns(p, req.Params, resp)
 	case *parser.ShowDatabases:
@@ -153,10 +145,12 @@ func (s *Server) send(call sqlwire.Call) {
 		s.ShowIndex(p, req.Params, resp)
 	case *parser.ShowTables:
 		s.ShowTables(p, req.Params, resp)
+	case *parser.Update:
+		s.Update(p, req.Params, resp)
 	case *parser.Use:
 		s.Use(p, req.Params, resp)
 	default:
-		echo(req.Sql, resp)
+		resp.SetGoError(fmt.Errorf("unknown statement type: %T", stmt))
 	}
 }
 
@@ -290,48 +284,58 @@ func (s *Server) Use(p *parser.Use, args []sqlwire.Datum, resp *sqlwire.Response
 	s.database = p.Name
 }
 
-func (c *conn) CreateDatabase(p *parser.CreateDatabase, args []driver.Value) (*rows, error) {
+// CreateDatabase creates a database if it doesn't exist.
+func (s *Server) CreateDatabase(p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) {
 	if p.Name == "" {
-		return nil, fmt.Errorf("empty database name")
+		resp.SetGoError(errors.New("empty database name"))
+		return
 	}
 
 	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, strings.ToLower(p.Name))
-	if gr, err := c.db.Get(nameKey); err != nil {
-		return nil, err
+	if gr, err := s.clientDB.Get(nameKey); err != nil {
+		resp.SetGoError(err)
+		return
 	} else if gr.Exists() {
 		if p.IfNotExists {
-			return &rows{}, nil
+			return
 		}
-		return nil, fmt.Errorf("database \"%s\" already exists", p.Name)
+		resp.SetGoError(fmt.Errorf("database \"%s\" already exists", p.Name))
+		return
 	}
-	ir, err := c.db.Inc(keys.DescIDGenerator, 1)
+	ir, err := s.clientDB.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 	nsID := uint32(ir.ValueInt() - 1)
-	if err := c.db.CPut(nameKey, nsID, nil); err != nil {
+	if err := s.clientDB.CPut(nameKey, nsID, nil); err != nil {
 		// TODO(pmattis): Need to handle if-not-exists here as well.
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
-	return &rows{}, nil
 }
 
-func (c *conn) CreateTable(p *parser.CreateTable, args []driver.Value) (*rows, error) {
-	if err := c.normalizeTableName(p.Table); err != nil {
-		return nil, err
+// CreateTable creates a table if it doesn't already exist.
+func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) {
+	if err := s.normalizeTableName(p.Table); err != nil {
+		resp.SetGoError(err)
+		return
 	}
 
-	dbID, err := c.lookupDatabase(p.Table.Qualifier)
+	dbID, err := s.lookupDatabase(p.Table.Qualifier)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 
 	desc, err := makeTableDesc(p)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 	if err := desc.AllocateIDs(); err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 
 	nameKey := keys.MakeNameMetadataKey(dbID, p.Table.Name)
@@ -339,25 +343,28 @@ func (c *conn) CreateTable(p *parser.CreateTable, args []driver.Value) (*rows, e
 	// This isn't strictly necessary as the conditional put below will fail if
 	// the key already exists, but it seems good to avoid the table ID allocation
 	// in most cases when the table already exists.
-	if gr, err := c.db.Get(nameKey); err != nil {
-		return nil, err
+	if gr, err := s.clientDB.Get(nameKey); err != nil {
+		resp.SetGoError(err)
+		return
 	} else if gr.Exists() {
 		if p.IfNotExists {
-			return &rows{}, nil
+			return
 		}
-		return nil, fmt.Errorf("table \"%s\" already exists", p.Table)
+		resp.SetGoError(fmt.Errorf("table \"%s\" already exists", p.Table))
+		return
 	}
 
-	ir, err := c.db.Inc(keys.DescIDGenerator, 1)
+	ir, err := s.clientDB.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 	desc.ID = uint32(ir.ValueInt() - 1)
 
 	// TODO(pmattis): Be cognizant of error messages when this is ported to the
 	// server. The error currently returned below is likely going to be difficult
 	// to interpret.
-	err = c.db.Txn(func(txn *client.Txn) error {
+	err = s.clientDB.Txn(func(txn *client.Txn) error {
 		descKey := keys.MakeDescMetadataKey(desc.ID)
 		b := &client.Batch{}
 		b.CPut(nameKey, descKey, nil)
@@ -366,25 +373,31 @@ func (c *conn) CreateTable(p *parser.CreateTable, args []driver.Value) (*rows, e
 	})
 	if err != nil {
 		// TODO(pmattis): Need to handle if-not-exists here as well.
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
-	return &rows{}, nil
+	return
 }
 
-func (c *conn) Delete(p *parser.Delete, args []driver.Value) (*rows, error) {
-	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
+// Delete is unimplemented.
+func (s *Server) Delete(p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) {
+	resp.SetGoError(fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p))
 }
 
-func (c *conn) Insert(p *parser.Insert, args []driver.Value) (*rows, error) {
-	desc, err := c.getTableDesc(p.Table)
+// Insert inserts rows into the database.
+func (s *Server) Insert(p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) {
+
+	desc, err := s.getTableDesc(p.Table)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 
 	// Determine which columns we're inserting into.
-	cols, err := c.processColumns(desc, p.Columns)
+	cols, err := s.processColumns(desc, p.Columns)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -397,78 +410,102 @@ func (c *conn) Insert(p *parser.Insert, args []driver.Value) (*rows, error) {
 	// Verify we have at least the columns that are part of the primary key.
 	for i, id := range desc.Indexes[0].ColumnIDs {
 		if _, ok := colMap[id]; !ok {
-			return nil, fmt.Errorf("missing \"%s\" primary key column",
-				desc.Indexes[0].ColumnNames[i])
+			resp.SetGoError(fmt.Errorf("missing \"%s\" primary key column",
+				desc.Indexes[0].ColumnNames[i]))
+			return
 		}
 	}
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	r, err := c.processInsertRows(p.Rows)
+	r, err := s.processInsertRows(p.Rows)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 
 	b := &client.Batch{}
-	for _, row := range r.rows {
-		if len(row) != len(cols) {
-			return nil, fmt.Errorf("invalid values for columns: %d != %d", len(row), len(cols))
+	for _, row := range r {
+		if len(row.Values) != len(cols) {
+			resp.SetGoError(fmt.Errorf("invalid values for columns: %d != %d", len(row.Values), len(cols)))
+			return
 		}
 		indexKey := encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID)
-		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, cols, row, indexKey)
+		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, cols, row.Values, indexKey)
 		if err != nil {
-			return nil, err
+			resp.SetGoError(err)
+			return
 		}
-		for i, val := range row {
+		for i, val := range row.Values {
 			key := encodeColumnKey(desc, cols[i], primaryKey)
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
 			// TODO(pmattis): Need to convert the value type to the column type.
-			b.Put(key, val)
+			if val.BoolVal != nil {
+				b.Put(key, *val.BoolVal)
+			} else if val.IntVal != nil {
+				b.Put(key, *val.IntVal)
+			} else if val.UintVal != nil {
+				b.Put(key, *val.UintVal)
+			} else if val.FloatVal != nil {
+				b.Put(key, *val.FloatVal)
+			} else if val.BytesVal != nil {
+				b.Put(key, val.BytesVal)
+			} else if val.StringVal != nil {
+				b.Put(key, *val.StringVal)
+			}
 		}
 	}
-	if err := c.db.Run(b); err != nil {
-		return nil, err
+	if err := s.clientDB.Run(b); err != nil {
+		resp.SetGoError(err)
+		return
 	}
-
-	return &rows{}, nil
 }
 
-func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
+// Select selects rows from a single table.
+func (s *Server) Select(p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) {
+
 	if len(p.Exprs) != 1 {
-		return nil, fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs)
+		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs))
+		return
 	}
 	if _, ok := p.Exprs[0].(*parser.StarExpr); !ok {
-		return nil, fmt.Errorf("TODO(pmattis): unsupported select expr: %s", p.Exprs)
+		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported select expr: %s", p.Exprs))
+		return
 	}
 
 	if len(p.From) != 1 {
-		return nil, fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
+		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From))
+		return
 	}
 	var desc *structured.TableDescriptor
 	{
 		ate, ok := p.From[0].(*parser.AliasedTableExpr)
 		if !ok {
-			return nil, fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
+			resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From))
+			return
 		}
 		table, ok := ate.Expr.(*parser.TableName)
 		if !ok {
-			return nil, fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
+			resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From))
+			return
 		}
 		var err error
-		desc, err = c.getTableDesc(table)
+		desc, err = s.getTableDesc(table)
 		if err != nil {
-			return nil, err
+			resp.SetGoError(err)
+			return
 		}
 	}
 
 	// Retrieve all of the keys that start with our index key prefix.
 	startKey := proto.Key(encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID))
 	endKey := startKey.PrefixEnd()
-	sr, err := c.db.Scan(startKey, endKey, 0)
+	sr, err := s.clientDB.Scan(startKey, endKey, 0)
 	if err != nil {
-		return nil, err
+		resp.SetGoError(err)
+		return
 	}
 
 	// All of the columns for a particular row will be grouped together. We loop
@@ -481,28 +518,31 @@ func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
 	// The TODOs here are too numerous to list. This is only performing a full
 	// table scan using the primary key.
 
-	r := &rows{}
+	var rows []sqlwire.Result_Row
 	var primaryKey []byte
-	vals := map[string]driver.Value{}
+	vals := map[string]sqlwire.Datum{}
 	for _, kv := range sr {
 		if primaryKey != nil && !bytes.HasPrefix(kv.Key, primaryKey) {
-			outputRow(r, desc.Columns, vals)
-			vals = map[string]driver.Value{}
+			rows = append(rows, outputRow(desc.Columns, vals))
+			vals = map[string]sqlwire.Datum{}
 		}
 
 		remaining, err := decodeIndexKey(desc, desc.Indexes[0], vals, kv.Key)
 		if err != nil {
-			return nil, err
+			resp.SetGoError(err)
+			return
 		}
 		primaryKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
 
 		_, colID := encoding.DecodeUvarint(remaining)
 		if err != nil {
-			return nil, err
+			resp.SetGoError(err)
+			return
 		}
 		col, err := desc.FindColumnByID(uint32(colID))
 		if err != nil {
-			return nil, err
+			resp.SetGoError(err)
+			return
 		}
 		vals[col.Name] = unmarshalValue(*col, kv)
 
@@ -511,17 +551,23 @@ func (c *conn) Select(p *parser.Select, args []driver.Value) (*rows, error) {
 		}
 	}
 
-	outputRow(r, desc.Columns, vals)
+	rows = append(rows, outputRow(desc.Columns, vals))
 
-	r.columns = make([]string, len(desc.Columns))
-	for i, col := range desc.Columns {
-		r.columns[i] = col.Name
+	resp.Results = []sqlwire.Result{
+		{
+			Columns: make([]string, len(desc.Columns)),
+			Rows:    rows,
+		},
 	}
-	return r, nil
+	for i, col := range desc.Columns {
+		resp.Results[0].Columns[i] = col.Name
+	}
 }
 
-func (c *conn) Update(p *parser.Update, args []driver.Value) (*rows, error) {
-	return nil, fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
+// Update is unimplemented.
+func (s *Server) Update(p *parser.Update, args []sqlwire.Datum, resp *sqlwire.Response) {
+
+	resp.SetGoError(fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p))
 }
 
 func (s *Server) getTableDesc(table *parser.TableName) (*structured.TableDescriptor, error) {
@@ -573,7 +619,8 @@ func (s *Server) lookupDatabase(name string) (uint32, error) {
 	}
 	return uint32(gr.ValueInt()), nil
 }
-func (c *conn) processColumns(desc *structured.TableDescriptor,
+
+func (s *Server) processColumns(desc *structured.TableDescriptor,
 	node parser.Columns) ([]structured.ColumnDescriptor, error) {
 	if node == nil {
 		return desc.Columns, nil
@@ -583,12 +630,13 @@ func (c *conn) processColumns(desc *structured.TableDescriptor,
 	for i, n := range node {
 		switch nt := n.(type) {
 		case *parser.StarExpr:
-			return c.processColumns(desc, nil)
+			return s.processColumns(desc, nil)
 		case *parser.NonStarExpr:
 			switch et := nt.Expr.(type) {
 			case *parser.ColName:
 				// TODO(pmattis): If et.Qualifier is not empty, verify it matches the
 				// table name.
+				var err error
 				col, err := desc.FindColumnByName(et.Name)
 				if err != nil {
 					return nil, err
@@ -603,40 +651,42 @@ func (c *conn) processColumns(desc *structured.TableDescriptor,
 	return cols, nil
 }
 
-func (c *conn) processInsertRows(node parser.InsertRows) (*rows, error) {
+func (s *Server) processInsertRows(node parser.InsertRows) (rows []sqlwire.Result_Row, err error) {
 	switch nt := node.(type) {
 	case parser.Values:
-		r := &rows{}
 		for _, row := range nt {
 			switch rt := row.(type) {
 			case parser.ValTuple:
-				var vals []driver.Value
+				var vals []sqlwire.Datum
 				for _, val := range rt {
 					switch vt := val.(type) {
 					case parser.StrVal:
-						vals = append(vals, string(vt))
+						tmp := string(vt)
+						vals = append(vals, sqlwire.Datum{StringVal: &tmp})
 					case parser.NumVal:
-						vals = append(vals, string(vt))
+						tmp := string(vt)
+						vals = append(vals, sqlwire.Datum{StringVal: &tmp})
 					case parser.ValArg:
-						return nil, fmt.Errorf("TODO(pmattis): unsupported node: %T", val)
+						return rows, fmt.Errorf("TODO(pmattis): unsupported node: %T", val)
 					case parser.BytesVal:
-						vals = append(vals, string(vt))
+						tmp := string(vt)
+						vals = append(vals, sqlwire.Datum{StringVal: &tmp})
 					default:
-						return nil, fmt.Errorf("TODO(pmattis): unsupported node: %T", val)
+						return rows, fmt.Errorf("TODO(pmattis): unsupported node: %T", val)
 					}
 				}
-				r.rows = append(r.rows, vals)
+				rows = append(rows, sqlwire.Result_Row{Values: vals})
 			case *parser.Subquery:
-				return nil, fmt.Errorf("TODO(pmattis): unsupported node: %T", row)
+				return rows, fmt.Errorf("TODO(pmattis): unsupported node: %T", row)
 			}
 		}
-		return r, nil
+		return rows, nil
 	case *parser.Select:
-		return c.query(nt, nil)
+		// TODO(vivek): return s.query(nt.stmt, nil)
 	case *parser.Union:
-		return c.query(nt, nil)
+		// TODO(vivek): return s.query(nt.stmt, nil)
 	}
-	return nil, fmt.Errorf("TODO(pmattis): unsupported node: %T", node)
+	return rows, fmt.Errorf("TODO(pmattis): unsupported node: %T", node)
 }
 
 // TODO(pmattis): The key encoding and decoding routines belong in either
@@ -653,7 +703,7 @@ func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 
 func encodeIndexKey(index structured.IndexDescriptor,
 	colMap map[uint32]int, cols []structured.ColumnDescriptor,
-	row []driver.Value, indexKey []byte) ([]byte, error) {
+	row []sqlwire.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
@@ -681,29 +731,28 @@ func encodeColumnKey(desc *structured.TableDescriptor,
 	return encoding.EncodeUvarint(key, uint64(col.ID))
 }
 
-func encodeTableKey(b []byte, v driver.Value) ([]byte, error) {
-	switch t := v.(type) {
-	case int64:
-		return encoding.EncodeVarint(b, t), nil
-	case float64:
-		return encoding.EncodeNumericFloat(b, t), nil
-	case bool:
-		if t {
+func encodeTableKey(b []byte, v sqlwire.Datum) ([]byte, error) {
+	if v.BoolVal != nil {
+		if *v.BoolVal {
 			return encoding.EncodeVarint(b, 1), nil
 		}
 		return encoding.EncodeVarint(b, 0), nil
-	case []byte:
-		return encoding.EncodeBytes(b, t), nil
-	case string:
-		return encoding.EncodeBytes(b, []byte(t)), nil
-	case time.Time:
-		return nil, fmt.Errorf("TODO(pmattis): encode index key: time.Time")
+	} else if v.IntVal != nil {
+		return encoding.EncodeVarint(b, *v.IntVal), nil
+	} else if v.UintVal != nil {
+		return encoding.EncodeUvarint(b, *v.UintVal), nil
+	} else if v.FloatVal != nil {
+		return encoding.EncodeNumericFloat(b, *v.FloatVal), nil
+	} else if v.BytesVal != nil {
+		return encoding.EncodeBytes(b, v.BytesVal), nil
+	} else if v.StringVal != nil {
+		return encoding.EncodeBytes(b, []byte(*v.StringVal)), nil
 	}
 	return nil, fmt.Errorf("unable to encode table key: %T", v)
 }
 
 func decodeIndexKey(desc *structured.TableDescriptor,
-	index structured.IndexDescriptor, vals map[string]driver.Value, key []byte) ([]byte, error) {
+	index structured.IndexDescriptor, vals map[string]sqlwire.Datum, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -730,16 +779,16 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 		case structured.ColumnType_BIT, structured.ColumnType_INT:
 			var i int64
 			key, i = encoding.DecodeVarint(key)
-			vals[col.Name] = i
+			vals[col.Name] = sqlwire.Datum{IntVal: &i}
 		case structured.ColumnType_FLOAT:
 			var f float64
 			key, f = encoding.DecodeNumericFloat(key)
-			vals[col.Name] = f
+			vals[col.Name] = sqlwire.Datum{FloatVal: &f}
 		case structured.ColumnType_CHAR, structured.ColumnType_BINARY,
 			structured.ColumnType_TEXT, structured.ColumnType_BLOB:
 			var r []byte
 			key, r = encoding.DecodeBytes(key, nil)
-			vals[col.Name] = r
+			vals[col.Name] = sqlwire.Datum{BytesVal: r}
 		default:
 			return nil, fmt.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}
@@ -748,28 +797,32 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 	return key, nil
 }
 
-func outputRow(r *rows, cols []structured.ColumnDescriptor, vals map[string]driver.Value) {
-	row := make(row, len(cols))
+func outputRow(cols []structured.ColumnDescriptor, vals map[string]sqlwire.Datum) sqlwire.Result_Row {
+	row := sqlwire.Result_Row{Values: make([]sqlwire.Datum, len(cols))}
 	for i, col := range cols {
-		row[i] = vals[col.Name]
+		row.Values[i] = vals[col.Name]
 	}
-	r.rows = append(r.rows, row)
+	return row
 }
 
-func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) driver.Value {
+func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) sqlwire.Datum {
+	var d sqlwire.Datum
 	if !kv.Exists() {
-		return nil
+		return d
 	}
 	switch col.Type.Kind {
 	case structured.ColumnType_BIT, structured.ColumnType_INT:
-		return kv.ValueInt()
+		tmp := kv.ValueInt()
+		d.IntVal = &tmp
 	case structured.ColumnType_FLOAT:
-		return math.Float64frombits(uint64(kv.ValueInt()))
+		tmp := math.Float64frombits(uint64(kv.ValueInt()))
+		d.FloatVal = &tmp
 	case structured.ColumnType_CHAR, structured.ColumnType_BINARY,
 		structured.ColumnType_TEXT, structured.ColumnType_BLOB:
 		// TODO(pmattis): The conversion to string isn't strictly necessary, but
 		// makes log messages more readable right now.
-		return string(kv.ValueBytes())
+		tmp := string(kv.ValueBytes())
+		d.StringVal = &tmp
 	}
-	return kv.ValueBytes()
+	return d
 }

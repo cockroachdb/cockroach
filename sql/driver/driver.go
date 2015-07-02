@@ -35,10 +35,6 @@ func init() {
 type roachDriver struct{}
 
 func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
-	db, err := client.Open(dsn)
-	if err != nil {
-		return nil, err
-	}
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return nil, err
@@ -57,5 +53,5 @@ func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &conn{db: db, sender: sender}, nil
+	return &conn{sender: sender}, nil
 }
