@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func adminSplitArgs(key, splitKey []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
@@ -296,8 +296,8 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
-		key := randhelper.RandBytes(src, int(src.Int31n(1<<7)))
-		val := randhelper.RandBytes(src, int(src.Int31n(1<<8)))
+		key := randutil.RandBytes(src, int(src.Int31n(1<<7)))
+		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs, pReply := putArgs(key, val, rng.Desc().RaftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
@@ -355,8 +355,8 @@ func fillRange(store *storage.Store, raftID proto.RaftID, prefix proto.Key, byte
 		if keyBytes+valBytes >= bytes {
 			return
 		}
-		key := append(append([]byte(nil), prefix...), randhelper.RandBytes(src, 100)...)
-		val := randhelper.RandBytes(src, int(src.Int31n(1<<8)))
+		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
+		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs, pReply := putArgs(key, val, raftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {

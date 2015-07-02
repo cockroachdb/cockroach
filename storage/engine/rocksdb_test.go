@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -164,7 +164,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 		return rocksdb
 	}
 
-	rng, _ := randhelper.NewPseudoRand()
+	rng, _ := randutil.NewPseudoRand()
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
@@ -179,7 +179,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				value := proto.Value{Bytes: randhelper.RandBytes(rng, 1024)}
+				value := proto.Value{Bytes: randutil.RandBytes(rng, 1024)}
 				value.InitChecksum(keys[i])
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
@@ -347,8 +347,8 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
-	rng, _ := randhelper.NewPseudoRand()
-	value := proto.Value{Bytes: randhelper.RandBytes(rng, valueSize)}
+	rng, _ := randutil.NewPseudoRand()
+	value := proto.Value{Bytes: randutil.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
@@ -385,8 +385,8 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 }
 
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
-	rng, _ := randhelper.NewPseudoRand()
-	value := proto.Value{Bytes: randhelper.RandBytes(rng, valueSize)}
+	rng, _ := randutil.NewPseudoRand()
+	value := proto.Value{Bytes: randutil.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)

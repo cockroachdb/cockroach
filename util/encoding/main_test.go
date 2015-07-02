@@ -15,10 +15,6 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package encoding
+package encoding_test
 
-import "github.com/cockroachdb/cockroach/testutils/fakeflags"
-
-func init() {
-	fakeflags.InitLogFlags()
-}
+import _ "github.com/cockroachdb/cockroach/util/log" // for flags

@@ -21,14 +21,7 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/testutils/fakeflags"
 )
-
-func init() {
-	// Required since `util/log`->`util/caller`.
-	fakeflags.InitLogFlags()
-}
 
 func TestCallResolver(t *testing.T) {
 	cr := NewCallResolver(0, `resolver_test\.go.*$`)

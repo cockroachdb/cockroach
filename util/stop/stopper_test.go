@@ -15,21 +15,18 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package stop
+package stop_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/testutils/fakeflags"
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func init() {
-	fakeflags.InitLogFlags()
-}
-
 func TestStopper(t *testing.T) {
-	s := NewStopper()
+	s := stop.NewStopper()
 	s.AddWorker()
 
 	waiting := make(chan struct{})
@@ -71,7 +68,7 @@ func (bc *blockingCloser) Close() {
 }
 
 func TestStopperIsStopped(t *testing.T) {
-	s := NewStopper()
+	s := stop.NewStopper()
 	s.AddWorker()
 	bc := newBlockingCloser()
 	s.AddCloser(bc)
@@ -100,7 +97,7 @@ func TestStopperIsStopped(t *testing.T) {
 
 func TestStopperMultipleStopees(t *testing.T) {
 	const count = 3
-	s := NewStopper()
+	s := stop.NewStopper()
 
 	for i := 0; i < count; i++ {
 		s.AddWorker()
@@ -124,7 +121,7 @@ func TestStopperMultipleStopees(t *testing.T) {
 }
 
 func TestStopperStartFinishTasks(t *testing.T) {
-	s := NewStopper()
+	s := stop.NewStopper()
 	s.AddWorker()
 
 	if !s.StartTask() {
@@ -149,7 +146,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 }
 
 func TestStopperRunWorker(t *testing.T) {
-	s := NewStopper()
+	s := stop.NewStopper()
 	s.RunWorker(func() {
 		select {
 		case <-s.ShouldStop():
@@ -171,9 +168,9 @@ func TestStopperRunWorker(t *testing.T) {
 
 // TestStopperQuiesce tests coordinate drain with Quiesce.
 func TestStopperQuiesce(t *testing.T) {
-	var stoppers []*Stopper
+	var stoppers []*stop.Stopper
 	for i := 0; i < 3; i++ {
-		stoppers = append(stoppers, NewStopper())
+		stoppers = append(stoppers, stop.NewStopper())
 	}
 	var quiesceDone []chan struct{}
 	var startTaskDone []chan struct{}
@@ -234,7 +231,7 @@ func (tc *testCloser) Close() {
 }
 
 func TestStopperClosers(t *testing.T) {
-	s := NewStopper()
+	s := stop.NewStopper()
 	var tc1, tc2 testCloser
 	s.AddCloser(&tc1)
 	s.AddCloser(&tc2)

@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randhelper"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 // TestPut starts up an N node cluster and runs N workers that write
@@ -47,8 +47,8 @@ func TestPut(t *testing.T) {
 	var count int64
 	for i := 0; i < *numNodes; i++ {
 		go func() {
-			r, _ := randhelper.NewPseudoRand()
-			value := randhelper.RandBytes(r, 8192)
+			r, _ := randutil.NewPseudoRand()
+			value := randutil.RandBytes(r, 8192)
 
 			for time.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)

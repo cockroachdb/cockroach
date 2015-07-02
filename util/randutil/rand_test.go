@@ -15,23 +15,20 @@
 //
 // Author: Ben Darnell
 
-package randhelper
+package randutil_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils/fakeflags"
+	_ "github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randutil" // for flags
 )
-
-func init() {
-	fakeflags.InitLogFlags()
-}
 
 func TestPseudoRand(t *testing.T) {
 	numbers := make(map[int]bool)
 	// Make two random number generators and pull two numbers from each.
-	rand1, _ := NewPseudoRand()
-	rand2, _ := NewPseudoRand()
+	rand1, _ := randutil.NewPseudoRand()
+	rand2, _ := randutil.NewPseudoRand()
 	numbers[rand1.Int()] = true
 	numbers[rand1.Int()] = true
 	numbers[rand2.Int()] = true
@@ -43,9 +40,9 @@ func TestPseudoRand(t *testing.T) {
 }
 
 func TestRandIntInRange(t *testing.T) {
-	rand, _ := NewPseudoRand()
+	rand, _ := randutil.NewPseudoRand()
 	for i := 0; i < 100; i++ {
-		x := RandIntInRange(rand, 20, 40)
+		x := randutil.RandIntInRange(rand, 20, 40)
 		if x < 20 || x >= 40 {
 			t.Errorf("got result out of range: %d", x)
 		}
@@ -53,9 +50,9 @@ func TestRandIntInRange(t *testing.T) {
 }
 
 func TestRandBytes(t *testing.T) {
-	rand, _ := NewPseudoRand()
+	rand, _ := randutil.NewPseudoRand()
 	for i := 0; i < 100; i++ {
-		x := RandBytes(rand, i)
+		x := randutil.RandBytes(rand, i)
 		if len(x) != i {
 			t.Errorf("got array with unexpected length: %d (expected %d)", len(x), i)
 		}
