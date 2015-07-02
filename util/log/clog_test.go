@@ -28,6 +28,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/caller"
 )
 
 // Test that shortHostname works as advertised.
@@ -448,7 +450,7 @@ func TestLogBacktraceAt(t *testing.T) {
 	}
 	{
 		// Start of tracing block. These lines know about each other's relative position.
-		file, line := Caller(0)
+		file, line, _ := caller.Lookup(0)
 		setTraceLocation(file, line, +2) // Two lines between Caller and Info calls.
 		Info("we want a stack trace here")
 		if err := logging.traceLocation.Set(""); err != nil {
@@ -465,36 +467,6 @@ func TestLogBacktraceAt(t *testing.T) {
 		// We could be more precise but that would require knowing the details
 		// of the traceback format, which may not be dependable.
 		t.Fatal("got no trace back; log is ", contents(InfoLog))
-	}
-}
-
-func TestCaller(t *testing.T) {
-	setFlags()
-	defer logging.swap(logging.newBuffers())
-	var files [3]string
-	var lines [3]int
-	i := 0
-	filename := "util/log/clog_test.go" // could obtain this, but KISS
-
-	fn := func() {
-		files[i], lines[i] = Caller(1)
-		i++
-	}
-
-	fn()
-	fn()
-	fn()
-
-	lastline := -1
-	i--
-	for ; i >= 0; i-- {
-		if files[i] != filename {
-			t.Fatalf("call %d: file not %s, but %s instead", i, filename, files[i])
-		}
-		if lastline != -1 && lines[i] != lastline-1 {
-			t.Fatalf("call %d: next call at %d != %d+1", i, lastline, lines[i])
-		}
-		lastline = lines[i]
 	}
 }
 

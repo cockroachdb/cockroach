@@ -20,7 +20,7 @@ package util
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/caller"
 )
 
 const defaultSkip = 2
@@ -29,7 +29,7 @@ const errorPrefixFormat string = "%s:%d: "
 // getPrefix skips "skip" stack frames to get the file & line number
 // of original caller.
 func getPrefix(skip int, format string) string {
-	file, line := log.Caller(skip)
+	file, line, _ := caller.Lookup(skip)
 	return fmt.Sprintf(format, file, line)
 }
 

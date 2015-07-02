@@ -36,6 +36,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log/logpb"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -712,18 +713,8 @@ func (l *loggingT) putBuffer(b *buffer) {
 
 var timeNow = time.Now // Stubbed out for testing.
 
-// Caller returns the file and line of the Caller or, in case of error,
-// the placeholder ('???', 1).
-func Caller(depth int) (string, int) {
-	if _, file, line, ok := runtime.Caller(1 + depth); ok {
-		list := strings.Split(file, "cockroach"+string(os.PathSeparator))
-		return list[len(list)-1], line
-	}
-	return "???", 1
-}
-
 func (l *loggingT) print(s Severity, args ...interface{}) {
-	file, line := Caller(1)
+	file, line, _ := caller.Lookup(1)
 	entry := logpb.LogEntry{}
 	setLogEntry(nil, "", args, &entry)
 	l.outputLogEntry(s, file, line, false, &entry)
@@ -952,7 +943,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
 	// Write header.
-	file, line := Caller(0)
+	file, line, _ := caller.Lookup(0)
 	for _, format := range []string{
 		fmt.Sprintf("Running on machine: %s", host),
 		fmt.Sprintf("Binary: Built with %s %s for %s/%s",

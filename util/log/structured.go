@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log/logpb"
 
 	"golang.org/x/net/context"
@@ -33,7 +34,7 @@ import (
 // AddStructured creates a structured log entry to be written to the
 // specified facility of the logger.
 func AddStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
-	file, line := Caller(depth + 1)
+	file, line, _ := caller.Lookup(depth + 1)
 	entry := &logpb.LogEntry{}
 	setLogEntry(ctx, format, args, entry)
 	logging.outputLogEntry(s, file, line, false, entry)
