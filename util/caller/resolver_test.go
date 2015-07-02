@@ -18,8 +18,7 @@
 package caller
 
 import (
-	"fmt"
-	"regexp"
+	"path"
 	"testing"
 )
 
@@ -30,12 +29,11 @@ func TestCallResolver(t *testing.T) {
 		if l := len(cr.cache); l != i {
 			t.Fatalf("cache has %d entries, expected %d", l, i)
 		}
-		file, line, fun := func() (string, int, string) {
+		file, _, fun := func() (string, int, string) {
 			return cr.Lookup(1)
 		}()
-		fileline := fmt.Sprintf("%s:%d", file, line)
-		if matched, err := regexp.MatchString(`^resolver_test\.go`, fileline); !matched || err != nil {
-			t.Fatalf("wrong file:line '%s'", fileline)
+		if file != "resolver_test.go" {
+			t.Fatalf("wrong file '%s'", file)
 		}
 		if fun != "TestCallResolver" {
 			t.Fatalf("unexpected caller reported: %s", fun)
@@ -48,14 +46,13 @@ func TestDefaultCallResolver(t *testing.T) {
 		if l := len(defaultCallResolver.cache); l != i {
 			t.Fatalf("cache has %d entries, expected %d", l, i)
 		}
-		file, line, fun := Lookup(0)
+		file, _, fun := Lookup(0)
 		if fun != "TestDefaultCallResolver" {
 			t.Fatalf("unexpected caller reported: %s", fun)
 		}
 
-		fileline := fmt.Sprintf("%s:%d", file, line)
-		if matched, err := regexp.MatchString(`^util/caller/resolver_test\.go`, fileline); !matched || err != nil {
-			t.Fatalf("wrong file:line '%s'", fileline)
+		if file != path.Join("util", "caller", "resolver_test.go") {
+			t.Fatalf("wrong file '%s'", file)
 		}
 	}
 }
