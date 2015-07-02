@@ -961,10 +961,11 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
-	if !r.rm.Stopper().StartTask() {
+	task := r.rm.Stopper().StartTask()
+	if !task.Ok() {
 		return false, util.Errorf("node is stopping")
 	}
-	defer r.rm.Stopper().FinishTask()
+	defer task.Done()
 
 	timestamp := r.rm.Clock().Now()
 
@@ -1073,7 +1074,8 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
-	if !stopper.StartTask() {
+	task := stopper.StartTask()
+	if !task.Ok() {
 		return
 	}
 	go func() {
@@ -1083,7 +1085,7 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 		if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 			log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 		}
-		stopper.FinishTask()
+		task.Done()
 	}()
 }
 

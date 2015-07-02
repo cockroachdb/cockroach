@@ -18,7 +18,12 @@
 package stop
 
 import (
+	"fmt"
+	"sort"
+	"strings"
 	"sync"
+
+	"github.com/cockroachdb/cockroach/util/caller"
 )
 
 // Closer is an interface for objects to attach to the stopper to
@@ -30,17 +35,17 @@ type Closer interface {
 // A Stopper provides a channel-based mechanism to stop an arbitrary
 // array of workers. Each worker is registered with the stopper via
 // the AddWorker() method. The system further tracks each task which
-// is outstanding by calling StartTask() when a task is started and
-// FinishTask() when completed.
+// is outstanding by calling StartTask() when a task is started, which
+// returns a handle with Ok() and Done() methods.
 //
-// Stopping occurs in two phases: the first is the request to stop,
-// which moves the stopper into a draining phase. While draining,
-// calls to StartTask() return false, meaning the system is draining
-// and new tasks should not be accepted. When all outstanding tasks
-// have been completed via calls to FinishTask(), the stopper closes
-// its stopper channel, which signals all live workers that it's safe
-// to shut down. Once shutdown, each worker invokes SetStopped(). When
-// all workers have shutdown, the stopper is complete.
+// Stopping occurs in two phases: the first is the request to stop, which moves
+// the stopper into a draining phase. While draining, calls to StartTask()
+// return a handle for which Ok() is false, meaning the system is draining and
+// new work must not be begun. When all outstanding tasks have been completed
+// via calls to Done(), the stopper closes its stopper channel, which signals
+// all live workers that it's safe to shut down. Once shutdown, each worker
+// invokes SetStopped(). When all workers have shutdown, the stopper is
+// complete.
 //
 // An arbitrary list of objects implementing the Closer interface may
 // be added to the stopper via AddCloser(), to be closed after the
@@ -53,6 +58,7 @@ type Stopper struct {
 	drain    *sync.Cond     // Conditional variable to wait for outstanding tasks
 	draining bool           // true when Stop() has been called
 	numTasks int            // number of outstanding tasks
+	tasks    map[string]int
 	closers  []Closer
 }
 
@@ -61,6 +67,7 @@ func NewStopper() *Stopper {
 	s := &Stopper{
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
+		tasks:   map[string]int{},
 	}
 	s.drain = sync.NewCond(&s.mu)
 	return s
@@ -72,6 +79,12 @@ func (s *Stopper) RunWorker(f func()) {
 	s.AddWorker()
 	go func() {
 		defer s.SetStopped()
+		defer func() {
+			if r := recover(); r != nil {
+				// TODO(tschottdorf)
+				panic(r)
+			}
+		}()
 		f()
 	}()
 }
@@ -88,33 +101,63 @@ func (s *Stopper) AddCloser(c Closer) {
 	s.closers = append(s.closers, c)
 }
 
-// StartTask adds one to the count of tasks left to drain in the
-// system. Any worker which is a "first mover" when starting tasks
-// must call this method before starting work on a new task and must
-// subsequently invoke FinishTask() when the task is complete.
-// First movers include goroutines launched to do periodic work and
-// the kv/db.go gateway which accepts external client
-// requests.
+// A PendingTask is returned by StartTask. For simplicity this is just a
+// function pointer which is nil if the task was refused and is executed
+// when the task is done, but the Ok() and Done() methods defined on it
+// are more idiomatic.
+type PendingTask func() bool
+
+// Ok must be called to confirm that actual work may be started for this task.
+func (pt PendingTask) Ok() bool {
+	return pt != nil
+}
+
+// Done is called (exactly once) when the started work has completed.
+// It must not be called when Ok() returned false.
+func (pt PendingTask) Done() {
+	if !pt.Ok() {
+		panic("task was not permitted")
+	}
+	pt()
+}
+
+// StartTask adds one to the count of tasks left to drain in the system. Any
+// worker which is a "first mover" when starting tasks must call this method
+// before starting work on a new task and must subsequently invoke Done() on
+// the returned handle  when the task is complete. First movers include
+// goroutines launched to do periodic work and the kv/db.go gateway which
+// accepts external client requests.
 //
-// Returns true if the task can be launched or false to indicate the
-// system is currently draining and the task should be refused.
-func (s *Stopper) StartTask() bool {
+// Ok() must be called to confirm that the task can be launched. Ok() returns
+// false to indicate that the system is currently draining and the task should
+// must not proceed. It's illegal to call Done() in that case.
+//
+// TODO(tschottdorf): Consider renaming PendingTask to Permit or using an API
+// similar to RunWorker.
+func (s *Stopper) StartTask() PendingTask {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.draining {
-		return false
+		return nil
 	}
-	s.numTasks++
-	return true
-}
 
-// FinishTask removes one from the count of tasks left to drain in the
-// system. This function must be invoked for every call to StartTask().
-func (s *Stopper) FinishTask() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.numTasks--
-	s.drain.Broadcast()
+	s.numTasks++
+	file, line, _ := caller.Lookup(1)
+	taskKey := fmt.Sprintf("%s:%d", file, line)
+	s.tasks[taskKey]++
+	var done bool
+	return func() bool {
+		if done {
+			panic("cannot finish a task twice")
+		}
+		done = true
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.numTasks--
+		s.tasks[taskKey]--
+		s.drain.Broadcast()
+		return false // never used
+	}
 }
 
 // NumTasks returns the number of active tasks.
@@ -122,6 +165,37 @@ func (s *Stopper) NumTasks() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.numTasks
+}
+
+// A TaskMap is returned by RunningTasks().
+type TaskMap map[string]int
+
+// String implements fmt.Stringer and returns a sorted multi-line listing of
+// the TaskMap.
+func (tm TaskMap) String() string {
+	var totalNum int
+	var lines []string
+	for location, num := range tm {
+		lines = append(lines, fmt.Sprintf("%-6d %s", num, location))
+		totalNum += num
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(lines)))
+	return strings.Join(lines, "\n")
+}
+
+// RunningTasks returns a map containing the count of running tasks keyed by
+// callsite.
+func (s *Stopper) RunningTasks() TaskMap {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m := map[string]int{}
+	for k := range s.tasks {
+		if s.tasks[k] == 0 {
+			continue
+		}
+		m[k] = s.tasks[k]
+	}
+	return m
 }
 
 // Stop signals all live workers to stop and then waits for each to

@@ -1427,7 +1427,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		}
 		resolveReply := &proto.InternalResolveIntentResponse{}
 
-		if s.stopper.StartTask() {
+		if task := s.stopper.StartTask(); task.Ok() {
 			wg.Add(1)
 			ctx := tracer.ToCtx(ctx, trace.Fork())
 
@@ -1438,7 +1438,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 						log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
 					}
 				}
-				s.stopper.FinishTask()
+				task.Done()
 			}(ctx)
 		}
 	}

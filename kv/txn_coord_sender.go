@@ -187,8 +187,9 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 		}
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.
-		if stopper.StartTask() {
+		if task := stopper.StartTask(); task.Ok() {
 			go func(ctx context.Context) {
+				defer task.Done()
 				if log.V(2) {
 					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
 				}
@@ -196,7 +197,6 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 				if call.Reply.Header().Error != nil {
 					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
 				}
-				stopper.FinishTask()
 			}(tracer.ToCtx(context.Background(), trace.Fork()))
 		}
 	}
@@ -758,7 +758,8 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 					Reply: reply,
 				}
 
-				if !tc.stopper.StartTask() {
+				task := tc.stopper.StartTask()
+				if !task.Ok() {
 					continue
 				}
 
@@ -778,7 +779,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 					proceed = false
 				}
 				trace.Finalize()
-				tc.stopper.FinishTask()
+				task.Done()
 				if !proceed {
 					return
 				}
