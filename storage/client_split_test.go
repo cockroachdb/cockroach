@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
-	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -132,10 +132,10 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			args, reply := adminSplitArgs(proto.KeyMin, []byte("a"), 1, store.StoreID())
 			err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
 			if err != nil {
-				if matched, regexpErr := regexp.MatchString("range is already split at key", err.Error()); !matched || regexpErr != nil {
-					t.Errorf("error %s didn't match regex %v", err, regexpErr)
-				} else {
+				if strings.Contains(err.Error(), "range is already split at key") {
 					atomic.AddInt32(&failureCount, 1)
+				} else {
+					t.Errorf("unexpected error: %s", err)
 				}
 			}
 			wg.Done()
