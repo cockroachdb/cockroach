@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/log/logpb"
 	"golang.org/x/net/context"
 )
 
@@ -55,55 +54,55 @@ func TestSetLogEntry(t *testing.T) {
 		ctx      context.Context
 		format   string
 		args     []interface{}
-		expEntry logpb.LogEntry
+		expEntry LogEntry
 	}{
-		{nil, "", []interface{}{}, logpb.LogEntry{}},
-		{ctx, "", []interface{}{}, logpb.LogEntry{
+		{nil, "", []interface{}{}, LogEntry{}},
+		{ctx, "", []interface{}{}, LogEntry{
 			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
 		}},
-		{ctx, "no args", []interface{}{}, logpb.LogEntry{
+		{ctx, "no args", []interface{}{}, LogEntry{
 			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
 			Format: "no args",
 		}},
-		{ctx, "1 arg %s", []interface{}{"foo"}, logpb.LogEntry{
+		{ctx, "1 arg %s", []interface{}{"foo"}, LogEntry{
 			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
 			Format: "1 arg %s",
-			Args: []logpb.LogEntry_Arg{
+			Args: []LogEntry_Arg{
 				{Type: "string", Str: "foo"},
 			},
 		}},
 		// Try a float64 argument with width and precision specified.
-		{nil, "float arg %10.4f", []interface{}{math.Pi}, logpb.LogEntry{
+		{nil, "float arg %10.4f", []interface{}{math.Pi}, LogEntry{
 			Format: "float arg %s",
-			Args: []logpb.LogEntry_Arg{
+			Args: []LogEntry_Arg{
 				{Type: "float64", Str: "    3.1416", Json: []byte("3.141592653589793")},
 			},
 		}},
 		// Try a proto.Key argument.
-		{nil, "Key arg %s", []interface{}{proto.Key("\x00\xff")}, logpb.LogEntry{
+		{nil, "Key arg %s", []interface{}{proto.Key("\x00\xff")}, LogEntry{
 			Format: "Key arg %s",
-			Args: []logpb.LogEntry_Arg{
+			Args: []LogEntry_Arg{
 				{Type: "proto.Key", Str: "\"\\x00\\xff\""},
 			},
 		}},
 		// Verify multiple args and set the formatting very particularly for int type.
-		{nil, "2 args %s %010d", []interface{}{"foo", 1}, logpb.LogEntry{
+		{nil, "2 args %s %010d", []interface{}{"foo", 1}, LogEntry{
 			Format: "2 args %s %s",
-			Args: []logpb.LogEntry_Arg{
+			Args: []LogEntry_Arg{
 				{Type: "string", Str: "foo"},
 				{Type: "int", Str: "0000000001", Json: []byte("1")},
 			},
 		}},
 		// Set argument to a non-simple type with custom stringer which will yield a JSON value in the Arg.
-		{nil, "JSON arg %s", []interface{}{testArg{"foo", 10}}, logpb.LogEntry{
+		{nil, "JSON arg %s", []interface{}{testArg{"foo", 10}}, LogEntry{
 			Format: "JSON arg %s",
-			Args: []logpb.LogEntry_Arg{
+			Args: []LogEntry_Arg{
 				{Type: "log.testArg", Str: "10-->foo", Json: []byte("{\"StrVal\":\"foo\",\"IntVal\":10}")},
 			},
 		}},
 	}
 	for i, test := range testCases {
-		entry := &logpb.LogEntry{}
+		entry := &LogEntry{}
 		setLogEntry(test.ctx, test.format, test.args, entry)
 		if !reflect.DeepEqual(entry, &test.expEntry) {
 			t.Errorf("%d: expected %+v; got %+v", i, &test.expEntry, entry)
