@@ -17,7 +17,7 @@
 
 syntax = "proto2";
 package cockroach.proto;
-option go_package = "logpb";
+option go_package = "log";
 
 import "gogoproto/gogo.proto";
 

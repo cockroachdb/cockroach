@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/log/logpb"
 
 	"golang.org/x/net/context"
 )
@@ -35,7 +34,7 @@ import (
 // specified facility of the logger.
 func AddStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line, _ := caller.Lookup(depth + 1)
-	entry := &logpb.LogEntry{}
+	entry := &LogEntry{}
 	setLogEntry(ctx, format, args, entry)
 	logging.outputLogEntry(s, file, line, false, entry)
 }
@@ -57,7 +56,7 @@ func getJSON(arg interface{}) []byte {
 	}
 	return jsonBytes
 }
-func setLogEntry(ctx context.Context, format string, args []interface{}, entry *logpb.LogEntry) {
+func setLogEntry(ctx context.Context, format string, args []interface{}, entry *LogEntry) {
 	entry.Format, entry.Args = parseFormatWithArgs(format, args)
 
 	if ctx != nil {
@@ -82,9 +81,9 @@ func setLogEntry(ctx context.Context, format string, args []interface{}, entry *
 
 // parseFormatWithArgs parses the format string, matching each
 // format specifier with an argument from the args array.
-func parseFormatWithArgs(format string, args []interface{}) (string, []logpb.LogEntry_Arg) {
+func parseFormatWithArgs(format string, args []interface{}) (string, []LogEntry_Arg) {
 	// Process format string.
-	var logArgs []logpb.LogEntry_Arg
+	var logArgs []LogEntry_Arg
 	var buf []byte
 	var idx int
 	end := len(format)
@@ -158,12 +157,12 @@ func parseFormatWithArgs(format string, args []interface{}) (string, []logpb.Log
 	return string(buf), logArgs
 }
 
-func makeLogArg(format string, arg interface{}) logpb.LogEntry_Arg {
+func makeLogArg(format string, arg interface{}) LogEntry_Arg {
 	var tstr string
 	if t := reflect.TypeOf(arg); t != nil {
 		tstr = t.String()
 	}
-	return logpb.LogEntry_Arg{
+	return LogEntry_Arg{
 		Type: tstr,
 		Str:  fmt.Sprintf(format, arg),
 		Json: getJSON(arg),

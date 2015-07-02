@@ -34,8 +34,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/log/logpb"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
@@ -298,7 +296,7 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 // stop reading in new files if the maxEntries is exceeded. The logs entries
 // returned will be in decreasing order, with the closest log to the start
 // time being the first entry.
-func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int) ([]logpb.LogEntry, error) {
+func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int) ([]LogEntry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
 		return nil, err
@@ -306,7 +304,7 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 
 	selectedFiles := selectFiles(logFiles, severity, endTimestamp)
 
-	entries := []logpb.LogEntry{}
+	entries := []LogEntry{}
 	for _, file := range selectedFiles {
 		newEntries, entryBeforeStart, err := readAllEntriesFromFile(
 			file,
@@ -335,17 +333,17 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 // occurred before the startTime to ensure inform the caller that no more log
 // files need to be processed. If the number of entries is exceeds maxEntries
 // then processing of new entries is stopped immediately.
-func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int) ([]logpb.LogEntry, bool, error) {
+func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int) ([]LogEntry, bool, error) {
 	reader, err := GetLogReader(file.Name, false)
 	defer reader.Close()
 	if reader == nil || err != nil {
 		return nil, false, err
 	}
-	entries := []logpb.LogEntry{}
+	entries := []LogEntry{}
 	decoder := NewEntryDecoder(reader)
 	entryBeforeStart := false
 	for {
-		entry := logpb.LogEntry{}
+		entry := LogEntry{}
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
@@ -353,7 +351,7 @@ func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, m
 			return nil, false, err
 		}
 		if entry.Time >= startTimestamp && entry.Time <= endTimestamp {
-			entries = append([]logpb.LogEntry{entry}, entries...)
+			entries = append([]LogEntry{entry}, entries...)
 			if len(entries) >= maxEntries {
 				break
 			}

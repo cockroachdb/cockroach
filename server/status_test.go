@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/log/logpb"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -367,7 +366,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Fetch a each listed log directly.
 	type logWrapper struct {
-		Data []logpb.LogEntry `json:"d"`
+		Data []log.LogEntry `json:"d"`
 	}
 	// Check each individual log can be fetched and is non-empty.
 	for _, log := range logs.Data {
@@ -390,7 +389,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Fetch the full list of log entries.
 	type entryWrapper struct {
-		Data []logpb.LogEntry `json:"d"`
+		Data []log.LogEntry `json:"d"`
 	}
 
 	testCases := []struct {
