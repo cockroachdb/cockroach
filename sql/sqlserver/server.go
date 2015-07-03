@@ -62,13 +62,14 @@ func createArgsAndReply(method string) (*sqlwire.Request, *sqlwire.Response) {
 // A Server provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.
 type Server struct {
+	// TODO(vivek): Move database to the session/transaction context.
 	database string
-	clientDB *client.DB
+	db       *client.DB
 }
 
 // NewServer allocates and returns a new Server.
 func NewServer(db *client.DB) *Server {
-	return &Server{clientDB: db}
+	return &Server{db: db}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path
@@ -105,7 +106,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the Request for SQL execution.
-	s.execute(sqlwire.Call{Args: args, Reply: reply})
+	s.exec(sqlwire.Call{Args: args, Reply: reply})
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
@@ -118,7 +119,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Send forwards the call for further processing.
-func (s *Server) execute(call sqlwire.Call) {
+func (s *Server) exec(call sqlwire.Call) {
 	req := call.Args
 	resp := call.Reply
 	stmt, err := parser.Parse(req.Sql)
@@ -184,7 +185,7 @@ func (s *Server) ShowColumns(p *parser.ShowColumns, args []sqlwire.Datum, resp *
 // ShowDatabases returns all the databases.
 func (s *Server) ShowDatabases(p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
-	sr, err := s.clientDB.Scan(prefix, prefix.PrefixEnd(), 0)
+	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -256,7 +257,7 @@ func (s *Server) ShowTables(p *parser.ShowTables, args []sqlwire.Datum, resp *sq
 		return
 	}
 	prefix := keys.MakeNameMetadataKey(dbID, "")
-	sr, err := s.clientDB.Scan(prefix, prefix.PrefixEnd(), 0)
+	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -292,7 +293,7 @@ func (s *Server) CreateDatabase(p *parser.CreateDatabase, args []sqlwire.Datum, 
 	}
 
 	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, strings.ToLower(p.Name))
-	if gr, err := s.clientDB.Get(nameKey); err != nil {
+	if gr, err := s.db.Get(nameKey); err != nil {
 		resp.SetGoError(err)
 		return
 	} else if gr.Exists() {
@@ -302,13 +303,13 @@ func (s *Server) CreateDatabase(p *parser.CreateDatabase, args []sqlwire.Datum, 
 		resp.SetGoError(fmt.Errorf("database \"%s\" already exists", p.Name))
 		return
 	}
-	ir, err := s.clientDB.Inc(keys.DescIDGenerator, 1)
+	ir, err := s.db.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
 		resp.SetGoError(err)
 		return
 	}
 	nsID := uint32(ir.ValueInt() - 1)
-	if err := s.clientDB.CPut(nameKey, nsID, nil); err != nil {
+	if err := s.db.CPut(nameKey, nsID, nil); err != nil {
 		// TODO(pmattis): Need to handle if-not-exists here as well.
 		resp.SetGoError(err)
 		return
@@ -343,7 +344,7 @@ func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *
 	// This isn't strictly necessary as the conditional put below will fail if
 	// the key already exists, but it seems good to avoid the table ID allocation
 	// in most cases when the table already exists.
-	if gr, err := s.clientDB.Get(nameKey); err != nil {
+	if gr, err := s.db.Get(nameKey); err != nil {
 		resp.SetGoError(err)
 		return
 	} else if gr.Exists() {
@@ -354,7 +355,7 @@ func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *
 		return
 	}
 
-	ir, err := s.clientDB.Inc(keys.DescIDGenerator, 1)
+	ir, err := s.db.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -364,7 +365,7 @@ func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *
 	// TODO(pmattis): Be cognizant of error messages when this is ported to the
 	// server. The error currently returned below is likely going to be difficult
 	// to interpret.
-	err = s.clientDB.Txn(func(txn *client.Txn) error {
+	err = s.db.Txn(func(txn *client.Txn) error {
 		descKey := keys.MakeDescMetadataKey(desc.ID)
 		b := &client.Batch{}
 		b.CPut(nameKey, descKey, nil)
@@ -376,7 +377,6 @@ func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *
 		resp.SetGoError(err)
 		return
 	}
-	return
 }
 
 // Delete is unimplemented.
@@ -442,6 +442,7 @@ func (s *Server) Insert(p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Re
 				log.Infof("Put %q -> %v", key, val)
 			}
 			// TODO(pmattis): Need to convert the value type to the column type.
+			// TODO(vivek): We need a better way of storing Datum.
 			if val.BoolVal != nil {
 				b.Put(key, *val.BoolVal)
 			} else if val.IntVal != nil {
@@ -457,7 +458,7 @@ func (s *Server) Insert(p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Re
 			}
 		}
 	}
-	if err := s.clientDB.Run(b); err != nil {
+	if err := s.db.Run(b); err != nil {
 		resp.SetGoError(err)
 		return
 	}
@@ -502,7 +503,7 @@ func (s *Server) Select(p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Re
 	// Retrieve all of the keys that start with our index key prefix.
 	startKey := proto.Key(encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID))
 	endKey := startKey.PrefixEnd()
-	sr, err := s.clientDB.Scan(startKey, endKey, 0)
+	sr, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -578,7 +579,7 @@ func (s *Server) getTableDesc(table *parser.TableName) (*structured.TableDescrip
 	if err != nil {
 		return nil, err
 	}
-	gr, err := s.clientDB.Get(keys.MakeNameMetadataKey(dbID, table.Name))
+	gr, err := s.db.Get(keys.MakeNameMetadataKey(dbID, table.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +588,7 @@ func (s *Server) getTableDesc(table *parser.TableName) (*structured.TableDescrip
 	}
 	descKey := gr.ValueBytes()
 	desc := structured.TableDescriptor{}
-	if err := s.clientDB.GetProto(descKey, &desc); err != nil {
+	if err := s.db.GetProto(descKey, &desc); err != nil {
 		return nil, err
 	}
 	if err := desc.Validate(); err != nil {
@@ -611,7 +612,7 @@ func (s *Server) normalizeTableName(table *parser.TableName) error {
 
 func (s *Server) lookupDatabase(name string) (uint32, error) {
 	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, name)
-	gr, err := s.clientDB.Get(nameKey)
+	gr, err := s.db.Get(nameKey)
 	if err != nil {
 		return 0, err
 	} else if !gr.Exists() {
