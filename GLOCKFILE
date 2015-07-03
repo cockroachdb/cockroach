@@ -5,6 +5,7 @@ cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
 cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
+cmd github.com/mibk/dupl
 cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
@@ -30,6 +31,7 @@ github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
 github.com/julienschmidt/httprouter 77a895ad01ebc98a4dc95d8355bc825ce80a56f6
 github.com/kisielk/errcheck 12fd1ab9811e54c55207f3e83134ff59829fbf21
 github.com/kisielk/gotool 58a7a198f2ec6ea7af221fd216e7f559d663ce02
+github.com/mibk/dupl dc349168a1738c7d62981f721ec0734d9896c9b3
 github.com/montanaflynn/stats 94c87312234200f782148dd8de4855d53a8c9c5d
 github.com/olekukonko/tablewriter a5eefc286b03d5560735698ef36c83728a6ae560
 github.com/opennota/check af1876a2bd92151d983163470ee4f1f1b2e6bb75

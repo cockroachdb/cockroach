@@ -39,6 +39,7 @@ TESTTIMEOUT  := 1m10s
 RACETIMEOUT  := 5m
 BENCHTIMEOUT := 5m
 TESTFLAGS    :=
+DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
 # The netgo build tag instructs the net package to try to build a
@@ -132,6 +133,10 @@ coverage:
 .PHONY: acceptance
 acceptance:
 	@acceptance/run.sh
+
+.PHONY: dupl
+dupl:
+	find . -name '*.go' -not -name '*.pb.go' -not -name 'embedded.go' -not -name '*_string.go' -not -name 'sql.go' | dupl -files $(DUPLFLAGS)
 
 .PHONY: check
 check:
