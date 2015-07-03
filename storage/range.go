@@ -210,11 +210,11 @@ type Range struct {
 	configHashes map[int][]byte // Config map sha256 hashes @ last gossip
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
+	respCache    *ResponseCache // Provides idempotence for retries
 
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
-	respCache    *ResponseCache  // Provides idempotence for retries
 	pendingCmds  map[cmdIDKey]*pendingCmd
 }
 
