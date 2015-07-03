@@ -1091,7 +1091,9 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	// subsumed replica each held their respective leader leases, we
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
+	r.Lock()
 	r.tsCache.Clear(r.rm.Clock())
+	r.Unlock()
 
 	batch.Defer(func() {
 		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID); err != nil {
