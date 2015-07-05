@@ -79,15 +79,15 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", statusNodeKeyPrefix, noCertsContext, true, http.StatusOK},
 		{"GET", statusNodeKeyPrefix, insecureContext, false, -1},
 
+		// /ts/: ts.Server: no auth.
+		{"GET", ts.URLPrefix, certsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, noCertsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, insecureContext, false, -1},
+
 		// /kv/db/: kv.DBServer. These are proto reqs, but we can at least get past auth.
 		{"GET", kv.DBPrefix + "Get", certsContext, true, http.StatusBadRequest},
 		{"GET", kv.DBPrefix + "Get", noCertsContext, true, http.StatusUnauthorized},
 		{"GET", kv.DBPrefix + "Get", insecureContext, false, -1},
-
-		// /ts/: ts.Server.
-		{"GET", ts.URLPrefix, certsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, noCertsContext, true, http.StatusUnauthorized},
-		{"GET", ts.URLPrefix, insecureContext, false, -1},
 	}
 
 	for tcNum, tc := range testCases {

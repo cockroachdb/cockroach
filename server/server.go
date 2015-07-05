@@ -213,14 +213,11 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(adminEndpoint, s.admin)
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusKeyPrefix, s.status)
+	s.mux.Handle(ts.URLPrefix, s.tsServer)
 
 	// KV handles its own authentication, verifying user certificates against
 	// the requested user.
 	s.mux.Handle(kv.DBPrefix, s.kvDB)
-	// TS requests do not have a user, so only check that client certificates are
-	// present if required.
-	// TODO(marc): we should have one, but this may come with status-page user handling.
-	s.mux.HandleFunc(ts.URLPrefix, s.authenticateRequest(s.tsServer))
 	// The SQL wire format does not currently have a requested user.
 	// TODO(marc): we need do figure out how to do sql wire auth.
 	s.mux.HandleFunc(sqlwire.Endpoint, s.authenticateRequest(s.sqlServer))
