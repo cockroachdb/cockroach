@@ -45,10 +45,26 @@ type CallResolver struct {
 }
 
 // defaultPattern strips src/github.com/organization/project/module/submodule/file.go
-// to module/submodule/file.go.
-var defaultPattern = "src/" + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, string(os.PathSeparator)), 3) + "(.*)"
+// down to module/submodule/file.go.
+var defaultRE = func() *regexp.Regexp {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("unable to look up location")
+	}
+	const sep = string(os.PathSeparator)
+	path := filepath.Dir(file)
+	// Strip to $GOPATH/src.
+	for i := 0; i < 5; i++ {
+		path = filepath.Dir(filepath.Clean(path))
+	}
+	if !strings.HasSuffix(path, sep+"src") {
+		panic("unable to find base path for default call resolver, got " + path)
+	}
+	qSep := regexp.QuoteMeta(sep)
+	return regexp.MustCompile(regexp.QuoteMeta(path) + qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(.*)")
+}()
 
-var defaultCallResolver = NewCallResolver(0, defaultPattern)
+var defaultCallResolver = NewCallResolver(0, defaultRE)
 
 // Lookup returns the (reduced) file, line and function of the caller at the
 // requested depth, using a default call resolver which drops the path of
@@ -62,10 +78,12 @@ func Lookup(depth int) (file string, line int, fun string) {
 // Lookup(): If submatches are specified, their concatenation forms the path,
 // otherwise the match of the whole expression is used. Paths which do not
 // match at all are left unchanged.
-func NewCallResolver(offset int, pattern string) *CallResolver {
+// TODO(bdarnell): don't strip paths at lookup time, but at display time;
+// need better handling for callers such as x/tools/something.
+func NewCallResolver(offset int, re *regexp.Regexp) *CallResolver {
 	return &CallResolver{
 		cache: map[uintptr]*cachedLookup{},
-		re:    regexp.MustCompile(pattern),
+		re:    re,
 	}
 }
 
@@ -81,7 +99,6 @@ func (cr *CallResolver) Lookup(depth int) (file string, line int, fun string) {
 	if v, ok := cr.cache[pc]; ok {
 		return v.file, v.line, v.fun
 	}
-
 	if matches := cr.re.FindStringSubmatch(file); matches != nil {
 		if len(matches) == 1 {
 			file = matches[0]
