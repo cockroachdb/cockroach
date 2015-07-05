@@ -133,7 +133,7 @@ void DBIterSeekToLast(DBIterator* iter);
 int  DBIterValid(DBIterator* iter);
 
 // Advances the iterator to the next key. After this call,
-// DBIterValid() returns 1 iff the iterator was not positioned at the
+// DBIterValid() returns 1 if the iterator was not positioned at the
 // last key.
 void DBIterNext(DBIterator* iter);
 
