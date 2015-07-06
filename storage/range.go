@@ -956,33 +956,37 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
+func (r *Range) getLeaseForGossip(ctx context.Context) (hasLeased bool, err error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
-	task := r.rm.Stopper().StartTask()
-	if !task.Ok() {
+	hasLeased = true
+	if !r.rm.Stopper().RunTask(func() {
+		timestamp := r.rm.Clock().Now()
+
+		// Check for or obtain the lease, if none active.
+		err = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), timestamp)
+		if err != nil {
+			switch e := err.(type) {
+			// NotLeaderError means there is an active lease, leaseRejectedError
+			// means we tried to get one but someone beat us to it.
+			case *proto.NotLeaderError, *proto.LeaseRejectedError:
+			default:
+				// Any other error is worth being logged visibly.
+				log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
+				hasLeased = false
+				return
+			}
+		}
+	}) {
 		return false, util.Errorf("node is stopping")
 	}
-	defer task.Done()
-
-	timestamp := r.rm.Clock().Now()
-
-	// Check for or obtain the lease, if none active.
-	err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), timestamp)
-	if err != nil {
-		switch e := err.(type) {
-		// NotLeaderError means there is an active lease, leaseRejectedError
-		// means we tried to get one but someone beat us to it.
-		case *proto.NotLeaderError, *proto.LeaseRejectedError:
-		default:
-			// Any other error is worth being logged visibly.
-			log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
-			return false, err
-		}
+	if !hasLeased {
+		return false, err
 	}
 	return err == nil, nil
+
 }
 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
@@ -1074,19 +1078,14 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
-	task := stopper.StartTask()
-	if !task.Ok() {
-		return
-	}
-	go func() {
+	stopper.RunGoTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,
 		}, r, args, proto.CLEANUP_TXN)
 		if wiErr, ok := err.(*proto.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 			log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
 		}
-		task.Done()
-	}()
+	})
 }
 
 // TODO(spencerkimball): move to util.

@@ -87,20 +87,16 @@ func (p *poller) start() {
 // poll retrieves data from the underlying DataSource a single time, storing any
 // returned time series data on the server.
 func (p *poller) poll() {
-	task := p.stopper.StartTask()
-	if !task.Ok() {
-		return
-	}
-	defer task.Done()
+	p.stopper.RunTask(func() {
+		data := p.source.GetTimeSeriesData()
+		if len(data) == 0 {
+			return
+		}
 
-	data := p.source.GetTimeSeriesData()
-	if len(data) == 0 {
-		return
-	}
-
-	if err := p.db.StoreData(p.r, data); err != nil {
-		log.Warningf("error writing time series data: %s", err)
-	}
+		if err := p.db.StoreData(p.r, data); err != nil {
+			log.Warningf("error writing time series data: %s", err)
+		}
+	})
 }
 
 // StoreData writes the supplied time series data to the cockroach server.
