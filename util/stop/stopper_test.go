@@ -27,9 +27,13 @@ import (
 
 func TestStopper(t *testing.T) {
 	s := stop.NewStopper()
-	s.AddWorker()
-
+	running := make(chan struct{})
 	waiting := make(chan struct{})
+
+	s.RunWorker(func() {
+		<-running
+	})
+
 	go func() {
 		<-s.ShouldStop()
 		select {
@@ -38,7 +42,7 @@ func TestStopper(t *testing.T) {
 		case <-time.After(1 * time.Millisecond):
 			// Expected.
 		}
-		s.SetStopped()
+		close(running)
 		select {
 		case <-waiting:
 			// Success.
@@ -69,14 +73,12 @@ func (bc *blockingCloser) Close() {
 
 func TestStopperIsStopped(t *testing.T) {
 	s := stop.NewStopper()
-	s.AddWorker()
 	bc := newBlockingCloser()
 	s.AddCloser(bc)
 	go s.Stop()
 
 	select {
 	case <-s.ShouldStop():
-		s.SetStopped()
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("stopper should have finished waiting")
 	}
@@ -100,11 +102,9 @@ func TestStopperMultipleStopees(t *testing.T) {
 	s := stop.NewStopper()
 
 	for i := 0; i < count; i++ {
-		s.AddWorker()
-		go func() {
+		s.RunWorker(func() {
 			<-s.ShouldStop()
-			s.SetStopped()
-		}()
+		})
 	}
 
 	done := make(chan struct{})
@@ -122,7 +122,6 @@ func TestStopperMultipleStopees(t *testing.T) {
 
 func TestStopperStartFinishTasks(t *testing.T) {
 	s := stop.NewStopper()
-	s.AddWorker()
 
 	task := s.StartTask()
 	if !task.Ok() {
@@ -143,7 +142,6 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("stopper should be ready to stop")
 	}
-	s.SetStopped()
 }
 
 func TestStopperRunWorker(t *testing.T) {
@@ -176,15 +174,12 @@ func TestStopperQuiesce(t *testing.T) {
 	var quiesceDone []chan struct{}
 	var startTaskDone []chan struct{}
 
-	for i := range stoppers {
-		// Create a local copy to avoid data race.
-		s := stoppers[i]
-		s.AddWorker()
+	for _, s := range stoppers {
 		qc := make(chan struct{})
 		quiesceDone = append(quiesceDone, qc)
 		sc := make(chan struct{})
 		startTaskDone = append(startTaskDone, sc)
-		go func() {
+		s.RunWorker(func() {
 			// Wait until Quiesce() is called.
 			<-qc
 			if task := s.StartTask(); task.Ok() {
@@ -194,8 +189,7 @@ func TestStopperQuiesce(t *testing.T) {
 			// Make the stoppers call Stop().
 			close(sc)
 			<-s.ShouldStop()
-			s.SetStopped()
-		}()
+		})
 	}
 
 	done := make(chan struct{})

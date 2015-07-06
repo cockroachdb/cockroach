@@ -120,7 +120,6 @@ func runStart(cmd *cobra.Command, args []string) {
 
 	log.Info("starting cockroach cluster")
 	stopper := stop.NewStopper()
-	stopper.AddWorker()
 	s, err := server.NewServer(Context, stopper)
 	if err != nil {
 		log.Errorf("failed to start Cockroach server: %s", err)
@@ -142,14 +141,11 @@ func runStart(cmd *cobra.Command, args []string) {
 	// is stopped externally (for example, via the quit endpoint).
 	select {
 	case <-stopper.ShouldStop():
-		stopper.SetStopped()
 	case <-signalCh:
-		log.Infof("initiating graceful shutdown of server")
-		stopper.SetStopped()
-		go func() {
-			s.Stop()
-		}()
+		go s.Stop()
 	}
+
+	log.Info("initiating graceful shutdown of server")
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)

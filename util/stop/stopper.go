@@ -34,7 +34,7 @@ type Closer interface {
 
 // A Stopper provides a channel-based mechanism to stop an arbitrary
 // array of workers. Each worker is registered with the stopper via
-// the AddWorker() method. The system further tracks each task which
+// the RunWorker() method. The system further tracks each task which
 // is outstanding by calling StartTask() when a task is started, which
 // returns a handle with Ok() and Done() methods.
 //
@@ -43,9 +43,8 @@ type Closer interface {
 // return a handle for which Ok() is false, meaning the system is draining and
 // new work must not be begun. When all outstanding tasks have been completed
 // via calls to Done(), the stopper closes its stopper channel, which signals
-// all live workers that it's safe to shut down. Once shutdown, each worker
-// invokes SetStopped(). When all workers have shutdown, the stopper is
-// complete.
+// all live workers that it's safe to shut down. When all workers have
+// shutdown, the stopper is complete.
 //
 // An arbitrary list of objects implementing the Closer interface may
 // be added to the stopper via AddCloser(), to be closed after the
@@ -76,9 +75,9 @@ func NewStopper() *Stopper {
 // RunWorker runs the supplied function as a "worker" to be stopped
 // by the stopper. The function <f> is run in a goroutine.
 func (s *Stopper) RunWorker(f func()) {
-	s.AddWorker()
+	s.stop.Add(1)
 	go func() {
-		defer s.SetStopped()
+		defer s.stop.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				// TODO(tschottdorf)
@@ -87,11 +86,6 @@ func (s *Stopper) RunWorker(f func()) {
 		}()
 		f()
 	}()
-}
-
-// AddWorker adds a worker to the stopper.
-func (s *Stopper) AddWorker() {
-	s.stop.Add(1)
 }
 
 // AddCloser adds an object to close after the stopper has been stopped.
@@ -199,7 +193,7 @@ func (s *Stopper) RunningTasks() TaskMap {
 }
 
 // Stop signals all live workers to stop and then waits for each to
-// confirm it has stopped (workers do this by calling SetStopped()).
+// confirm it has stopped.
 func (s *Stopper) Stop() {
 	s.Quiesce()
 	close(s.stopper)
@@ -213,8 +207,7 @@ func (s *Stopper) Stop() {
 }
 
 // ShouldStop returns a channel which will be closed when Stop() has been
-// invoked and outstanding tasks have drained. SetStopped() should be called
-// to confirm.
+// invoked and outstanding tasks have drained.
 func (s *Stopper) ShouldStop() <-chan struct{} {
 	if s == nil {
 		// A nil stopper will never signal ShouldStop, but will also never panic.
@@ -231,14 +224,6 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 		return nil
 	}
 	return s.stopped
-}
-
-// SetStopped should be called after the ShouldStop() channel has
-// been closed to confirm the worker has stopped.
-func (s *Stopper) SetStopped() {
-	if s != nil {
-		s.stop.Done()
-	}
 }
 
 // Quiesce moves the stopper to state draining and waits until all
