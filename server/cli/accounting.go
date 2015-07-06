@@ -48,8 +48,8 @@ func runGetAcct(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
-	body, err := client.GetYAML(args[0])
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	body, err := admin.GetYAML(args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -74,8 +74,8 @@ func runLsAccts(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
-	list, err := client.List()
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	list, err := admin.List()
 	if err != nil {
 		log.Error(err)
 		return
@@ -103,8 +103,8 @@ func runRmAcct(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
-	if err := client.Delete(args[0]); err != nil {
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	if err := admin.Delete(args[0]); err != nil {
 		log.Error(err)
 		return
 	}
@@ -146,8 +146,8 @@ func runSetAcct(cmd *cobra.Command, args []string) {
 		log.Errorf("unable to read accounting config file %q: %s", args[1], err)
 		return
 	}
-	client := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
-	if err := client.SetYAML(args[0], string(body)); err != nil {
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Accounting)
+	if err := admin.SetYAML(args[0], string(body)); err != nil {
 		log.Error(err)
 		return
 	}

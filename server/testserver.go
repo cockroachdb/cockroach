@@ -37,7 +37,7 @@ import (
 
 // StartAdminServer launches a new admin server using minimal engine
 // and local database setup. Returns the new server context and stopper.
-// The stopper should be called after testing.
+// The stopper should be stopped after testing.
 func StartAdminServer() (*Context, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
