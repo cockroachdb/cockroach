@@ -90,6 +90,26 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	}
 }
 
+// TestStoreRangeSplitBetweenConfigPrefix verifies a range can be split
+// between ConfigPrefix and gossip them correctly.
+func TestStoreRangeSplitBetweenConfigPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	key := keys.MakeKey(keys.SystemPrefix, []byte("tsd"))
+
+	args, reply := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
+	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
+	if err != nil {
+		t.Fatalf("%q: split unexpected error: %s", key, err)
+	}
+
+	if err := store.MaybeGossipConfigs(); err != nil {
+		t.Fatalf("error gossiping configs: %s", err)
+	}
+}
+
 // TestStoreRangeSplitAtRangeBounds verifies a range cannot be split
 // at its start or end keys (would create zero-length range!). This
 // sort of thing might happen in the wild if two split requests
