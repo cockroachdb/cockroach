@@ -20,8 +20,6 @@ package client_test
 import (
 	"fmt"
 
-	"gopkg.in/yaml.v1"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
@@ -38,24 +36,34 @@ func Example_accounting() {
 	context := testutils.NewRootTestBaseContext()
 	client := client.NewAdminClient(context, ctx.Addr, client.Accounting)
 
-	const testAcctConfig = `cluster_id: test`
+	const yamlConfig = `cluster_id: test`
+	const jsonConfig = `{
+  "cluster_id": "test"
+}`
 	testData := []struct {
 		prefix proto.Key
-		yaml   string
+		cfg    string
+		isJSON bool
 	}{
-		{proto.KeyMin, testAcctConfig},
-		{proto.Key("db1"), testAcctConfig},
-		{proto.Key("db 2"), testAcctConfig},
-		{proto.Key("\xfe"), testAcctConfig},
+		{proto.KeyMin, yamlConfig, false},
+		{proto.Key("db1"), yamlConfig, false},
+		{proto.Key("db 2"), jsonConfig, true},
+		{proto.Key("\xfe"), jsonConfig, true},
 	}
 
 	// Write configs.
 	for _, test := range testData {
 		prefix := string(test.prefix)
-		fmt.Printf("Set accounting config for %q\n", prefix)
-		err := client.SetYAML(prefix, testAcctConfig)
-		if err != nil {
-			log.Fatal(err)
+		if test.isJSON {
+			fmt.Printf("Set JSON accounting config for %q\n", prefix)
+			if err := client.SetJSON(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			fmt.Printf("Set YAML accounting config for %q\n", prefix)
+			if err := client.SetYAML(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -97,10 +105,10 @@ func Example_accounting() {
 	fmt.Printf("Accounting prefixes: %q\n", keys)
 
 	// Output:
-	// Set accounting config for ""
-	// Set accounting config for "db1"
-	// Set accounting config for "db 2"
-	// Set accounting config for "\xfe"
+	// Set YAML accounting config for ""
+	// Set YAML accounting config for "db1"
+	// Set JSON accounting config for "db 2"
+	// Set JSON accounting config for "\xfe"
 	// JSON config for "db1":
 	// {
 	//   "cluster_id": "test"
@@ -121,27 +129,45 @@ func Example_permission() {
 	context := testutils.NewRootTestBaseContext()
 	client := client.NewAdminClient(context, ctx.Addr, client.Permission)
 
-	const testPermConfig = `
+	const yamlConfig = `
 read: [readonly, readwrite]
 write: [readwrite, writeonly]
 `
+	const jsonConfig = `{
+	   "read": [
+	     "readonly",
+	     "readwrite"
+	   ],
+	   "write": [
+	     "readwrite",
+	     "writeonly"
+	   ]
+	 }`
+
 	testData := []struct {
 		prefix proto.Key
-		yaml   string
+		cfg    string
+		isJSON bool
 	}{
-		{proto.KeyMin, testPermConfig},
-		{proto.Key("db1"), testPermConfig},
-		{proto.Key("db 2"), testPermConfig},
-		{proto.Key("\xfe"), testPermConfig},
+		{proto.KeyMin, yamlConfig, false},
+		{proto.Key("db1"), yamlConfig, false},
+		{proto.Key("db 2"), jsonConfig, true},
+		{proto.Key("\xfe"), jsonConfig, true},
 	}
 
 	// Write configs.
 	for _, test := range testData {
 		prefix := string(test.prefix)
-		fmt.Printf("Set permission config for %q\n", prefix)
-		err := client.SetYAML(prefix, testPermConfig)
-		if err != nil {
-			log.Fatal(err)
+		if test.isJSON {
+			fmt.Printf("Set JSON permission config for %q\n", prefix)
+			if err := client.SetJSON(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			fmt.Printf("Set YAML permission config for %q\n", prefix)
+			if err := client.SetYAML(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -183,10 +209,10 @@ write: [readwrite, writeonly]
 	fmt.Printf("Permission prefixes: %q\n", keys)
 
 	// Output:
-	// Set permission config for ""
-	// Set permission config for "db1"
-	// Set permission config for "db 2"
-	// Set permission config for "\xfe"
+	// Set YAML permission config for ""
+	// Set YAML permission config for "db1"
+	// Set JSON permission config for "db 2"
+	// Set JSON permission config for "\xfe"
 	// JSON config for "db1":
 	// {
 	//   "read": [
@@ -210,14 +236,6 @@ write: [readwrite, writeonly]
 	// Permission prefixes: ["" "db1" "\xfe"]
 }
 
-// We do not generate a real hashed password as that would make our
-// example outputs very very long. Instead, just put two bytes.
-func fakeUserConfig() string {
-	pb := &proto.UserConfig{HashedPassword: []byte{10, 20}}
-	contents, _ := yaml.Marshal(pb)
-	return string(contents)
-}
-
 // Example_user shows how to use the admin client to
 // get/set/list/delete user configs.
 func Example_user() {
@@ -227,18 +245,24 @@ func Example_user() {
 	context := testutils.NewRootTestBaseContext()
 	client := client.NewAdminClient(context, ctx.Addr, client.User)
 
-	var testUserConfig = fakeUserConfig()
+	const yamlConfig = `hashed_password:
+ - 10
+ - 20`
+	const jsonConfig = `{
+	   "hashed_password": "ChQ="
+	 }`
 	testData := []struct {
 		prefix proto.Key
-		yaml   string
+		cfg    string
+		isJSON bool
 	}{
-		{proto.Key("db1"), testUserConfig},
-		{proto.Key("db 2"), testUserConfig},
-		{proto.Key("\xfe"), testUserConfig},
+		{proto.Key("db1"), yamlConfig, false},
+		{proto.Key("db 2"), jsonConfig, true},
+		{proto.Key("\xfe"), jsonConfig, true},
 	}
 
 	// Overwriting the default entry fails.
-	err := client.SetYAML("", testUserConfig)
+	err := client.SetYAML("", yamlConfig)
 	if err == nil {
 		log.Fatal("expected error")
 	}
@@ -246,10 +270,16 @@ func Example_user() {
 	// Write configs.
 	for _, test := range testData {
 		prefix := string(test.prefix)
-		fmt.Printf("Set user config for %q\n", prefix)
-		err := client.SetYAML(prefix, testUserConfig)
-		if err != nil {
-			log.Fatal(err)
+		if test.isJSON {
+			fmt.Printf("Set JSON user config for %q\n", prefix)
+			if err := client.SetJSON(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			fmt.Printf("Set YAML user config for %q\n", prefix)
+			if err := client.SetYAML(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -291,9 +321,9 @@ func Example_user() {
 	fmt.Printf("Users: %q\n", keys)
 
 	// Output:
-	// Set user config for "db1"
-	// Set user config for "db 2"
-	// Set user config for "\xfe"
+	// Set YAML user config for "db1"
+	// Set JSON user config for "db 2"
+	// Set JSON user config for "\xfe"
 	// JSON config for "db1":
 	// {
 	//   "hashed_password": "ChQ="
@@ -316,7 +346,7 @@ func Example_zone() {
 	context := testutils.NewRootTestBaseContext()
 	client := client.NewAdminClient(context, ctx.Addr, client.Zone)
 
-	const testZoneConfig = `
+	const yamlConfig = `
 replicas:
   - attrs: [dc1, ssd]
   - attrs: [dc2, ssd]
@@ -324,23 +354,55 @@ replicas:
 range_min_bytes: 1048576
 range_max_bytes: 67108864
 `
+	const jsonConfig = `{
+	   "replica_attrs": [
+	     {
+	       "attrs": [
+	         "dc1",
+	         "ssd"
+	       ]
+	     },
+	     {
+	       "attrs": [
+	         "dc2",
+	         "ssd"
+	       ]
+	     },
+	     {
+	       "attrs": [
+	         "dc3",
+	         "ssd"
+	       ]
+	     }
+	   ],
+	   "range_min_bytes": 1048576,
+	   "range_max_bytes": 67108864
+	 }`
+
 	testData := []struct {
 		prefix proto.Key
-		yaml   string
+		cfg    string
+		isJSON bool
 	}{
-		{proto.KeyMin, testZoneConfig},
-		{proto.Key("db1"), testZoneConfig},
-		{proto.Key("db 2"), testZoneConfig},
-		{proto.Key("\xfe"), testZoneConfig},
+		{proto.KeyMin, yamlConfig, false},
+		{proto.Key("db1"), yamlConfig, false},
+		{proto.Key("db 2"), jsonConfig, true},
+		{proto.Key("\xfe"), jsonConfig, true},
 	}
 
 	// Write configs.
 	for _, test := range testData {
 		prefix := string(test.prefix)
-		fmt.Printf("Set zone config for %q\n", prefix)
-		err := client.SetYAML(prefix, testZoneConfig)
-		if err != nil {
-			log.Fatal(err)
+		if test.isJSON {
+			fmt.Printf("Set JSON zone config for %q\n", prefix)
+			if err := client.SetJSON(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			fmt.Printf("Set YAML zone config for %q\n", prefix)
+			if err := client.SetYAML(prefix, test.cfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -382,10 +444,10 @@ range_max_bytes: 67108864
 	fmt.Printf("Zone prefixes: %q\n", keys)
 
 	// Output:
-	// Set zone config for ""
-	// Set zone config for "db1"
-	// Set zone config for "db 2"
-	// Set zone config for "\xfe"
+	// Set YAML zone config for ""
+	// Set YAML zone config for "db1"
+	// Set JSON zone config for "db 2"
+	// Set JSON zone config for "\xfe"
 	// JSON config for "db1":
 	// {
 	//   "replica_attrs": [

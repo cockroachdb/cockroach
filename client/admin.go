@@ -96,6 +96,13 @@ func (a *AdminClient) GetYAML(key string) (string, error) {
 	return string(body), nil
 }
 
+// SetJSON issues a POST request for the given key using the json-encoded body.
+func (a *AdminClient) SetJSON(key, body string) error {
+	_, err := a.do("POST", a.adminURIWithKey(key), util.JSONContentType,
+		"", strings.NewReader(body))
+	return err
+}
+
 // SetYAML issues a POST request for the given key using the yaml-encoded body.
 func (a *AdminClient) SetYAML(key, body string) error {
 	_, err := a.do("POST", a.adminURIWithKey(key), util.YAMLContentType,
