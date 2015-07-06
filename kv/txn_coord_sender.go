@@ -188,7 +188,7 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.
 		ctx := tracer.ToCtx(context.Background(), trace.Fork())
-		stopper.RunGoTask(func() {
+		stopper.RunAsyncTask(func() {
 			if log.V(2) {
 				log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
 			}

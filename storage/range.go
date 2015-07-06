@@ -956,12 +956,12 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Range) getLeaseForGossip(ctx context.Context) (hasLeased bool, err error) {
+func (r *Range) getLeaseForGossip(ctx context.Context) (hasLease bool, err error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
-	hasLeased = true
+	hasLease = true
 	if !r.rm.Stopper().RunTask(func() {
 		timestamp := r.rm.Clock().Now()
 
@@ -975,18 +975,14 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (hasLeased bool, err erro
 			default:
 				// Any other error is worth being logged visibly.
 				log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
-				hasLeased = false
+				hasLease = false
 				return
 			}
 		}
 	}) {
 		return false, util.Errorf("node is stopping")
 	}
-	if !hasLeased {
-		return false, err
-	}
-	return err == nil, nil
-
+	return
 }
 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
@@ -1078,7 +1074,7 @@ func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent)
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
-	stopper.RunGoTask(func() {
+	stopper.RunAsyncTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,
 		}, r, args, proto.CLEANUP_TXN)

@@ -18,10 +18,10 @@
 package stop_test
 
 import (
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -235,15 +235,14 @@ func TestStopperClosers(t *testing.T) {
 
 func TestStopperNumTasks(t *testing.T) {
 	s := stop.NewStopper()
-
-	var tasks []bool
-	var wg sync.WaitGroup
+	var tasks []chan bool
 	for i := 0; i < 3; i++ {
-		wg.Add(1)
-		tasks = append(tasks, s.RunGoTask(func() {
-			time.Sleep(5 * time.Millisecond)
-			wg.Done()
-		}))
+		c := make(chan bool)
+		tasks = append(tasks, c)
+		s.RunAsyncTask(func() {
+			// Wait for channel to close
+			<-c
+		})
 		tm := s.RunningTasks()
 		if numTypes, numTasks := len(tm), s.NumTasks(); numTypes != 1 || numTasks != i+1 {
 			t.Errorf("stopper should have %d running tasks, got %d / %+v", i+1, numTasks, tm)
@@ -258,13 +257,27 @@ func TestStopperNumTasks(t *testing.T) {
 			}
 		}
 	}
-
-	wg.Wait()
-	time.Sleep(5 * time.Millisecond)
+	for i, c := range tasks {
+		m := s.RunningTasks()
+		if len(m) != 1 {
+			t.Fatalf("%d: expected exactly one task map entry: %+v", i, m)
+		}
+		for _, v := range m {
+			if expNum := len(tasks[i:]); v != expNum {
+				t.Fatalf("%d: expected %d tasks, got %d:\n%s", i, expNum, v, m)
+			}
+		}
+		// Close the channel to let the task proceed.
+		close(c)
+		expNum := len(tasks[i+1:])
+		err := util.IsTrueWithin(func() bool { return s.NumTasks() == expNum }, 20*time.Millisecond)
+		if err != nil {
+			t.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, s.NumTasks())
+		}
+	}
 	// The taskmap should've cleared out.
 	if m := s.RunningTasks(); len(m) != 0 {
 		t.Fatalf("task map not empty: %+v", m)
 	}
-
 	s.Stop()
 }

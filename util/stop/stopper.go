@@ -106,6 +106,32 @@ func (s *Stopper) AddCloser(c Closer) {
 func (s *Stopper) RunTask(f func()) bool {
 	file, line, _ := caller.Lookup(1)
 	taskKey := fmt.Sprintf("%s:%d", file, line)
+	if !s.runPrelude(taskKey) {
+		return false
+	}
+	// Call f.
+	f()
+	s.runPostlude(taskKey)
+	return true
+}
+
+// RunAsyncTask runs function f in a goroutine. It returns false if it is unable
+// to run the function.
+func (s *Stopper) RunAsyncTask(f func()) bool {
+	file, line, _ := caller.Lookup(1)
+	taskKey := fmt.Sprintf("%s:%d", file, line)
+	if !s.runPrelude(taskKey) {
+		return false
+	}
+	// Call f.
+	go func() {
+		f()
+		s.runPostlude(taskKey)
+	}()
+	return true
+}
+
+func (s *Stopper) runPrelude(taskKey string) bool {
 	s.mu.Lock()
 	if s.draining {
 		s.mu.Unlock()
@@ -114,38 +140,15 @@ func (s *Stopper) RunTask(f func()) bool {
 	s.numTasks++
 	s.tasks[taskKey]++
 	s.mu.Unlock()
-	// Call f.
-	f()
+	return true
+}
+
+func (s *Stopper) runPostlude(taskKey string) {
 	s.mu.Lock()
 	s.numTasks--
 	s.tasks[taskKey]--
 	s.drain.Broadcast()
 	s.mu.Unlock()
-	return true
-}
-
-// RunGoTask runs function f in a goroutine. It returns false if it is unable
-// to run the function.
-func (s *Stopper) RunGoTask(f func()) bool {
-	file, line, _ := caller.Lookup(1)
-	taskKey := fmt.Sprintf("%s:%d", file, line)
-	s.mu.Lock()
-	if s.draining {
-		s.mu.Unlock()
-		return false
-	}
-	s.numTasks++
-	s.tasks[taskKey]++
-	s.mu.Unlock()
-	go func() {
-		f()
-		s.mu.Lock()
-		s.numTasks--
-		s.tasks[taskKey]--
-		s.drain.Broadcast()
-		s.mu.Unlock()
-	}()
-	return true
 }
 
 // NumTasks returns the number of active tasks.
