@@ -961,22 +961,20 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (hasLease bool, err error
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
-	hasLease = true
 	if !r.rm.Stopper().RunTask(func() {
 		timestamp := r.rm.Clock().Now()
-
 		// Check for or obtain the lease, if none active.
 		err = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), timestamp)
+		hasLease = err == nil
 		if err != nil {
 			switch e := err.(type) {
 			// NotLeaderError means there is an active lease, leaseRejectedError
 			// means we tried to get one but someone beat us to it.
 			case *proto.NotLeaderError, *proto.LeaseRejectedError:
+				err = nil
 			default:
 				// Any other error is worth being logged visibly.
 				log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
-				hasLease = false
-				return
 			}
 		}
 	}) {
