@@ -859,14 +859,14 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 		r.rm.EventFeed().updateRange(r, args.Method(), &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
-		// Maybe update gossip configs on a put.
-		switch args.(type) {
-		case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
-			if key := args.Header().Key; key.Less(keys.SystemMax) {
-				r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-					return bytes.HasPrefix(key, configPrefix)
-				})
-			}
+		// Maybe update gossip configs if the command is not part of a transaction.
+		// If the command is part of an uncommitted transaction, we rely on the
+		// periodic configGossipInterval loop since we will not see the update
+		// until the transaction is committed.
+		if key := args.Header().Key; key.Less(keys.SystemMax) && args.Header().Txn == nil {
+			r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+				return bytes.HasPrefix(key, configPrefix)
+			})
 		}
 	}
 
