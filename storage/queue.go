@@ -235,41 +235,37 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 }
 
 func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *stop.Stopper) {
-	task := stopper.StartTask()
-	if !task.Ok() {
-		return
-	}
-	defer task.Done()
-
-	start := time.Now()
-	bq.Lock()
-	rng := bq.pop()
-	bq.Unlock()
-	if rng != nil {
-		now := clock.Now()
-		if log.V(1) {
-			log.Infof("processing range %s from %s queue...", rng, bq.name)
-		}
-		// If the queue requires the leader lease to process the
-		// range, check whether this replica has leader lease and
-		// renew or acquire if necessary.
-		if bq.impl.needsLeaderLease() {
-			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
-			if err := rng.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
-				if log.V(1) {
-					log.Infof("this replica of %s could not acquire leader lease; skipping...", rng)
+	stopper.RunTask(func() {
+		start := time.Now()
+		bq.Lock()
+		rng := bq.pop()
+		bq.Unlock()
+		if rng != nil {
+			now := clock.Now()
+			if log.V(1) {
+				log.Infof("processing range %s from %s queue...", rng, bq.name)
+			}
+			// If the queue requires the leader lease to process the
+			// range, check whether this replica has leader lease and
+			// renew or acquire if necessary.
+			if bq.impl.needsLeaderLease() {
+				// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
+				args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
+				if err := rng.redirectOnOrAcquireLeaderLease(nil /* Trace */, args.Header().Timestamp); err != nil {
+					if log.V(1) {
+						log.Infof("this replica of %s could not acquire leader lease; skipping...", rng)
+					}
+					return
 				}
-				return
+			}
+			if err := bq.impl.process(now, rng); err != nil {
+				log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
+			}
+			if log.V(1) {
+				log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
 			}
 		}
-		if err := bq.impl.process(now, rng); err != nil {
-			log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
-		}
-		if log.V(1) {
-			log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
-		}
-	}
+	})
 }
 
 // pop dequeues the highest priority range in the queue. Returns the

@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -123,19 +124,18 @@ func TestStopperMultipleStopees(t *testing.T) {
 func TestStopperStartFinishTasks(t *testing.T) {
 	s := stop.NewStopper()
 
-	task := s.StartTask()
-	if !task.Ok() {
-		t.Error("expected StartTask to succeed")
-	}
-	go s.Stop()
+	if !s.RunTask(func() {
+		go s.Stop()
 
-	select {
-	case <-s.ShouldStop():
-		t.Fatal("expected stopper to be draining")
-	case <-time.After(1 * time.Millisecond):
-		// Expected.
+		select {
+		case <-s.ShouldStop():
+			t.Fatal("expected stopper to be draining")
+		case <-time.After(1 * time.Millisecond):
+			// Expected.
+		}
+	}) {
+		t.Error("expected RunTask to succeed")
 	}
-	task.Done()
 	select {
 	case <-s.ShouldStop():
 		// Success.
@@ -172,19 +172,18 @@ func TestStopperQuiesce(t *testing.T) {
 		stoppers = append(stoppers, stop.NewStopper())
 	}
 	var quiesceDone []chan struct{}
-	var startTaskDone []chan struct{}
+	var runTaskDone []chan struct{}
 
 	for _, s := range stoppers {
 		qc := make(chan struct{})
 		quiesceDone = append(quiesceDone, qc)
 		sc := make(chan struct{})
-		startTaskDone = append(startTaskDone, sc)
+		runTaskDone = append(runTaskDone, sc)
 		s.RunWorker(func() {
 			// Wait until Quiesce() is called.
 			<-qc
-			if task := s.StartTask(); task.Ok() {
-				task.Done()
-				t.Error("expected StartTask to fail")
+			if s.RunTask(func() {}) {
+				t.Error("expected RunTask to fail")
 			}
 			// Make the stoppers call Stop().
 			close(sc)
@@ -197,13 +196,13 @@ func TestStopperQuiesce(t *testing.T) {
 		for _, s := range stoppers {
 			s.Quiesce()
 		}
-		// Make the tasks call StartTask().
+		// Make the tasks call RunTask().
 		for _, qc := range quiesceDone {
 			close(qc)
 		}
 
-		// Wait until StartTask() is called.
-		for _, sc := range startTaskDone {
+		// Wait until RunTask() is called.
+		for _, sc := range runTaskDone {
 			<-sc
 		}
 
@@ -236,10 +235,14 @@ func TestStopperClosers(t *testing.T) {
 
 func TestStopperNumTasks(t *testing.T) {
 	s := stop.NewStopper()
-
-	var tasks []stop.PendingTask
+	var tasks []chan bool
 	for i := 0; i < 3; i++ {
-		tasks = append(tasks, s.StartTask())
+		c := make(chan bool)
+		tasks = append(tasks, c)
+		s.RunAsyncTask(func() {
+			// Wait for channel to close
+			<-c
+		})
 		tm := s.RunningTasks()
 		if numTypes, numTasks := len(tm), s.NumTasks(); numTypes != 1 || numTasks != i+1 {
 			t.Errorf("stopper should have %d running tasks, got %d / %+v", i+1, numTasks, tm)
@@ -254,11 +257,7 @@ func TestStopperNumTasks(t *testing.T) {
 			}
 		}
 	}
-
-	for i, task := range tasks {
-		if !task.Ok() {
-			t.Fatalf("%d: task should have been allowed", i)
-		}
+	for i, c := range tasks {
 		m := s.RunningTasks()
 		if len(m) != 1 {
 			t.Fatalf("%d: expected exactly one task map entry: %+v", i, m)
@@ -268,16 +267,17 @@ func TestStopperNumTasks(t *testing.T) {
 				t.Fatalf("%d: expected %d tasks, got %d:\n%s", i, expNum, v, m)
 			}
 		}
-		task.Done()
+		// Close the channel to let the task proceed.
+		close(c)
 		expNum := len(tasks[i+1:])
-		if numTasks := s.NumTasks(); numTasks != expNum {
-			t.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, numTasks)
+		err := util.IsTrueWithin(func() bool { return s.NumTasks() == expNum }, 20*time.Millisecond)
+		if err != nil {
+			t.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, s.NumTasks())
 		}
 	}
-	// Done() on the last task should've cleared out the map.
+	// The taskmap should've cleared out.
 	if m := s.RunningTasks(); len(m) != 0 {
 		t.Fatalf("task map not empty: %+v", m)
 	}
-
 	s.Stop()
 }

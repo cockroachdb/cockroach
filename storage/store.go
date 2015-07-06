@@ -1427,19 +1427,18 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		}
 		resolveReply := &proto.InternalResolveIntentResponse{}
 
-		if task := s.stopper.StartTask(); task.Ok() {
-			wg.Add(1)
-			ctx := tracer.ToCtx(ctx, trace.Fork())
-
-			go func(ctx context.Context) {
-				resolveErr := rng.addWriteCmd(ctx, resolveArgs, resolveReply, &wg)
-				if resolveErr != nil {
-					if log.V(1) {
-						log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
-					}
+		wg.Add(1)
+		ctx := tracer.ToCtx(ctx, trace.Fork())
+		if !s.stopper.RunAsyncTask(func() {
+			resolveErr := rng.addWriteCmd(ctx, resolveArgs, resolveReply, &wg)
+			if resolveErr != nil {
+				if log.V(1) {
+					log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
 				}
-				task.Done()
-			}(ctx)
+			}
+		}) {
+			// Couldn't run the task. We need to notify the WorkGroup.
+			wg.Done()
 		}
 	}
 

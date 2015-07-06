@@ -187,18 +187,16 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 		}
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.
-		if task := stopper.StartTask(); task.Ok() {
-			go func(ctx context.Context) {
-				defer task.Done()
-				if log.V(2) {
-					log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
-				}
-				sender.Send(ctx, call)
-				if call.Reply.Header().Error != nil {
-					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
-				}
-			}(tracer.ToCtx(context.Background(), trace.Fork()))
-		}
+		ctx := tracer.ToCtx(context.Background(), trace.Fork())
+		stopper.RunAsyncTask(func() {
+			if log.V(2) {
+				log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+			}
+			sender.Send(ctx, call)
+			if call.Reply.Header().Error != nil {
+				log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
+			}
+		})
 	}
 	tm.keys.Clear()
 }
@@ -758,28 +756,26 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 					Reply: reply,
 				}
 
-				task := tc.stopper.StartTask()
-				if !task.Ok() {
+				if !tc.stopper.RunTask(func() {
+					// Each heartbeat gets its own Trace.
+					trace := tc.tracer.NewTrace(&txn)
+					ctx := tracer.ToCtx(context.Background(), trace)
+					epochEnds := trace.Epoch("heartbeat")
+					tc.wrapped.Send(ctx, call)
+					epochEnds()
+					// If the transaction is not in pending state, then we can stop
+					// the heartbeat. It's either aborted or committed, and we resolve
+					// write intents accordingly.
+					if reply.GoError() != nil {
+						log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
+					} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
+						tc.cleanupTxn(trace, *reply.Txn, nil)
+						proceed = false
+					}
+					trace.Finalize()
+				}) {
 					continue
 				}
-
-				// Each heartbeat gets its own Trace.
-				trace := tc.tracer.NewTrace(&txn)
-				ctx := tracer.ToCtx(context.Background(), trace)
-				epochEnds := trace.Epoch("heartbeat")
-				tc.wrapped.Send(ctx, call)
-				epochEnds()
-				// If the transaction is not in pending state, then we can stop
-				// the heartbeat. It's either aborted or committed, and we resolve
-				// write intents accordingly.
-				if reply.GoError() != nil {
-					log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
-				} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-					tc.cleanupTxn(trace, *reply.Txn, nil)
-					proceed = false
-				}
-				trace.Finalize()
-				task.Done()
 				if !proceed {
 					return
 				}

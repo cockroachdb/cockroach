@@ -180,16 +180,12 @@ func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stoppe
 				return false
 			}
 
-			task := stopper.StartTask()
-			if !task.Ok() {
-				return true
-			}
-			// Try adding range to all queues.
-			for _, q := range rs.queues {
-				q.MaybeAdd(rng, clock.Now())
-			}
-			task.Done()
-			return false
+			return !stopper.RunTask(func() {
+				// Try adding range to all queues.
+				for _, q := range rs.queues {
+					q.MaybeAdd(rng, clock.Now())
+				}
+			})
 		case rng := <-rs.removed:
 			// Remove range from all queues as applicable.
 			for _, q := range rs.queues {
@@ -228,25 +224,23 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				}
 			}
 
-			task := stopper.StartTask()
-			if !task.Ok() {
-				// Exit the loop.
+			if !stopper.RunTask(func() {
+				// Increment iteration count.
+				rs.completedScan.L.Lock()
+				rs.count++
+				rs.total += time.Now().Sub(start)
+				rs.completedScan.Broadcast()
+				rs.completedScan.L.Unlock()
+				if log.V(6) {
+					log.Infof("reset range scan iteration")
+				}
+
+				// Reset iteration and start time.
+				start = time.Now()
+			}) {
+				// Exit the loop
 				break
 			}
-
-			// Increment iteration count.
-			rs.completedScan.L.Lock()
-			rs.count++
-			rs.total += time.Now().Sub(start)
-			rs.completedScan.Broadcast()
-			rs.completedScan.L.Unlock()
-			if log.V(6) {
-				log.Infof("reset range scan iteration")
-			}
-
-			// Reset iteration and start time.
-			start = time.Now()
-			task.Done()
 		}
 	})
 }

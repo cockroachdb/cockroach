@@ -53,10 +53,9 @@ func (lt *localInterceptableTransport) start() {
 		for {
 			select {
 			case msg := <-lt.messages:
-				if task := lt.stopper.StartTask(); task.Ok() {
+				lt.stopper.RunTask(func() {
 					lt.handleMessage(msg)
-					task.Done()
-				}
+				})
 
 			case <-lt.stopper.ShouldStop():
 				return

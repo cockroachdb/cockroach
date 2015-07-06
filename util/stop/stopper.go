@@ -95,63 +95,60 @@ func (s *Stopper) AddCloser(c Closer) {
 	s.closers = append(s.closers, c)
 }
 
-// A PendingTask is returned by StartTask. For simplicity this is just a
-// function pointer which is nil if the task was refused and is executed
-// when the task is done, but the Ok() and Done() methods defined on it
-// are more idiomatic.
-type PendingTask func() bool
-
-// Ok must be called to confirm that actual work may be started for this task.
-func (pt PendingTask) Ok() bool {
-	return pt != nil
-}
-
-// Done is called (exactly once) when the started work has completed.
-// It must not be called when Ok() returned false.
-func (pt PendingTask) Done() {
-	if !pt.Ok() {
-		panic("task was not permitted")
-	}
-	pt()
-}
-
-// StartTask adds one to the count of tasks left to drain in the system. Any
+// RunTask adds one to the count of tasks left to drain in the system. Any
 // worker which is a "first mover" when starting tasks must call this method
-// before starting work on a new task and must subsequently invoke Done() on
-// the returned handle  when the task is complete. First movers include
+// before starting work on a new task. First movers include
 // goroutines launched to do periodic work and the kv/db.go gateway which
 // accepts external client requests.
 //
-// Ok() must be called to confirm that the task can be launched. Ok() returns
-// false to indicate that the system is currently draining and the task should
-// must not proceed. It's illegal to call Done() in that case.
-//
-// TODO(tschottdorf): Consider renaming PendingTask to Permit or using an API
-// similar to RunWorker.
-func (s *Stopper) StartTask() PendingTask {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.draining {
-		return nil
-	}
-
-	s.numTasks++
+// returns false to indicate that the system is currently draining and
+// function f was not called.
+func (s *Stopper) RunTask(f func()) bool {
 	file, line, _ := caller.Lookup(1)
 	taskKey := fmt.Sprintf("%s:%d", file, line)
-	s.tasks[taskKey]++
-	var done bool
-	return func() bool {
-		if done {
-			panic("cannot finish a task twice")
-		}
-		done = true
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.numTasks--
-		s.tasks[taskKey]--
-		s.drain.Broadcast()
-		return false // never used
+	if !s.runPrelude(taskKey) {
+		return false
 	}
+	// Call f.
+	f()
+	s.runPostlude(taskKey)
+	return true
+}
+
+// RunAsyncTask runs function f in a goroutine. It returns false if it is unable
+// to run the function.
+func (s *Stopper) RunAsyncTask(f func()) bool {
+	file, line, _ := caller.Lookup(1)
+	taskKey := fmt.Sprintf("%s:%d", file, line)
+	if !s.runPrelude(taskKey) {
+		return false
+	}
+	// Call f.
+	go func() {
+		f()
+		s.runPostlude(taskKey)
+	}()
+	return true
+}
+
+func (s *Stopper) runPrelude(taskKey string) bool {
+	s.mu.Lock()
+	if s.draining {
+		s.mu.Unlock()
+		return false
+	}
+	s.numTasks++
+	s.tasks[taskKey]++
+	s.mu.Unlock()
+	return true
+}
+
+func (s *Stopper) runPostlude(taskKey string) {
+	s.mu.Lock()
+	s.numTasks--
+	s.tasks[taskKey]--
+	s.drain.Broadcast()
+	s.mu.Unlock()
 }
 
 // NumTasks returns the number of active tasks.

@@ -311,12 +311,9 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {
-		if task := stopper.StartTask(); task.Ok() {
-			go func() {
-				n.bootstrapStores(bootstraps, stopper)
-				task.Done()
-			}()
-		}
+		stopper.RunAsyncTask(func() {
+			n.bootstrapStores(bootstraps, stopper)
+		})
 	}
 
 	return nil
