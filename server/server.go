@@ -253,9 +253,11 @@ func (s *Server) startWriteSummaries() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := s.writeSummaries(); err != nil {
-					log.Error(err)
-				}
+				s.stopper.RunTask(func() {
+					if err := s.writeSummaries(); err != nil {
+						log.Error(err)
+					}
+				})
 			case <-s.stopper.ShouldStop():
 				return
 			}
@@ -265,29 +267,27 @@ func (s *Server) startWriteSummaries() {
 
 // writeSummaries retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
-func (s *Server) writeSummaries() (err error) {
-	s.stopper.RunTask(func() {
-		nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
-		if nodeStatus != nil {
-			key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
-			if err = s.db.Put(key, nodeStatus); err != nil {
-				return
-			}
-			if log.V(1) {
-				log.Infof("recorded status for node %d", nodeStatus.Desc.NodeID)
-			}
-		}
-
-		for _, ss := range storeStatuses {
-			key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
-			if err = s.db.Put(key, &ss); err != nil {
-				return
-			}
+func (s *Server) writeSummaries() error {
+	nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
+	if nodeStatus != nil {
+		key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
+		if err := s.db.Put(key, nodeStatus); err != nil {
+			return err
 		}
 		if log.V(1) {
-			log.Infof("recorded status for %d stores", len(storeStatuses))
+			log.Infof("recorded status for node %d", nodeStatus.Desc.NodeID)
 		}
-	})
+	}
+
+	for _, ss := range storeStatuses {
+		key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
+		if err := s.db.Put(key, &ss); err != nil {
+			return err
+		}
+	}
+	if log.V(1) {
+		log.Infof("recorded status for %d stores", len(storeStatuses))
+	}
 	return nil
 }
 

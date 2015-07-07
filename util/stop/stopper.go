@@ -34,17 +34,15 @@ type Closer interface {
 
 // A Stopper provides a channel-based mechanism to stop an arbitrary
 // array of workers. Each worker is registered with the stopper via
-// the RunWorker() method. The system further tracks each task which
-// is outstanding by calling StartTask() when a task is started, which
-// returns a handle with Ok() and Done() methods.
+// the RunWorker() method. The system further allows execution of functions
+// through RunTask() and RunAsyncTask().
 //
 // Stopping occurs in two phases: the first is the request to stop, which moves
-// the stopper into a draining phase. While draining, calls to StartTask()
-// return a handle for which Ok() is false, meaning the system is draining and
-// new work must not be begun. When all outstanding tasks have been completed
-// via calls to Done(), the stopper closes its stopper channel, which signals
-// all live workers that it's safe to shut down. When all workers have
-// shutdown, the stopper is complete.
+// the stopper into a draining phase. While draining, calls to RunTask() &
+// RunAsyncTask() don't execute the function passed in and return false.
+// When all outstanding tasks have been completed, the stopper
+// closes its stopper channel, which signals all live workers that it's safe to
+// shut down. When all workers have shutdown, the stopper is complete.
 //
 // An arbitrary list of objects implementing the Closer interface may
 // be added to the stopper via AddCloser(), to be closed after the
@@ -101,7 +99,7 @@ func (s *Stopper) AddCloser(c Closer) {
 // goroutines launched to do periodic work and the kv/db.go gateway which
 // accepts external client requests.
 //
-// returns false to indicate that the system is currently draining and
+// Returns false to indicate that the system is currently draining and
 // function f was not called.
 func (s *Stopper) RunTask(f func()) bool {
 	file, line, _ := caller.Lookup(1)
@@ -115,8 +113,8 @@ func (s *Stopper) RunTask(f func()) bool {
 	return true
 }
 
-// RunAsyncTask runs function f in a goroutine. It returns false if it is unable
-// to run the function.
+// RunAsyncTask runs function f in a goroutine. It returns false when the
+// Stopper is draining and the function is not executed.
 func (s *Stopper) RunAsyncTask(f func()) bool {
 	file, line, _ := caller.Lookup(1)
 	taskKey := fmt.Sprintf("%s:%d", file, line)

@@ -956,11 +956,13 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Range) getLeaseForGossip(ctx context.Context) (hasLease bool, err error) {
+func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
+	var hasLease bool
+	var err error
 	if !r.rm.Stopper().RunTask(func() {
 		timestamp := r.rm.Clock().Now()
 		// Check for or obtain the lease, if none active.
@@ -980,7 +982,7 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (hasLease bool, err error
 	}) {
 		err = util.Errorf("node is stopping")
 	}
-	return
+	return hasLease, err
 }
 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
