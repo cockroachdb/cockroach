@@ -1018,7 +1018,7 @@ func (r *Range) maybeGossipFirstRange() error {
 
 // maybeGossipConfigs gossips those configuration maps for which the supplied
 // function returns true and whose contents are marked dirty. Configuration
-// maps include accounting, permissions, and zones. The store is in charge of
+// maps include accounting, permissions, users, and zones. The store is in charge of
 // the initial update, and the range itself re-triggers updates following
 // writes that may have altered any of the maps.
 //
@@ -1159,7 +1159,7 @@ func (r *Range) maybeSetCorrupt(err error) error {
 
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
-// configuration maps include accounting, permissions, and zones.
+// configuration maps include accounting, permissions, users, and zones.
 func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)
