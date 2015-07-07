@@ -978,7 +978,7 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (hasLease bool, err error
 			}
 		}
 	}) {
-		return false, util.Errorf("node is stopping")
+		err = util.Errorf("node is stopping")
 	}
 	return
 }
