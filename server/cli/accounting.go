@@ -117,7 +117,7 @@ var setAcctCmd = &cobra.Command{
 	Use:   "set [options] <key-prefix> <acct-config-file>",
 	Short: "create or update an accounting config for key prefix",
 	Long: `
-Create or update a accounting config for the specified key prefix (first
+Create or update an accounting config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
 (second argument: <acct-config-file>).
 
