@@ -208,23 +208,19 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 		start := time.Now()
 
 		for {
+			var shouldStop bool
 			if rs.ranges.EstimatedCount() == 0 {
 				// Just wait without processing any range.
-				if rs.waitAndProcess(start, clock, stopper, nil) {
-					break
-				}
+				shouldStop = rs.waitAndProcess(start, clock, stopper, nil)
 			} else {
-				shouldStop := true
+				shouldStop = true
 				rs.ranges.Visit(func(rng *Range) bool {
 					shouldStop = rs.waitAndProcess(start, clock, stopper, rng)
 					return !shouldStop
 				})
-				if shouldStop {
-					break
-				}
 			}
 
-			if !stopper.RunTask(func() {
+			shouldStop = shouldStop || !stopper.RunTask(func() {
 				// Increment iteration count.
 				rs.completedScan.L.Lock()
 				rs.count++
@@ -237,9 +233,9 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 
 				// Reset iteration and start time.
 				start = time.Now()
-			}) {
-				// Exit the loop
-				break
+			})
+			if shouldStop {
+				return
 			}
 		}
 	})

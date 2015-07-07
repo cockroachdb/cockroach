@@ -1431,10 +1431,8 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		ctx := tracer.ToCtx(ctx, trace.Fork())
 		if !s.stopper.RunAsyncTask(func() {
 			resolveErr := rng.addWriteCmd(ctx, resolveArgs, resolveReply, &wg)
-			if resolveErr != nil {
-				if log.V(1) {
-					log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
-				}
+			if resolveErr != nil && log.V(1) {
+				log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
 			}
 		}) {
 			// Couldn't run the task. We need to notify the WorkGroup.

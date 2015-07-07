@@ -756,7 +756,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 					Reply: reply,
 				}
 
-				if !tc.stopper.RunTask(func() {
+				tc.stopper.RunTask(func() {
 					// Each heartbeat gets its own Trace.
 					trace := tc.tracer.NewTrace(&txn)
 					ctx := tracer.ToCtx(context.Background(), trace)
@@ -773,9 +773,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 						proceed = false
 					}
 					trace.Finalize()
-				}) {
-					continue
-				}
+				})
 				if !proceed {
 					return
 				}

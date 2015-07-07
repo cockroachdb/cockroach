@@ -275,7 +275,7 @@ func TestStopperNumTasks(t *testing.T) {
 			t.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, s.NumTasks())
 		}
 	}
-	// The taskmap should've cleared out.
+	// The taskmap should've been cleared out.
 	if m := s.RunningTasks(); len(m) != 0 {
 		t.Fatalf("task map not empty: %+v", m)
 	}
