@@ -27,7 +27,6 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -77,28 +76,18 @@ func TestStatusJson(t *testing.T) {
 	testCases := []TestCase{
 		{statusNodeKeyPrefix, "\\\"d\\\":"},
 	}
-	// Test the /_status/local/ endpoint only in a go release branch.
-	if !strings.HasPrefix(runtime.Version(), "devel") {
-		testCases = append(testCases, TestCase{statusLocalKeyPrefix, fmt.Sprintf(`{
+	testCases = append(testCases, TestCase{statusLocalKeyPrefix, fmt.Sprintf(`{
   "address": {
     "network": "%s",
     "string": "%s"
   },
   "buildInfo": {
-    "goVersion": "go[0-9\.]+",
+    "goVersion": "%s",
     "tag": "",
     "time": "",
     "dependencies": ""
   }
-}`, addr.Network(), addr.String())})
-	} else {
-		testCases = append(testCases, TestCase{statusLocalKeyPrefix, fmt.Sprintf(`{
-  "address": {
-    "network": "%s",
-    "string": "%s"
-  }
-}`, addr.Network(), addr.String())})
-	}
+}`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))})
 
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
@@ -128,8 +117,8 @@ func TestStatusJson(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if matches, err := regexp.Match(spec.expected, body); !matches || err != nil {
-				t.Errorf("expected match %s; got %s; err nil: %s", spec.expected, body, err)
+			if re := regexp.MustCompile(spec.expected); !re.Match(body) {
+				t.Errorf("expected match %s; got %s", spec.expected, body)
 			}
 		}
 	}
