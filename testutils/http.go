@@ -77,8 +77,8 @@ func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, body)
+		respBody, _ := ioutil.ReadAll(resp.Body)
+		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, respBody)
 	}
 	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 	if returnedContentType != util.JSONContentType {

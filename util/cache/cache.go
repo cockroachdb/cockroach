@@ -305,7 +305,8 @@ func (oc *OrderedCache) length() int {
 
 // Ceil returns the smallest cache entry greater than or equal to key.
 func (oc *OrderedCache) Ceil(key interface{}) (k, v interface{}, ok bool) {
-	if e, ok := oc.llrb.Ceil(&entry{key: key}).(*entry); ok {
+	var e *entry
+	if e, ok = oc.llrb.Ceil(&entry{key: key}).(*entry); ok {
 		return e.key, e.value, true
 	}
 	return
@@ -313,7 +314,8 @@ func (oc *OrderedCache) Ceil(key interface{}) (k, v interface{}, ok bool) {
 
 // Floor returns the greatest cache entry less than or equal to key.
 func (oc *OrderedCache) Floor(key interface{}) (k, v interface{}, ok bool) {
-	if e, ok := oc.llrb.Floor(&entry{key: key}).(*entry); ok {
+	var e *entry
+	if e, ok = oc.llrb.Floor(&entry{key: key}).(*entry); ok {
 		return e.key, e.value, true
 	}
 	return

@@ -136,7 +136,7 @@ check:
 	! golint $(PKG) | grep -vE '(\.pb\.go|embedded\.go|yyEofCode|_string\.go|LastInsertId)'
 	! gofmt -s -l . | grep -vF 'No Exceptions'
 	! goimports -l . | grep -vF 'No Exceptions'
-	go vet $(PKG)
+	! go tool vet --shadow --shadowstrict . 2>&1 |grep -vE '(\.pb\.go|declaration of err shadows)'
 
 .PHONY: clean
 clean:

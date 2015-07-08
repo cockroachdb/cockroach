@@ -96,7 +96,7 @@ func (cr *CallResolver) Lookup(depth int) (file string, line int, fun string) {
 	}
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
-	if v, ok := cr.cache[pc]; ok {
+	if v, okCache := cr.cache[pc]; okCache {
 		return v.file, v.line, v.fun
 	}
 	if matches := cr.re.FindStringSubmatch(file); matches != nil {

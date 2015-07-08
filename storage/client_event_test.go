@@ -165,7 +165,7 @@ func (ser *storeEventReader) updateCountString() string {
 
 			for _, methodID := range methodIDs {
 				method := proto.Method(methodID)
-				if count, ok := countset[method]; ok {
+				if count, okCount := countset[method]; okCount {
 					fmt.Fprintf(w, "\tproto.%s:\t%d,\n", method, count)
 				} else {
 					panic("unreachable!")

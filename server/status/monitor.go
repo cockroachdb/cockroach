@@ -80,7 +80,7 @@ func (nsm *NodeStatusMonitor) GetStoreMonitor(id proto.StoreID) *StoreStatusMoni
 	// lock.
 	nsm.Lock()
 	defer nsm.Unlock()
-	if s, ok := nsm.stores[id]; ok {
+	if s, ok = nsm.stores[id]; ok {
 		return s
 	}
 	s = &StoreStatusMonitor{
