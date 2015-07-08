@@ -37,6 +37,9 @@ import (
 // Most fields and settings are hard-coded. TODO(marc): allow customization.
 
 const (
+	// Make certs valid a day before to handle clock issues, specifically
+	// boot2docker: https://github.com/boot2docker/boot2docker/issues/69
+	validFrom     = -time.Hour * 24
 	validFor      = time.Hour * 24 * 365
 	maxPathLength = 1
 	caCommonName  = "Cockroach CA"
@@ -83,7 +86,8 @@ func newTemplate(commonName string) (*x509.Certificate, error) {
 		return nil, err
 	}
 
-	notBefore := time.Now()
+	notBefore := time.Now().Add(validFrom)
+	notAfter := notBefore.Add(validFor)
 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -92,7 +96,7 @@ func newTemplate(commonName string) (*x509.Certificate, error) {
 			CommonName:   commonName,
 		},
 		NotBefore: notBefore,
-		NotAfter:  notBefore.Add(validFor),
+		NotAfter:  notAfter,
 
 		KeyUsage: x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	}
