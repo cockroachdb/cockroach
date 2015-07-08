@@ -1105,8 +1105,8 @@ func TestRangeCommandQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Intercept commands with matching command IDs and block them.
-	blockingStart := make(chan struct{}, 1)
-	blockingDone := make(chan struct{}, 1)
+	blockingStart := make(chan struct{})
+	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(args proto.Request) error {
 		if args.Header().User == "Foo" {
 			blockingStart <- struct{}{}
@@ -1265,7 +1265,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 		t.Fatalf("waited 500ms for cmd2 of key")
 	}
 
-	close(blockingDone)
+	blockingDone <- struct{}{}
 	select {
 	case <-cmd1Done:
 		// success.
