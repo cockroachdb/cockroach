@@ -331,6 +331,28 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 	return nil
 }
 
+// updateRangeInfo is called whenever a range is updated by ApplySnapshot
+// or is created by range splitting to setup the fields which are
+// uninitialized or need updating.
+func (r *Range) updateRangeInfo() error {
+	// RangeMaxBytes should be updated by looking up Zone Config in two cases:
+	// 1. After snapshot applying, if no updating of zone config
+	// for this key range, then maxBytes of this range will not
+	// be updated.
+	// 2. After a new range is created by range splition, just
+	// copying maxBytes from the original range does not work
+	// since the original range and the new range might belong
+	// to different zones.
+	zone, err := lookupZoneConfig(r.rm.Gossip(), r)
+	if err != nil {
+		return util.Errorf("failed to lookup zone config for Range %s: %s", r, err)
+	}
+	r.SetMaxBytes(zone.RangeMaxBytes)
+	// TODO(kkaneda): Update configHashes and other fields as well (#1362)?
+
+	return nil
+}
+
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	snapData := proto.RaftSnapshotData{}
@@ -419,6 +441,11 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	if err := r.setDesc(&desc); err != nil {
 		return err
 	}
+	// Update other fields which are uninitialized or need updating.
+	if err := r.updateRangeInfo(); err != nil {
+		return err
+	}
+
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 	return nil
 }

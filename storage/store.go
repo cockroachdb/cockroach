@@ -1029,16 +1029,10 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree", newRng)
 	}
 
-	// Update the max bytes of the range. Just copying it from the
-	// original range does not work since the original range and
-	// the new range might belong to different zones.
-	zone, err := lookupZoneConfig(s.ctx.Gossip, newRng)
-	if err != nil {
-		return util.Errorf("couldn't find a zone config for range %v", newRng)
+	// Update the max bytes and other information of the new range.
+	if err := newRng.updateRangeInfo(); err != nil {
+		return err
 	}
-	newRng.SetMaxBytes(zone.RangeMaxBytes)
-
-	// TODO(kkaneda): Update configHashes and other fields as well (Issue # 1362)?
 
 	s.feed.splitRange(origRng, newRng)
 	return s.processRangeDescriptorUpdateLocked(origRng)
