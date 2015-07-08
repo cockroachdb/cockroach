@@ -395,7 +395,14 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 	return false
 }
 
-func (l *Cluster) monitor(ch <-chan dockerclient.EventOrError, monitorStopper chan struct{}) {
+func (l *Cluster) monitor(monitorStopper chan struct{}) {
+	// MonitorEvents will (as of Docker 1.7) block until the first event is
+	// received.
+	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
+	if err != nil {
+		panic(err)
+	}
+
 	for e := range ch {
 		if !l.processEvent(e, monitorStopper) {
 			break
@@ -417,12 +424,7 @@ func (l *Cluster) Start() {
 	l.createClientCerts()
 
 	l.monitorStopper = make(chan struct{})
-	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
-	if err != nil {
-		panic(err)
-	}
-	go l.monitor(ch, l.monitorStopper)
-
+	go l.monitor(l.monitorStopper)
 	for i := range l.Nodes {
 		l.Nodes[i] = l.startNode(i)
 	}
