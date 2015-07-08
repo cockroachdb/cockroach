@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -2485,16 +2486,16 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	// Get original meta2 descriptor.
 	rlArgs := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     keys.RangeMetaKey(key),
-			RaftID:  tc.rng.Desc().RaftID,
-			Replica: proto.Replica{StoreID: tc.store.StoreID()},
+			Key:             keys.RangeMetaKey(key),
+			RaftID:          tc.rng.Desc().RaftID,
+			Replica:         proto.Replica{StoreID: tc.store.StoreID()},
+			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges: 1,
 	}
 	rlReply := &proto.InternalRangeLookupResponse{}
 
 	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply}); err != nil {
-
 		t.Fatal(err)
 	}
 
@@ -2515,7 +2516,8 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Now lookup the range; should get old value + write intent error.
+	// Now lookup the range; should get the value. Since the lookup is
+	// inconsistent, there's no WriteIntentErorr.
 	rlArgs.Key = keys.RangeMetaKey(proto.Key("A"))
 	rlArgs.Timestamp = proto.ZeroTimestamp
 
@@ -2528,8 +2530,23 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
 	}
 
+	// Switch to consistent lookups, which should run into the intent.
+	rlArgs.ReadConsistency = proto.CONSISTENT
+	err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply})
+	if _, ok := err.(*proto.WriteIntentError); !ok {
+		t.Fatalf("expected WriteIntentError, not %s", err)
+	}
+
 	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
+	// First, try this consistently, which should not be allowed.
 	rlArgs.IgnoreIntents = true
+	err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply})
+	if !testutils.IsError(err, "can not read consistently and skip intents") {
+		t.Fatalf("wanted specific error, not %s", err)
+	}
+	// After changing back to inconsistent lookups, should be good to go.
+	rlArgs.ReadConsistency = proto.INCONSISTENT
+
 	var origSeen, newSeen bool
 	const count = 100
 
