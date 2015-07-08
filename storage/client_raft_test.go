@@ -399,11 +399,11 @@ func TestFailedReplicaChange(t *testing.T) {
 	// complain about goroutines involved in the process).
 	if err := util.IsTrueWithin(func() bool {
 		for _, store := range mtc.stores {
-			rng, err := store.GetRange(1)
+			rang, err := store.GetRange(1)
 			if err != nil {
 				return false
 			}
-			if len(rng.Desc().Replicas) == 1 {
+			if len(rang.Desc().Replicas) == 1 {
 				return false
 			}
 		}

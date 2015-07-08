@@ -282,9 +282,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
-	txn := newTxn(s.Clock, proto.Key("a"))
+	initialTxn := newTxn(s.Clock, proto.Key("a"))
 	call := proto.Call{
-		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
+		Args:  createPutRequest(proto.Key("a"), []byte("value"), initialTxn),
 		Reply: &proto.PutResponse{}}
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
@@ -294,7 +294,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS proto.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			ok, txn, err := getTxn(s.Sender, txn)
+			ok, txn, err := getTxn(s.Sender, initialTxn)
 			if !ok || err != nil {
 				return false
 			}

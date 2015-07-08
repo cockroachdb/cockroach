@@ -249,7 +249,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		// MVCCGetProto may return WriteIntentErrors in addition to a valid value.
 		// We can't resolve intents at this level so just ignore the error.
-		if _, ok := err.(*proto.WriteIntentError); !ok {
+		if _, ok = err.(*proto.WriteIntentError); !ok {
 			return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
 		}
 	}

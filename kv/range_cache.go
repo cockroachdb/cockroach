@@ -246,11 +246,11 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	// should be cleared out in favor of a KeyMin->"m" descriptor.
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if ok {
-		desc := v.(*proto.RangeDescriptor)
+		descriptor := v.(*proto.RangeDescriptor)
 		addrKey := keys.KeyAddress(key)
-		if !addrKey.Less(desc.StartKey) && !desc.EndKey.Less(addrKey) {
+		if !addrKey.Less(descriptor.StartKey) && !descriptor.EndKey.Less(addrKey) {
 			if log.V(1) {
-				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, desc)
+				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
 			rdc.rangeCache.Del(k.(rangeCacheKey))
 		}

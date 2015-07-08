@@ -428,7 +428,7 @@ func TestEngineScan1(t *testing.T) {
 		// a special case in engine.scan, that's why we test it here.
 		startKeys := []proto.EncodedKey{proto.EncodedKey("cat"), proto.EncodedKey("")}
 		for _, startKey := range startKeys {
-			keyvals, err := Scan(engine, startKey, proto.EncodedKey(proto.KeyMax), 0)
+			keyvals, err = Scan(engine, startKey, proto.EncodedKey(proto.KeyMax), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
