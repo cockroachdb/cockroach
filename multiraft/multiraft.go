@@ -168,10 +168,8 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 }
 
 // Start runs the raft algorithm in a background goroutine.
-func (m *MultiRaft) Start() error {
-	s := newState(m)
-	s.start()
-	return nil
+func (m *MultiRaft) Start() {
+	newState(m).start()
 }
 
 // RaftMessage implements ServerInterface; this method is called by net/rpc

@@ -513,9 +513,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
-	if err = s.multiraft.Start(); err != nil {
-		return err
-	}
+	s.multiraft.Start()
 	s.processRaft()
 
 	// Gossip is only ever nil while bootstrapping a cluster and
