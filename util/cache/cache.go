@@ -304,21 +304,19 @@ func (oc *OrderedCache) length() int {
 }
 
 // Ceil returns the smallest cache entry greater than or equal to key.
-func (oc *OrderedCache) Ceil(key interface{}) (k, v interface{}, ok bool) {
-	var e *entry
-	if e, ok = oc.llrb.Ceil(&entry{key: key}).(*entry); ok {
+func (oc *OrderedCache) Ceil(key interface{}) (interface{}, interface{}, bool) {
+	if e, ok := oc.llrb.Ceil(&entry{key: key}).(*entry); ok {
 		return e.key, e.value, true
 	}
-	return
+	return nil, nil, false
 }
 
 // Floor returns the greatest cache entry less than or equal to key.
-func (oc *OrderedCache) Floor(key interface{}) (k, v interface{}, ok bool) {
-	var e *entry
-	if e, ok = oc.llrb.Floor(&entry{key: key}).(*entry); ok {
+func (oc *OrderedCache) Floor(key interface{}) (interface{}, interface{}, bool) {
+	if e, ok := oc.llrb.Floor(&entry{key: key}).(*entry); ok {
 		return e.key, e.value, true
 	}
-	return
+	return nil, nil, false
 }
 
 // Do invokes f on all of the entries in the cache.
