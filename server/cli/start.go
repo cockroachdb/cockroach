@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -195,10 +196,12 @@ func runExterminate(cmd *cobra.Command, args []string) {
 
 	// First attempt to shutdown the server. Note that an error of EOF just
 	// means the HTTP server shutdown before the request to quit returned.
-	if err := server.SendQuit(Context); err != nil {
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Quit)
+	body, err := admin.Get()
+	if err != nil {
 		log.Infof("shutdown node %s: %s", Context.Addr, err)
 	} else {
-		log.Infof("shutdown node in anticipation of data extermination")
+		log.Infof("shutdown node in anticipation of data extermination: %s", body)
 	}
 
 	// Exterminate all data held in specified stores.
@@ -227,9 +230,12 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) {
-	if err := server.SendQuit(Context); err != nil {
-		fmt.Fprintf(osStderr, "quit failed: %s\n", err)
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Quit)
+	body, err := admin.Get()
+	if err != nil {
+		fmt.Printf("shutdown node error: %s\n", err)
 		osExit(1)
 		return
 	}
+	fmt.Printf("node drained and shutdown: %s\n", body)
 }

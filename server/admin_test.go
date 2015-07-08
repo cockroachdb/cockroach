@@ -19,51 +19,17 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// startAdminServer launches a new admin server using minimal engine
-// and local database setup. Returns the new http test server, which
-// should be cleaned up by caller via httptest.Server.Close(). The
-// Cockroach KV client address is set to the address of the test server.
-func startAdminServer() (string, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
-	if err != nil {
-		log.Fatal(err)
-	}
-	admin := newAdminServer(db, stopper)
-	mux := http.NewServeMux()
-	mux.Handle(adminEndpoint, admin)
-	mux.Handle(debugEndpoint, admin)
-	httpServer := httptest.NewUnstartedServer(mux)
-	tlsConfig, err := testContext.GetServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	httpServer.TLS = tlsConfig
-	httpServer.StartTLS()
-	stopper.AddCloser(httpServer)
-
-	if strings.HasPrefix(httpServer.URL, "http://") {
-		testContext.Addr = strings.TrimPrefix(httpServer.URL, "http://")
-	} else if strings.HasPrefix(httpServer.URL, "https://") {
-		testContext.Addr = strings.TrimPrefix(httpServer.URL, "https://")
-	}
-	return httpServer.URL, stopper
-}
 
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
@@ -99,10 +65,10 @@ func getJSON(url string) (interface{}, error) {
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	url, stopper := startAdminServer()
+	ctx, stopper := StartAdminServer()
 	defer stopper.Stop()
 
-	jI, err := getJSON(url + debugEndpoint + "vars")
+	jI, err := getJSON(ctx.RequestScheme() + "://" + ctx.Addr + debugEndpoint + "vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -119,14 +85,71 @@ func TestAdminDebugExpVar(t *testing.T) {
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	url, stopper := startAdminServer()
+	ctx, stopper := StartAdminServer()
 	defer stopper.Stop()
 
-	body, err := getText(url + debugEndpoint + "pprof/block")
+	body, err := getText(ctx.RequestScheme() + "://" + ctx.Addr + debugEndpoint + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if matches, err := regexp.MatchString(".*contention:\ncycles/second=.*", string(body)); !matches || err != nil {
 		t.Errorf("expected match: %t; err nil: %v", matches, err)
+	}
+}
+
+// TestSetZoneInvalid sets invalid zone configs and verifies error
+// responses.
+func TestSetZoneInvalid(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	ctx, stopper := StartAdminServer()
+	defer stopper.Stop()
+
+	testData := []struct {
+		zone   string
+		expErr string
+	}{
+		{`
+replicas:
+  - attrs: [dc1, ssd]
+range_min_bytes: 128
+range_max_bytes: 524288
+`, "RangeMaxBytes 524288 less than minimum allowed"},
+		{`
+replicas:
+  - attrs: [dc1, ssd]
+range_min_bytes: 67108864
+range_max_bytes: 67108864
+`, "RangeMinBytes 67108864 is greater than or equal to RangeMaxBytes 67108864"},
+		{`
+range_min_bytes: 1048576
+range_max_bytes: 67108864
+`, "attributes for at least one replica must be specified in zone config"},
+	}
+
+	httpClient, err := testContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, test := range testData {
+		re := regexp.MustCompile(test.expErr)
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", ctx.RequestScheme(), ctx.Addr, zonePathPrefix, "foo"), strings.NewReader(test.zone))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Add(util.ContentTypeHeader, util.YAMLContentType)
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("%d: expected error", i)
+		} else if !re.MatchString(string(b)) {
+			t.Errorf("%d: expected error matching %q; got %s", i, test.expErr, b)
+		}
 	}
 }

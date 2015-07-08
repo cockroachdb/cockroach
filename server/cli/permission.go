@@ -18,9 +18,11 @@
 package cli
 
 import (
+	"fmt"
 	"io/ioutil"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
@@ -32,9 +34,7 @@ var getPermsCmd = &cobra.Command{
 	Use:   "get [options] <key-prefix>",
 	Short: "fetches and displays the permission config",
 	Long: `
-Fetches and displays the permission configuration for <key-prefix>. The key
-prefix should be escaped via URL query escaping if it contains
-non-ascii bytes or spaces.
+Fetches and displays the permission configuration for <key-prefix>.
 `,
 	Run: runGetPerms,
 }
@@ -45,37 +45,39 @@ func runGetPerms(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunGetPerm(Context, args[0])
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Permission)
+	body, err := admin.GetYAML(args[0])
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Permission config for prefix %q:\n%s\n", args[0], body)
 }
 
 // A lsPermsCmd command displays a list of perm configs by prefix.
 var lsPermsCmd = &cobra.Command{
-	Use:   "ls [options] [key-regexp]",
+	Use:   "ls [options]",
 	Short: "list all permisison configs by key prefix",
 	Long: `
-List permission configs. If a regular expression is given, the results of
-the listing are filtered by key prefixes matching the regexp. The key
-prefix should be escaped via URL query escaping if it contains
-non-ascii bytes or spaces.
+List permission configs.
 `,
 	Run: runLsPerms,
 }
 
 // runLsPerms invokes the REST API with GET action and no path, which
-// fetches a list of all perm configuration prefixes. The optional
-// regexp is applied to the complete list and matching prefixes
-// displayed.
+// fetches a list of all perm configuration prefixes.
 func runLsPerms(cmd *cobra.Command, args []string) {
-	if len(args) > 1 {
+	if len(args) > 0 {
 		cmd.Usage()
 		return
 	}
-	pattern := ""
-	if len(args) == 1 {
-		pattern = args[0]
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Permission)
+	list, err := admin.List()
+	if err != nil {
+		log.Error(err)
+		return
 	}
-	server.RunLsPerm(Context, pattern)
-
+	fmt.Printf("Permission keys:\n%s\n", strings.Join(list, "\n  "))
 }
 
 // A rmPermsCmd command removes a perm config by prefix.
@@ -86,8 +88,7 @@ var rmPermsCmd = &cobra.Command{
 Remove an existing permission config by key prefix. No action is taken if no
 permission configuration exists for the specified key prefix. Note that this
 command can affect only a single perm config with an exactly matching
-prefix. The key prefix should be escaped via URL query escaping if it
-contains non-ascii bytes or spaces.
+prefix.
 `,
 	Run: runRmPerms,
 }
@@ -99,7 +100,12 @@ func runRmPerms(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunRmPerm(Context, args[0])
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Permission)
+	if err := admin.Delete(args[0]); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Deleted permission key %q\n", args[0])
 }
 
 // A setPermsCmd command creates a new or updates an existing perm
@@ -110,9 +116,7 @@ var setPermsCmd = &cobra.Command{
 	Long: `
 Create or update a perm config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
-(second argument: <perm-config-file>). The key prefix should be
-escaped via URL query escaping if it contains non-ascii bytes or
-spaces.
+(second argument: <perm-config-file>).
 
 The permission config format has the following YAML schema:
 
@@ -154,7 +158,12 @@ func runSetPerms(cmd *cobra.Command, args []string) {
 		log.Errorf("unable to read permission config file %q: %s", args[1], err)
 		return
 	}
-	server.RunSetPerm(Context, args[0], body)
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Permission)
+	if err := admin.SetYAML(args[0], string(body)); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Wrote permission config to %q\n", args[0])
 }
 
 // TODO:(bram) Add inline json for setting

@@ -19,9 +19,11 @@
 package cli
 
 import (
+	"fmt"
 	"io/ioutil"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/log"
 
 	"github.com/spf13/cobra"
@@ -33,9 +35,7 @@ var getZoneCmd = &cobra.Command{
 	Use:   "get [options] <key-prefix>",
 	Short: "fetches and displays the zone config",
 	Long: `
-Fetches and displays the zone configuration for <key-prefix>. The key
-prefix should be escaped via URL query escaping if it contains
-non-ascii bytes or spaces.
+Fetches and displays the zone configuration for <key-prefix>.
 `,
 	Run: runGetZone,
 }
@@ -46,18 +46,22 @@ func runGetZone(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunGetZone(Context, args[0])
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	body, err := admin.GetYAML(args[0])
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Zone config for prefix %q:\n%s\n", args[0], body)
+
 }
 
 // A lsZonesCmd command displays a list of zone configs by prefix.
 var lsZonesCmd = &cobra.Command{
-	Use:   "ls [options] [key-regexp]",
+	Use:   "ls [options]",
 	Short: "list all zone configs by key prefix",
 	Long: `
-List zone configs. If a regular expression is given, the results of
-the listing are filtered by key prefixes matching the regexp. The key
-prefix should be escaped via URL query escaping if it contains
-non-ascii bytes or spaces.
+List zone configs.
 `,
 	Run: runLsZones,
 }
@@ -67,15 +71,18 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsZones(cmd *cobra.Command, args []string) {
-	if len(args) > 1 {
+	if len(args) > 0 {
 		cmd.Usage()
 		return
 	}
-	pattern := ""
-	if len(args) == 1 {
-		pattern = args[0]
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	list, err := admin.List()
+	if err != nil {
+		log.Error(err)
+		return
 	}
-	server.RunLsZone(Context, pattern)
+	fmt.Printf("Zone keys:\n%s\n", strings.Join(list, "\n  "))
+
 }
 
 // A rmZoneCmd command removes a zone config by prefix.
@@ -86,8 +93,7 @@ var rmZoneCmd = &cobra.Command{
 Remove an existing zone config by key prefix. No action is taken if no
 zone configuration exists for the specified key prefix. Note that this
 command can affect only a single zone config with an exactly matching
-prefix. The key prefix should be escaped via URL query escaping if it
-contains non-ascii bytes or spaces.
+prefix.
 `,
 	Run: runRmZone,
 }
@@ -99,7 +105,12 @@ func runRmZone(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	server.RunRmZone(Context, args[0])
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	if err := admin.Delete(args[0]); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Deleted zone key %q\n", args[0])
 }
 
 // A setZoneCmd command creates a new or updates an existing zone
@@ -110,9 +121,7 @@ var setZoneCmd = &cobra.Command{
 	Long: `
 Create or update a zone config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
-(second argument: <zone-config-file>). The key prefix should be
-escaped via URL query escaping if it contains non-ascii bytes or
-spaces.
+(second argument: <zone-config-file>).
 
 The zone config format has the following YAML schema:
 
@@ -152,7 +161,13 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		log.Errorf("unable to read zone config file %q: %s", args[1], err)
 		return
 	}
-	server.RunSetZone(Context, args[0], body)
+	admin := client.NewAdminClient(&Context.Context, Context.Addr, client.Zone)
+	if err := admin.SetYAML(args[0], string(body)); err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Printf("Wrote zone config to %q\n", args[0])
+
 }
 
 var zoneCmds = []*cobra.Command{
