@@ -55,6 +55,7 @@ var (
 		Read:  []string{"root"},
 		Write: []string{"root"},
 	}
+	testDefaultUserConfig = proto.UserConfig{}
 	testDefaultZoneConfig = proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{Attrs: []string{"dc1", "mem"}},
@@ -212,6 +213,9 @@ func initConfigs(e engine.Engine, t testing.TB) {
 		t.Fatal(err)
 	}
 	if err := engine.MVCCPutProto(e, nil, keys.ConfigPermissionPrefix, timestamp, nil, &testDefaultPermConfig); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.MVCCPutProto(e, nil, keys.ConfigUserPrefix, timestamp, nil, &testDefaultUserConfig); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.MVCCPutProto(e, nil, keys.ConfigZonePrefix, timestamp, nil, &testDefaultZoneConfig); err != nil {
@@ -654,6 +658,7 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	}{
 		{gossip.KeyConfigAccounting, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultAcctConfig}}},
 		{gossip.KeyConfigPermission, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultPermConfig}}},
+		{gossip.KeyConfigUser, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultUserConfig}}},
 		{gossip.KeyConfigZone, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {

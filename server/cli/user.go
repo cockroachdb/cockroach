@@ -85,7 +85,7 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 // A rmUserCmd command removes the user config for the specified username.
 var rmUserCmd = &cobra.Command{
 	Use:   "rm [options] <username>",
-	Short: "remove an user config",
+	Short: "remove a user config",
 	Long: `
 Remove an existing user config by username.
 `,
@@ -110,7 +110,7 @@ func runRmUser(cmd *cobra.Command, args []string) {
 // A setUserCmd command creates a new or updates an existing user config.
 var setUserCmd = &cobra.Command{
 	Use:   "set [options] <username>",
-	Short: "create or update an accounting config for key prefix",
+	Short: "create or update a user config for key prefix",
 	Long: `
 Create or update a user config for the specified username, prompting
 for the password.

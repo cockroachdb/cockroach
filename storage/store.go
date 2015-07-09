@@ -837,8 +837,8 @@ func (s *Store) RaftStatus(raftID proto.RaftID) *raft.Status {
 // BootstrapRange creates the first range in the cluster and manually
 // writes it to the store. Default range addressing records are
 // created for meta1 and meta2. Default configurations for accounting,
-// permissions, and zones are created. All configs are specified for
-// the empty key prefix, meaning they apply to the entire
+// permissions, users, and zones are created. All configs are specified
+// for the empty key prefix, meaning they apply to the entire
 // database. Permissions are granted to all users and the zone
 // requires three replicas with no other specifications. It also adds
 // the range tree and the root node, the first range, to it.
