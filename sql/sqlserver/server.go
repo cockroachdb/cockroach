@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
@@ -62,9 +64,7 @@ func createArgsAndReply(method string) (*sqlwire.Request, *sqlwire.Response) {
 // A Server provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.
 type Server struct {
-	// TODO(vivek): Move database to the session/transaction context.
-	database string
-	db       *client.DB
+	db *client.DB
 }
 
 // NewServer allocates and returns a new Server.
@@ -122,6 +122,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) exec(call sqlwire.Call) {
 	req := call.Args
 	resp := call.Reply
+	// Pick up current session state.
+	var session Session
+	if req.Session != nil {
+		if err := gogoproto.Unmarshal(req.Session, &session); err != nil {
+			resp.SetGoError(err)
+			return
+		}
+	}
 	stmt, err := parser.Parse(req.Sql)
 	if err != nil {
 		resp.SetGoError(err)
@@ -129,35 +137,45 @@ func (s *Server) exec(call sqlwire.Call) {
 	}
 	switch p := stmt.(type) {
 	case *parser.CreateDatabase:
-		s.CreateDatabase(p, req.Params, resp)
+		s.CreateDatabase(&session, p, req.Params, resp)
 	case *parser.CreateTable:
-		s.CreateTable(p, req.Params, resp)
+		s.CreateTable(&session, p, req.Params, resp)
 	case *parser.Delete:
-		s.Delete(p, req.Params, resp)
+		s.Delete(&session, p, req.Params, resp)
 	case *parser.Insert:
-		s.Insert(p, req.Params, resp)
+		s.Insert(&session, p, req.Params, resp)
 	case *parser.Select:
-		s.Select(p, req.Params, resp)
+		s.Select(&session, p, req.Params, resp)
 	case *parser.ShowColumns:
-		s.ShowColumns(p, req.Params, resp)
+		s.ShowColumns(&session, p, req.Params, resp)
 	case *parser.ShowDatabases:
-		s.ShowDatabases(p, req.Params, resp)
+		s.ShowDatabases(&session, p, req.Params, resp)
 	case *parser.ShowIndex:
-		s.ShowIndex(p, req.Params, resp)
+		s.ShowIndex(&session, p, req.Params, resp)
 	case *parser.ShowTables:
-		s.ShowTables(p, req.Params, resp)
+		s.ShowTables(&session, p, req.Params, resp)
 	case *parser.Update:
-		s.Update(p, req.Params, resp)
+		s.Update(&session, p, req.Params, resp)
 	case *parser.Use:
-		s.Use(p, req.Params, resp)
+		s.Use(&session, p, req.Params, resp)
 	default:
 		resp.SetGoError(fmt.Errorf("unknown statement type: %T", stmt))
 	}
+	// Update session state.
+	if resp.Error != nil {
+		return
+	}
+	payload, err := gogoproto.Marshal(&session)
+	if err != nil {
+		resp.SetGoError(util.Errorf("unable to marshal %+v to protobuf: %s", session, err))
+		return
+	}
+	resp.Session = payload
 }
 
 // ShowColumns of a table
-func (s *Server) ShowColumns(p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) {
-	desc, err := s.getTableDesc(p.Table)
+func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) {
+	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -183,7 +201,7 @@ func (s *Server) ShowColumns(p *parser.ShowColumns, args []sqlwire.Datum, resp *
 }
 
 // ShowDatabases returns all the databases.
-func (s *Server) ShowDatabases(p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
@@ -208,8 +226,8 @@ func (s *Server) ShowDatabases(p *parser.ShowDatabases, args []sqlwire.Datum, re
 }
 
 // ShowIndex returns all the indexes for a table.
-func (s *Server) ShowIndex(p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) {
-	desc, err := s.getTableDesc(p.Table)
+func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) {
+	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -243,13 +261,13 @@ func (s *Server) ShowIndex(p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlw
 }
 
 // ShowTables returns all the tables.
-func (s *Server) ShowTables(p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) {
 	if p.Name == "" {
-		if s.database == "" {
+		if session.Database == "" {
 			resp.SetGoError(errors.New("no database specified"))
 			return
 		}
-		p.Name = s.database
+		p.Name = session.Database
 	}
 	dbID, err := s.lookupDatabase(p.Name)
 	if err != nil {
@@ -281,12 +299,12 @@ func (s *Server) ShowTables(p *parser.ShowTables, args []sqlwire.Datum, resp *sq
 }
 
 // Use sets the database being operated on.
-func (s *Server) Use(p *parser.Use, args []sqlwire.Datum, resp *sqlwire.Response) {
-	s.database = p.Name
+func (s *Server) Use(session *Session, p *parser.Use, args []sqlwire.Datum, resp *sqlwire.Response) {
+	session.Database = p.Name
 }
 
 // CreateDatabase creates a database if it doesn't exist.
-func (s *Server) CreateDatabase(p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) {
 	if p.Name == "" {
 		resp.SetGoError(errors.New("empty database name"))
 		return
@@ -317,8 +335,8 @@ func (s *Server) CreateDatabase(p *parser.CreateDatabase, args []sqlwire.Datum, 
 }
 
 // CreateTable creates a table if it doesn't already exist.
-func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) {
-	if err := s.normalizeTableName(p.Table); err != nil {
+func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) {
+	if err := s.normalizeTableName(session.Database, p.Table); err != nil {
 		resp.SetGoError(err)
 		return
 	}
@@ -380,14 +398,14 @@ func (s *Server) CreateTable(p *parser.CreateTable, args []sqlwire.Datum, resp *
 }
 
 // Delete is unimplemented.
-func (s *Server) Delete(p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) Delete(session *Session, p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) {
 	resp.SetGoError(fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p))
 }
 
 // Insert inserts rows into the database.
-func (s *Server) Insert(p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) {
 
-	desc, err := s.getTableDesc(p.Table)
+	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		resp.SetGoError(err)
 		return
@@ -465,7 +483,7 @@ func (s *Server) Insert(p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Re
 }
 
 // Select selects rows from a single table.
-func (s *Server) Select(p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) {
 
 	if len(p.Exprs) != 1 {
 		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs))
@@ -493,7 +511,7 @@ func (s *Server) Select(p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Re
 			return
 		}
 		var err error
-		desc, err = s.getTableDesc(table)
+		desc, err = s.getTableDesc(session.Database, table)
 		if err != nil {
 			resp.SetGoError(err)
 			return
@@ -566,13 +584,13 @@ func (s *Server) Select(p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Re
 }
 
 // Update is unimplemented.
-func (s *Server) Update(p *parser.Update, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) Update(session *Session, p *parser.Update, args []sqlwire.Datum, resp *sqlwire.Response) {
 
 	resp.SetGoError(fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p))
 }
 
-func (s *Server) getTableDesc(table *parser.TableName) (*structured.TableDescriptor, error) {
-	if err := s.normalizeTableName(table); err != nil {
+func (s *Server) getTableDesc(database string, table *parser.TableName) (*structured.TableDescriptor, error) {
+	if err := s.normalizeTableName(database, table); err != nil {
 		return nil, err
 	}
 	dbID, err := s.lookupDatabase(table.Qualifier)
@@ -597,12 +615,12 @@ func (s *Server) getTableDesc(table *parser.TableName) (*structured.TableDescrip
 	return &desc, nil
 }
 
-func (s *Server) normalizeTableName(table *parser.TableName) error {
+func (s *Server) normalizeTableName(database string, table *parser.TableName) error {
 	if table.Qualifier == "" {
-		if s.database == "" {
+		if database == "" {
 			return fmt.Errorf("no database specified")
 		}
-		table.Qualifier = s.database
+		table.Qualifier = database
 	}
 	if table.Name == "" {
 		return fmt.Errorf("empty table name: %s", table)

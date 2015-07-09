@@ -43,7 +43,8 @@ import (
 // be stateful and is not used concurrently by multiple goroutines; See
 // https://golang.org/pkg/database/sql/driver/#Conn.
 type conn struct {
-	sender *httpSender
+	sender  *httpSender
+	session []byte
 }
 
 func (c *conn) Close() error {
@@ -55,6 +56,7 @@ func (c *conn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *conn) Begin() (driver.Tx, error) {
+	c.session = []byte{}
 	return &tx{conn: c}, nil
 }
 
@@ -68,7 +70,7 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 
 func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 	// TODO(vivek): Add the args to the Call.
-	return c.send(sqlwire.Call{Args: &sqlwire.Request{Sql: stmt}, Reply: &sqlwire.Response{}})
+	return c.send(sqlwire.Call{Args: &sqlwire.Request{RequestHeader: sqlwire.RequestHeader{Session: c.session}, Sql: stmt}, Reply: &sqlwire.Response{}})
 }
 
 // Send sends the call to the server.
@@ -78,6 +80,7 @@ func (c *conn) send(call sqlwire.Call) (*rows, error) {
 	if resp.Error != nil {
 		return nil, errors.New(resp.Error.Error())
 	}
+	c.session = resp.Session
 	// Translate into rows
 	r := &rows{}
 	// Only use the last result to populate the response
