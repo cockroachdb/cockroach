@@ -131,22 +131,21 @@ func (s *Stopper) RunAsyncTask(f func()) bool {
 
 func (s *Stopper) runPrelude(taskKey string) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.draining {
-		s.mu.Unlock()
 		return false
 	}
 	s.numTasks++
 	s.tasks[taskKey]++
-	s.mu.Unlock()
 	return true
 }
 
 func (s *Stopper) runPostlude(taskKey string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.numTasks--
 	s.tasks[taskKey]--
 	s.drain.Broadcast()
-	s.mu.Unlock()
 }
 
 // NumTasks returns the number of active tasks.
