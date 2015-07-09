@@ -319,12 +319,15 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 // looking for, which would result in having to back the iterator up, an option
 // which is both less efficient and not available in all cases.
 //
-// This method has an important optimization: instead of just returning the
-// request RangeDescriptor, it also returns a slice of additional range
-// descriptors immediately consecutive to the desired RangeDescriptor. This is
-// intended to serve as a sort of caching pre-fetch, so that the requesting
-// nodes can aggressively cache RangeDescriptors which are likely to be desired
-// by their current workload.
+// Lookups for range metadata keys usually want to read inconsistently, but
+// some callers need a consistent result; both are supported.
+//
+// This method has an important optimization in the inconsistent case: instead
+// of just returning the request RangeDescriptor, it also returns a slice of
+// additional range descriptors immediately consecutive to the desired
+// RangeDescriptor. This is intended to serve as a sort of caching pre-fetch,
+// so that the requesting nodes can aggressively cache RangeDescriptors which
+// are likely to be desired by their current workload.
 func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) []proto.Intent {
 	if err := keys.ValidateRangeMetaKey(args.Key); err != nil {
 		reply.SetGoError(err)
@@ -337,21 +340,26 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount))
 		return nil
 	}
-	if args.IgnoreIntents {
-		rangeCount = 1 // simplify lookup because we may have to retry to read new
+	consistent := args.ReadConsistency != proto.INCONSISTENT
+	if consistent && args.IgnoreIntents {
+		reply.SetGoError(util.Errorf("can not read consistently and skip intents"))
+		return nil
+	}
+	if args.IgnoreIntents || consistent {
+		// Disable prefetching; in those cases the caller only cares about
+		// a single intent, and the code below simplifies considerably.
+		rangeCount = 1
 	}
 
 	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
 	startKey, endKey := keys.MetaScanBounds(args.Key)
-	// Scan inconsistently. Any intents encountered are bundled up, but other-
-	// wise ignored.
+	// Scan for descriptors.
 	kvs, intents, err := engine.MVCCScan(batch, startKey, endKey, rangeCount,
-		args.Timestamp, false /* !consistent */, args.Txn)
+		args.Timestamp, consistent, args.Txn)
 	if err != nil {
-		// An error here would likely amount to something seriously going
-		// wrong.
+		// An error here is likely a WriteIntentError when reading consistently.
 		reply.SetGoError(err)
 		return nil
 	}
