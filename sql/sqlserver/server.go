@@ -40,11 +40,15 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
+var (
+	allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
+	allMethods       = map[string]sqlwire.Method{
+		sqlwire.Execute.String(): sqlwire.Execute,
+	}
 
-var allMethods = map[string]sqlwire.Method{
-	sqlwire.Execute.String(): sqlwire.Execute,
-}
+	errNoDatabase        = errors.New("no database specified")
+	errEmptyDatabaseName = errors.New("empty database name")
+)
 
 // createArgsAndReply returns allocated request and response pairs
 // according to the specified method. Note that createArgsAndReply
@@ -105,8 +109,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the Request for SQL execution.
-	s.exec(sqlwire.Call{Args: args, Reply: reply})
+	// Send the Request for SQL execution and set the application-level error
+	// on the reply.
+	if err = s.exec(sqlwire.Call{Args: args, Reply: reply}); err != nil {
+		errProto := proto.Error{}
+		errProto.SetResponseGoError(err)
+		reply.Error = &errProto
+	}
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
@@ -119,66 +128,60 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Send forwards the call for further processing.
-func (s *Server) exec(call sqlwire.Call) {
+func (s *Server) exec(call sqlwire.Call) error {
 	req := call.Args
 	resp := call.Reply
 	// Pick up current session state.
 	var session Session
 	if req.Session != nil {
 		if err := gogoproto.Unmarshal(req.Session, &session); err != nil {
-			resp.SetGoError(err)
-			return
+			return err
 		}
 	}
 	stmt, err := parser.Parse(req.Sql)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	switch p := stmt.(type) {
 	case *parser.CreateDatabase:
-		s.CreateDatabase(&session, p, req.Params, resp)
+		err = s.CreateDatabase(&session, p, req.Params, resp)
 	case *parser.CreateTable:
-		s.CreateTable(&session, p, req.Params, resp)
+		err = s.CreateTable(&session, p, req.Params, resp)
 	case *parser.Delete:
-		s.Delete(&session, p, req.Params, resp)
+		err = s.Delete(&session, p, req.Params, resp)
 	case *parser.Insert:
-		s.Insert(&session, p, req.Params, resp)
+		err = s.Insert(&session, p, req.Params, resp)
 	case *parser.Select:
-		s.Select(&session, p, req.Params, resp)
+		err = s.Select(&session, p, req.Params, resp)
 	case *parser.ShowColumns:
-		s.ShowColumns(&session, p, req.Params, resp)
+		err = s.ShowColumns(&session, p, req.Params, resp)
 	case *parser.ShowDatabases:
-		s.ShowDatabases(&session, p, req.Params, resp)
+		err = s.ShowDatabases(&session, p, req.Params, resp)
 	case *parser.ShowIndex:
-		s.ShowIndex(&session, p, req.Params, resp)
+		err = s.ShowIndex(&session, p, req.Params, resp)
 	case *parser.ShowTables:
-		s.ShowTables(&session, p, req.Params, resp)
+		err = s.ShowTables(&session, p, req.Params, resp)
 	case *parser.Update:
-		s.Update(&session, p, req.Params, resp)
+		err = s.Update(&session, p, req.Params, resp)
 	case *parser.Use:
 		s.Use(&session, p, req.Params, resp)
 	default:
-		resp.SetGoError(fmt.Errorf("unknown statement type: %T", stmt))
+		err = fmt.Errorf("unknown statement type: %T", stmt)
 	}
-	// Update session state.
-	if resp.Error != nil {
-		return
-	}
-	payload, err := gogoproto.Marshal(&session)
 	if err != nil {
-		resp.SetGoError(util.Errorf("unable to marshal %+v to protobuf: %s", session, err))
-		return
+		return err
 	}
-	resp.Session = payload
+
+	// Update session state.
+	resp.Session, err = gogoproto.Marshal(&session)
+	return err
 }
 
 // ShowColumns of a table
-func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	var rows []sqlwire.Result_Row
 	for i, col := range desc.Columns {
@@ -198,15 +201,15 @@ func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sql
 			Rows:    rows,
 		},
 	}
+	return nil
 }
 
 // ShowDatabases returns all the databases.
-func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	var rows []sqlwire.Result_Row
 	for _, row := range sr {
@@ -223,14 +226,14 @@ func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args [
 			Rows:    rows,
 		},
 	}
+	return nil
 }
 
 // ShowIndex returns all the indexes for a table.
-func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
@@ -258,27 +261,25 @@ func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire
 			Rows:    rows,
 		},
 	}
+	return nil
 }
 
 // ShowTables returns all the tables.
-func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if p.Name == "" {
 		if session.Database == "" {
-			resp.SetGoError(errors.New("no database specified"))
-			return
+			return errNoDatabase
 		}
 		p.Name = session.Database
 	}
 	dbID, err := s.lookupDatabase(p.Name)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	prefix := keys.MakeNameMetadataKey(dbID, "")
 	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	var rows []sqlwire.Result_Row
 
@@ -296,6 +297,7 @@ func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwi
 			Rows:    rows,
 		},
 	}
+	return nil
 }
 
 // Use sets the database being operated on.
@@ -304,57 +306,46 @@ func (s *Server) Use(session *Session, p *parser.Use, args []sqlwire.Datum, resp
 }
 
 // CreateDatabase creates a database if it doesn't exist.
-func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if p.Name == "" {
-		resp.SetGoError(errors.New("empty database name"))
-		return
+		return errEmptyDatabaseName
 	}
 
 	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, strings.ToLower(p.Name))
 	if gr, err := s.db.Get(nameKey); err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	} else if gr.Exists() {
 		if p.IfNotExists {
-			return
+			return nil
 		}
-		resp.SetGoError(fmt.Errorf("database \"%s\" already exists", p.Name))
-		return
+		return fmt.Errorf("database \"%s\" already exists", p.Name)
 	}
 	ir, err := s.db.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	nsID := uint32(ir.ValueInt() - 1)
-	if err := s.db.CPut(nameKey, nsID, nil); err != nil {
-		// TODO(pmattis): Need to handle if-not-exists here as well.
-		resp.SetGoError(err)
-		return
-	}
+	// TODO(pmattis): Need to handle if-not-exists here as well.
+	return s.db.CPut(nameKey, nsID, nil)
 }
 
 // CreateTable creates a table if it doesn't already exist.
-func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) {
+func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if err := s.normalizeTableName(session.Database, p.Table); err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	dbID, err := s.lookupDatabase(p.Table.Qualifier)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	desc, err := makeTableDesc(p)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	if err := desc.AllocateIDs(); err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	nameKey := keys.MakeNameMetadataKey(dbID, p.Table.Name)
@@ -363,59 +354,49 @@ func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sql
 	// the key already exists, but it seems good to avoid the table ID allocation
 	// in most cases when the table already exists.
 	if gr, err := s.db.Get(nameKey); err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	} else if gr.Exists() {
 		if p.IfNotExists {
-			return
+			return nil
 		}
-		resp.SetGoError(fmt.Errorf("table \"%s\" already exists", p.Table))
-		return
+		return fmt.Errorf("table \"%s\" already exists", p.Table)
 	}
 
 	ir, err := s.db.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 	desc.ID = uint32(ir.ValueInt() - 1)
 
 	// TODO(pmattis): Be cognizant of error messages when this is ported to the
 	// server. The error currently returned below is likely going to be difficult
 	// to interpret.
-	err = s.db.Txn(func(txn *client.Txn) error {
+	// TODO(pmattis): Need to handle if-not-exists here as well.
+	return s.db.Txn(func(txn *client.Txn) error {
 		descKey := keys.MakeDescMetadataKey(desc.ID)
 		b := &client.Batch{}
 		b.CPut(nameKey, descKey, nil)
 		b.Put(descKey, &desc)
 		return txn.Commit(b)
 	})
-	if err != nil {
-		// TODO(pmattis): Need to handle if-not-exists here as well.
-		resp.SetGoError(err)
-		return
-	}
 }
 
 // Delete is unimplemented.
-func (s *Server) Delete(session *Session, p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) {
-	resp.SetGoError(fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p))
+func (s *Server) Delete(session *Session, p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) error {
+	return fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
 // Insert inserts rows into the database.
-func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) {
-
+func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	// Determine which columns we're inserting into.
 	cols, err := s.processColumns(desc, p.Columns)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -428,9 +409,7 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 	// Verify we have at least the columns that are part of the primary key.
 	for i, id := range desc.Indexes[0].ColumnIDs {
 		if _, ok := colMap[id]; !ok {
-			resp.SetGoError(fmt.Errorf("missing \"%s\" primary key column",
-				desc.Indexes[0].ColumnNames[i]))
-			return
+			return fmt.Errorf("missing \"%s\" primary key column", desc.Indexes[0].ColumnNames[i])
 		}
 	}
 
@@ -438,21 +417,18 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 	// generates rows from the values contained within the query.
 	r, err := s.processInsertRows(p.Rows)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	b := &client.Batch{}
 	for _, row := range r {
 		if len(row.Values) != len(cols) {
-			resp.SetGoError(fmt.Errorf("invalid values for columns: %d != %d", len(row.Values), len(cols)))
-			return
+			return fmt.Errorf("invalid values for columns: %d != %d", len(row.Values), len(cols))
 		}
 		indexKey := encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID)
 		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, cols, row.Values, indexKey)
 		if err != nil {
-			resp.SetGoError(err)
-			return
+			return err
 		}
 		for i, val := range row.Values {
 			key := encodeColumnKey(desc, cols[i], primaryKey)
@@ -476,45 +452,35 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 			}
 		}
 	}
-	if err := s.db.Run(b); err != nil {
-		resp.SetGoError(err)
-		return
-	}
+	return s.db.Run(b)
 }
 
 // Select selects rows from a single table.
-func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) {
-
+func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if len(p.Exprs) != 1 {
-		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs))
-		return
+		return fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs)
 	}
 	if _, ok := p.Exprs[0].(*parser.StarExpr); !ok {
-		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported select expr: %s", p.Exprs))
-		return
+		return fmt.Errorf("TODO(pmattis): unsupported select expr: %s", p.Exprs)
 	}
 
 	if len(p.From) != 1 {
-		resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From))
-		return
+		return fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
 	}
 	var desc *structured.TableDescriptor
 	{
 		ate, ok := p.From[0].(*parser.AliasedTableExpr)
 		if !ok {
-			resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From))
-			return
+			return fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
 		}
 		table, ok := ate.Expr.(*parser.TableName)
 		if !ok {
-			resp.SetGoError(fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From))
-			return
+			return fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
 		}
 		var err error
 		desc, err = s.getTableDesc(session.Database, table)
 		if err != nil {
-			resp.SetGoError(err)
-			return
+			return err
 		}
 	}
 
@@ -523,8 +489,7 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 	endKey := startKey.PrefixEnd()
 	sr, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
-		resp.SetGoError(err)
-		return
+		return err
 	}
 
 	// All of the columns for a particular row will be grouped together. We loop
@@ -548,20 +513,17 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 
 		remaining, err := decodeIndexKey(desc, desc.Indexes[0], vals, kv.Key)
 		if err != nil {
-			resp.SetGoError(err)
-			return
+			return err
 		}
 		primaryKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
 
 		_, colID := encoding.DecodeUvarint(remaining)
 		if err != nil {
-			resp.SetGoError(err)
-			return
+			return err
 		}
 		col, err := desc.FindColumnByID(uint32(colID))
 		if err != nil {
-			resp.SetGoError(err)
-			return
+			return err
 		}
 		vals[col.Name] = unmarshalValue(*col, kv)
 
@@ -581,12 +543,12 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 	for i, col := range desc.Columns {
 		resp.Results[0].Columns[i] = col.Name
 	}
+	return nil
 }
 
 // Update is unimplemented.
-func (s *Server) Update(session *Session, p *parser.Update, args []sqlwire.Datum, resp *sqlwire.Response) {
-
-	resp.SetGoError(fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p))
+func (s *Server) Update(session *Session, p *parser.Update, args []sqlwire.Datum, resp *sqlwire.Response) error {
+	return fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
 func (s *Server) getTableDesc(database string, table *parser.TableName) (*structured.TableDescriptor, error) {

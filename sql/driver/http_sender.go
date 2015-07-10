@@ -21,8 +21,6 @@ package driver
 import (
 	"net/url"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
@@ -66,8 +64,7 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
 // which are retryable are retried with backoff in a loop using the
 // default retry options.
-func (s *httpSender) Send(_ context.Context, call sqlwire.Call) {
-	if err := client.HTTPPost(s.ctx, call.Args, call.Reply, call.Args.Method()); err != nil {
-		call.Reply.Header().SetGoError(err)
-	}
+func (s *httpSender) Send(args sqlwire.Request) (sqlwire.Response, error) {
+	reply := sqlwire.Response{}
+	return reply, client.HTTPPost(s.ctx, &args, &reply, args.Method())
 }

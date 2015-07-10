@@ -41,9 +41,9 @@ var defaultRetryOptions = retry.Options{
 
 // Sender is an interface for sending a request to a SQL database backend.
 type Sender interface {
-	// Send invokes the Call.Args.Method with Call.Args and sets the result
-	// in Call.Reply.
-	Send(context.Context, sqlwire.Call)
+	// Send dispatches a `sqlwire.Request` and returns the resulting
+	// `sqlwire.Response` with an optional transmission error.
+	Send(sqlwire.Request) (sqlwire.Response, error)
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions

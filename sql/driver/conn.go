@@ -19,11 +19,8 @@ package driver
 
 import (
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"math"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
@@ -70,15 +67,17 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 
 func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 	// TODO(vivek): Add the args to the Call.
-	return c.send(sqlwire.Call{Args: &sqlwire.Request{RequestHeader: sqlwire.RequestHeader{Session: c.session}, Sql: stmt}, Reply: &sqlwire.Response{}})
+	return c.send(sqlwire.Request{RequestHeader: sqlwire.RequestHeader{Session: c.session}, Sql: stmt})
 }
 
 // Send sends the call to the server.
-func (c *conn) send(call sqlwire.Call) (*rows, error) {
-	c.sender.Send(context.TODO(), call)
-	resp := call.Reply
+func (c *conn) send(args sqlwire.Request) (*rows, error) {
+	resp, err := c.sender.Send(args)
+	if err != nil {
+		return nil, err
+	}
 	if resp.Error != nil {
-		return nil, errors.New(resp.Error.Error())
+		return nil, resp.Error
 	}
 	c.session = resp.Session
 	// Translate into rows
