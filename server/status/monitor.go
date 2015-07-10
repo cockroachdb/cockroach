@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // StoreStatusMonitor monitors the status of a single store on the server.
@@ -209,14 +207,6 @@ func (nsm *NodeStatusMonitor) OnCallSuccess(event *CallSuccessEvent) {
 // method is part of the implementation of NodeEventListener.
 func (nsm *NodeStatusMonitor) OnCallError(event *CallErrorEvent) {
 	atomic.AddInt64(&nsm.callErrors, 1)
-}
-
-// OnTrace receives Trace objects from a node event subscription. This method
-// is part of the implementation of NodeEventListener.
-func (nsm *NodeStatusMonitor) OnTrace(trace *tracer.Trace) {
-	if log.V(2) {
-		log.Infof("received trace:\n%s", trace)
-	}
 }
 
 // rangeDataAccumulator maintains a set of accumulated stats for a set of
