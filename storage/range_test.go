@@ -756,6 +756,64 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 }
 
+// TestRangeNoGossipConfig verifies that certain commands (e.g.,
+// reads, writes in uncommitted transactions) do not trigger gossip.
+func TestRangeNoGossipConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Add a permission for a new key prefix.
+	db1Perm := &proto.PermConfig{
+		Read:  []string{"spencer"},
+		Write: []string{"spencer"},
+	}
+	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
+	raftID := proto.RaftID(1)
+
+	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
+	data, err := gogoproto.Marshal(db1Perm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req1, reply1 := putArgs(key, data, raftID, tc.store.StoreID())
+	req1.Txn = txn
+	req1.Timestamp = txn.Timestamp
+
+	req2, reply2 := endTxnArgs(txn, true /* commit */, raftID, tc.store.StoreID())
+	req2.Timestamp = txn.Timestamp
+
+	req3, reply3 := getArgs(key, raftID, tc.store.StoreID())
+	req3.Timestamp = txn.Timestamp
+
+	calls := []proto.Call{
+		{Args: req1, Reply: reply1},
+		{Args: req2, Reply: reply2},
+		{Args: req3, Reply: reply3},
+	}
+
+	for i, call := range calls {
+		if err := tc.store.ExecuteCmd(tc.rng.context(), call); err != nil {
+			t.Fatal(err)
+		}
+
+		// Information for db1 is not gossiped.
+		info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+		if err != nil {
+			t.Fatal(err)
+		}
+		configMap := info.(PrefixConfigMap)
+		expConfigs := []*PrefixConfig{
+			{proto.KeyMin, nil, &testDefaultPermConfig},
+		}
+		if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+			t.Errorf("%d: expected gossiped configs to be equal %s vs %s",
+				i, configMap, expConfigs)
+		}
+	}
+}
+
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
 func getArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
