@@ -50,7 +50,6 @@ func (c *conn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *conn) Begin() (driver.Tx, error) {
-	c.session = []byte{}
 	return &tx{conn: c}, nil
 }
 
