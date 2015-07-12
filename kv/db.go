@@ -68,6 +68,7 @@ var allPublicMethods = map[string]proto.Method{
 	proto.Delete.String():         proto.Delete,
 	proto.DeleteRange.String():    proto.DeleteRange,
 	proto.Scan.String():           proto.Scan,
+	proto.ReverseScan.String():    proto.ReverseScan,
 	proto.EndTransaction.String(): proto.EndTransaction,
 	proto.Batch.String():          proto.Batch,
 	proto.AdminSplit.String():     proto.AdminSplit,
@@ -96,6 +97,8 @@ func createArgsAndReply(method string) (proto.Request, proto.Response) {
 			return &proto.DeleteRangeRequest{}, &proto.DeleteRangeResponse{}
 		case proto.Scan:
 			return &proto.ScanRequest{}, &proto.ScanResponse{}
+		case proto.ReverseScan:
+			return &proto.ReverseScanRequest{}, &proto.ReverseScanResponse{}
 		case proto.EndTransaction:
 			return &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}
 		case proto.Batch:
@@ -196,6 +199,7 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 		&proto.DeleteRequest{},
 		&proto.DeleteRangeRequest{},
 		&proto.ScanRequest{},
+		&proto.ReverseScanRequest{},
 		&proto.EndTransactionRequest{},
 		&proto.BatchRequest{},
 		&proto.AdminSplitRequest{},

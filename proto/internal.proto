@@ -76,6 +76,7 @@ message RaftCommandUnion {
     MergeRequest merge_response = 15;
     TruncateLogRequest truncate_log = 16;
     LeaderLeaseRequest lease = 17;
+    ReverseScanRequest reverse_scan = 18;
 
     // Other requests. Allow a gap in tag numbers so the previous list can
     // be copy/pasted from RequestUnion.

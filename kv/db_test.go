@@ -114,6 +114,19 @@ func TestKVDBCoverage(t *testing.T) {
 		}
 	}
 
+	// Test reverse scan.
+	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
+		t.Fatal(err)
+	} else if len(rows) != len(keyValues) {
+		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
+	} else {
+		for i, kv := range keyValues {
+			if !bytes.Equal(rows[len(keyValues)-1-i].ValueBytes(), kv.Value.Bytes) {
+				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[len(keyValues)-i].ValueBytes(), kv.Value.Bytes)
+			}
+		}
+	}
+
 	if err := db.DelRange("a", "c"); err != nil {
 		t.Fatal(err)
 	}

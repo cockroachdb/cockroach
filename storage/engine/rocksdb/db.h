@@ -137,6 +137,11 @@ int  DBIterValid(DBIterator* iter);
 // last key.
 void DBIterNext(DBIterator* iter);
 
+// Moves the iterator back to the previous key. After this call,
+// DBIterValid() returns 1 iff the iterator was not positioned at the
+// first key.
+void DBIterPrev(DBIterator* iter);
+
 // Returns the key at the current iterator position. Note that a slice
 // is returned and the memory does not have to be freed.
 DBSlice DBIterKey(DBIterator* iter);

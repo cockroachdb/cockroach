@@ -182,6 +182,30 @@ func ExampleDB_Scan() {
 	// 1: ab=2
 }
 
+func ExampleDB_ReverseScan() {
+	s, db := setup()
+	defer s.Stop()
+
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(b); err != nil {
+		panic(err)
+	}
+	rows, err := db.ReverseScan("ab", "c", 100)
+	if err != nil {
+		panic(err)
+	}
+	for i, row := range rows {
+		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
+	}
+
+	// Output:
+	// 0: bb=3
+	// 1: ab=2
+}
+
 func ExampleDB_Del() {
 	s, db := setup()
 	defer s.Stop()

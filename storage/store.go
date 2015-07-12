@@ -483,34 +483,35 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
 	s.feed.beginScanRanges()
-	if _, err := engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, func(kv proto.KeyValue) (bool, error) {
-		// Only consider range metadata entries; ignore others.
-		_, suffix, _ := keys.DecodeRangeKey(kv.Key)
-		if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
+	if _, err := engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
+		false /* !reverse */, func(kv proto.KeyValue) (bool, error) {
+			// Only consider range metadata entries; ignore others.
+			_, suffix, _ := keys.DecodeRangeKey(kv.Key)
+			if !suffix.Equal(keys.LocalRangeDescriptorSuffix) {
+				return false, nil
+			}
+			var desc proto.RangeDescriptor
+			if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
+				return false, err
+			}
+			rng, err := NewReplica(&desc, s)
+			if err != nil {
+				return false, err
+			}
+			if err = s.addReplicaInternal(rng); err != nil {
+				return false, err
+			}
+			s.feed.registerRange(rng, true /* scan */)
+			// Note that we do not create raft groups at this time; they will be created
+			// on-demand the first time they are needed. This helps reduce the amount of
+			// election-related traffic in a cold start.
+			// Raft initialization occurs when we propose a command on this range or
+			// receive a raft message addressed to it.
+			// TODO(bdarnell): Also initialize raft groups when read leases are needed.
+			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
+			// and initialize those groups.
 			return false, nil
-		}
-		var desc proto.RangeDescriptor
-		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
-			return false, err
-		}
-		rng, err := NewReplica(&desc, s)
-		if err != nil {
-			return false, err
-		}
-		if err = s.addReplicaInternal(rng); err != nil {
-			return false, err
-		}
-		s.feed.registerRange(rng, true /* scan */)
-		// Note that we do not create raft groups at this time; they will be created
-		// on-demand the first time they are needed. This helps reduce the amount of
-		// election-related traffic in a cold start.
-		// Raft initialization occurs when we propose a command on this range or
-		// receive a raft message addressed to it.
-		// TODO(bdarnell): Also initialize raft groups when read leases are needed.
-		// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
-		// and initialize those groups.
-		return false, nil
-	}); err != nil {
+		}); err != nil {
 		return err
 	}
 	s.feed.endScanRanges()

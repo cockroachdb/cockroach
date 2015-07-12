@@ -506,7 +506,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &proto.Replica{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key)
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(call.Args.Header().Key, false)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -671,6 +671,7 @@ func TestVerifyPermissions(t *testing.T) {
 		&proto.DeleteRequest{},
 		&proto.DeleteRangeRequest{},
 		&proto.ScanRequest{},
+		&proto.ReverseScanRequest{},
 		&proto.EndTransactionRequest{},
 		&proto.AdminSplitRequest{},
 		&proto.AdminMergeRequest{},
@@ -928,4 +929,34 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	if !reflect.DeepEqual(existingKVs, reply.Rows) {
 		t.Fatalf("expect get %v, actual get %v", existingKVs, reply.Rows)
 	}
+}
+
+// TestRangeLookupOptionOnReverseScan verifies the lookup range option of a reverse scan
+// request is to be true.
+func TestRangeLookupOptionOnReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+		return []gogoproto.Message{getReply()}, nil
+	}
+
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key, opts lookupOptions) ([]proto.RangeDescriptor, error) {
+			if !opts.useReverseScan {
+				t.Fatalf("expected useReverseScan to be %t", true)
+			}
+			return []proto.RangeDescriptor{testRangeDescriptor}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	call := proto.Call{
+		Args: &proto.ReverseScanRequest{
+			RequestHeader: proto.RequestHeader{EndKey: proto.Key("a")},
+		},
+		Reply: &proto.ReverseScanResponse{},
+	}
+	ds.Send(context.Background(), call)
 }

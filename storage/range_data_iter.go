@@ -136,3 +136,11 @@ func (ri *rangeDataIterator) advance() {
 		}
 	}
 }
+
+func (ri *rangeDataIterator) SeekReverse(key []byte) {
+	panic("Cannot reverse scan rangeDataIterator.")
+}
+
+func (ri *rangeDataIterator) Prev() {
+	panic("Cannot reverse scan rangeDataIterator.")
+}

@@ -59,6 +59,8 @@ class DeleteRangeRequest;
 class DeleteRangeResponse;
 class ScanRequest;
 class ScanResponse;
+class ReverseScanRequest;
+class ReverseScanResponse;
 class EndTransactionRequest;
 class EndTransactionResponse;
 class AdminSplitRequest;
@@ -1932,6 +1934,211 @@ class ScanResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class ReverseScanRequest : public ::google::protobuf::Message {
+ public:
+  ReverseScanRequest();
+  virtual ~ReverseScanRequest();
+
+  ReverseScanRequest(const ReverseScanRequest& from);
+
+  inline ReverseScanRequest& operator=(const ReverseScanRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ReverseScanRequest& default_instance();
+
+  void Swap(ReverseScanRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ReverseScanRequest* New() const { return New(NULL); }
+
+  ReverseScanRequest* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ReverseScanRequest& from);
+  void MergeFrom(const ReverseScanRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ReverseScanRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.RequestHeader header = 1;
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  const ::cockroach::proto::RequestHeader& header() const;
+  ::cockroach::proto::RequestHeader* mutable_header();
+  ::cockroach::proto::RequestHeader* release_header();
+  void set_allocated_header(::cockroach::proto::RequestHeader* header);
+
+  // optional int64 max_results = 2;
+  bool has_max_results() const;
+  void clear_max_results();
+  static const int kMaxResultsFieldNumber = 2;
+  ::google::protobuf::int64 max_results() const;
+  void set_max_results(::google::protobuf::int64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.ReverseScanRequest)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+  inline void set_has_max_results();
+  inline void clear_has_max_results();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::RequestHeader* header_;
+  ::google::protobuf::int64 max_results_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static ReverseScanRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class ReverseScanResponse : public ::google::protobuf::Message {
+ public:
+  ReverseScanResponse();
+  virtual ~ReverseScanResponse();
+
+  ReverseScanResponse(const ReverseScanResponse& from);
+
+  inline ReverseScanResponse& operator=(const ReverseScanResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ReverseScanResponse& default_instance();
+
+  void Swap(ReverseScanResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ReverseScanResponse* New() const { return New(NULL); }
+
+  ReverseScanResponse* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ReverseScanResponse& from);
+  void MergeFrom(const ReverseScanResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ReverseScanResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.ResponseHeader header = 1;
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  const ::cockroach::proto::ResponseHeader& header() const;
+  ::cockroach::proto::ResponseHeader* mutable_header();
+  ::cockroach::proto::ResponseHeader* release_header();
+  void set_allocated_header(::cockroach::proto::ResponseHeader* header);
+
+  // repeated .cockroach.proto.KeyValue rows = 2;
+  int rows_size() const;
+  void clear_rows();
+  static const int kRowsFieldNumber = 2;
+  const ::cockroach::proto::KeyValue& rows(int index) const;
+  ::cockroach::proto::KeyValue* mutable_rows(int index);
+  ::cockroach::proto::KeyValue* add_rows();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue >&
+      rows() const;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue >*
+      mutable_rows();
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.ReverseScanResponse)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::ResponseHeader* header_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue > rows_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static ReverseScanResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class EndTransactionRequest : public ::google::protobuf::Message {
  public:
   EndTransactionRequest();
@@ -2642,6 +2849,13 @@ class RangeLookupRequest : public ::google::protobuf::Message {
   bool ignore_intents() const;
   void set_ignore_intents(bool value);
 
+  // optional bool reverse = 4;
+  bool has_reverse() const;
+  void clear_reverse();
+  static const int kReverseFieldNumber = 4;
+  bool reverse() const;
+  void set_reverse(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.RangeLookupRequest)
  private:
   inline void set_has_header();
@@ -2650,6 +2864,8 @@ class RangeLookupRequest : public ::google::protobuf::Message {
   inline void clear_has_max_ranges();
   inline void set_has_ignore_intents();
   inline void clear_has_ignore_intents();
+  inline void set_has_reverse();
+  inline void clear_has_reverse();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -2657,6 +2873,7 @@ class RangeLookupRequest : public ::google::protobuf::Message {
   ::cockroach::proto::RequestHeader* header_;
   ::google::protobuf::int32 max_ranges_;
   bool ignore_intents_;
+  bool reverse_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -4492,6 +4709,7 @@ class RequestUnion : public ::google::protobuf::Message {
     kMerge = 17,
     kTruncate = 18,
     kLeaderLease = 19,
+    kReverseScan = 20,
     VALUE_NOT_SET = 0,
   };
 
@@ -4707,6 +4925,15 @@ class RequestUnion : public ::google::protobuf::Message {
   ::cockroach::proto::LeaderLeaseRequest* release_leader_lease();
   void set_allocated_leader_lease(::cockroach::proto::LeaderLeaseRequest* leader_lease);
 
+  // optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
+  bool has_reverse_scan() const;
+  void clear_reverse_scan();
+  static const int kReverseScanFieldNumber = 20;
+  const ::cockroach::proto::ReverseScanRequest& reverse_scan() const;
+  ::cockroach::proto::ReverseScanRequest* mutable_reverse_scan();
+  ::cockroach::proto::ReverseScanRequest* release_reverse_scan();
+  void set_allocated_reverse_scan(::cockroach::proto::ReverseScanRequest* reverse_scan);
+
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.RequestUnion)
  private:
@@ -4729,6 +4956,7 @@ class RequestUnion : public ::google::protobuf::Message {
   inline void set_has_merge();
   inline void set_has_truncate();
   inline void set_has_leader_lease();
+  inline void set_has_reverse_scan();
 
   inline bool has_value() const;
   void clear_value();
@@ -4758,6 +4986,7 @@ class RequestUnion : public ::google::protobuf::Message {
     ::cockroach::proto::MergeRequest* merge_;
     ::cockroach::proto::TruncateLogRequest* truncate_;
     ::cockroach::proto::LeaderLeaseRequest* leader_lease_;
+    ::cockroach::proto::ReverseScanRequest* reverse_scan_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -4813,6 +5042,7 @@ class ResponseUnion : public ::google::protobuf::Message {
     kMerge = 17,
     kTruncate = 18,
     kLeaderLease = 19,
+    kReverseScan = 20,
     VALUE_NOT_SET = 0,
   };
 
@@ -5028,6 +5258,15 @@ class ResponseUnion : public ::google::protobuf::Message {
   ::cockroach::proto::LeaderLeaseResponse* release_leader_lease();
   void set_allocated_leader_lease(::cockroach::proto::LeaderLeaseResponse* leader_lease);
 
+  // optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
+  bool has_reverse_scan() const;
+  void clear_reverse_scan();
+  static const int kReverseScanFieldNumber = 20;
+  const ::cockroach::proto::ReverseScanResponse& reverse_scan() const;
+  ::cockroach::proto::ReverseScanResponse* mutable_reverse_scan();
+  ::cockroach::proto::ReverseScanResponse* release_reverse_scan();
+  void set_allocated_reverse_scan(::cockroach::proto::ReverseScanResponse* reverse_scan);
+
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.ResponseUnion)
  private:
@@ -5050,6 +5289,7 @@ class ResponseUnion : public ::google::protobuf::Message {
   inline void set_has_merge();
   inline void set_has_truncate();
   inline void set_has_leader_lease();
+  inline void set_has_reverse_scan();
 
   inline bool has_value() const;
   void clear_value();
@@ -5079,6 +5319,7 @@ class ResponseUnion : public ::google::protobuf::Message {
     ::cockroach::proto::MergeResponse* merge_;
     ::cockroach::proto::TruncateLogResponse* truncate_;
     ::cockroach::proto::LeaderLeaseResponse* leader_lease_;
+    ::cockroach::proto::ReverseScanResponse* reverse_scan_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -6876,6 +7117,154 @@ ScanResponse::mutable_rows() {
 
 // -------------------------------------------------------------------
 
+// ReverseScanRequest
+
+// optional .cockroach.proto.RequestHeader header = 1;
+inline bool ReverseScanRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ReverseScanRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ReverseScanRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ReverseScanRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::RequestHeader& ReverseScanRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReverseScanRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::RequestHeader* ReverseScanRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::proto::RequestHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ReverseScanRequest.header)
+  return header_;
+}
+inline ::cockroach::proto::RequestHeader* ReverseScanRequest::release_header() {
+  clear_has_header();
+  ::cockroach::proto::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void ReverseScanRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ReverseScanRequest.header)
+}
+
+// optional int64 max_results = 2;
+inline bool ReverseScanRequest::has_max_results() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ReverseScanRequest::set_has_max_results() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ReverseScanRequest::clear_has_max_results() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ReverseScanRequest::clear_max_results() {
+  max_results_ = GOOGLE_LONGLONG(0);
+  clear_has_max_results();
+}
+inline ::google::protobuf::int64 ReverseScanRequest::max_results() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReverseScanRequest.max_results)
+  return max_results_;
+}
+inline void ReverseScanRequest::set_max_results(::google::protobuf::int64 value) {
+  set_has_max_results();
+  max_results_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.ReverseScanRequest.max_results)
+}
+
+// -------------------------------------------------------------------
+
+// ReverseScanResponse
+
+// optional .cockroach.proto.ResponseHeader header = 1;
+inline bool ReverseScanResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ReverseScanResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ReverseScanResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ReverseScanResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::ResponseHeader& ReverseScanResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReverseScanResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::ResponseHeader* ReverseScanResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::proto::ResponseHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ReverseScanResponse.header)
+  return header_;
+}
+inline ::cockroach::proto::ResponseHeader* ReverseScanResponse::release_header() {
+  clear_has_header();
+  ::cockroach::proto::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void ReverseScanResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ReverseScanResponse.header)
+}
+
+// repeated .cockroach.proto.KeyValue rows = 2;
+inline int ReverseScanResponse::rows_size() const {
+  return rows_.size();
+}
+inline void ReverseScanResponse::clear_rows() {
+  rows_.Clear();
+}
+inline const ::cockroach::proto::KeyValue& ReverseScanResponse::rows(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReverseScanResponse.rows)
+  return rows_.Get(index);
+}
+inline ::cockroach::proto::KeyValue* ReverseScanResponse::mutable_rows(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ReverseScanResponse.rows)
+  return rows_.Mutable(index);
+}
+inline ::cockroach::proto::KeyValue* ReverseScanResponse::add_rows() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.ReverseScanResponse.rows)
+  return rows_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue >&
+ReverseScanResponse::rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.ReverseScanResponse.rows)
+  return rows_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::KeyValue >*
+ReverseScanResponse::mutable_rows() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.ReverseScanResponse.rows)
+  return &rows_;
+}
+
+// -------------------------------------------------------------------
+
 // EndTransactionRequest
 
 // optional .cockroach.proto.RequestHeader header = 1;
@@ -7477,6 +7866,30 @@ inline void RangeLookupRequest::set_ignore_intents(bool value) {
   set_has_ignore_intents();
   ignore_intents_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.RangeLookupRequest.ignore_intents)
+}
+
+// optional bool reverse = 4;
+inline bool RangeLookupRequest::has_reverse() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void RangeLookupRequest::set_has_reverse() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void RangeLookupRequest::clear_has_reverse() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void RangeLookupRequest::clear_reverse() {
+  reverse_ = false;
+  clear_has_reverse();
+}
+inline bool RangeLookupRequest::reverse() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeLookupRequest.reverse)
+  return reverse_;
+}
+inline void RangeLookupRequest::set_reverse(bool value) {
+  set_has_reverse();
+  reverse_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeLookupRequest.reverse)
 }
 
 // -------------------------------------------------------------------
@@ -9647,6 +10060,52 @@ inline void RequestUnion::set_allocated_leader_lease(::cockroach::proto::LeaderL
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.leader_lease)
 }
 
+// optional .cockroach.proto.ReverseScanRequest reverse_scan = 20;
+inline bool RequestUnion::has_reverse_scan() const {
+  return value_case() == kReverseScan;
+}
+inline void RequestUnion::set_has_reverse_scan() {
+  _oneof_case_[0] = kReverseScan;
+}
+inline void RequestUnion::clear_reverse_scan() {
+  if (has_reverse_scan()) {
+    delete value_.reverse_scan_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::ReverseScanRequest& RequestUnion::reverse_scan() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestUnion.reverse_scan)
+  return has_reverse_scan() ? *value_.reverse_scan_
+                      : ::cockroach::proto::ReverseScanRequest::default_instance();
+}
+inline ::cockroach::proto::ReverseScanRequest* RequestUnion::mutable_reverse_scan() {
+  if (!has_reverse_scan()) {
+    clear_value();
+    set_has_reverse_scan();
+    value_.reverse_scan_ = new ::cockroach::proto::ReverseScanRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RequestUnion.reverse_scan)
+  return value_.reverse_scan_;
+}
+inline ::cockroach::proto::ReverseScanRequest* RequestUnion::release_reverse_scan() {
+  if (has_reverse_scan()) {
+    clear_has_value();
+    ::cockroach::proto::ReverseScanRequest* temp = value_.reverse_scan_;
+    value_.reverse_scan_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void RequestUnion::set_allocated_reverse_scan(::cockroach::proto::ReverseScanRequest* reverse_scan) {
+  clear_value();
+  if (reverse_scan) {
+    set_has_reverse_scan();
+    value_.reverse_scan_ = reverse_scan;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestUnion.reverse_scan)
+}
+
 inline bool RequestUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -10534,6 +10993,52 @@ inline void ResponseUnion::set_allocated_leader_lease(::cockroach::proto::Leader
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.leader_lease)
 }
 
+// optional .cockroach.proto.ReverseScanResponse reverse_scan = 20;
+inline bool ResponseUnion::has_reverse_scan() const {
+  return value_case() == kReverseScan;
+}
+inline void ResponseUnion::set_has_reverse_scan() {
+  _oneof_case_[0] = kReverseScan;
+}
+inline void ResponseUnion::clear_reverse_scan() {
+  if (has_reverse_scan()) {
+    delete value_.reverse_scan_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::ReverseScanResponse& ResponseUnion::reverse_scan() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ResponseUnion.reverse_scan)
+  return has_reverse_scan() ? *value_.reverse_scan_
+                      : ::cockroach::proto::ReverseScanResponse::default_instance();
+}
+inline ::cockroach::proto::ReverseScanResponse* ResponseUnion::mutable_reverse_scan() {
+  if (!has_reverse_scan()) {
+    clear_value();
+    set_has_reverse_scan();
+    value_.reverse_scan_ = new ::cockroach::proto::ReverseScanResponse;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ResponseUnion.reverse_scan)
+  return value_.reverse_scan_;
+}
+inline ::cockroach::proto::ReverseScanResponse* ResponseUnion::release_reverse_scan() {
+  if (has_reverse_scan()) {
+    clear_has_value();
+    ::cockroach::proto::ReverseScanResponse* temp = value_.reverse_scan_;
+    value_.reverse_scan_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void ResponseUnion::set_allocated_reverse_scan(::cockroach::proto::ReverseScanResponse* reverse_scan) {
+  clear_value();
+  if (reverse_scan) {
+    set_has_reverse_scan();
+    value_.reverse_scan_ = reverse_scan;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ResponseUnion.reverse_scan)
+}
+
 inline bool ResponseUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -10698,6 +11203,10 @@ BatchResponse::mutable_responses() {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

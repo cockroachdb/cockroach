@@ -1232,6 +1232,10 @@ void DBIterNext(DBIterator* iter) {
   iter->rep->Next();
 }
 
+void DBIterPrev(DBIterator* iter){
+	iter->rep->Prev();
+}
+
 DBSlice DBIterKey(DBIterator* iter) {
   return ToDBSlice(iter->rep->key());
 }

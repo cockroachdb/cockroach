@@ -98,9 +98,9 @@ func setupMultipleRanges(t *testing.T, splitAt string) (*server.TestServer, *cli
 	return s, db
 }
 
-// TestMultiRangeScan verifies that Scan, DeleteRange and ResolveIntentRange
-// work across ranges.
-func TestMultiRangeScanDeleteResolve(t *testing.T) {
+// TestMultiRangeScanReverseScanDeleteResolve verifies that Scan, ReverseScan,
+// DeleteRange and ResolveIntentRange work across ranges.
+func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
@@ -117,6 +117,14 @@ func TestMultiRangeScanDeleteResolve(t *testing.T) {
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
+
+	// Scan in reverse order to retrieve the keys just written.
+	if rows, err := db.ReverseScan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(func(txn *client.Txn) error {
@@ -132,12 +140,19 @@ func TestMultiRangeScanDeleteResolve(t *testing.T) {
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
 	}
+
+	// ReverseScan consistently to make sure the intents are gone.
+	if rows, err := db.ReverseScan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 0 {
+		t.Errorf("expected 0 rows; got %d", l)
+	}
 }
 
-// TestMultiRangeScanInconsistent verifies that a scan across ranges
-// that doesn't require read consistency will set a timestamp using
-// the clock local to the distributed sender.
-func TestMultiRangeScanInconsistent(t *testing.T) {
+// TestMultiRangeScanReverseScanInconsistent verifies that a scan/reverse_scan
+// across ranges that doesn't require read consistency will set a timestamp
+// using the clock local to the distributed sender.
+func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
@@ -158,13 +173,15 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 		log.Infof("%d: %s", i, b.Results[i].Rows[0].Timestamp)
 	}
 
-	// Do an inconsistent scan from a new dist sender and verify it does
-	// the read at its local clock and doesn't receive an
+	// Do an inconsistent scan/reverse_scan from a new dist sender and verify
+	// it does the read at its local clock and doesn't receive an
 	// OpRequiresTxnError. We set the local clock to the timestamp of
 	// the first key to verify it's used to read only key "a".
 	manual := hlc.NewManualClock(ts[1].UnixNano() - 1)
 	clock := hlc.NewClock(manual.UnixNano)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
+
+	// Scan
 	call := proto.ScanCall(proto.Key("a"), proto.Key("c"), 0)
 	sr := call.Reply.(*proto.ScanResponse)
 	sa := call.Args.(*proto.ScanRequest)
@@ -180,10 +197,131 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	if key := string(sr.Rows[0].Key); keys[0] != key {
 		t.Errorf("expected key %q; got %q", keys[0], key)
 	}
+
+	// ReverseScan
+	call = proto.ReverseScanCall(proto.Key("a"), proto.Key("c"), 0)
+	rsr := call.Reply.(*proto.ReverseScanResponse)
+	rsa := call.Args.(*proto.ReverseScanRequest)
+	rsa.ReadConsistency = proto.INCONSISTENT
+	rsa.User = security.RootUser
+	ds.Send(context.Background(), call)
+	if err := rsr.GoError(); err != nil {
+		t.Fatal(err)
+	}
+	if l := len(rsr.Rows); l != 1 {
+		t.Fatalf("expected 1 row; got %d", l)
+	}
+	if key := string(rsr.Rows[0].Key); keys[0] != key {
+		t.Errorf("expected key %q; got %q", keys[0], key)
+	}
 }
 
-// TestStartEqualsEndKeyScan verifies that specifying start==end on scan
-// returns an empty set.
+func initReverseScanTestEvn(t *testing.T) (*server.TestServer, *client.DB) {
+	s := server.StartTestServer(t)
+	db := createTestClient(t, s.ServingAddr())
+
+	// Set multiple ranges : ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff") .
+	for _, key := range []string{"b", "e", "g"} {
+		// Split the keyspace at the given key.
+		if err := db.AdminSplit(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Write keys before, at, and after the split key.
+	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return s, db
+}
+
+// TestSingleRangeReverseScan verifies that ReverseScan gets the right results
+// on single range.
+func TestSingleRangeReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := initReverseScanTestEvn(t)
+	defer s.Stop()
+
+	// Condition 1: Request.EndKey is in the middle of the range.
+	if rows, err := db.ReverseScan("b", "d", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 2 {
+		t.Errorf("expected 2 rows; got %d", l)
+	}
+	// Condition 2: Request.EndKey is equal to the EndKey of the range.
+	if rows, err := db.ReverseScan("e", "g", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 2 {
+		t.Errorf("expected 2 rows; got %d", l)
+	}
+	// Condition 3: Test proto.KeyMax
+	if rows, err := db.ReverseScan("g", proto.KeyMax, 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 2 {
+		t.Errorf("expected 2 rows; got %d", l)
+	}
+	// Condition 4: Test keys.SystemMax
+	if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 1 {
+		t.Errorf("expected 1 row; got %d", l)
+	}
+}
+
+// TestMultiRangeReverseScan verifies that ReverseScan gets the right results
+// cross multiple ranges.
+func TestMultiRangeReverseScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := initReverseScanTestEvn(t)
+	defer s.Stop()
+
+	// Condition 1: Request.EndKey is in the middle of the range.
+	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+	// Condition 2: Request.EndKey is equal to the EndKey of the range.
+	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+}
+
+// TestReverseScanWithSplitAndMerge verifies that ReverseScan gets the right results
+// cross multiple ranges encounter with range split and merge.
+func TestReverseScanWithSplitAndMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := initReverseScanTestEvn(t)
+	defer s.Stop()
+
+	// Condition 1: encounter with range split.
+	// Split the range ["b", "e") at "c".
+	if err := db.AdminSplit("c"); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+
+	// Condition 2: encounter with range merge .
+	// Merge the range ["e", "g") and ["g", "\xff\xff") .
+	if err := db.AdminMerge("g"); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+}
+
+// TestStartEqualsEndKeyScan verifies that specifying start==end on
+// scan/reverse_scan returns an error.
 func TestStartEqualsEndKeyScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
@@ -197,6 +335,10 @@ func TestStartEqualsEndKeyScan(t *testing.T) {
 
 	if _, err := db.Scan("a", "a", 0); err == nil {
 		t.Fatalf("expected error on scan with startkey == endkey")
+	}
+
+	if _, err := db.ReverseScan("a", "a", 0); err == nil {
+		t.Fatalf("expected error on reverse scan with startkey == endkey")
 	}
 }
 

@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+
+	"github.com/cockroachdb/cockroach/keys"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -315,4 +317,91 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	close(waitSecondGet)
 	<-waitTxnComplete
+}
+
+// TestInternalRangeLookupUseReverse tests whether the results and the results count
+// are correct when scanning in reverse order.
+func TestInternalRangeLookupUseReverse(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Init test ranges: ["1" , "a"), ["a" , "c"), ["c" , "e"), ["e" , "g") and ["g" , "\xff\xff")
+	splits := []proto.AdminSplitRequest{
+		adminSplitArgs(proto.Key("g"), proto.Key("g"), 1, store.StoreID()),
+		adminSplitArgs(proto.Key("e"), proto.Key("e"), 1, store.StoreID()),
+		adminSplitArgs(proto.Key("c"), proto.Key("c"), 1, store.StoreID()),
+		adminSplitArgs(proto.Key("a"), proto.Key("a"), 1, store.StoreID()),
+		adminSplitArgs(proto.Key("1"), proto.Key("1"), 1, store.StoreID()),
+	}
+
+	for _, split := range splits {
+		_, err := store.ExecuteCmd(context.Background(), &split)
+		if err != nil {
+			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, err)
+		}
+	}
+
+	// Test cases.
+	testCases := []struct {
+		request  *proto.RangeLookupRequest
+		expected []proto.RangeDescriptor
+	}{
+		// Test key in the middle of the range.
+		{
+			request: &proto.RangeLookupRequest{
+				RequestHeader: proto.RequestHeader{
+					Key:             keys.RangeMetaKey(proto.Key("f")),
+					RangeID:         1,
+					Replica:         proto.Replica{StoreID: store.StoreID()},
+					ReadConsistency: proto.INCONSISTENT,
+				},
+				MaxRanges: 2,
+				Reverse:   true,
+			},
+			// ["e" , "g") and ["c" , "e")
+			expected: []proto.RangeDescriptor{
+				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
+				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+			},
+		},
+		// Test key in the end key of the range.
+		{
+			request: &proto.RangeLookupRequest{
+				RequestHeader: proto.RequestHeader{
+					Key:             keys.RangeMetaKey(proto.Key("g")),
+					RangeID:         1,
+					Replica:         proto.Replica{StoreID: store.StoreID()},
+					ReadConsistency: proto.INCONSISTENT,
+				},
+				MaxRanges: 3,
+				Reverse:   true,
+			},
+			// ["e" , "g"), ["c" , "e") and ["a" , "c")
+			expected: []proto.RangeDescriptor{
+				{StartKey: proto.Key("e"), EndKey: proto.Key("g")},
+				{StartKey: proto.Key("c"), EndKey: proto.Key("e")},
+				{StartKey: proto.Key("a"), EndKey: proto.Key("c")},
+			},
+		},
+	}
+
+	for _, test := range testCases {
+		resp, err := store.ExecuteCmd(context.Background(), test.request)
+		if err != nil {
+			t.Fatalf("InternalRangeLookup error: %s", err)
+		}
+
+		rlReply := resp.(*proto.RangeLookupResponse)
+		// Checks the results count.
+		if int32(len(rlReply.Ranges)) != test.request.MaxRanges {
+			t.Fatalf("returned results count, expected %d,but got %d", test.request.MaxRanges, len(rlReply.Ranges))
+		}
+		// Checks the range descriptors.
+		for i, rng := range test.expected {
+			if !(rng.StartKey.Equal(rlReply.Ranges[i].StartKey) && rng.EndKey.Equal(rlReply.Ranges[i].EndKey)) {
+				t.Fatalf("returned range is not correct, expected %v ,but got %v", rng, rlReply.Ranges[i])
+			}
+		}
+	}
 }

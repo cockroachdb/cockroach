@@ -268,7 +268,8 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 
 // lookupOptions capture additional options to pass to RangeLookup.
 type lookupOptions struct {
-	ignoreIntents bool
+	ignoreIntents  bool
+	useReverseScan bool
 }
 
 // rangeLookup dispatches an RangeLookup request for the given
@@ -290,6 +291,7 @@ func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 		},
 		MaxRanges:     ds.rangeLookupMaxRanges,
 		IgnoreIntents: options.ignoreIntents,
+		Reverse:       options.useReverseScan,
 	}
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
@@ -493,15 +495,40 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 		options.ignoreIntents = pushArgs.RangeLookup
 	}
 
-	desc, err := ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key, options)
+	var desc *proto.RangeDescriptor
+	var err error
+	_, isReverseScan := call.Args.(*proto.ReverseScanRequest)
+	if !isReverseScan {
+		desc, err = ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key, options)
+	} else {
+		options.useReverseScan = true
+		desc, err = ds.rangeCache.LookupRangeDescriptor(call.Args.Header().EndKey, options)
+	}
+
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// Checks whether need to get next range descriptor.
+	needAnother := func(desc *proto.RangeDescriptor, isReverseScan bool) bool {
+		if isReverseScan {
+			return call.Args.Header().Key.Less(desc.StartKey)
+		}
+		return desc.EndKey.Less(call.Args.Header().EndKey)
+	}
+
+	// Gets the next range lookup key.
+	getNextKey := func(desc *proto.RangeDescriptor, isReverseScan bool) proto.Key {
+		if isReverseScan {
+			return desc.StartKey
+		}
+		return desc.EndKey
 	}
 
 	var descNext *proto.RangeDescriptor
 	// If the request accesses keys beyond the end of this range,
 	// get the descriptor of the adjacent range to address next.
-	if desc.EndKey.Less(call.Args.Header().EndKey) {
+	if needAnother(desc, isReverseScan) {
 		if _, ok := call.Reply.(proto.Combinable); !ok {
 			return nil, nil, util.Error("illegal cross-range operation")
 		}
@@ -516,7 +543,7 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 		// This next lookup is likely for free since we've read the
 		// previous descriptor and range lookups use cache
 		// prefetching.
-		descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey, options)
+		descNext, err = ds.rangeCache.LookupRangeDescriptor(getNextKey(desc, isReverseScan), options)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -532,11 +559,19 @@ func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *
 func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc *proto.RangeDescriptor) (proto.Response, error) {
 	defer trace.Epoch("sending RPC")()
 	// Truncate the request to our current range, making sure not to
-	// touch it unless we have to (it is illegal to send EndKey on
-	// commands which do not operate on ranges).
-	if endKey := args.Header().EndKey; endKey != nil && !endKey.Less(desc.EndKey) {
-		defer func(k proto.Key) { args.Header().EndKey = k }(endKey)
-		args.Header().EndKey = desc.EndKey
+	// touch it unless we have to
+	if _, isReverseScan := args.(*proto.ReverseScanRequest); isReverseScan {
+		// Truncate to the current range if the reverse scan crosses range boundaries.
+		if key := args.Header().Key; key != nil && key.Less(desc.StartKey) {
+			defer func(k proto.Key) { args.Header().Key = k }(key)
+			args.Header().Key = desc.StartKey
+		}
+	} else {
+		// It is illegal to send EndKey on commands which do not operate on ranges.
+		if endKey := args.Header().EndKey; endKey != nil && !endKey.Less(desc.EndKey) {
+			defer func(k proto.Key) { args.Header().EndKey = k }(endKey)
+			args.Header().EndKey = desc.EndKey
+		}
 	}
 	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
 
@@ -601,10 +636,17 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			boundedArgs.SetBound(bound)
 		}(boundedArgs.GetBound())
 	}
-
-	defer func(key proto.Key) {
-		args.Header().Key = key
-	}(args.Header().Key)
+	_, isReverseScan := call.Args.(*proto.ReverseScanRequest)
+	// Restore to the original range if the scan/reverse_scan crosses range boundaries.
+	if isReverseScan {
+		defer func(key proto.Key) {
+			args.Header().EndKey = key
+		}(args.Header().EndKey)
+	} else {
+		defer func(key proto.Key) {
+			args.Header().Key = key
+		}(args.Header().Key)
+	}
 
 	first := true
 
@@ -636,6 +678,12 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			}
 			// At this point reply.Header().Error may be non-nil!
 			curReply, err = ds.sendAttempt(trace, args, desc)
+
+			descKey := args.Header().Key
+			if isReverseScan {
+				descKey = args.Header().EndKey
+			}
+
 			if err != nil {
 				trace.Event(fmt.Sprintf("send error: %T", err))
 				// For an RPC error to occur, we must've been unable to contact any
@@ -646,7 +694,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 				// TODO(tschottdorf): If a replica group goes dead, this will cause clients
 				// to put high read pressure on the first range, so there should be some
 				// rate limiting here.
-				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+				ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverseScan)
 			} else {
 				err = curReply.Header().GoError()
 			}
@@ -666,7 +714,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 				trace.Event(fmt.Sprintf("reply error: %T", err))
 				// Range descriptor might be out of date - evict it.
-				ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+				ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverseScan)
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
 				if log.V(1) {
@@ -684,7 +732,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 						if log.V(1) {
 							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
 						}
-						ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key, desc)
+						ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, isReverseScan)
 					}
 				} else {
 					newLeader = &proto.Replica{}
@@ -755,14 +803,21 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 			break
 		}
 
-		// In next iteration, query next range.
-		// It's important that we use the EndKey of the current descriptor
-		// as opposed to the StartKey of the next one: if the former is stale,
-		// it's possible that the next range has since merged the subsequent
-		// one, and unless both descriptors are stale, the next descriptor's
-		// StartKey would move us to the beginning of the current range,
-		// resulting in a duplicate scan.
-		args.Header().Key = desc.EndKey
+		if isReverseScan {
+			// In next iteration, query previous range.
+			// We use the StartKey of the current descriptor as opposed to the
+			// EndKey of the previous one.
+			args.Header().EndKey = desc.StartKey
+		} else {
+			// In next iteration, query next range.
+			// It's important that we use the EndKey of the current descriptor
+			// as opposed to the StartKey of the next one: if the former is stale,
+			// it's possible that the next range has since merged the subsequent
+			// one, and unless both descriptors are stale, the next descriptor's
+			// StartKey would move us to the beginning of the current range,
+			// resulting in a duplicate scan.
+			args.Header().Key = desc.EndKey
+		}
 		trace.Event("querying next range")
 	}
 }

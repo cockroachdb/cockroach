@@ -206,6 +206,7 @@ type RaftCommandUnion struct {
 	MergeResponse      *MergeRequest              `protobuf:"bytes,15,opt,name=merge_response" json:"merge_response,omitempty"`
 	TruncateLog        *TruncateLogRequest        `protobuf:"bytes,16,opt,name=truncate_log" json:"truncate_log,omitempty"`
 	Lease              *LeaderLeaseRequest        `protobuf:"bytes,17,opt,name=lease" json:"lease,omitempty"`
+	ReverseScan        *ReverseScanRequest        `protobuf:"bytes,18,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
 	// Other requests. Allow a gap in tag numbers so the previous list can
 	// be copy/pasted from RequestUnion.
 	Batch            *BatchRequest `protobuf:"bytes,30,opt,name=batch" json:"batch,omitempty"`
@@ -331,6 +332,13 @@ func (m *RaftCommandUnion) GetTruncateLog() *TruncateLogRequest {
 func (m *RaftCommandUnion) GetLease() *LeaderLeaseRequest {
 	if m != nil {
 		return m.Lease
+	}
+	return nil
+}
+
+func (m *RaftCommandUnion) GetReverseScan() *ReverseScanRequest {
+	if m != nil {
+		return m.ReverseScan
 	}
 	return nil
 }
@@ -1635,6 +1643,36 @@ func (m *RaftCommandUnion) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 18:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReverseScan", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ReverseScan == nil {
+				m.ReverseScan = &ReverseScanRequest{}
+			}
+			if err := m.ReverseScan.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 30:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Batch", wireType)
@@ -2674,6 +2712,9 @@ func (this *RaftCommandUnion) GetValue() interface{} {
 	if this.Lease != nil {
 		return this.Lease
 	}
+	if this.ReverseScan != nil {
+		return this.ReverseScan
+	}
 	if this.Batch != nil {
 		return this.Batch
 	}
@@ -2716,6 +2757,8 @@ func (this *RaftCommandUnion) SetValue(value interface{}) bool {
 		this.TruncateLog = vt
 	case *LeaderLeaseRequest:
 		this.Lease = vt
+	case *ReverseScanRequest:
+		this.ReverseScan = vt
 	case *BatchRequest:
 		this.Batch = vt
 	default:
@@ -2861,6 +2904,10 @@ func (m *RaftCommandUnion) Size() (n int) {
 	}
 	if m.Lease != nil {
 		l = m.Lease.Size()
+		n += 2 + l + sovInternal(uint64(l))
+	}
+	if m.ReverseScan != nil {
+		l = m.ReverseScan.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
 	if m.Batch != nil {
@@ -3364,17 +3411,29 @@ func (m *RaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n32
 	}
+	if m.ReverseScan != nil {
+		data[i] = 0x92
+		i++
+		data[i] = 0x1
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.ReverseScan.Size()))
+		n33, err := m.ReverseScan.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n33
+	}
 	if m.Batch != nil {
 		data[i] = 0xf2
 		i++
 		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.Batch.Size()))
-		n33, err := m.Batch.MarshalTo(data[i:])
+		n34, err := m.Batch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n33
+		i += n34
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -3406,11 +3465,11 @@ func (m *RaftCommand) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x1a
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.Cmd.Size()))
-	n34, err := m.Cmd.MarshalTo(data[i:])
+	n35, err := m.Cmd.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n34
+	i += n35
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3592,11 +3651,11 @@ func (m *RaftSnapshotData) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.RangeDescriptor.Size()))
-	n35, err := m.RangeDescriptor.MarshalTo(data[i:])
+	n36, err := m.RangeDescriptor.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n35
+	i += n36
 	if len(m.KV) > 0 {
 		for _, msg := range m.KV {
 			data[i] = 0x12
