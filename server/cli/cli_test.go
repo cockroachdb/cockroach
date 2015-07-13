@@ -76,6 +76,8 @@ func Example_basic() {
 	c.Run("kv inc c 1")
 	c.Run("kv inc c 10")
 	c.Run("kv inc c 100")
+	c.Run("kv inc c -- -60")
+	c.Run("kv inc c -- -9")
 	c.Run("kv scan")
 	c.Run("kv inc c b")
 	c.Run("quit")
@@ -96,9 +98,13 @@ func Example_basic() {
 	// 11
 	// kv inc c 100
 	// 111
+	// kv inc c -- -60
+	// 51
+	// kv inc c -- -9
+	// 42
 	// kv scan
 	// "b"	"2"
-	// "c"	"\x00\x00\x00\x00\x00\x00\x00o"
+	// "c"	"\x00\x00\x00\x00\x00\x00\x00*"
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
