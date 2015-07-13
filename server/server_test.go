@@ -32,8 +32,8 @@ import (
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -315,7 +315,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		Reply: &proto.GetResponse{},
 	}
-	get.Args.Header().User = storage.UserRoot
+	get.Args.Header().User = security.RootUser
 	get.Args.Header().EndKey = writes[len(writes)-1]
 	tds.Send(context.Background(), get)
 	if err := get.Reply.Header().GoError(); err == nil {
@@ -324,7 +324,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	var call proto.Call
 	for i, k := range writes {
 		call = proto.PutCall(k, proto.Value{Bytes: k})
-		call.Args.Header().User = storage.UserRoot
+		call.Args.Header().User = security.RootUser
 		tds.Send(context.Background(), call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
@@ -333,7 +333,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
 		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-		scan.Args.Header().User = storage.UserRoot
+		scan.Args.Header().User = security.RootUser
 		tds.Send(context.Background(), scan)
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
@@ -349,7 +349,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	del := proto.Call{
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
-				User:      storage.UserRoot,
+				User:      security.RootUser,
 				Key:       writes[0],
 				EndKey:    proto.Key(writes[len(writes)-1]).Next(),
 				Timestamp: call.Reply.Header().Timestamp,
@@ -371,7 +371,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
-	scan.Args.Header().User = storage.UserRoot
+	scan.Args.Header().User = security.RootUser
 	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
 	tds.Send(context.Background(), scan)
 	if err := scan.Reply.Header().GoError(); err != nil {
@@ -414,7 +414,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		var call proto.Call
 		for _, k := range tc.keys {
 			call = proto.PutCall(k, proto.Value{Bytes: k})
-			call.Args.Header().User = storage.UserRoot
+			call.Args.Header().User = security.RootUser
 			tds.Send(context.Background(), call)
 			if err := call.Reply.Header().GoError(); err != nil {
 				t.Fatal(err)
@@ -428,7 +428,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				scan := proto.ScanCall(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 					int64(maxResults))
 				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-				scan.Args.Header().User = storage.UserRoot
+				scan.Args.Header().User = security.RootUser
 				tds.Send(context.Background(), scan)
 				if err := scan.Reply.Header().GoError(); err != nil {
 					t.Fatal(err)
@@ -449,9 +449,10 @@ func TestSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	baseURL := testContext.RequestScheme() + "://" + s.ServingAddr() + sqlwire.Endpoint
 	// sendURL sends a request to the server and returns a StatusCode
-	sendURL := func(t *testing.T, url string, body []byte) int {
+	sendURL := func(t *testing.T, command string, body []byte) int {
+		url := fmt.Sprintf("%s://root@%s%s%s?certs=test_certs", testContext.RequestScheme(),
+			s.ServingAddr(), sqlwire.Endpoint, command)
 		httpClient, _ := testContext.GetHTTPClient()
 		req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
@@ -464,7 +465,7 @@ func TestSQLServer(t *testing.T) {
 		defer resp.Body.Close()
 		return resp.StatusCode
 	}
-	body, _ := gogoproto.Marshal(&sqlwire.Request{})
+	body, _ := gogoproto.Marshal(&sqlwire.Request{RequestHeader: sqlwire.RequestHeader{User: security.RootUser}})
 	testCases := []struct {
 		command       string
 		body          []byte
@@ -477,10 +478,10 @@ func TestSQLServer(t *testing.T) {
 		// Valid request.
 		{"Execute", body, http.StatusOK},
 	}
-	for _, test := range testCases {
-		statusCode := sendURL(t, baseURL+test.command, test.body)
+	for tcNum, test := range testCases {
+		statusCode := sendURL(t, test.command, test.body)
 		if statusCode != test.expStatusCode {
-			t.Fatalf("Expected status: %d, received status %d", test.expStatusCode, statusCode)
+			t.Fatalf("#%d: Expected status: %d, received status %d", tcNum, test.expStatusCode, statusCode)
 		}
 	}
 }

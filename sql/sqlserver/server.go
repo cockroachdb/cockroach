@@ -27,9 +27,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/structured"
@@ -68,12 +70,13 @@ func createArgsAndReply(method string) (*sqlwire.Request, *sqlwire.Response) {
 // A Server provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.
 type Server struct {
-	db *client.DB
+	context *base.Context
+	db      *client.DB
 }
 
 // NewServer allocates and returns a new Server.
-func NewServer(db *client.DB) *Server {
-	return &Server{db: db}
+func NewServer(ctx *base.Context, db *client.DB) *Server {
+	return &Server{context: ctx, db: db}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path
@@ -90,6 +93,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
+
+	// Check TLS settings.
+	authenticationHook, err := security.AuthenticationHook(s.context.Insecure, r.TLS)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	method = strings.TrimPrefix(method, sqlwire.Endpoint)
 	args, reply := createArgsAndReply(method)
 	if args == nil {
@@ -106,6 +117,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := util.UnmarshalRequest(r, reqBody, args, allowedEncodings); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check request user against client certificate user.
+	if err := authenticationHook(args); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
