@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -88,6 +89,11 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", kv.DBPrefix + "Get", certsContext, true, http.StatusBadRequest},
 		{"GET", kv.DBPrefix + "Get", noCertsContext, true, http.StatusUnauthorized},
 		{"GET", kv.DBPrefix + "Get", insecureContext, false, -1},
+
+		// /sql/: sqlserver.Server. These are proto reqs, but we can at least get past auth.
+		{"GET", sqlwire.Endpoint + "Get", certsContext, true, http.StatusNotFound},
+		{"GET", sqlwire.Endpoint + "Get", noCertsContext, true, http.StatusUnauthorized},
+		{"GET", sqlwire.Endpoint + "Get", insecureContext, false, -1},
 	}
 
 	for tcNum, tc := range testCases {

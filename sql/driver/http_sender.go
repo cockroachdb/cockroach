@@ -65,6 +65,10 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 // which are retryable are retried with backoff in a loop using the
 // default retry options.
 func (s *httpSender) Send(args sqlwire.Request) (sqlwire.Response, error) {
+	// Prepare the args.
+	if args.GetUser() == "" {
+		args.User = s.ctx.Context.User
+	}
 	reply := sqlwire.Response{}
 	return reply, client.HTTPPost(s.ctx, &args, &reply, args.Method())
 }

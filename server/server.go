@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql/sqlserver"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
@@ -141,7 +140,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	//
-	s.sqlServer = sqlserver.NewServer(s.db)
+	s.sqlServer = sqlserver.NewServer(&s.ctx.Context, s.db)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -210,6 +209,8 @@ func (s *Server) initHTTP() {
 		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir}))
 
 	// The admin server handles both /debug/ and /_admin/
+	// TODO(marc): when cookie-based authentication exists,
+	// apply it for all web endpoints.
 	s.mux.Handle(adminEndpoint, s.admin)
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusKeyPrefix, s.status)
@@ -218,30 +219,9 @@ func (s *Server) initHTTP() {
 	// KV handles its own authentication, verifying user certificates against
 	// the requested user.
 	s.mux.Handle(kv.DBPrefix, s.kvDB)
-	// The SQL wire format does not currently have a requested user.
-	// TODO(marc): we need do figure out how to do sql wire auth.
-	s.mux.HandleFunc(sqlwire.Endpoint, s.authenticateRequest(s.sqlServer))
-}
-
-// authenticateRequest is a simple wrapper around a http handler.
-// If running in secure mode, verifies that the request is authenticated.
-// TODO(marc):
-// - pass verified credentials down.
-// - cookie-based auth for status/admin/debug/rest endpoints.
-func (s *Server) authenticateRequest(handler http.Handler) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.ctx.Insecure {
-			handler.ServeHTTP(w, r)
-			return
-		}
-
-		_, err := security.GetCertificateUser(r.TLS)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		handler.ServeHTTP(w, r)
-	}
+	// The SQL endpoints handles its own authentication, verifying user
+	// credentials against the requested user.
+	s.mux.Handle(sqlwire.Endpoint, s.sqlServer)
 }
 
 // startWriteSummaries begins periodically persisting status summaries for the
