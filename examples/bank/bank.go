@@ -41,7 +41,7 @@ var useTransaction = flag.Bool("use-transaction", true, "Turn off to disable tra
 var firstAccount = flag.Int("first-account", 0, "First account in the account range.")
 var numAccounts = flag.Int("num-accounts", 1000, "Number of accounts in the account range.")
 
-var numParallelTransfers = flag.Int("num-parallel-transfers", 100, "Number of parallel transfers.")
+var numParallelTransfers = flag.Int("num-parallel-transfers", 50, "Number of parallel transfers.")
 
 // Bank stores all the bank related state.
 type Bank struct {
