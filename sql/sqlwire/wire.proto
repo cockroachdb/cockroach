@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Vivek Menezes (vivek@cockroachlabs.com) 
+// Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 syntax = "proto2";
 package cockroach.sqlwire;

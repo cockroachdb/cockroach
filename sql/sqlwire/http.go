@@ -17,8 +17,6 @@
 
 package sqlwire
 
-import "github.com/cockroachdb/cockroach/proto"
-
 const (
 	// Endpoint is the URL path prefix which accepts incoming
 	// HTTP requests for the SQL API.
@@ -49,15 +47,4 @@ func (*Request) CreateReply() *Response {
 // Header returns the response header.
 func (r *ResponseHeader) Header() *ResponseHeader {
 	return r
-}
-
-// SetGoError converts the specified type into either one of the proto-
-// defined error types or into a Error for all other Go errors.
-func (r *ResponseHeader) SetGoError(err error) {
-	if err == nil {
-		r.Error = nil
-		return
-	}
-	r.Error = &proto.Error{}
-	r.Error.SetResponseGoError(err)
 }
