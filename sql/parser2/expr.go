@@ -242,12 +242,11 @@ func (n QualifiedName) String() string {
 		if i > 0 {
 			_, _ = buf.WriteString(".")
 		}
-		// TODO(pmattis):
-		// if _, ok := keywords[s]; ok {
-		// 	fmt.Fprintf(&buf, "\"%s\"", s)
-		// } else {
-		fmt.Fprintf(&buf, "%s", s)
-		// }
+		if _, ok := keywords[s]; ok {
+			fmt.Fprintf(&buf, "\"%s\"", s)
+		} else {
+			fmt.Fprintf(&buf, "%s", s)
+		}
 	}
 	return buf.String()
 }
