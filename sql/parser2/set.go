@@ -17,21 +17,17 @@
 
 package parser2
 
-import "bytes"
+import "fmt"
 
-// Truncate represents a TRUNCATE statement.
-type Truncate struct {
-	Tables []QualifiedName
+// Set represents a SET statement.
+type Set struct {
+	Name   QualifiedName
+	Values Exprs
 }
 
-func (node *Truncate) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
-		if i > 0 {
-			_, _ = buf.WriteString(", ")
-		}
-		_, _ = buf.WriteString(n.String())
+func (node *Set) String() string {
+	if node.Values == nil {
+		return fmt.Sprintf("SET %s = DEFAULT", node.Name)
 	}
-	return buf.String()
+	return fmt.Sprintf("SET %s = %v", node.Name, node.Values)
 }

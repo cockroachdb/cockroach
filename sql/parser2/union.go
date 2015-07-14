@@ -17,21 +17,21 @@
 
 package parser2
 
-import "bytes"
+import "fmt"
 
-// Truncate represents a TRUNCATE statement.
-type Truncate struct {
-	Tables []QualifiedName
+// Union represents a UNION statement.
+type Union struct {
+	Type        string
+	Left, Right SelectStatement
 }
 
-func (node *Truncate) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
-		if i > 0 {
-			_, _ = buf.WriteString(", ")
-		}
-		_, _ = buf.WriteString(n.String())
-	}
-	return buf.String()
+// Union.Type
+const (
+	astUnion     = "UNION"
+	astExcept    = "EXCEPT"
+	astIntersect = "INTERSECT"
+)
+
+func (node *Union) String() string {
+	return fmt.Sprintf("%v %s %v", node.Left, node.Type, node.Right)
 }

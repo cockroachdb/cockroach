@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,11 +23,6 @@ import (
 	"strings"
 )
 
-func (*CreateDatabase) statement() {}
-func (*CreateIndex) statement()    {}
-func (*CreateTable) statement()    {}
-func (*CreateView) statement()     {}
-
 // CreateDatabase represents a CREATE DATABASE statement.
 type CreateDatabase struct {
 	IfNotExists bool
@@ -36,28 +31,11 @@ type CreateDatabase struct {
 
 func (node *CreateDatabase) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("CREATE DATABASE")
+	_, _ = buf.WriteString("CREATE DATABASE ")
 	if node.IfNotExists {
-		buf.WriteString(" IF NOT EXISTS")
+		_, _ = buf.WriteString("IF NOT EXISTS ")
 	}
-	fmt.Fprintf(&buf, " %s", node.Name)
-	return buf.String()
-}
-
-// CreateIndex represents a CREATE INDEX statement.
-type CreateIndex struct {
-	Name   string
-	Table  *TableName
-	Unique bool
-}
-
-func (node *CreateIndex) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE ")
-	if node.Unique {
-		buf.WriteString("UNIQUE ")
-	}
-	fmt.Fprintf(&buf, "INDEX %s ON %s", node.Name, node.Table)
+	_, _ = buf.WriteString(node.Name)
 	return buf.String()
 }
 
@@ -106,22 +84,66 @@ type ColumnTableDef struct {
 	Unique     bool
 }
 
+func newColumnTableDef(name string, typ ColumnType,
+	constraints []ColumnConstraint) *ColumnTableDef {
+	d := &ColumnTableDef{
+		Name:     name,
+		Type:     typ,
+		Nullable: SilentNull,
+	}
+	for _, c := range constraints {
+		switch c.(type) {
+		case NotNullConstraint:
+			d.Nullable = NotNull
+		case NullConstraint:
+			d.Nullable = Null
+		case PrimaryKeyConstraint:
+			d.PrimaryKey = true
+		case UniqueConstraint:
+			d.Unique = true
+		}
+	}
+	return d
+}
+
 func (node *ColumnTableDef) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
 	switch node.Nullable {
 	case Null:
-		buf.WriteString(" NULL")
+		_, _ = buf.WriteString(" NULL")
 	case NotNull:
-		buf.WriteString(" NOT NULL")
+		_, _ = buf.WriteString(" NOT NULL")
 	}
 	if node.PrimaryKey {
-		buf.WriteString(" PRIMARY KEY")
+		_, _ = buf.WriteString(" PRIMARY KEY")
 	} else if node.Unique {
-		buf.WriteString(" UNIQUE")
+		_, _ = buf.WriteString(" UNIQUE")
 	}
 	return buf.String()
 }
+
+// ColumnConstraint represents a constraint on a column.
+type ColumnConstraint interface {
+	columnConstraint()
+}
+
+func (NotNullConstraint) columnConstraint()    {}
+func (NullConstraint) columnConstraint()       {}
+func (PrimaryKeyConstraint) columnConstraint() {}
+func (UniqueConstraint) columnConstraint()     {}
+
+// NotNullConstraint represents NOT NULL on a column.
+type NotNullConstraint struct{}
+
+// NullConstraint represents NULL on a column.
+type NullConstraint struct{}
+
+// PrimaryKeyConstraint represents NULL on a column.
+type PrimaryKeyConstraint struct{}
+
+// UniqueConstraint represents UNIQUE on a column.
+type UniqueConstraint struct{}
 
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
@@ -134,40 +156,33 @@ type IndexTableDef struct {
 
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
-	if node.PrimaryKey {
-		fmt.Fprintf(&buf, "PRIMARY KEY (%s)", strings.Join(node.Columns, ", "))
-	} else {
-		if node.Unique {
-			buf.WriteString("UNIQUE ")
-		}
-		fmt.Fprintf(&buf, "INDEX %s (%s)",
-			node.Name, strings.Join(node.Columns, ", "))
+	if node.Name != "" {
+		fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
 	}
+	if node.PrimaryKey {
+		_, _ = buf.WriteString("PRIMARY KEY ")
+	} else if node.Unique {
+		_, _ = buf.WriteString("UNIQUE ")
+	} else {
+		_, _ = buf.WriteString("INDEX ")
+	}
+	fmt.Fprintf(&buf, "(%s)", strings.Join(node.Columns, ", "))
 	return buf.String()
 }
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists bool
-	Table       *TableName
+	Table       QualifiedName
 	Defs        TableDefs
 }
 
 func (node *CreateTable) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("CREATE TABLE")
+	_, _ = buf.WriteString("CREATE TABLE")
 	if node.IfNotExists {
-		buf.WriteString(" IF NOT EXISTS")
+		_, _ = buf.WriteString(" IF NOT EXISTS")
 	}
 	fmt.Fprintf(&buf, " %s (%s)", node.Table, node.Defs)
 	return buf.String()
-}
-
-// CreateView represents a CREATE VIEW statement.
-type CreateView struct {
-	Name string
-}
-
-func (node *CreateView) String() string {
-	return fmt.Sprintf("CREATE VIEW %s", node.Name)
 }

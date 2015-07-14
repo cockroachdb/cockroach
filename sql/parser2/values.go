@@ -17,21 +17,20 @@
 
 package parser2
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
-// Truncate represents a TRUNCATE statement.
-type Truncate struct {
-	Tables []QualifiedName
-}
+// Values represents a VALUES clause.
+type Values []Tuple
 
-func (node *Truncate) String() string {
+func (node Values) String() string {
+	prefix := "VALUES "
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
-		if i > 0 {
-			_, _ = buf.WriteString(", ")
-		}
-		_, _ = buf.WriteString(n.String())
+	for _, n := range node {
+		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		prefix = ", "
 	}
 	return buf.String()
 }

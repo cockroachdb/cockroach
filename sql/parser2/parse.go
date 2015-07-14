@@ -19,19 +19,27 @@ package parser2
 
 import "bytes"
 
-// Truncate represents a TRUNCATE statement.
-type Truncate struct {
-	Tables []QualifiedName
-}
+//go:generate make
 
-func (node *Truncate) String() string {
+// StatementList is a list of statements.
+type StatementList []Statement
+
+func (l StatementList) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
+	for i, s := range l {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			_, _ = buf.WriteString("; ")
 		}
-		_, _ = buf.WriteString(n.String())
+		_, _ = buf.WriteString(s.String())
 	}
 	return buf.String()
 }
+
+// Parse parses the sql and returns a list of statements.
+// func Parse(sql string) (StatementList, error) {
+// 	s := newScanner(sql)
+// 	if sqlParse(s) != 0 {
+// 		return nil, errors.New(s.lastError)
+// 	}
+// 	return s.stmts, nil
+// }

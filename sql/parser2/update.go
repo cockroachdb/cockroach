@@ -17,21 +17,42 @@
 
 package parser2
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
-// Truncate represents a TRUNCATE statement.
-type Truncate struct {
-	Tables []QualifiedName
+// Update represents an UPDATE statement.
+type Update struct {
+	Table TableExpr
+	Exprs UpdateExprs
+	Where *Where
 }
 
-func (node *Truncate) String() string {
+func (node *Update) String() string {
+	return fmt.Sprintf("UPDATE %v SET %v%v",
+		node.Table, node.Exprs, node.Where)
+}
+
+// UpdateExprs represents a list of update expressions.
+type UpdateExprs []*UpdateExpr
+
+func (node UpdateExprs) String() string {
+	var prefix string
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
-		if i > 0 {
-			_, _ = buf.WriteString(", ")
-		}
-		_, _ = buf.WriteString(n.String())
+	for _, n := range node {
+		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		prefix = ", "
 	}
 	return buf.String()
+}
+
+// UpdateExpr represents an update expression.
+type UpdateExpr struct {
+	Name QualifiedName
+	Expr Expr
+}
+
+func (node *UpdateExpr) String() string {
+	return fmt.Sprintf("%v = %v", node.Name, node.Expr)
 }

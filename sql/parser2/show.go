@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,23 +22,14 @@ import (
 	"fmt"
 )
 
-func (*ShowColumns) statement()   {}
-func (*ShowDatabases) statement() {}
-func (*ShowIndex) statement()     {}
-func (*ShowTables) statement()    {}
-
-// ShowColumns represents a SHOW [FULL] COLUMNS statement.
+// ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
-	Table *TableName
-	Full  bool
+	Table QualifiedName
 }
 
 func (node *ShowColumns) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("SHOW ")
-	if node.Full {
-		buf.WriteString("FULL ")
-	}
 	fmt.Fprintf(&buf, "COLUMNS FROM %s", node.Table)
 	return buf.String()
 }
@@ -53,7 +44,7 @@ func (node *ShowDatabases) String() string {
 
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
-	Table *TableName
+	Table QualifiedName
 }
 
 func (node *ShowIndex) String() string {
@@ -62,13 +53,13 @@ func (node *ShowIndex) String() string {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	Name string
+	Name QualifiedName
 }
 
 func (node *ShowTables) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("SHOW TABLES")
-	if node.Name != "" {
+	if node.Name != nil {
 		fmt.Fprintf(&buf, " FROM %s", node.Name)
 	}
 	return buf.String()
