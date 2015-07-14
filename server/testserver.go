@@ -18,10 +18,6 @@
 package server
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
@@ -34,37 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// StartAdminServer launches a new admin server using minimal engine
-// and local database setup. Returns the new server context and stopper.
-// The stopper should be stopped after testing.
-func StartAdminServer() (*Context, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
-	if err != nil {
-		log.Fatal(err)
-	}
-	admin := newAdminServer(db, stopper)
-	mux := http.NewServeMux()
-	mux.Handle(adminEndpoint, admin)
-	mux.Handle(debugEndpoint, admin)
-	httpServer := httptest.NewUnstartedServer(mux)
-	ctx := NewTestContext()
-	tlsConfig, err := ctx.GetServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	httpServer.TLS = tlsConfig
-	httpServer.StartTLS()
-	stopper.AddCloser(httpServer)
-
-	if strings.HasPrefix(httpServer.URL, "http://") {
-		ctx.Addr = strings.TrimPrefix(httpServer.URL, "http://")
-	} else if strings.HasPrefix(httpServer.URL, "https://") {
-		ctx.Addr = strings.TrimPrefix(httpServer.URL, "https://")
-	}
-	return ctx, stopper
-}
 
 // StartTestServer starts a in-memory test server.
 func StartTestServer(t util.Tester) *TestServer {

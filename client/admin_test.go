@@ -30,11 +30,11 @@ import (
 // Example_accounting shows how to use the admin client to
 // get/set/list/delete accounting configs.
 func Example_accounting() {
-	ctx, stopper := server.StartAdminServer()
-	defer stopper.Stop()
+	s := server.StartTestServer(nil)
+	defer s.Stop()
 
 	context := testutils.NewRootTestBaseContext()
-	client := client.NewAdminClient(context, ctx.Addr, client.Accounting)
+	client := client.NewAdminClient(context, s.ServingAddr(), client.Accounting)
 
 	const yamlConfig = `cluster_id: test`
 	const jsonConfig = `{
@@ -123,11 +123,11 @@ func Example_accounting() {
 // Example_permission shows how to use the admin client to
 // get/set/list/delete permission configs.
 func Example_permission() {
-	ctx, stopper := server.StartAdminServer()
-	defer stopper.Stop()
+	s := server.StartTestServer(nil)
+	defer s.Stop()
 
 	context := testutils.NewRootTestBaseContext()
-	client := client.NewAdminClient(context, ctx.Addr, client.Permission)
+	client := client.NewAdminClient(context, s.ServingAddr(), client.Permission)
 
 	const yamlConfig = `
 read: [readonly, readwrite]
@@ -239,11 +239,11 @@ write: [readwrite, writeonly]
 // Example_user shows how to use the admin client to
 // get/set/list/delete user configs.
 func Example_user() {
-	ctx, stopper := server.StartAdminServer()
-	defer stopper.Stop()
+	s := server.StartTestServer(nil)
+	defer s.Stop()
 
 	context := testutils.NewRootTestBaseContext()
-	client := client.NewAdminClient(context, ctx.Addr, client.User)
+	client := client.NewAdminClient(context, s.ServingAddr(), client.User)
 
 	const yamlConfig = `hashed_password:
  - 10
@@ -340,11 +340,11 @@ func Example_user() {
 // Example_zone shows how to use the admin client to
 // get/set/list/delete zone configs.
 func Example_zone() {
-	ctx, stopper := server.StartAdminServer()
-	defer stopper.Stop()
+	s := server.StartTestServer(nil)
+	defer s.Stop()
 
 	context := testutils.NewRootTestBaseContext()
-	client := client.NewAdminClient(context, ctx.Addr, client.Zone)
+	client := client.NewAdminClient(context, s.ServingAddr(), client.Zone)
 
 	const yamlConfig = `
 replicas:

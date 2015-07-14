@@ -65,10 +65,10 @@ func getJSON(url string) (interface{}, error) {
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ctx, stopper := StartAdminServer()
-	defer stopper.Stop()
+	s := StartTestServer(t)
+	defer s.Stop()
 
-	jI, err := getJSON(ctx.RequestScheme() + "://" + ctx.Addr + debugEndpoint + "vars")
+	jI, err := getJSON(s.Ctx.RequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -85,10 +85,10 @@ func TestAdminDebugExpVar(t *testing.T) {
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ctx, stopper := StartAdminServer()
-	defer stopper.Stop()
+	s := StartTestServer(t)
+	defer s.Stop()
 
-	body, err := getText(ctx.RequestScheme() + "://" + ctx.Addr + debugEndpoint + "pprof/block")
+	body, err := getText(s.Ctx.RequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,8 +101,8 @@ func TestAdminDebugPprof(t *testing.T) {
 // responses.
 func TestSetZoneInvalid(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ctx, stopper := StartAdminServer()
-	defer stopper.Stop()
+	s := StartTestServer(t)
+	defer s.Stop()
 
 	testData := []struct {
 		zone   string
@@ -132,7 +132,7 @@ range_max_bytes: 67108864
 	}
 	for i, test := range testData {
 		re := regexp.MustCompile(test.expErr)
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", ctx.RequestScheme(), ctx.Addr, zonePathPrefix, "foo"), strings.NewReader(test.zone))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", s.Ctx.RequestScheme(), s.ServingAddr(), zonePathPrefix, "foo"), strings.NewReader(test.zone))
 		if err != nil {
 			t.Fatal(err)
 		}
