@@ -814,6 +814,70 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	}
 }
 
+// TestRangeNoGossipFromNonLeader verifies that a non-leader replica
+// does not gossip configurations.
+func TestRangeNoGossipFromNonLeader(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Add a permission for a new key prefix. Set the config in a transaction
+	// to avoid gossip.
+	db1Perm := &proto.PermConfig{
+		Read:  []string{"spencer"},
+		Write: []string{"spencer"},
+	}
+	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
+	raftID := proto.RaftID(1)
+
+	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
+	data, err := gogoproto.Marshal(db1Perm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req1, reply1 := putArgs(key, data, raftID, tc.store.StoreID())
+	req1.Txn = txn
+	req1.Timestamp = txn.Timestamp
+	if err := tc.store.ExecuteCmd(tc.rng.context(), proto.Call{Args: req1, Reply: reply1}); err != nil {
+		t.Fatal(err)
+	}
+	req2, reply2 := endTxnArgs(txn, true /* commit */, raftID, tc.store.StoreID())
+	req2.Timestamp = txn.Timestamp
+	if err := tc.store.ExecuteCmd(tc.rng.context(), proto.Call{Args: req2, Reply: reply2}); err != nil {
+		t.Fatal(err)
+	}
+	// Execute a get to resolve the intent.
+	req3, reply3 := getArgs(key, raftID, tc.store.StoreID())
+	req3.Timestamp = txn.Timestamp
+	if err := tc.store.ExecuteCmd(tc.rng.context(), proto.Call{Args: req3, Reply: reply3}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Increment the clock's timestamp to expire the leader lease.
+	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration) + 1)
+	if lease := tc.rng.getLease(); lease.Covers(tc.clock.Now()) {
+		t.Fatal("leader lease should have been expired")
+	}
+
+	// Make sure the information for db1 is not gossiped.
+	tc.rng.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+		return tc.rng.ContainsKey(configPrefix)
+	})
+	info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configMap := info.(PrefixConfigMap)
+	expConfigs := []*PrefixConfig{
+		{proto.KeyMin, nil, &testDefaultPermConfig},
+	}
+	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+		t.Errorf("expected gossiped configs to be equal %s vs %s",
+			configMap, expConfigs)
+	}
+}
+
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
 func getArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {

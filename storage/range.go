@@ -247,6 +247,12 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 
+	// Gossip configs as they might not be gossiped until configs
+	// are updated or a leader lease is acquired/extended.
+	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+		return r.ContainsKey(configPrefix)
+	})
+
 	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
 		return nil, err
 	}
@@ -1022,11 +1028,11 @@ func (r *Range) maybeGossipFirstRange() error {
 // the initial update, and the range itself re-triggers updates following
 // writes that may have altered any of the maps.
 //
-// Note that maybeGossipConfigs does not check the leader lease; it is called
-// on only when the lease is actually held.
-// TODO(tschottdorf): The main reason this method does not try to get the lease
-// is that InternalLeaderLease calls it, which means that we would wind up
-// deadlocking in redirectOnOrObtainLeaderLease. Can possibly simplify.
+// Note that maybeGossipConfigs gossips information only when the
+// lease is actually held. The method does not request a leader lease
+// here since InternalLeaderLease and applyRaftCommand call the
+// method and we need to avoid deadlocking in redirectOnOrObtainLeaderLease.
+// TODO(tschottdorf): Can possibly simplify.
 func (r *Range) maybeGossipConfigs(match func(proto.Key) bool) {
 	r.Lock()
 	defer r.Unlock()
@@ -1037,6 +1043,12 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}
+
+	if lease := r.getLease(); !lease.OwnedBy(r.rm.RaftNodeID()) || !lease.Covers(r.rm.Clock().Now()) {
+		// Do not gossip when a leader lease is not held.
+		return
+	}
+
 	ctx := r.context()
 	for i, cd := range configDescriptors {
 		if match(cd.keyPrefix) {
