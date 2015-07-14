@@ -381,6 +381,9 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
 func (r *Range) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp proto.Timestamp) error {
+	// The primary merit of this Trace entry is that it measures the time spent
+	// waiting for the mutex.
+	defer trace.Epoch("verifying leader lease")()
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 

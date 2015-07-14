@@ -87,9 +87,15 @@ type Feed struct {
 	subscribers []*Subscription
 }
 
+// A Publisher consumes events. The caller must not access objects after
+// handing them off to the Publisher.
+type Publisher interface {
+	Publish(interface{})
+}
+
 // Publish publishes a event into the Feed, which will eventually be received by
 // all Subscribers to the feed. Events published to a closed feed, or to a feed
-// with no Subscribers, will be ignored.
+// with no Subscribers, will be ignored. A Feed is a Publisher.
 func (f *Feed) Publish(event interface{}) {
 	if f == nil {
 		return

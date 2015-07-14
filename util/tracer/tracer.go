@@ -117,7 +117,7 @@ func (t *Trace) epoch(name string) func() {
 	}
 }
 
-// Finalize submits the Trace to the underlying feed. If there is an open
+// Finalize submits the Trace to the underlying Publisher. If there is an open
 // Epoch, a panic occurs.
 func (t *Trace) Finalize() {
 	if t == nil {
@@ -127,7 +127,7 @@ func (t *Trace) Finalize() {
 		panic("attempt to finalize unbalanced trace:\n" + t.String())
 	}
 	t.depth = math.MinInt32
-	t.tracer.feed.Publish(t) // by reference
+	t.tracer.pub.Publish(t) // by reference
 }
 
 func (t *Trace) add(name string) int {
@@ -179,29 +179,41 @@ func (t Trace) String() string {
 	return buf.String()
 }
 
+// A CallbackPublisher is a function which handles a Trace.
+type CallbackPublisher func(*Trace)
+
+// Publish implements util.Publisher.
+func (cp CallbackPublisher) Publish(e interface{}) {
+	cp(e.(*Trace))
+}
+
+var noopPublisher CallbackPublisher = func(_ *Trace) { return }
+
 // A Tracer is used to follow requests across the system (or across systems).
 // Requests must implement the Traceable interface and can be traced by invoking
 // NewTrace(), which returns a Trace object initialized to publish itself to a
-// util.Feed registered by the Tracer on completion.
+// util.Publisher registered by the Tracer on completion.
 type Tracer struct {
 	origin string // owner of this Tracer, i.e. Host ID
-	feed   *util.Feed
+	pub    util.Publisher
 	now    func() time.Time
 }
 
-// NewTracer returns a new Tracer whose created Traces publish to the given feed.
-// The origin is an identifier of the system, for instance a host ID.
-func NewTracer(f *util.Feed, origin string) *Tracer {
+// NewTracer returns a new Tracer whose created Traces publish to the given
+// Publisher. The origin is an identifier of the system, for instance a host
+// ID.
+func NewTracer(pub util.Publisher, origin string) *Tracer {
+	if pub == nil {
+		pub = noopPublisher
+	}
 	return &Tracer{
 		origin: origin,
 		now:    time.Now,
-		feed:   f,
+		pub:    pub,
 	}
 }
 
-var dummyTracer = &Tracer{
-	now: func() time.Time { return time.Time{} },
-}
+var dummyTracer = NewTracer(nil, "")
 
 // NewTrace creates a Trace for the given Traceable.
 func (t *Tracer) NewTrace(tracee Traceable) *Trace {

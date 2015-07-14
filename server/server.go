@@ -118,7 +118,14 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapResolvers)
 
 	feed := &util.Feed{}
-	tracer := tracer.NewTracer(feed, addr)
+	var logPub tracer.CallbackPublisher = func(tr *tracer.Trace) {
+		// Log all Traces on V(2), only Transactions and slow requests on V(1).
+		if log.V(2) || (log.V(1) && (tr.ID[0:1] == "t" ||
+			tr.Content[0].Duration > time.Second)) {
+			log.Infof("received trace:\n%s\n", tr)
+		}
+	}
+	tracer := tracer.NewTracer(logPub, addr)
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
