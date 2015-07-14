@@ -76,12 +76,6 @@ func (s *Stopper) RunWorker(f func()) {
 	s.stop.Add(1)
 	go func() {
 		defer s.stop.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				// TODO(tschottdorf)
-				panic(r)
-			}
-		}()
 		f()
 	}()
 }
