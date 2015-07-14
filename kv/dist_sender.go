@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -205,12 +206,12 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	// The root user can always proceed.
 	header := args.Header()
-	if header.User == storage.UserRoot {
+	if header.User == security.RootUser {
 		return nil
 	}
 	// Check for admin methods.
 	if proto.IsAdmin(args) {
-		if header.User != storage.UserRoot {
+		if header.User != security.RootUser {
 			return util.Errorf("user %q cannot invoke admin command %s", header.User, args.Method())
 		}
 		return nil
@@ -283,7 +284,7 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
-			User:            storage.UserRoot,
+			User:            security.RootUser,
 			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges:     ds.rangeLookupMaxRanges,

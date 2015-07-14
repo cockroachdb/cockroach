@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -263,7 +264,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *engine.MVCCMe
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    now,
 			Key:          meta.Txn.Key,
-			User:         UserRoot,
+			User:         security.RootUser,
 			UserPriority: gogoproto.Int32(proto.MaxPriority),
 			Txn:          nil,
 		},
@@ -285,7 +286,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *engine.MVCCMe
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
 			Key:       key,
-			User:      UserRoot,
+			User:      security.RootUser,
 			Txn:       pushReply.PusheeTxn,
 		},
 	}
