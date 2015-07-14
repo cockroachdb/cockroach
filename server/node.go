@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -476,7 +477,7 @@ func (n *Node) publishStoreStatuses() error {
 }
 
 // executeCmd creates a proto.Call struct and sends it via our local sender.
-func (n *Node) executeCmd(argsI interface{}) (interface{}, error) {
+func (n *Node) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	args := argsI.(proto.Request)
 	reply := args.CreateReply()
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the

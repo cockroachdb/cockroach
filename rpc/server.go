@@ -31,16 +31,17 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
 
 type method struct {
-	handler func(interface{}) (interface{}, error)
+	handler func(proto.Message) (proto.Message, error)
 	reqType reflect.Type
 }
 
 type serverResponse struct {
 	req   *rpc.Request
-	reply interface{}
+	reply proto.Message
 	err   error
 }
 
@@ -85,8 +86,8 @@ func NewServer(addr net.Addr, context *Context) *Server {
 // `handler` is a function that takes an argument of the same type as `reqPrototype`.
 // Both the argument and return value of 'handler' should be a pointer to a protocol
 // message type.
-func (s *Server) Register(name string, handler func(interface{}) (interface{}, error),
-	reqPrototype interface{}) error {
+func (s *Server) Register(name string, handler func(proto.Message) (proto.Message, error),
+	reqPrototype proto.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -348,7 +349,7 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 
 // readRequest reads a single request from a connection.
 func (s *Server) readRequest(codec rpc.ServerCodec) (req *rpc.Request, m method,
-	args interface{}, err error) {
+	args proto.Message, err error) {
 	req = &rpc.Request{}
 	if err = codec.ReadRequestHeader(req); err != nil {
 		return
@@ -363,7 +364,7 @@ func (s *Server) readRequest(codec rpc.ServerCodec) (req *rpc.Request, m method,
 		return
 	}
 
-	args = reflect.New(m.reqType.Elem()).Interface()
+	args = reflect.New(m.reqType.Elem()).Interface().(proto.Message)
 	err = codec.ReadRequestBody(args)
 	return
 }

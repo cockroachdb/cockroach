@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
@@ -181,7 +182,7 @@ func TestUnretryableError(t *testing.T) {
 
 type Heartbeat struct{}
 
-func (h *Heartbeat) Ping(args interface{}) (interface{}, error) {
+func (h *Heartbeat) Ping(args gogoproto.Message) (gogoproto.Message, error) {
 	time.Sleep(50 * time.Millisecond)
 	return &proto.PingResponse{}, nil
 }

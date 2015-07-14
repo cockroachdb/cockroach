@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -203,7 +204,7 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 }
 
 // executeCmd creates a proto.Call struct and sends it via our local sender.
-func (s *DBServer) executeCmd(argsI interface{}) (interface{}, error) {
+func (s *DBServer) executeCmd(argsI gogoproto.Message) (gogoproto.Message, error) {
 	args := argsI.(proto.Request)
 	reply := args.CreateReply()
 	s.sender.Send(context.TODO(), proto.Call{Args: args, Reply: reply})
