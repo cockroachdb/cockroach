@@ -45,8 +45,8 @@ const (
 )
 
 // Context holds parameters needed to setup a server.
-// Calling "server/cli".InitFlags(ctx *Context) will initialize Context using
-// command flags. Keep in sync with "server/cli/flags.go".
+// Calling "cli".InitFlags(ctx *Context) will initialize Context using
+// command flags. Keep in sync with "cli/flags.go".
 type Context struct {
 	// Embed the base context.
 	base.Context
