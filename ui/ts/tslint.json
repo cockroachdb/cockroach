@@ -53,7 +53,7 @@
     "no-shadowed-variable": true,
     "no-empty": false,
     "no-eval": true,
-    "no-require-imports": true,
+    "no-require-imports": false,
     "no-string-literal": true,
     "no-switch-case-fall-through": true,
     "no-trailing-comma": true,

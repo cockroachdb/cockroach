@@ -274,10 +274,10 @@ module Models {
        * for the results.
        */
       execute: () => promise<QueryResultSet> = (): promise<QueryResultSet> => {
-        let s: number[] = this.timespan().timespan();
+        let ts: number[] = this.timespan().timespan();
         let req: Proto.QueryRequestSet = {
-          start_nanos: Utils.Convert.MilliToNano(s[0]),
-          end_nanos: Utils.Convert.MilliToNano(s[1]),
+          start_nanos: Utils.Convert.MilliToNano(ts[0]),
+          end_nanos: Utils.Convert.MilliToNano(ts[1]),
           queries: []
         };
 

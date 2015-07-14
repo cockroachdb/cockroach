@@ -9,7 +9,6 @@ RUN apt-get update -y && \
  	apt-get clean autoclean && \
  	apt-get autoremove -y && \
  	rm -rf /tmp/* /var/lib/{apt,dpkg,cache,log} && \
-	npm -g install typescript tslint && \
 	ln -s /usr/bin/nodejs /usr/bin/node
 
 ENV GOPATH /go
@@ -22,6 +21,6 @@ RUN mkdir -p $ROACHPATH && \
 WORKDIR ${ROACHPATH}/cockroach
 
 ADD . ${ROACHPATH}/cockroach/build/devbase/
-RUN ["./build/devbase/godeps-docker.sh"]
+RUN ["./build/devbase/deps-docker.sh"]
 
 CMD ["/bin/bash"]
