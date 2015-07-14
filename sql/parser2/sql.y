@@ -23,7 +23,11 @@ package parser2
 %}
 
 %union {
+  id    int
+  pos   int
   empty struct{}
+  ival  int
+  str   string
 }
 
 %type <empty> stmt_block

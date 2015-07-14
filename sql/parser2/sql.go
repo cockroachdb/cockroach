@@ -8,7 +8,11 @@ import __yyfmt__ "fmt"
 //line sql.y:25
 type sqlSymType struct {
 	yys   int
+	id    int
+	pos   int
 	empty struct{}
+	ival  int
+	str   string
 }
 
 const IDENT = 57346
@@ -892,7 +896,7 @@ const sqlEofCode = 1
 const sqlErrCode = 2
 const sqlMaxDepth = 200
 
-//line sql.y:2929
+//line sql.y:2933
 
 //line yacctab:1
 var sqlExca = []int{
@@ -6113,15 +6117,15 @@ sqldefault:
 	switch sqlnt {
 
 	case 1:
-		//line sql.y:438
+		//line sql.y:442
 		{
 		}
 	case 2:
-		//line sql.y:441
+		//line sql.y:445
 		{
 		}
 	case 3:
-		//line sql.y:442
+		//line sql.y:446
 		{
 		}
 	case 4:
@@ -6151,7 +6155,7 @@ sqldefault:
 	case 16:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 17:
-		//line sql.y:458
+		//line sql.y:462
 		{
 		}
 	case 18:
@@ -6161,31 +6165,31 @@ sqldefault:
 	case 20:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 21:
-		//line sql.y:468
+		//line sql.y:472
 		{
 		}
 	case 22:
-		//line sql.y:469
-		{
-		}
-	case 23:
-		//line sql.y:470
-		{
-		}
-	case 24:
 		//line sql.y:473
 		{
 		}
-	case 25:
+	case 23:
 		//line sql.y:474
 		{
 		}
-	case 26:
+	case 24:
 		//line sql.y:477
 		{
 		}
-	case 27:
+	case 25:
 		//line sql.y:478
+		{
+		}
+	case 26:
+		//line sql.y:481
+		{
+		}
+	case 27:
+		//line sql.y:482
 		{
 		}
 	case 28:
@@ -6193,175 +6197,175 @@ sqldefault:
 	case 29:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 30:
-		//line sql.y:494
-		{
-		}
-	case 31:
-		//line sql.y:496
-		{
-		}
-	case 32:
 		//line sql.y:498
 		{
 		}
-	case 33:
+	case 31:
 		//line sql.y:500
 		{
 		}
-	case 34:
+	case 32:
 		//line sql.y:502
 		{
 		}
-	case 35:
+	case 33:
 		//line sql.y:504
 		{
 		}
-	case 36:
+	case 34:
 		//line sql.y:506
 		{
 		}
-	case 37:
+	case 35:
 		//line sql.y:508
 		{
 		}
-	case 38:
+	case 36:
 		//line sql.y:510
 		{
 		}
-	case 39:
+	case 37:
 		//line sql.y:512
 		{
 		}
-	case 40:
+	case 38:
 		//line sql.y:514
 		{
 		}
+	case 39:
+		//line sql.y:516
+		{
+		}
+	case 40:
+		//line sql.y:518
+		{
+		}
 	case 41:
-		//line sql.y:517
-		{
-		}
-	case 42:
-		//line sql.y:519
-		{
-		}
-	case 43:
 		//line sql.y:521
 		{
 		}
-	case 44:
+	case 42:
 		//line sql.y:523
 		{
 		}
-	case 45:
+	case 43:
 		//line sql.y:525
 		{
 		}
-	case 46:
+	case 44:
 		//line sql.y:527
 		{
 		}
-	case 47:
+	case 45:
 		//line sql.y:529
 		{
 		}
-	case 48:
+	case 46:
 		//line sql.y:531
 		{
 		}
-	case 49:
+	case 47:
 		//line sql.y:533
 		{
 		}
-	case 50:
+	case 48:
 		//line sql.y:535
 		{
 		}
-	case 51:
+	case 49:
 		//line sql.y:537
 		{
 		}
-	case 52:
+	case 50:
 		//line sql.y:539
 		{
 		}
-	case 53:
+	case 51:
 		//line sql.y:541
 		{
 		}
-	case 54:
+	case 52:
 		//line sql.y:543
 		{
 		}
-	case 55:
-		//line sql.y:546
+	case 53:
+		//line sql.y:545
 		{
 		}
-	case 56:
+	case 54:
 		//line sql.y:547
 		{
 		}
-	case 57:
+	case 55:
 		//line sql.y:550
 		{
 		}
-	case 58:
+	case 56:
 		//line sql.y:551
 		{
 		}
-	case 59:
-		//line sql.y:552
+	case 57:
+		//line sql.y:554
 		{
 		}
-	case 60:
+	case 58:
 		//line sql.y:555
 		{
 		}
-	case 61:
+	case 59:
 		//line sql.y:556
 		{
 		}
-	case 62:
+	case 60:
 		//line sql.y:559
 		{
 		}
-	case 63:
+	case 61:
 		//line sql.y:560
 		{
 		}
-	case 64:
+	case 62:
 		//line sql.y:563
 		{
 		}
-	case 65:
-		//line sql.y:566
+	case 63:
+		//line sql.y:564
 		{
 		}
-	case 66:
+	case 64:
 		//line sql.y:567
 		{
 		}
-	case 67:
+	case 65:
 		//line sql.y:570
 		{
 		}
-	case 68:
+	case 66:
 		//line sql.y:571
 		{
 		}
-	case 69:
+	case 67:
+		//line sql.y:574
+		{
+		}
+	case 68:
 		//line sql.y:575
 		{
 		}
+	case 69:
+		//line sql.y:579
+		{
+		}
 	case 70:
-		//line sql.y:576
+		//line sql.y:580
 		{
 		}
 	case 71:
-		//line sql.y:577
+		//line sql.y:581
 		{
 		}
 	case 72:
-		//line sql.y:578
+		//line sql.y:582
 		{
 		}
 	case 73:
@@ -6373,71 +6377,71 @@ sqldefault:
 	case 76:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 77:
-		//line sql.y:592
-		{
-		}
-	case 78:
 		//line sql.y:596
 		{
 		}
-	case 79:
-		//line sql.y:597
-		{
-		}
-	case 80:
-		//line sql.y:598
-		{
-		}
-	case 81:
-		//line sql.y:599
-		{
-		}
-	case 82:
+	case 78:
 		//line sql.y:600
 		{
 		}
-	case 83:
+	case 79:
 		//line sql.y:601
 		{
 		}
-	case 84:
+	case 80:
+		//line sql.y:602
+		{
+		}
+	case 81:
+		//line sql.y:603
+		{
+		}
+	case 82:
 		//line sql.y:604
 		{
 		}
+	case 83:
+		//line sql.y:605
+		{
+		}
+	case 84:
+		//line sql.y:608
+		{
+		}
 	case 85:
-		//line sql.y:609
-		{
-		}
-	case 86:
-		//line sql.y:610
-		{
-		}
-	case 87:
 		//line sql.y:613
 		{
 		}
-	case 88:
+	case 86:
 		//line sql.y:614
 		{
 		}
-	case 89:
+	case 87:
 		//line sql.y:617
 		{
 		}
-	case 90:
+	case 88:
 		//line sql.y:618
 		{
 		}
+	case 89:
+		//line sql.y:621
+		{
+		}
+	case 90:
+		//line sql.y:622
+		{
+		}
 	case 91:
-		//line sql.y:623
+		//line sql.y:627
 		{
 		}
 	case 92:
-		//line sql.y:624
+		//line sql.y:628
 		{
 		}
 	case 93:
-		//line sql.y:625
+		//line sql.y:629
 		{
 		}
 	case 94:
@@ -6457,93 +6461,93 @@ sqldefault:
 	case 101:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 102:
-		//line sql.y:643
-		{
-		}
-	case 103:
-		//line sql.y:646
-		{
-		}
-	case 104:
 		//line sql.y:647
 		{
 		}
+	case 103:
+		//line sql.y:650
+		{
+		}
+	case 104:
+		//line sql.y:651
+		{
+		}
 	case 105:
-		//line sql.y:648
+		//line sql.y:652
 		{
 		}
 	case 106:
-		//line sql.y:674
+		//line sql.y:678
 		{
 		}
 	case 107:
-		//line sql.y:675
-		{
-		}
-	case 108:
-		//line sql.y:676
-		{
-		}
-	case 109:
 		//line sql.y:679
 		{
 		}
-	case 110:
+	case 108:
 		//line sql.y:680
 		{
 		}
-	case 111:
-		//line sql.y:681
+	case 109:
+		//line sql.y:683
 		{
 		}
-	case 112:
+	case 110:
 		//line sql.y:684
 		{
 		}
-	case 113:
+	case 111:
 		//line sql.y:685
 		{
 		}
+	case 112:
+		//line sql.y:688
+		{
+		}
+	case 113:
+		//line sql.y:689
+		{
+		}
 	case 114:
-		//line sql.y:686
+		//line sql.y:690
 		{
 		}
 	case 115:
-		//line sql.y:687
+		//line sql.y:691
 		{
 		}
 	case 116:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 117:
-		//line sql.y:692
+		//line sql.y:696
 		{
 		}
 	case 118:
-		//line sql.y:694
+		//line sql.y:698
 		{
 		}
 	case 119:
-		//line sql.y:695
+		//line sql.y:699
 		{
 		}
 	case 120:
-		//line sql.y:697
-		{
-		}
-	case 121:
-		//line sql.y:700
-		{
-		}
-	case 122:
 		//line sql.y:701
 		{
 		}
-	case 123:
+	case 121:
 		//line sql.y:704
 		{
 		}
-	case 124:
+	case 122:
 		//line sql.y:705
+		{
+		}
+	case 123:
+		//line sql.y:708
+		{
+		}
+	case 124:
+		//line sql.y:709
 		{
 		}
 	case 125:
@@ -6551,934 +6555,934 @@ sqldefault:
 	case 126:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 127:
-		//line sql.y:712
+		//line sql.y:716
 		{
 		}
 	case 128:
-		//line sql.y:713
+		//line sql.y:717
 		{
 		}
 	case 129:
-		//line sql.y:714
-		{
-		}
-	case 130:
-		//line sql.y:715
-		{
-		}
-	case 131:
 		//line sql.y:718
 		{
 		}
-	case 132:
+	case 130:
 		//line sql.y:719
 		{
 		}
+	case 131:
+		//line sql.y:722
+		{
+		}
+	case 132:
+		//line sql.y:723
+		{
+		}
 	case 133:
-		//line sql.y:720
+		//line sql.y:724
 		{
 		}
 	case 134:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 135:
-		//line sql.y:734
-		{
-		}
-	case 136:
-		//line sql.y:735
-		{
-		}
-	case 137:
-		//line sql.y:736
-		{
-		}
-	case 138:
-		//line sql.y:737
-		{
-		}
-	case 139:
 		//line sql.y:738
 		{
 		}
-	case 140:
+	case 136:
 		//line sql.y:739
 		{
 		}
-	case 141:
+	case 137:
 		//line sql.y:740
 		{
 		}
-	case 142:
+	case 138:
+		//line sql.y:741
+		{
+		}
+	case 139:
+		//line sql.y:742
+		{
+		}
+	case 140:
 		//line sql.y:743
 		{
 		}
-	case 143:
+	case 141:
 		//line sql.y:744
 		{
 		}
-	case 144:
-		//line sql.y:745
+	case 142:
+		//line sql.y:747
 		{
 		}
-	case 145:
+	case 143:
 		//line sql.y:748
 		{
 		}
-	case 146:
+	case 144:
 		//line sql.y:749
 		{
 		}
-	case 147:
+	case 145:
 		//line sql.y:752
 		{
 		}
-	case 148:
-		//line sql.y:755
+	case 146:
+		//line sql.y:753
 		{
 		}
-	case 149:
+	case 147:
 		//line sql.y:756
 		{
 		}
-	case 150:
-		//line sql.y:757
-		{
-		}
-	case 151:
-		//line sql.y:758
-		{
-		}
-	case 152:
+	case 148:
 		//line sql.y:759
 		{
 		}
-	case 153:
+	case 149:
 		//line sql.y:760
 		{
 		}
+	case 150:
+		//line sql.y:761
+		{
+		}
+	case 151:
+		//line sql.y:762
+		{
+		}
+	case 152:
+		//line sql.y:763
+		{
+		}
+	case 153:
+		//line sql.y:764
+		{
+		}
 	case 154:
-		//line sql.y:765
-		{
-		}
-	case 155:
-		//line sql.y:767
-		{
-		}
-	case 156:
 		//line sql.y:769
 		{
 		}
-	case 157:
+	case 155:
 		//line sql.y:771
 		{
 		}
+	case 156:
+		//line sql.y:773
+		{
+		}
+	case 157:
+		//line sql.y:775
+		{
+		}
 	case 158:
-		//line sql.y:783
-		{
-		}
-	case 159:
-		//line sql.y:784
-		{
-		}
-	case 160:
-		//line sql.y:785
-		{
-		}
-	case 161:
-		//line sql.y:786
-		{
-		}
-	case 162:
 		//line sql.y:787
 		{
 		}
-	case 163:
+	case 159:
 		//line sql.y:788
 		{
 		}
-	case 164:
+	case 160:
 		//line sql.y:789
 		{
 		}
-	case 165:
+	case 161:
 		//line sql.y:790
+		{
+		}
+	case 162:
+		//line sql.y:791
+		{
+		}
+	case 163:
+		//line sql.y:792
+		{
+		}
+	case 164:
+		//line sql.y:793
+		{
+		}
+	case 165:
+		//line sql.y:794
 		{
 		}
 	case 166:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 167:
-		//line sql.y:794
-		{
-		}
-	case 168:
-		//line sql.y:797
-		{
-		}
-	case 169:
 		//line sql.y:798
 		{
 		}
-	case 170:
+	case 168:
 		//line sql.y:801
 		{
 		}
-	case 171:
+	case 169:
 		//line sql.y:802
 		{
 		}
-	case 172:
+	case 170:
 		//line sql.y:805
 		{
 		}
-	case 173:
+	case 171:
 		//line sql.y:806
+		{
+		}
+	case 172:
+		//line sql.y:809
+		{
+		}
+	case 173:
+		//line sql.y:810
 		{
 		}
 	case 174:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 175:
-		//line sql.y:810
+		//line sql.y:814
 		{
 		}
 	case 176:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 177:
-		//line sql.y:814
-		{
-		}
-	case 178:
-		//line sql.y:815
-		{
-		}
-	case 179:
 		//line sql.y:818
 		{
 		}
+	case 178:
+		//line sql.y:819
+		{
+		}
+	case 179:
+		//line sql.y:822
+		{
+		}
 	case 180:
-		//line sql.y:821
-		{
-		}
-	case 181:
-		//line sql.y:824
-		{
-		}
-	case 182:
 		//line sql.y:825
 		{
 		}
-	case 183:
+	case 181:
+		//line sql.y:828
+		{
+		}
+	case 182:
 		//line sql.y:829
+		{
+		}
+	case 183:
+		//line sql.y:833
 		{
 			// TODO(pmattis): Handle constraint name.
 		}
 	case 184:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 185:
-		//line sql.y:833
+		//line sql.y:837
 		{
 		}
 	case 186:
-		//line sql.y:848
-		{
-		}
-	case 187:
-		//line sql.y:849
-		{
-		}
-	case 188:
-		//line sql.y:850
-		{
-		}
-	case 189:
-		//line sql.y:851
-		{
-		}
-	case 190:
 		//line sql.y:852
 		{
 		}
-	case 191:
+	case 187:
 		//line sql.y:853
 		{
 		}
-	case 192:
+	case 188:
 		//line sql.y:854
 		{
 		}
-	case 193:
+	case 189:
+		//line sql.y:855
+		{
+		}
+	case 190:
+		//line sql.y:856
+		{
+		}
+	case 191:
 		//line sql.y:857
 		{
 		}
-	case 194:
-		//line sql.y:860
+	case 192:
+		//line sql.y:858
 		{
 		}
-	case 195:
+	case 193:
 		//line sql.y:861
 		{
 		}
-	case 196:
-		//line sql.y:862
+	case 194:
+		//line sql.y:864
 		{
 		}
-	case 197:
+	case 195:
 		//line sql.y:865
 		{
 		}
-	case 198:
+	case 196:
 		//line sql.y:866
 		{
 		}
-	case 199:
-		//line sql.y:867
-		{
-		}
-	case 200:
-		//line sql.y:868
-		{
-		}
-	case 201:
+	case 197:
 		//line sql.y:869
 		{
 		}
-	case 202:
+	case 198:
 		//line sql.y:870
 		{
 		}
+	case 199:
+		//line sql.y:871
+		{
+		}
+	case 200:
+		//line sql.y:872
+		{
+		}
+	case 201:
+		//line sql.y:873
+		{
+		}
+	case 202:
+		//line sql.y:874
+		{
+		}
 	case 203:
-		//line sql.y:876
-		{
-		}
-	case 204:
-		//line sql.y:877
-		{
-		}
-	case 205:
 		//line sql.y:880
 		{
 		}
-	case 206:
+	case 204:
 		//line sql.y:881
 		{
 		}
-	case 207:
-		//line sql.y:882
-		{
-		}
-	case 208:
-		//line sql.y:883
-		{
-		}
-	case 209:
+	case 205:
 		//line sql.y:884
 		{
 		}
-	case 210:
+	case 206:
 		//line sql.y:885
 		{
 		}
-	case 211:
+	case 207:
+		//line sql.y:886
+		{
+		}
+	case 208:
 		//line sql.y:887
 		{
 		}
-	case 212:
+	case 209:
+		//line sql.y:888
+		{
+		}
+	case 210:
 		//line sql.y:889
 		{
 		}
-	case 213:
-		//line sql.y:892
+	case 211:
+		//line sql.y:891
 		{
 		}
-	case 214:
+	case 212:
 		//line sql.y:893
 		{
 		}
-	case 215:
+	case 213:
 		//line sql.y:896
 		{
 		}
-	case 216:
+	case 214:
 		//line sql.y:897
 		{
 		}
-	case 217:
+	case 215:
 		//line sql.y:900
 		{
 		}
-	case 218:
+	case 216:
 		//line sql.y:901
+		{
+		}
+	case 217:
+		//line sql.y:904
+		{
+		}
+	case 218:
+		//line sql.y:905
 		{
 		}
 	case 219:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 220:
-		//line sql.y:907
+		//line sql.y:911
 		{
 		}
 	case 221:
-		//line sql.y:908
+		//line sql.y:912
 		{
 		}
 	case 222:
-		//line sql.y:909
-		{
-		}
-	case 223:
-		//line sql.y:910
-		{
-		}
-	case 224:
 		//line sql.y:913
 		{
 		}
-	case 225:
+	case 223:
 		//line sql.y:914
 		{
 		}
-	case 226:
+	case 224:
 		//line sql.y:917
 		{
 		}
-	case 227:
-		//line sql.y:920
+	case 225:
+		//line sql.y:918
 		{
 		}
-	case 228:
+	case 226:
 		//line sql.y:921
 		{
 		}
+	case 227:
+		//line sql.y:924
+		{
+		}
+	case 228:
+		//line sql.y:925
+		{
+		}
 	case 229:
-		//line sql.y:928
-		{
-		}
-	case 230:
-		//line sql.y:929
-		{
-		}
-	case 231:
-		//line sql.y:930
-		{
-		}
-	case 232:
-		//line sql.y:931
-		{
-		}
-	case 233:
 		//line sql.y:932
 		{
 		}
-	case 234:
+	case 230:
+		//line sql.y:933
+		{
+		}
+	case 231:
+		//line sql.y:934
+		{
+		}
+	case 232:
 		//line sql.y:935
 		{
 		}
+	case 233:
+		//line sql.y:936
+		{
+		}
+	case 234:
+		//line sql.y:939
+		{
+		}
 	case 235:
-		//line sql.y:938
-		{
-		}
-	case 236:
-		//line sql.y:941
-		{
-		}
-	case 237:
 		//line sql.y:942
 		{
 		}
-	case 238:
-		//line sql.y:943
-		{
-		}
-	case 239:
-		//line sql.y:944
-		{
-		}
-	case 240:
+	case 236:
 		//line sql.y:945
 		{
 		}
-	case 241:
+	case 237:
+		//line sql.y:946
+		{
+		}
+	case 238:
+		//line sql.y:947
+		{
+		}
+	case 239:
 		//line sql.y:948
 		{
 		}
-	case 242:
+	case 240:
 		//line sql.y:949
 		{
 		}
-	case 243:
+	case 241:
 		//line sql.y:952
 		{
 		}
-	case 244:
+	case 242:
 		//line sql.y:953
 		{
 		}
-	case 245:
+	case 243:
 		//line sql.y:956
 		{
 		}
-	case 246:
+	case 244:
 		//line sql.y:957
 		{
 		}
+	case 245:
+		//line sql.y:960
+		{
+		}
+	case 246:
+		//line sql.y:961
+		{
+		}
 	case 247:
-		//line sql.y:958
-		{
-		}
-	case 248:
-		//line sql.y:959
-		{
-		}
-	case 249:
 		//line sql.y:962
 		{
 		}
-	case 250:
+	case 248:
+		//line sql.y:963
+		{
+		}
+	case 249:
 		//line sql.y:966
 		{
 		}
-	case 251:
-		//line sql.y:967
-		{
-		}
-	case 252:
+	case 250:
 		//line sql.y:970
 		{
 		}
-	case 253:
-		//line sql.y:973
+	case 251:
+		//line sql.y:971
 		{
 		}
-	case 254:
+	case 252:
 		//line sql.y:974
 		{
 		}
-	case 255:
-		//line sql.y:975
+	case 253:
+		//line sql.y:977
 		{
 		}
-	case 256:
+	case 254:
 		//line sql.y:978
 		{
 		}
-	case 257:
+	case 255:
 		//line sql.y:979
 		{
 		}
-	case 258:
-		//line sql.y:980
+	case 256:
+		//line sql.y:982
 		{
 		}
-	case 259:
+	case 257:
+		//line sql.y:983
+		{
+		}
+	case 258:
 		//line sql.y:984
 		{
 		}
-	case 260:
-		//line sql.y:985
-		{
-		}
-	case 261:
-		//line sql.y:986
-		{
-		}
-	case 262:
-		//line sql.y:987
-		{
-		}
-	case 263:
+	case 259:
 		//line sql.y:988
 		{
 		}
-	case 264:
+	case 260:
+		//line sql.y:989
+		{
+		}
+	case 261:
+		//line sql.y:990
+		{
+		}
+	case 262:
+		//line sql.y:991
+		{
+		}
+	case 263:
 		//line sql.y:992
 		{
 		}
-	case 265:
-		//line sql.y:995
-		{
-		}
-	case 266:
+	case 264:
 		//line sql.y:996
 		{
 		}
+	case 265:
+		//line sql.y:999
+		{
+		}
+	case 266:
+		//line sql.y:1000
+		{
+		}
 	case 267:
-		//line sql.y:997
+		//line sql.y:1001
 		{
 		}
 	case 268:
-		//line sql.y:1003
+		//line sql.y:1007
 		{
 		}
 	case 269:
-		//line sql.y:1006
-		{
-		}
-	case 270:
-		//line sql.y:1009
-		{
-		}
-	case 271:
 		//line sql.y:1010
 		{
 		}
-	case 272:
+	case 270:
 		//line sql.y:1013
 		{
 		}
-	case 273:
+	case 271:
 		//line sql.y:1014
 		{
 		}
-	case 274:
+	case 272:
 		//line sql.y:1017
 		{
 		}
-	case 275:
+	case 273:
 		//line sql.y:1018
 		{
 		}
-	case 276:
+	case 274:
 		//line sql.y:1021
 		{
 		}
-	case 277:
+	case 275:
 		//line sql.y:1022
 		{
 		}
-	case 278:
+	case 276:
 		//line sql.y:1025
 		{
 		}
-	case 279:
+	case 277:
 		//line sql.y:1026
 		{
 		}
+	case 278:
+		//line sql.y:1029
+		{
+		}
+	case 279:
+		//line sql.y:1030
+		{
+		}
 	case 280:
-		//line sql.y:1033
-		{
-		}
-	case 281:
-		//line sql.y:1035
-		{
-		}
-	case 282:
 		//line sql.y:1037
 		{
 		}
-	case 283:
-		//line sql.y:1040
+	case 281:
+		//line sql.y:1039
 		{
 		}
-	case 284:
+	case 282:
 		//line sql.y:1041
 		{
 		}
-	case 285:
+	case 283:
 		//line sql.y:1044
 		{
 		}
-	case 286:
+	case 284:
 		//line sql.y:1045
 		{
 		}
-	case 287:
-		//line sql.y:1046
+	case 285:
+		//line sql.y:1048
 		{
 		}
-	case 288:
+	case 286:
 		//line sql.y:1049
 		{
 		}
-	case 289:
+	case 287:
 		//line sql.y:1050
 		{
 		}
-	case 290:
-		//line sql.y:1051
+	case 288:
+		//line sql.y:1053
 		{
 		}
-	case 291:
+	case 289:
 		//line sql.y:1054
 		{
 		}
-	case 292:
+	case 290:
 		//line sql.y:1055
 		{
 		}
+	case 291:
+		//line sql.y:1058
+		{
+		}
+	case 292:
+		//line sql.y:1059
+		{
+		}
 	case 293:
-		//line sql.y:1056
+		//line sql.y:1060
 		{
 		}
 	case 294:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 295:
-		//line sql.y:1066
+		//line sql.y:1070
 		{
 		}
 	case 296:
-		//line sql.y:1067
-		{
-		}
-	case 297:
-		//line sql.y:1068
-		{
-		}
-	case 298:
 		//line sql.y:1071
 		{
 		}
-	case 299:
+	case 297:
 		//line sql.y:1072
 		{
 		}
-	case 300:
+	case 298:
+		//line sql.y:1075
+		{
+		}
+	case 299:
 		//line sql.y:1076
 		{
 		}
+	case 300:
+		//line sql.y:1080
+		{
+		}
 	case 301:
-		//line sql.y:1078
-		{
-		}
-	case 302:
-		//line sql.y:1079
-		{
-		}
-	case 303:
 		//line sql.y:1082
 		{
 		}
-	case 304:
+	case 302:
 		//line sql.y:1083
 		{
 		}
-	case 305:
-		//line sql.y:1084
-		{
-		}
-	case 306:
-		//line sql.y:1085
-		{
-		}
-	case 307:
+	case 303:
 		//line sql.y:1086
 		{
 		}
-	case 308:
+	case 304:
 		//line sql.y:1087
 		{
 		}
-	case 309:
+	case 305:
+		//line sql.y:1088
+		{
+		}
+	case 306:
+		//line sql.y:1089
+		{
+		}
+	case 307:
 		//line sql.y:1090
 		{
 		}
-	case 310:
+	case 308:
 		//line sql.y:1091
 		{
 		}
-	case 311:
+	case 309:
 		//line sql.y:1094
 		{
 		}
-	case 312:
+	case 310:
 		//line sql.y:1095
 		{
 		}
-	case 313:
+	case 311:
+		//line sql.y:1098
+		{
+		}
+	case 312:
 		//line sql.y:1099
 		{
 		}
-	case 314:
-		//line sql.y:1100
-		{
-		}
-	case 315:
-		//line sql.y:1101
-		{
-		}
-	case 316:
-		//line sql.y:1102
-		{
-		}
-	case 317:
+	case 313:
 		//line sql.y:1103
 		{
 		}
-	case 318:
+	case 314:
 		//line sql.y:1104
 		{
 		}
-	case 319:
+	case 315:
 		//line sql.y:1105
 		{
 		}
-	case 320:
+	case 316:
 		//line sql.y:1106
 		{
 		}
-	case 321:
+	case 317:
 		//line sql.y:1107
 		{
 		}
-	case 322:
+	case 318:
 		//line sql.y:1108
 		{
 		}
-	case 323:
+	case 319:
 		//line sql.y:1109
 		{
 		}
-	case 324:
+	case 320:
 		//line sql.y:1110
 		{
 		}
-	case 325:
+	case 321:
 		//line sql.y:1111
 		{
 		}
-	case 326:
+	case 322:
 		//line sql.y:1112
 		{
 		}
-	case 327:
+	case 323:
+		//line sql.y:1113
+		{
+		}
+	case 324:
+		//line sql.y:1114
+		{
+		}
+	case 325:
 		//line sql.y:1115
 		{
 		}
-	case 328:
+	case 326:
 		//line sql.y:1116
 		{
 		}
-	case 329:
-		//line sql.y:1117
+	case 327:
+		//line sql.y:1119
 		{
 		}
-	case 330:
+	case 328:
 		//line sql.y:1120
 		{
 		}
-	case 331:
+	case 329:
 		//line sql.y:1121
 		{
 		}
-	case 332:
-		//line sql.y:1122
-		{
-		}
-	case 333:
-		//line sql.y:1123
-		{
-		}
-	case 334:
+	case 330:
 		//line sql.y:1124
 		{
 		}
-	case 335:
+	case 331:
+		//line sql.y:1125
+		{
+		}
+	case 332:
+		//line sql.y:1126
+		{
+		}
+	case 333:
+		//line sql.y:1127
+		{
+		}
+	case 334:
 		//line sql.y:1128
 		{
 		}
+	case 335:
+		//line sql.y:1132
+		{
+		}
 	case 336:
-		//line sql.y:1129
-		{
-		}
-	case 337:
-		//line sql.y:1130
-		{
-		}
-	case 338:
 		//line sql.y:1133
 		{
 		}
-	case 339:
+	case 337:
 		//line sql.y:1134
 		{
 		}
+	case 338:
+		//line sql.y:1137
+		{
+		}
+	case 339:
+		//line sql.y:1138
+		{
+		}
 	case 340:
-		//line sql.y:1155
-		{
-		}
-	case 341:
-		//line sql.y:1156
-		{
-		}
-	case 342:
 		//line sql.y:1159
 		{
 		}
-	case 343:
+	case 341:
 		//line sql.y:1160
 		{
 		}
-	case 344:
-		//line sql.y:1161
+	case 342:
+		//line sql.y:1163
 		{
 		}
-	case 345:
+	case 343:
 		//line sql.y:1164
 		{
 		}
-	case 346:
+	case 344:
 		//line sql.y:1165
 		{
 		}
-	case 347:
+	case 345:
 		//line sql.y:1168
 		{
 		}
-	case 348:
+	case 346:
 		//line sql.y:1169
 		{
 		}
-	case 349:
+	case 347:
 		//line sql.y:1172
 		{
 		}
-	case 350:
+	case 348:
 		//line sql.y:1173
 		{
 		}
+	case 349:
+		//line sql.y:1176
+		{
+		}
+	case 350:
+		//line sql.y:1177
+		{
+		}
 	case 351:
-		//line sql.y:1174
+		//line sql.y:1178
 		{
 		}
 	case 352:
-		//line sql.y:1186
-		{
-		}
-	case 353:
-		//line sql.y:1187
-		{
-		}
-	case 354:
-		//line sql.y:1188
-		{
-		}
-	case 355:
-		//line sql.y:1189
-		{
-		}
-	case 356:
 		//line sql.y:1190
 		{
 		}
-	case 357:
+	case 353:
 		//line sql.y:1191
 		{
 		}
+	case 354:
+		//line sql.y:1192
+		{
+		}
+	case 355:
+		//line sql.y:1193
+		{
+		}
+	case 356:
+		//line sql.y:1194
+		{
+		}
+	case 357:
+		//line sql.y:1195
+		{
+		}
 	case 358:
-		//line sql.y:1196
-		{
-		}
-	case 359:
-		//line sql.y:1197
-		{
-		}
-	case 360:
 		//line sql.y:1200
 		{
 		}
-	case 361:
+	case 359:
 		//line sql.y:1201
 		{
 		}
-	case 362:
+	case 360:
+		//line sql.y:1204
+		{
+		}
+	case 361:
 		//line sql.y:1205
+		{
+		}
+	case 362:
+		//line sql.y:1209
 		{
 		}
 	case 363:
@@ -7486,101 +7490,101 @@ sqldefault:
 	case 364:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 365:
-		//line sql.y:1217
+		//line sql.y:1221
 		{
 		}
 	case 366:
-		//line sql.y:1218
-		{
-		}
-	case 367:
-		//line sql.y:1219
-		{
-		}
-	case 368:
 		//line sql.y:1222
 		{
 		}
-	case 369:
+	case 367:
 		//line sql.y:1223
 		{
 		}
-	case 370:
+	case 368:
 		//line sql.y:1226
 		{
 		}
-	case 371:
-		//line sql.y:1229
+	case 369:
+		//line sql.y:1227
 		{
 		}
-	case 372:
+	case 370:
 		//line sql.y:1230
 		{
 		}
-	case 373:
-		//line sql.y:1231
+	case 371:
+		//line sql.y:1233
 		{
 		}
-	case 374:
+	case 372:
 		//line sql.y:1234
 		{
 		}
-	case 375:
+	case 373:
 		//line sql.y:1235
 		{
 		}
-	case 376:
-		//line sql.y:1236
+	case 374:
+		//line sql.y:1238
 		{
 		}
-	case 377:
+	case 375:
 		//line sql.y:1239
 		{
 		}
-	case 378:
+	case 376:
 		//line sql.y:1240
 		{
 		}
+	case 377:
+		//line sql.y:1243
+		{
+		}
+	case 378:
+		//line sql.y:1244
+		{
+		}
 	case 379:
-		//line sql.y:1247
+		//line sql.y:1251
 		{
 		}
 	case 380:
-		//line sql.y:1250
+		//line sql.y:1254
 		{
 		}
 	case 381:
-		//line sql.y:1251
+		//line sql.y:1255
 		{
 		}
 	case 382:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 383:
-		//line sql.y:1255
+		//line sql.y:1259
 		{
 		}
 	case 384:
-		//line sql.y:1258
+		//line sql.y:1262
 		{
 		}
 	case 385:
-		//line sql.y:1267
-		{
-		}
-	case 386:
-		//line sql.y:1268
-		{
-		}
-	case 387:
 		//line sql.y:1271
 		{
 		}
+	case 386:
+		//line sql.y:1272
+		{
+		}
+	case 387:
+		//line sql.y:1275
+		{
+		}
 	case 388:
-		//line sql.y:1274
+		//line sql.y:1278
 		{
 		}
 	case 389:
-		//line sql.y:1275
+		//line sql.y:1279
 		{
 		}
 	case 390:
@@ -7588,41 +7592,41 @@ sqldefault:
 	case 391:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 392:
-		//line sql.y:1319
+		//line sql.y:1323
 		{
 		}
 	case 393:
-		//line sql.y:1320
+		//line sql.y:1324
 		{
 		}
 	case 394:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 395:
-		//line sql.y:1333
-		{
-		}
-	case 396:
-		//line sql.y:1334
-		{
-		}
-	case 397:
-		//line sql.y:1335
-		{
-		}
-	case 398:
-		//line sql.y:1336
-		{
-		}
-	case 399:
 		//line sql.y:1337
 		{
 		}
-	case 400:
+	case 396:
 		//line sql.y:1338
 		{
 		}
-	case 401:
+	case 397:
 		//line sql.y:1339
+		{
+		}
+	case 398:
+		//line sql.y:1340
+		{
+		}
+	case 399:
+		//line sql.y:1341
+		{
+		}
+	case 400:
+		//line sql.y:1342
+		{
+		}
+	case 401:
+		//line sql.y:1343
 		{
 		}
 	case 402:
@@ -7630,53 +7634,53 @@ sqldefault:
 	case 403:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 404:
-		//line sql.y:1370
+		//line sql.y:1374
 		{
 		}
 	case 405:
-		//line sql.y:1373
+		//line sql.y:1377
 		{
 		}
 	case 406:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 407:
-		//line sql.y:1375
+		//line sql.y:1379
 		{
 		}
 	case 408:
-		//line sql.y:1376
+		//line sql.y:1380
 		{
 		}
 	case 409:
-		//line sql.y:1377
+		//line sql.y:1381
 		{
 		}
 	case 410:
-		//line sql.y:1378
+		//line sql.y:1382
 		{
 		}
 	case 411:
-		//line sql.y:1389
+		//line sql.y:1393
 		{
 		}
 	case 412:
-		//line sql.y:1390
-		{
-		}
-	case 413:
-		//line sql.y:1391
-		{
-		}
-	case 414:
 		//line sql.y:1394
 		{
 		}
-	case 415:
+	case 413:
 		//line sql.y:1395
 		{
 		}
-	case 416:
+	case 414:
 		//line sql.y:1398
+		{
+		}
+	case 415:
+		//line sql.y:1399
+		{
+		}
+	case 416:
+		//line sql.y:1402
 		{
 		}
 	case 417:
@@ -7688,83 +7692,83 @@ sqldefault:
 	case 420:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 421:
-		//line sql.y:1407
-		{
-		}
-	case 422:
-		//line sql.y:1408
-		{
-		}
-	case 423:
 		//line sql.y:1411
 		{
 		}
-	case 424:
+	case 422:
 		//line sql.y:1412
 		{
 		}
-	case 425:
+	case 423:
 		//line sql.y:1415
 		{
 		}
-	case 426:
+	case 424:
 		//line sql.y:1416
 		{
 		}
+	case 425:
+		//line sql.y:1419
+		{
+		}
+	case 426:
+		//line sql.y:1420
+		{
+		}
 	case 427:
-		//line sql.y:1417
+		//line sql.y:1421
 		{
 		}
 	case 428:
-		//line sql.y:1422
-		{
-		}
-	case 429:
-		//line sql.y:1423
-		{
-		}
-	case 430:
 		//line sql.y:1426
 		{
 		}
-	case 431:
+	case 429:
 		//line sql.y:1427
 		{
 		}
-	case 432:
+	case 430:
 		//line sql.y:1430
 		{
 		}
-	case 433:
+	case 431:
 		//line sql.y:1431
 		{
 		}
-	case 434:
+	case 432:
 		//line sql.y:1434
 		{
 		}
-	case 435:
-		//line sql.y:1437
+	case 433:
+		//line sql.y:1435
 		{
 		}
-	case 436:
+	case 434:
 		//line sql.y:1438
 		{
 		}
-	case 437:
+	case 435:
 		//line sql.y:1441
 		{
 		}
-	case 438:
+	case 436:
 		//line sql.y:1442
 		{
 		}
-	case 439:
+	case 437:
 		//line sql.y:1445
 		{
 		}
-	case 440:
+	case 438:
 		//line sql.y:1446
+		{
+		}
+	case 439:
+		//line sql.y:1449
+		{
+		}
+	case 440:
+		//line sql.y:1450
 		{
 		}
 	case 441:
@@ -7774,437 +7778,437 @@ sqldefault:
 	case 443:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 444:
-		//line sql.y:1452
+		//line sql.y:1456
 		{
 		}
 	case 445:
-		//line sql.y:1455
+		//line sql.y:1459
 		{
 		}
 	case 446:
-		//line sql.y:1457
+		//line sql.y:1461
 		{
 		}
 	case 447:
-		//line sql.y:1460
+		//line sql.y:1464
 		{
 		}
 	case 448:
-		//line sql.y:1462
+		//line sql.y:1466
 		{
 		}
 	case 449:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 450:
-		//line sql.y:1466
+		//line sql.y:1470
 		{
 		}
 	case 451:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 452:
-		//line sql.y:1475
+		//line sql.y:1479
 		{
 		}
 	case 453:
-		//line sql.y:1476
+		//line sql.y:1480
 		{
 		}
 	case 454:
-		//line sql.y:1477
+		//line sql.y:1481
 		{
 		}
 	case 455:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 456:
-		//line sql.y:1486
-		{
-		}
-	case 457:
-		//line sql.y:1487
-		{
-		}
-	case 458:
 		//line sql.y:1490
 		{
 		}
-	case 459:
+	case 457:
 		//line sql.y:1491
 		{
 		}
+	case 458:
+		//line sql.y:1494
+		{
+		}
+	case 459:
+		//line sql.y:1495
+		{
+		}
 	case 460:
-		//line sql.y:1512
-		{
-		}
-	case 461:
-		//line sql.y:1513
-		{
-		}
-	case 462:
 		//line sql.y:1516
 		{
 		}
-	case 463:
+	case 461:
 		//line sql.y:1517
 		{
 		}
-	case 464:
+	case 462:
 		//line sql.y:1520
 		{
 		}
-	case 465:
+	case 463:
 		//line sql.y:1521
 		{
 		}
-	case 466:
+	case 464:
 		//line sql.y:1524
 		{
 		}
-	case 467:
-		//line sql.y:1527
+	case 465:
+		//line sql.y:1525
 		{
 		}
-	case 468:
+	case 466:
 		//line sql.y:1528
 		{
 		}
-	case 469:
+	case 467:
 		//line sql.y:1531
 		{
 		}
-	case 470:
+	case 468:
 		//line sql.y:1532
 		{
 		}
-	case 471:
+	case 469:
 		//line sql.y:1535
 		{
 		}
-	case 472:
+	case 470:
 		//line sql.y:1536
 		{
 		}
-	case 473:
+	case 471:
 		//line sql.y:1539
 		{
 		}
-	case 474:
+	case 472:
 		//line sql.y:1540
 		{
 		}
-	case 475:
+	case 473:
 		//line sql.y:1543
 		{
 		}
-	case 476:
-		//line sql.y:1546
+	case 474:
+		//line sql.y:1544
 		{
 		}
-	case 477:
+	case 475:
 		//line sql.y:1547
 		{
 		}
-	case 478:
-		//line sql.y:1548
+	case 476:
+		//line sql.y:1550
 		{
 		}
-	case 479:
+	case 477:
 		//line sql.y:1551
 		{
 		}
-	case 480:
+	case 478:
 		//line sql.y:1552
 		{
 		}
+	case 479:
+		//line sql.y:1555
+		{
+		}
+	case 480:
+		//line sql.y:1556
+		{
+		}
 	case 481:
-		//line sql.y:1553
-		{
-		}
-	case 482:
-		//line sql.y:1554
-		{
-		}
-	case 483:
 		//line sql.y:1557
 		{
 		}
-	case 484:
+	case 482:
 		//line sql.y:1558
 		{
 		}
-	case 485:
+	case 483:
 		//line sql.y:1561
 		{
 		}
-	case 486:
+	case 484:
 		//line sql.y:1562
 		{
 		}
+	case 485:
+		//line sql.y:1565
+		{
+		}
+	case 486:
+		//line sql.y:1566
+		{
+		}
 	case 487:
-		//line sql.y:1569
-		{
-		}
-	case 488:
-		//line sql.y:1570
-		{
-		}
-	case 489:
 		//line sql.y:1573
 		{
 		}
-	case 490:
+	case 488:
 		//line sql.y:1574
 		{
 		}
-	case 491:
+	case 489:
+		//line sql.y:1577
+		{
+		}
+	case 490:
 		//line sql.y:1578
 		{
 		}
+	case 491:
+		//line sql.y:1582
+		{
+		}
 	case 492:
-		//line sql.y:1579
+		//line sql.y:1583
 		{
 		}
 	case 493:
-		//line sql.y:1580
+		//line sql.y:1584
 		{
 		}
 	case 494:
-		//line sql.y:1581
+		//line sql.y:1585
 		{
 		}
 	case 495:
-		//line sql.y:1582
+		//line sql.y:1586
 		{
 		}
 	case 496:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 497:
-		//line sql.y:1584
+		//line sql.y:1588
 		{
 		}
 	case 498:
-		//line sql.y:1601
-		{
-		}
-	case 499:
-		//line sql.y:1602
-		{
-		}
-	case 500:
-		//line sql.y:1603
-		{
-		}
-	case 501:
-		//line sql.y:1604
-		{
-		}
-	case 502:
 		//line sql.y:1605
 		{
 		}
-	case 503:
+	case 499:
 		//line sql.y:1606
 		{
 		}
-	case 504:
+	case 500:
+		//line sql.y:1607
+		{
+		}
+	case 501:
+		//line sql.y:1608
+		{
+		}
+	case 502:
 		//line sql.y:1609
 		{
 		}
-	case 505:
+	case 503:
 		//line sql.y:1610
 		{
 		}
+	case 504:
+		//line sql.y:1613
+		{
+		}
+	case 505:
+		//line sql.y:1614
+		{
+		}
 	case 506:
-		//line sql.y:1611
+		//line sql.y:1615
 		{
 		}
 	case 507:
-		//line sql.y:1612
+		//line sql.y:1616
 		{
 		}
 	case 508:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 509:
-		//line sql.y:1616
+		//line sql.y:1620
 		{
 		}
 	case 510:
-		//line sql.y:1621
-		{
-		}
-	case 511:
-		//line sql.y:1622
-		{
-		}
-	case 512:
-		//line sql.y:1623
-		{
-		}
-	case 513:
-		//line sql.y:1624
-		{
-		}
-	case 514:
 		//line sql.y:1625
 		{
 		}
-	case 515:
+	case 511:
+		//line sql.y:1626
+		{
+		}
+	case 512:
+		//line sql.y:1627
+		{
+		}
+	case 513:
 		//line sql.y:1628
 		{
 		}
-	case 516:
+	case 514:
 		//line sql.y:1629
 		{
 		}
+	case 515:
+		//line sql.y:1632
+		{
+		}
+	case 516:
+		//line sql.y:1633
+		{
+		}
 	case 517:
-		//line sql.y:1630
+		//line sql.y:1634
 		{
 		}
 	case 518:
-		//line sql.y:1631
-		{
-		}
-	case 519:
 		//line sql.y:1635
 		{
 		}
+	case 519:
+		//line sql.y:1639
+		{
+		}
 	case 520:
-		//line sql.y:1636
+		//line sql.y:1640
 		{
 		}
 	case 521:
-		//line sql.y:1646
-		{
-		}
-	case 522:
-		//line sql.y:1647
-		{
-		}
-	case 523:
 		//line sql.y:1650
 		{
 		}
-	case 524:
+	case 522:
 		//line sql.y:1651
 		{
 		}
+	case 523:
+		//line sql.y:1654
+		{
+		}
+	case 524:
+		//line sql.y:1655
+		{
+		}
 	case 525:
-		//line sql.y:1652
-		{
-		}
-	case 526:
-		//line sql.y:1653
-		{
-		}
-	case 527:
 		//line sql.y:1656
 		{
 		}
-	case 528:
+	case 526:
 		//line sql.y:1657
 		{
 		}
+	case 527:
+		//line sql.y:1660
+		{
+		}
+	case 528:
+		//line sql.y:1661
+		{
+		}
 	case 529:
-		//line sql.y:1667
+		//line sql.y:1671
 		{
 		}
 	case 530:
-		//line sql.y:1668
+		//line sql.y:1672
 		{
 		}
 	case 531:
-		//line sql.y:1669
+		//line sql.y:1673
 		{
 		}
 	case 532:
-		//line sql.y:1681
-		{
-		}
-	case 533:
-		//line sql.y:1682
-		{
-		}
-	case 534:
 		//line sql.y:1685
 		{
 		}
-	case 535:
-		//line sql.y:1688
+	case 533:
+		//line sql.y:1686
 		{
 		}
-	case 536:
+	case 534:
 		//line sql.y:1689
 		{
 		}
-	case 537:
+	case 535:
 		//line sql.y:1692
 		{
 		}
-	case 538:
+	case 536:
 		//line sql.y:1693
 		{
 		}
-	case 539:
+	case 537:
 		//line sql.y:1696
 		{
 		}
-	case 540:
+	case 538:
 		//line sql.y:1697
 		{
 		}
-	case 541:
+	case 539:
 		//line sql.y:1700
 		{
 		}
-	case 542:
+	case 540:
 		//line sql.y:1701
 		{
 		}
-	case 543:
+	case 541:
 		//line sql.y:1704
 		{
 		}
-	case 544:
+	case 542:
 		//line sql.y:1705
 		{
 		}
-	case 545:
+	case 543:
 		//line sql.y:1708
 		{
 		}
+	case 544:
+		//line sql.y:1709
+		{
+		}
+	case 545:
+		//line sql.y:1712
+		{
+		}
 	case 546:
-		//line sql.y:1717
-		{
-		}
-	case 547:
-		//line sql.y:1718
-		{
-		}
-	case 548:
-		//line sql.y:1720
-		{
-		}
-	case 549:
 		//line sql.y:1721
 		{
 		}
-	case 550:
+	case 547:
 		//line sql.y:1722
 		{
 		}
-	case 551:
-		//line sql.y:1723
+	case 548:
+		//line sql.y:1724
 		{
 		}
-	case 552:
+	case 549:
+		//line sql.y:1725
+		{
+		}
+	case 550:
 		//line sql.y:1726
 		{
 		}
-	case 553:
+	case 551:
 		//line sql.y:1727
 		{
 		}
+	case 552:
+		//line sql.y:1730
+		{
+		}
+	case 553:
+		//line sql.y:1731
+		{
+		}
 	case 554:
-		//line sql.y:1728
+		//line sql.y:1732
 		{
 		}
 	case 555:
@@ -8216,19 +8220,19 @@ sqldefault:
 	case 558:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 559:
-		//line sql.y:1735
+		//line sql.y:1739
 		{
 		}
 	case 560:
-		//line sql.y:1736
+		//line sql.y:1740
 		{
 		}
 	case 561:
-		//line sql.y:1737
+		//line sql.y:1741
 		{
 		}
 	case 562:
-		//line sql.y:1738
+		//line sql.y:1742
 		{
 		}
 	case 563:
@@ -8240,67 +8244,67 @@ sqldefault:
 	case 566:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 567:
-		//line sql.y:1756
+		//line sql.y:1760
 		{
 		}
 	case 568:
-		//line sql.y:1757
+		//line sql.y:1761
 		{
 		}
 	case 569:
-		//line sql.y:1758
-		{
-		}
-	case 570:
 		//line sql.y:1762
 		{
 		}
-	case 571:
-		//line sql.y:1763
-		{
-		}
-	case 572:
-		//line sql.y:1764
-		{
-		}
-	case 573:
-		//line sql.y:1765
-		{
-		}
-	case 574:
+	case 570:
 		//line sql.y:1766
 		{
 		}
-	case 575:
+	case 571:
 		//line sql.y:1767
 		{
 		}
-	case 576:
+	case 572:
 		//line sql.y:1768
 		{
 		}
-	case 577:
+	case 573:
 		//line sql.y:1769
 		{
 		}
-	case 578:
+	case 574:
 		//line sql.y:1770
 		{
 		}
-	case 579:
+	case 575:
 		//line sql.y:1771
 		{
 		}
-	case 580:
+	case 576:
 		//line sql.y:1772
 		{
 		}
-	case 581:
+	case 577:
+		//line sql.y:1773
+		{
+		}
+	case 578:
+		//line sql.y:1774
+		{
+		}
+	case 579:
 		//line sql.y:1775
 		{
 		}
-	case 582:
+	case 580:
 		//line sql.y:1776
+		{
+		}
+	case 581:
+		//line sql.y:1779
+		{
+		}
+	case 582:
+		//line sql.y:1780
 		{
 		}
 	case 583:
@@ -8312,11 +8316,11 @@ sqldefault:
 	case 586:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 587:
-		//line sql.y:1791
+		//line sql.y:1795
 		{
 		}
 	case 588:
-		//line sql.y:1794
+		//line sql.y:1798
 		{
 		}
 	case 589:
@@ -8328,479 +8332,479 @@ sqldefault:
 	case 592:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 593:
-		//line sql.y:1807
+		//line sql.y:1811
 		{
 		}
 	case 594:
-		//line sql.y:1810
-		{
-		}
-	case 595:
-		//line sql.y:1813
-		{
-		}
-	case 596:
 		//line sql.y:1814
 		{
 		}
-	case 597:
-		//line sql.y:1815
+	case 595:
+		//line sql.y:1817
 		{
 		}
-	case 598:
+	case 596:
 		//line sql.y:1818
 		{
 		}
-	case 599:
+	case 597:
 		//line sql.y:1819
 		{
 		}
-	case 600:
+	case 598:
 		//line sql.y:1822
 		{
 		}
-	case 601:
+	case 599:
 		//line sql.y:1823
 		{
 		}
-	case 602:
+	case 600:
+		//line sql.y:1826
+		{
+		}
+	case 601:
 		//line sql.y:1827
 		{
 		}
-	case 603:
-		//line sql.y:1828
-		{
-		}
-	case 604:
-		//line sql.y:1829
-		{
-		}
-	case 605:
-		//line sql.y:1830
-		{
-		}
-	case 606:
+	case 602:
 		//line sql.y:1831
 		{
 		}
-	case 607:
+	case 603:
+		//line sql.y:1832
+		{
+		}
+	case 604:
+		//line sql.y:1833
+		{
+		}
+	case 605:
 		//line sql.y:1834
 		{
 		}
-	case 608:
-		//line sql.y:1837
+	case 606:
+		//line sql.y:1835
 		{
 		}
-	case 609:
+	case 607:
 		//line sql.y:1838
 		{
 		}
-	case 610:
-		//line sql.y:1839
+	case 608:
+		//line sql.y:1841
 		{
 		}
-	case 611:
+	case 609:
 		//line sql.y:1842
 		{
 		}
-	case 612:
+	case 610:
 		//line sql.y:1843
 		{
 		}
-	case 613:
-		//line sql.y:1844
-		{
-		}
-	case 614:
-		//line sql.y:1845
-		{
-		}
-	case 615:
+	case 611:
 		//line sql.y:1846
 		{
 		}
-	case 616:
+	case 612:
 		//line sql.y:1847
 		{
 		}
-	case 617:
+	case 613:
 		//line sql.y:1848
 		{
 		}
-	case 618:
+	case 614:
 		//line sql.y:1849
 		{
 		}
-	case 619:
+	case 615:
 		//line sql.y:1850
 		{
 		}
-	case 620:
+	case 616:
 		//line sql.y:1851
 		{
 		}
-	case 621:
+	case 617:
 		//line sql.y:1852
 		{
 		}
-	case 622:
+	case 618:
 		//line sql.y:1853
 		{
 		}
-	case 623:
+	case 619:
 		//line sql.y:1854
 		{
 		}
-	case 624:
+	case 620:
 		//line sql.y:1855
 		{
 		}
-	case 625:
+	case 621:
+		//line sql.y:1856
+		{
+		}
+	case 622:
+		//line sql.y:1857
+		{
+		}
+	case 623:
 		//line sql.y:1858
 		{
 		}
-	case 626:
+	case 624:
 		//line sql.y:1859
+		{
+		}
+	case 625:
+		//line sql.y:1862
+		{
+		}
+	case 626:
+		//line sql.y:1863
 		{
 		}
 	case 627:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 628:
-		//line sql.y:1882
+		//line sql.y:1886
 		{
 		}
 	case 629:
-		//line sql.y:1883
+		//line sql.y:1887
 		{
 		}
 	case 630:
-		//line sql.y:1884
+		//line sql.y:1888
 		{
 		}
 	case 631:
-		//line sql.y:1892
-		{
-		}
-	case 632:
-		//line sql.y:1893
-		{
-		}
-	case 633:
-		//line sql.y:1894
-		{
-		}
-	case 634:
-		//line sql.y:1895
-		{
-		}
-	case 635:
 		//line sql.y:1896
 		{
 		}
-	case 636:
+	case 632:
 		//line sql.y:1897
 		{
 		}
-	case 637:
+	case 633:
 		//line sql.y:1898
 		{
 		}
-	case 638:
+	case 634:
 		//line sql.y:1899
 		{
 		}
-	case 639:
+	case 635:
 		//line sql.y:1900
 		{
 		}
-	case 640:
+	case 636:
 		//line sql.y:1901
 		{
 		}
-	case 641:
+	case 637:
 		//line sql.y:1902
 		{
 		}
-	case 642:
+	case 638:
 		//line sql.y:1903
 		{
 		}
-	case 643:
+	case 639:
 		//line sql.y:1904
 		{
 		}
-	case 644:
+	case 640:
 		//line sql.y:1905
 		{
 		}
-	case 645:
+	case 641:
 		//line sql.y:1906
 		{
 		}
-	case 646:
+	case 642:
 		//line sql.y:1907
 		{
 		}
-	case 647:
+	case 643:
 		//line sql.y:1908
 		{
 		}
-	case 648:
+	case 644:
 		//line sql.y:1909
 		{
 		}
-	case 649:
+	case 645:
 		//line sql.y:1910
 		{
 		}
-	case 650:
+	case 646:
 		//line sql.y:1911
 		{
 		}
-	case 651:
+	case 647:
 		//line sql.y:1912
 		{
 		}
-	case 652:
+	case 648:
 		//line sql.y:1913
 		{
 		}
-	case 653:
+	case 649:
 		//line sql.y:1914
 		{
 		}
-	case 654:
+	case 650:
 		//line sql.y:1915
 		{
 		}
-	case 655:
+	case 651:
 		//line sql.y:1916
 		{
 		}
-	case 656:
+	case 652:
 		//line sql.y:1917
 		{
 		}
-	case 657:
+	case 653:
 		//line sql.y:1918
 		{
 		}
-	case 658:
+	case 654:
 		//line sql.y:1919
 		{
 		}
-	case 659:
+	case 655:
 		//line sql.y:1920
 		{
 		}
-	case 660:
+	case 656:
 		//line sql.y:1921
 		{
 		}
-	case 661:
+	case 657:
 		//line sql.y:1922
 		{
 		}
-	case 662:
+	case 658:
 		//line sql.y:1923
 		{
 		}
-	case 663:
+	case 659:
 		//line sql.y:1924
 		{
 		}
-	case 664:
+	case 660:
 		//line sql.y:1925
 		{
 		}
-	case 665:
+	case 661:
 		//line sql.y:1926
 		{
 		}
-	case 666:
+	case 662:
 		//line sql.y:1927
 		{
 		}
-	case 667:
+	case 663:
 		//line sql.y:1928
 		{
 		}
-	case 668:
+	case 664:
 		//line sql.y:1929
 		{
 		}
-	case 669:
+	case 665:
 		//line sql.y:1930
 		{
 		}
-	case 670:
+	case 666:
 		//line sql.y:1931
 		{
 		}
-	case 671:
+	case 667:
 		//line sql.y:1932
 		{
 		}
-	case 672:
+	case 668:
 		//line sql.y:1933
 		{
 		}
-	case 673:
+	case 669:
 		//line sql.y:1934
 		{
 		}
-	case 674:
+	case 670:
 		//line sql.y:1935
 		{
 		}
-	case 675:
+	case 671:
 		//line sql.y:1936
 		{
 		}
-	case 676:
+	case 672:
 		//line sql.y:1937
 		{
 		}
-	case 677:
+	case 673:
 		//line sql.y:1938
 		{
 		}
-	case 678:
+	case 674:
 		//line sql.y:1939
 		{
 		}
-	case 679:
+	case 675:
 		//line sql.y:1940
 		{
 		}
-	case 680:
+	case 676:
 		//line sql.y:1941
 		{
 		}
-	case 681:
+	case 677:
 		//line sql.y:1942
 		{
 		}
-	case 682:
+	case 678:
 		//line sql.y:1943
 		{
 		}
-	case 683:
+	case 679:
 		//line sql.y:1944
 		{
 		}
-	case 684:
+	case 680:
 		//line sql.y:1945
 		{
 		}
-	case 685:
+	case 681:
 		//line sql.y:1946
+		{
+		}
+	case 682:
+		//line sql.y:1947
+		{
+		}
+	case 683:
+		//line sql.y:1948
+		{
+		}
+	case 684:
+		//line sql.y:1949
+		{
+		}
+	case 685:
+		//line sql.y:1950
 		{
 		}
 	case 686:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 687:
-		//line sql.y:1957
-		{
-		}
-	case 688:
-		//line sql.y:1958
-		{
-		}
-	case 689:
-		//line sql.y:1959
-		{
-		}
-	case 690:
-		//line sql.y:1960
-		{
-		}
-	case 691:
 		//line sql.y:1961
 		{
 		}
-	case 692:
+	case 688:
 		//line sql.y:1962
 		{
 		}
-	case 693:
+	case 689:
 		//line sql.y:1963
 		{
 		}
-	case 694:
+	case 690:
 		//line sql.y:1964
 		{
 		}
-	case 695:
+	case 691:
 		//line sql.y:1965
 		{
 		}
-	case 696:
+	case 692:
 		//line sql.y:1966
 		{
 		}
-	case 697:
+	case 693:
 		//line sql.y:1967
 		{
 		}
-	case 698:
+	case 694:
 		//line sql.y:1968
 		{
 		}
-	case 699:
+	case 695:
 		//line sql.y:1969
 		{
 		}
-	case 700:
+	case 696:
 		//line sql.y:1970
 		{
 		}
-	case 701:
+	case 697:
 		//line sql.y:1971
 		{
 		}
-	case 702:
+	case 698:
 		//line sql.y:1972
 		{
 		}
-	case 703:
+	case 699:
 		//line sql.y:1973
 		{
 		}
-	case 704:
+	case 700:
 		//line sql.y:1974
 		{
 		}
-	case 705:
+	case 701:
 		//line sql.y:1975
 		{
 		}
-	case 706:
+	case 702:
 		//line sql.y:1976
 		{
 		}
-	case 707:
+	case 703:
 		//line sql.y:1977
 		{
 		}
-	case 708:
+	case 704:
 		//line sql.y:1978
 		{
 		}
-	case 709:
+	case 705:
 		//line sql.y:1979
 		{
 		}
-	case 710:
+	case 706:
 		//line sql.y:1980
 		{
 		}
-	case 711:
+	case 707:
 		//line sql.y:1981
 		{
 		}
-	case 712:
+	case 708:
 		//line sql.y:1982
+		{
+		}
+	case 709:
+		//line sql.y:1983
+		{
+		}
+	case 710:
+		//line sql.y:1984
+		{
+		}
+	case 711:
+		//line sql.y:1985
+		{
+		}
+	case 712:
+		//line sql.y:1986
 		{
 		}
 	case 713:
@@ -8808,751 +8812,751 @@ sqldefault:
 	case 714:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 715:
-		//line sql.y:1993
+		//line sql.y:1997
 		{
 		}
 	case 716:
-		//line sql.y:1994
+		//line sql.y:1998
 		{
 		}
 	case 717:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 718:
-		//line sql.y:1996
-		{
-		}
-	case 719:
-		//line sql.y:1997
-		{
-		}
-	case 720:
-		//line sql.y:1998
-		{
-		}
-	case 721:
-		//line sql.y:1999
-		{
-		}
-	case 722:
 		//line sql.y:2000
 		{
 		}
-	case 723:
+	case 719:
 		//line sql.y:2001
 		{
 		}
-	case 724:
+	case 720:
 		//line sql.y:2002
 		{
 		}
-	case 725:
+	case 721:
 		//line sql.y:2003
 		{
 		}
-	case 726:
+	case 722:
 		//line sql.y:2004
 		{
 		}
-	case 727:
+	case 723:
+		//line sql.y:2005
+		{
+		}
+	case 724:
+		//line sql.y:2006
+		{
+		}
+	case 725:
 		//line sql.y:2007
 		{
 		}
-	case 728:
+	case 726:
 		//line sql.y:2008
 		{
 		}
-	case 729:
-		//line sql.y:2009
-		{
-		}
-	case 730:
-		//line sql.y:2010
-		{
-		}
-	case 731:
+	case 727:
 		//line sql.y:2011
 		{
 		}
-	case 732:
+	case 728:
 		//line sql.y:2012
 		{
 		}
-	case 733:
+	case 729:
 		//line sql.y:2013
 		{
 		}
+	case 730:
+		//line sql.y:2014
+		{
+		}
+	case 731:
+		//line sql.y:2015
+		{
+		}
+	case 732:
+		//line sql.y:2016
+		{
+		}
+	case 733:
+		//line sql.y:2017
+		{
+		}
 	case 734:
-		//line sql.y:2023
+		//line sql.y:2027
 		{
 		}
 	case 735:
-		//line sql.y:2024
+		//line sql.y:2028
 		{
 		}
 	case 736:
-		//line sql.y:2031
+		//line sql.y:2035
 		{
 		}
 	case 737:
-		//line sql.y:2032
-		{
-		}
-	case 738:
 		//line sql.y:2036
 		{
 		}
-	case 739:
-		//line sql.y:2037
-		{
-		}
-	case 740:
-		//line sql.y:2038
-		{
-		}
-	case 741:
-		//line sql.y:2039
-		{
-		}
-	case 742:
+	case 738:
 		//line sql.y:2040
 		{
 		}
-	case 743:
+	case 739:
 		//line sql.y:2041
 		{
 		}
-	case 744:
+	case 740:
 		//line sql.y:2042
 		{
 		}
-	case 745:
+	case 741:
 		//line sql.y:2043
 		{
 		}
-	case 746:
+	case 742:
 		//line sql.y:2044
 		{
 		}
-	case 747:
+	case 743:
 		//line sql.y:2045
 		{
 		}
-	case 748:
+	case 744:
 		//line sql.y:2046
 		{
 		}
-	case 749:
+	case 745:
 		//line sql.y:2047
 		{
 		}
-	case 750:
+	case 746:
 		//line sql.y:2048
 		{
 		}
-	case 751:
+	case 747:
 		//line sql.y:2049
 		{
 		}
-	case 752:
+	case 748:
 		//line sql.y:2050
 		{
 		}
-	case 753:
+	case 749:
 		//line sql.y:2051
 		{
 		}
-	case 754:
+	case 750:
 		//line sql.y:2052
 		{
 		}
-	case 755:
+	case 751:
 		//line sql.y:2053
 		{
 		}
-	case 756:
+	case 752:
 		//line sql.y:2054
 		{
 		}
-	case 757:
+	case 753:
 		//line sql.y:2055
 		{
 		}
-	case 758:
+	case 754:
 		//line sql.y:2056
 		{
 		}
-	case 759:
+	case 755:
 		//line sql.y:2057
 		{
 		}
-	case 760:
+	case 756:
 		//line sql.y:2058
 		{
 		}
-	case 761:
+	case 757:
 		//line sql.y:2059
 		{
 		}
-	case 762:
+	case 758:
 		//line sql.y:2060
 		{
 		}
-	case 763:
+	case 759:
 		//line sql.y:2061
 		{
 		}
-	case 764:
+	case 760:
 		//line sql.y:2062
 		{
 		}
-	case 765:
+	case 761:
 		//line sql.y:2063
 		{
 		}
-	case 766:
+	case 762:
 		//line sql.y:2064
 		{
 		}
-	case 767:
+	case 763:
 		//line sql.y:2065
 		{
 		}
-	case 768:
+	case 764:
+		//line sql.y:2066
+		{
+		}
+	case 765:
+		//line sql.y:2067
+		{
+		}
+	case 766:
+		//line sql.y:2068
+		{
+		}
+	case 767:
 		//line sql.y:2069
 		{
 		}
-	case 769:
-		//line sql.y:2070
-		{
-		}
-	case 770:
+	case 768:
 		//line sql.y:2073
 		{
 		}
-	case 771:
+	case 769:
 		//line sql.y:2074
 		{
 		}
-	case 772:
+	case 770:
+		//line sql.y:2077
+		{
+		}
+	case 771:
 		//line sql.y:2078
 		{
 		}
-	case 773:
-		//line sql.y:2079
-		{
-		}
-	case 774:
+	case 772:
 		//line sql.y:2082
 		{
 		}
-	case 775:
+	case 773:
 		//line sql.y:2083
 		{
 		}
-	case 776:
+	case 774:
 		//line sql.y:2086
 		{
 		}
-	case 777:
-		//line sql.y:2089
+	case 775:
+		//line sql.y:2087
 		{
 		}
-	case 778:
+	case 776:
 		//line sql.y:2090
 		{
 		}
-	case 779:
-		//line sql.y:2091
+	case 777:
+		//line sql.y:2093
 		{
 		}
-	case 780:
+	case 778:
+		//line sql.y:2094
+		{
+		}
+	case 779:
 		//line sql.y:2095
 		{
 		}
+	case 780:
+		//line sql.y:2099
+		{
+		}
 	case 781:
-		//line sql.y:2106
-		{
-		}
-	case 782:
-		//line sql.y:2107
-		{
-		}
-	case 783:
 		//line sql.y:2110
 		{
 		}
-	case 784:
+	case 782:
 		//line sql.y:2111
 		{
 		}
+	case 783:
+		//line sql.y:2114
+		{
+		}
+	case 784:
+		//line sql.y:2115
+		{
+		}
 	case 785:
-		//line sql.y:2119
+		//line sql.y:2123
 		{
 		}
 	case 786:
-		//line sql.y:2120
-		{
-		}
-	case 787:
-		//line sql.y:2121
-		{
-		}
-	case 788:
 		//line sql.y:2124
 		{
 		}
-	case 789:
+	case 787:
 		//line sql.y:2125
 		{
 		}
+	case 788:
+		//line sql.y:2128
+		{
+		}
+	case 789:
+		//line sql.y:2129
+		{
+		}
 	case 790:
-		//line sql.y:2131
-		{
-		}
-	case 791:
-		//line sql.y:2132
-		{
-		}
-	case 792:
-		//line sql.y:2133
-		{
-		}
-	case 793:
-		//line sql.y:2134
-		{
-		}
-	case 794:
 		//line sql.y:2135
 		{
 		}
+	case 791:
+		//line sql.y:2136
+		{
+		}
+	case 792:
+		//line sql.y:2137
+		{
+		}
+	case 793:
+		//line sql.y:2138
+		{
+		}
+	case 794:
+		//line sql.y:2139
+		{
+		}
 	case 795:
-		//line sql.y:2145
+		//line sql.y:2149
 		{
 		}
 	case 796:
-		//line sql.y:2146
-		{
-		}
-	case 797:
-		//line sql.y:2147
-		{
-		}
-	case 798:
 		//line sql.y:2150
 		{
 		}
-	case 799:
+	case 797:
 		//line sql.y:2151
 		{
 		}
-	case 800:
+	case 798:
 		//line sql.y:2154
 		{
 		}
-	case 801:
-		//line sql.y:2157
+	case 799:
+		//line sql.y:2155
 		{
 		}
-	case 802:
+	case 800:
 		//line sql.y:2158
 		{
 		}
-	case 803:
-		//line sql.y:2159
+	case 801:
+		//line sql.y:2161
 		{
 		}
-	case 804:
+	case 802:
 		//line sql.y:2162
 		{
 		}
-	case 805:
+	case 803:
 		//line sql.y:2163
 		{
 		}
-	case 806:
-		//line sql.y:2164
-		{
-		}
-	case 807:
-		//line sql.y:2165
-		{
-		}
-	case 808:
+	case 804:
 		//line sql.y:2166
 		{
 		}
-	case 809:
+	case 805:
 		//line sql.y:2167
 		{
 		}
-	case 810:
+	case 806:
 		//line sql.y:2168
 		{
 		}
-	case 811:
+	case 807:
 		//line sql.y:2169
 		{
 		}
-	case 812:
+	case 808:
 		//line sql.y:2170
 		{
 		}
-	case 813:
+	case 809:
 		//line sql.y:2171
 		{
 		}
-	case 814:
+	case 810:
 		//line sql.y:2172
 		{
 		}
-	case 815:
+	case 811:
 		//line sql.y:2173
 		{
 		}
-	case 816:
+	case 812:
 		//line sql.y:2174
 		{
 		}
-	case 817:
+	case 813:
 		//line sql.y:2175
 		{
 		}
-	case 818:
+	case 814:
 		//line sql.y:2176
 		{
 		}
-	case 819:
+	case 815:
 		//line sql.y:2177
 		{
 		}
-	case 820:
+	case 816:
+		//line sql.y:2178
+		{
+		}
+	case 817:
+		//line sql.y:2179
+		{
+		}
+	case 818:
 		//line sql.y:2180
 		{
 		}
-	case 821:
+	case 819:
 		//line sql.y:2181
 		{
 		}
+	case 820:
+		//line sql.y:2184
+		{
+		}
+	case 821:
+		//line sql.y:2185
+		{
+		}
 	case 822:
-		//line sql.y:2182
+		//line sql.y:2186
 		{
 		}
 	case 823:
-		//line sql.y:2192
+		//line sql.y:2196
 		{
 		}
 	case 824:
-		//line sql.y:2193
-		{
-		}
-	case 825:
 		//line sql.y:2197
 		{
 		}
-	case 826:
-		//line sql.y:2198
-		{
-		}
-	case 827:
+	case 825:
 		//line sql.y:2201
 		{
 		}
-	case 828:
+	case 826:
 		//line sql.y:2202
 		{
 		}
-	case 829:
-		//line sql.y:2203
+	case 827:
+		//line sql.y:2205
 		{
 		}
-	case 830:
+	case 828:
 		//line sql.y:2206
 		{
 		}
-	case 831:
+	case 829:
 		//line sql.y:2207
 		{
 		}
-	case 832:
+	case 830:
 		//line sql.y:2210
 		{
 		}
-	case 833:
+	case 831:
 		//line sql.y:2211
 		{
 		}
-	case 834:
-		//line sql.y:2212
+	case 832:
+		//line sql.y:2214
 		{
 		}
-	case 835:
+	case 833:
 		//line sql.y:2215
 		{
 		}
-	case 836:
+	case 834:
 		//line sql.y:2216
 		{
 		}
-	case 837:
+	case 835:
 		//line sql.y:2219
 		{
 		}
-	case 838:
+	case 836:
 		//line sql.y:2220
 		{
 		}
+	case 837:
+		//line sql.y:2223
+		{
+		}
+	case 838:
+		//line sql.y:2224
+		{
+		}
 	case 839:
-		//line sql.y:2225
-		{
-		}
-	case 840:
-		//line sql.y:2226
-		{
-		}
-	case 841:
-		//line sql.y:2227
-		{
-		}
-	case 842:
-		//line sql.y:2228
-		{
-		}
-	case 843:
 		//line sql.y:2229
 		{
 		}
-	case 844:
+	case 840:
 		//line sql.y:2230
 		{
 		}
-	case 845:
+	case 841:
 		//line sql.y:2231
 		{
 		}
-	case 846:
+	case 842:
 		//line sql.y:2232
 		{
 		}
+	case 843:
+		//line sql.y:2233
+		{
+		}
+	case 844:
+		//line sql.y:2234
+		{
+		}
+	case 845:
+		//line sql.y:2235
+		{
+		}
+	case 846:
+		//line sql.y:2236
+		{
+		}
 	case 847:
-		//line sql.y:2240
-		{
-		}
-	case 848:
-		//line sql.y:2241
-		{
-		}
-	case 849:
 		//line sql.y:2244
 		{
 		}
-	case 850:
+	case 848:
+		//line sql.y:2245
+		{
+		}
+	case 849:
 		//line sql.y:2248
 		{
 		}
+	case 850:
+		//line sql.y:2252
+		{
+		}
 	case 851:
-		//line sql.y:2249
+		//line sql.y:2253
 		{
 		}
 	case 852:
-		//line sql.y:2263
-		{
-		}
-	case 853:
-		//line sql.y:2264
-		{
-		}
-	case 854:
-		//line sql.y:2265
-		{
-		}
-	case 855:
-		//line sql.y:2266
-		{
-		}
-	case 856:
 		//line sql.y:2267
 		{
 		}
-	case 857:
+	case 853:
 		//line sql.y:2268
 		{
 		}
-	case 858:
+	case 854:
+		//line sql.y:2269
+		{
+		}
+	case 855:
+		//line sql.y:2270
+		{
+		}
+	case 856:
 		//line sql.y:2271
 		{
 		}
+	case 857:
+		//line sql.y:2272
+		{
+		}
+	case 858:
+		//line sql.y:2275
+		{
+		}
 	case 859:
-		//line sql.y:2274
-		{
-		}
-	case 860:
-		//line sql.y:2277
-		{
-		}
-	case 861:
 		//line sql.y:2278
 		{
 		}
-	case 862:
-		//line sql.y:2279
+	case 860:
+		//line sql.y:2281
 		{
 		}
-	case 863:
+	case 861:
 		//line sql.y:2282
 		{
 		}
-	case 864:
+	case 862:
 		//line sql.y:2283
 		{
 		}
-	case 865:
-		//line sql.y:2291
+	case 863:
+		//line sql.y:2286
 		{
 		}
-	case 866:
+	case 864:
+		//line sql.y:2287
+		{
+		}
+	case 865:
 		//line sql.y:2295
 		{
 		}
-	case 867:
-		//line sql.y:2296
-		{
-		}
-	case 868:
+	case 866:
 		//line sql.y:2299
 		{
 		}
+	case 867:
+		//line sql.y:2300
+		{
+		}
+	case 868:
+		//line sql.y:2303
+		{
+		}
 	case 869:
-		//line sql.y:2302
+		//line sql.y:2306
 		{
 		}
 	case 870:
-		//line sql.y:2303
+		//line sql.y:2307
 		{
 		}
 	case 871:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 872:
-		//line sql.y:2307
-		{
-		}
-	case 873:
-		//line sql.y:2310
-		{
-		}
-	case 874:
 		//line sql.y:2311
 		{
 		}
-	case 875:
+	case 873:
 		//line sql.y:2314
 		{
 		}
-	case 876:
+	case 874:
 		//line sql.y:2315
 		{
 		}
+	case 875:
+		//line sql.y:2318
+		{
+		}
+	case 876:
+		//line sql.y:2319
+		{
+		}
 	case 877:
-		//line sql.y:2316
-		{
-		}
-	case 878:
-		//line sql.y:2317
-		{
-		}
-	case 879:
 		//line sql.y:2320
 		{
 		}
-	case 880:
+	case 878:
 		//line sql.y:2321
 		{
 		}
-	case 881:
+	case 879:
 		//line sql.y:2324
 		{
 		}
-	case 882:
+	case 880:
 		//line sql.y:2325
 		{
 		}
-	case 883:
+	case 881:
 		//line sql.y:2328
 		{
 		}
-	case 884:
+	case 882:
 		//line sql.y:2329
+		{
+		}
+	case 883:
+		//line sql.y:2332
+		{
+		}
+	case 884:
+		//line sql.y:2333
 		{
 		}
 	case 885:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 886:
-		//line sql.y:2337
-		{
-		}
-	case 887:
-		//line sql.y:2340
-		{
-		}
-	case 888:
 		//line sql.y:2341
 		{
 		}
+	case 887:
+		//line sql.y:2344
+		{
+		}
+	case 888:
+		//line sql.y:2345
+		{
+		}
 	case 889:
-		//line sql.y:2347
+		//line sql.y:2351
 		{
 		}
 	case 890:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 891:
-		//line sql.y:2352
-		{
-		}
-	case 892:
-		//line sql.y:2355
-		{
-		}
-	case 893:
 		//line sql.y:2356
 		{
 		}
-	case 894:
+	case 892:
 		//line sql.y:2359
 		{
 		}
+	case 893:
+		//line sql.y:2360
+		{
+		}
+	case 894:
+		//line sql.y:2363
+		{
+		}
 	case 895:
-		//line sql.y:2365
+		//line sql.y:2369
 		{
 		}
 	case 896:
-		//line sql.y:2366
+		//line sql.y:2370
 		{
 		}
 	case 897:
-		//line sql.y:2367
+		//line sql.y:2371
 		{
 		}
 	case 898:
-		//line sql.y:2372
+		//line sql.y:2376
 		{
 		}
 	case 899:
-		//line sql.y:2373
+		//line sql.y:2377
 		{
 		}
 	case 900:
-		//line sql.y:2381
-		{
-		}
-	case 901:
-		//line sql.y:2382
-		{
-		}
-	case 902:
 		//line sql.y:2385
 		{
 		}
-	case 903:
+	case 901:
 		//line sql.y:2386
+		{
+		}
+	case 902:
+		//line sql.y:2389
+		{
+		}
+	case 903:
+		//line sql.y:2390
 		{
 		}
 	case 904:
@@ -9560,73 +9564,73 @@ sqldefault:
 	case 905:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 906:
-		//line sql.y:2395
+		//line sql.y:2399
 		{
 		}
 	case 907:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 908:
-		//line sql.y:2401
+		//line sql.y:2405
 		{
 		}
 	case 909:
-		//line sql.y:2410
+		//line sql.y:2414
 		{
 		}
 	case 910:
-		//line sql.y:2411
-		{
-		}
-	case 911:
 		//line sql.y:2415
 		{
 		}
-	case 912:
-		//line sql.y:2416
-		{
-		}
-	case 913:
-		//line sql.y:2417
-		{
-		}
-	case 914:
-		//line sql.y:2418
-		{
-		}
-	case 915:
+	case 911:
 		//line sql.y:2419
 		{
 		}
-	case 916:
+	case 912:
 		//line sql.y:2420
 		{
 		}
-	case 917:
+	case 913:
 		//line sql.y:2421
 		{
 		}
-	case 918:
+	case 914:
 		//line sql.y:2422
 		{
 		}
-	case 919:
+	case 915:
 		//line sql.y:2423
 		{
 		}
-	case 920:
+	case 916:
 		//line sql.y:2424
 		{
 		}
-	case 921:
+	case 917:
 		//line sql.y:2425
 		{
 		}
-	case 922:
+	case 918:
 		//line sql.y:2426
 		{
 		}
-	case 923:
+	case 919:
 		//line sql.y:2427
+		{
+		}
+	case 920:
+		//line sql.y:2428
+		{
+		}
+	case 921:
+		//line sql.y:2429
+		{
+		}
+	case 922:
+		//line sql.y:2430
+		{
+		}
+	case 923:
+		//line sql.y:2431
 		{
 		}
 	case 924:
@@ -9636,11 +9640,11 @@ sqldefault:
 	case 926:
 		sqlVAL.empty = sqlS[sqlpt-0].empty
 	case 927:
-		//line sql.y:2437
+		//line sql.y:2441
 		{
 		}
 	case 928:
-		//line sql.y:2438
+		//line sql.y:2442
 		{
 		}
 	case 929:
