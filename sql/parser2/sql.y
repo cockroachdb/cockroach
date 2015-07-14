@@ -20,48 +20,72 @@
 
 %{
 package parser2
+
+import "strings"
 %}
 
 %union {
-  id    int
-  pos   int
-  empty struct{}
-  ival  int
-  str   string
+  id             int
+  pos            int
+  empty          struct{}
+  ival           int
+  str            string
+  strs           []string
+  qname          QualifiedName
+  qnames         []QualifiedName
+  stmt           Statement
+  stmts          []Statement
+  tableDef       TableDef
+  tableDefs      []TableDef
+  colConstraint  ColumnConstraint
+  colConstraints []ColumnConstraint
+  colType        ColumnType
+  expr           Expr
+  exprs          Exprs
+  selExpr        SelectExpr
+  selExprs       SelectExprs
+  tblExpr        TableExpr
+  tblExprs       TableExprs
+  joinCond       JoinCond
+  when           *When
+  whens          []*When
+  updateExpr     *UpdateExpr
+  updateExprs    []*UpdateExpr
+  limit          *Limit
 }
 
-%type <empty> stmt_block
-%type <empty> stmt_list
-%type <empty> stmt
+%type <stmts> stmt_block
+%type <stmts> stmt_list
+%type <stmt> stmt
 
-%type <empty> alter_stmt
-%type <empty> alter_database_stmt
-%type <empty> alter_index_stmt
-%type <empty> alter_table_stmt
-// %type <empty> alter_view_stmt
-%type <empty> create_stmt
-%type <empty> create_database_stmt
-%type <empty> create_index_stmt
-// %type <empty> create_schema_stmt
-%type <empty> create_table_stmt
-%type <empty> create_table_as_stmt
-// %type <empty> create_view_stmt
-%type <empty> delete_stmt
-%type <empty> drop_stmt
-%type <empty> explain_stmt
-%type <empty> explainable_stmt
-%type <empty> insert_stmt
-%type <empty> preparable_stmt
-%type <empty> rename_stmt
-%type <empty> select_stmt
-%type <empty> set_stmt
-%type <empty> show_stmt
-%type <empty> transaction_stmt
-%type <empty> truncate_stmt
-%type <empty> update_stmt
+%type <stmt> alter_stmt
+%type <stmt> alter_database_stmt
+%type <stmt> alter_index_stmt
+%type <stmt> alter_table_stmt
+// %type <stmt> alter_view_stmt
+%type <stmt> create_stmt
+%type <stmt> create_database_stmt
+%type <stmt> create_index_stmt
+// %type <stmt> create_schema_stmt
+%type <stmt> create_table_stmt
+%type <stmt> create_table_as_stmt
+// %type <stmt> create_view_stmt
+%type <stmt> delete_stmt
+%type <stmt> drop_stmt
+%type <stmt> explain_stmt
+%type <stmt> explainable_stmt
+%type <stmt> insert_stmt
+%type <stmt> preparable_stmt
+%type <stmt> rename_stmt
+%type <stmt> select_stmt
+%type <stmt> set_stmt
+%type <stmt> show_stmt
+%type <stmt> transaction_stmt
+%type <stmt> truncate_stmt
+%type <stmt> update_stmt
 
-%type <empty> select_no_parens select_with_parens select_clause
-%type <empty> simple_select values_clause
+%type <stmt> select_no_parens select_with_parens select_clause
+%type <stmt> simple_select values_clause
 
 %type <empty> alter_column_default alter_using
 %type <empty> opt_asc_desc opt_nulls_order
@@ -81,51 +105,51 @@ package parser2
 // %type <empty> opt_schema_elem_list
 // %type <empty> opt_schema_elem
 
-%type <empty> database_name attr_name
+%type <str>   database_name attr_name
 %type <empty> access_method_clause access_method
-%type <empty> name
+%type <str>   name
 %type <empty> index_name opt_index_name
 
 %type <empty> func_name subquery_op
 %type <empty> opt_class
 %type <empty> opt_collate
 
-%type <empty> qualified_name
-%type <empty> insert_target
+%type <qname> qualified_name
+%type <qname> insert_target
 
 %type <empty> math_op
 
 %type <empty> iso_level opt_encoding
 
-%type <empty> opt_table_elem_list table_elem_list 
+%type <tableDefs> opt_table_elem_list table_elem_list 
 %type <empty> opt_inherit
 %type <empty> opt_typed_table_elem_list typed_table_elem_list
 %type <empty> reloptions opt_reloptions
 %type <empty> opt_with distinct_clause opt_all_clause
-%type <empty> opt_column_list column_list
+%type <strs> opt_column_list column_list
 %type <empty> sort_clause opt_sort_clause sortby_list index_params
-%type <empty> name_list opt_name_list
+%type <strs> name_list opt_name_list
 %type <empty> opt_array_bounds
-%type <empty> from_clause from_list
+%type <tblExprs> from_clause from_list
 %type <empty> qualified_name_list
-%type <empty> any_name
-%type <empty> any_name_list
+%type <qname> any_name
+%type <qnames> any_name_list
 %type <empty> any_operator
-%type <empty> expr_list
-%type <empty> attrs
-%type <empty> target_list opt_target_list
-%type <empty> insert_column_list
+%type <exprs> expr_list
+%type <qname> attrs
+%type <selExprs> target_list opt_target_list
+%type <selExprs> insert_column_list
 %type <empty> set_target_list
-%type <empty> set_clause_list
-%type <empty> set_clause multiple_set_clause
-%type <empty>  indirection opt_indirection
-%type <empty> ctext_expr_list ctext_row
+%type <updateExprs> set_clause_list
+%type <updateExpr> set_clause multiple_set_clause
+%type <strs>  indirection opt_indirection
+%type <exprs> ctext_expr_list ctext_row
 %type <empty> reloption_list group_clause
-%type <empty> select_limit opt_select_limit
+%type <limit> select_limit opt_select_limit
 %type <empty> transaction_mode_list_or_empty
 %type <empty> table_func_elem_list
 %type <empty> returning_clause
-%type <empty> relation_expr_list
+%type <qnames> relation_expr_list
 
 %type <empty> group_by_list
 %type <empty> group_by_item empty_grouping_set
@@ -145,8 +169,8 @@ package parser2
 %type <empty> all_or_distinct
 
 %type <empty> join_outer
-%type <empty> join_qual
-%type <empty> join_type
+%type <joinCond> join_qual
+%type <str> join_type
 
 %type <empty> extract_list overlay_list position_list
 %type <empty> substr_list trim_list
@@ -158,30 +182,30 @@ package parser2
 %type <empty> opt_column opt_set_data
 %type <empty> drop_type
 
-%type <empty> limit_clause offset_clause 
-%type <empty>  select_limit_value select_offset_value select_offset_value2 
+%type <limit> limit_clause offset_clause 
+%type <expr>  select_limit_value select_offset_value select_offset_value2 
 %type <empty> opt_select_fetch_first_value
 %type <empty> row_or_rows first_or_next
 
-%type <empty> insert_rest
+%type <stmt>  insert_rest
 %type <empty> opt_conf_expr
 %type <empty> opt_on_conflict
 
-%type <empty> generic_set set_rest set_rest_more
+%type <stmt>  generic_set set_rest set_rest_more
 %type <empty> set_reset_clause
 
-%type <empty> table_elem column_def constraint_elem
+%type <tableDef> table_elem column_def constraint_elem
 %type <empty> typed_table_elem table_func_elem
 %type <empty> column_options
 %type <empty> reloption_elem
 %type <empty> def_arg
-%type <empty> column_elem
-%type <empty> where_clause
-%type <empty> indirection_elem
-%type <empty> a_expr b_expr c_expr a_expr_const
-%type <empty> columnref
-%type <empty> in_expr
-%type <empty> having_clause
+%type <str>   column_elem
+%type <expr>  where_clause
+%type <str>   indirection_elem
+%type <expr>  a_expr b_expr c_expr a_expr_const
+%type <expr>  columnref
+%type <expr>  in_expr
+%type <expr>  having_clause
 %type <empty> func_table array_expr
 %type <empty> exclusion_where_clause
 %type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
@@ -190,62 +214,62 @@ package parser2
 %type <empty> func_arg_list
 %type <empty> func_arg_expr
 %type <empty> row explicit_row implicit_row type_list array_expr_list
-%type <empty> case_expr case_arg case_default
-%type <empty> when_clause
-%type <empty> when_clause_list
+%type <expr>  case_expr case_arg case_default
+%type <when>  when_clause
+%type <whens> when_clause_list
 %type <empty> sub_type
-%type <empty> ctext_expr
-%type <empty> numeric_only
-%type <empty> alias_clause opt_alias_clause
+%type <expr> ctext_expr
+%type <expr> numeric_only
+%type <str> alias_clause opt_alias_clause
 %type <empty> func_alias_clause
 %type <empty> sortby
 %type <empty> index_elem
-%type <empty> table_ref
-%type <empty> joined_table
-%type <empty> relation_expr
-%type <empty> relation_expr_opt_alias
-%type <empty> target_elem insert_column_item
-%type <empty> single_set_clause
-%type <empty> set_target
+%type <tblExpr> table_ref
+%type <tblExpr> joined_table
+%type <qname> relation_expr
+%type <tblExpr> relation_expr_opt_alias
+%type <selExpr> target_elem insert_column_item
+%type <updateExpr> single_set_clause
+%type <qname> set_target
 
 %type <empty> explain_option_name
 %type <empty> explain_option_arg
 %type <empty> explain_option_elem
 %type <empty> explain_option_list
 
-%type <empty> typename simple_typename const_typename
-%type <empty> numeric opt_numeric_modifiers
-%type <empty> opt_float
-%type <empty> character const_character
-%type <empty> character_with_length character_without_length
-%type <empty> const_datetime const_interval
-%type <empty> bit const_bit bit_with_length bit_without_length
-%type <empty> character_base
+%type <colType> typename simple_typename const_typename
+%type <colType> numeric opt_numeric_modifiers
+%type <ival> opt_float
+%type <colType> character const_character
+%type <colType> character_with_length character_without_length
+%type <colType> const_datetime const_interval
+%type <colType> bit const_bit bit_with_length bit_without_length
+%type <colType> character_base
 %type <empty> extract_arg
 %type <empty> opt_charset
 %type <empty> opt_varying opt_timezone opt_no_inherit
 
-%type <empty> iconst signed_iconst
-%type <empty> sconst
-%type <empty> opt_boolean_or_string
-%type <empty> var_list
-%type <empty> var_name
-%type <empty> col_id
-%type <empty> col_label type_function_name param_name
-%type <empty> non_reserved_word
-%type <empty> non_reserved_word_or_sconst
+%type <ival>  iconst signed_iconst
+%type <str>   sconst
+%type <expr>  opt_boolean_or_string
+%type <exprs> var_list
+%type <strs>  var_name
+%type <str>   col_id
+%type <str>   col_label type_function_name param_name
+%type <str>   non_reserved_word
+%type <expr>  non_reserved_word_or_sconst
 %type <empty> createdb_opt_name
-%type <empty> var_value
+%type <expr>  var_value
 %type <empty> zone_value
 // %type <empty> role_spec
 
-%type <empty> unreserved_keyword type_func_name_keyword
-%type <empty> col_name_keyword reserved_keyword
+%type <str>   unreserved_keyword type_func_name_keyword
+%type <str>   col_name_keyword reserved_keyword
 
-%type <empty> table_constraint table_like_clause
+%type <tableDef> table_constraint table_like_clause
 %type <empty> table_like_option_list table_like_option
-%type <empty> col_qual_list
-%type <empty> col_constraint col_constraint_elem
+%type <colConstraints> col_qual_list
+%type <colConstraint> col_constraint col_constraint_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 %type <empty> existing_index
 
@@ -271,11 +295,11 @@ package parser2
 // 
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
-%token <empty> IDENT FCONST SCONST BCONST XCONST
-%token <empty> ICONST PARAM
-%token <empty> TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
-%token <empty> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%token <empty> ERROR
+%token <str>   IDENT FCONST SCONST BCONST XCONST
+%token <ival>  ICONST PARAM
+%token <str>   TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
+%token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+%token <str>   ERROR
 
 // If you want to make any keyword changes, update the keyword table in
 // src/include/parser/kwlist.h and add new keywords to the appropriate one of
@@ -283,90 +307,90 @@ package parser2
 // "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <empty> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER
-%token <empty> AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
-%token <empty> ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
+%token <str>   ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER
+%token <str>   AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
+%token <str>   ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
-%token <empty> BACKWARD BEFORE BEGIN BETWEEN BIGINT BINARY BIT
-%token <empty> BLOB BOOLEAN BOTH BY
+%token <str>   BACKWARD BEFORE BEGIN BETWEEN BIGINT BINARY BIT
+%token <str>   BLOB BOOLEAN BOTH BY
 
-%token <empty> CACHE CALLED CASCADE CASCADED CASE CAST CATALOG CHAIN CHAR
-%token <empty> CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
-%token <empty> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
-%token <empty> COMMITTED CONCAT CONCURRENTLY CONFIGURATION CONFLICT CONNECTION CONSTRAINT
-%token <empty> CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST CREATE
-%token <empty> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
-%token <empty> CURRENT_ROLE CURRENT_SCHEMA CURRENT_TIME CURRENT_TIMESTAMP
-%token <empty> CURRENT_USER CURSOR CYCLE
+%token <str>   CACHE CALLED CASCADE CASCADED CASE CAST CATALOG CHAIN CHAR
+%token <str>   CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
+%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
+%token <str>   COMMITTED CONCAT CONCURRENTLY CONFIGURATION CONFLICT CONNECTION CONSTRAINT
+%token <str>   CONSTRAINTS CONTENT CONTINUE CONVERSION COPY COST CREATE
+%token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
+%token <str>   CURRENT_ROLE CURRENT_SCHEMA CURRENT_TIME CURRENT_TIMESTAMP
+%token <str>   CURRENT_USER CURSOR CYCLE
 
-%token <empty> DATA DATABASE DATABASES DATE DAY DEALLOCATE DEC DECIMAL DECLARE DEFAULT DEFAULTS
-%token <empty> DEFERRABLE DEFERRED DEFINER DELETE DELIMITER DELIMITERS DESC
-%token <empty> DICTIONARY DISABLE DISCARD DISTINCT DO DOCUMENT DOMAIN DOUBLE DROP
+%token <str>   DATA DATABASE DATABASES DATE DAY DEALLOCATE DEC DECIMAL DECLARE DEFAULT DEFAULTS
+%token <str>   DEFERRABLE DEFERRED DEFINER DELETE DELIMITER DELIMITERS DESC
+%token <str>   DICTIONARY DISABLE DISCARD DISTINCT DO DOCUMENT DOMAIN DOUBLE DROP
 
-%token <empty> EACH ELSE ENABLE ENCODING ENCRYPTED END ENUM ESCAPE EVENT EXCEPT
-%token <empty> EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
+%token <str>   EACH ELSE ENABLE ENCODING ENCRYPTED END ENUM ESCAPE EVENT EXCEPT
+%token <str>   EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION EXTERNAL EXTRACT
 
-%token <empty> FALSE FAMILY FETCH FILTER FIRST FLOAT FOLLOWING FOR
-%token <empty> FORCE FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
+%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FOLLOWING FOR
+%token <str>   FORCE FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
-%token <empty> GLOBAL GRANT GRANTED GREATEST GROUP GROUPING
+%token <str>   GLOBAL GRANT GRANTED GREATEST GROUP GROUPING
 
-%token <empty> HANDLER HAVING HEADER HOLD HOUR
+%token <str>   HANDLER HAVING HEADER HOLD HOUR
 
-%token <empty> IDENTITY IF IMMEDIATE IMMUTABLE IMPLICIT IMPORT IN
-%token <empty> INCLUDING INCREMENT INDEX INDEXES INHERIT INHERITS INITIALLY INLINE
-%token <empty> INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
-%token <empty> INTERSECT INTERVAL INTO INVOKER IS ISOLATION
+%token <str>   IDENTITY IF IMMEDIATE IMMUTABLE IMPLICIT IMPORT IN
+%token <str>   INCLUDING INCREMENT INDEX INDEXES INHERIT INHERITS INITIALLY INLINE
+%token <str>   INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
+%token <str>   INTERSECT INTERVAL INTO INVOKER IS ISOLATION
 
-%token <empty> JOIN
+%token <str>   JOIN
 
-%token <empty> KEY
+%token <str>   KEY
 
-%token <empty> LABEL LANGUAGE LARGE LAST LATERAL
-%token <empty> LEADING LEAKPROOF LEAST LEFT LEVEL LIKE LIMIT LISTEN LOAD LOCAL
-%token <empty> LOCALTIME LOCALTIMESTAMP LOCATION LOCK LOCKED LOGGED
+%token <str>   LABEL LANGUAGE LARGE LAST LATERAL
+%token <str>   LEADING LEAKPROOF LEAST LEFT LEVEL LIKE LIMIT LISTEN LOAD LOCAL
+%token <str>   LOCALTIME LOCALTIMESTAMP LOCATION LOCK LOCKED LOGGED
 
-%token <empty> MAPPING MATCH MATERIALIZED MAXVALUE MINUTE MINVALUE MODE MONTH MOVE
+%token <str>   MAPPING MATCH MATERIALIZED MAXVALUE MINUTE MINVALUE MODE MONTH MOVE
 
-%token <empty> NAME NAMES NATIONAL NATURAL NCHAR NEXT NO NONE
-%token <empty> NOT NOTHING NOTIFY NOWAIT NULL NULLIF
-%token <empty> NULLS NUMERIC
+%token <str>   NAME NAMES NATIONAL NATURAL NCHAR NEXT NO NONE
+%token <str>   NOT NOTHING NOTIFY NOWAIT NULL NULLIF
+%token <str>   NULLS NUMERIC
 
-%token <empty> OBJECT OF OFF OFFSET OIDS ON ONLY OPTION OPTIONS OR
-%token <empty> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER
+%token <str>   OBJECT OF OFF OFFSET OIDS ON ONLY OPTION OPTIONS OR
+%token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER
 
-%token <empty> PARSER PARTIAL PARTITION PASSING PASSWORD PLACING PLANS POLICY POSITION
-%token <empty> PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
-%token <empty> PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROGRAM
+%token <str>   PARSER PARTIAL PARTITION PASSING PASSWORD PLACING PLANS POLICY POSITION
+%token <str>   PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
+%token <str>   PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROGRAM
 
-%token <empty> QUOTE
+%token <str>   QUOTE
 
-%token <empty> RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REFRESH REINDEX
-%token <empty> RELATIVE RELEASE RENAME REPEATABLE REPLACE REPLICA RESET RESTART
-%token <empty> RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK ROLLUP
-%token <empty> ROW ROWS RULE
+%token <str>   RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REFRESH REINDEX
+%token <str>   RELATIVE RELEASE RENAME REPEATABLE REPLACE REPLICA RESET RESTART
+%token <str>   RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK ROLLUP
+%token <str>   ROW ROWS RULE
 
-%token <empty> SAVEPOINT SCHEMA SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
-%token <empty> SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
-%token <empty> SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
-%token <empty> STATEMENT STATISTICS STDIN STDOUT STORAGE STRICT STRIP SUBSTRING
-%token <empty> SYMMETRIC SYSID SYSTEM
+%token <str>   SAVEPOINT SCHEMA SCROLL SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
+%token <str>   SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
+%token <str>   SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL STABLE STANDALONE START
+%token <str>   STATEMENT STATISTICS STDIN STDOUT STORAGE STRICT STRIP SUBSTRING
+%token <str>   SYMMETRIC SYSID SYSTEM
 
-%token <empty> TABLE TABLES TABLESAMPLE TABLESPACE TEMP TEMPLATE TEMPORARY TEXT THEN
-%token <empty> TIME TIMESTAMP TO TRAILING TRANSACTION TRANSFORM TREAT TRIGGER TRIM TRUE
-%token <empty> TRUNCATE TRUSTED TYPE TYPES
+%token <str>   TABLE TABLES TABLESAMPLE TABLESPACE TEMP TEMPLATE TEMPORARY TEXT THEN
+%token <str>   TIME TIMESTAMP TO TRAILING TRANSACTION TRANSFORM TREAT TRIGGER TRIM TRUE
+%token <str>   TRUNCATE TRUSTED TYPE TYPES
 
-%token <empty> UNBOUNDED UNCOMMITTED UNENCRYPTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED
-%token <empty> UNTIL UPDATE USER USING
+%token <str>   UNBOUNDED UNCOMMITTED UNENCRYPTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED
+%token <str>   UNTIL UPDATE USER USING
 
-%token <empty> VACUUM VALID VALIDATE VALIDATOR VALUE VALUES VARCHAR VARIADIC VARYING
-%token <empty> VERBOSE VERSION VIEW VIEWS VOLATILE
+%token <str>   VACUUM VALID VALIDATE VALIDATOR VALUE VALUES VARCHAR VARIADIC VARYING
+%token <str>   VERBOSE VERSION VIEW VIEWS VOLATILE
 
-%token <empty> WHEN WHERE WHITESPACE WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
+%token <str>   WHEN WHERE WHITESPACE WINDOW WITH WITHIN WITHOUT WORK WRAPPER WRITE
 
-%token <empty> YEAR YES
+%token <str>   YEAR YES
 
-%token <empty> ZONE
+%token <str>   ZONE
 
 // The grammar thinks these are keywords, but they are not in the kwlist.h list
 // and so can never be entered directly. The filter in parser.c creates these
@@ -439,11 +463,26 @@ package parser2
 %%
 
 stmt_block:
-  stmt_list {}
+  stmt_list
+  {
+    sqllex.(*scanner).stmts = $1
+  }
 
 stmt_list:
-  stmt_list ';' stmt {}
-| stmt {}
+  stmt_list ';' stmt
+  {
+    if $3 != nil {
+      $$ = append($1, $3)
+    }
+  }
+| stmt
+  {
+    if $1 != nil {
+      $$ = []Statement{$1}
+    } else {
+      $$ = nil
+    }
+  }
 
 stmt:
   alter_stmt
@@ -459,7 +498,10 @@ stmt:
 | transaction_stmt
 | truncate_stmt
 | update_stmt
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 // ALTER [DATABASE|INDEX|TABLE|VIEW]
 alter_stmt:
@@ -469,25 +511,64 @@ alter_stmt:
   // | alter_view_stmt
 
 alter_database_stmt:
-  ALTER DATABASE database_name WITH createdb_opt_list {}
-| ALTER DATABASE database_name createdb_opt_list {}
-| ALTER DATABASE database_name set_reset_clause {}
+  ALTER DATABASE database_name WITH createdb_opt_list
+  {
+    $$ = nil
+  }
+| ALTER DATABASE database_name createdb_opt_list
+  {
+    $$ = nil
+  }
+| ALTER DATABASE database_name set_reset_clause
+  {
+    $$ = nil
+  }
 
 alter_index_stmt:
-  ALTER INDEX qualified_name alter_table_cmds {}
-| ALTER INDEX IF EXISTS qualified_name alter_table_cmds {}
+  ALTER INDEX qualified_name alter_table_cmds
+  {
+    $$ = nil
+  }
+| ALTER INDEX IF EXISTS qualified_name alter_table_cmds
+  {
+    $$ = nil
+  }
 
 alter_table_stmt:
-  ALTER TABLE relation_expr alter_table_cmds {}
-| ALTER TABLE IF EXISTS relation_expr alter_table_cmds {}
-// | ALTER TABLE relation_expr SET SCHEMA name {}
-// | ALTER TABLE IF EXISTS relation_expr SET SCHEMA name {}
+  ALTER TABLE relation_expr alter_table_cmds
+  {
+    $$ = nil
+  }
+| ALTER TABLE IF EXISTS relation_expr alter_table_cmds
+  {
+    $$ = nil
+  }
+// | ALTER TABLE relation_expr SET SCHEMA name
+//   {
+//     $$ = nil
+//   }
+// | ALTER TABLE IF EXISTS relation_expr SET SCHEMA name
+//   {
+//     $$ = nil
+//   }
 
 // alter_view_stmt:
-//   ALTER VIEW qualified_name alter_table_cmds {}
-// | ALTER VIEW IF EXISTS qualified_name alter_table_cmds {}
-// | ALTER VIEW qualified_name SET SCHEMA name {}
-// | ALTER VIEW IF EXISTS qualified_name SET SCHEMA name {}
+//   ALTER VIEW qualified_name alter_table_cmds
+//   {
+//     $$ = nil
+//   }
+// | ALTER VIEW IF EXISTS qualified_name alter_table_cmds
+//   {
+//     $$ = nil
+//   }
+// | ALTER VIEW qualified_name SET SCHEMA name
+//   {
+//     $$ = nil
+//   }
+// | ALTER VIEW IF EXISTS qualified_name SET SCHEMA name
+//   {
+//     $$ = nil
+//   }
 
 alter_table_cmds:
   alter_table_cmd
@@ -564,7 +645,10 @@ alter_using:
 | /* EMPTY */ {}
 
 reloptions:
-  '(' reloption_list ')' {}
+  '(' reloption_list ')'
+  {
+    $$ = $2
+  }
 
 opt_reloptions:
   WITH reloptions {}
@@ -593,16 +677,37 @@ create_stmt:
 // DELETE FROM query
 delete_stmt:
   opt_with_clause DELETE FROM relation_expr_opt_alias
-    where_clause returning_clause {}
+    where_clause returning_clause
+  {
+    $$ = &Delete{Table: $4, Where: newWhere(astWhere, $5)}
+  }
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
-  DROP drop_type IF EXISTS any_name_list opt_drop_behavior {}
-| DROP drop_type any_name_list opt_drop_behavior {}
-| DROP DATABASE database_name {}
-| DROP DATABASE IF EXISTS database_name {}
-| DROP TABLE any_name_list {}
-| DROP TABLE IF EXISTS any_name_list {}
+  DROP drop_type IF EXISTS any_name_list opt_drop_behavior
+  {
+    $$ = nil
+  }
+| DROP drop_type any_name_list opt_drop_behavior
+  {
+    $$ = nil
+  }
+| DROP DATABASE database_name
+  {
+    $$ = &DropDatabase{Name: $3, IfExists: false}
+  }
+| DROP DATABASE IF EXISTS database_name
+  {
+    $$ = &DropDatabase{Name: $5, IfExists: true}
+  }
+| DROP TABLE any_name_list
+  {
+    $$ = &DropTable{Names: $3, IfExists: false}
+  }
+| DROP TABLE IF EXISTS any_name_list
+  {
+    $$ = &DropTable{Names: $5, IfExists: true}
+  }
 
 drop_type:
   INDEX {}
@@ -610,23 +715,50 @@ drop_type:
 // | VIEW {}
 
 any_name_list:
-  any_name {}
-| any_name_list ',' any_name {}
+  any_name
+  {
+    $$ = []QualifiedName{$1}
+  }
+| any_name_list ',' any_name
+  {
+    $$ = append($1, $3)
+  }
 
 any_name:
-  col_id {}
-| col_id attrs {}
+  col_id
+  {
+    $$ = QualifiedName{$1}
+  }
+| col_id attrs
+  {
+    $$ = append(QualifiedName{$1}, $2...)
+  }
 
 attrs:
-  '.' attr_name {}
-| attrs '.' attr_name {}
+  '.' attr_name
+  {
+    $$ = QualifiedName{$2}
+  }
+| attrs '.' attr_name
+  {
+    $$ = append($1, $3)
+  }
 
 // EXPLAIN [VERBOSE] query
 // EXPLAIN (options) query
 explain_stmt:
-  EXPLAIN explainable_stmt {}
-| EXPLAIN VERBOSE explainable_stmt {}
-| EXPLAIN '(' explain_option_list ')' explainable_stmt {}
+  EXPLAIN explainable_stmt
+  {
+    $$ = nil
+  }
+| EXPLAIN VERBOSE explainable_stmt
+  {
+    $$ = nil
+  }
+| EXPLAIN '(' explain_option_list ')' explainable_stmt
+  {
+    $$ = nil
+  }
 
 explainable_stmt:
   select_stmt
@@ -652,10 +784,22 @@ explain_option_arg:
 | /* EMPTY */ {}
 
 // create_schema_stmt:
-//   CREATE SCHEMA opt_schema_name AUTHORIZATION role_spec opt_schema_elem_list {}
-// | CREATE SCHEMA col_id opt_schema_elem_list {}
-// | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec opt_schema_elem_list {}
-// | CREATE SCHEMA IF NOT EXISTS col_id opt_schema_elem_list {}
+//   CREATE SCHEMA opt_schema_name AUTHORIZATION role_spec opt_schema_elem_list
+//   {
+//     $$ = nil
+//   }
+// | CREATE SCHEMA col_id opt_schema_elem_list
+//   {
+//     $$ = nil
+//   }
+// | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec opt_schema_elem_list
+//   {
+//     $$ = nil
+//   }
+// | CREATE SCHEMA IF NOT EXISTS col_id opt_schema_elem_list
+//   {
+//     $$ = nil
+//   }
 //
 // opt_schema_name:
 //   col_id {}
@@ -675,9 +819,18 @@ explain_option_arg:
 // SET name TO 'var_value'
 // SET TIME ZONE 'var_value'
 set_stmt:
-  SET set_rest {}
-| SET LOCAL set_rest {}
-| SET SESSION set_rest {}
+  SET set_rest
+  {
+    $$ = $2
+  }
+| SET LOCAL set_rest
+  {
+    $$ = $3
+  }
+| SET SESSION set_rest
+  {
+    $$ = $3
+  }
 
 set_rest:
   TRANSACTION transaction_mode_list {}
@@ -685,10 +838,22 @@ set_rest:
 | set_rest_more {}
 
 generic_set:
-  var_name TO var_list {}
-| var_name '=' var_list {}
-| var_name TO DEFAULT {}
-| var_name '=' DEFAULT {}
+  var_name TO var_list
+  {
+    $$ = &Set{Name: $1, Values: $3}
+  }
+| var_name '=' var_list
+  {
+    $$ = &Set{Name: $1, Values: $3}
+  }
+| var_name TO DEFAULT
+  {
+    $$ = &Set{Name: $1}
+  }
+| var_name '=' DEFAULT
+  {
+    $$ = &Set{Name: $1}
+  }
 
 set_rest_more:
   // Generic SET syntaxes:
@@ -701,12 +866,24 @@ set_rest_more:
 | NAMES opt_encoding {}
 
 var_name:
-  col_id {}
-| var_name '.' col_id {}
+  col_id
+  {
+    $$ = []string{$1}
+  }
+| var_name '.' col_id
+  {
+    $$ = append($1, $3)
+  }
 
 var_list:
-  var_value {}
-| var_list ',' var_value {}
+  var_value
+  {
+    $$ = []Expr{$1}
+  }
+| var_list ',' var_value
+  {
+    $$ = append($1, $3)
+  }
 
 var_value:
   opt_boolean_or_string
@@ -719,9 +896,18 @@ iso_level:
 | SERIALIZABLE {}
 
 opt_boolean_or_string:
-  TRUE {}
-| FALSE {}
-| ON {}
+  TRUE
+  {
+    $$ = BoolVal(true)
+  }
+| FALSE
+  {
+    $$ = BoolVal(false)
+  }
+| ON
+  {
+    $$ = StrVal($1)
+  }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
   // so we don't need to distinguish them here.
@@ -749,30 +935,76 @@ opt_encoding:
 | /* EMPTY */ {}
 
 non_reserved_word_or_sconst:
-  non_reserved_word {}
-| sconst {}
+  non_reserved_word
+  {
+    $$ = StrVal($1)
+  }
+| sconst
+  {
+    $$ = StrVal($1)
+  }
 
 set_reset_clause:
   SET set_rest {}
 
 show_stmt:
-  SHOW var_name {}
-| SHOW TIME ZONE {}
-| SHOW ALL {}
-| SHOW TABLES FROM var_name {}
-| SHOW COLUMNS FROM var_name {}
-| SHOW INDEX FROM var_name {}
+  SHOW var_name
+  {
+    // It would be cleaner if we could have "SHOW DATABASES" and "SHOW
+    // TABLES" rules, but unfortunately DATABASES and TABLES are
+    // unreserved keywords and thus valid variable names and such
+    // rules would cause reduce/reduce conflicts.
+    if len($2) == 1 && strings.EqualFold($2[0], "DATABASES") {
+      $$ = &ShowDatabases{}
+    } else if len($2) == 1 && strings.EqualFold($2[0], "TABLES") {
+      $$ = &ShowTables{}
+    } else {
+      $$ = nil
+    }
+  }
+| SHOW TIME ZONE
+  {
+    $$ = nil
+  }
+| SHOW ALL
+  {
+    $$ = nil
+  }
+| SHOW TABLES FROM var_name
+  {
+    $$ = &ShowTables{Name: $4}
+  }
+| SHOW COLUMNS FROM var_name
+  {
+    $$ = &ShowColumns{Table: $4}
+  }
+| SHOW INDEX FROM var_name
+  {
+    $$ = &ShowIndex{Table: $4}
+  }
 
 // CREATE TABLE relname
 create_table_stmt:
   CREATE opt_temp TABLE any_name '(' opt_table_elem_list ')'
-    opt_inherit opt_with on_commit_option {}
+    opt_inherit opt_with on_commit_option
+  {
+    $$ = &CreateTable{Table: $4, IfNotExists: false, Defs: $6}
+  }
 | CREATE opt_temp TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
-    opt_inherit opt_with on_commit_option {}
+    opt_inherit opt_with on_commit_option
+  {
+    $$ = &CreateTable{Table: $7, IfNotExists: true, Defs: $9}
+  }
 | CREATE opt_temp TABLE any_name OF any_name
-    opt_typed_table_elem_list opt_with on_commit_option {}
+    opt_typed_table_elem_list opt_with on_commit_option
+  {
+    $$ = nil
+  }
 | CREATE opt_temp TABLE IF NOT EXISTS any_name OF any_name
-    opt_typed_table_elem_list opt_with on_commit_option {}
+    opt_typed_table_elem_list opt_with on_commit_option
+  {
+    $$ = nil
+  }
 
 // Redundancy here is needed to avoid shift/reduce conflicts, since TEMP is not
 // a reserved word.
@@ -795,15 +1027,27 @@ opt_temp:
 
 opt_table_elem_list:
   table_elem_list
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 opt_typed_table_elem_list:
-  '(' typed_table_elem_list ')' {}
+  '(' typed_table_elem_list ')'
+  {
+    $$ = $2
+  }
 | /* EMPTY */ {}
 
 table_elem_list:
-  table_elem {}
-| table_elem_list ',' table_elem {}
+  table_elem
+  {
+    $$ = TableDefs{$1}
+  }
+| table_elem_list ',' table_elem
+  {
+    $$ = append($1, $3)
+  }
 
 typed_table_elem_list:
   typed_table_elem {}
@@ -819,19 +1063,29 @@ typed_table_elem:
 | table_constraint {}
 
 column_def:
-  col_id typename col_qual_list {}
+  col_id typename col_qual_list
+  {
+    $$ = newColumnTableDef($1, $2, $3)
+  }
 
 column_options:
   col_id WITH OPTIONS col_qual_list {}
 
 col_qual_list:
-  col_qual_list col_constraint {}
-| /* EMPTY */ {}
+  col_qual_list col_constraint
+  {
+    $$ = append($1, $2)
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 col_constraint:
   CONSTRAINT name col_constraint_elem
   {
     // TODO(pmattis): Handle constraint name.
+    $$ = $3
   }
 | col_constraint_elem
 | COLLATE any_name {}
@@ -849,10 +1103,22 @@ col_constraint:
 // conflict on NOT (since NOT might start a subsequent NOT NULL constraint, or
 // be part of a_expr NOT LIKE or similar constructs).
 col_constraint_elem:
-  NOT NULL {}
-| NULL {}
-| UNIQUE {}
-| PRIMARY KEY {}
+  NOT NULL
+  {
+    $$ = NotNullConstraint{}
+  }
+| NULL
+  {
+    $$ = NullConstraint{}
+  }
+| UNIQUE
+  {
+    $$ = UniqueConstraint{}
+  }
+| PRIMARY KEY
+  {
+    $$ = PrimaryKeyConstraint{}
+  }
 | CHECK '(' a_expr ')' opt_no_inherit {}
 | DEFAULT b_expr {}
 | REFERENCES qualified_name opt_column_list key_match key_actions {}
@@ -877,15 +1143,33 @@ table_like_option:
 // column definition. col_constraint_elem specifies the embedded form.
 // - thomas 1997-12-03
 table_constraint:
-  CONSTRAINT name constraint_elem {}
-| constraint_elem {}
+  CONSTRAINT name constraint_elem
+  {
+    $$ = $3
+    if i, ok := $$.(*IndexTableDef); ok {
+      i.Name = $2
+    }
+  }
+| constraint_elem
+  {
+    $$ = $1
+  }
 
 constraint_elem:
   CHECK '(' a_expr ')' {}
-| UNIQUE '(' column_list ')' {}
+| UNIQUE '(' column_list ')'
+  {
+    $$ = &IndexTableDef{Unique: true, Columns: $3}
+  }
 | UNIQUE existing_index {}
-| INDEX '(' column_list ')' {}
-| PRIMARY KEY '(' column_list ')' {}
+| INDEX '(' column_list ')'
+  {
+    $$ = &IndexTableDef{Columns: $3}
+  }
+| PRIMARY KEY '(' column_list ')'
+  {
+    $$ = &IndexTableDef{PrimaryKey: true, Columns: $4}
+  }
 | PRIMARY KEY existing_index {}
 | EXCLUDE access_method_clause '(' exclusion_constraint_list ')'
     exclusion_where_clause {}
@@ -897,12 +1181,24 @@ opt_no_inherit:
 | /* EMPTY */ {}
 
 opt_column_list:
-  '(' column_list ')' {}
-| /* EMPTY */ {}
+  '(' column_list ')'
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 column_list:
-  column_elem {}
-| column_list ',' column_elem {}
+  column_elem
+  {
+    $$ = []string{$1}
+  }
+| column_list ',' column_elem
+  {
+    $$ = append($1, $3)
+  }
 
 column_elem:
   col_id
@@ -967,8 +1263,14 @@ existing_index:
 
 // CREATE TABLE relname AS select_stmt [ WITH [NO] DATA ]
 create_table_as_stmt:
-  CREATE opt_temp TABLE create_as_target AS select_stmt opt_with_data {}
-| CREATE opt_temp TABLE IF NOT EXISTS create_as_target AS select_stmt opt_with_data {}
+  CREATE opt_temp TABLE create_as_target AS select_stmt opt_with_data
+  {
+    $$ = nil
+  }
+| CREATE opt_temp TABLE IF NOT EXISTS create_as_target AS select_stmt opt_with_data
+  {
+    $$ = nil
+  }
 
 create_as_target:
   any_name opt_column_list opt_with on_commit_option {}
@@ -979,9 +1281,18 @@ opt_with_data:
 | /* EMPTY */ {}
 
 numeric_only:
-  FCONST {}
-| '-' FCONST {}
-| signed_iconst {}
+  FCONST
+  {
+    $$ = NumVal($1)
+  }
+| '-' FCONST
+  {
+    $$ = NumVal("-" + $2)
+  }
+| signed_iconst
+  {
+    $$ = IntVal($1)
+  }
 
 // Note: any simple identifier will be returned as a type name!
 def_arg:
@@ -993,7 +1304,10 @@ def_arg:
 
 // TRUNCATE table relname1, relname2, ...
 truncate_stmt:
-  TRUNCATE opt_table relation_expr_list opt_restart_seqs opt_drop_behavior {}
+  TRUNCATE opt_table relation_expr_list opt_restart_seqs opt_drop_behavior
+  {
+    $$ = &Truncate{Tables: $3}
+  }
 
 opt_restart_seqs:
   CONTINUE IDENTITY {}
@@ -1004,10 +1318,16 @@ opt_restart_seqs:
 create_index_stmt:
   CREATE opt_unique INDEX opt_concurrently opt_index_name
     ON qualified_name access_method_clause '(' index_params ')'
-    opt_reloptions where_clause {}
+    opt_reloptions where_clause
+  {
+    $$ = nil
+  }
 | CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name
     ON qualified_name access_method_clause '(' index_params ')'
-    opt_reloptions where_clause {}
+    opt_reloptions where_clause
+  {
+    $$ = nil
+  }
 
 opt_unique:
   UNIQUE {}
@@ -1077,18 +1397,54 @@ any_operator:
 
 // ALTER THING name RENAME TO newname
 rename_stmt:
-  ALTER DATABASE database_name RENAME TO database_name {}
-// | ALTER SCHEMA name RENAME TO name {}
-| ALTER TABLE relation_expr RENAME TO name {}
-| ALTER TABLE IF EXISTS relation_expr RENAME TO name {}
-// | ALTER VIEW qualified_name RENAME TO name {}
-// | ALTER VIEW IF EXISTS qualified_name RENAME TO name {}
-| ALTER INDEX qualified_name RENAME TO name {}
-| ALTER INDEX IF EXISTS qualified_name RENAME TO name {}
-| ALTER TABLE relation_expr RENAME opt_column name TO name {}
-| ALTER TABLE IF EXISTS relation_expr RENAME opt_column name TO name {}
-| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name {}
-| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name {}
+  ALTER DATABASE database_name RENAME TO database_name
+  {
+    $$ = nil
+  }
+// | ALTER SCHEMA name RENAME TO name
+//   {
+//     $$ = nil
+//   }
+| ALTER TABLE relation_expr RENAME TO name
+  {
+    $$ = nil
+  }
+| ALTER TABLE IF EXISTS relation_expr RENAME TO name
+  {
+    $$ = nil
+  }
+// | ALTER VIEW qualified_name RENAME TO name
+//   {
+//     $$ = nil
+//   }
+// | ALTER VIEW IF EXISTS qualified_name RENAME TO name
+//   {
+//     $$ = nil
+//   }
+| ALTER INDEX qualified_name RENAME TO name
+  {
+    $$ = nil
+  }
+| ALTER INDEX IF EXISTS qualified_name RENAME TO name
+  {
+    $$ = nil
+  }
+| ALTER TABLE relation_expr RENAME opt_column name TO name
+  {
+    $$ = nil
+  }
+| ALTER TABLE IF EXISTS relation_expr RENAME opt_column name TO name
+  {
+    $$ = nil
+  }
+| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
+  {
+    $$ = nil
+  }
+| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
+  {
+    $$ = nil
+  }
 
 opt_column:
   COLUMN {}
@@ -1100,20 +1456,62 @@ opt_set_data:
 
 // BEGIN / COMMIT / ROLLBACK / ...
 transaction_stmt:
-  ABORT opt_transaction {}
-| BEGIN opt_transaction transaction_mode_list_or_empty {}
-| START TRANSACTION transaction_mode_list_or_empty {}
-| COMMIT opt_transaction {}
-| END opt_transaction {}
-| ROLLBACK opt_transaction {}
-| SAVEPOINT col_id {}
-| RELEASE SAVEPOINT col_id {}
-| RELEASE col_id {}
-| ROLLBACK opt_transaction TO SAVEPOINT col_id {}
-| ROLLBACK opt_transaction TO col_id {}
-| PREPARE TRANSACTION sconst {}
-| COMMIT PREPARED sconst {}
-| ROLLBACK PREPARED sconst {}
+  ABORT opt_transaction
+  {
+    $$ = nil
+  }
+| BEGIN opt_transaction transaction_mode_list_or_empty
+  {
+    $$ = nil
+  }
+| START TRANSACTION transaction_mode_list_or_empty
+  {
+    $$ = nil
+  }
+| COMMIT opt_transaction
+  {
+    $$ = nil
+  }
+| END opt_transaction
+  {
+    $$ = nil
+  }
+| ROLLBACK opt_transaction
+  {
+    $$ = nil
+  }
+| SAVEPOINT col_id
+  {
+    $$ = nil
+  }
+| RELEASE SAVEPOINT col_id
+  {
+    $$ = nil
+  }
+| RELEASE col_id
+  {
+    $$ = nil
+  }
+| ROLLBACK opt_transaction TO SAVEPOINT col_id
+  {
+    $$ = nil
+  }
+| ROLLBACK opt_transaction TO col_id
+  {
+    $$ = nil
+  }
+| PREPARE TRANSACTION sconst
+  {
+    $$ = nil
+  }
+| COMMIT PREPARED sconst
+  {
+    $$ = nil
+  }
+| ROLLBACK PREPARED sconst
+  {
+    $$ = nil
+  }
 
 opt_transaction:
   WORK {}
@@ -1141,13 +1539,25 @@ transaction_mode_list_or_empty:
 //     AS <query> [ WITH [ CASCADED | LOCAL ] CHECK OPTION ]
 // create_view_stmt:
 //   CREATE opt_temp VIEW qualified_name opt_column_list opt_reloptions
-//     AS select_stmt opt_check_option {}
+//     AS select_stmt opt_check_option
+//   {
+//     $$ = nil
+//   }
 // | CREATE OR REPLACE opt_temp VIEW qualified_name opt_column_list opt_reloptions
-//     AS select_stmt opt_check_option {}
+//     AS select_stmt opt_check_option
+//   {
+//     $$ = nil
+//   }
 // | CREATE opt_temp RECURSIVE VIEW qualified_name '(' column_list ')' opt_reloptions
-//     AS select_stmt opt_check_option {}
+//     AS select_stmt opt_check_option
+//   {
+//     $$ = nil
+//   }
 // | CREATE OR REPLACE opt_temp RECURSIVE VIEW qualified_name '(' column_list ')' opt_reloptions
-//     AS select_stmt opt_check_option {}
+//     AS select_stmt opt_check_option
+//   {
+//     $$ = nil
+//   }
 //
 // opt_check_option:
 //   WITH CHECK OPTION {}
@@ -1156,8 +1566,16 @@ transaction_mode_list_or_empty:
 // | /* EMPTY */ {}
 
 create_database_stmt:
-  CREATE DATABASE database_name createdb_opt_with createdb_opt_list {}
-| CREATE DATABASE IF NOT EXISTS database_name createdb_opt_with createdb_opt_list {}
+  CREATE DATABASE database_name createdb_opt_with createdb_opt_list
+  {
+    // TODO(pmattis): Handle options.
+    $$ = &CreateDatabase{Name: $3}
+  }
+| CREATE DATABASE IF NOT EXISTS database_name createdb_opt_with createdb_opt_list
+  {
+    // TODO(pmattis): Handle options.
+    $$ = &CreateDatabase{IfNotExists: true, Name: $6}
+  }
 
 createdb_opt_with:
   WITH {}
@@ -1201,12 +1619,19 @@ opt_equal:
 | /* EMPTY */ {}
 
 opt_name_list:
-  '(' name_list ')' {}
+  '(' name_list ')'
+  {
+    $$ = $2
+  }
 | /* EMPTY */ {}
 
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest
-    opt_on_conflict returning_clause {}
+    opt_on_conflict returning_clause
+  {
+    $$ = $5
+    $$.(*Insert).Table = $4
+  }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
 // a shift/reduce conflict with VALUES as an optional alias. We could easily
@@ -1218,16 +1643,34 @@ insert_target:
   // TODO(pmattis): Support alias.
 
 insert_rest:
-  select_stmt {}
-| '(' insert_column_list ')' select_stmt {}
-| DEFAULT VALUES {}
+  select_stmt
+  {
+    $$ = &Insert{Rows: $1.(SelectStatement)}
+  }
+| '(' insert_column_list ')' select_stmt
+  {
+    $$ = &Insert{Columns: Columns($2), Rows: $4.(SelectStatement)}
+  }
+| DEFAULT VALUES
+  {
+    $$ = &Insert{}
+  }
 
 insert_column_list:
-  insert_column_item {}
-| insert_column_list ',' insert_column_item {}
+  insert_column_item
+  {
+    $$ = SelectExprs{$1}
+  }
+| insert_column_list ',' insert_column_item
+  {
+    $$ = append($1, $3)
+  }
 
 insert_column_item:
-  col_id opt_indirection {}
+  col_id opt_indirection
+  {
+    $$ = &NonStarExpr{Expr: append(QualifiedName{$1}, $2...)}
+  }
 
 opt_on_conflict:
   ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause {}
@@ -1248,18 +1691,30 @@ update_stmt:
     SET set_clause_list
     from_clause
     where_clause
-    returning_clause {}
+    returning_clause
+  {
+    $$ = &Update{Table: $3, Exprs: $5, Where: newWhere(astWhere, $7)}
+  }
 
 set_clause_list:
-  set_clause {}
-| set_clause_list ',' set_clause {}
+  set_clause
+  {
+    $$ = UpdateExprs{$1}
+  }
+| set_clause_list ',' set_clause
+  {
+    $$ = append($1, $3)
+  }
 
 set_clause:
   single_set_clause
 | multiple_set_clause {}
 
 single_set_clause:
-  set_target '=' ctext_expr {}
+  set_target '=' ctext_expr
+  {
+    $$ = &UpdateExpr{Name: $1, Expr: $3}
+  }
 
 // Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
 // However, per SQL spec the row-constructor case must allow DEFAULT as a row
@@ -1272,7 +1727,10 @@ multiple_set_clause:
 | '(' set_target_list ')' '=' select_with_parens {}
 
 set_target:
-  col_id opt_indirection {}
+  col_id opt_indirection
+  {
+    $$ = append(QualifiedName{$1}, $2...)
+  }
 
 set_target_list:
   set_target {}
@@ -1320,8 +1778,14 @@ select_stmt:
 | select_with_parens %prec UMINUS
 
 select_with_parens:
-  '(' select_no_parens ')' {}
-| '(' select_with_parens ')' {}
+  '(' select_no_parens ')'
+  {
+    $$ = $2
+  }
+| '(' select_with_parens ')'
+  {
+    $$ = $2
+  }
 
 // This rule parses the equivalent of the standard's <query expression>. The
 // duplicative productions are annoying, but hard to get rid of without
@@ -1334,13 +1798,46 @@ select_with_parens:
 //      - 2002-08-28 bjm
 select_no_parens:
   simple_select
-| select_clause sort_clause {}
-| select_clause opt_sort_clause for_locking_clause opt_select_limit {}
-| select_clause opt_sort_clause select_limit opt_for_locking_clause {}
-| with_clause select_clause {}
-| with_clause select_clause sort_clause {}
-| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit {}
-| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause {}
+| select_clause sort_clause
+  {
+    $$ = $1
+  }
+| select_clause opt_sort_clause for_locking_clause opt_select_limit
+  {
+    $$ = $1
+    if s, ok := $$.(*Select); ok {
+      s.Limit = $4
+    }
+  }
+| select_clause opt_sort_clause select_limit opt_for_locking_clause
+  {
+    $$ = $1
+    if s, ok := $$.(*Select); ok {
+      s.Limit = $3
+    }
+  }
+| with_clause select_clause
+  {
+    $$ = $2
+  }
+| with_clause select_clause sort_clause
+  {
+    $$ = $2
+  }
+| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
+  {
+    $$ = $2
+    if s, ok := $$.(*Select); ok {
+      s.Limit = $5
+    }
+  }
+| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
+  {
+    $$ = $2
+    if s, ok := $$.(*Select); ok {
+      s.Limit = $4
+    }
+  }
 
 select_clause:
   simple_select
@@ -1371,15 +1868,57 @@ select_clause:
 simple_select:
   SELECT opt_all_clause opt_target_list
     from_clause where_clause
-    group_clause having_clause window_clause {}
+    group_clause having_clause window_clause
+  {
+    $$ = &Select{
+      Exprs:  $3,
+      From:   $4,
+      Where:  newWhere(astWhere, $5),
+      Having: newWhere(astHaving, $7),
+    }
+  }
 | SELECT distinct_clause target_list
     from_clause where_clause
-    group_clause having_clause window_clause {}
+    group_clause having_clause window_clause
+  {
+    // TODO(pmattis): Support DISTINCT ON?
+    $$ = &Select{
+      Distinct: astDistinct,
+      Exprs:    $3,
+      From:     $4,
+      Where:    newWhere(astWhere, $5),
+      Having:   newWhere(astHaving, $7),
+    }
+  }
 | values_clause
 | TABLE relation_expr {}
-| select_clause UNION all_or_distinct select_clause {}
-| select_clause INTERSECT all_or_distinct select_clause {}
-| select_clause EXCEPT all_or_distinct select_clause {}
+| select_clause UNION all_or_distinct select_clause
+  {
+    // TODO(pmattis): Support all/distinct
+    $$ = &Union{
+      Type:  astUnion,
+      Left:  $1.(SelectStatement),
+      Right: $4.(SelectStatement),
+    }
+  }
+| select_clause INTERSECT all_or_distinct select_clause
+  {
+    // TODO(pmattis): Support all/distinct
+    $$ = &Union{
+      Type:  astIntersect,
+      Left:  $1.(SelectStatement),
+      Right: $4.(SelectStatement),
+    }
+  }
+| select_clause EXCEPT all_or_distinct select_clause
+  {
+    // TODO(pmattis): Support all/distinct
+    $$ = &Union{
+      Type:  astExcept,
+      Left:  $1.(SelectStatement),
+      Right: $4.(SelectStatement),
+    }
+  }
 
 // SQL standard WITH clause looks like:
 // 
@@ -1446,28 +1985,61 @@ sortby:
 | a_expr opt_asc_desc opt_nulls_order {}
 
 select_limit:
-  limit_clause offset_clause {}
-| offset_clause limit_clause {}
+  limit_clause offset_clause
+  {
+    if $1 == nil {
+      $$ = $2
+    } else {
+      $$ = $1
+      $$.Offset = $2.Offset
+    }
+  }
+| offset_clause limit_clause
+  {
+    $$ = $1
+    if $2 != nil {
+      $$.Count = $2.Count
+    }
+  }
 | limit_clause
 | offset_clause
 
 opt_select_limit:
   select_limit
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 limit_clause:
-  LIMIT select_limit_value {}
+  LIMIT select_limit_value
+  {
+    if $2 == nil {
+      $$ = nil
+    } else {
+      $$ = &Limit{Count: $2}
+    }
+  }
   // SQL:2008 syntax
 | FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY {}
 
 offset_clause:
-  OFFSET select_offset_value {}
+  OFFSET select_offset_value
+  {
+    $$ = &Limit{Offset: $2}
+  }
   // SQL:2008 syntax
-| OFFSET select_offset_value2 row_or_rows {}
+| OFFSET select_offset_value2 row_or_rows
+  {
+    $$ = &Limit{Offset: $2}
+  }
 
 select_limit_value:
   a_expr
-| ALL {}
+| ALL
+  {
+    $$ = nil
+  }
 
 select_offset_value:
   a_expr
@@ -1528,8 +2100,14 @@ empty_grouping_set:
   '(' ')' {}
 
 having_clause:
-  HAVING a_expr {}
-| /* EMPTY */ {}
+  HAVING a_expr
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 for_locking_clause:
   for_locking_items {}
@@ -1562,27 +2140,51 @@ locked_rels_list:
 | /* EMPTY */ {}
 
 values_clause:
-  VALUES ctext_row {}
-| values_clause ',' ctext_row {}
+  VALUES ctext_row
+  {
+    $$ = Values{Tuple($2)}
+  }
+| values_clause ',' ctext_row
+  {
+    $$ = append($1.(Values), Tuple($3))
+  }
 
 // clauses common to all optimizable statements:
 // 	from_clause   - allow list of both JOIN expressions and table names
 // 	where_clause  - qualifications for joins or restrictions
 
 from_clause:
-  FROM from_list {}
-| /* EMPTY */ {}
+  FROM from_list
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 from_list:
-  table_ref {}
-| from_list ',' table_ref {}
+  table_ref
+  {
+    $$ = TableExprs{$1}
+  }
+| from_list ',' table_ref
+  {
+    $$ = append($1, $3)
+  }
 
 // table_ref is where an alias clause can be attached.
 table_ref:
-  relation_expr opt_alias_clause {}
+  relation_expr opt_alias_clause
+  {
+    $$ = &AliasedTableExpr{Expr: $1, As: $2}
+  }
 | func_table func_alias_clause {}
 | LATERAL func_table func_alias_clause {}
-| select_with_parens opt_alias_clause {}
+| select_with_parens opt_alias_clause
+  {
+    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1.(SelectStatement)}, As: $2}
+  }
 | LATERAL select_with_parens opt_alias_clause {}
 | joined_table
 | '(' joined_table ')' alias_clause {}
@@ -1602,22 +2204,49 @@ table_ref:
 // columns during the later transformations.
 
 joined_table:
-  '(' joined_table ')' {}
-| table_ref CROSS JOIN table_ref {}
-| table_ref join_type JOIN table_ref join_qual {}
-| table_ref JOIN table_ref join_qual {}
-| table_ref NATURAL join_type JOIN table_ref {}
-| table_ref NATURAL JOIN table_ref {}
+  '(' joined_table ')'
+  {
+    $$ = &ParenTableExpr{Expr: $2}
+  }
+| table_ref CROSS JOIN table_ref
+  {
+    $$ = &JoinTableExpr{Join: astCrossJoin, Left: $1, Right: $4}
+  }
+| table_ref join_type JOIN table_ref join_qual
+  {
+    $$ = &JoinTableExpr{Join: $2, Left: $1, Right: $4, Cond: $5}
+  }
+| table_ref JOIN table_ref join_qual
+  {
+    $$ = &JoinTableExpr{Join: astJoin, Left: $1, Right: $3, Cond: $4}
+  }
+| table_ref NATURAL join_type JOIN table_ref
+  {
+    $$ = &JoinTableExpr{Join: astNaturalJoin, Left: $1, Right: $5}
+  }
+| table_ref NATURAL JOIN table_ref
+  {
+    $$ = &JoinTableExpr{Join: astNaturalJoin, Left: $1, Right: $4}
+  }
 
 alias_clause:
   AS col_id '(' name_list ')' {}
-| AS col_id {}
+| AS col_id
+  {
+    $$ = $2
+  }
 | col_id '(' name_list ')' {}
-| col_id {}
+| col_id
+  {
+    $$ = $1
+  }
 
 opt_alias_clause:
   alias_clause
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 // func_alias_clause can include both an Alias and a coldeflist, so we make it
 // return a 2-element list that gets disassembled by calling production.
@@ -1629,10 +2258,22 @@ func_alias_clause:
 | /* EMPTY */ {}
 
 join_type:
-  FULL join_outer {}
-| LEFT join_outer {}
-| RIGHT join_outer {}
-| INNER {}
+  FULL join_outer
+  {
+    $$ = astFullJoin
+  }
+| LEFT join_outer
+  {
+    $$ = astLeftJoin
+  }
+| RIGHT join_outer
+  {
+    $$ = astRightJoin
+  }
+| INNER
+  {
+    $$ = astInnerJoin
+  }
 
 // OUTER is just noise...
 join_outer:
@@ -1647,18 +2288,44 @@ join_outer:
 // 
 // We return USING as a List node, while an ON-expr will not be a List.
 join_qual:
-  USING '(' name_list ')' {}
-| ON a_expr {}
+  USING '(' name_list ')'
+  {
+    $$ = &UsingJoinCond{Cols: $3}
+  }
+| ON a_expr
+  {
+    $$ = &OnJoinCond{Expr: $2}
+  }
 
 relation_expr:
-  qualified_name {}
-| qualified_name '*' {}
-| ONLY qualified_name {}
-| ONLY '(' qualified_name ')' {}
+  qualified_name
+  {
+    $$ = $1
+  }
+| qualified_name '*'
+  {
+    $$ = append(QualifiedName($1), "*")
+  }
+| ONLY qualified_name
+  {
+    // TODO(pmattis): Support ONLY.
+    $$ = $2
+  }
+| ONLY '(' qualified_name ')'
+  {
+    // TODO(pmattis): Support ONLY.
+    $$ = $3
+  }
 
 relation_expr_list:
-  relation_expr {}
-| relation_expr_list ',' relation_expr {}
+  relation_expr
+  {
+    $$ = []QualifiedName{$1}
+  }
+| relation_expr_list ',' relation_expr
+  {
+    $$ = append($1, $3)
+  }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
 // further ahead whether the first "set" is an alias or the UPDATE's SET
@@ -1668,9 +2335,18 @@ relation_expr_list:
 // has, causing the parser to prefer to reduce, in effect assuming that the SET
 // is not an alias.
 relation_expr_opt_alias:
-  relation_expr %prec UMINUS {}
-| relation_expr col_id {}
-| relation_expr AS col_id {}
+  relation_expr %prec UMINUS
+  {
+    $$ = &AliasedTableExpr{Expr: $1}
+  }
+| relation_expr col_id
+  {
+    $$ = &AliasedTableExpr{Expr: $1, As: $2}
+  }
+| relation_expr AS col_id
+  {
+    $$ = &AliasedTableExpr{Expr: $1, As: $3}
+  }
 
 // func_table represents a function invocation in a FROM list. It can be a
 // plain function call, like "foo(...)", or a ROWS FROM expression with one or
@@ -1701,8 +2377,14 @@ opt_ordinality:
 | /* EMPTY */ {}
 
 where_clause:
-  WHERE a_expr {}
-| /* EMPTY */ {}
+  WHERE a_expr
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 table_func_elem_list:
   table_func_elem {}
@@ -1718,7 +2400,10 @@ table_func_elem:
 //   - thomas 1997-10-10
 
 typename:
-  simple_typename opt_array_bounds {}
+  simple_typename opt_array_bounds
+  {
+    $$ = $1
+  }
 | SETOF simple_typename opt_array_bounds {}
   // SQL standard syntax, currently only one-dimensional
 | simple_typename ARRAY '[' iconst ']' {}
@@ -1738,8 +2423,14 @@ simple_typename:
 | const_datetime
 | const_interval opt_interval {}
 | const_interval '(' iconst ')' {}
-| BLOB {}
-| TEXT {}
+| BLOB
+  {
+    $$ = &BlobType{}
+  }
+| TEXT
+  {
+    $$ = &TextType{}
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -1757,27 +2448,78 @@ const_typename:
 | const_datetime
 
 opt_numeric_modifiers:
-  '(' iconst ')' {}
-| '(' iconst ',' iconst ')' {}
-| /* EMPTY */ {}
+  '(' iconst ')'
+  {
+    $$ = &DecimalType{Prec: $2}
+  }
+| '(' iconst ',' iconst ')'
+  {
+    $$ = &DecimalType{Prec: $2, Scale: $4}
+  }
+| /* EMPTY */
+  {
+    $$ = &DecimalType{}
+  }
 
 // SQL numeric data types
 numeric:
-  INT {}
-| INTEGER {}
-| SMALLINT {}
-| BIGINT {}
-| REAL {}
-| FLOAT opt_float {}
-| DOUBLE PRECISION {}
-| DECIMAL opt_numeric_modifiers {}
-| DEC opt_numeric_modifiers {}
-| NUMERIC opt_numeric_modifiers {}
-| BOOLEAN {}
+  INT
+  {
+    $$ = &IntType{Name: astInt}
+  }
+| INTEGER
+  {
+    $$ = &IntType{Name: astInteger}
+  }
+| SMALLINT
+  {
+    $$ = &IntType{Name: astSmallInt}
+  }
+| BIGINT
+  {
+    $$ = &IntType{Name: astBigInt}
+  }
+| REAL
+  {
+    $$ = &FloatType{Name: astReal}
+  }
+| FLOAT opt_float
+  {
+    $$ = &FloatType{Name: astFloat, Prec: $2}
+  }
+| DOUBLE PRECISION
+  {
+    $$ = &FloatType{Name: astDouble}
+  }
+| DECIMAL opt_numeric_modifiers
+  {
+    $$ = $2
+    $$.(*DecimalType).Name = astDecimal
+  }
+| DEC opt_numeric_modifiers
+  {
+    $$ = $2
+    $$.(*DecimalType).Name = astDecimal
+  }
+| NUMERIC opt_numeric_modifiers
+  {
+    $$ = $2
+    $$.(*DecimalType).Name = astNumeric
+  }
+| BOOLEAN
+  {
+    $$ = &BoolType{}
+  }
 
 opt_float:
-  '(' iconst ')' {}
-| /* EMPTY */ {}
+  '(' iconst ')'
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = 0
+  }
 
 // SQL bit-field data types
 // The following implements BIT() and BIT VARYING().
@@ -1792,10 +2534,16 @@ const_bit:
 | bit_without_length
 
 bit_with_length:
-  BIT opt_varying '(' iconst ')' {}
+  BIT opt_varying '(' iconst ')'
+  {
+    $$ = &BitType{N: $4}
+  }
 
 bit_without_length:
-  BIT opt_varying {}
+  BIT opt_varying
+  {
+    $$ = &BitType{}
+  }
 
 // SQL character data types
 // The following implements CHAR() and VARCHAR().
@@ -1808,15 +2556,31 @@ const_character:
 | character_without_length
 
 character_with_length:
-  character_base '(' iconst ')' opt_charset {}
+  character_base '(' iconst ')' opt_charset
+  {
+    $$ = $1
+    $$.(*CharType).N = $3
+  }
 
 character_without_length:
-  character_base opt_charset {}
+  character_base opt_charset
+  {
+    $$ = $1
+  }
 
 character_base:
-  CHARACTER opt_varying {}
-| CHAR opt_varying {}
-| VARCHAR {}
+  CHARACTER opt_varying
+  {
+    $$ = &CharType{Name: astChar}
+  }
+| CHAR opt_varying
+  {
+    $$ = &CharType{Name: astChar}
+  }
+| VARCHAR
+  {
+    $$ = &CharType{Name: astVarChar}
+  }
 
 opt_varying:
   VARYING {}
@@ -1828,11 +2592,26 @@ opt_charset:
 
 // SQL date/time types
 const_datetime:
-  DATE {}
-| TIMESTAMP '(' iconst ')' opt_timezone {}
-| TIMESTAMP opt_timezone {}
-| TIME '(' iconst ')' opt_timezone {}
-| TIME opt_timezone {}
+  DATE
+  {
+    $$ = &DateType{}
+  }
+| TIMESTAMP '(' iconst ')' opt_timezone
+  {
+    $$ = &TimestampType{}
+  }
+| TIMESTAMP opt_timezone
+  {
+    $$ = &TimestampType{}
+  }
+| TIME '(' iconst ')' opt_timezone
+  {
+    $$ = &TimeType{}
+  }
+| TIME opt_timezone
+  {
+    $$ = &TimeType{}
+  }
 
 const_interval:
   INTERVAL {}
@@ -1893,39 +2672,126 @@ a_expr:
   // 
   // If you add more explicitly-known operators, be sure to add them also to
   // b_expr and to the math_op list below.
-| '+' a_expr %prec UMINUS {}
-| '-' a_expr %prec UMINUS {}
-| '~' a_expr %prec UMINUS {}
-| a_expr '+' a_expr {}
-| a_expr '-' a_expr {}
-| a_expr '*' a_expr {}
-| a_expr '/' a_expr {}
-| a_expr '%' a_expr {}
-| a_expr '^' a_expr {}
-| a_expr '&' a_expr {}
-| a_expr '|' a_expr {}
-| a_expr '#' a_expr {}
-| a_expr '<' a_expr {}
-| a_expr '>' a_expr {}
-| a_expr '=' a_expr {}
-| a_expr CONCAT a_expr {}
-| a_expr LESS_EQUALS a_expr {}
-| a_expr GREATER_EQUALS a_expr {}
-| a_expr NOT_EQUALS a_expr {}
-| a_expr AND a_expr {}
-| a_expr OR a_expr {}
-| NOT a_expr {}
-| NOT_LA a_expr %prec NOT {}
-| a_expr LIKE a_expr {}
-| a_expr LIKE a_expr ESCAPE a_expr %prec LIKE {}
-| a_expr NOT_LA LIKE a_expr %prec NOT_LA {}
-| a_expr NOT_LA LIKE a_expr ESCAPE a_expr %prec NOT_LA {}
+| '+' a_expr %prec UMINUS
+  {
+    $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
+  }
+| '-' a_expr %prec UMINUS
+  {
+    $$ = &UnaryExpr{Operator: UnaryMinus, Expr: $2}
+  }
+| '~' a_expr %prec UMINUS
+  {
+    $$ = &UnaryExpr{Operator: UnaryComplement, Expr: $2}
+  }
+| a_expr '+' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Plus, Left: $1, Right: $3}
+  }
+| a_expr '-' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Minus, Left: $1, Right: $3}
+  }
+| a_expr '*' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Mult, Left: $1, Right: $3}
+  }
+| a_expr '/' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Div, Left: $1, Right: $3}
+  }
+| a_expr '%' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Mod, Left: $1, Right: $3}
+  }
+| a_expr '^' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Exp, Left: $1, Right: $3}
+  }
+| a_expr '&' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitand, Left: $1, Right: $3}
+  }
+| a_expr '|' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
+  }
+| a_expr '#' a_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+  }
+| a_expr '<' a_expr
+  {
+    $$ = &ComparisonExpr{Operator: LT, Left: $1, Right: $3}
+  }
+| a_expr '>' a_expr
+  {
+    $$ = &ComparisonExpr{Operator: GT, Left: $1, Right: $3}
+  }
+| a_expr '=' a_expr
+  {
+    $$ = &ComparisonExpr{Operator: EQ, Left: $1, Right: $3}
+  }
+| a_expr CONCAT a_expr
+  {
+    $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+  }
+| a_expr LESS_EQUALS a_expr
+  {
+    $$ = &ComparisonExpr{Operator: LE, Left: $1, Right: $3}
+  }
+| a_expr GREATER_EQUALS a_expr
+  {
+    $$ = &ComparisonExpr{Operator: GE, Left: $1, Right: $3}
+  }
+| a_expr NOT_EQUALS a_expr
+  {
+    $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
+  }
+| a_expr AND a_expr
+  {
+    $$ = &AndExpr{Left: $1, Right: $3}
+  }
+| a_expr OR a_expr
+  {
+    $$ = &OrExpr{Left: $1, Right: $3}
+  }
+| NOT a_expr
+  {
+    $$ = &NotExpr{Expr: $2}
+  }
+| NOT_LA a_expr %prec NOT
+  {
+    $$ = &NotExpr{Expr: $2}
+  }
+| a_expr LIKE a_expr
+  {
+    $$ = &ComparisonExpr{Operator: Like, Left: $1, Right: $3}
+  }
+| a_expr LIKE a_expr ESCAPE a_expr %prec LIKE
+  {
+    $$ = &ComparisonExpr{Operator: Like, Left: $1, Right: $3}
+  }
+| a_expr NOT_LA LIKE a_expr %prec NOT_LA
+  {
+    $$ = &ComparisonExpr{Operator: NotLike, Left: $1, Right: $4}
+  }
+| a_expr NOT_LA LIKE a_expr ESCAPE a_expr %prec NOT_LA
+  {
+    $$ = &ComparisonExpr{Operator: NotLike, Left: $1, Right: $4}
+  }
 | a_expr SIMILAR TO a_expr %prec SIMILAR {}
 | a_expr SIMILAR TO a_expr ESCAPE a_expr %prec SIMILAR {}
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA {}
 | a_expr NOT_LA SIMILAR TO a_expr ESCAPE a_expr %prec NOT_LA {}
-| a_expr IS NULL %prec IS {}
-| a_expr IS NOT NULL %prec IS {}
+| a_expr IS NULL %prec IS
+  {
+    $$ = &NullCheck{Expr: $1}
+  }
+| a_expr IS NOT NULL %prec IS
+  {
+    $$ = &NullCheck{Not: true, Expr: $1}
+  }
 | row OVERLAPS row {}
 | a_expr IS TRUE %prec IS {}
 | a_expr IS NOT TRUE %prec IS {}
@@ -1937,12 +2803,30 @@ a_expr:
 | a_expr IS NOT DISTINCT FROM a_expr %prec IS {}
 | a_expr IS OF '(' type_list ')' %prec IS {}
 | a_expr IS NOT OF '(' type_list ')' %prec IS {}
-| a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN {}
-| a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr %prec NOT_LA {}
-| a_expr BETWEEN SYMMETRIC b_expr AND a_expr %prec BETWEEN {}
-| a_expr NOT_LA BETWEEN SYMMETRIC b_expr AND a_expr %prec NOT_LA {}
-| a_expr IN in_expr {}
-| a_expr NOT_LA IN in_expr %prec NOT_LA {}
+| a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
+  {
+    $$ = &RangeCond{Left: $1, From: $4, To: $6}
+  }
+| a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr %prec NOT_LA
+  {
+    $$ = &RangeCond{Not: true, Left: $1, From: $5, To: $7}
+  }
+| a_expr BETWEEN SYMMETRIC b_expr AND a_expr %prec BETWEEN
+  {
+    $$ = &RangeCond{Left: $1, From: $4, To: $6}
+  }
+| a_expr NOT_LA BETWEEN SYMMETRIC b_expr AND a_expr %prec NOT_LA
+  {
+    $$ = &RangeCond{Not: true, Left: $1, From: $5, To: $7}
+  }
+| a_expr IN in_expr
+  {
+    $$ = &ComparisonExpr{Operator: In, Left: $1, Right: $3}
+  }
+| a_expr NOT_LA IN in_expr %prec NOT_LA
+  {
+    $$ = &ComparisonExpr{Operator: NotIn, Left: $1, Right: $4}
+  }
 | a_expr subquery_op sub_type select_with_parens %prec CONCAT {}
 | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT {}
 | UNIQUE select_with_parens {}
@@ -1959,25 +2843,82 @@ a_expr:
 b_expr:
   c_expr
 | b_expr TYPECAST typename {}
-| '+' b_expr %prec UMINUS {}
-| '-' b_expr %prec UMINUS {}
-| '~' b_expr %prec UMINUS {}
-| b_expr '+' b_expr {}
-| b_expr '-' b_expr {}
-| b_expr '*' b_expr {}
-| b_expr '/' b_expr {}
-| b_expr '%' b_expr {}
-| b_expr '^' b_expr {}
-| b_expr '&' b_expr {}
-| b_expr '|' b_expr {}
-| b_expr '#' b_expr {}
-| b_expr '<' b_expr {}
-| b_expr '>' b_expr {}
-| b_expr '=' b_expr {}
-| b_expr CONCAT b_expr {}
-| b_expr LESS_EQUALS b_expr {}
-| b_expr GREATER_EQUALS b_expr {}
-| b_expr NOT_EQUALS b_expr {}
+| '+' b_expr %prec UMINUS
+  {
+    $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
+  }
+| '-' b_expr %prec UMINUS
+  {
+    $$ = &UnaryExpr{Operator: UnaryMinus, Expr: $2}
+  }
+| '~' b_expr %prec UMINUS
+  {
+    $$ = &UnaryExpr{Operator: UnaryComplement, Expr: $2}
+  }
+| b_expr '+' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Plus, Left: $1, Right: $3}
+  }
+| b_expr '-' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Minus, Left: $1, Right: $3}
+  }
+| b_expr '*' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Mult, Left: $1, Right: $3}
+  }
+| b_expr '/' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Div, Left: $1, Right: $3}
+  }
+| b_expr '%' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Mod, Left: $1, Right: $3}
+  }
+| b_expr '^' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Exp, Left: $1, Right: $3}
+  }
+| b_expr '&' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitand, Left: $1, Right: $3}
+  }
+| b_expr '|' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
+  }
+| b_expr '#' b_expr
+  {
+    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+  }
+| b_expr '<' b_expr
+  {
+    $$ = &ComparisonExpr{Operator: LT, Left: $1, Right: $3}
+  }
+| b_expr '>' b_expr
+  {
+    $$ = &ComparisonExpr{Operator: GT, Left: $1, Right: $3}
+  }
+| b_expr '=' b_expr
+  {
+    $$ = &ComparisonExpr{Operator: EQ, Left: $1, Right: $3}
+  }
+| b_expr CONCAT b_expr
+  {
+    $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+  }
+| b_expr LESS_EQUALS b_expr
+  {
+    $$ = &ComparisonExpr{Operator: LE, Left: $1, Right: $3}
+  }
+| b_expr GREATER_EQUALS b_expr
+  {
+    $$ = &ComparisonExpr{Operator: GE, Left: $1, Right: $3}
+  }
+| b_expr NOT_EQUALS b_expr
+  {
+    $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
+  }
 | b_expr IS DISTINCT FROM b_expr %prec IS {}
 | b_expr IS NOT DISTINCT FROM b_expr %prec IS {}
 | b_expr IS OF '(' type_list ')' %prec IS {}
@@ -1994,13 +2935,28 @@ b_expr:
 c_expr:
   columnref
 | a_expr_const
-| PARAM opt_indirection {}
-| '(' a_expr ')' opt_indirection {}
+| PARAM opt_indirection
+  {
+    $$ = ValArg($1)
+  }
+| '(' a_expr ')' opt_indirection
+  {
+    $$ = &ParenExpr{Expr: $2}
+  }
 | case_expr
 | func_expr {}
-| select_with_parens %prec UMINUS {}
-| select_with_parens indirection {}
-| EXISTS select_with_parens {}
+| select_with_parens %prec UMINUS
+  {
+    $$ = &Subquery{Select: $1.(SelectStatement)}
+  }
+| select_with_parens indirection
+  {
+    $$ = &Subquery{Select: $1.(SelectStatement)}
+  }
+| EXISTS select_with_parens
+  {
+    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2.(SelectStatement)}}
+  }
 | ARRAY select_with_parens {}
 | ARRAY array_expr {}
 | explicit_row {}
@@ -2193,8 +3149,14 @@ subquery_op:
   // is not ready for such a thing.
 
 expr_list:
-  a_expr {}
-| expr_list ',' a_expr {}
+  a_expr
+  {
+    $$ = Exprs{$1}
+  }
+| expr_list ',' a_expr
+  {
+    $$ = append($1, $3)
+  }
 
 // function arguments can have names
 func_arg_list:
@@ -2283,8 +3245,14 @@ trim_list:
 | expr_list {}
 
 in_expr:
-  select_with_parens {}
-| '(' expr_list ')' {}
+  select_with_parens
+  {
+    $$ = &Subquery{Select: $1.(SelectStatement)}
+  }
+| '(' expr_list ')'
+  {
+    $$ = Tuple($2)
+  }
 
 // Define SQL-style CASE clause.
 // - Full specification
@@ -2292,41 +3260,92 @@ in_expr:
 // - Implicit argument
 //      CASE a WHEN b THEN c ... ELSE d END
 case_expr:
-  CASE case_arg when_clause_list case_default END {}
+  CASE case_arg when_clause_list case_default END
+  {
+    $$ = &CaseExpr{Expr: $2, Whens: $3, Else: $4}
+  }
 
 when_clause_list:
   // There must be at least one
-  when_clause {}
-| when_clause_list when_clause {}
+  when_clause
+  {
+    $$ = []*When{$1}
+  }
+| when_clause_list when_clause
+  {
+    $$ = append($1, $2)
+  }
 
 when_clause:
-  WHEN a_expr THEN a_expr {}
+  WHEN a_expr THEN a_expr
+  {
+    $$ = &When{Cond: $2, Val: $4}
+  }
 
 case_default:
-  ELSE a_expr {}
-| /* EMPTY */ {}
+  ELSE a_expr
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 case_arg:
   a_expr
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 columnref:
-  col_id {}
-| col_id indirection {}
+  col_id
+  {
+    $$ = QualifiedName{$1}
+  }
+| col_id indirection
+  {
+    $$ = append(QualifiedName{$1}, $2...)
+  }
 
 indirection_elem:
-  '.' attr_name {}
-| '.' '*' {}
-| '[' a_expr ']' {}
-| '[' a_expr ':' a_expr ']' {}
+  '.' attr_name
+  {
+    $$ = $2
+  }
+| '.' '*'
+  {
+    $$ = "*"
+  }
+| '[' a_expr ']'
+  {
+    $$ = ""
+  }
+| '[' a_expr ':' a_expr ']'
+  {
+    $$ = ""
+  }
 
 indirection:
-  indirection_elem {}
-| indirection indirection_elem {}
+  indirection_elem
+  {
+    $$ = []string{$1}
+  }
+| indirection indirection_elem
+  {
+    $$ = append($1, $2)
+  }
 
 opt_indirection:
-  /* EMPTY */ {}
-| opt_indirection indirection_elem {}
+  /* EMPTY */
+  {
+    $$ = nil
+  }
+| opt_indirection indirection_elem
+  {
+    $$ = append($1, $2)
+  }
 
 opt_asymmetric:
   ASYMMETRIC {}
@@ -2338,37 +3357,70 @@ opt_asymmetric:
 
 ctext_expr:
   a_expr
-| DEFAULT {}
+| DEFAULT
+  {
+    $$ = nil
+  }
 
 ctext_expr_list:
-  ctext_expr {}
-| ctext_expr_list ',' ctext_expr {}
+  ctext_expr
+  {
+    $$ = []Expr{$1}
+  }
+| ctext_expr_list ',' ctext_expr
+  {
+    $$ = append($1, $3)
+  }
 
 // We should allow ROW '(' ctext_expr_list ')' too, but that seems to require
 // making VALUES a fully reserved word, which will probably break more apps
 // than allowing the noise-word is worth.
 ctext_row:
-  '(' ctext_expr_list ')' {}
+  '(' ctext_expr_list ')'
+  {
+    $$ = $2
+  }
 
 // target list for SELECT
 opt_target_list:
   target_list
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 target_list:
-  target_elem {}
-| target_list ',' target_elem {}
+  target_elem
+  {
+    $$ = SelectExprs{$1}
+  }
+| target_list ',' target_elem
+  {
+    $$ = append($1, $3)
+  }
 
 target_elem:
-  a_expr AS col_label {}
+  a_expr AS col_label
+  {
+    $$ = &NonStarExpr{Expr: $1, As: $3}
+  }
   // We support omitting AS only for column labels that aren't any known
   // keyword. There is an ambiguity against postfix operators: is "a ! b" an
   // infix expression, or a postfix expression and a column label?  We prefer
   // to resolve this as an infix expression, which we accomplish by assigning
   // IDENT a precedence higher than POSTFIXOP.
-| a_expr IDENT {}
-| a_expr {}
-| '*' {}
+| a_expr IDENT
+  {
+    $$ = &NonStarExpr{Expr: $1, As: $2}
+  }
+| a_expr
+  {
+    $$ = &NonStarExpr{Expr: $1}
+  }
+| '*'
+  {
+    $$ = &StarExpr{}
+  }
 
 // Names and constants.
 
@@ -2382,12 +3434,24 @@ qualified_name_list:
 // func_name, something else for a relation). Therefore we allow 'indirection'
 // which may contain subscripts, and reject that case in the C code.
 qualified_name:
-  col_id {}
-| col_id indirection {}
+  col_id
+  {
+    $$ = []string{$1}
+  }
+| col_id indirection
+  {
+    $$ = append([]string{$1}, $2...)
+  }
 
 name_list:
-  name {}
-| name_list ',' name {}
+  name
+  {
+    $$ = []string{$1}
+  }
+| name_list ',' name
+  {
+    $$ = append($1, $3)
+  }
 
 name:
   col_id
@@ -2416,19 +3480,46 @@ func_name:
 
 // Constants
 a_expr_const:
-  iconst {}
-| FCONST {}
-| sconst {}
-| BCONST {}
-| XCONST {}
+  iconst
+  {
+    $$ = IntVal($1)
+  }
+| FCONST
+  {
+    $$ = NumVal($1)
+  }
+| sconst
+  {
+    // TODO(pmattis): string literal
+    $$ = StrVal($1)
+  }
+| BCONST
+  {
+    // TODO(pmattis): bit literal.
+    $$ = StrVal($1)
+  }
+| XCONST
+  {
+    // TODO(pmattis): hex literal.
+    $$ = StrVal($1)
+  }
 | func_name sconst {}
 | func_name '(' func_arg_list opt_sort_clause ')' sconst {}
 | const_typename sconst {}
 | const_interval sconst opt_interval {}
 | const_interval '(' iconst ')' sconst {}
-| TRUE {}
-| FALSE {}
-| NULL {}
+| TRUE
+  {
+    $$ = BoolVal(true)
+  }
+| FALSE
+  {
+    $$ = BoolVal(false)
+  }
+| NULL
+  {
+    $$ = NullVal{}
+  }
 
 iconst:
   ICONST
@@ -2438,8 +3529,14 @@ sconst:
 
 signed_iconst:
   iconst
-| '+' iconst {}
-| '-' iconst {}
+| '+' iconst
+  {
+    $$ = +$2
+  }
+| '-' iconst
+  {
+    $$ = -$2
+  }
 
 // role_spec:
 //   non_reserved_word {}

@@ -17,7 +17,10 @@
 
 package parser2
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+)
 
 //go:generate make
 
@@ -36,10 +39,10 @@ func (l StatementList) String() string {
 }
 
 // Parse parses the sql and returns a list of statements.
-// func Parse(sql string) (StatementList, error) {
-// 	s := newScanner(sql)
-// 	if sqlParse(s) != 0 {
-// 		return nil, errors.New(s.lastError)
-// 	}
-// 	return s.stmts, nil
-// }
+func Parse(sql string) (StatementList, error) {
+	s := newScanner(sql)
+	if sqlParse(s) != 0 {
+		return nil, errors.New(s.lastError)
+	}
+	return s.stmts, nil
+}

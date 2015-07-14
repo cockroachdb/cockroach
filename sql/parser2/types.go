@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,33 +20,20 @@ package parser2
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 const (
-	astInt        = "INT"
-	astInteger    = "INTEGER"
-	astTinyInt    = "TINYINT"
-	astSmallInt   = "SMALLINT"
-	astMediumInt  = "MEDIUMINT"
-	astBigInt     = "BIGINT"
-	astReal       = "REAL"
-	astDouble     = "DOUBLE"
-	astFloat      = "FLOAT"
-	astDecimal    = "DECIMAL"
-	astNumeric    = "NUMERIC"
-	astChar       = "CHAR"
-	astVarChar    = "VARCHAR"
-	astBinary     = "BINARY"
-	astVarBinary  = "VARBINARY"
-	astText       = "TEXT"
-	astTinyText   = "TINYTEXT"
-	astMediumText = "MEDIUMTEXT"
-	astLongText   = "LONGTEXT"
-	astBlob       = "BLOB"
-	astTinyBlob   = "TINYBLOB"
-	astMediumBlob = "MEDIUMBLOB"
-	astLongBlob   = "LONGBLOB"
+	astInt      = "INT"
+	astInteger  = "INTEGER"
+	astSmallInt = "SMALLINT"
+	astBigInt   = "BIGINT"
+	astReal     = "REAL"
+	astDouble   = "DOUBLE PRECISION"
+	astFloat    = "FLOAT"
+	astDecimal  = "DECIMAL"
+	astNumeric  = "NUMERIC"
+	astChar     = "CHAR"
+	astVarChar  = "VARCHAR"
 )
 
 // ColumnType represents a type in a column definition.
@@ -55,12 +42,22 @@ type ColumnType interface {
 	columnType()
 }
 
+func (*BitType) columnType()       {}
+func (*BoolType) columnType()      {}
+func (*IntType) columnType()       {}
+func (*FloatType) columnType()     {}
+func (*DecimalType) columnType()   {}
+func (*DateType) columnType()      {}
+func (*TimeType) columnType()      {}
+func (*TimestampType) columnType() {}
+func (*CharType) columnType()      {}
+func (*TextType) columnType()      {}
+func (*BlobType) columnType()      {}
+
 // BitType represents a BIT type.
 type BitType struct {
 	N int
 }
-
-func (*BitType) columnType() {}
 
 func (node *BitType) String() string {
 	var buf bytes.Buffer
@@ -71,68 +68,59 @@ func (node *BitType) String() string {
 	return buf.String()
 }
 
-// IntType represents an INT, TINYINT, SMALLINT, MEDIUMINT, BIGINT or INTEGER
-// type.
-type IntType struct {
-	Name     string
-	N        int
-	Unsigned bool
+// BoolType represents a BOOLEAN type.
+type BoolType struct{}
+
+func (node *BoolType) String() string {
+	return "BOOLEAN"
 }
 
-func (*IntType) columnType() {}
+// IntType represents an INT, INTEGER, SMALLINT or BIGINT type.
+type IntType struct {
+	Name string
+	N    int
+}
 
 func (node *IntType) String() string {
 	var buf bytes.Buffer
-	buf.WriteString(node.Name)
+	_, _ = buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
-	}
-	if node.Unsigned {
-		buf.WriteString(" UNSIGNED")
 	}
 	return buf.String()
 }
 
 // FloatType represents a REAL, DOUBLE or FLOAT type.
 type FloatType struct {
-	Name     string
-	N        int
-	Prec     int
-	Unsigned bool
+	Name string
+	Prec int
 }
-
-func (*FloatType) columnType() {}
 
 func (node *FloatType) String() string {
 	var buf bytes.Buffer
-	buf.WriteString(node.Name)
-	if node.N > 0 {
-		fmt.Fprintf(&buf, "(%d,%d)", node.N, node.Prec)
-	}
-	if node.Unsigned {
-		buf.WriteString(" UNSIGNED")
+	_, _ = buf.WriteString(node.Name)
+	if node.Prec > 0 {
+		fmt.Fprintf(&buf, "(%d)", node.Prec)
 	}
 	return buf.String()
 }
 
 // DecimalType represents a DECIMAL or NUMERIC type.
 type DecimalType struct {
-	Name string
-	N    int
-	Prec int
+	Name  string
+	Prec  int
+	Scale int
 }
-
-func (*DecimalType) columnType() {}
 
 func (node *DecimalType) String() string {
 	var buf bytes.Buffer
-	buf.WriteString(node.Name)
-	if node.N > 0 {
-		fmt.Fprintf(&buf, "(%d", node.N)
-		if node.Prec > 0 {
-			fmt.Fprintf(&buf, ",%d", node.Prec)
+	_, _ = buf.WriteString(node.Name)
+	if node.Prec > 0 {
+		fmt.Fprintf(&buf, "(%d", node.Prec)
+		if node.Scale > 0 {
+			fmt.Fprintf(&buf, ",%d", node.Scale)
 		}
-		buf.WriteString(")")
+		_, _ = buf.WriteString(")")
 	}
 	return buf.String()
 }
@@ -140,8 +128,6 @@ func (node *DecimalType) String() string {
 // DateType represents a DATE type.
 type DateType struct {
 }
-
-func (*DateType) columnType() {}
 
 func (node *DateType) String() string {
 	return "DATE"
@@ -151,27 +137,13 @@ func (node *DateType) String() string {
 type TimeType struct {
 }
 
-func (*TimeType) columnType() {}
-
 func (node *TimeType) String() string {
 	return "TIME"
-}
-
-// DateTimeType represents a DATETIME type.
-type DateTimeType struct {
-}
-
-func (*DateTimeType) columnType() {}
-
-func (node *DateTimeType) String() string {
-	return "DATETIME"
 }
 
 // TimestampType represents a TIMESTAMP type.
 type TimestampType struct {
 }
-
-func (*TimestampType) columnType() {}
 
 func (node *TimestampType) String() string {
 	return "TIMESTAMP"
@@ -183,74 +155,29 @@ type CharType struct {
 	N    int
 }
 
-func (*CharType) columnType() {}
-
 func (node *CharType) String() string {
 	var buf bytes.Buffer
-	buf.WriteString(node.Name)
+	_, _ = buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(&buf, "(%d)", node.N)
 	}
 	return buf.String()
 }
 
-// BinaryType represents a BINARY or VARBINARY type.
-type BinaryType struct {
-	Name string
-	N    int
-}
-
-func (*BinaryType) columnType() {}
-
-func (node *BinaryType) String() string {
-	var buf bytes.Buffer
-	buf.WriteString(node.Name)
-	if node.N > 0 {
-		fmt.Fprintf(&buf, "(%d)", node.N)
-	}
-	return buf.String()
-}
-
-// TextType represents a TEXT, TINYTEXT, MEDIUMTEXT or LONGTEXT type.
+// TextType represents a TEXT type.
 type TextType struct {
 	Name string
 }
 
-func (*TextType) columnType() {}
-
 func (node *TextType) String() string {
-	return node.Name
+	return "TEXT"
 }
 
-// BlobType represents a BLOB, TINYBLOB, MEDIUMBLOB or LONGBLOB type.
+// BlobType represents a BLOB type.
 type BlobType struct {
 	Name string
 }
 
-func (*BlobType) columnType() {}
-
 func (node *BlobType) String() string {
-	return node.Name
-}
-
-// EnumType represents an ENUM type.
-type EnumType struct {
-	Vals []string
-}
-
-func (*EnumType) columnType() {}
-
-func (node *EnumType) String() string {
-	return fmt.Sprintf("ENUM(%s)", strings.Join(node.Vals, ","))
-}
-
-// SetType represents a SET type.
-type SetType struct {
-	Vals []string
-}
-
-func (*SetType) columnType() {}
-
-func (node *SetType) String() string {
-	return fmt.Sprintf("SET(%s)", strings.Join(node.Vals, ","))
+	return "BLOB"
 }
