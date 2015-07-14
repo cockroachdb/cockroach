@@ -26,7 +26,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/cockroachdb/cockroach/server/cli"
+	"github.com/cockroachdb/cockroach/cli"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
