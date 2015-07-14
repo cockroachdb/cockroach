@@ -315,7 +315,7 @@ func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline,
 			continue
 		}
 		if allowComments {
-			if present, ok := s.scanComment(lval); !ok {
+			if present, cok := s.scanComment(lval); !cok {
 				return false, false
 			} else if present {
 				continue
