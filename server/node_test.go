@@ -540,10 +540,11 @@ func TestStatusSummaries(t *testing.T) {
 		},
 		SplitKey: splitKey,
 	}
-	ns := (*nodeServer)(ts.node)
-	reply := &proto.AdminSplitResponse{}
-	if err := ns.AdminSplit(args, reply); err != nil {
+	var reply *proto.AdminSplitResponse
+	if replyI, err := ts.node.executeCmd(args); err != nil {
 		t.Fatal(err)
+	} else {
+		reply = replyI.(*proto.AdminSplitResponse)
 	}
 	if reply.Error != nil {
 		t.Fatal(reply.Error)

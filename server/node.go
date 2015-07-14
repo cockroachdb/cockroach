@@ -73,10 +73,6 @@ type Node struct {
 	startedAt  int64
 }
 
-// nodeServer is a type alias to separate RPC methods
-// (which net/rpc finds via reflection) from others.
-type nodeServer Node
-
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(db *client.DB) (proto.NodeID, error) {
@@ -232,8 +228,31 @@ func (n *Node) initNodeID(id proto.NodeID) {
 func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	attrs proto.Attributes, stopper *stop.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
-	if err := rpcServer.RegisterName("Node", (*nodeServer)(n)); err != nil {
-		log.Fatalf("unable to register node service with RPC server: %s", err)
+	requests := []proto.Request{
+		&proto.GetRequest{},
+		&proto.PutRequest{},
+		&proto.ConditionalPutRequest{},
+		&proto.IncrementRequest{},
+		&proto.DeleteRequest{},
+		&proto.DeleteRangeRequest{},
+		&proto.ScanRequest{},
+		&proto.EndTransactionRequest{},
+		&proto.AdminSplitRequest{},
+		&proto.AdminMergeRequest{},
+		&proto.InternalRangeLookupRequest{},
+		&proto.InternalHeartbeatTxnRequest{},
+		&proto.InternalGCRequest{},
+		&proto.InternalPushTxnRequest{},
+		&proto.InternalResolveIntentRequest{},
+		&proto.InternalResolveIntentRangeRequest{},
+		&proto.InternalMergeRequest{},
+		&proto.InternalTruncateLogRequest{},
+		&proto.InternalLeaderLeaseRequest{},
+	}
+	for _, r := range requests {
+		if err := rpcServer.Register("Node."+r.Method().String(), n.executeCmd, r); err != nil {
+			log.Fatalf("unable to register node service with RPC server: %s", err)
+		}
 	}
 
 	// Start status monitor.
@@ -457,7 +476,9 @@ func (n *Node) publishStoreStatuses() error {
 }
 
 // executeCmd creates a proto.Call struct and sends it via our local sender.
-func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
+func (n *Node) executeCmd(argsI interface{}) (interface{}, error) {
+	args := argsI.(proto.Request)
+	reply := args.CreateReply()
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
 	header := args.Header()
@@ -472,82 +493,5 @@ func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error 
 	if err := reply.Header().GoError(); err != nil {
 		trace.Event(fmt.Sprintf("error: %T", err))
 	}
-	return nil
-}
-
-func (n *nodeServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalResolveIntentRange(args *proto.InternalResolveIntentRangeRequest, reply *proto.InternalResolveIntentRangeResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-func (n *nodeServer) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest,
-	reply *proto.InternalLeaderLeaseResponse) error {
-	return n.executeCmd(args, reply)
+	return reply, nil
 }

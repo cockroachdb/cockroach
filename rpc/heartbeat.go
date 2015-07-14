@@ -35,18 +35,29 @@ type HeartbeatService struct {
 	remoteClockMonitor *RemoteClockMonitor
 }
 
+// Register this service on the given RPC server.
+func (hs *HeartbeatService) Register(server *Server) error {
+	if err := server.Register("Heartbeat.Ping", hs.Ping,
+		&proto.PingRequest{}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Ping echos the contents of the request to the response, and returns the
 // server's current clock value, allowing the requester to measure its clock.
 // The requester should also estimate its offset from this server along
 // with the requester's address.
-func (hs *HeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+func (hs *HeartbeatService) Ping(argsI interface{}) (interface{}, error) {
+	args := argsI.(*proto.PingRequest)
+	reply := &proto.PingResponse{}
 	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
 	reply.ServerTime = hs.clock.PhysicalNow()
-	return nil
+	return reply, nil
 }
 
 // A ManualHeartbeatService allows manual control of when heartbeats occur, to
@@ -59,8 +70,17 @@ type ManualHeartbeatService struct {
 	stopper *stop.Stopper
 }
 
+// Register this service on the given RPC server.
+func (mhs *ManualHeartbeatService) Register(server *Server) error {
+	if err := server.Register("Heartbeat.Ping", mhs.Ping,
+		&proto.PingRequest{}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
-func (mhs *ManualHeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+func (mhs *ManualHeartbeatService) Ping(args interface{}) (interface{}, error) {
 	select {
 	case <-mhs.ready:
 	case <-mhs.stopper.ShouldStop():
@@ -69,5 +89,5 @@ func (mhs *ManualHeartbeatService) Ping(args *proto.PingRequest, reply *proto.Pi
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
 	}
-	return hs.Ping(args, reply)
+	return hs.Ping(args)
 }

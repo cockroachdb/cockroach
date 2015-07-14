@@ -180,59 +180,32 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // RegisterRPC registers the RPC endpoints.
 func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
-	return rpcServer.RegisterName("Server", (*rpcDBServer)(s))
-}
-
-// rpcDBServer is used to provide a separate method namespace for RPC
-// registration.
-type rpcDBServer DBServer
-
-// executeCmd creates a proto.Call struct and sends it via our local sender.
-func (s *rpcDBServer) executeCmd(args proto.Request, reply proto.Response) error {
-	s.sender.Send(context.TODO(), proto.Call{Args: args, Reply: reply})
+	requests := []proto.Request{
+		&proto.GetRequest{},
+		&proto.PutRequest{},
+		&proto.ConditionalPutRequest{},
+		&proto.IncrementRequest{},
+		&proto.DeleteRequest{},
+		&proto.DeleteRangeRequest{},
+		&proto.ScanRequest{},
+		&proto.EndTransactionRequest{},
+		&proto.BatchRequest{},
+		&proto.AdminSplitRequest{},
+		&proto.AdminMergeRequest{},
+	}
+	for _, r := range requests {
+		if err := rpcServer.Register("Server."+r.Method().String(),
+			s.executeCmd, r); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (s *rpcDBServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) Batch(args *proto.BatchRequest, reply *proto.BatchResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
-	return s.executeCmd(args, reply)
-}
-
-func (s *rpcDBServer) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
-	return s.executeCmd(args, reply)
+// executeCmd creates a proto.Call struct and sends it via our local sender.
+func (s *DBServer) executeCmd(argsI interface{}) (interface{}, error) {
+	args := argsI.(proto.Request)
+	reply := args.CreateReply()
+	s.sender.Send(context.TODO(), proto.Call{Args: args, Reply: reply})
+	return reply, nil
 }

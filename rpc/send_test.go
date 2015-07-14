@@ -19,7 +19,6 @@ package rpc
 
 import (
 	"net"
-	"net/rpc"
 	"strings"
 	"testing"
 	"time"
@@ -182,9 +181,9 @@ func TestUnretryableError(t *testing.T) {
 
 type Heartbeat struct{}
 
-func (h *Heartbeat) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+func (h *Heartbeat) Ping(args interface{}) (interface{}, error) {
 	time.Sleep(50 * time.Millisecond)
-	return nil
+	return &proto.PingResponse{}, nil
 }
 
 // TestClientNotReady verifies that Send gets an RPC error when a client
@@ -201,11 +200,11 @@ func TestClientNotReady(t *testing.T) {
 
 	// Construct a server that listens but doesn't do anything.
 	s := &Server{
-		Server:  rpc.NewServer(),
 		context: nodeContext,
 		addr:    addr,
+		methods: map[string]method{},
 	}
-	if err := s.Register(&Heartbeat{}); err != nil {
+	if err := s.Register("Heartbeat.Ping", (&Heartbeat{}).Ping, &proto.PingRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Start(); err != nil {
