@@ -54,7 +54,13 @@ func moveMoney(db *sql.DB) {
 		}
 		rows, err := tx.Query("SELECT id, balance FROM accounts WHERE id IN ($1, $2)", from, to)
 		if err != nil {
-			log.Fatal(err)
+			if log.V(1) {
+				log.Warning(err)
+			}
+			if err = tx.Rollback(); err != nil {
+				log.Fatal(err)
+			}
+			continue
 		}
 		var fromBalance, toBalance int
 		for rows.Next() {
