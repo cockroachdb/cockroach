@@ -1020,7 +1020,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
 	}
 	if err := s.addRangeInternal(newRng); err != nil {
-		return util.Errorf("couldn't insert range %v in rangesByKey btree", newRng)
+		return util.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
 	}
 
 	// Update the max bytes and other information of the new range.
