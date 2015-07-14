@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -140,7 +140,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
-				User:         storage.UserRoot,
+				User:         security.RootUser,
 				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
 				Txn: &proto.Transaction{
 					Name:      "test txn",
@@ -179,7 +179,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
-				User:         storage.UserRoot,
+				User:         security.RootUser,
 				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
 				Txn: &proto.Transaction{
 					Name:      "test txn",
@@ -512,7 +512,7 @@ func (ts *testSender) Close() {
 var testPutReq = &proto.PutRequest{
 	RequestHeader: proto.RequestHeader{
 		Key:          proto.Key("test-key"),
-		User:         storage.UserRoot,
+		User:         security.RootUser,
 		UserPriority: gogoproto.Int32(-1),
 		Txn: &proto.Transaction{
 			Name: "test txn",

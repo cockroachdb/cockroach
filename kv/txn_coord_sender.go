@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -159,7 +160,7 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 					Timestamp: txn.Timestamp,
 					Key:       key,
 					EndKey:    endKey,
-					User:      storage.UserRoot,
+					User:      security.RootUser,
 					Txn:       txn,
 				},
 			}
@@ -179,7 +180,7 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 				RequestHeader: proto.RequestHeader{
 					Timestamp: txn.Timestamp,
 					Key:       key,
-					User:      storage.UserRoot,
+					User:      security.RootUser,
 					Txn:       txn,
 				},
 			}
@@ -744,7 +745,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 				request := &proto.InternalHeartbeatTxnRequest{
 					RequestHeader: proto.RequestHeader{
 						Key:  txn.Key,
-						User: storage.UserRoot,
+						User: security.RootUser,
 						Txn:  &txn,
 					},
 				}

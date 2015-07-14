@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
@@ -46,8 +47,6 @@ import (
 )
 
 const (
-	// UserRoot is the username for the root user.
-	UserRoot = "root"
 	// GCResponseCacheExpiration is the expiration duration for response
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
@@ -883,8 +882,8 @@ func (s *Store) BootstrapRange() error {
 	}
 	// Permission config.
 	permConfig := &proto.PermConfig{
-		Read:  []string{UserRoot}, // root user
-		Write: []string{UserRoot}, // root user
+		Read:  []string{security.RootUser}, // root user
+		Write: []string{security.RootUser}, // root user
 	}
 	key = keys.MakeKey(keys.ConfigPermissionPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, permConfig); err != nil {
@@ -1409,7 +1408,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				// than the pushee's txn!
 				Timestamp: pushReply.PusheeTxn.Timestamp,
 				Key:       intentKey,
-				User:      UserRoot,
+				User:      security.RootUser,
 				Txn:       pushReply.PusheeTxn,
 			},
 		}
