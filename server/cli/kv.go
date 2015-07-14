@@ -143,6 +143,8 @@ var incCmd = &cobra.Command{
 	Long: `
 Increments the value for a key. The increment amount defaults to 1 if
 not specified. Displays the incremented value upon success.
+Negative values need to be prefixed with -- to not get interpreted as
+flags.
 `,
 	Run: runInc,
 }
