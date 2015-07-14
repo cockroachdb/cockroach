@@ -102,9 +102,6 @@ func TestParse(t *testing.T) {
 		{`SELECT $1 FROM t`},
 		{`SELECT $1, $2 FROM t`},
 		{`SELECT NULL FROM t`},
-		// {`SELECT 010 FROM t`},
-		// {`SELECT 0xf0 FROM t`},
-		// {`SELECT 0xF0 FROM t`},
 		{`SELECT 0.1 FROM t`},
 		{`SELECT a FROM t`},
 		{`SELECT a.b FROM t`},
@@ -113,6 +110,9 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t AS bar`},
 		{`SELECT FROM (SELECT 1 FROM t)`},
 		{`SELECT FROM (SELECT 1 FROM t) AS bar`},
+		{`SELECT FROM t1, t2`},
+		{`SELECT FROM t AS t1`},
+		{`SELECT FROM s.t`},
 
 		{`SELECT DISTINCT 1 FROM t`},
 
@@ -139,7 +139,6 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE a <= b`},
 		{`SELECT FROM t WHERE a >= b`},
 		{`SELECT FROM t WHERE a != b`},
-		// {`SELECT FROM t WHERE a <> b`},
 		{`SELECT FROM t WHERE a = (SELECT a FROM t)`},
 		{`SELECT FROM t WHERE a = (b)`},
 		{`SELECT FROM t WHERE a = b&c`},
@@ -159,21 +158,19 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c ELSE d END`},
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c WHEN b = d THEN d ELSE d END`},
 		{`SELECT FROM t WHERE CASE aa WHEN a = b THEN c END`},
+		{`SELECT (a.b) FROM t WHERE (b.c) = 2`},
 
 		{`SELECT FROM t HAVING a = b`},
 
 		{`SELECT FROM t UNION SELECT 1 FROM t`},
 		{`SELECT FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t`},
-		// {`SELECT FROM t UNION ALL SELECT 1 FROM t`},
 		{`SELECT FROM t EXCEPT SELECT 1 FROM t`},
 		{`SELECT FROM t INTERSECT SELECT 1 FROM t`},
 
 		{`SELECT FROM t1 JOIN t2 ON a = b`},
 		{`SELECT FROM t1 JOIN t2 USING (a)`},
 		{`SELECT FROM t1 LEFT JOIN t2 ON a = b`},
-		// {`SELECT FROM t1 LEFT OUTER JOIN t2 ON a = b`},
 		{`SELECT FROM t1 RIGHT JOIN t2 ON a = b`},
-		// {`SELECT FROM t1 RIGHT OUTER JOIN t2 ON a = b`},
 		{`SELECT FROM t1 INNER JOIN t2 ON a = b`},
 		{`SELECT FROM t1 CROSS JOIN t2`},
 		{`SELECT FROM t1 NATURAL JOIN t2`},
@@ -183,7 +180,6 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t LIMIT a`},
 		{`SELECT FROM t OFFSET b`},
 		{`SELECT FROM t LIMIT a OFFSET b`},
-		// {`SELECT FROM t OFFSET a LIMIT b`},
 
 		{`SET a = 3`},
 		{`SET a = 3, 4`},
@@ -212,6 +208,56 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// TestParse2 verifies that we can parse the supplied SQL and regenerate the
+// expected SQL string from the syntax tree. Note that if the input and output
+// SQL strings are the same, the test case should go in TestParse instead.
+func TestParse2(t *testing.T) {
+	testData := []struct {
+		sql      string
+		expected string
+	}{
+		// TODO(pmattis): Handle octal and hexadecimal numbers.
+		// {`SELECT 010 FROM t`, ``},
+		// {`SELECT 0xf0 FROM t`, ``},
+		// {`SELECT 0xF0 FROM t`, ``},
+
+		// Comments are stripped.
+		{`SELECT 1 FROM t -- hello world`,
+			`SELECT 1 FROM t`},
+		{`SELECT /* hello world */ 1 FROM t`,
+			`SELECT 1 FROM t`},
+		{`SELECT /* hello */ 1 FROM /* world */ t`,
+			`SELECT 1 FROM t`},
+		// Alias expressions are always output using AS.
+		{`SELECT 1 FROM t t1`,
+			`SELECT 1 FROM t AS t1`},
+		// Alternate not-equal operator.
+		{`SELECT FROM t WHERE a <> b`,
+			`SELECT FROM t WHERE a != b`},
+		// OUTER is syntactic sugar.
+		{`SELECT FROM t1 LEFT OUTER JOIN t2 ON a = b`,
+			`SELECT FROM t1 LEFT JOIN t2 ON a = b`},
+		{`SELECT FROM t1 RIGHT OUTER JOIN t2 ON a = b`,
+			`SELECT FROM t1 RIGHT JOIN t2 ON a = b`},
+		// TODO(pmattis): Handle UNION ALL.
+		{`SELECT FROM t UNION ALL SELECT 1 FROM t`,
+			`SELECT FROM t UNION SELECT 1 FROM t`},
+		// We allow OFFSET before LIMIT, but always output LIMIT first.
+		{`SELECT FROM t OFFSET a LIMIT b`,
+			`SELECT FROM t LIMIT b OFFSET a`},
+	}
+	for _, d := range testData {
+		stmts, err := Parse(d.sql)
+		if err != nil {
+			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+		}
+		s := stmts.String()
+		if d.expected != s {
+			t.Fatalf("expected %s, but found %s", d.expected, s)
+		}
+	}
+}
+
 // TestParseSyntax verifieds that parsing succeeds, though the syntax tree
 // likely differs. All of the test cases here should eventually be moved
 // elswhere.
@@ -219,19 +265,12 @@ func TestParseSyntax(t *testing.T) {
 	testData := []struct {
 		sql string
 	}{
-		{`SELECT 1 FROM t -- aa`},
-		{`SELECT 1 FROM t`},
 		{`SELECT '\0' FROM a`},
 		{`SELECT 1 FROM t FOR READ ONLY`},
 		{`SELECT 1 FROM t FOR UPDATE`},
 		{`SELECT 1 FROM t FOR SHARE`},
 		{`SELECT 1 FROM t FOR KEY SHARE`},
-		{`SELECT 1 FROM t1, t2`},
-		{`SELECT 1 FROM t t1`},
-		{`SELECT 1 FROM t AS t1`},
-		{`SELECT 1 FROM s.t`},
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
-		{`SELECT (a.b) FROM t WHERE (b.c) = 2`},
 		{`SELECT 1 FROM t WHERE a = B()`},
 		{`SELECT 1 FROM t WHERE a = B(c)`},
 		{`SELECT 1 FROM t WHERE a = B(c, d)`},
@@ -249,7 +288,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT 1 FROM t ORDER BY a`},
 		{`SELECT 1 FROM t ORDER BY a ASC`},
 		{`SELECT 1 FROM t ORDER BY a DESC`},
-		{`SELECT 1 FROM t OFFSET a LIMIT b`},
 		{`CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
