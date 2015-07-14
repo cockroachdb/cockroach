@@ -4,12 +4,14 @@
 
 package parser2
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 var (
 	dontEscape = byte(255)
 	// encodeMap specifies how to escape binary data with '\'.
-	// Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
 	encodeMap [256]byte
 	// decodeMap is the reverse of encodeMap
 	decodeMap [256]byte
@@ -30,8 +32,36 @@ func encodeSQLString(buf []byte, in []byte) []byte {
 	return buf
 }
 
+// TODO(pmattis): This method needs testing.
+func encodeSQLIdent(buf *bytes.Buffer, s string) {
+	// The string needs quoting if it does not match the ident format.
+	if isIdent(s) {
+		_, _ = buf.WriteString(s)
+		return
+	}
+
+	// The only characters we need to escape are '"' and '\\'.
+	_ = buf.WriteByte('"')
+	start := 0
+	for i, n := 0, len(s); i < n; i++ {
+		ch := s[i]
+		if ch == '"' || ch == '\\' {
+			if start != i {
+				_, _ = buf.WriteString(s[start:i])
+			}
+			start = i + 1
+			_ = buf.WriteByte('\\')
+			_ = buf.WriteByte(ch)
+		}
+	}
+	if start < len(s) {
+		_, _ = buf.WriteString(s[start:])
+	}
+	_ = buf.WriteByte('"')
+}
+
 func encodeSQLBytes(buf []byte, v []byte) []byte {
-	buf = append(buf, "X'"...)
+	buf = append(buf, "x'"...)
 	for _, d := range v {
 		buf = append(buf, hexMap[d]...)
 	}
@@ -45,10 +75,10 @@ func init() {
 		'\'':   '\'',
 		'"':    '"',
 		'\b':   'b',
+		'\f':   'f',
 		'\n':   'n',
 		'\r':   'r',
 		'\t':   't',
-		26:     'Z', // ctl-Z
 		'\\':   '\\',
 	}
 

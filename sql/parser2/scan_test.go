@@ -218,24 +218,26 @@ func TestScanString(t *testing.T) {
 		{`'a''b'`, `a'b`},
 		{`"a" "b"`, `a`},
 		{`'a' 'b'`, `a`},
+		{`'\n'`, "\\n"},
 		{`"\""`, `"`},
 		{`'\''`, `'`},
-		{`'\0\'\"\b\n\r\t\Z\\'`, `\0'\"\b\n\r\t\Z\`},
+		{`'\0\'\"\b\f\n\r\t\\'`, `\0'\"\b\f\n\r\t\`},
 		{`"a"
-"b"`, `ab`},
+	"b"`, `ab`},
 		{`"a"
-'b'`, `a`},
+	'b'`, `a`},
 		{`'a'
-'b'`, `ab`},
+	'b'`, `ab`},
 		{`'a'
-"b"`, `a`},
+	"b"`, `a`},
+		{`e'foo\"\'\\\b\f\n\r\tbar'`, "foo\"'\\\b\f\n\r\tbar"},
 	}
 	for _, d := range testData {
 		s := newScanner(d.sql)
 		var lval sqlSymType
 		_ = s.Lex(&lval)
 		if d.expected != lval.str {
-			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
+			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.str)
 		}
 	}
 }

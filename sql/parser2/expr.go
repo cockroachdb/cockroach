@@ -242,10 +242,12 @@ func (n QualifiedName) String() string {
 		if i > 0 {
 			_, _ = buf.WriteString(".")
 		}
-		if _, ok := keywords[s]; ok {
+		if s == "*" {
+			_, _ = buf.WriteString(s)
+		} else if _, ok := keywords[s]; ok {
 			fmt.Fprintf(&buf, "\"%s\"", s)
 		} else {
-			fmt.Fprintf(&buf, "%s", s)
+			encodeSQLIdent(&buf, s)
 		}
 	}
 	return buf.String()

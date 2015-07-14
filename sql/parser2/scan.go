@@ -387,7 +387,7 @@ func (s *scanner) scanIdent(lval *sqlSymType, ch int) {
 	start := s.pos - 1
 	for {
 		ch := s.peek()
-		if isIdentStart(ch) || isDigit(ch) || ch == '$' {
+		if isIdentMiddle(ch) {
 			s.pos++
 			continue
 		}
@@ -517,7 +517,16 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 				continue
 			}
 			if allowEscapes {
-				// TODO(pmattis): Handle other back-slash escapes?
+				switch t {
+				case 'b', 'f', 'n', 'r', 't', '\'', '"':
+					lval.str += s.in[start : s.pos-1]
+					lval.str += string(decodeMap[byte(t)])
+					s.pos++
+					start = s.pos
+					continue
+				}
+				// TODO(pmattis): Handle other back-slash escapes? Octal? Hexadecimal?
+				// Unicode?
 			}
 
 		case eof:
@@ -532,9 +541,25 @@ func isDigit(ch int) bool {
 	return ch >= '0' && ch <= '9'
 }
 
+func isIdent(s string) bool {
+	if !isIdentStart(int(s[0])) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isIdentMiddle(int(s[i])) {
+			return false
+		}
+	}
+	return true
+}
+
 func isIdentStart(ch int) bool {
 	return (ch >= 'A' && ch <= 'Z') ||
 		(ch >= 'a' && ch <= 'z') ||
 		(ch >= 128 && ch <= 255) ||
 		(ch == '_')
+}
+
+func isIdentMiddle(ch int) bool {
+	return isIdentStart(ch) || isDigit(ch) || ch == '$'
 }
