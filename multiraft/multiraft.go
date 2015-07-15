@@ -33,6 +33,8 @@ import (
 
 const (
 	noGroup = proto.RaftID(0)
+
+	reqBufferSize = 100
 )
 
 // An ErrGroupDeleted is returned for commands which are pending while their
@@ -151,7 +153,7 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 		Events: make(chan interface{}, config.EventBufferSize),
 
 		// Input channels.
-		reqChan:         make(chan *RaftMessageRequest),
+		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
 		createGroupChan: make(chan *createGroupOp),
 		removeGroupChan: make(chan *removeGroupOp),
 		proposalChan:    make(chan *proposal),
@@ -173,7 +175,8 @@ func (m *MultiRaft) Start() error {
 }
 
 // RaftMessage implements ServerInterface; this method is called by net/rpc
-// when we receive a message.
+// when we receive a message. It returns as soon as the request has been
+// enqueued without waiting for it to be processed.
 func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
 	select {
