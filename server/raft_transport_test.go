@@ -119,9 +119,10 @@ func TestSendAndReceive(t *testing.T) {
 		}
 	}
 
-	// Read all the messages from the channels.  Note that the transport does not
-	// currently guarantee in-order delivery, so we just verify that the right number
-	// of messages end up in each channel.
+	// Read all the messages from the channels.  Note that the transport
+	// does not guarantee in-order delivery between independent
+	// transports, so we just verify that the right number of messages
+	// end up in each channel.
 	for to := 0; to < numStores; to++ {
 		for from := 0; from < numStores; from++ {
 			select {
@@ -139,6 +140,75 @@ func TestSendAndReceive(t *testing.T) {
 		case req := <-channels[to]:
 			t.Errorf("got unexpected message %+v on channel %d", req, nodeIDs[to])
 		default:
+		}
+	}
+}
+
+// TestInOrderDelivery verifies that for a given pair of nodes, raft
+// messages are delivered in order. This test is unfortunately not
+// very sensitive; even when we were not guaranteeing in-order
+// delivery it was difficult to reliably trigger a reordering.
+func TestInOrderDelivery(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	g := gossip.New(nodeRPCContext, gossip.TestInterval, gossip.TestBootstrap)
+
+	server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	const numMessages = 100
+	protoNodeID := proto.NodeID(1)
+	raftNodeID := proto.MakeRaftNodeID(protoNodeID, 1)
+	serverTransport, err := newRPCTransport(g, server, nodeRPCContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverTransport.Close()
+	serverChannel := make(ChannelServer, numMessages)
+	if err := serverTransport.Listen(raftNodeID, serverChannel); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
+		&proto.NodeDescriptor{
+			Address: proto.Addr{
+				Network: server.Addr().Network(),
+				Address: server.Addr().String(),
+			},
+		},
+		time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	clientNodeID := proto.MakeRaftNodeID(2, 2)
+	clientTransport, err := newRPCTransport(g, nil, nodeRPCContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientTransport.Close()
+
+	for i := 0; i < numMessages; i++ {
+		req := &multiraft.RaftMessageRequest{
+			GroupID: 1,
+			Message: raftpb.Message{
+				To:     uint64(raftNodeID),
+				From:   uint64(clientNodeID),
+				Commit: uint64(i),
+			},
+		}
+		if err := clientTransport.Send(req); err != nil {
+			t.Errorf("failed to send message %d: %s", i, err)
+		}
+	}
+
+	for i := 0; i < numMessages; i++ {
+		req := <-serverChannel
+		if req.Message.Commit != uint64(i) {
+			t.Errorf("messages out of order: got %d while expecting %d", req.Message.Commit, i)
 		}
 	}
 }

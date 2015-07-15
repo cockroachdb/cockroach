@@ -65,21 +65,24 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		queues:     make(map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest),
 	}
 
-	if err := t.rpcServer.Register(raftMessageName, t.RaftMessage,
-		&proto.RaftMessageRequest{}); err != nil {
-		return nil, err
+	if t.rpcServer != nil {
+		if err := t.rpcServer.RegisterAsync(raftMessageName, t.RaftMessage,
+			&proto.RaftMessageRequest{}); err != nil {
+			return nil, err
+		}
 	}
 
 	return t, nil
 }
 
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *rpcTransport) RaftMessage(args gogoproto.Message) (gogoproto.Message, error) {
+func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogoproto.Message, error)) {
 	protoReq := args.(*proto.RaftMessageRequest)
 	// Convert from proto to internal formats.
 	req := &multiraft.RaftMessageRequest{GroupID: protoReq.GroupID}
 	if err := req.Message.Unmarshal(protoReq.Msg); err != nil {
-		return nil, err
+		callback(nil, err)
+		return
 	}
 
 	t.mu.Lock()
@@ -87,13 +90,19 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message) (gogoproto.Message, e
 	t.mu.Unlock()
 
 	if !ok {
-		return nil, util.Errorf("Unable to proxy message to node: %d", req.Message.To)
+		callback(nil, util.Errorf("Unable to proxy message to node: %d", req.Message.To))
+		return
 	}
 
-	// Raft responses are empty so we don't actually need to convert between
-	// multiraft's internal struct and the external proto representation.
+	// Raft responses are empty so we don't actually need to convert
+	// between multiraft's internal struct and the external proto
+	// representation.  In fact, we don't even need to wait for the
+	// message to be processed to invoke the callback. We are just
+	// (ab)using the async handler mechanism to get this (synchronous)
+	// handler called in the RPC server's goroutine so we can preserve
+	// order of incoming messages.
 	err := server.RaftMessage(req, &multiraft.RaftMessageResponse{})
-	return &proto.RaftMessageResponse{}, err
+	callback(&proto.RaftMessageResponse{}, err)
 }
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface

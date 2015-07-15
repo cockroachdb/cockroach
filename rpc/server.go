@@ -35,7 +35,7 @@ import (
 )
 
 type method struct {
-	handler func(proto.Message) (proto.Message, error)
+	handler func(proto.Message, func(proto.Message, error))
 	reqType reflect.Type
 }
 
@@ -43,6 +43,14 @@ type serverResponse struct {
 	req   *rpc.Request
 	reply proto.Message
 	err   error
+}
+
+type syncAdapter func(proto.Message) (proto.Message, error)
+
+func (s syncAdapter) exec(args proto.Message, callback func(proto.Message, error)) {
+	go func() {
+		callback(s(args))
+	}()
 }
 
 // Server is a Cockroach-specific RPC server with an embedded go RPC
@@ -82,11 +90,25 @@ func NewServer(addr net.Addr, context *Context) *Server {
 	return s
 }
 
-// Register a new method handler. `name` is a qualified name of the form "Service.Name".
-// `handler` is a function that takes an argument of the same type as `reqPrototype`.
-// Both the argument and return value of 'handler' should be a pointer to a protocol
-// message type.
+// Register a new method handler. `name` is a qualified name of the
+// form "Service.Name". `handler` is a function that takes an
+// argument of the same type as `reqPrototype`. Both the argument and
+// return value of 'handler' should be a pointer to a protocol message
+// type. The handler function will be executed in a new goroutine.
 func (s *Server) Register(name string, handler func(proto.Message) (proto.Message, error),
+	reqPrototype proto.Message) error {
+	return s.RegisterAsync(name, syncAdapter(handler).exec, reqPrototype)
+}
+
+// RegisterAsync registers an asynchronous method handler. Instead of
+// returning a (proto.Message, error) tuple, an asynchronous handler
+// receives a callback which it must execute when it is complete. Note
+// that async handlers are started in the RPC server's goroutine and
+// must not block (i.e. they must start a goroutine or write to a
+// channel promptly). However, the fact that they are started in the
+// RPC server's goroutine guarantees that the order of requests as
+// they were read from the connection is preserved.
+func (s *Server) RegisterAsync(name string, handler func(proto.Message, func(proto.Message, error)),
 	reqPrototype proto.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -340,15 +362,14 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 		}
 
 		wg.Add(1)
-		go func() {
-			reply, err := meth.handler(args)
+		meth.handler(args, func(reply proto.Message, err error) {
 			responses <- serverResponse{
 				req:   req,
 				reply: reply,
 				err:   err,
 			}
 			wg.Done()
-		}()
+		})
 	}
 }
 
