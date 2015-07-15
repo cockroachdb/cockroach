@@ -97,7 +97,6 @@ const (
 	LE
 	GE
 	NE
-	NullSafeEqual
 	In
 	NotIn
 	Like
@@ -105,17 +104,16 @@ const (
 )
 
 var comparisonOpName = [...]string{
-	EQ:            "=",
-	LT:            "<",
-	GT:            ">",
-	LE:            "<=",
-	GE:            ">=",
-	NE:            "!=",
-	NullSafeEqual: "<=>",
-	In:            "IN",
-	NotIn:         "NOT IN",
-	Like:          "LIKE",
-	NotLike:       "NOT LIKE",
+	EQ:      "=",
+	LT:      "<",
+	GT:      ">",
+	LE:      "<=",
+	GE:      ">=",
+	NE:      "!=",
+	In:      "IN",
+	NotIn:   "NOT IN",
+	Like:    "LIKE",
+	NotLike: "NOT LIKE",
 }
 
 func (i ComparisonOp) String() string {
@@ -196,10 +194,10 @@ func (node BytesVal) String() string {
 }
 
 // IntVal represents an integer.
-type IntVal uint64
+type IntVal int64
 
 func (node IntVal) String() string {
-	return strconv.FormatUint(uint64(node), 10)
+	return strconv.FormatInt(int64(node), 10)
 }
 
 // NumVal represents a number.
