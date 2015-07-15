@@ -87,7 +87,7 @@ func lz4Decode(src []byte, uncompressedSize uint32, m proto.Message) error {
 	if len(src) == 0 || len(src) == int(uncompressedSize) {
 		// len(src) == int(uncompressedSize) indicates the data was not
 		// compressible.
-		return proto.Unmarshal(src, m)
+		return nilSafeUnmarshal(src, m)
 	}
 
 	var dst unsafe.Pointer
@@ -100,7 +100,7 @@ func lz4Decode(src []byte, uncompressedSize uint32, m proto.Message) error {
 	// We call through directly to proto.Unmarshal so that we don't have
 	// to allocate a slice for "dst" or have some awkward interface
 	// where the caller has to deallocate "dst".
-	err := proto.Unmarshal(unsafeSlice(dst, C.size_t(dLen)), m)
+	err := nilSafeUnmarshal(unsafeSlice(dst, C.size_t(dLen)), m)
 	C.free(dst)
 	return err
 }

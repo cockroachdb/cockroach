@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 type clientInfo struct {
@@ -65,17 +66,19 @@ func newServer(interval time.Duration) *server {
 // Gossip receives gossiped information from a peer node.
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
-func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) error {
+func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
+	args := argsI.(*proto.GossipRequest)
+	reply := &proto.GossipResponse{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	addr, err := args.Addr.NetAddr()
 	if err != nil {
-		return util.Errorf("addr %s could not be converted to net.Addr: %s", args.Addr, err)
+		return nil, util.Errorf("addr %s could not be converted to net.Addr: %s", args.Addr, err)
 	}
 	lAddr, err := args.LAddr.NetAddr()
 	if err != nil {
-		return util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
+		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
 	}
 
 	// If there is no more capacity to accept incoming clients, return
@@ -87,7 +90,7 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 			for _, cInfo := range s.lAddrMap {
 				if count == idx {
 					reply.Alternate = cInfo.addr
-					return nil
+					return reply, nil
 				}
 				count++
 			}
@@ -103,7 +106,7 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 	if args.Delta != nil {
 		delta := &infoStore{}
 		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {
-			return util.Errorf("infostore could not be decoded: %s", err)
+			return nil, util.Errorf("infostore could not be decoded: %s", err)
 		}
 		if delta.infoCount() > 0 {
 			if log.V(1) {
@@ -116,7 +119,7 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 	}
 	// The exit condition for waiting clients.
 	if s.closed {
-		return util.Errorf("gossip server shutdown")
+		return nil, util.Errorf("gossip server shutdown")
 	}
 	// If requested max sequence is not -1, wait for gossip interval to expire.
 	if args.MaxSeq != -1 {
@@ -131,7 +134,7 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 		}
 		reply.Delta = buf.Bytes()
 	}
-	return nil
+	return reply, nil
 }
 
 // jitteredGossipInterval returns a randomly jittered duration from
@@ -146,7 +149,7 @@ func (s *server) jitteredGossipInterval() time.Duration {
 // the next round of gossip are awoken via the conditional variable.
 func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	s.is.NodeAddr = rpcServer.Addr()
-	if err := rpcServer.RegisterName("Gossip", s); err != nil {
+	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &proto.GossipRequest{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
 	}
 	rpcServer.AddCloseCallback(s.onClose)

@@ -19,7 +19,6 @@ package rpc
 
 import (
 	"net"
-	"net/rpc"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
@@ -182,9 +182,9 @@ func TestUnretryableError(t *testing.T) {
 
 type Heartbeat struct{}
 
-func (h *Heartbeat) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+func (h *Heartbeat) Ping(args gogoproto.Message) (gogoproto.Message, error) {
 	time.Sleep(50 * time.Millisecond)
-	return nil
+	return &proto.PingResponse{}, nil
 }
 
 // TestClientNotReady verifies that Send gets an RPC error when a client
@@ -201,11 +201,11 @@ func TestClientNotReady(t *testing.T) {
 
 	// Construct a server that listens but doesn't do anything.
 	s := &Server{
-		Server:  rpc.NewServer(),
 		context: nodeContext,
 		addr:    addr,
+		methods: map[string]method{},
 	}
-	if err := s.Register(&Heartbeat{}); err != nil {
+	if err := s.Register("Heartbeat.Ping", (&Heartbeat{}).Ping, &proto.PingRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Start(); err != nil {
@@ -382,11 +382,17 @@ func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
 
 // sendPing sends Ping requests to specified addresses using Send.
 func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]interface{}, error) {
+	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
+		&proto.PingRequest{}, &proto.PingResponse{})
+}
+
+func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
+	args, reply gogoproto.Message) ([]interface{}, error) {
 	getArgs := func(addr net.Addr) interface{} {
-		return &proto.PingRequest{}
+		return args
 	}
 	getReply := func() interface{} {
-		return &proto.PingResponse{}
+		return reply
 	}
-	return Send(opts, "Heartbeat.Ping", addrs, getArgs, getReply, rpcContext)
+	return Send(opts, name, addrs, getArgs, getReply, rpcContext)
 }

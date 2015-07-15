@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -33,14 +34,24 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+type method struct {
+	handler func(proto.Message) (proto.Message, error)
+	reqType reflect.Type
+}
+
+type serverResponse struct {
+	req   *rpc.Request
+	reply proto.Message
+	err   error
+}
+
 // Server is a Cockroach-specific RPC server with an embedded go RPC
 // server struct. By default it handles a simple heartbeat protocol
 // to measure link health. It also supports close callbacks.
 //
 // TODO(spencer): heartbeat protocol should also measure link latency.
 type Server struct {
-	*rpc.Server              // Embedded RPC server instance
-	listener    net.Listener // Server listener
+	listener net.Listener // Server listener
 
 	activeConns map[net.Conn]struct{}
 	handler     http.Handler
@@ -51,23 +62,49 @@ type Server struct {
 	addr           net.Addr              // Server address; may change if picking unused port
 	closed         bool                  // Set upon invocation of Close()
 	closeCallbacks []func(conn net.Conn) // Slice of callbacks to invoke on conn close
+	methods        map[string]method
 }
 
 // NewServer creates a new instance of Server.
 func NewServer(addr net.Addr, context *Context) *Server {
 	s := &Server{
-		Server:  rpc.NewServer(),
 		context: context,
 		addr:    addr,
+		methods: map[string]method{},
 	}
 	heartbeat := &HeartbeatService{
 		clock:              context.localClock,
 		remoteClockMonitor: context.RemoteClocks,
 	}
-	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+	if err := heartbeat.Register(s); err != nil {
 		log.Fatalf("unable to register heartbeat service with RPC server: %s", err)
 	}
 	return s
+}
+
+// Register a new method handler. `name` is a qualified name of the form "Service.Name".
+// `handler` is a function that takes an argument of the same type as `reqPrototype`.
+// Both the argument and return value of 'handler' should be a pointer to a protocol
+// message type.
+func (s *Server) Register(name string, handler func(proto.Message) (proto.Message, error),
+	reqPrototype proto.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.methods[name]; ok {
+		return util.Errorf("method %s already registered", name)
+	}
+	reqType := reflect.TypeOf(reqPrototype)
+	if reqType.Kind() != reflect.Ptr {
+		// net/rpc supports non-pointer requests, but we always use pointers
+		// and things are a little simpler this way.
+		return util.Errorf("request type not a pointer")
+	}
+	s.methods[name] = method{
+		handler: handler,
+		reqType: reqType,
+	}
+	return nil
 }
 
 // AddCloseCallback adds a callback to the closeCallbacks slice to
@@ -112,7 +149,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	security.LogTLSState("RPC", r.TLS)
 	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
-	s.serveConn(conn, authHook)
+
+	codec := codec.NewServerCodec(conn, authHook)
+	responses := make(chan serverResponse)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		s.sendResponses(codec, responses)
+		wg.Done()
+	}()
+	s.readRequests(codec, responses)
+	wg.Wait()
+
+	codec.Close()
+
+	s.mu.Lock()
+	if s.closeCallbacks != nil {
+		for _, cb := range s.closeCallbacks {
+			cb(conn)
+		}
+	}
+	s.mu.Unlock()
+	conn.Close()
 }
 
 // Listen listens on the configured address but does not start
@@ -252,16 +310,85 @@ func (s *Server) Close() {
 	}
 }
 
-// serveConn synchronously serves a single connection. When the
-// connection is closed, close callbacks are invoked.
-func (s *Server) serveConn(conn net.Conn, authHook func(proto.Message) error) {
-	s.ServeCodec(codec.NewServerCodec(conn, authHook))
-	s.mu.Lock()
-	if s.closeCallbacks != nil {
-		for _, cb := range s.closeCallbacks {
-			cb(conn)
+// readRequests synchronously reads a stream of requests from a
+// connection. Each request is handled in a new background goroutine;
+// when the handler finishes the response is written to the responses
+// channel. When the connection is closed (and any pending requests
+// have finished), we close the responses channel.
+func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResponse) {
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+		close(responses)
+	}()
+
+	for {
+		req, meth, args, err := s.readRequest(codec)
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return
+		} else if err != nil {
+			log.Warningf("rpc: server cannot decode request: %s", err)
+			return
+		}
+
+		if meth.handler == nil {
+			responses <- serverResponse{
+				req: req,
+				err: util.Errorf("rpc: couldn't find method: %s", req.ServiceMethod),
+			}
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			reply, err := meth.handler(args)
+			responses <- serverResponse{
+				req:   req,
+				reply: reply,
+				err:   err,
+			}
+			wg.Done()
+		}()
+	}
+}
+
+// readRequest reads a single request from a connection.
+func (s *Server) readRequest(codec rpc.ServerCodec) (req *rpc.Request, m method,
+	args proto.Message, err error) {
+	req = &rpc.Request{}
+	if err = codec.ReadRequestHeader(req); err != nil {
+		return
+	}
+
+	s.mu.RLock()
+	var ok bool
+	m, ok = s.methods[req.ServiceMethod]
+	s.mu.RUnlock()
+
+	// If we found the method, construct a request protobuf and parse into it.
+	// If not, consume and discard the input by passing nil to ReadRequestBody.
+	if ok {
+		args = reflect.New(m.reqType.Elem()).Interface().(proto.Message)
+	}
+	err = codec.ReadRequestBody(args)
+	return
+}
+
+// sendResponses sends a stream of responses on a connection, and
+// exits when the channel is closed.
+func (s *Server) sendResponses(codec rpc.ServerCodec, responses <-chan serverResponse) {
+	for resp := range responses {
+		rpcResp := rpc.Response{
+			ServiceMethod: resp.req.ServiceMethod,
+			Seq:           resp.req.Seq,
+		}
+		if resp.err != nil {
+			rpcResp.Error = resp.err.Error()
+		}
+		if err := codec.WriteResponse(&rpcResp, resp.reply); err != nil {
+			log.Warningf("rpc: write response failed")
+			// TODO(bdarnell): what to do at this point? close the connection?
+			// net/rpc just swallows the error.
 		}
 	}
-	s.mu.Unlock()
-	conn.Close()
 }

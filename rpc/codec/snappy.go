@@ -111,7 +111,7 @@ func snappyEncode(src []byte, w func([]byte) error) error {
 // uncompressed data into m.
 func snappyDecode(src []byte, uncompressedSize uint32, m proto.Message) error {
 	if len(src) == 0 {
-		return proto.Unmarshal(nil, m)
+		return nilSafeUnmarshal(nil, m)
 	}
 
 	var dLen C.size_t
@@ -126,7 +126,7 @@ func snappyDecode(src []byte, uncompressedSize uint32, m proto.Message) error {
 	// We call through directly to proto.Unmarshal so that we don't have
 	// to allocate a slice for "dst" or have some awkward interface
 	// where the caller has to deallocate "dst".
-	err := proto.Unmarshal(unsafeSlice(dst, dLen), m)
+	err := nilSafeUnmarshal(unsafeSlice(dst, dLen), m)
 	C.free(dst)
 	return err
 }

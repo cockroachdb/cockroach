@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 
 	gorpc "net/rpc"
 )
@@ -64,36 +65,35 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 		queues:     make(map[proto.RaftNodeID]chan *multiraft.RaftMessageRequest),
 	}
 
-	err := t.rpcServer.RegisterName(raftServiceName, (*transportRPCServer)(t))
-	if err != nil {
+	if err := t.rpcServer.Register(raftMessageName, t.RaftMessage,
+		&proto.RaftMessageRequest{}); err != nil {
 		return nil, err
 	}
 
 	return t, nil
 }
 
-// transportRPCServer is a type alias to separate RPC methods
-// (which net/rpc finds via reflection) from others.
-type transportRPCServer rpcTransport
-
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *transportRPCServer) RaftMessage(protoReq *proto.RaftMessageRequest,
-	resp *proto.RaftMessageResponse) error {
+func (t *rpcTransport) RaftMessage(args gogoproto.Message) (gogoproto.Message, error) {
+	protoReq := args.(*proto.RaftMessageRequest)
 	// Convert from proto to internal formats.
 	req := &multiraft.RaftMessageRequest{GroupID: protoReq.GroupID}
 	if err := req.Message.Unmarshal(protoReq.Msg); err != nil {
-		return err
+		return nil, err
 	}
 
 	t.mu.Lock()
 	server, ok := t.servers[proto.RaftNodeID(req.Message.To)]
 	t.mu.Unlock()
 
-	if ok {
-		return server.RaftMessage(req, &multiraft.RaftMessageResponse{})
+	if !ok {
+		return nil, util.Errorf("Unable to proxy message to node: %d", req.Message.To)
 	}
 
-	return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
+	// Raft responses are empty so we don't actually need to convert between
+	// multiraft's internal struct and the external proto representation.
+	err := server.RaftMessage(req, &multiraft.RaftMessageResponse{})
+	return &proto.RaftMessageResponse{}, err
 }
 
 // Listen implements the multiraft.Transport interface by registering a ServerInterface

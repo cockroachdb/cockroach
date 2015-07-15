@@ -18,7 +18,6 @@
 package rpc
 
 import (
-	"net/rpc"
 	"testing"
 	"time"
 
@@ -106,7 +105,7 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 	// The client should fail the heartbeat and be recycled.
 	<-c.Closed
 
-	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+	if err := heartbeat.Register(s); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
 	}
 	// Same thing, but now the heartbeat service exists.
@@ -130,7 +129,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
-	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+	if err := heartbeat.Register(s); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
 	}
 
@@ -177,7 +176,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
-	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+	if err := heartbeat.Register(s); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
 	}
 
@@ -228,7 +227,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 		ready:              make(chan struct{}),
 		stopper:            stopper,
 	}
-	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+	if err := heartbeat.Register(s); err != nil {
 		t.Fatalf("Unable to register heartbeat service: %s", err)
 	}
 
@@ -273,9 +272,9 @@ func createTestServer(serverClock *hlc.Clock, stopper *stop.Stopper, t *testing.
 	// Create the server so that we can register a manual clock.
 	addr := util.CreateTestAddr("tcp")
 	s := &Server{
-		Server:  rpc.NewServer(),
 		context: nodeContext,
 		addr:    addr,
+		methods: map[string]method{},
 	}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
