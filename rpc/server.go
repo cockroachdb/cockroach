@@ -153,15 +153,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	codec := codec.NewServerCodec(conn, authHook)
 	responses := make(chan serverResponse)
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		s.readRequests(codec, responses)
-		wg.Done()
-	}()
+	wg.Add(1)
 	go func() {
 		s.sendResponses(codec, responses)
 		wg.Done()
 	}()
+	s.readRequests(codec, responses)
 	wg.Wait()
 
 	codec.Close()
