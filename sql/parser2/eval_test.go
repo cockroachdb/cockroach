@@ -20,29 +20,8 @@ package parser2
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/testutils"
 )
-
-func dInt(v int64) sqlwire.Datum {
-	return sqlwire.Datum{IntVal: &v}
-}
-
-func dUint(v uint64) sqlwire.Datum {
-	return sqlwire.Datum{UintVal: &v}
-}
-
-func dFloat(v float64) sqlwire.Datum {
-	return sqlwire.Datum{FloatVal: &v}
-}
-
-func dBytes(v []byte) sqlwire.Datum {
-	return sqlwire.Datum{BytesVal: v}
-}
-
-func dString(v string) sqlwire.Datum {
-	return sqlwire.Datum{StringVal: &v}
-}
 
 func TestEvalExpr(t *testing.T) {
 	testData := []struct {
@@ -70,14 +49,13 @@ func TestEvalExpr(t *testing.T) {
 		// Unary operators.
 		{`-3`, `-3`, nil},
 		{`-4.1`, `-4.1`, nil},
-		// Ones complement operates on unsigned integers.
-		{`~0`, `18446744073709551615`, nil},
-		{`~0.1`, `18446744073709551615`, nil},
-		{`~0 - 1`, `18446744073709551614`, nil},
+		// Ones complement operates on signed integers.
+		{`~0`, `-1`, nil},
+		{`~0 - 1`, `-2`, nil},
 		// Hexadecimal numbers.
 		// TODO(pmattis): {`0xa`, `10`, nil},
 		// Octal numbers.
-		// TODO(pmattis):{`0755`, `493`, nil},
+		// TODO(pmattis): {`0755`, `493`, nil},
 		// String conversion
 		{`'1' + '2'`, `3`, nil},
 		// Strings convert to floats.
@@ -86,12 +64,10 @@ func TestEvalExpr(t *testing.T) {
 		{`'a' || 'b'`, `ab`, nil},
 		{`'a' || (1 + 2)`, `a3`, nil},
 		// Column lookup.
-		{`a`, `1`, mapEnv{"a": dInt(1)}},
-		{`a`, `2`, mapEnv{"a": dUint(2)}},
-		{`a`, `3.1`, mapEnv{"a": dFloat(3.1)}},
-		{`a`, `b`, mapEnv{"a": dBytes([]byte("b"))}},
-		{`a`, `c`, mapEnv{"a": dString("c")}},
-		{`a.b + 1`, `2`, mapEnv{"a.b": dInt(1)}},
+		{`a`, `1`, mapEnv{"a": dint(1)}},
+		{`a`, `3.1`, mapEnv{"a": dfloat(3.1)}},
+		{`a`, `c`, mapEnv{"a": dstring("c")}},
+		{`a.b + 1`, `2`, mapEnv{"a.b": dint(1)}},
 		// Boolean expressions.
 		{`false AND true`, `false`, nil},
 		{`true AND true`, `true`, nil},
@@ -129,7 +105,7 @@ func TestEvalExpr(t *testing.T) {
 		// Comparison of a string against a number compares using floating point.
 		{`'10' > '2'`, `false`, nil},
 		{`'10' > 2`, `true`, nil},
-		// Comparisons against NULL result in NULL, except for the null-safe equal.
+		// Comparisons against NULL result in NULL.
 		{`0 = NULL`, `NULL`, nil},
 		{`NULL = NULL`, `NULL`, nil},
 		// NULL checks.
@@ -147,18 +123,18 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`, nil},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
 	}
-	for i, d := range testData {
+	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%d: %v: %s", i, err, d.expr)
+			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		r, err := EvalExpr(expr, d.env)
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := r.String(); d.expected != s {
-			t.Errorf("%d: expected %s, but found %s: %s", i, d.expected, s, d.expr)
+			t.Errorf("%s: expected %s, but found %s: %s", d.expr, d.expected, s, d.expr)
 		}
 	}
 }
@@ -171,17 +147,18 @@ func TestEvalExprError(t *testing.T) {
 		{`'a' + 0`, `parsing \"a\": invalid syntax`},
 		{`'0a' + 0`, `parsing \"0a\": invalid syntax`},
 		{`a`, `column \"a\" not found`},
+		{`~0.1`, `unary complement not supported for: parser2.dfloat`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`, nil},
 	}
-	for i, d := range testData {
+	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%d: %v: %s", i, err, d.expr)
+			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		if _, err := EvalExpr(expr, mapEnv{}); !testutils.IsError(err, d.expected) {
-			t.Errorf("%d: expected %s, but found %v", i, d.expected, err)
+			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
 }

@@ -21,30 +21,180 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
+
+// TODO(pmattis):
+//
+// - Support tuples (i.e. []Datum) and tuple operations (a IN (b, c, d)).
+//
+// - Support decimal arithmetic.
 
 type opType int
 
 const (
 	intOp opType = iota
-	uintOp
 	floatOp
-	stringOp
 )
 
-var null = sqlwire.Datum{}
+// A Datum holds either a bool, int64, float64, string or []Datum.
+type Datum interface {
+	IsNull() bool
+	ToBool() (Datum, error)
+	ToInt() (Datum, error)
+	ToFloat() (Datum, error)
+	String() string
+}
+
+var _ Datum = dbool(false)
+var _ Datum = dint(0)
+var _ Datum = dfloat(0)
+var _ Datum = dstring("")
+var _ Datum = dnull{}
+
+type dbool bool
+
+func (d dbool) IsNull() bool {
+	return false
+}
+
+func (d dbool) ToBool() (Datum, error) {
+	return d, nil
+}
+
+func (d dbool) ToInt() (Datum, error) {
+	if d {
+		return dint(1), nil
+	}
+	return dint(0), nil
+}
+
+func (d dbool) ToFloat() (Datum, error) {
+	if d {
+		return dfloat(1), nil
+	}
+	return dfloat(0), nil
+}
+
+func (d dbool) String() string {
+	if d {
+		return "true"
+	}
+	return "false"
+}
+
+type dint int64
+
+func (d dint) IsNull() bool {
+	return false
+}
+
+func (d dint) ToBool() (Datum, error) {
+	return dbool(d != 0), nil
+}
+
+func (d dint) ToInt() (Datum, error) {
+	return d, nil
+}
+
+func (d dint) ToFloat() (Datum, error) {
+	return dfloat(d), nil
+}
+
+func (d dint) String() string {
+	return strconv.FormatInt(int64(d), 10)
+}
+
+type dfloat float64
+
+func (d dfloat) IsNull() bool {
+	return false
+}
+
+func (d dfloat) ToBool() (Datum, error) {
+	return dbool(d != 0), nil
+}
+
+func (d dfloat) ToInt() (Datum, error) {
+	return dint(d), nil
+}
+
+func (d dfloat) ToFloat() (Datum, error) {
+	return d, nil
+}
+
+func (d dfloat) String() string {
+	return strconv.FormatFloat(float64(d), 'g', -1, 64)
+}
+
+type dstring string
+
+func (d dstring) IsNull() bool {
+	return false
+}
+
+func (d dstring) ToBool() (Datum, error) {
+	// TODO(pmattis): ParseBool is more permissive than the SQL grammar accepting
+	// "t" and "f". Is this conversion even necessary?
+	v, err := strconv.ParseBool(string(d))
+	if err != nil {
+		return null, err
+	}
+	return dbool(v), nil
+}
+
+func (d dstring) ToInt() (Datum, error) {
+	v, err := strconv.ParseInt(string(d), 0, 64)
+	if err != nil {
+		return null, err
+	}
+	return dint(v), nil
+}
+
+func (d dstring) ToFloat() (Datum, error) {
+	v, err := strconv.ParseFloat(string(d), 64)
+	if err != nil {
+		return null, err
+	}
+	return dfloat(v), nil
+}
+
+func (d dstring) String() string {
+	return string(d)
+}
+
+type dnull struct{}
+
+func (d dnull) IsNull() bool {
+	return true
+}
+
+func (d dnull) ToBool() (Datum, error) {
+	return d, fmt.Errorf("cannot convert NULL to bool")
+}
+
+func (d dnull) ToInt() (Datum, error) {
+	return d, fmt.Errorf("cannot convert NULL to int")
+}
+
+func (d dnull) ToFloat() (Datum, error) {
+	return d, fmt.Errorf("cannot convert NULL to float")
+}
+
+func (d dnull) String() string {
+	return "NULL"
+}
+
+var null = dnull{}
 
 // Env defines the interface for retrieving column values.
 type Env interface {
-	Get(name string) (sqlwire.Datum, bool)
+	Get(name string) (Datum, bool)
 }
 
 // mapEnv is an Env implementation using a map.
-type mapEnv map[string]sqlwire.Datum
+type mapEnv map[string]Datum
 
-func (e mapEnv) Get(name string) (sqlwire.Datum, bool) {
+func (e mapEnv) Get(name string) (Datum, bool) {
 	d, ok := e[name]
 	return d, ok
 }
@@ -54,7 +204,7 @@ func (e mapEnv) Get(name string) (sqlwire.Datum, bool) {
 // parse tree. The only significant complexity is the handling of types and
 // implicit conversions. See prepareComparisonArgs and prepareBinaryArgs for
 // details.
-func EvalExpr(expr Expr, env Env) (sqlwire.Datum, error) {
+func EvalExpr(expr Expr, env Env) (Datum, error) {
 	switch t := expr.(type) {
 	case *AndExpr:
 		return evalAndExpr(t, env)
@@ -82,26 +232,23 @@ func EvalExpr(expr Expr, env Env) (sqlwire.Datum, error) {
 		// expression evaluation and the exists nodes replaced with the result.
 
 	case BytesVal:
-		v := string(t)
-		return sqlwire.Datum{StringVal: &v}, nil
+		return dstring(t), nil
 
 	case StrVal:
-		v := string(t)
-		return sqlwire.Datum{StringVal: &v}, nil
+		return dstring(t), nil
 
 	case IntVal:
-		v := uint64(t)
-		return sqlwire.Datum{UintVal: &v}, nil
+		return dint(t), nil
 
 	case NumVal:
 		v, err := strconv.ParseFloat(string(t), 64)
 		if err != nil {
 			return null, err
 		}
-		return sqlwire.Datum{FloatVal: &v}, nil
+		return dfloat(v), nil
 
 	case BoolVal:
-		return boolToDatum(bool(t)), nil
+		return dbool(t), nil
 
 	case ValArg:
 		// Placeholders should have been replaced before expression evaluation.
@@ -141,63 +288,63 @@ func EvalExpr(expr Expr, env Env) (sqlwire.Datum, error) {
 	return null, fmt.Errorf("unsupported expression type: %T", expr)
 }
 
-func evalAndExpr(expr *AndExpr, env Env) (sqlwire.Datum, error) {
+func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
 	}
-	if v, err := left.Bool(); err != nil {
+	if v, err := left.ToBool(); err != nil {
 		return null, err
-	} else if !v {
-		return boolToDatum(false), nil
+	} else if !v.(dbool) {
+		return dbool(false), nil
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
 		return null, err
 	}
-	if v, err := right.Bool(); err != nil {
+	if v, err := right.ToBool(); err != nil {
 		return null, err
-	} else if !v {
-		return boolToDatum(false), nil
+	} else if !v.(dbool) {
+		return dbool(false), nil
 	}
-	return boolToDatum(true), nil
+	return dbool(true), nil
 }
 
-func evalOrExpr(expr *OrExpr, env Env) (sqlwire.Datum, error) {
+func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
 	}
-	if v, err := left.Bool(); err != nil {
+	if v, err := left.ToBool(); err != nil {
 		return null, err
-	} else if v {
-		return boolToDatum(true), nil
+	} else if v.(dbool) {
+		return dbool(true), nil
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
 		return null, err
 	}
-	if v, err := right.Bool(); err != nil {
+	if v, err := right.ToBool(); err != nil {
 		return null, err
-	} else if v {
-		return boolToDatum(true), nil
+	} else if v.(dbool) {
+		return dbool(true), nil
 	}
-	return boolToDatum(false), nil
+	return dbool(false), nil
 }
 
-func evalNotExpr(expr *NotExpr, env Env) (sqlwire.Datum, error) {
+func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
 	}
-	v, err := d.Bool()
+	v, err := d.ToBool()
 	if err != nil {
 		return null, err
 	}
-	return boolToDatum(!v), nil
+	return !v.(dbool), nil
 }
 
-func evalRangeCond(expr *RangeCond, env Env) (sqlwire.Datum, error) {
+func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 	// TODO(pmattis): This could be more efficient or done ahead of time.
 	d, err := EvalExpr(&AndExpr{
 		Left: &ComparisonExpr{
@@ -215,12 +362,16 @@ func evalRangeCond(expr *RangeCond, env Env) (sqlwire.Datum, error) {
 		return null, err
 	}
 	if expr.Not {
-		*d.BoolVal = !*d.BoolVal
+		v, err := d.ToBool()
+		if err != nil {
+			return null, err
+		}
+		return !v.(dbool), nil
 	}
 	return d, nil
 }
 
-func evalNullCheck(expr *NullCheck, env Env) (sqlwire.Datum, error) {
+func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
@@ -229,52 +380,51 @@ func evalNullCheck(expr *NullCheck, env Env) (sqlwire.Datum, error) {
 	if expr.Not {
 		v = !v
 	}
-	return boolToDatum(v), nil
+	return dbool(v), nil
 }
 
 // Prepare the arguments for a comparison operation. The returned arguments
 // will have the same type.
-func prepareComparisonArgs(left, right sqlwire.Datum) (opType, sqlwire.Datum, sqlwire.Datum, error) {
-	// If both arguments are strings (or string-like), compare as strings.
-	if (left.BytesVal != nil || left.StringVal != nil) &&
-		(right.BytesVal != nil || right.StringVal != nil) {
-		return stringOp, left.ToString(), right.ToString(), nil
-	}
-
-	// If both arguments are uints, compare as unsigned.
-	if left.UintVal != nil && right.UintVal != nil {
-		return uintOp, left, right, nil
-	}
-
+func prepareComparisonArgs(left, right Datum) (Datum, Datum, error) {
 	var err error
 
-	// If both arguments are integers (signed or unsigned), compare as integers.
-	if (left.BoolVal != nil || left.IntVal != nil || left.UintVal != nil) &&
-		(right.BoolVal != nil || right.IntVal != nil || right.UintVal != nil) {
-		left, err = left.ToInt()
-		if err != nil {
-			return intOp, null, null, err
+	switch left.(type) {
+	case dstring:
+		switch right.(type) {
+		case dstring:
+			// If both arguments are strings (or string-like), compare as strings.
+			return left, right, nil
 		}
-		right, err = right.ToInt()
-		if err != nil {
-			return intOp, null, null, err
+
+	case dbool, dint:
+		switch right.(type) {
+		case dbool, dint:
+			// If both arguments are integers or bools, compare as integers.
+			left, err = left.ToInt()
+			if err != nil {
+				return null, null, err
+			}
+			right, err = right.ToInt()
+			if err != nil {
+				return null, null, err
+			}
+			return left, right, nil
 		}
-		return intOp, left, right, nil
 	}
 
 	// In all other cases, compare as floats.
 	left, err = left.ToFloat()
 	if err != nil {
-		return intOp, null, null, err
+		return null, null, err
 	}
 	right, err = right.ToFloat()
 	if err != nil {
-		return intOp, null, null, err
+		return null, null, err
 	}
-	return floatOp, left, right, nil
+	return left, right, nil
 }
 
-func evalComparisonExpr(expr *ComparisonExpr, env Env) (sqlwire.Datum, error) {
+func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
@@ -284,174 +434,139 @@ func evalComparisonExpr(expr *ComparisonExpr, env Env) (sqlwire.Datum, error) {
 		return null, err
 	}
 
-	op := expr.Operator
-
 	if left.IsNull() || right.IsNull() {
 		return null, nil
 	}
 
-	var typ opType
 	var v bool
-
-	switch op {
+	switch expr.Operator {
 	case EQ:
-		typ, left, right, err = prepareComparisonArgs(left, right)
-		switch typ {
-		case intOp:
-			v = *left.IntVal == *right.IntVal
-		case uintOp:
-			v = *left.UintVal == *right.UintVal
-		case floatOp:
-			v = *left.FloatVal == *right.FloatVal
-		case stringOp:
-			v = *left.StringVal == *right.StringVal
+		left, right, err = prepareComparisonArgs(left, right)
+		switch left.(type) {
+		case dint:
+			v = left.(dint) == right.(dint)
+		case dfloat:
+			v = left.(dfloat) == right.(dfloat)
+		case dstring:
+			v = left.(dstring) == right.(dstring)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 
 	case LT:
-		typ, left, right, err = prepareComparisonArgs(left, right)
-		switch typ {
-		case intOp:
-			v = *left.IntVal < *right.IntVal
-		case uintOp:
-			v = *left.UintVal < *right.UintVal
-		case floatOp:
-			v = *left.FloatVal < *right.FloatVal
-		case stringOp:
-			v = *left.StringVal < *right.StringVal
+		left, right, err = prepareComparisonArgs(left, right)
+		switch left.(type) {
+		case dint:
+			v = left.(dint) < right.(dint)
+		case dfloat:
+			v = left.(dfloat) < right.(dfloat)
+		case dstring:
+			v = left.(dstring) < right.(dstring)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 
 	case LE:
-		typ, left, right, err = prepareComparisonArgs(left, right)
-		switch typ {
-		case intOp:
-			v = *left.IntVal <= *right.IntVal
-		case uintOp:
-			v = *left.UintVal <= *right.UintVal
-		case floatOp:
-			v = *left.FloatVal <= *right.FloatVal
-		case stringOp:
-			v = *left.StringVal <= *right.StringVal
+		left, right, err = prepareComparisonArgs(left, right)
+		switch left.(type) {
+		case dint:
+			v = left.(dint) <= right.(dint)
+		case dfloat:
+			v = left.(dfloat) <= right.(dfloat)
+		case dstring:
+			v = left.(dstring) <= right.(dstring)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 
 	case GT:
-		typ, left, right, err = prepareComparisonArgs(left, right)
-		switch typ {
-		case intOp:
-			v = *left.IntVal > *right.IntVal
-		case uintOp:
-			v = *left.UintVal > *right.UintVal
-		case floatOp:
-			v = *left.FloatVal > *right.FloatVal
-		case stringOp:
-			v = *left.StringVal > *right.StringVal
+		left, right, err = prepareComparisonArgs(left, right)
+		switch left.(type) {
+		case dint:
+			v = left.(dint) > right.(dint)
+		case dfloat:
+			v = left.(dfloat) > right.(dfloat)
+		case dstring:
+			v = left.(dstring) > right.(dstring)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 
 	case GE:
-		typ, left, right, err = prepareComparisonArgs(left, right)
-		switch typ {
-		case intOp:
-			v = *left.IntVal >= *right.IntVal
-		case uintOp:
-			v = *left.UintVal >= *right.UintVal
-		case floatOp:
-			v = *left.FloatVal >= *right.FloatVal
-		case stringOp:
-			v = *left.StringVal >= *right.StringVal
+		left, right, err = prepareComparisonArgs(left, right)
+		switch left.(type) {
+		case dint:
+			v = left.(dint) >= right.(dint)
+		case dfloat:
+			v = left.(dfloat) >= right.(dfloat)
+		case dstring:
+			v = left.(dstring) >= right.(dstring)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 
 	case NE:
-		typ, left, right, err = prepareComparisonArgs(left, right)
-		switch typ {
-		case intOp:
-			v = *left.IntVal != *right.IntVal
-		case uintOp:
-			v = *left.UintVal != *right.UintVal
-		case floatOp:
-			v = *left.FloatVal != *right.FloatVal
-		case stringOp:
-			v = *left.StringVal != *right.StringVal
+		left, right, err = prepareComparisonArgs(left, right)
+		switch left.(type) {
+		case dint:
+			v = left.(dint) != right.(dint)
+		case dfloat:
+			v = left.(dfloat) != right.(dfloat)
+		case dstring:
+			v = left.(dstring) != right.(dstring)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 
 	case In, NotIn, Like, NotLike:
-		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
+		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", expr.Operator)
 	}
 
-	return boolToDatum(v), nil
+	return dbool(v), nil
 }
 
 // Prepare the arguments for a binary operation. The returned arguments will
 // have the same type. The typ parameter specifies the allowed types for the
-// operation. For example, bit-operations should specify intOp or uintOp to
-// indicate that they do not operate on floating point arguments. Float
-// operations may still reduce to intOp or uintOp if the operands support it.
-func prepareBinaryArgs(typ opType, left, right sqlwire.Datum) (opType, sqlwire.Datum, sqlwire.Datum, error) {
+// operation. For example, bit-operations should specify intOp to indicate that
+// they do not operate on floating point arguments. Float operations may still
+// reduce to intOp if the operands support it.
+func prepareBinaryArgs(typ opType, left, right Datum) (Datum, Datum, error) {
 	var err error
 
 	switch typ {
-	case intOp, uintOp:
-		if left.UintVal != nil || right.UintVal != nil {
-			left, err = left.ToUint()
-			if err != nil {
-				return uintOp, null, null, err
-			}
-			right, err = right.ToUint()
-			if err != nil {
-				return uintOp, null, null, err
-			}
-			return uintOp, left, right, nil
-		}
+	case intOp:
 		left, err = left.ToInt()
 		if err != nil {
-			return intOp, null, null, err
+			return null, null, err
 		}
 		right, err = right.ToInt()
 		if err != nil {
-			return intOp, null, null, err
+			return null, null, err
 		}
-		return intOp, left, right, nil
+		return left, right, nil
 
 	case floatOp:
-		if (left.UintVal != nil && (right.IntVal != nil || right.UintVal != nil)) ||
-			(right.UintVal != nil && (left.IntVal != nil || left.UintVal != nil)) {
-			left, err = left.ToUint()
-			if err != nil {
-				return uintOp, null, null, err
+		switch left.(type) {
+		case dint:
+			switch right.(type) {
+			case dint:
+				return left, right, nil
 			}
-			right, err = right.ToUint()
-			if err != nil {
-				return uintOp, null, null, err
-			}
-			return uintOp, left, right, nil
-		}
-		if left.IntVal != nil && right.IntVal != nil {
-			return intOp, left, right, nil
 		}
 	}
 
 	left, err = left.ToFloat()
 	if err != nil {
-		return floatOp, null, null, err
+		return null, null, err
 	}
 	right, err = right.ToFloat()
 	if err != nil {
-		return floatOp, null, null, err
+		return null, null, err
 	}
-	return floatOp, left, right, nil
+	return left, right, nil
 }
 
-func evalBinaryExpr(expr *BinaryExpr, env Env) (sqlwire.Datum, error) {
+func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
@@ -463,109 +578,88 @@ func evalBinaryExpr(expr *BinaryExpr, env Env) (sqlwire.Datum, error) {
 
 	// TODO(pmattis): Overflow/underflow checks?
 
-	var typ opType
-
 	switch expr.Operator {
 	case Bitand:
-		typ, left, right, err = prepareBinaryArgs(intOp, left, right)
+		left, right, err = prepareBinaryArgs(intOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			*left.UintVal &= *right.UintVal
-		case intOp:
-			*left.IntVal &= *right.IntVal
+		switch left.(type) {
+		case dint:
+			left = left.(dint) & right.(dint)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
 	case Bitor:
-		typ, left, right, err = prepareBinaryArgs(intOp, left, right)
+		left, right, err = prepareBinaryArgs(intOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			*left.UintVal |= *right.UintVal
-		case intOp:
-			*left.IntVal |= *right.IntVal
+		switch left.(type) {
+		case dint:
+			left = left.(dint) | right.(dint)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
 	case Bitxor:
-		typ, left, right, err = prepareBinaryArgs(intOp, left, right)
+		left, right, err = prepareBinaryArgs(intOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			*left.UintVal ^= *right.UintVal
-		case intOp:
-			*left.IntVal ^= *right.IntVal
+		switch left.(type) {
+		case dint:
+			left = left.(dint) ^ right.(dint)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
 	case Plus:
-		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
+		left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			*left.UintVal += *right.UintVal
-		case intOp:
-			*left.IntVal += *right.IntVal
-		case floatOp:
-			*left.FloatVal += *right.FloatVal
+		switch left.(type) {
+		case dint:
+			left = left.(dint) + right.(dint)
+		case dfloat:
+			left = left.(dfloat) + right.(dfloat)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
 	case Minus:
-		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
+		left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			// If the unsigned subtraction would result in a negative number, convert
-			// to signed values.
-			if *right.UintVal > *left.UintVal {
-				v := -int64(*right.UintVal - *left.UintVal)
-				left = sqlwire.Datum{IntVal: &v}
-			} else {
-				*left.UintVal -= *right.UintVal
-			}
-		case intOp:
-			*left.IntVal -= *right.IntVal
-		case floatOp:
-			*left.FloatVal -= *right.FloatVal
+		switch left.(type) {
+		case dint:
+			left = left.(dint) - right.(dint)
+		case dfloat:
+			left = left.(dfloat) - right.(dfloat)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
 	case Mult:
-		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
+		left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			*left.UintVal *= *right.UintVal
-		case intOp:
-			*left.IntVal *= *right.IntVal
-		case floatOp:
-			*left.FloatVal *= *right.FloatVal
+		switch left.(type) {
+		case dint:
+			left = left.(dint) * right.(dint)
+		case dfloat:
+			left = left.(dfloat) * right.(dfloat)
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
@@ -579,35 +673,33 @@ func evalBinaryExpr(expr *BinaryExpr, env Env) (sqlwire.Datum, error) {
 		if err != nil {
 			return null, err
 		}
-		*left.FloatVal /= *right.FloatVal
+		left = left.(dfloat) / right.(dfloat)
 		return left, nil
 
 	case Mod:
-		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
+		left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
 		}
-		switch typ {
-		case uintOp:
-			*left.UintVal %= *right.UintVal
-		case intOp:
-			*left.IntVal %= *right.IntVal
-		case floatOp:
-			*left.FloatVal = math.Mod(*left.FloatVal, *right.FloatVal)
+		switch left.(type) {
+		case dint:
+			left = left.(dint) % right.(dint)
+		case dfloat:
+			left = dfloat(math.Mod(float64(left.(dfloat)), float64(right.(dfloat))))
 		default:
-			panic(fmt.Sprintf("unsupported op type: %d", typ))
+			panic(fmt.Sprintf("unsupported type: %T", left))
 		}
 		return left, nil
 
 	case Concat:
 		s := left.String() + right.String()
-		return sqlwire.Datum{StringVal: &s}, nil
+		return dstring(s), nil
 	}
 
 	return null, fmt.Errorf("unsupported binary operator: %c", expr.Operator)
 }
 
-func evalUnaryExpr(expr *UnaryExpr, env Env) (sqlwire.Datum, error) {
+func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
@@ -618,41 +710,33 @@ func evalUnaryExpr(expr *UnaryExpr, env Env) (sqlwire.Datum, error) {
 
 	case UnaryMinus:
 		var err error
-		if d.IntVal != nil {
-			*d.IntVal = -*d.IntVal
-		} else if d.UintVal != nil {
-			d, err = d.ToInt()
-			if err != nil {
-				return null, err
-			}
-			*d.IntVal = -*d.IntVal
-		} else if d.FloatVal != nil {
-			*d.FloatVal = -*d.FloatVal
-		} else {
-			d, err = d.ToFloat()
-			if err != nil {
-				return null, err
-			}
-			*d.FloatVal = -*d.FloatVal
+		switch t := d.(type) {
+		case dint:
+			return -t, nil
+		case dfloat:
+			return -t, nil
 		}
-		return d, nil
-
-	case UnaryComplement:
-		d, err = d.ToUint()
+		d, err = d.ToFloat()
 		if err != nil {
 			return null, err
 		}
-		*d.UintVal = ^*d.UintVal
-		return d, nil
+		return -d.(dfloat), nil
+
+	case UnaryComplement:
+		switch d.(type) {
+		case dint:
+			return ^d.(dint), nil
+		}
+		return null, fmt.Errorf("unary complement not supported for: %T", d)
 	}
 	return null, fmt.Errorf("unsupported unary operator: %c", expr.Operator)
 }
 
-func evalFuncExpr(expr *FuncExpr, env Env) (sqlwire.Datum, error) {
+func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 	return null, fmt.Errorf("TODO(pmattis): unsupported expression type: %T", expr)
 }
 
-func evalCaseExpr(expr *CaseExpr, env Env) (sqlwire.Datum, error) {
+func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 	if expr.Expr != nil {
 		// These are expressions of the form `CASE <val> WHEN <val> THEN ...`. The
 		// parser doesn't properly support them yet.
@@ -664,9 +748,9 @@ func evalCaseExpr(expr *CaseExpr, env Env) (sqlwire.Datum, error) {
 		if err != nil {
 			return null, err
 		}
-		if v, err := d.Bool(); err != nil {
+		if v, err := d.ToBool(); err != nil {
 			return null, err
-		} else if v {
+		} else if v.(dbool) {
 			return EvalExpr(when.Val, env)
 		}
 	}
@@ -675,8 +759,4 @@ func evalCaseExpr(expr *CaseExpr, env Env) (sqlwire.Datum, error) {
 		return EvalExpr(expr.Else, env)
 	}
 	return null, nil
-}
-
-func boolToDatum(v bool) sqlwire.Datum {
-	return sqlwire.Datum{BoolVal: &v}
 }
