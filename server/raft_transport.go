@@ -96,7 +96,7 @@ func (t *rpcTransport) RaftMessage(args gogoproto.Message, callback func(gogopro
 
 	// Raft responses are empty so we don't actually need to convert
 	// between multiraft's internal struct and the external proto
-	// representation.  In fact, we don't even need to wait for the
+	// representation. In fact, we don't even need to wait for the
 	// message to be processed to invoke the callback. We are just
 	// (ab)using the async handler mechanism to get this (synchronous)
 	// handler called in the RPC server's goroutine so we can preserve

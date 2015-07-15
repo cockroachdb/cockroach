@@ -18,6 +18,7 @@
 package server
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
@@ -32,11 +33,27 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-type ChannelServer chan *multiraft.RaftMessageRequest
+type channelServer struct {
+	ch       chan *multiraft.RaftMessageRequest
+	maxSleep time.Duration
+}
 
-func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
+func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
+	return channelServer{
+		ch:       make(chan *multiraft.RaftMessageRequest, bufSize),
+		maxSleep: maxSleep,
+	}
+}
+
+func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 	resp *multiraft.RaftMessageResponse) error {
-	s <- req
+	if s.maxSleep != 0 {
+		// maxSleep simulates goroutine scheduling delays that could
+		// result in messages being processed out of order (in previous
+		// transport implementations).
+		time.Sleep(time.Duration(rand.Int63n(int64(s.maxSleep))))
+	}
+	s.ch <- req
 	return nil
 }
 
@@ -58,7 +75,7 @@ func TestSendAndReceive(t *testing.T) {
 	nextNodeID := proto.NodeID(1)
 	nodeIDs := []proto.RaftNodeID{}
 	transports := []multiraft.Transport{}
-	channels := []ChannelServer{}
+	channels := []channelServer{}
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
 		server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
 		if err := server.Start(); err != nil {
@@ -77,7 +94,7 @@ func TestSendAndReceive(t *testing.T) {
 			nodeID := proto.MakeRaftNodeID(protoNodeID, 1)
 			nextNodeID++
 
-			channel := make(ChannelServer, 10)
+			channel := newChannelServer(10, 0)
 			if err := transport.Listen(nodeID, channel); err != nil {
 				t.Fatal(err)
 			}
@@ -119,14 +136,14 @@ func TestSendAndReceive(t *testing.T) {
 		}
 	}
 
-	// Read all the messages from the channels.  Note that the transport
+	// Read all the messages from the channels. Note that the transport
 	// does not guarantee in-order delivery between independent
 	// transports, so we just verify that the right number of messages
 	// end up in each channel.
 	for to := 0; to < numStores; to++ {
 		for from := 0; from < numStores; from++ {
 			select {
-			case req := <-channels[to]:
+			case req := <-channels[to].ch:
 				if req.Message.To != uint64(nodeIDs[to]) {
 					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
 						nodeIDs[to], nodeIDs[from], req)
@@ -137,7 +154,7 @@ func TestSendAndReceive(t *testing.T) {
 		}
 
 		select {
-		case req := <-channels[to]:
+		case req := <-channels[to].ch:
 			t.Errorf("got unexpected message %+v on channel %d", req, nodeIDs[to])
 		default:
 		}
@@ -145,9 +162,7 @@ func TestSendAndReceive(t *testing.T) {
 }
 
 // TestInOrderDelivery verifies that for a given pair of nodes, raft
-// messages are delivered in order. This test is unfortunately not
-// very sensitive; even when we were not guaranteeing in-order
-// delivery it was difficult to reliably trigger a reordering.
+// messages are delivered in order.
 func TestInOrderDelivery(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
@@ -169,7 +184,7 @@ func TestInOrderDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer serverTransport.Close()
-	serverChannel := make(ChannelServer, numMessages)
+	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
 	if err := serverTransport.Listen(raftNodeID, serverChannel); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +221,7 @@ func TestInOrderDelivery(t *testing.T) {
 	}
 
 	for i := 0; i < numMessages; i++ {
-		req := <-serverChannel
+		req := <-serverChannel.ch
 		if req.Message.Commit != uint64(i) {
 			t.Errorf("messages out of order: got %d while expecting %d", req.Message.Commit, i)
 		}
