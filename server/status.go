@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"runtime"
 	"strconv"
 	"time"
@@ -241,13 +242,19 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 	return result, nil
 }
 
-// handleLocalLog returns the log entries parsed from the log file that occurred
-// after or on the query parameter "starttime" and before or on the query
-// parameter "endtime". Additionally, if a level is specified via the URL, the
-// log entries are scoped to that level. If no "starttime" is provided, then
-// a "starttime" of a day ago is used.  If no "endtime" is provided, the current
-// time is used. The cutoff for entries is defaults to defaultMaxLogEntries but
-// can be adjusted via the "max" query parameter.
+// handleLocalLog returns the log entries parsed from the log files stored on
+// the server. Log entries are returned in reverse chronological order. The
+// following options are available:
+// * "starttime" query parameter filters the log entries to only ones that
+//   occurred on or after the "starttime". Defaults to a day ago.
+// * "endtime" query parameter filters the log entries to only ones that
+//   occurred before on on the "endtime". Defaults to the current time.
+// * "pattern" query parameter filters the log entries by the provided regexp
+//   pattern if it exists. Defaults to nil.
+// * "max" query parameter is the hard limit of the number of returned log
+//   entries. Defaults to defaultMaxLogEntries.
+// * "level" which is an optional part of the URL filters the log entries to be
+//   those of the corresponding severity level or worse. Defaults to "info".
 func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	log.Flush()
 	level := ps.ByName("level")
@@ -302,7 +309,17 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 		return
 	}
 
-	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries))
+	pattern := r.URL.Query().Get("pattern")
+	var regex *regexp.Regexp
+	if len(pattern) > 0 {
+		if regex, err = regexp.Compile(pattern); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "could not compile regex pattern:%s", err)
+			return
+		}
+	}
+
+	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries), regex)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)

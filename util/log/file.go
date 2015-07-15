@@ -290,12 +290,13 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 	return files
 }
 
-// FetchEntriesFromFiles fetches all available logs on disk that are of the
-// level of severity (or worse) and are between the start and end times. It will
-// stop reading in new files if the maxEntries is exceeded. The logs entries
-// returned will be in decreasing order, with the closest log to the start
-// time being the first entry.
-func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int) ([]LogEntry, error) {
+// FetchEntriesFromFiles fetches all available log entires on disk that match
+// the log 'severity' (or worse) and are between the 'startTimestamp' and
+// 'endTimestamp'. It will stop reading new files if the number of entries
+// exceeds 'maxEntries'. Log entries are further filtered by the regexp
+// 'pattern' if provided. The logs entries are returned in reverse chronological
+// order.
+func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
 		return nil, err
@@ -309,7 +310,8 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 			file,
 			startTimestamp,
 			endTimestamp,
-			maxEntries-len(entries))
+			maxEntries-len(entries),
+			pattern)
 		if err != nil {
 			return nil, err
 		}
@@ -327,12 +329,13 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 }
 
 // readAllEntriesFromFile reads in all log entries from a given file that are
-// between the start and end times and returns the entries in the reverse order,
-// from newest to oldest. It also returns a flag that denotes if any timestamp
-// occurred before the startTime to ensure inform the caller that no more log
-// files need to be processed. If the number of entries is exceeds maxEntries
-// then processing of new entries is stopped immediately.
-func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int) ([]LogEntry, bool, error) {
+// between the 'startTimestamp' and 'endTimestamp' and match the 'pattern' if it
+// exists. It returns the entries in the reverse chronological order. It also
+// returns a flag that denotes if any timestamp occurred before the
+// 'startTimestamp' to inform the caller that no more log files need to be
+// processed. If the number of entries returned exceeds 'maxEntries' then
+// processing of new entries is stopped immediately.
+func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, bool, error) {
 	reader, err := GetLogReader(file.Name, false)
 	defer reader.Close()
 	if reader == nil || err != nil {
@@ -349,7 +352,21 @@ func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, m
 			}
 			return nil, false, err
 		}
-		if entry.Time >= startTimestamp && entry.Time <= endTimestamp {
+		var match bool
+		if pattern == nil {
+			match = true
+		} else {
+			args := []interface{}{}
+			for _, arg := range entry.Args {
+				args = append(args, arg.Str)
+			}
+			logText := fmt.Sprintf(entry.Format, args...)
+
+			match = pattern.MatchString(logText) ||
+				pattern.MatchString(entry.File) ||
+				((entry.Method != nil) && (pattern.MatchString(entry.Method.String())))
+		}
+		if match && entry.Time >= startTimestamp && entry.Time <= endTimestamp {
 			entries = append([]LogEntry{entry}, entries...)
 			if len(entries) >= maxEntries {
 				break
