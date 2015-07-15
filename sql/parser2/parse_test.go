@@ -17,7 +17,11 @@
 
 package parser2
 
-import "testing"
+import (
+	"testing"
+
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+)
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
