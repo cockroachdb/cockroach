@@ -84,15 +84,16 @@ func (c *serverCodec) ReadRequestHeader(r *rpc.Request) error {
 }
 
 func (c *serverCodec) ReadRequestBody(x interface{}) error {
-	if x == nil {
-		return nil
-	}
-	request, ok := x.(proto.Message)
-	if !ok {
-		return fmt.Errorf(
-			"protorpc.ServerCodec.ReadRequestBody: %T does not implement proto.Message",
-			x,
-		)
+	var request proto.Message
+	if x != nil {
+		var ok bool
+		request, ok = x.(proto.Message)
+		if !ok {
+			return fmt.Errorf(
+				"protorpc.ServerCodec.ReadRequestBody: %T does not implement proto.Message",
+				x,
+			)
+		}
 	}
 
 	err := c.readRequestBody(c.r, &c.reqHeader, request)
@@ -101,7 +102,9 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	}
 	c.reqHeader.Reset()
 
-	if c.requestBodyHook == nil {
+	if c.requestBodyHook == nil || x == nil {
+		// Only call requestBodyHook if we are actually decoding a frame
+		// instead of discarding it.
 		return nil
 	}
 	return c.requestBodyHook(request)

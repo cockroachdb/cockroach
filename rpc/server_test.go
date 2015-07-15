@@ -18,10 +18,14 @@
 package rpc
 
 import (
+	"net"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func checkUpdateMatches(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
@@ -60,4 +64,43 @@ func TestUpdatedAddr(t *testing.T) {
 
 	checkUpdateMatches(t, "unix", "address", "address", "address")
 	checkUpdateFails(t, "unix", "address", "anotheraddress")
+}
+
+func TestDuplicateRegistration(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	s := NewServer(util.CreateTestAddr("tcp"), NewNodeTestContext(nil, stopper))
+	heartbeat := &Heartbeat{}
+	if err := s.Register("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err != nil {
+		t.Fatalf("unexpected failure on first registration: %s", s)
+	}
+	if err := s.Register("Foo.Bar", heartbeat.Ping, &proto.PingRequest{}); err == nil {
+		t.Fatalf("unexpected success on second registration")
+	}
+}
+
+func TestUnregisteredMethod(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	nodeContext := NewNodeTestContext(nil, stopper)
+
+	s := createAndStartNewServer(t, nodeContext)
+
+	opts := Options{
+		N: 1,
+	}
+
+	// Sending an invalid method fails cleanly, but leaves the connection
+	// in a valid state.
+	_, err := sendRPC(opts, []net.Addr{s.Addr()}, nodeContext, "Foo.Bar",
+		&proto.PingRequest{}, &proto.PingResponse{})
+	if !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {
+		t.Fatalf("expected 'couldn't find method' but got %s", err)
+	}
+	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {
+		t.Fatalf("unexpected failure sending ping after unknown request: %s", err)
+	}
 }

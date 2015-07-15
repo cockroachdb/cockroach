@@ -382,11 +382,17 @@ func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
 
 // sendPing sends Ping requests to specified addresses using Send.
 func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]interface{}, error) {
+	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
+		&proto.PingRequest{}, &proto.PingResponse{})
+}
+
+func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
+	args, reply gogoproto.Message) ([]interface{}, error) {
 	getArgs := func(addr net.Addr) interface{} {
-		return &proto.PingRequest{}
+		return args
 	}
 	getReply := func() interface{} {
-		return &proto.PingResponse{}
+		return reply
 	}
-	return Send(opts, "Heartbeat.Ping", addrs, getArgs, getReply, rpcContext)
+	return Send(opts, name, addrs, getArgs, getReply, rpcContext)
 }

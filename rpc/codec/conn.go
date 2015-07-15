@@ -120,5 +120,16 @@ func (c *baseConn) recvProto(m proto.Message,
 }
 
 func protoUnmarshal(src []byte, uncompressedSize uint32, msg proto.Message) error {
+	return nilSafeUnmarshal(src, msg)
+}
+
+// nilSafeUnmarshal is a wrapper around proto.Unmarshal which is a
+// noop if msg is nil. This is useful in parts of the protocol that
+// need to read and discard frames whose protobuf type cannot be
+// known.
+func nilSafeUnmarshal(src []byte, msg proto.Message) error {
+	if msg == nil {
+		return nil
+	}
 	return proto.Unmarshal(src, msg)
 }

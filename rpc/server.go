@@ -331,6 +331,14 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 			return
 		}
 
+		if meth.handler == nil {
+			responses <- serverResponse{
+				req: req,
+				err: util.Errorf("rpc: couldn't find method: %s", req.ServiceMethod),
+			}
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
 			reply, err := meth.handler(args)
@@ -356,12 +364,12 @@ func (s *Server) readRequest(codec rpc.ServerCodec) (req *rpc.Request, m method,
 	var ok bool
 	m, ok = s.methods[req.ServiceMethod]
 	s.mu.RUnlock()
-	if !ok {
-		err = util.Errorf("rpc: can't find method %s", req.ServiceMethod)
-		return
-	}
 
-	args = reflect.New(m.reqType.Elem()).Interface().(proto.Message)
+	// If we found the method, construct a request protobuf and parse into it.
+	// If not, consume and discard the input by passing nil to ReadRequestBody.
+	if ok {
+		args = reflect.New(m.reqType.Elem()).Interface().(proto.Message)
+	}
 	err = codec.ReadRequestBody(args)
 	return
 }
