@@ -20,6 +20,7 @@ package parser2
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 )
 
@@ -28,13 +29,6 @@ import (
 // - Support tuples (i.e. []Datum) and tuple operations (a IN (b, c, d)).
 //
 // - Support decimal arithmetic.
-
-type opType int
-
-const (
-	intOp opType = iota
-	floatOp
-)
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
@@ -186,6 +180,201 @@ func (d dnull) String() string {
 
 var null = dnull{}
 
+var (
+	boolType   = reflect.TypeOf(dbool(false))
+	intType    = reflect.TypeOf(dint(0))
+	floatType  = reflect.TypeOf(dfloat(0))
+	stringType = reflect.TypeOf(dstring(""))
+	nullType   = reflect.TypeOf(null)
+)
+
+type unaryArgs struct {
+	op      UnaryOp
+	argType reflect.Type
+}
+
+// unaryOps contains the unary operations indexed by operation type and
+// argument type.
+var unaryOps = map[unaryArgs]func(Datum) (Datum, error){
+	unaryArgs{UnaryPlus, intType}: func(d Datum) (Datum, error) {
+		return d, nil
+	},
+	unaryArgs{UnaryPlus, floatType}: func(d Datum) (Datum, error) {
+		return d, nil
+	},
+
+	unaryArgs{UnaryMinus, intType}: func(d Datum) (Datum, error) {
+		return -d.(dint), nil
+	},
+	unaryArgs{UnaryMinus, floatType}: func(d Datum) (Datum, error) {
+		return -d.(dfloat), nil
+	},
+
+	unaryArgs{UnaryComplement, intType}: func(d Datum) (Datum, error) {
+		return ^d.(dint), nil
+	},
+}
+
+type binArgs struct {
+	op        BinaryOp
+	leftType  reflect.Type
+	rightType reflect.Type
+}
+
+// binOps contains the binary operations indexed by operation type and argument
+// types.
+var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
+	binArgs{Bitand, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) & right.(dint), nil
+	},
+
+	binArgs{Bitor, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) | right.(dint), nil
+	},
+
+	binArgs{Bitxor, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) ^ right.(dint), nil
+	},
+
+	// TODO(pmattis): Overflow/underflow checks?
+
+	binArgs{Plus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) + right.(dint), nil
+	},
+	binArgs{Plus, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(left.(dint)) + right.(dfloat), nil
+	},
+	binArgs{Plus, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) + dfloat(right.(dint)), nil
+	},
+	binArgs{Plus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) + right.(dfloat), nil
+	},
+
+	binArgs{Minus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) - right.(dint), nil
+	},
+	binArgs{Minus, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(left.(dint)) - right.(dfloat), nil
+	},
+	binArgs{Minus, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) - dfloat(right.(dint)), nil
+	},
+	binArgs{Minus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) - right.(dfloat), nil
+	},
+
+	binArgs{Mult, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) * right.(dint), nil
+	},
+	binArgs{Mult, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(left.(dint)) * right.(dfloat), nil
+	},
+	binArgs{Mult, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) * dfloat(right.(dint)), nil
+	},
+	binArgs{Mult, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) * right.(dfloat), nil
+	},
+
+	binArgs{Div, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(left.(dint)) / dfloat(right.(dint)), nil
+	},
+	binArgs{Div, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(left.(dint)) / right.(dfloat), nil
+	},
+	binArgs{Div, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) / dfloat(right.(dint)), nil
+	},
+	binArgs{Div, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dfloat) / right.(dfloat), nil
+	},
+
+	binArgs{Mod, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dint) % right.(dint), nil
+	},
+	binArgs{Mod, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(math.Mod(float64(left.(dint)), float64(right.(dfloat)))), nil
+	},
+	binArgs{Mod, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(math.Mod(float64(left.(dfloat)), float64(right.(dint)))), nil
+	},
+	binArgs{Mod, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dfloat(math.Mod(float64(left.(dfloat)), float64(right.(dfloat)))), nil
+	},
+
+	binArgs{Concat, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dstring) + right.(dstring), nil
+	},
+	binArgs{Concat, boolType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return dstring(left.String()) + right.(dstring), nil
+	},
+	binArgs{Concat, stringType, boolType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dstring) + dstring(right.String()), nil
+	},
+	binArgs{Concat, intType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return dstring(left.String()) + right.(dstring), nil
+	},
+	binArgs{Concat, stringType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dstring) + dstring(right.String()), nil
+	},
+	binArgs{Concat, floatType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return dstring(left.String()) + right.(dstring), nil
+	},
+	binArgs{Concat, stringType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return left.(dstring) + dstring(right.String()), nil
+	},
+}
+
+type cmpArgs struct {
+	op        ComparisonOp
+	leftType  reflect.Type
+	rightType reflect.Type
+}
+
+// cmpOps contains the comparison operations indexed by operation type and
+// argument types.
+var cmpOps = map[cmpArgs]func(Datum, Datum) (Datum, error){
+	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dstring) == right.(dstring)), nil
+	},
+	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dbool) == right.(dbool)), nil
+	},
+	cmpArgs{EQ, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dint) == right.(dint)), nil
+	},
+	cmpArgs{EQ, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dfloat) == right.(dfloat)), nil
+	},
+
+	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dstring) < right.(dstring)), nil
+	},
+	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(!left.(dbool) && right.(dbool)), nil
+	},
+	cmpArgs{LT, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dint) < right.(dint)), nil
+	},
+	cmpArgs{LT, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dfloat) < right.(dfloat)), nil
+	},
+
+	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dstring) <= right.(dstring)), nil
+	},
+	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(!left.(dbool) || right.(dbool)), nil
+	},
+	cmpArgs{LE, intType, intType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dint) <= right.(dint)), nil
+	},
+	cmpArgs{LE, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
+		return dbool(left.(dfloat) <= right.(dfloat)), nil
+	},
+}
+
 // Env defines the interface for retrieving column values.
 type Env interface {
 	Get(name string) (Datum, bool)
@@ -202,8 +391,7 @@ func (e mapEnv) Get(name string) (Datum, bool) {
 // EvalExpr evaluates an SQL expression in the context of an
 // environment. Expression evaluation is a mostly straightforward walk over the
 // parse tree. The only significant complexity is the handling of types and
-// implicit conversions. See prepareComparisonArgs and prepareBinaryArgs for
-// details.
+// implicit conversions. See binOps and cmpOps for more details.
 func EvalExpr(expr Expr, env Env) (Datum, error) {
 	switch t := expr.(type) {
 	case *AndExpr:
@@ -383,47 +571,6 @@ func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 	return dbool(v), nil
 }
 
-// Prepare the arguments for a comparison operation. The returned arguments
-// will have the same type.
-func prepareComparisonArgs(left, right Datum) (Datum, Datum, error) {
-	var err error
-
-	switch left.(type) {
-	case dstring:
-		switch right.(type) {
-		case dstring:
-			// If both arguments are strings (or string-like), compare as strings.
-			return left, right, nil
-		}
-
-	case dbool, dint:
-		switch right.(type) {
-		case dbool, dint:
-			// If both arguments are integers or bools, compare as integers.
-			left, err = left.ToInt()
-			if err != nil {
-				return null, null, err
-			}
-			right, err = right.ToInt()
-			if err != nil {
-				return null, null, err
-			}
-			return left, right, nil
-		}
-	}
-
-	// In all other cases, compare as floats.
-	left, err = left.ToFloat()
-	if err != nil {
-		return null, null, err
-	}
-	right, err = right.ToFloat()
-	if err != nil {
-		return null, null, err
-	}
-	return left, right, nil
-}
-
 func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
@@ -438,132 +585,39 @@ func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 		return null, nil
 	}
 
-	var v bool
-	switch expr.Operator {
-	case EQ:
-		left, right, err = prepareComparisonArgs(left, right)
-		switch left.(type) {
-		case dint:
-			v = left.(dint) == right.(dint)
-		case dfloat:
-			v = left.(dfloat) == right.(dfloat)
-		case dstring:
-			v = left.(dstring) == right.(dstring)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-
-	case LT:
-		left, right, err = prepareComparisonArgs(left, right)
-		switch left.(type) {
-		case dint:
-			v = left.(dint) < right.(dint)
-		case dfloat:
-			v = left.(dfloat) < right.(dfloat)
-		case dstring:
-			v = left.(dstring) < right.(dstring)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-
-	case LE:
-		left, right, err = prepareComparisonArgs(left, right)
-		switch left.(type) {
-		case dint:
-			v = left.(dint) <= right.(dint)
-		case dfloat:
-			v = left.(dfloat) <= right.(dfloat)
-		case dstring:
-			v = left.(dstring) <= right.(dstring)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-
-	case GT:
-		left, right, err = prepareComparisonArgs(left, right)
-		switch left.(type) {
-		case dint:
-			v = left.(dint) > right.(dint)
-		case dfloat:
-			v = left.(dfloat) > right.(dfloat)
-		case dstring:
-			v = left.(dstring) > right.(dstring)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-
-	case GE:
-		left, right, err = prepareComparisonArgs(left, right)
-		switch left.(type) {
-		case dint:
-			v = left.(dint) >= right.(dint)
-		case dfloat:
-			v = left.(dfloat) >= right.(dfloat)
-		case dstring:
-			v = left.(dstring) >= right.(dstring)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-
+	not := false
+	op := expr.Operator
+	switch op {
 	case NE:
-		left, right, err = prepareComparisonArgs(left, right)
-		switch left.(type) {
-		case dint:
-			v = left.(dint) != right.(dint)
-		case dfloat:
-			v = left.(dfloat) != right.(dfloat)
-		case dstring:
-			v = left.(dstring) != right.(dstring)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
+		// NE(left, right) is implemented as !EQ(left, right).
+		not = true
+		op = EQ
+	case GT:
+		// GT(left, right) is implemented as LT(right, left)
+		op = LT
+		left, right = right, left
+	case GE:
+		// GE(left, right) is implemented as LE(right, left)
+		op = LE
+		left, right = right, left
+	}
 
+	f := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]
+	if f != nil {
+		d, err := f(left, right)
+		if err == nil && not {
+			return !d.(dbool), nil
+		}
+		return d, err
+	}
+
+	switch op {
 	case In, NotIn, Like, NotLike:
 		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", expr.Operator)
 	}
 
-	return dbool(v), nil
-}
-
-// Prepare the arguments for a binary operation. The returned arguments will
-// have the same type. The typ parameter specifies the allowed types for the
-// operation. For example, bit-operations should specify intOp to indicate that
-// they do not operate on floating point arguments. Float operations may still
-// reduce to intOp if the operands support it.
-func prepareBinaryArgs(typ opType, left, right Datum) (Datum, Datum, error) {
-	var err error
-
-	switch typ {
-	case intOp:
-		left, err = left.ToInt()
-		if err != nil {
-			return null, null, err
-		}
-		right, err = right.ToInt()
-		if err != nil {
-			return null, null, err
-		}
-		return left, right, nil
-
-	case floatOp:
-		switch left.(type) {
-		case dint:
-			switch right.(type) {
-			case dint:
-				return left, right, nil
-			}
-		}
-	}
-
-	left, err = left.ToFloat()
-	if err != nil {
-		return null, null, err
-	}
-	right, err = right.ToFloat()
-	if err != nil {
-		return null, null, err
-	}
-	return left, right, nil
+	return null, fmt.Errorf("unsupported comparison operator: <%T> %s <%T>",
+		left, expr.Operator, right)
 }
 
 func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
@@ -575,128 +629,12 @@ func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-
-	// TODO(pmattis): Overflow/underflow checks?
-
-	switch expr.Operator {
-	case Bitand:
-		left, right, err = prepareBinaryArgs(intOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) & right.(dint)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Bitor:
-		left, right, err = prepareBinaryArgs(intOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) | right.(dint)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Bitxor:
-		left, right, err = prepareBinaryArgs(intOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) ^ right.(dint)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Plus:
-		left, right, err = prepareBinaryArgs(floatOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) + right.(dint)
-		case dfloat:
-			left = left.(dfloat) + right.(dfloat)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Minus:
-		left, right, err = prepareBinaryArgs(floatOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) - right.(dint)
-		case dfloat:
-			left = left.(dfloat) - right.(dfloat)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Mult:
-		left, right, err = prepareBinaryArgs(floatOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) * right.(dint)
-		case dfloat:
-			left = left.(dfloat) * right.(dfloat)
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Div:
-		// Division always operates on floats. TODO(pmattis): Is this correct?
-		left, err = left.ToFloat()
-		if err != nil {
-			return null, err
-		}
-		right, err = right.ToFloat()
-		if err != nil {
-			return null, err
-		}
-		left = left.(dfloat) / right.(dfloat)
-		return left, nil
-
-	case Mod:
-		left, right, err = prepareBinaryArgs(floatOp, left, right)
-		if err != nil {
-			return null, err
-		}
-		switch left.(type) {
-		case dint:
-			left = left.(dint) % right.(dint)
-		case dfloat:
-			left = dfloat(math.Mod(float64(left.(dfloat)), float64(right.(dfloat))))
-		default:
-			panic(fmt.Sprintf("unsupported type: %T", left))
-		}
-		return left, nil
-
-	case Concat:
-		s := left.String() + right.String()
-		return dstring(s), nil
+	f := binOps[binArgs{expr.Operator, reflect.TypeOf(left), reflect.TypeOf(right)}]
+	if f != nil {
+		return f(left, right)
 	}
-
-	return null, fmt.Errorf("unsupported binary operator: %c", expr.Operator)
+	return null, fmt.Errorf("unsupported binary operator: <%T> %s <%T>",
+		left, expr.Operator, right)
 }
 
 func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
@@ -704,32 +642,11 @@ func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-	switch expr.Operator {
-	case UnaryPlus:
-		return d, nil
-
-	case UnaryMinus:
-		var err error
-		switch t := d.(type) {
-		case dint:
-			return -t, nil
-		case dfloat:
-			return -t, nil
-		}
-		d, err = d.ToFloat()
-		if err != nil {
-			return null, err
-		}
-		return -d.(dfloat), nil
-
-	case UnaryComplement:
-		switch d.(type) {
-		case dint:
-			return ^d.(dint), nil
-		}
-		return null, fmt.Errorf("unary complement not supported for: %T", d)
+	f := unaryOps[unaryArgs{expr.Operator, reflect.TypeOf(d)}]
+	if f != nil {
+		return f(d)
 	}
-	return null, fmt.Errorf("unsupported unary operator: %c", expr.Operator)
+	return null, fmt.Errorf("unsupported unary operator: %s <%T>", expr.Operator, d)
 }
 
 func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {

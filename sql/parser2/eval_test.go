@@ -33,9 +33,6 @@ func TestEvalExpr(t *testing.T) {
 		{`1 & 3`, `1`, nil},
 		{`1 | 3`, `3`, nil},
 		{`1 # 3`, `2`, nil},
-		// Bitwise operators convert their arguments to ints.
-		// TODO(pmattis): Should this be an error instead?
-		{`1.1 # 3.1`, `2`, nil},
 		// Arithmetic operators.
 		{`1 + 1`, `2`, nil},
 		{`1 - 2`, `-1`, nil},
@@ -56,10 +53,6 @@ func TestEvalExpr(t *testing.T) {
 		// TODO(pmattis): {`0xa`, `10`, nil},
 		// Octal numbers.
 		// TODO(pmattis): {`0755`, `493`, nil},
-		// String conversion
-		{`'1' + '2'`, `3`, nil},
-		// Strings convert to floats.
-		{`'18446744073709551614' + 1`, `1.8446744073709552e+19`, nil},
 		// String concatenation.
 		{`'a' || 'b'`, `ab`, nil},
 		{`'a' || (1 + 2)`, `a3`, nil},
@@ -102,9 +95,7 @@ func TestEvalExpr(t *testing.T) {
 		{`'a' > 'b'`, `false`, nil},
 		{`'a' >= 'b'`, `false`, nil},
 		{`'a' >= 'b'`, `false`, nil},
-		// Comparison of a string against a number compares using floating point.
 		{`'10' > '2'`, `false`, nil},
-		{`'10' > 2`, `true`, nil},
 		// Comparisons against NULL result in NULL.
 		{`0 = NULL`, `NULL`, nil},
 		{`NULL = NULL`, `NULL`, nil},
@@ -144,10 +135,12 @@ func TestEvalExprError(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{`'a' + 0`, `parsing \"a\": invalid syntax`},
-		{`'0a' + 0`, `parsing \"0a\": invalid syntax`},
+		{`'1' + '2'`, `unsupported binary operator:`},
+		{`'a' + 0`, `unsupported binary operator:`},
+		{`1.1 # 3.1`, `unsupported binary operator:`},
+		{`~0.1`, `unsupported unary operator:`},
+		{`'10' > 2`, `unsupported comparison operator:`},
 		{`a`, `column \"a\" not found`},
-		{`~0.1`, `unary complement not supported for: parser2.dfloat`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`, nil},
 	}
