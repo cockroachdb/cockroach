@@ -67,6 +67,7 @@ func init() {
 
 		logCmd,
 
+		sqlShellCmd,
 		kvCmd,
 		acctCmd,
 		permCmd,
