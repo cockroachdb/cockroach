@@ -127,29 +127,15 @@ func (d dstring) IsNull() bool {
 }
 
 func (d dstring) ToBool() (Datum, error) {
-	// TODO(pmattis): ParseBool is more permissive than the SQL grammar accepting
-	// "t" and "f". Is this conversion even necessary?
-	v, err := strconv.ParseBool(string(d))
-	if err != nil {
-		return null, err
-	}
-	return dbool(v), nil
+	return null, fmt.Errorf("cannot convert string to bool")
 }
 
 func (d dstring) ToInt() (Datum, error) {
-	v, err := strconv.ParseInt(string(d), 0, 64)
-	if err != nil {
-		return null, err
-	}
-	return dint(v), nil
+	return null, fmt.Errorf("cannot convert string to int")
 }
 
 func (d dstring) ToFloat() (Datum, error) {
-	v, err := strconv.ParseFloat(string(d), 64)
-	if err != nil {
-		return null, err
-	}
-	return dfloat(v), nil
+	return null, fmt.Errorf("cannot convert string to float")
 }
 
 func (d dstring) String() string {
