@@ -467,6 +467,9 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
+	if left.IsNull() {
+		return null, nil
+	}
 	if v, err := left.ToBool(); err != nil {
 		return null, err
 	} else if !v.(dbool) {
@@ -475,6 +478,9 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
 		return null, err
+	}
+	if right.IsNull() {
+		return null, nil
 	}
 	if v, err := right.ToBool(); err != nil {
 		return null, err
@@ -489,19 +495,27 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-	if v, err := left.ToBool(); err != nil {
-		return null, err
-	} else if v.(dbool) {
-		return dbool(true), nil
+	if !left.IsNull() {
+		if v, err := left.ToBool(); err != nil {
+			return null, err
+		} else if v.(dbool) {
+			return dbool(true), nil
+		}
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
 		return null, err
 	}
+	if right.IsNull() {
+		return null, nil
+	}
 	if v, err := right.ToBool(); err != nil {
 		return null, err
 	} else if v.(dbool) {
 		return dbool(true), nil
+	}
+	if left.IsNull() {
+		return null, nil
 	}
 	return dbool(false), nil
 }
@@ -510,6 +524,9 @@ func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
+	}
+	if d.IsNull() {
+		return null, nil
 	}
 	v, err := d.ToBool()
 	if err != nil {
