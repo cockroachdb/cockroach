@@ -29,7 +29,9 @@ import (
 
 // Example_accounting shows how to use the admin client to
 // get/set/list/delete accounting configs.
-func Example_accounting() {
+//
+// TODO(kkaneda,tschottdorf): This test is flaky. See #1684.
+func Skip_Example_accounting() {
 	s := server.StartTestServer(nil)
 	defer s.Stop()
 
@@ -339,7 +341,9 @@ func Example_user() {
 
 // Example_zone shows how to use the admin client to
 // get/set/list/delete zone configs.
-func Example_zone() {
+//
+// TODO(kkaneda,tschottdorf): This test is flaky. See #1684.
+func Skip_Example_zone() {
 	s := server.StartTestServer(nil)
 	defer s.Stop()
 
