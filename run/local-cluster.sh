@@ -206,7 +206,7 @@ done
 # Print all node logs for debugging.
 echo
 echo "Failed to verify nodes in cluster after $MAX_WAIT seconds"
-echo "Last seen nodes: $FOUND_NODES"
+echo "Last seen nodes: $FOUND_NAMES"
 for i in $(seq 1 $NODES); do
   echo ""
   echo "Output for ${HOSTS[$i]}..."

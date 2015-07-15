@@ -20,9 +20,11 @@ package resolver
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 )
+
+var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 func TestParseResolverSpec(t *testing.T) {
 	testCases := []struct {
@@ -46,7 +48,7 @@ func TestParseResolverSpec(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(&base.Context{}, tc.input)
+		resolver, err := NewResolver(nodeTestBaseContext, tc.input)
 		if (err == nil) != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
 		}
@@ -81,7 +83,7 @@ func TestGetAddress(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(&base.Context{}, tc.resolverSpec)
+		resolver, err := NewResolver(nodeTestBaseContext, tc.resolverSpec)
 		if err != nil {
 			t.Fatal(err)
 		}

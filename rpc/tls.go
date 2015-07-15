@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -44,6 +45,10 @@ func tlsListen(network, address string, config *tls.Config) (net.Listener, error
 	return tls.Listen(network, address, config)
 }
 
+var defaultDialer = net.Dialer{
+	Timeout: 3 * time.Second,
+}
+
 // tlsDial wraps either net.Dial or crypto/tls.Dial, depending on the contents of
 // the passed TLS Config.
 func tlsDial(network, address string, config *tls.Config) (net.Conn, error) {
@@ -51,9 +56,9 @@ func tlsDial(network, address string, config *tls.Config) (net.Conn, error) {
 		if network != "unix" {
 			log.Warningf("connecting via %s to %s without TLS", network, address)
 		}
-		return net.Dial(network, address)
+		return defaultDialer.Dial(network, address)
 	}
-	return tls.Dial(network, address, config)
+	return tls.DialWithDialer(&defaultDialer, network, address, config)
 }
 
 // tlsDialHTTP connects to an HTTP RPC server at the specified address.

@@ -64,7 +64,7 @@ func newSender(server string, context *base.Context, retryOpts retry.Options) (*
 		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
 	}
 	ctx := roachrpc.NewContext(context, hlc.NewClock(hlc.UnixNano), nil)
-	client := roachrpc.NewClient(addr, &retryOpts, ctx)
+	client := roachrpc.NewClient(addr, ctx)
 	return &Sender{
 		client:    client,
 		retryOpts: retryOpts,
@@ -80,16 +80,15 @@ func newSender(server string, context *base.Context, retryOpts retry.Options) (*
 func (s *Sender) Send(_ context.Context, call proto.Call) {
 	var err error
 	for r := retry.Start(s.retryOpts); r.Next(); {
-		if !s.client.IsHealthy() {
+		select {
+		case <-s.client.Healthy():
+		default:
 			log.Warningf("client %s is unhealthy; retrying", s.client)
 			continue
 		}
 
 		method := call.Args.Method().String()
-		c := s.client.Go("Server."+method, call.Args, call.Reply, nil)
-		<-c.Done
-		err = c.Error
-		if err != nil {
+		if err = s.client.Call("Server."+method, call.Args, call.Reply); err != nil {
 			// Assume all errors sending request are retryable. The actual
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the

@@ -19,6 +19,7 @@ package rpc
 
 import (
 	"net"
+	"net/rpc"
 	"strings"
 	"testing"
 	"time"
@@ -115,12 +116,9 @@ func TestRetryableError(t *testing.T) {
 	nodeContext := NewNodeTestContext(nil, stopper)
 	s := createAndStartNewServer(t, nodeContext)
 
-	// Wait until the server becomes ready and shut down the server.
-	c := NewClient(s.Addr(), nil, nodeContext)
-	<-c.Ready
-	// Directly call Close() to close the connection without
-	// removing the client from the cache.
-	c.Client.Close()
+	c := NewClient(s.Addr(), nodeContext)
+	// Wait until the client becomes ready and shut down the server.
+	<-c.Healthy()
 	s.Close()
 
 	opts := Options{
@@ -142,6 +140,14 @@ func TestRetryableError(t *testing.T) {
 	}
 }
 
+type BrokenResponse struct {
+	*proto.ResponseHeader
+}
+
+func (*BrokenResponse) Verify() error {
+	return util.Error("boom")
+}
+
 // TestUnretryableError verifies that Send returns an unretryable
 // error when it hits a critical error.
 func TestUnretryableError(t *testing.T) {
@@ -159,13 +165,13 @@ func TestUnretryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         5 * time.Second,
 	}
-	getArgs := func(addr net.Addr) interface{} {
-		return &proto.PingRequest{}
+	getArgs := func(addr net.Addr) gogoproto.Message {
+		return &proto.RequestHeader{}
 	}
-	// Make getRetry return a non-proto value so that the proto
+	// Make getRetry return a BrokenResponse so that the proto
 	// integrity check fails.
-	getReply := func() interface{} {
-		return 0
+	getReply := func() gogoproto.Message {
+		return &BrokenResponse{&proto.ResponseHeader{}}
 	}
 	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, nodeContext)
 	if err == nil {
@@ -233,9 +239,9 @@ func TestClientNotReady(t *testing.T) {
 	}
 
 	// Send the RPC again with no timeout.
-	opts.SendNextTimeout = 0 * time.Nanosecond
-	opts.Timeout = 0 * time.Nanosecond
-	c := make(chan interface{})
+	opts.SendNextTimeout = 0
+	opts.Timeout = 0
+	c := make(chan struct{})
 	go func() {
 		if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err == nil {
 			t.Fatalf("expected error when client is closed")
@@ -252,8 +258,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will
 	// cause the blocked ping RPC to finish.
-	client := NewClient(s.Addr(), nil, nodeContext)
-	client.Close()
+	NewClient(s.Addr(), nodeContext).Close()
 	select {
 	case <-c:
 	case <-time.After(100 * time.Millisecond):
@@ -320,17 +325,16 @@ func TestComplexScenarios(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         1 * time.Second,
 		}
-		getArgs := func(addr net.Addr) interface{} {
-			return addr
+		getArgs := func(addr net.Addr) gogoproto.Message {
+			return &proto.PingRequest{}
 		}
-		getReply := func() interface{} {
-			return 0
+		getReply := func() gogoproto.Message {
+			return &proto.PingResponse{}
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client *Client, timeout time.Duration, method string, args, reply interface{},
-			c chan interface{}) {
-			addr := args.(net.Addr)
+		sendOneFn = func(client *Client, timeout time.Duration, method string, args, reply gogoproto.Message, done chan *rpc.Call) {
+			addr := client.addr
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {
 				if serverAddr.String() == addr.String() {
@@ -341,15 +345,16 @@ func TestComplexScenarios(t *testing.T) {
 			if addrID == -1 {
 				t.Fatalf("%d: %v is not found in serverAddrs: %v", i, addr, serverAddrs)
 			}
+			call := rpc.Call{
+				Reply: reply,
+			}
 			if addrID < numErrors {
-				c <- SendError{
+				call.Error = SendError{
 					errMsg:   "test",
 					canRetry: addrID < numRetryableErrors,
 				}
-				return
 			}
-
-			c <- nil
+			done <- &call
 		}
 		defer func() { sendOneFn = sendOne }()
 
@@ -381,17 +386,17 @@ func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
 }
 
 // sendPing sends Ping requests to specified addresses using Send.
-func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]interface{}, error) {
+func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]gogoproto.Message, error) {
 	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
 		&proto.PingRequest{}, &proto.PingResponse{})
 }
 
 func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
-	args, reply gogoproto.Message) ([]interface{}, error) {
-	getArgs := func(addr net.Addr) interface{} {
+	args, reply gogoproto.Message) ([]gogoproto.Message, error) {
+	getArgs := func(addr net.Addr) gogoproto.Message {
 		return args
 	}
-	getReply := func() interface{} {
+	getReply := func() gogoproto.Message {
 		return reply
 	}
 	return Send(opts, name, addrs, getArgs, getReply, rpcContext)

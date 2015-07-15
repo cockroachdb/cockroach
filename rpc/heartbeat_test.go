@@ -114,24 +114,28 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	// it will update the server's remote clocks map. We create the
 	// client manually here to allow us to set the remote offset
 	// before the first heartbeat.
+	tlsConfig, err := nodeContext.GetClientTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := &Client{
-		addr:         s.Addr(),
-		Ready:        make(chan struct{}),
 		Closed:       make(chan struct{}),
+		addr:         util.MakeUnresolvedAddr(s.Addr().Network(), s.Addr().String()),
+		tlsConfig:    tlsConfig,
 		clock:        nodeContext.localClock,
 		remoteClocks: nodeContext.RemoteClocks,
-		offset: proto.RemoteOffset{
+		remoteOffset: proto.RemoteOffset{
 			Offset:      10,
 			Uncertainty: 5,
 			MeasuredAt:  20,
 		},
 	}
-	if err := client.connect(nil, nodeContext); err != nil {
+	if err = client.connect(); err != nil {
 		t.Fatal(err)
 	}
 
 	nodeContext.RemoteClocks.mu.Lock()
-	remoteAddr := client.Addr().String()
+	remoteAddr := client.RemoteAddr().String()
 	o := nodeContext.RemoteClocks.offsets[remoteAddr]
 	nodeContext.RemoteClocks.mu.Unlock()
 	expServerOffset := proto.RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
@@ -140,12 +144,12 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	}
 	s.Close()
 
-	// Remove the offset from RemoteClocks and simulate the remote end
-	// closing the client connection. A new offset for the server should
-	// not be added to the clock monitor.
+	// Remove the offset from RemoteClocks and close the connection from the
+	// remote end. A new offset for the server should not be added to the clock
+	// monitor.
 	nodeContext.RemoteClocks.mu.Lock()
 	delete(nodeContext.RemoteClocks.offsets, remoteAddr)
-	client.Client.Close()
+	s.Close()
 	nodeContext.RemoteClocks.mu.Unlock()
 
 	nodeContext.RemoteClocks.mu.Lock()

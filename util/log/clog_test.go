@@ -486,7 +486,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	Fatalf("cinap")
 	cont := contents(FatalLog)
 	msg := ""
-	if !strings.Contains(cont, "] cinap") {
+	if !strings.Contains(cont, " cinap") {
 		msg = "panic output does not contain cinap"
 	} else if strings.Count(cont, "goroutine ") < 2 {
 		msg = "stack trace contains less than two goroutines"

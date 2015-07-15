@@ -18,10 +18,12 @@
 package rpc
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/rpc"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -30,11 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
-	defaultHeartbeatInterval = 3 * time.Second // 3s
+	defaultHeartbeatInterval = 3 * time.Second
 
 	// Affects maximum error in reading the clock of the remote. 1.5 seconds is
 	// the longest NTP allows for a remote clock reading. After 1.5 seconds, we
@@ -43,14 +44,17 @@ const (
 )
 
 var (
-	clientMu          sync.Mutex         // Protects access to the client cache.
-	clients           map[string]*Client // Cache of RPC clients by server address.
+	clientMu          sync.Mutex                      // Protects access to the client cache.
+	clients           map[util.UnresolvedAddr]*Client // Cache of RPC clients by server address.
 	heartbeatInterval time.Duration
 	errClosed         = errors.New("client is closed")
+	errUnstarted      = errors.New("not started yet")
 )
 
 // clientRetryOptions specifies exponential backoff starting
 // at 1s and ending at 30s with indefinite retries.
+// Clients currently never give up. TODO(tamird): Add `MaxRetries` here or
+// otherwise address this.
 var clientRetryOptions = retry.Options{
 	InitialBackoff: 1 * time.Second,  // first backoff at 1s
 	MaxBackoff:     30 * time.Second, // max backoff is 30s
@@ -59,26 +63,28 @@ var clientRetryOptions = retry.Options{
 
 // init creates a new client RPC cache.
 func init() {
-	clients = map[string]*Client{}
+	clients = map[util.UnresolvedAddr]*Client{}
 	heartbeatInterval = defaultHeartbeatInterval
+}
+
+type internalConn struct {
+	conn   net.Conn
+	client *rpc.Client
 }
 
 // Client is a Cockroach-specific RPC client with an embedded go
 // rpc.Client struct.
 type Client struct {
-	Ready  chan struct{} // Closed when client is connected
-	Closed chan struct{} // Closed when connection has closed
-	closed bool          // True when connection has closed. Protected by clientMu.
+	addr      util.UnresolvedAddr
+	Closed    chan struct{}
+	conn      atomic.Value // holds a `internalConn`
+	healthy   atomic.Value // holds a `chan struct{}` exposed in `Healthy`
+	isClosed  bool
+	tlsConfig *tls.Config
 
-	mu           sync.Mutex // Mutex protects the fields below
-	*rpc.Client             // Embedded RPC client
-	addr         net.Addr   // Remote address of client
-	lAddr        net.Addr   // Local address of client
-	healthy      bool
-	offset       proto.RemoteOffset // Latest measured clock offset from the server
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
-	cached       bool
+	remoteOffset proto.RemoteOffset
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -91,219 +97,206 @@ type Client struct {
 //
 // The Client.Ready channel is closed after the client has connected
 // and completed one successful heartbeat. The Closed channel is
-// closed if the client fails to connect or if the client's Close()
-// method is invoked.
-func NewClient(addr net.Addr, opts *retry.Options, context *Context) *Client {
+// closed if the client's Close() method is invoked.
+func NewClient(addr net.Addr, context *Context) *Client {
 	clientMu.Lock()
+	defer clientMu.Unlock()
+
+	key := util.MakeUnresolvedAddr(addr.Network(), addr.String())
+
 	if !context.DisableCache {
-		if c, ok := clients[addr.String()]; ok {
-			clientMu.Unlock()
+		if c, ok := clients[key]; ok {
 			return c
 		}
 	}
+
+	tlsConfig, err := context.GetClientTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	c := &Client{
-		addr:         addr,
-		Ready:        make(chan struct{}),
 		Closed:       make(chan struct{}),
+		addr:         key,
+		tlsConfig:    tlsConfig,
 		clock:        context.localClock,
 		remoteClocks: context.RemoteClocks,
-		cached:       !context.DisableCache,
 	}
+
+	c.healthy.Store(make(chan struct{}))
+	// Must store junk in here so `Load()` doesn't blow up
+	c.conn.Store(internalConn{})
+
 	if !context.DisableCache {
-		clients[c.Addr().String()] = c
+		clients[key] = c
 	}
-	clientMu.Unlock()
+
+	retryOpts := clientRetryOptions
+	retryOpts.Stopper = context.Stopper
 
 	context.Stopper.RunWorker(func() {
-		if err := c.connect(opts, context); err != nil {
-			log.Errorf("client %s failed to connect: %v", c.addr, err)
-		} else {
-			// Signal client is ready by closing Ready channel.
-			log.Infof("client %s connected", c.addr)
-			close(c.Ready)
-
-			// Launch periodic heartbeat. This blocks until the client is to be closed.
-			c.runHeartbeat(context.Stopper)
+		select {
+		case <-context.Stopper.ShouldStop():
+			c.Close()
+		case <-c.Closed:
 		}
-		c.Close()
 	})
+
+	context.Stopper.RunWorker(func() {
+		c.runHeartbeat(retryOpts)
+
+		if client := c.conn.Load().(internalConn).client; client != nil {
+			client.Close()
+		}
+	})
+
 	return c
 }
 
-// connect dials the connection in a backoff/retry loop.
-func (c *Client) connect(opts *retry.Options, context *Context) error {
-	// Attempt to dial connection.
-	retryOpts := clientRetryOptions
-	if opts != nil {
-		retryOpts = *opts
+// Go delegates to net/rpc.Client.Go.
+func (c *Client) Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call {
+	return c.conn.Load().(internalConn).client.Go(serviceMethod, args, reply, done)
+}
+
+// Call delegates to net/rpc.Client.Call.
+func (c *Client) Call(serviceMethod string, args interface{}, reply interface{}) error {
+	return c.conn.Load().(internalConn).client.Call(serviceMethod, args, reply)
+}
+
+func (c *Client) connect() error {
+	conn, err := tlsDialHTTP(c.addr.NetworkField, c.addr.StringField, c.tlsConfig)
+	if err != nil {
+		return err
 	}
-	retryOpts.Stopper = context.Stopper
+	c.conn.Store(internalConn{
+		conn:   conn,
+		client: rpc.NewClientWithCodec(codec.NewClientCodec(conn)),
+	})
 
-	for r := retry.Start(retryOpts); r.Next(); {
-		tlsConfig, err := context.GetClientTLSConfig()
-		if err != nil {
-			// Problem loading the TLS config. Retrying will not help.
-			return err
-		}
-
-		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), tlsConfig)
-		if err != nil {
-			// Retry if the error is temporary, otherwise fail fast.
-			if t, ok := err.(net.Error); ok && t.Temporary() {
-				if log.V(1) {
-					log.Warning(err)
-				}
-				continue
-			}
-			return err
-		}
-
-		c.mu.Lock()
-		c.Client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
-		c.lAddr = conn.LocalAddr()
-		c.mu.Unlock()
-		if c.lAddr == nil {
-			return errClosed
-		}
-
-		// Ensure at least one heartbeat succeeds before exiting the
-		// retry loop. If it fails, don't retry: The node is probably
-		// dead.
-		if err = c.heartbeat(); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	return util.Errorf("system is stopping")
+	return nil
 }
 
-// IsConnected returns whether the client is connected.
-func (c *Client) IsConnected() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.Client != nil
+// Healthy returns a channel that is closed when the client becomes healthy.
+func (c *Client) Healthy() <-chan struct{} {
+	return c.healthy.Load().(chan struct{})
 }
 
-// IsHealthy returns whether the client is healthy.
-func (c *Client) IsHealthy() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.healthy
-}
-
-// Addr returns remote address of the client.
-func (c *Client) Addr() net.Addr {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.addr
-}
-
-// LocalAddr returns the local address of the client.
-func (c *Client) LocalAddr() net.Addr {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lAddr
-}
-
-// RemoteOffset returns the most recently measured offset of the client clock
-// from the remote server clock.
-func (c *Client) RemoteOffset() proto.RemoteOffset {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.offset
-}
-
-// Close removes the client from the clients map and closes
-// the Closed channel.
+// Close closes the Closed channel, which triggers the end of the run loop and
+// removal from the clients map.
 func (c *Client) Close() {
 	clientMu.Lock()
-	if !c.closed {
-		if c.cached {
-			delete(clients, c.Addr().String())
-		}
-		c.mu.Lock()
-		c.healthy = false
-		c.closed = true
-		if c.Client != nil {
-			c.Client.Close()
-		}
-		c.mu.Unlock()
-		close(c.Closed)
+	defer clientMu.Unlock()
+
+	if c.isClosed {
+		return
 	}
-	clientMu.Unlock()
+
+	c.isClosed = true
+	delete(clients, c.addr)
+	close(c.Closed)
 }
 
 // runHeartbeat sends periodic heartbeats to client. Closes the
 // connection on error. Heartbeats are sent in an infinite loop until
 // an error is encountered.
-func (c *Client) runHeartbeat(stopper *stop.Stopper) {
-	if log.V(2) {
-		log.Infof("client %s starting heartbeat", c.Addr())
-	}
-
-	for {
-		select {
-		case <-stopper.ShouldStop():
+func (c *Client) runHeartbeat(retryOpts retry.Options) {
+	isHealthy := false
+	setHealthy := func() {
+		if isHealthy {
 			return
-		case <-time.After(heartbeatInterval):
-			if err := c.heartbeat(); err != nil {
-				log.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
-				return
-			}
+		}
+		isHealthy = true
+		close(c.healthy.Load().(chan struct{}))
+	}
+	setUnhealthy := func() {
+		if isHealthy {
+			isHealthy = false
+			c.healthy.Store(make(chan struct{}))
 		}
 	}
+
+	// initial condition
+	connErr := errUnstarted
+	var beatErr error
+	for {
+		for r := retry.Start(retryOpts); r.Next(); {
+			// reconnect if connection failed or heartbeat error is not definitely temporary
+			if netErr, ok := beatErr.(net.Error); connErr != nil || beatErr != nil && !(ok && netErr.Temporary()) {
+				if connErr = c.connect(); connErr != nil {
+					log.Warning(connErr)
+					setUnhealthy()
+					continue
+				}
+			}
+
+			if beatErr = c.heartbeat(); beatErr == nil {
+				setHealthy()
+				break
+			} else {
+				log.Warning(beatErr)
+				setUnhealthy()
+			}
+		}
+		// Wait after the heartbeat so that the first iteration gets a wait-free
+		// heartbeat attempt.
+		select {
+		case <-c.Closed:
+			return
+			// TODO: perhaps retry more aggressively when the client is unhealthy
+		case <-time.After(heartbeatInterval):
+		}
+	}
+}
+
+// LocalAddr returns the local address of the client.
+func (c *Client) LocalAddr() net.Addr {
+	return c.conn.Load().(internalConn).conn.LocalAddr()
+}
+
+// RemoteAddr returns remote address of the client.
+func (c *Client) RemoteAddr() net.Addr {
+	return c.addr
 }
 
 // heartbeat sends a single heartbeat RPC. As part of the heartbeat protocol,
 // it measures the clock of the remote to determine the node's clock offset
 // from the remote.
 func (c *Client) heartbeat() error {
-	request := &proto.PingRequest{Offset: c.RemoteOffset(), Addr: c.LocalAddr().String()}
+	request := &proto.PingRequest{Offset: c.remoteOffset, Addr: c.LocalAddr().String()}
 	response := &proto.PingResponse{}
 	sendTime := c.clock.PhysicalNow()
+
 	call := c.Go("Heartbeat.Ping", request, response, nil)
+
 	select {
-	case <-call.Done:
-		receiveTime := c.clock.PhysicalNow()
-		if log.V(2) {
-			log.Infof("client %s heartbeat: %v", c.Addr(), call.Error)
-		}
-		if call.Error == nil {
-			// Only update the clock offset measurement if we actually got a
-			// successful response from the server.
-			c.mu.Lock()
-			c.healthy = true
-			if receiveTime-sendTime > maximumClockReadingDelay.Nanoseconds() {
-				c.offset.Reset()
-			} else {
-				// Offset and error are measured using the remote clock reading
-				// technique described in
-				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-				// However, we assume that drift and min message delay are 0, for
-				// now.
-				c.offset.MeasuredAt = receiveTime
-				c.offset.Uncertainty = (receiveTime - sendTime) / 2
-				remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
-				c.offset.Offset = remoteTimeNow - receiveTime
-			}
-			offset := c.offset
-			c.mu.Unlock()
-			if offset.MeasuredAt != 0 {
-				c.remoteClocks.UpdateOffset(c.addr.String(), offset)
-			}
-		}
-		return call.Error
-	case <-time.After(heartbeatInterval * 2):
-		// Allowed twice heartbeat interval.
-		c.mu.Lock()
-		c.healthy = false
-		c.offset.Reset()
-		c.mu.Unlock()
-		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
-		return util.Errorf("client timeout")
 	case <-c.Closed:
 		return errClosed
+	case <-call.Done:
+		if err := call.Error; err != nil {
+			return err
+		}
+	case <-time.After(2 * heartbeatInterval):
+		return util.Errorf("heartbeat timed out after %s", 2*heartbeatInterval)
 	}
+
+	receiveTime := c.clock.PhysicalNow()
+
+	// Only update the clock offset measurement if we actually got a
+	// successful response from the server.
+	if receiveTime > sendTime+maximumClockReadingDelay.Nanoseconds() {
+		c.remoteOffset.Reset()
+	} else {
+		// Offset and error are measured using the remote clock reading
+		// technique described in
+		// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+		// However, we assume that drift and min message delay are 0, for
+		// now.
+		c.remoteOffset.MeasuredAt = receiveTime
+		c.remoteOffset.Uncertainty = (receiveTime - sendTime) / 2
+		remoteTimeNow := response.ServerTime + c.remoteOffset.Uncertainty
+		c.remoteOffset.Offset = remoteTimeNow - receiveTime
+		c.remoteClocks.UpdateOffset(c.RemoteAddr().String(), c.remoteOffset)
+	}
+
+	return nil
 }

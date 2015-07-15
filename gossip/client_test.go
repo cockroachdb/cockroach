@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
@@ -43,7 +42,7 @@ const (
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
 	stopper = stop.NewStopper()
-	lRPCContext := rpc.NewContext(insecureTestBaseContext, lclock, stopper)
+	lRPCContext := rpc.NewContext(nodeTestBaseContext, lclock, stopper)
 
 	laddr := util.CreateTestAddr("tcp")
 	lserver := rpc.NewServer(laddr, lRPCContext)
@@ -61,7 +60,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("tcp")
-	rRPCContext := rpc.NewContext(insecureTestBaseContext, rclock, stopper)
+	rRPCContext := rpc.NewContext(nodeTestBaseContext, rclock, stopper)
 	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
@@ -97,7 +96,7 @@ func TestClientGossip(t *testing.T) {
 	client := newClient(remote.is.NodeAddr)
 	// Use an insecure context. We're talking to unix socket which are not in the certs.
 	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(insecureTestBaseContext, lclock, stopper)
+	rpcContext := rpc.NewContext(nodeTestBaseContext, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
 	if err := util.IsTrueWithin(func() bool {
@@ -129,7 +128,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
 	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, lclock, stopper)
+	rpcContext := rpc.NewContext(nodeTestBaseContext, lclock, stopper)
 	local.startClient(rAddr, rpcContext, stopper)
 	remote.startClient(lAddr, rpcContext, stopper)
 	local.mu.Unlock()

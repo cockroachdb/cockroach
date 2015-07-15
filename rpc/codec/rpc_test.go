@@ -262,18 +262,11 @@ func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 	// EchoService.Echo
 	args := &message.EchoRequest{Msg: "Hello, Protobuf-RPC"}
 	reply := &message.EchoResponse{}
-	echoCall := client.Go("EchoService.Echo", args, reply, nil)
-
-	// EchoService.Echo reply
-	echoCall = <-echoCall.Done
-	if echoCall.Error != nil {
-		t.Fatalf(`EchoService.Echo: %v`, echoCall.Error)
+	if err := client.Call("EchoService.Echo", args, reply); err != nil {
+		t.Fatalf(`EchoService.Echo: %s`, err)
 	}
-	if echoCall.Reply.(*message.EchoResponse).GetMsg() != args.GetMsg() {
-		t.Fatalf(`EchoService.Echo: expected = "%s", got = "%s"`,
-			args.GetMsg(),
-			echoCall.Reply.(*message.EchoResponse).GetMsg(),
-		)
+	if e, g := args.GetMsg(), reply.GetMsg(); e != g {
+		t.Fatalf(`EchoService.Echo: expected = "%s", got = "%s"`, e, g)
 	}
 }
 

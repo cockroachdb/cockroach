@@ -224,12 +224,12 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(rpc.Options, []net.Addr) error
 
 	var testFn rpcSendFn = func(opts rpc.Options, method string,
-		addrs []net.Addr, _ func(addr net.Addr) interface{},
-		getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		addrs []net.Addr, _ func(addr net.Addr) gogoproto.Message,
+		getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		if err := verifyCall(opts, addrs); err != nil {
 			return nil, err
 		}
-		return []interface{}{getReply()}, nil
+		return []gogoproto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -317,15 +317,15 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	first := true
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		if first {
 			reply := getReply()
 			reply.(proto.Response).Header().SetGoError(
 				&proto.NotLeaderError{Leader: &leader, Replica: &proto.Replica{}})
 			first = false
-			return []interface{}{reply}, nil
+			return []gogoproto.Message{reply}, nil
 		}
-		return []interface{}{getReply()}, nil
+		return []gogoproto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -357,8 +357,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		return []interface{}{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+		return []gogoproto.Message{getReply()}, nil
 	}
 
 	errors := []error{
@@ -421,9 +421,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, _ func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 			if !first {
-				return []interface{}{getReply()}, nil
+				return []gogoproto.Message{getReply()}, nil
 			}
 			first = false
 			err := &proto.Error{
@@ -435,7 +435,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 			reply := getReply()
 			reply.(proto.Response).Header().SetGoError(err)
-			return []interface{}{reply}, nil
+			return []gogoproto.Message{reply}, nil
 		}
 
 		ctx := &DistSenderContext{
@@ -471,8 +471,8 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
-		return []interface{}{getReply()}, nil
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
+		return []gogoproto.Message{getReply()}, nil
 	}
 
 	for _, rangeLookup := range []bool{true, false} {
@@ -509,7 +509,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newEndKey := proto.Key("m")
 	descStale := true
 
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		header := getArgs(testAddress).(proto.Request).Header()
 		if method == "Node.InternalRangeLookup" {
 			// If the non-broken descriptor has already been returned, that's
@@ -526,7 +526,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 				descStale = false
 			}
 			r.Ranges = append(r.Ranges, newRangeDescriptor)
-			return []interface{}{r}, nil
+			return []gogoproto.Message{r}, nil
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
@@ -536,7 +536,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
 				RequestEndKey: header.EndKey}
 		}
-		return []interface{}{getReply()}, nil
+		return []gogoproto.Message{getReply()}, nil
 	}
 
 	ctx := &DistSenderContext{
@@ -755,14 +755,14 @@ func TestSendRPCRetry(t *testing.T) {
 		})
 	}
 	// Define our rpcSend stub which returns success on the second address.
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		if method == "Node.Scan" {
 			// reply from first address failed
 			_ = getReply()
 			// reply from second address succeed
 			reply := getReply()
 			reply.(*proto.ScanResponse).Rows = append([]proto.KeyValue{}, proto.KeyValue{Key: proto.Key("b"), Value: proto.Value{}})
-			return []interface{}{reply}, nil
+			return []gogoproto.Message{reply}, nil
 		}
 		return nil, util.Errorf("Not expected method %v", method)
 	}
@@ -844,7 +844,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: proto.Key("a"), Value: proto.Value{Bytes: []byte("1")}},
 		{Key: proto.Key("c"), Value: proto.Value{Bytes: []byte("2")}},
 	}
-	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		if method != "Node.Scan" {
 			t.Fatalf("unexpected method:%s", method)
 		}
@@ -857,7 +857,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 			}
 		}
 		reply.Rows = results
-		return []interface{}{reply}, nil
+		return []gogoproto.Message{reply}, nil
 	}
 	ctx := &DistSenderContext{
 		rpcSend: testFn,

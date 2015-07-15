@@ -516,8 +516,7 @@ func formatHeader(s Severity, now time.Time, threadID int32, file string, line i
 	buf.Write(tmp[:n])
 	buf.WriteString(file)
 	tmp[0] = ':'
-	n = 1 + buf.someDigits(1, int(line))
-	tmp[n] = ']'
+	n = buf.someDigits(1, int(line))
 	n++
 	if colors != nil {
 		n += copy(tmp[n:], []byte("\033[0m")) // reset
