@@ -148,11 +148,11 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	numIncrements := 0
 
-	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+	storage.TestingCommandFilter = func(args proto.Request) error {
 		if _, ok := args.(*proto.IncrementRequest); ok && args.Header().Key.Equal(proto.Key("a")) {
 			numIncrements++
 		}
-		return false
+		return nil
 	}
 
 	func() {
@@ -351,15 +351,14 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+	storage.TestingCommandFilter = func(args proto.Request) error {
 		if runFilter.Load().(bool) {
 			if et, ok := args.(*proto.EndTransactionRequest); ok && et.Commit {
-				reply.Header().SetGoError(util.Errorf("boom"))
-				return true
+				return util.Errorf("boom")
 			}
-			return false
+			return nil
 		}
-		return false
+		return nil
 	}
 
 	rng, err := mtc.stores[0].GetRange(1)

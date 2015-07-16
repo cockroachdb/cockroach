@@ -1197,11 +1197,11 @@ func TestStoreScanIntents(t *testing.T) {
 	var count int32
 	countPtr := &count
 
-	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+	TestingCommandFilter = func(args proto.Request) error {
 		if _, ok := args.(*proto.ScanRequest); ok {
 			atomic.AddInt32(countPtr, 1)
 		}
-		return false
+		return nil
 	}
 
 	testCases := []struct {

@@ -39,59 +39,98 @@ import (
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command. It returns an error and, for some calls
 // such as inconsistent reads, the intents they skipped.
-func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request, reply proto.Response) ([]proto.Intent, error) {
+func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request) (proto.Response, []proto.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		reply.Header().SetGoError(err)
-		return nil, err
+		// TODO(tamird): Remove the CreateReply when upstream doesn't need it.
+		return args.CreateReply(), nil, err
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if TestingCommandFilter != nil && TestingCommandFilter(args, reply) {
-		return nil, reply.Header().GoError()
+	if TestingCommandFilter != nil {
+		if err := TestingCommandFilter(args); err != nil {
+			// TODO(tamird): Remove the CreateReply when upstream doesn't need it.
+			return args.CreateReply(), nil, err
+		}
 	}
 
+	var reply proto.Response
 	var intents []proto.Intent
+	var err error
 	switch tArgs := args.(type) {
 	case *proto.GetRequest:
-		intents = r.Get(batch, tArgs, reply.(*proto.GetResponse))
+		var resp proto.GetResponse
+		resp, intents, err = r.Get(batch, tArgs)
+		reply = &resp
 	case *proto.PutRequest:
-		r.Put(batch, ms, tArgs, reply.(*proto.PutResponse))
+		var resp proto.PutResponse
+		resp, err = r.Put(batch, ms, tArgs)
+		reply = &resp
 	case *proto.ConditionalPutRequest:
-		r.ConditionalPut(batch, ms, tArgs, reply.(*proto.ConditionalPutResponse))
+		var resp proto.ConditionalPutResponse
+		resp, err = r.ConditionalPut(batch, ms, tArgs)
+		reply = &resp
 	case *proto.IncrementRequest:
-		r.Increment(batch, ms, tArgs, reply.(*proto.IncrementResponse))
+		var resp proto.IncrementResponse
+		resp, err = r.Increment(batch, ms, tArgs)
+		reply = &resp
 	case *proto.DeleteRequest:
-		r.Delete(batch, ms, tArgs, reply.(*proto.DeleteResponse))
+		var resp proto.DeleteResponse
+		resp, err = r.Delete(batch, ms, tArgs)
+		reply = &resp
 	case *proto.DeleteRangeRequest:
-		r.DeleteRange(batch, ms, tArgs, reply.(*proto.DeleteRangeResponse))
+		var resp proto.DeleteRangeResponse
+		resp, err = r.DeleteRange(batch, ms, tArgs)
+		reply = &resp
 	case *proto.ScanRequest:
-		intents = r.Scan(batch, tArgs, reply.(*proto.ScanResponse))
+		var resp proto.ScanResponse
+		resp, intents, err = r.Scan(batch, tArgs)
+		reply = &resp
 	case *proto.EndTransactionRequest:
-		r.EndTransaction(batch, ms, tArgs, reply.(*proto.EndTransactionResponse))
+		var resp proto.EndTransactionResponse
+		resp, err = r.EndTransaction(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalRangeLookupRequest:
-		intents = r.InternalRangeLookup(batch, tArgs, reply.(*proto.InternalRangeLookupResponse))
+		var resp proto.InternalRangeLookupResponse
+		resp, intents, err = r.InternalRangeLookup(batch, tArgs)
+		reply = &resp
 	case *proto.InternalHeartbeatTxnRequest:
-		r.InternalHeartbeatTxn(batch, ms, tArgs, reply.(*proto.InternalHeartbeatTxnResponse))
+		var resp proto.InternalHeartbeatTxnResponse
+		resp, err = r.InternalHeartbeatTxn(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalGCRequest:
-		r.InternalGC(batch, ms, tArgs, reply.(*proto.InternalGCResponse))
+		var resp proto.InternalGCResponse
+		resp, err = r.InternalGC(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalPushTxnRequest:
-		r.InternalPushTxn(batch, ms, tArgs, reply.(*proto.InternalPushTxnResponse))
+		var resp proto.InternalPushTxnResponse
+		resp, err = r.InternalPushTxn(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalResolveIntentRequest:
-		r.InternalResolveIntent(batch, ms, tArgs, reply.(*proto.InternalResolveIntentResponse))
+		var resp proto.InternalResolveIntentResponse
+		resp, err = r.InternalResolveIntent(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalResolveIntentRangeRequest:
-		r.InternalResolveIntentRange(batch, ms, tArgs, reply.(*proto.InternalResolveIntentRangeResponse))
+		var resp proto.InternalResolveIntentRangeResponse
+		resp, err = r.InternalResolveIntentRange(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalMergeRequest:
-		r.InternalMerge(batch, ms, tArgs, reply.(*proto.InternalMergeResponse))
+		var resp proto.InternalMergeResponse
+		resp, err = r.InternalMerge(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalTruncateLogRequest:
-		r.InternalTruncateLog(batch, ms, tArgs, reply.(*proto.InternalTruncateLogResponse))
+		var resp proto.InternalTruncateLogResponse
+		resp, err = r.InternalTruncateLog(batch, ms, tArgs)
+		reply = &resp
 	case *proto.InternalLeaderLeaseRequest:
-		r.InternalLeaderLease(batch, ms, tArgs, reply.(*proto.InternalLeaderLeaseResponse))
+		var resp proto.InternalLeaderLeaseResponse
+		resp, err = r.InternalLeaderLease(batch, ms, tArgs)
+		reply = &resp
 	default:
-		return nil, util.Errorf("unrecognized command %s", args.Method())
+		err = util.Errorf("unrecognized command %s", args.Method())
 	}
 
 	if log.V(2) {
@@ -107,8 +146,6 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = header.Timestamp
 
-	err := reply.Header().GoError()
-
 	// A ReadWithinUncertaintyIntervalError contains the timestamp of the value
 	// that provoked the conflict. However, we forward the timestamp to the
 	// node's time here. The reason is that the caller (which is always
@@ -118,77 +155,87 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 	// the node to be classified as without further uncertain reads for the
 	// remainder of the transaction.
 	// See the comment on proto.Transaction.CertainNodes.
-	if tErr, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok && tErr != nil {
+	if tErr, ok := err.(*proto.ReadWithinUncertaintyIntervalError); ok {
 		// Note that we can use this node's clock (which may be different from
 		// other replicas') because this error attaches the existing timestamp
 		// to the node itself when retrying.
 		tErr.ExistingTimestamp.Forward(r.rm.Clock().Now())
 	}
 
-	// Return the error (if any) set in the reply.
-	return intents, err
+	return reply, intents, err
 }
 
 // Get returns the value for a specified key.
-func (r *Range) Get(batch engine.Engine, args *proto.GetRequest, reply *proto.GetResponse) []proto.Intent {
+func (r *Range) Get(batch engine.Engine, args *proto.GetRequest) (proto.GetResponse, []proto.Intent, error) {
+	var reply proto.GetResponse
+
 	val, intents, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	reply.Value = val
-	reply.SetGoError(err)
-	return intents
+	return reply, intents, err
 }
 
 // Put sets the value for a specified key.
-func (r *Range) Put(batch engine.Engine, ms *engine.MVCCStats, args *proto.PutRequest, reply *proto.PutResponse) {
-	err := engine.MVCCPut(batch, ms, args.Key, args.Timestamp, args.Value, args.Txn)
-	reply.SetGoError(err)
+func (r *Range) Put(batch engine.Engine, ms *engine.MVCCStats, args *proto.PutRequest) (proto.PutResponse, error) {
+	var reply proto.PutResponse
+
+	return reply, engine.MVCCPut(batch, ms, args.Key, args.Timestamp, args.Value, args.Txn)
 }
 
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (r *Range) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
-	err := engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
-	reply.SetGoError(err)
+func (r *Range) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args *proto.ConditionalPutRequest) (proto.ConditionalPutResponse, error) {
+	var reply proto.ConditionalPutResponse
+
+	return reply, engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
-func (r *Range) Increment(batch engine.Engine, ms *engine.MVCCStats, args *proto.IncrementRequest, reply *proto.IncrementResponse) {
-	val, err := engine.MVCCIncrement(batch, ms, args.Key, args.Timestamp, args.Txn, args.Increment)
-	reply.NewValue = val
-	reply.SetGoError(err)
+func (r *Range) Increment(batch engine.Engine, ms *engine.MVCCStats, args *proto.IncrementRequest) (proto.IncrementResponse, error) {
+	var reply proto.IncrementResponse
+
+	newVal, err := engine.MVCCIncrement(batch, ms, args.Key, args.Timestamp, args.Txn, args.Increment)
+	reply.NewValue = newVal
+	return reply, err
 }
 
 // Delete deletes the key and value specified by key.
-func (r *Range) Delete(batch engine.Engine, ms *engine.MVCCStats, args *proto.DeleteRequest, reply *proto.DeleteResponse) {
-	reply.SetGoError(engine.MVCCDelete(batch, ms, args.Key, args.Timestamp, args.Txn))
+func (r *Range) Delete(batch engine.Engine, ms *engine.MVCCStats, args *proto.DeleteRequest) (proto.DeleteResponse, error) {
+	var reply proto.DeleteResponse
+
+	return reply, engine.MVCCDelete(batch, ms, args.Key, args.Timestamp, args.Txn)
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
-func (r *Range) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) {
-	num, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
-	reply.NumDeleted = num
-	reply.SetGoError(err)
+func (r *Range) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args *proto.DeleteRangeRequest) (proto.DeleteRangeResponse, error) {
+	var reply proto.DeleteRangeResponse
+
+	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
+	reply.NumDeleted = numDel
+	return reply, err
 }
 
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
-func (r *Range) Scan(batch engine.Engine, args *proto.ScanRequest, reply *proto.ScanResponse) []proto.Intent {
-	kvs, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
-	reply.Rows = kvs
-	reply.SetGoError(err)
-	return intents
+func (r *Range) Scan(batch engine.Engine, args *proto.ScanRequest) (proto.ScanResponse, []proto.Intent, error) {
+	var reply proto.ScanResponse
+
+	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
+	reply.Rows = rows
+	return reply, intents, err
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
+func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *proto.EndTransactionRequest) (proto.EndTransactionResponse, error) {
+	var reply proto.EndTransactionResponse
+
 	if args.Txn == nil {
-		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
-		return
+		return reply, util.Errorf("no transaction specified to EndTransaction")
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
@@ -196,32 +243,29 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 	existTxn := &proto.Transaction{}
 	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, existTxn)
 	if err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
+
 	// If the transaction record already exists, verify that we can either
 	// commit it or abort it (according to args.Commit), and also that the
 	// Timestamp and Epoch have not suffered regression.
 	if ok {
-		// Use the persisted transaction record as final transaction.
-		reply.Txn = gogoproto.Clone(existTxn).(*proto.Transaction)
-
 		if existTxn.Status == proto.COMMITTED {
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already committed"))
-			return
+			return reply, proto.NewTransactionStatusError(existTxn, "already committed")
 		} else if existTxn.Status == proto.ABORTED {
-			reply.SetGoError(proto.NewTransactionAbortedError(existTxn))
-			return
+			return reply, proto.NewTransactionAbortedError(existTxn)
 		} else if args.Txn.Epoch < existTxn.Epoch {
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch)))
-			return
+			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
 		} else if args.Txn.Epoch == existTxn.Epoch && existTxn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp)))
-			return
+			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
 		}
+
+		// Use the persisted transaction record as final transaction.
+		reply.Txn = existTxn
+
 		// Take max of requested epoch and existing epoch. The requester
 		// may have incremented the epoch on retries.
 		if reply.Txn.Epoch < args.Txn.Epoch {
@@ -234,7 +278,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 		}
 	} else {
 		// The transaction doesn't exist yet on disk; use the supplied version.
-		reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)
+		reply.Txn = args.Txn
 	}
 
 	// Take max of requested timestamp and possibly "pushed" txn
@@ -250,8 +294,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
 		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.OrigTimestamp) {
-			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn))
-			return
+			return reply, proto.NewTransactionRetryError(reply.Txn)
 		}
 		reply.Txn.Status = proto.COMMITTED
 	} else {
@@ -260,8 +303,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 
 	// Persist the transaction record with updated status (& possibly timestamp).
 	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
 
 	// Run triggers if successfully committed. Any failures running
@@ -273,8 +315,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 				log.Infof("resolving intent at %s on end transaction [%s]", key, reply.Txn.Status)
 			}
 			if err := engine.MVCCResolveWriteIntent(batch, ms, key, reply.Txn.Timestamp, reply.Txn); err != nil {
-				reply.SetGoError(err)
-				return
+				return reply, err
 			}
 			reply.Resolved = append(reply.Resolved, key)
 		}
@@ -282,15 +323,22 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 		if reply.Txn.Status == proto.COMMITTED {
 			if ct.SplitTrigger != nil {
 				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
-				reply.SetGoError(r.splitTrigger(batch, ct.SplitTrigger))
+				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
+					return reply, err
+				}
 			} else if ct.MergeTrigger != nil {
 				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
-				reply.SetGoError(r.mergeTrigger(batch, ct.MergeTrigger))
+				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
+					return reply, err
+				}
 			} else if ct.ChangeReplicasTrigger != nil {
-				reply.SetGoError(r.changeReplicasTrigger(ct.ChangeReplicasTrigger))
+				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
+					return reply, err
+				}
 			}
 		}
 	}
+	return reply, nil
 }
 
 // InternalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
@@ -328,22 +376,20 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 // RangeDescriptor. This is intended to serve as a sort of caching pre-fetch,
 // so that the requesting nodes can aggressively cache RangeDescriptors which
 // are likely to be desired by their current workload.
-func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) []proto.Intent {
+func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRangeLookupRequest) (proto.InternalRangeLookupResponse, []proto.Intent, error) {
+	var reply proto.InternalRangeLookupResponse
+
 	if err := keys.ValidateRangeMetaKey(args.Key); err != nil {
-		reply.SetGoError(err)
-		return nil
+		return reply, nil, err
 	}
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
-		reply.SetGoError(util.Errorf(
-			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount))
-		return nil
+		return reply, nil, util.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 	consistent := args.ReadConsistency != proto.INCONSISTENT
 	if consistent && args.IgnoreIntents {
-		reply.SetGoError(util.Errorf("can not read consistently and skip intents"))
-		return nil
+		return reply, nil, util.Errorf("can not read consistently and skip intents")
 	}
 	if args.IgnoreIntents || consistent {
 		// Disable prefetching; in those cases the caller only cares about
@@ -360,8 +406,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 		args.Timestamp, consistent, args.Txn)
 	if err != nil {
 		// An error here is likely a WriteIntentError when reading consistently.
-		reply.SetGoError(err)
-		return nil
+		return reply, nil, err
 	}
 	if args.IgnoreIntents && len(intents) > 0 {
 		// NOTE (subtle): in general, we want to try to clean up dangling
@@ -388,8 +433,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 			key, txn := intents[0].Key, &intents[0].Txn
 			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
 			if err != nil {
-				reply.SetGoError(err)
-				return nil
+				return reply, nil, err
 			}
 			kvs = []proto.KeyValue{{Key: key, Value: *val}}
 		}
@@ -400,9 +444,8 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 		// indicate a very bad system error, but for now we will just
 		// treat it as a retryable Key Mismatch error.
 		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc())
-		reply.SetGoError(err)
 		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
-		return nil
+		return reply, nil, err
 	}
 
 	// Decode all scanned range descriptors, stopping if a range is encountered
@@ -412,33 +455,31 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError, once we
 		// introduce that.
 		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
-			reply.SetGoError(err)
-			return nil
+			return reply, nil, err
 		}
 	}
-
 	reply.Ranges = rds
-	return intents
+
+	return reply, intents, nil
 }
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats,
-	args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
+func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalHeartbeatTxnRequest) (proto.InternalHeartbeatTxnResponse, error) {
+	var reply proto.InternalHeartbeatTxnResponse
+
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
-	var txn proto.Transaction
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, &txn)
-	if err != nil {
-		reply.SetGoError(err)
-		return
+	txn := &proto.Transaction{}
+	if ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, txn); err != nil {
+		return reply, err
+	} else if !ok {
+		// If no existing transaction record was found, initialize
+		// to the transaction in the request header.
+		txn = args.Txn
 	}
-	// If no existing transaction record was found, initialize
-	// to the transaction in the request header.
-	if !ok {
-		gogoproto.Merge(&txn, args.Txn)
-	}
+
 	if txn.Status == proto.PENDING {
 		if txn.LastHeartbeat == nil {
 			txn.LastHeartbeat = &proto.Timestamp{}
@@ -446,29 +487,33 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats,
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &txn); err != nil {
-			reply.SetGoError(err)
-			return
+		if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, txn); err != nil {
+			return reply, err
 		}
 	}
-	reply.Txn = &txn
+
+	reply.Txn = txn
+	return reply, nil
 }
 
 // InternalGC iterates through the list of keys to garbage collect
 // specified in the arguments. MVCCGarbageCollect is invoked on each
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
-func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalGCRequest, reply *proto.InternalGCResponse) {
+func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalGCRequest) (proto.InternalGCResponse, error) {
+	var reply proto.InternalGCResponse
+
 	// Garbage collect the specified keys by expiration timestamps.
 	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, args.Timestamp); err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
 
 	// Store the GC metadata for this range.
 	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
-	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta)
-	reply.SetGoError(err)
+	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta); err != nil {
+		return reply, err
+	}
+	return reply, nil
 }
 
 // InternalPushTxn resolves conflicts between concurrent txns (or
@@ -505,10 +550,11 @@ func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *prot
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
+func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalPushTxnRequest) (proto.InternalPushTxnResponse, error) {
+	var reply proto.InternalPushTxnResponse
+
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		reply.SetGoError(util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key))
-		return
+		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
@@ -517,8 +563,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, existTxn)
 	if err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
 	if ok {
 		// Start with the persisted transaction record as final transaction.
@@ -534,13 +579,11 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
 		if args.PusheeTxn.LastHeartbeat != nil {
-			reply.SetGoError(proto.NewTransactionStatusError(&args.PusheeTxn,
-				"no txn persisted, yet intent has heartbeat"))
-			return
+			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
+				"no txn persisted, yet intent has heartbeat")
 		} else if args.PusheeTxn.Status != proto.PENDING {
-			reply.SetGoError(proto.NewTransactionStatusError(&args.PusheeTxn,
-				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status)))
-			return
+			return reply, proto.NewTransactionStatusError(&args.PusheeTxn,
+				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status))
 		}
 		// The transaction doesn't exist yet on disk; use the supplied version.
 		reply.PusheeTxn = gogoproto.Clone(&args.PusheeTxn).(*proto.Transaction)
@@ -549,14 +592,14 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 	// If already committed or aborted, return success.
 	if reply.PusheeTxn.Status != proto.PENDING {
 		// Trivial noop.
-		return
+		return reply, nil
 	}
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
 	if args.PushType == proto.PUSH_TIMESTAMP && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
-		return
+		return reply, nil
 	}
 
 	// pusherWins bool is true in the event the pusher prevails.
@@ -580,8 +623,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
 	if args.Now.Equal(proto.ZeroTimestamp) {
-		reply.SetGoError(util.Error("the field Now must be provided"))
-		return
+		return reply, util.Error("the field Now must be provided")
 	}
 	// Compute heartbeat expiration (all replicas must see the same result).
 	expiry := args.Now
@@ -617,8 +659,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 		if log.V(1) {
 			log.Info(err)
 		}
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
 
 	// Upgrade priority of pushed transaction to one less than pusher's.
@@ -635,31 +676,36 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 
 	// Persist the pushed transaction using zero timestamp for inline value.
 	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
+	return reply, nil
 }
 
 // InternalResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
-func (r *Range) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
+func (r *Range) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalResolveIntentRequest) (proto.InternalResolveIntentResponse, error) {
+	var reply proto.InternalResolveIntentResponse
+
 	if args.Txn == nil {
-		reply.SetGoError(util.Errorf("no transaction specified to InternalResolveIntent"))
-		return
+		return reply, util.Errorf("no transaction specified to InternalResolveIntent")
 	}
-	reply.SetGoError(engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn))
+	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn); err != nil {
+		return reply, err
+	}
+	return reply, nil
 }
 
 // InternalResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
 func (r *Range) InternalResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
-	args *proto.InternalResolveIntentRangeRequest, reply *proto.InternalResolveIntentRangeResponse) {
+	args *proto.InternalResolveIntentRangeRequest) (proto.InternalResolveIntentRangeResponse, error) {
+	var reply proto.InternalResolveIntentRangeResponse
+
 	if args.Txn == nil {
-		reply.SetGoError(util.Errorf("no transaction specified to InternalResolveIntentRange"))
-		return
+		return reply, util.Errorf("no transaction specified to InternalResolveIntentRange")
 	}
 	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, args.Txn)
-	reply.SetGoError(err)
+	return reply, err
 }
 
 // InternalMerge is used to merge a value into an existing key. Merge is an
@@ -667,37 +713,33 @@ func (r *Range) InternalResolveIntentRange(batch engine.Engine, ms *engine.MVCCS
 // Cockroach for the efficient accumulation of certain values. Due to the
 // difficulty of making these operations transactional, merges are not currently
 // exposed directly to clients. Merged values are explicitly not MVCC data.
-func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) {
-	err := engine.MVCCMerge(batch, ms, args.Key, args.Value)
-	reply.SetGoError(err)
+func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalMergeRequest) (proto.InternalMergeResponse, error) {
+	var reply proto.InternalMergeResponse
+
+	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
 }
 
 // InternalTruncateLog discards a prefix of the raft log.
-func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) {
+func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalTruncateLogRequest) (proto.InternalTruncateLogResponse, error) {
+	var reply proto.InternalTruncateLogResponse
+
 	// args.Index is the first index to keep.
 	term, err := r.Term(args.Index - 1)
 	if err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
 	start := keys.RaftLogKey(r.Desc().RaftID, 0)
 	end := keys.RaftLogKey(r.Desc().RaftID, args.Index)
-	err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
-		func(kv proto.RawKeyValue) (bool, error) {
-			err := batch.Clear(kv.Key)
-			return false, err
-		})
-	if err != nil {
-		reply.SetGoError(err)
-		return
+	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
+		return false, batch.Clear(kv.Key)
+	}); err != nil {
+		return reply, err
 	}
 	ts := proto.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	err = engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, nil, &ts)
-	reply.SetGoError(err)
+	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &ts)
 }
 
 // InternalLeaderLease sets the leader lease for this range. The command fails
@@ -709,7 +751,9 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
-func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
+func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalLeaderLeaseRequest) (proto.InternalLeaderLeaseResponse, error) {
+	var reply proto.InternalLeaderLeaseResponse
+
 	r.Lock()
 	defer r.Unlock()
 
@@ -725,8 +769,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 	// Verify details of new lease request. The start of this lease must
 	// obviously precede its expiration.
 	if !args.Lease.Start.Less(args.Lease.Expiration) {
-		reply.SetGoError(rErr)
-		return
+		return reply, rErr
 	}
 
 	// Wind the start timestamp back as far to the previous lease's expiration
@@ -753,22 +796,19 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
-			reply.SetGoError(rErr)
-			return
+			return reply, rErr
 		}
 		// Note that the lease expiration can be shortened by the holder.
 		// This could be used to effect a faster lease handoff.
 	} else if effectiveStart.Less(prevLease.Expiration) {
-		reply.SetGoError(rErr)
-		return
+		return reply, rErr
 	}
 
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
 	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
-		reply.SetGoError(err)
-		return
+		return reply, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
 
@@ -786,6 +826,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 	r.maybeGossipConfigsLocked(func(configPrefix proto.Key) bool {
 		return r.ContainsKey(configPrefix)
 	})
+	return reply, nil
 }
 
 // AdminSplit divides the range into into two ranges, using either
