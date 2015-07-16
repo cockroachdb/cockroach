@@ -79,7 +79,6 @@ type Client struct {
 	Closed    chan struct{}
 	conn      atomic.Value // holds a `internalConn`
 	healthy   atomic.Value // holds a `chan struct{}` exposed in `Healthy`
-	isClosed  bool
 	tlsConfig *tls.Config
 
 	clock        *hlc.Clock
@@ -182,13 +181,13 @@ func (c *Client) Close() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 
-	if c.isClosed {
+	select {
+	case <-c.Closed:
 		return
+	default:
+		delete(clients, c.addr)
+		close(c.Closed)
 	}
-
-	c.isClosed = true
-	delete(clients, c.addr)
-	close(c.Closed)
 }
 
 // runHeartbeat sends periodic heartbeats to client, marking the client healthy
