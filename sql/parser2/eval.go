@@ -32,8 +32,10 @@ import (
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
-	IsNull() bool
-	ToBool() (Datum, error)
+	// Bool returns the Datum as a bool or an error if the Datum cannot be
+	// converted to a bool.
+	Bool() (dbool, error)
+	Type() string
 	String() string
 }
 
@@ -45,12 +47,12 @@ var _ Datum = dnull{}
 
 type dbool bool
 
-func (d dbool) IsNull() bool {
-	return false
+func (d dbool) Bool() (dbool, error) {
+	return d, nil
 }
 
-func (d dbool) ToBool() (Datum, error) {
-	return d, nil
+func (d dbool) Type() string {
+	return "bool"
 }
 
 func (d dbool) String() string {
@@ -62,12 +64,14 @@ func (d dbool) String() string {
 
 type dint int64
 
-func (d dint) IsNull() bool {
-	return false
+// TODO(pmattis): Do we want to allow implicit conversions of int to bool?  See
+// #1626.
+func (d dint) Bool() (dbool, error) {
+	return dbool(d != 0), nil
 }
 
-func (d dint) ToBool() (Datum, error) {
-	return dbool(d != 0), nil
+func (d dint) Type() string {
+	return "int"
 }
 
 func (d dint) String() string {
@@ -76,12 +80,14 @@ func (d dint) String() string {
 
 type dfloat float64
 
-func (d dfloat) IsNull() bool {
-	return false
+// TODO(pmattis): Do we want to allow implicit conversions of float to bool?
+// See #1626.
+func (d dfloat) Bool() (dbool, error) {
+	return dbool(d != 0), nil
 }
 
-func (d dfloat) ToBool() (Datum, error) {
-	return dbool(d != 0), nil
+func (d dfloat) Type() string {
+	return "float"
 }
 
 func (d dfloat) String() string {
@@ -90,12 +96,12 @@ func (d dfloat) String() string {
 
 type dstring string
 
-func (d dstring) IsNull() bool {
-	return false
+func (d dstring) Bool() (dbool, error) {
+	return false, fmt.Errorf("cannot convert string to bool")
 }
 
-func (d dstring) ToBool() (Datum, error) {
-	return null, fmt.Errorf("cannot convert string to bool")
+func (d dstring) Type() string {
+	return "string"
 }
 
 func (d dstring) String() string {
@@ -104,12 +110,12 @@ func (d dstring) String() string {
 
 type dnull struct{}
 
-func (d dnull) IsNull() bool {
-	return true
+func (d dnull) Bool() (dbool, error) {
+	return false, fmt.Errorf("cannot convert NULL to bool")
 }
 
-func (d dnull) ToBool() (Datum, error) {
-	return d, fmt.Errorf("cannot convert NULL to bool")
+func (d dnull) Type() string {
+	return "NULL"
 }
 
 func (d dnull) String() string {
@@ -419,25 +425,25 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-	if left.IsNull() {
+	if left == null {
 		return null, nil
 	}
-	if v, err := left.ToBool(); err != nil {
+	if v, err := left.Bool(); err != nil {
 		return null, err
-	} else if !v.(dbool) {
-		return dbool(false), nil
+	} else if !v {
+		return v, nil
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
 		return null, err
 	}
-	if right.IsNull() {
+	if right == null {
 		return null, nil
 	}
-	if v, err := right.ToBool(); err != nil {
+	if v, err := right.Bool(); err != nil {
 		return null, err
-	} else if !v.(dbool) {
-		return dbool(false), nil
+	} else if !v {
+		return v, nil
 	}
 	return dbool(true), nil
 }
@@ -447,26 +453,26 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-	if !left.IsNull() {
-		if v, err := left.ToBool(); err != nil {
+	if left != null {
+		if v, err := left.Bool(); err != nil {
 			return null, err
-		} else if v.(dbool) {
-			return dbool(true), nil
+		} else if v {
+			return v, nil
 		}
 	}
 	right, err := EvalExpr(expr.Right, env)
 	if err != nil {
 		return null, err
 	}
-	if right.IsNull() {
+	if right == null {
 		return null, nil
 	}
-	if v, err := right.ToBool(); err != nil {
+	if v, err := right.Bool(); err != nil {
 		return null, err
-	} else if v.(dbool) {
-		return dbool(true), nil
+	} else if v {
+		return v, nil
 	}
-	if left.IsNull() {
+	if left == null {
 		return null, nil
 	}
 	return dbool(false), nil
@@ -477,14 +483,14 @@ func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-	if d.IsNull() {
+	if d == null {
 		return null, nil
 	}
-	v, err := d.ToBool()
+	v, err := d.Bool()
 	if err != nil {
 		return null, err
 	}
-	return !v.(dbool), nil
+	return !v, nil
 }
 
 func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
@@ -505,11 +511,11 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 		return null, err
 	}
 	if expr.Not {
-		v, err := d.ToBool()
+		v, err := d.Bool()
 		if err != nil {
 			return null, err
 		}
-		return !v.(dbool), nil
+		return !v, nil
 	}
 	return d, nil
 }
@@ -519,7 +525,7 @@ func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 	if err != nil {
 		return null, err
 	}
-	v := d.IsNull()
+	v := d == null
 	if expr.Not {
 		v = !v
 	}
@@ -536,7 +542,7 @@ func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 		return null, err
 	}
 
-	if left.IsNull() || right.IsNull() {
+	if left == null || right == null {
 		return null, nil
 	}
 
@@ -571,8 +577,8 @@ func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", expr.Operator)
 	}
 
-	return null, fmt.Errorf("unsupported comparison operator: <%T> %s <%T>",
-		left, expr.Operator, right)
+	return null, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+		left.Type(), expr.Operator, right.Type())
 }
 
 func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
@@ -588,8 +594,8 @@ func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
 	if f != nil {
 		return f(left, right)
 	}
-	return null, fmt.Errorf("unsupported binary operator: <%T> %s <%T>",
-		left, expr.Operator, right)
+	return null, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
+		left.Type(), expr.Operator, right.Type())
 }
 
 func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
@@ -601,7 +607,8 @@ func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
 	if f != nil {
 		return f(d)
 	}
-	return null, fmt.Errorf("unsupported unary operator: %s <%T>", expr.Operator, d)
+	return null, fmt.Errorf("unsupported unary operator: %s <%s>",
+		expr.Operator, d.Type())
 }
 
 func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
@@ -620,9 +627,9 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 		if err != nil {
 			return null, err
 		}
-		if v, err := d.ToBool(); err != nil {
+		if v, err := d.Bool(); err != nil {
 			return null, err
-		} else if v.(dbool) {
+		} else if v {
 			return EvalExpr(when.Val, env)
 		}
 	}
