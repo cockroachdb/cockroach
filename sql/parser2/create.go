@@ -63,7 +63,7 @@ func (node TableDefs) String() string {
 	var prefix string
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()

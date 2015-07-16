@@ -35,7 +35,7 @@ func (node Values) String() string {
 	prefix := "VALUES "
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()

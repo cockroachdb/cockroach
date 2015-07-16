@@ -64,7 +64,7 @@ const (
 )
 
 func (node *Select) String() string {
-	return fmt.Sprintf("SELECT%s%v%v%v%v%v%v%v%s",
+	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s%s%s",
 		node.Distinct, node.Exprs,
 		node.From, node.Where,
 		node.GroupBy, node.Having, node.OrderBy,
@@ -78,7 +78,7 @@ func (node SelectExprs) String() string {
 	prefix := " "
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
@@ -114,7 +114,7 @@ type NonStarExpr struct {
 
 func (node *NonStarExpr) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v", node.Expr)
+	fmt.Fprintf(&buf, "%s", node.Expr)
 	if node.As != "" {
 		fmt.Fprintf(&buf, " AS %s", node.As)
 	}
@@ -133,7 +133,7 @@ func (node TableExprs) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(" FROM ")
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
@@ -157,7 +157,7 @@ type AliasedTableExpr struct {
 
 func (node *AliasedTableExpr) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v", node.Expr)
+	fmt.Fprintf(&buf, "%s", node.Expr)
 	if node.As != "" {
 		fmt.Fprintf(&buf, " AS %s", node.As)
 	}
@@ -178,7 +178,7 @@ type ParenTableExpr struct {
 }
 
 func (node *ParenTableExpr) String() string {
-	return fmt.Sprintf("(%v)", node.Expr)
+	return fmt.Sprintf("(%s)", node.Expr)
 }
 
 // JoinTableExpr represents a TableExpr that's a JOIN operation.
@@ -202,9 +202,9 @@ const (
 
 func (node *JoinTableExpr) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v %s %v", node.Left, node.Join, node.Right)
+	fmt.Fprintf(&buf, "%s %s %s", node.Left, node.Join, node.Right)
 	if node.Cond != nil {
-		fmt.Fprintf(&buf, "%v", node.Cond)
+		fmt.Fprintf(&buf, "%s", node.Cond)
 	}
 	return buf.String()
 }
@@ -223,7 +223,7 @@ type OnJoinCond struct {
 }
 
 func (node *OnJoinCond) String() string {
-	return fmt.Sprintf(" ON %v", node.Expr)
+	return fmt.Sprintf(" ON %s", node.Expr)
 }
 
 // UsingJoinCond represents a USING join condition.
@@ -260,7 +260,7 @@ func (node *Where) String() string {
 	if node == nil {
 		return ""
 	}
-	return fmt.Sprintf(" %s %v", node.Type, node.Expr)
+	return fmt.Sprintf(" %s %s", node.Type, node.Expr)
 }
 
 // GroupBy represents a GROUP BY clause.
@@ -270,7 +270,7 @@ func (node GroupBy) String() string {
 	prefix := " GROUP BY "
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
@@ -283,7 +283,7 @@ func (node OrderBy) String() string {
 	prefix := " ORDER BY "
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
@@ -302,7 +302,7 @@ const (
 )
 
 func (node *Order) String() string {
-	return fmt.Sprintf("%v%s", node.Expr, node.Direction)
+	return fmt.Sprintf("%s%s", node.Expr, node.Direction)
 }
 
 // Limit represents a LIMIT clause.
@@ -316,10 +316,10 @@ func (node *Limit) String() string {
 	}
 	var buf bytes.Buffer
 	if node.Count != nil {
-		fmt.Fprintf(&buf, " LIMIT %v", node.Count)
+		fmt.Fprintf(&buf, " LIMIT %s", node.Count)
 	}
 	if node.Offset != nil {
-		fmt.Fprintf(&buf, " OFFSET %v", node.Offset)
+		fmt.Fprintf(&buf, " OFFSET %s", node.Offset)
 	}
 	return buf.String()
 }

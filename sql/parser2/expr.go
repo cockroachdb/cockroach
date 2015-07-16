@@ -56,7 +56,7 @@ type AndExpr struct {
 }
 
 func (node *AndExpr) String() string {
-	return fmt.Sprintf("%v AND %v", node.Left, node.Right)
+	return fmt.Sprintf("%s AND %s", node.Left, node.Right)
 }
 
 // OrExpr represents an OR expression.
@@ -65,7 +65,7 @@ type OrExpr struct {
 }
 
 func (node *OrExpr) String() string {
-	return fmt.Sprintf("%v OR %v", node.Left, node.Right)
+	return fmt.Sprintf("%s OR %s", node.Left, node.Right)
 }
 
 // NotExpr represents a NOT expression.
@@ -74,7 +74,7 @@ type NotExpr struct {
 }
 
 func (node *NotExpr) String() string {
-	return fmt.Sprintf("NOT %v", node.Expr)
+	return fmt.Sprintf("NOT %s", node.Expr)
 }
 
 // ParenExpr represents a parenthesized expression.
@@ -83,7 +83,7 @@ type ParenExpr struct {
 }
 
 func (node *ParenExpr) String() string {
-	return fmt.Sprintf("(%v)", node.Expr)
+	return fmt.Sprintf("(%s)", node.Expr)
 }
 
 // ComparisonOp represents a binary operator.
@@ -130,7 +130,7 @@ type ComparisonExpr struct {
 }
 
 func (node *ComparisonExpr) String() string {
-	return fmt.Sprintf("%v %s %v", node.Left, node.Operator, node.Right)
+	return fmt.Sprintf("%s %s %s", node.Left, node.Operator, node.Right)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -148,9 +148,9 @@ const (
 
 func (node *RangeCond) String() string {
 	if node.Not {
-		return fmt.Sprintf("%v NOT BETWEEN %v AND %v", node.Left, node.From, node.To)
+		return fmt.Sprintf("%s NOT BETWEEN %s AND %s", node.Left, node.From, node.To)
 	}
-	return fmt.Sprintf("%v BETWEEN %v AND %v", node.Left, node.From, node.To)
+	return fmt.Sprintf("%s BETWEEN %s AND %s", node.Left, node.From, node.To)
 }
 
 // NullCheck represents an IS NULL or an IS NOT NULL expression.
@@ -161,9 +161,9 @@ type NullCheck struct {
 
 func (node *NullCheck) String() string {
 	if node.Not {
-		return fmt.Sprintf("%v IS NOT NULL", node.Expr)
+		return fmt.Sprintf("%s IS NOT NULL", node.Expr)
 	}
-	return fmt.Sprintf("%v IS NULL", node.Expr)
+	return fmt.Sprintf("%s IS NULL", node.Expr)
 }
 
 // ExistsExpr represents an EXISTS expression.
@@ -172,7 +172,7 @@ type ExistsExpr struct {
 }
 
 func (node *ExistsExpr) String() string {
-	return fmt.Sprintf("EXISTS %v", node.Subquery)
+	return fmt.Sprintf("EXISTS %s", node.Subquery)
 }
 
 // StrVal represents a string value.
@@ -255,7 +255,7 @@ func (n QualifiedName) String() string {
 type Tuple Exprs
 
 func (node Tuple) String() string {
-	return fmt.Sprintf("(%v)", Exprs(node))
+	return fmt.Sprintf("(%s)", Exprs(node))
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
@@ -266,7 +266,7 @@ func (node Exprs) String() string {
 	var prefix string
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
@@ -278,7 +278,7 @@ type Subquery struct {
 }
 
 func (node *Subquery) String() string {
-	return fmt.Sprintf("(%v)", node.Select)
+	return fmt.Sprintf("(%s)", node.Select)
 }
 
 // BinaryOp represents a binary operator.
@@ -325,7 +325,7 @@ type BinaryExpr struct {
 }
 
 func (node *BinaryExpr) String() string {
-	return fmt.Sprintf("%v%s%v", node.Left, node.Operator, node.Right)
+	return fmt.Sprintf("%s%s%s", node.Left, node.Operator, node.Right)
 }
 
 // UnaryOp represents a unary operator.
@@ -358,7 +358,7 @@ type UnaryExpr struct {
 }
 
 func (node *UnaryExpr) String() string {
-	return fmt.Sprintf("%s%v", node.Operator, node.Expr)
+	return fmt.Sprintf("%s%s", node.Operator, node.Expr)
 }
 
 // FuncExpr represents a function call.
@@ -373,7 +373,7 @@ func (node *FuncExpr) String() string {
 	if node.Distinct {
 		distinct = "DISTINCT "
 	}
-	return fmt.Sprintf("%s(%s%v)", node.Name, distinct, node.Exprs)
+	return fmt.Sprintf("%s(%s%s)", node.Name, distinct, node.Exprs)
 }
 
 // CaseExpr represents a CASE expression.
@@ -387,13 +387,13 @@ func (node *CaseExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CASE ")
 	if node.Expr != nil {
-		fmt.Fprintf(&buf, "%v ", node.Expr)
+		fmt.Fprintf(&buf, "%s ", node.Expr)
 	}
 	for _, when := range node.Whens {
-		fmt.Fprintf(&buf, "%v ", when)
+		fmt.Fprintf(&buf, "%s ", when)
 	}
 	if node.Else != nil {
-		fmt.Fprintf(&buf, "ELSE %v ", node.Else)
+		fmt.Fprintf(&buf, "ELSE %s ", node.Else)
 	}
 	fmt.Fprintf(&buf, "END")
 	return buf.String()
@@ -406,5 +406,5 @@ type When struct {
 }
 
 func (node *When) String() string {
-	return fmt.Sprintf("WHEN %v THEN %v", node.Cond, node.Val)
+	return fmt.Sprintf("WHEN %s THEN %s", node.Cond, node.Val)
 }
