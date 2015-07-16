@@ -20,6 +20,7 @@ ORG_ROOT     := $(REPO_ROOT)/..
 GITHUB_ROOT  := $(ORG_ROOT)/..
 NODE_MODULES := node_modules
 TS_ROOT      := ts
+CSS_ROOT     := css
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -43,12 +44,17 @@ all: $(GOBINDATA_TARGET)
 debug: $(GOBINDATA_DEBUG_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
-$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT))
-	@# This runs in under half a second, so a new target is unneeded.
+npm.installed: npm-shrinkwrap.json
 	npm install
+	touch $@
+
+$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) npm.installed
 	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
 	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(addprefix -f , $(shell find $(TS_ROOT) -name *.ts -not -path *typings*))
 
+css/%.css: styl/%.styl npm.installed
+	$(NODE_MODULES)/.bin/stylus $< --out css
+	
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^
 	gofmt -s -w $@
