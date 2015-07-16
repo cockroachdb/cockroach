@@ -510,8 +510,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
 // command queue.
-func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
-	args := call.Args
+func (r *Range) AddCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
@@ -531,19 +530,7 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 		panic(fmt.Sprintf("don't know how to handle command %T", args))
 	}
 
-	if reply != nil {
-		gogoproto.Merge(call.Reply, reply)
-	}
-
-	if err != nil {
-		replyHeader := call.Reply.Header()
-		if replyHeader.Error != nil {
-			panic("the world is on fire")
-		}
-		replyHeader.SetGoError(err)
-	}
-
-	return err
+	return reply, err
 }
 
 func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
