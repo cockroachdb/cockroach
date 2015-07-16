@@ -149,13 +149,17 @@ func usesTimestampCache(r proto.Request) bool {
 	return tsCacheMethods[m]
 }
 
-// A pendingCmd holds the reply buffer and a done channel for a command
-// sent to Raft. Once committed to the Raft log, the command is
-// executed and the result returned via the done channel.
+type responseWithErr struct {
+	reply proto.Response
+	err   error
+}
+
+// A pendingCmd holds a done channel for a command sent to Raft. Once
+// committed to the Raft log, the command is executed and the result returned
+// via the done channel.
 type pendingCmd struct {
-	Reply proto.Response
-	ctx   context.Context
-	done  chan error // Used to signal waiting RPC handler
+	ctx  context.Context
+	done chan responseWithErr // Used to signal waiting RPC handler
 }
 
 // A rangeManager is an interface satisfied by Store through which ranges
@@ -354,11 +358,11 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// checks from normal request machinery, (e.g. the command queue).
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
-	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args, &proto.InternalLeaderLeaseResponse{})
+	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = <-pendingCmd.done
+		err = (<-pendingCmd.done).err
 	}
 	return err
 }
@@ -521,7 +525,7 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 		defer trace.Epoch("read path")()
 		reply, err = r.addReadOnlyCmd(ctx, args)
 	} else if proto.IsWrite(args) {
-		return r.addWriteCmd(ctx, args, call.Reply, nil)
+		reply, err = r.addWriteCmd(ctx, args, nil)
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %T", args))
 	}
@@ -531,10 +535,14 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 	}
 
 	if err != nil {
-		if call.Reply.Header().Error != nil {
-			panic("the world is on fire")
+		replyHeader := call.Reply.Header()
+		// Ideally we wouldn't allow any error to be set here, but in the
+		// `addWriteCmd` case these replies go through the raft machinery
+		// which hasn't been audited yet.
+		if replyHeader.Error != nil && replyHeader.Error.Error() != replyHeader.GoError().Error() {
+			panic(fmt.Sprintf("cannot set error to %s, already set to %s", err, replyHeader.GoError()))
 		}
-		call.Reply.Header().SetGoError(err)
+		replyHeader.SetGoError(err)
 	}
 
 	return err
@@ -667,7 +675,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto.R
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wg *sync.WaitGroup) error {
+func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.WaitGroup) (proto.Response, error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -682,8 +690,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	header := args.Header()
 
 	if err := r.checkCmdHeader(args.Header()); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	trace := tracer.FromCtx(ctx)
@@ -700,8 +707,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// This replica must have leader lease to process a write.
 	if err := r.redirectOnOrAcquireLeaderLease(trace, header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// Two important invariants of Cockroach: 1) encountering a more
@@ -737,15 +743,17 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 
 	defer trace.Epoch("raft")()
 
-	errChan, pendingCmd := r.proposeRaftCommand(ctx, args, reply)
+	errChan, pendingCmd := r.proposeRaftCommand(ctx, args)
 
 	signal()
 
 	// First wait for raft to commit or abort the command.
 	var err error
+	var reply proto.Response
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = <-pendingCmd.done
+		respWithErr := <-pendingCmd.done
+		reply, err = respWithErr.reply, respWithErr.err
 	} else if err == multiraft.ErrGroupDeleted {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
@@ -755,18 +763,17 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// of this write on success. This ensures a strictly higher
 	// timestamp for successive writes to the same key or key range.
 	r.endCmd(cmdKey, args, err, false /* !readOnly */)
-	return err
+	return reply, err
 }
 
 // proposeRaftCommand prepares necessary pending command struct and
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request, reply proto.Response) (<-chan error, *pendingCmd) {
+func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
-		ctx:   ctx,
-		Reply: reply,
-		done:  make(chan error, 1),
+		ctx:  ctx,
+		done: make(chan responseWithErr, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
 		RaftID:       r.Desc().RaftID,
@@ -804,15 +811,14 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	var reply proto.Response
 	var ctx context.Context
 	if cmd != nil {
-		// We initiated this command, so use the caller-supplied reply.
-		reply = cmd.Reply
+		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
 	} else {
-		// This command originated elsewhere so we must create a new reply buffer.
-		reply = args.CreateReply()
 		// TODO(tschottdorf): consider the Trace situation here.
 		ctx = r.context()
 	}
+
+	reply = args.CreateReply()
 
 	execDone := tracer.FromCtx(ctx).Epoch(fmt.Sprintf("applying %s", args.Method()))
 	// applyRaftCommand will return "expected" errors, but may also indicate
@@ -824,7 +830,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	execDone()
 
 	if cmd != nil {
-		cmd.done <- err
+		cmd.done <- responseWithErr{reply, err}
 	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
 	}

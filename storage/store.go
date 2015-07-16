@@ -1412,13 +1412,11 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				Txn:       pushReply.PusheeTxn,
 			},
 		}
-		resolveReply := &proto.InternalResolveIntentResponse{}
 
 		wg.Add(1)
 		ctx := tracer.ToCtx(ctx, trace.Fork())
 		if !s.stopper.RunAsyncTask(func() {
-			resolveErr := rng.addWriteCmd(ctx, resolveArgs, resolveReply, &wg)
-			if resolveErr != nil && log.V(1) {
+			if _, resolveErr := rng.addWriteCmd(ctx, resolveArgs, &wg); resolveErr != nil && log.V(1) {
 				log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
 			}
 		}) {

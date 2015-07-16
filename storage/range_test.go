@@ -282,12 +282,11 @@ func TestRangeContains(t *testing.T) {
 
 func setLeaderLease(t *testing.T, r *Range, l *proto.Lease) {
 	args := &proto.InternalLeaderLeaseRequest{Lease: *l}
-	reply := &proto.InternalLeaderLeaseResponse{}
-	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args, reply)
+	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = <-pendingCmd.done
+		err = (<-pendingCmd.done).err
 	}
 	if err != nil {
 		t.Errorf("failed to set lease: %s", err)
@@ -360,7 +359,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pArgs, pReply := putArgs(proto.Key("a"), []byte("asd"),
+	pArgs, _ := putArgs(proto.Key("a"), []byte("asd"),
 		tc.rng.Desc().RaftID, tc.store.StoreID())
 	pArgs.Timestamp = tc.clock.Now()
 
@@ -374,17 +373,14 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	})
 
 	// Submit a proposal to Raft.
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), pArgs, pReply)
+	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), pArgs)
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
-	if err := <-pendingCmd.done; err == nil {
+	if err := (<-pendingCmd.done).err; err == nil {
 		t.Fatalf("expected an error")
 	} else if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Fatalf("expected not leader error in return, got %s", err)
-	}
-	if _, ok := pReply.GoError().(*proto.NotLeaderError); !ok {
-		t.Errorf("expected not leader error in reply header; got %s", pReply.GoError())
 	}
 }
 
