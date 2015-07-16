@@ -125,6 +125,8 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 END`, `NULL`, nil},
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`, nil},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
+		{`CASE 1+1 WHEN 1 THEN 1 WHEN 2 THEN 2 END`, `2`, nil},
+		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 'doh' END`, `doh`, nil},
 		// Row (tuple) comparisons.
 		{`ROW(1) = ROW(1)`, `true`, nil},
 		{`ROW(1, true) = (1, NOT false)`, `true`, nil},
@@ -137,7 +139,7 @@ func TestEvalExpr(t *testing.T) {
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
+			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		r, err := EvalExpr(expr, d.env)
@@ -145,7 +147,7 @@ func TestEvalExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := r.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s: %s", d.expr, d.expected, s, d.expr)
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
 }
@@ -167,7 +169,7 @@ func TestEvalExprError(t *testing.T) {
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
+			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		if _, err := EvalExpr(expr, mapEnv{}); !testutils.IsError(err, d.expected) {

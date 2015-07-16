@@ -542,30 +542,44 @@ func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 }
 
 func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
-	// TODO(pmattis): This could be more efficient or done ahead of time.
-	d, err := EvalExpr(&AndExpr{
-		Left: &ComparisonExpr{
-			Operator: GE,
-			Left:     expr.Left,
-			Right:    expr.From,
-		},
-		Right: &ComparisonExpr{
-			Operator: LE,
-			Left:     expr.Left,
-			Right:    expr.To,
-		},
-	}, nil)
+	// A range such as "left BETWEEN from AND to" is equivalent to "left >= from
+	// AND left <= to". The only tricky part is that we evaluate "left" only
+	// once.
+
+	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
 	}
-	if expr.Not {
-		v, err := d.Bool()
+
+	limits := [2]struct {
+		op   ComparisonOp
+		expr Expr
+	}{
+		{GE, expr.From},
+		{LE, expr.To},
+	}
+
+	var v dbool
+	for _, l := range limits {
+		arg, err := EvalExpr(l.expr, env)
 		if err != nil {
 			return null, err
 		}
+		cmp, err := evalComparisonOp(l.op, left, arg)
+		if err != nil {
+			return null, err
+		}
+		if v, err = cmp.Bool(); err != nil {
+			return null, err
+		} else if !v {
+			break
+		}
+	}
+
+	if expr.Not {
 		return !v, nil
 	}
-	return d, nil
+	return v, nil
 }
 
 func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
@@ -668,20 +682,41 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 
 func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 	if expr.Expr != nil {
-		// TODO(pmattis): These are expressions of the form `CASE <val> WHEN <val>
-		// THEN ...`.
-		return null, fmt.Errorf("TODO(pmattis): unsupported simple case expression: %T", expr)
-	}
-
-	for _, when := range expr.Whens {
-		d, err := EvalExpr(when.Cond, env)
+		// CASE <val> WHEN <expr> THEN ...
+		//
+		// For each "when" expression we compare for equality to <val>.
+		val, err := EvalExpr(expr.Expr, env)
 		if err != nil {
 			return null, err
 		}
-		if v, err := d.Bool(); err != nil {
-			return null, err
-		} else if v {
-			return EvalExpr(when.Val, env)
+
+		for _, when := range expr.Whens {
+			arg, err := EvalExpr(when.Cond, env)
+			if err != nil {
+				return null, err
+			}
+			d, err := evalComparisonOp(EQ, val, arg)
+			if err != nil {
+				return null, err
+			}
+			if v, err := d.Bool(); err != nil {
+				return null, err
+			} else if v {
+				return EvalExpr(when.Val, env)
+			}
+		}
+	} else {
+		// CASE WHEN <bool-expr> THEN ...
+		for _, when := range expr.Whens {
+			d, err := EvalExpr(when.Cond, env)
+			if err != nil {
+				return null, err
+			}
+			if v, err := d.Bool(); err != nil {
+				return null, err
+			} else if v {
+				return EvalExpr(when.Val, env)
+			}
 		}
 	}
 
