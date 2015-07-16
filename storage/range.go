@@ -507,29 +507,37 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue.
 func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
-	args, cReply := call.Args, call.Reply
+	args := call.Args
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and read-write.
+	var reply proto.Response
+	var err error
 	if proto.IsAdmin(args) {
 		defer trace.Epoch("admin path")()
-		return r.addAdminCmd(ctx, args, cReply)
+		reply, err = r.addAdminCmd(ctx, args)
 	} else if proto.IsReadOnly(args) {
 		defer trace.Epoch("read path")()
-		reply, err := r.addReadOnlyCmd(ctx, args)
-		if reply != nil {
-			gogoproto.Merge(cReply, reply)
-		}
-		if err != nil {
-			if cReply.Header().Error != nil {
-				panic("the world is on fire")
-			}
-			cReply.Header().SetGoError(err)
-		}
-		return err
+		reply, err = r.addReadOnlyCmd(ctx, args)
+	} else if proto.IsWrite(args) {
+		return r.addWriteCmd(ctx, args, call.Reply, nil)
+	} else {
+		panic(fmt.Sprintf("don't know how to handle command %T", args))
 	}
-	return r.addWriteCmd(ctx, args, cReply, nil)
+
+	if reply != nil {
+		gogoproto.Merge(call.Reply, reply)
+	}
+
+	if err != nil {
+		if call.Reply.Header().Error != nil {
+			panic("the world is on fire")
+		}
+		call.Reply.Header().SetGoError(err)
+	}
+
+	return err
 }
 
 func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
@@ -577,29 +585,28 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
+func (r *Range) addAdminCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// Admin commands always require the leader lease.
 	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
-	switch args.(type) {
+	switch tArgs := args.(type) {
 	case *proto.AdminSplitRequest:
-		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
+		resp, err := r.AdminSplit(tArgs)
+		return &resp, err
 	case *proto.AdminMergeRequest:
-		r.AdminMerge(args.(*proto.AdminMergeRequest), reply.(*proto.AdminMergeResponse))
+		resp, err := r.AdminMerge(tArgs)
+		return &resp, err
 	default:
-		return util.Error("unrecognized admin command")
+		return nil, util.Error("unrecognized admin command")
 	}
-	return reply.Header().GoError()
 }
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
