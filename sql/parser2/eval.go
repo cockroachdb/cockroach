@@ -18,6 +18,7 @@
 package parser2
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"reflect"
@@ -29,6 +30,13 @@ import (
 // - Support tuples (i.e. []Datum) and tuple operations (a IN (b, c, d)).
 //
 // - Support decimal arithmetic.
+//
+// - Allow partial expression evaluation to simplify expressions before being
+//   used in where clauses. Make Datum implement Expr and change EvalExpr to
+//   return an Expr.
+//
+// - Support IN and NOT IN but converting the right-hand-side into a
+//   map[string]struct{}. Add a Key() method to every Datum implementation.
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
@@ -43,6 +51,7 @@ var _ Datum = dbool(false)
 var _ Datum = dint(0)
 var _ Datum = dfloat(0)
 var _ Datum = dstring("")
+var _ Datum = dtuple{}
 var _ Datum = dnull{}
 
 type dbool bool
@@ -108,7 +117,32 @@ func (d dstring) String() string {
 	return string(d)
 }
 
+type dtuple []Datum
+
+func (d dtuple) Bool() (dbool, error) {
+	return false, fmt.Errorf("cannot convert tuple to bool")
+}
+
+func (d dtuple) Type() string {
+	return "tuple"
+}
+
+func (d dtuple) String() string {
+	var buf bytes.Buffer
+	_ = buf.WriteByte('(')
+	for i, v := range d {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		_, _ = buf.WriteString(v.String())
+	}
+	_ = buf.WriteByte(')')
+	return buf.String()
+}
+
 type dnull struct{}
+
+var null = dnull{}
 
 func (d dnull) Bool() (dbool, error) {
 	return false, fmt.Errorf("cannot convert NULL to bool")
@@ -122,13 +156,12 @@ func (d dnull) String() string {
 	return "NULL"
 }
 
-var null = dnull{}
-
 var (
 	boolType   = reflect.TypeOf(dbool(false))
 	intType    = reflect.TypeOf(dint(0))
 	floatType  = reflect.TypeOf(dfloat(0))
 	stringType = reflect.TypeOf(dstring(""))
+	tupleType  = reflect.TypeOf(dtuple{})
 	nullType   = reflect.TypeOf(null)
 )
 
@@ -319,6 +352,13 @@ var cmpOps = map[cmpArgs]func(Datum, Datum) (Datum, error){
 	},
 }
 
+func init() {
+	// This avoids an init-loop if we try to initialize this operation when
+	// cmpOps is declared. The loop is caused by evalTupleEQ using cmpOps
+	// internally.
+	cmpOps[cmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
+}
+
 // Env defines the interface for retrieving column values.
 type Env interface {
 	Get(name string) (Datum, bool)
@@ -395,10 +435,18 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		return null, fmt.Errorf("column \"%s\" not found", t)
 
 	case Tuple:
-		if len(t) != 1 {
-			return null, fmt.Errorf("unsupported expression type: %T: %s", expr, expr)
+		if len(t) == 1 {
+			return EvalExpr(t[0], env)
 		}
-		return EvalExpr(t[0], env)
+		tuple := make(dtuple, 0, len(t))
+		for _, v := range t {
+			d, err := EvalExpr(v, env)
+			if err != nil {
+				return null, err
+			}
+			tuple = append(tuple, d)
+		}
+		return tuple, nil
 
 	case *Subquery:
 		// The subquery should have been executed before expression evaluation and
@@ -542,12 +590,15 @@ func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 		return null, err
 	}
 
+	return evalComparisonOp(expr.Operator, left, right)
+}
+
+func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	if left == null || right == null {
 		return null, nil
 	}
 
 	not := false
-	op := expr.Operator
 	switch op {
 	case NE:
 		// NE(left, right) is implemented as !EQ(left, right).
@@ -574,11 +625,11 @@ func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
 
 	switch op {
 	case In, NotIn, Like, NotLike:
-		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", expr.Operator)
+		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
 	return null, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-		left.Type(), expr.Operator, right.Type())
+		left.Type(), op, right.Type())
 }
 
 func evalBinaryExpr(expr *BinaryExpr, env Env) (Datum, error) {
@@ -617,8 +668,8 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 
 func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 	if expr.Expr != nil {
-		// These are expressions of the form `CASE <val> WHEN <val> THEN ...`. The
-		// parser doesn't properly support them yet.
+		// TODO(pmattis): These are expressions of the form `CASE <val> WHEN <val>
+		// THEN ...`.
 		return null, fmt.Errorf("TODO(pmattis): unsupported simple case expression: %T", expr)
 	}
 
@@ -638,4 +689,24 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 		return EvalExpr(expr.Else, env)
 	}
 	return null, nil
+}
+
+func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
+	left := ldatum.(dtuple)
+	right := rdatum.(dtuple)
+	if len(left) != len(right) {
+		return dbool(false), nil
+	}
+	for i := range left {
+		d, err := evalComparisonOp(EQ, left[i], right[i])
+		if err != nil {
+			return null, err
+		}
+		if v, err := d.Bool(); err != nil {
+			return null, err
+		} else if !v {
+			return v, nil
+		}
+	}
+	return dbool(true), nil
 }

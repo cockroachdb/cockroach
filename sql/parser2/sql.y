@@ -213,7 +213,8 @@ import "strings"
 %type <empty> exclusion_constraint_list exclusion_constraint_elem
 %type <empty> func_arg_list
 %type <empty> func_arg_expr
-%type <empty> row explicit_row implicit_row type_list array_expr_list
+%type <empty> type_list array_expr_list
+%type <exprs> row explicit_row implicit_row
 %type <expr>  case_expr case_arg case_default
 %type <when>  when_clause
 %type <whens> when_clause_list
@@ -2959,8 +2960,14 @@ c_expr:
   }
 | ARRAY select_with_parens {}
 | ARRAY array_expr {}
-| explicit_row {}
-| implicit_row {}
+| explicit_row
+  {
+    $$ = Tuple($1)
+  }
+| implicit_row
+  {
+    $$ = Tuple($1)
+  }
 | GROUPING '(' expr_list ')' {}
 
 func_application:
@@ -3102,16 +3109,34 @@ frame_bound:
 // without conflicting with the parenthesized a_expr production. Without the
 // ROW keyword, there must be more than one a_expr inside the parens.
 row:
-  ROW '(' expr_list ')' {}
-| ROW '(' ')' {}
-| '(' expr_list ',' a_expr ')' {}
+  ROW '(' expr_list ')'
+  {
+    $$ = $3
+  }
+| ROW '(' ')'
+  {
+    $$ = nil
+  }
+| '(' expr_list ',' a_expr ')'
+  {
+    $$ = append($2, $4)
+  }
 
 explicit_row:
-  ROW '(' expr_list ')' {}
-| ROW '(' ')' {}
+  ROW '(' expr_list ')'
+  {
+    $$ = $3
+  }
+| ROW '(' ')'
+  {
+    $$ = nil
+  }
 
 implicit_row:
-  '(' expr_list ',' a_expr ')' {}
+  '(' expr_list ',' a_expr ')'
+  {
+    $$ = append($2, $4)
+  }
 
 sub_type:
   ANY {}
