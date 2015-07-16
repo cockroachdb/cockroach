@@ -92,8 +92,7 @@ func processOneLine(db *sql.DB, line string, w io.Writer) (bool, error) {
 	}
 
 	// Format all rows using tabwriter.
-	tw := new(tabwriter.Writer)
-	tw.Init(w, 0, 8, 0, '\t', 0)
+	tw := tabwriter.NewWriter(w, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
 	strs := make([]string, len(cols))
 	vals := make([]interface{}, len(cols))

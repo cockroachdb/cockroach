@@ -160,8 +160,7 @@ func (t *Trace) Fork() *Trace {
 func (t Trace) String() string {
 	const tab = "\t"
 	buf := bytes.NewBuffer(nil)
-	w := &tabwriter.Writer{}
-	w.Init(buf, 1, 1, 0, ' ', 0)
+	w := tabwriter.NewWriter(buf, 1, 1, 0, ' ', 0)
 	fmt.Fprintln(w, "Name", tab, "Origin", tab, "Ts", tab, "Dur", tab, "Desc", tab, "File")
 
 	const traceTimeFormat = "15:04:05.000000"
