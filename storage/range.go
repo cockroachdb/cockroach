@@ -857,7 +857,10 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	ms := engine.MVCCStats{}
-	batch, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, args, reply, &ms)
+	batch, batchReply, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, args, &ms)
+	if batchReply != nil {
+		gogoproto.Merge(reply, batchReply)
+	}
 	// ALWAYS set the reply header error to the error returned by the
 	// helper. This is the definitive result of the execution. The
 	// error must be set before saving to the response cache.
@@ -900,7 +903,7 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
-	args proto.Request, reply proto.Response, ms *engine.MVCCStats) (engine.Engine, error) {
+	args proto.Request, ms *engine.MVCCStats) (engine.Engine, proto.Response, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
 
@@ -922,31 +925,26 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 		// same ClientCmdID and would get the distributed sender stuck in an
 		// infinite loop, retrieving a stale NotLeaderError over and over
 		// again, even when proposing at the correct replica.
-		return batch, r.newNotLeaderError(lease, originNode)
+		return batch, nil, r.newNotLeaderError(lease, originNode)
 	}
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if cachedReply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
+		if reply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
 			// Any error encountered while fetching the response cache entry means corruption.
-			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
-		} else if cachedReply != nil {
-			// TODO(tamird): this shouldn't be needed
-			gogoproto.Merge(reply, cachedReply)
+			return batch, reply, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
+		} else if reply != nil {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return batch, cachedReply.Header().GoError()
+			return batch, reply, reply.Header().GoError()
 		}
 	}
 
 	// Execute the command.
-	executedReply, intents, rErr := r.executeCmd(batch, ms, args)
-	executedReply.Header().SetGoError(rErr)
-	reply.Reset()
-	gogoproto.Merge(reply, executedReply)
+	reply, intents, rErr := r.executeCmd(batch, ms, args)
 	// Regardless of error, add result to the response cache if this is
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
@@ -963,14 +961,20 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 			batch.Close()
 			batch = r.rm.Engine().NewBatch()
 		}
+		// TODO(tamird): remove this when the response cache can handle these errors itself
+		if reply.Header().Error != nil {
+			panic("the world is on fire")
+		}
+		reply.Header().SetGoError(rErr)
 		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
 			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
+		reply.Header().Error = nil
 	}
 
 	// If the execution of the command wasn't successful, stop here.
 	if rErr != nil {
-		return batch, rErr
+		return batch, reply, rErr
 	}
 
 	// On success and only on the replica on which this command originated,
@@ -979,7 +983,7 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 		r.handleSkippedIntents(args, intents)
 	}
 
-	return batch, nil
+	return batch, reply, nil
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
