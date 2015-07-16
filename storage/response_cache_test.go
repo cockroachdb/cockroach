@@ -49,9 +49,8 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
-	val := proto.IncrementResponse{}
 	// Start with a get for an unseen cmdID.
-	if ok, err := rc.GetResponse(e, cmdID, &val); ok || err != nil {
+	if val, err := rc.GetResponse(e, cmdID); val != nil || err != nil {
 		t.Errorf("expected no response for id %+v; got %+v, %v", cmdID, val, err)
 	}
 	// Put value of 1 for test response.
@@ -59,15 +58,15 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
 	// Get should now return 1.
-	if ok, err := rc.GetResponse(e, cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Errorf("unexpected failure getting response: %t, %v, %+v", ok, err, val)
+	if val, err := rc.GetResponse(e, cmdID); val == nil || err != nil || val.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response: %v, %+v", err, val)
 	}
 	if err := rc.ClearData(e); err != nil {
 		t.Error(err)
 	}
 	// The previously present response should be gone.
-	if ok, err := rc.GetResponse(e, cmdID, &val); ok {
-		t.Errorf("unexpected success getting response: %t, %v, %+v", ok, err, val)
+	if val, err := rc.GetResponse(e, cmdID); val != nil {
+		t.Errorf("unexpected success getting response: %v, %+v", err, val)
 	}
 }
 
@@ -77,14 +76,13 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := proto.ClientCmdID{}
-	val := proto.IncrementResponse{}
 	// Put value of 1 for test response.
 	if err := rc.PutResponse(e, cmdID, &incR); err != nil {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
 	// Get should return !ok.
-	if ok, err := rc.GetResponse(e, cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected success getting response: %v, %v, %+v", ok, err, val)
+	if val, err := rc.GetResponse(e, cmdID); val != nil || err != nil {
+		t.Errorf("unexpected success getting response: %v, %v, %+v", err, val)
 	}
 }
 
@@ -96,7 +94,6 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	val := proto.IncrementResponse{}
 	if err := rc1.PutResponse(e, cmdID, &incR); err != nil {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
@@ -105,11 +102,11 @@ func TestResponseCacheCopyInto(t *testing.T) {
 		t.Errorf("unexpected error while copying response cache: %v", err)
 	}
 	// Get should return 1 for both caches.
-	if ok, err := rc1.GetResponse(e, cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %t, %v, %+v", ok, err, val)
+	if val, err := rc1.GetResponse(e, cmdID); val == nil || err != nil || val.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %v, %+v", err, val)
 	}
-	if ok, err := rc2.GetResponse(e, cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from destination: %t, %v, %+v", ok, err, val)
+	if val, err := rc2.GetResponse(e, cmdID); val == nil || err != nil || val.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from destination: %v, %+v", err, val)
 	}
 }
 
@@ -121,7 +118,6 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	val := proto.IncrementResponse{}
 	if err := rc1.PutResponse(e, cmdID, &incR); err != nil {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
@@ -132,11 +128,11 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	}
 
 	// Get should return 1 for both caches.
-	if ok, err := rc1.GetResponse(e, cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %t, %v, %+v", ok, err, val)
+	if val, err := rc1.GetResponse(e, cmdID); val == nil || err != nil || val.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %v, %+v", err, val)
 	}
-	if ok, err := rc2.GetResponse(e, cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %t, %v, %+v", ok, err, val)
+	if val, err := rc2.GetResponse(e, cmdID); val == nil || err != nil || val.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %v, %+v", err, val)
 	}
 }
 
@@ -146,18 +142,16 @@ func TestResponseCacheInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
-	val := proto.IncrementResponse{}
 	// Add inflight for cmdID.
-	if ok, err := rc.GetResponse(e, cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected response or error: %t, %v", ok, err)
+	if val, err := rc.GetResponse(e, cmdID); val != nil || err != nil {
+		t.Errorf("unexpected response or error: %v", err)
 	}
 	// Make two requests for response from cmdID, which is inflight.
 	doneChans := []chan struct{}{make(chan struct{}), make(chan struct{})}
 	for _, done := range doneChans {
 		doneChan := done
 		go func() {
-			val2 := proto.IncrementResponse{}
-			if ok, err := rc.GetResponse(e, cmdID, &val2); ok || err != nil {
+			if val, err := rc.GetResponse(e, cmdID); val != nil || err != nil {
 				t.Errorf("unexpectedly found value for response cache entry %+v: %s", cmdID, err)
 			}
 			close(doneChan)
@@ -226,15 +220,14 @@ func TestResponseCacheGC(t *testing.T) {
 	}
 	eng.SetGCTimeouts(0, 0) // avoids GC
 	eng.CompactRange(nil, nil)
-	val := proto.IncrementResponse{}
-	if ok, err := rc.GetResponse(eng, cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Fatalf("unexpected response or error: %t, %v, %+v", ok, err, val)
+	if val, err := rc.GetResponse(eng, cmdID); val == nil || err != nil || val.(*proto.IncrementResponse).NewValue != 1 {
+		t.Fatalf("unexpected response or error: %v, %+v", err, val)
 	}
 
 	// Now set minRCacheTS to 1, which will GC.
 	eng.SetGCTimeouts(0, 1)
 	eng.CompactRange(nil, nil)
-	if ok, err := rc.GetResponse(eng, cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected response or error: %t, %v", ok, err)
+	if val, err := rc.GetResponse(eng, cmdID); val != nil || err != nil {
+		t.Errorf("unexpected response or error: %v", err)
 	}
 }
