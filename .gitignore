@@ -40,6 +40,7 @@ _testmain.go
 
 # NPM node modules
 node_modules
+npm.installed
 
 # That file is present in the cockroach-dev Docker container, required to avoid
 # untracked files.
