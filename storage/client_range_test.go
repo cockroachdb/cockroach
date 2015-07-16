@@ -187,7 +187,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+	storage.TestingCommandFilter = func(args proto.Request) error {
 		if _, ok := args.(*proto.GetRequest); ok &&
 			args.Header().Key.Equal(proto.Key(key)) &&
 			args.Header().Txn == nil {
@@ -196,11 +196,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			// succeeds). Returns an error for the fourth get request to avoid timestamp cache
 			// update after the third get operation pushes the txn timestamp.
 			if atomic.AddInt32(&numGets, 1) == 4 {
-				reply.Header().SetGoError(util.Errorf("Test"))
-				return true
+				return util.Errorf("Test")
 			}
 		}
-		return false
+		return nil
 	}
 	defer func() {
 		storage.TestingCommandFilter = nil

@@ -1180,12 +1180,12 @@ func TestRangeCommandQueue(t *testing.T) {
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{}, 1)
 	blockingDone := make(chan struct{}, 1)
-	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+	TestingCommandFilter = func(args proto.Request) error {
 		if args.Header().User == "Foo" {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
-		return false
+		return nil
 	}
 
 	// Test all four combinations of reads & writes waiting.
@@ -1293,12 +1293,12 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	key := proto.Key("key1")
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
+	TestingCommandFilter = func(args proto.Request) error {
 		if args.Header().CmdID.Random == 1 {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
-		return false
+		return nil
 	}
 	cmd1Done := make(chan struct{})
 	go func() {

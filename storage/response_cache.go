@@ -78,10 +78,10 @@ func (rc *ResponseCache) ClearData(e engine.Engine) error {
 // false. If a command is pending already for the cmdID, then this
 // method will block until the the command is completed or the
 // response cache is cleared.
-func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID, reply proto.Response) (bool, error) {
+func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (proto.Response, error) {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
-		return false, nil
+		return nil, nil
 	}
 
 	// Pull response from the cache and read into reply if available.
@@ -89,9 +89,9 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rwResp)
 	if ok && err == nil {
-		gogoproto.Merge(reply, rwResp.GetValue().(gogoproto.Message))
+		return rwResp.GetValue().(proto.Response), nil
 	}
-	return ok, err
+	return nil, err
 }
 
 // CopyInto copies all the cached results from this response cache

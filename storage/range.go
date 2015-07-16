@@ -88,14 +88,13 @@ var (
 )
 
 // TestingCommandFilter may be set in tests to intercept the handling
-// of commands and artificially generate errors. Return true to
-// terminate processing with the filled-in response, or false to
-// continue with regular processing. Note that in a multi-replica test
-// this filter will be run once for each replica and must produce
-// consistent results each time. Should only be used in tests in the
-// storage package but needs to be exported due to circular import
-// issues.
-var TestingCommandFilter func(proto.Request, proto.Response) bool
+// of commands and artificially generate errors. Return nil to continue
+// with regular processing or non-nil to terminate processing with the
+// returned error. Note that in a multi-replica test this filter will
+// be run once for each replica and must produce consistent results
+// each time. Should only be used in tests in the storage and
+// storage_test packages.
+var TestingCommandFilter func(proto.Request) error
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -614,7 +613,13 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
 			header.Timestamp = r.rm.Clock().Now()
 		}
-		intents, err := r.executeCmd(r.rm.Engine(), nil, args, reply)
+		executedReply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
+		if executedReply.Header().Error != nil {
+			panic("the world is on fire")
+		}
+		executedReply.Header().SetGoError(err)
+		reply.Reset()
+		gogoproto.Merge(reply, executedReply)
 		if err == nil {
 			r.handleSkippedIntents(args, intents)
 		}
@@ -636,7 +641,13 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	}
 
 	// Execute read-only command.
-	intents, err := r.executeCmd(r.rm.Engine(), nil, args, reply)
+	executedReply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
+	if executedReply.Header().Error != nil {
+		panic("the world is on fire")
+	}
+	executedReply.Header().SetGoError(err)
+	reply.Reset()
+	gogoproto.Merge(reply, executedReply)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.endCmd(cmdKey, args, err, true /* readOnly */)
@@ -842,8 +853,6 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	// ALWAYS set the reply header error to the error returned by the
 	// helper. This is the definitive result of the execution. The
 	// error must be set before saving to the response cache.
-	// TODO(tschottdorf,tamird) For #1400, want to refactor executeCmd to not
-	// touch the reply header's error field.
 	reply.Header().SetGoError(rErr)
 	defer batch.Close()
 
@@ -910,21 +919,26 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if ok, err := r.respCache.GetResponse(batch, args.Header().CmdID, reply); err != nil {
+		if cachedReply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
 			// Any error encountered while fetching the response cache entry means corruption.
 			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
-		} else if ok {
+		} else if cachedReply != nil {
+			// TODO(tamird): this shouldn't be needed
+			gogoproto.Merge(reply, cachedReply)
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return batch, reply.Header().GoError()
+			return batch, cachedReply.Header().GoError()
 		}
 	}
 
 	// Execute the command.
-	intents, rErr := r.executeCmd(batch, ms, args, reply)
+	executedReply, intents, rErr := r.executeCmd(batch, ms, args)
+	executedReply.Header().SetGoError(rErr)
+	reply.Reset()
+	gogoproto.Merge(reply, executedReply)
 	// Regardless of error, add result to the response cache if this is
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
