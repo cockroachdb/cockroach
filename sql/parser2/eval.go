@@ -35,9 +35,6 @@ import (
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
-	// Bool returns the Datum as a bool or an error if the Datum cannot be
-	// converted to a bool.
-	Bool() (dbool, error)
 	Type() string
 	String() string
 }
@@ -51,8 +48,11 @@ var _ Datum = dnull{}
 
 type dbool bool
 
-func (d dbool) Bool() (dbool, error) {
-	return d, nil
+func getBool(d Datum) (dbool, error) {
+	if v, ok := d.(dbool); ok {
+		return v, nil
+	}
+	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
 }
 
 func (d dbool) Type() string {
@@ -68,12 +68,6 @@ func (d dbool) String() string {
 
 type dint int64
 
-// TODO(pmattis): Do we want to allow implicit conversions of int to bool?  See
-// #1626.
-func (d dint) Bool() (dbool, error) {
-	return dbool(d != 0), nil
-}
-
 func (d dint) Type() string {
 	return "int"
 }
@@ -83,12 +77,6 @@ func (d dint) String() string {
 }
 
 type dfloat float64
-
-// TODO(pmattis): Do we want to allow implicit conversions of float to bool?
-// See #1626.
-func (d dfloat) Bool() (dbool, error) {
-	return dbool(d != 0), nil
-}
 
 func (d dfloat) Type() string {
 	return "float"
@@ -100,10 +88,6 @@ func (d dfloat) String() string {
 
 type dstring string
 
-func (d dstring) Bool() (dbool, error) {
-	return false, fmt.Errorf("cannot convert string to bool")
-}
-
 func (d dstring) Type() string {
 	return "string"
 }
@@ -113,10 +97,6 @@ func (d dstring) String() string {
 }
 
 type dtuple []Datum
-
-func (d dtuple) Bool() (dbool, error) {
-	return false, fmt.Errorf("cannot convert tuple to bool")
-}
 
 func (d dtuple) Type() string {
 	return "tuple"
@@ -138,10 +118,6 @@ func (d dtuple) String() string {
 type dnull struct{}
 
 var null = dnull{}
-
-func (d dnull) Bool() (dbool, error) {
-	return false, fmt.Errorf("cannot convert NULL to bool")
-}
 
 func (d dnull) Type() string {
 	return "NULL"
@@ -209,6 +185,9 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	},
 
 	// TODO(pmattis): Overflow/underflow checks?
+
+	// TODO(pmattis): Should we allow the implicit conversion from int to float
+	// below. Once we have cast operators we could remove them. See #1626.
 
 	binArgs{Plus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(dint) + right.(dint), nil
@@ -477,7 +456,7 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	if left == null {
 		return null, nil
 	}
-	if v, err := left.Bool(); err != nil {
+	if v, err := getBool(left); err != nil {
 		return null, err
 	} else if !v {
 		return v, nil
@@ -489,7 +468,7 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	if right == null {
 		return null, nil
 	}
-	if v, err := right.Bool(); err != nil {
+	if v, err := getBool(right); err != nil {
 		return null, err
 	} else if !v {
 		return v, nil
@@ -503,7 +482,7 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 		return null, err
 	}
 	if left != null {
-		if v, err := left.Bool(); err != nil {
+		if v, err := getBool(left); err != nil {
 			return null, err
 		} else if v {
 			return v, nil
@@ -516,7 +495,7 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	if right == null {
 		return null, nil
 	}
-	if v, err := right.Bool(); err != nil {
+	if v, err := getBool(right); err != nil {
 		return null, err
 	} else if v {
 		return v, nil
@@ -535,7 +514,7 @@ func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 	if d == null {
 		return null, nil
 	}
-	v, err := d.Bool()
+	v, err := getBool(d)
 	if err != nil {
 		return null, err
 	}
@@ -570,7 +549,7 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 		if err != nil {
 			return null, err
 		}
-		if v, err = cmp.Bool(); err != nil {
+		if v, err = getBool(cmp); err != nil {
 			return null, err
 		} else if !v {
 			break
@@ -704,7 +683,7 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 			if err != nil {
 				return null, err
 			}
-			if v, err := d.Bool(); err != nil {
+			if v, err := getBool(d); err != nil {
 				return null, err
 			} else if v {
 				return EvalExpr(when.Val, env)
@@ -717,7 +696,7 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 			if err != nil {
 				return null, err
 			}
-			if v, err := d.Bool(); err != nil {
+			if v, err := getBool(d); err != nil {
 				return null, err
 			} else if v {
 				return EvalExpr(when.Val, env)
@@ -742,7 +721,7 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 		if err != nil {
 			return null, err
 		}
-		if v, err := d.Bool(); err != nil {
+		if v, err := getBool(d); err != nil {
 			return null, err
 		} else if !v {
 			return v, nil
@@ -786,7 +765,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 			if err != nil {
 				return null, err
 			}
-			if v, err := d.Bool(); err != nil {
+			if v, err := getBool(d); err != nil {
 				return null, err
 			} else if v {
 				return v, nil

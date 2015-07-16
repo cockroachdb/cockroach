@@ -169,6 +169,10 @@ func TestEvalExprError(t *testing.T) {
 		{`'10' > 2`, `unsupported comparison operator:`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},
 		{`a`, `column \"a\" not found`},
+		{`1 AND true`, `cannot convert int to bool`},
+		{`1.0 AND true`, `cannot convert float to bool`},
+		{`'a' AND true`, `cannot convert string to bool`},
+		{`(1, 2) AND true`, `cannot convert tuple to bool`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`, nil},
 	}
