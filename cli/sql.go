@@ -57,8 +57,7 @@ Open a sql shell running against the cockroach database at --addr.
 	Run: runTerm,
 }
 
-// processOneLine takes a line from the terminal,
-// determines what type of statement it is, runs it,
+// processOneLine takes a line from the terminal, runs it,
 // and displays the result.
 // TODO(marc): handle multi-line, this will require ';' terminated statements.
 func processOneLine(db *sql.DB, line string, w io.Writer) (bool, error) {
@@ -71,51 +70,43 @@ func processOneLine(db *sql.DB, line string, w io.Writer) (bool, error) {
 	// This is a really terrible way of figuring out how to handle
 	// the input.
 	command := strings.ToUpper(words[0])
-	switch command {
-	case "EXIT", "QUIT":
+	if command == "EXIT" || command == "QUIT" {
 		return true, nil
-	case "SELECT", "SHOW":
-		// Issues a query and examine returned Rows.
-		rows, err := db.Query(line)
-		if err != nil {
-			return false, util.Errorf("query error: %s", err)
-		}
-
-		defer rows.Close()
-		cols, err := rows.Columns()
-		if err != nil {
-			return false, util.Errorf("rows.Columns() error: %s", err)
-		}
-
-		// Format all rows using tabwriter.
-		tw := new(tabwriter.Writer)
-		tw.Init(w, 0, 8, 0, '\t', 0)
-		fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
-		strs := make([]string, len(cols))
-		vals := make([]interface{}, len(cols))
-		for rows.Next() {
-			for i := range vals {
-				vals[i] = &strs[i]
-			}
-			if err := rows.Scan(vals...); err != nil {
-				return false, util.Errorf("scan error: %s", err)
-			}
-			fmt.Fprintf(tw, "%s\n", strings.Join(strs, "\t"))
-		}
-		_ = tw.Flush()
-	default:
-		// Generic Exec: output number of rows affected.
-		result, err := db.Exec(line)
-		if err != nil {
-			return false, util.Errorf("exec error: %s", err)
-		}
-
-		affected, err := result.RowsAffected()
-		if err != nil {
-			return false, util.Errorf("result.RowsAffected error: %s", err)
-		}
-		fmt.Fprintf(w, "%d rows affected\n", affected)
 	}
+	// Issues a query and examine returned Rows.
+	rows, err := db.Query(line)
+	if err != nil {
+		return false, util.Errorf("query error: %s", err)
+	}
+
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return false, util.Errorf("rows.Columns() error: %s", err)
+	}
+
+	if len(cols) == 0 {
+		// This operation did not return rows, just show success.
+		fmt.Fprintf(w, "OK\n")
+		return false, nil
+	}
+
+	// Format all rows using tabwriter.
+	tw := new(tabwriter.Writer)
+	tw.Init(w, 0, 8, 0, '\t', 0)
+	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
+	strs := make([]string, len(cols))
+	vals := make([]interface{}, len(cols))
+	for rows.Next() {
+		for i := range vals {
+			vals[i] = &strs[i]
+		}
+		if err := rows.Scan(vals...); err != nil {
+			return false, util.Errorf("scan error: %s", err)
+		}
+		fmt.Fprintf(tw, "%s\n", strings.Join(strs, "\t"))
+	}
+	_ = tw.Flush()
 	return false, nil
 }
 
