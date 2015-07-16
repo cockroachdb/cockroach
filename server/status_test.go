@@ -397,23 +397,32 @@ func TestStatusLocalLogs(t *testing.T) {
 		MaxEntities     int
 		StartTimestamp  int64
 		EndTimestamp    int64
+		Pattern         string
 		ExpectedError   bool
 		ExpectedWarning bool
 		ExpectedInfo    bool
 	}{
-		{log.InfoLog, 0, 0, 0, true, true, true},
-		{log.WarningLog, 0, 0, 0, true, true, false},
-		{log.ErrorLog, 0, 0, 0, true, false, false},
-		{log.InfoLog, 1, timestamp, timestampEWI, true, false, false},
-		{log.InfoLog, 2, timestamp, timestampEWI, true, true, false},
-		{log.InfoLog, 3, timestamp, timestampEWI, true, true, true},
-		{log.InfoLog, 0, timestamp, timestamp, false, false, false},
-		{log.InfoLog, 0, timestamp, timestampE, true, false, false},
-		{log.InfoLog, 0, timestampE, timestampEW, false, true, false},
-		{log.InfoLog, 0, timestampEW, timestampEWI, false, false, true},
-		{log.InfoLog, 0, timestamp, timestampEW, true, true, false},
-		{log.InfoLog, 0, timestampE, timestampEWI, false, true, true},
-		{log.InfoLog, 0, timestamp, timestampEWI, true, true, true},
+		// Test filtering by log severity.
+		{log.InfoLog, 0, 0, 0, "", true, true, true},
+		{log.WarningLog, 0, 0, 0, "", true, true, false},
+		{log.ErrorLog, 0, 0, 0, "", true, false, false},
+		// Test filtering in different timestamp windows.
+		{log.InfoLog, 1, timestamp, timestampEWI, "", true, false, false},
+		{log.InfoLog, 2, timestamp, timestampEWI, "", true, true, false},
+		{log.InfoLog, 3, timestamp, timestampEWI, "", true, true, true},
+		{log.InfoLog, 0, timestamp, timestamp, "", false, false, false},
+		{log.InfoLog, 0, timestamp, timestampE, "", true, false, false},
+		{log.InfoLog, 0, timestampE, timestampEW, "", false, true, false},
+		{log.InfoLog, 0, timestampEW, timestampEWI, "", false, false, true},
+		{log.InfoLog, 0, timestamp, timestampEW, "", true, true, false},
+		{log.InfoLog, 0, timestampE, timestampEWI, "", false, true, true},
+		{log.InfoLog, 0, timestamp, timestampEWI, "", true, true, true},
+		// Test filtering by regexp pattern.
+		{log.InfoLog, 0, 0, 0, "Info", false, false, true},
+		{log.InfoLog, 0, 0, 0, "Warning", false, true, false},
+		{log.InfoLog, 0, 0, 0, "Error", true, false, false},
+		{log.InfoLog, 0, 0, 0, "Info|Error|Warning", true, true, true},
+		{log.InfoLog, 0, 0, 0, "Nothing", false, false, false},
 	}
 
 	for i, testCase := range testCases {
@@ -427,6 +436,9 @@ func TestStatusLocalLogs(t *testing.T) {
 		}
 		if testCase.StartTimestamp > 0 {
 			fmt.Fprintf(&url, "endtime=%d&", testCase.EndTimestamp)
+		}
+		if len(testCase.Pattern) > 0 {
+			fmt.Fprintf(&url, "pattern=%s&", testCase.Pattern)
 		}
 
 		body = getRequest(t, ts, url.String())
