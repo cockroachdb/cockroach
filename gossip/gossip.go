@@ -373,6 +373,7 @@ func (g *Gossip) filterExtant(nodes *nodeSet) *nodeSet {
 // getNextBootstrapAddress returns the next available bootstrap
 // address by consulting the first non-exhausted resolver from the
 // slice supplied to the constructor or set using setBootstrap().
+// The lock is assumed held.
 func (g *Gossip) getNextBootstrapAddress() net.Addr {
 	if len(g.resolvers) == 0 {
 		log.Fatalf("no resolvers specified for gossip network")
@@ -552,17 +553,18 @@ func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
 			Multiplier:     2,                // doubles
 			Stopper:        stopper,          // stop no matter what on stopper
 		}
-		// will never error because infinite retries
+		// This will never error because of infinite retries.
 		for r := retry.Start(retryOptions); r.Next(); {
 			g.mu.Lock()
 			hasSentinel := g.is.getInfo(KeySentinel) != nil
+			triedAll := g.triedAll
 			g.mu.Unlock()
 			// If we have the sentinel, exit the retry loop.
 			if hasSentinel {
 				break
 			}
 			// Otherwise, if all bootstrap hosts are connected, warn.
-			if g.triedAll {
+			if triedAll {
 				log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
 					"Use \"cockroach init\" to initialize.")
 			}
