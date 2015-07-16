@@ -135,6 +135,11 @@ func TestEvalExpr(t *testing.T) {
 		{`(1+1, (2+2, (3+3))) = (2, (4, (6)))`, `true`, nil},
 		{`(1, 'a') != (1, 'a')`, `false`, nil},
 		{`(1, 'a') != (1, 'b')`, `true`, nil},
+		// IN and NOT IN expressions.
+		{`1 NOT IN (2, 3, 4)`, `true`, nil},
+		{`1+1 IN (2, 3, 4)`, `true`, nil},
+		{`'a0' IN ('a'||0, 'b'||1, 'c'||2)`, `true`, nil},
+		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`, nil},
 	}
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
@@ -162,6 +167,7 @@ func TestEvalExprError(t *testing.T) {
 		{`1.1 # 3.1`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
 		{`'10' > 2`, `unsupported comparison operator:`},
+		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},
 		{`a`, `column \"a\" not found`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`, nil},

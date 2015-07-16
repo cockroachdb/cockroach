@@ -357,6 +357,12 @@ func init() {
 	// cmpOps is declared. The loop is caused by evalTupleEQ using cmpOps
 	// internally.
 	cmpOps[cmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
+
+	cmpOps[cmpArgs{In, boolType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, intType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, floatType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, stringType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
 // Env defines the interface for retrieving column values.
@@ -626,6 +632,10 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// GE(left, right) is implemented as LE(right, left)
 		op = LE
 		left, right = right, left
+	case NotIn:
+		// NotIn(left, right) is implemented as !IN(left, right)
+		not = true
+		op = In
 	}
 
 	f := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]
@@ -638,7 +648,7 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	}
 
 	switch op {
-	case In, NotIn, Like, NotLike:
+	case Like, NotLike:
 		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
@@ -744,4 +754,44 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 		}
 	}
 	return dbool(true), nil
+}
+
+func evalTupleIN(arg, values Datum) (Datum, error) {
+	if arg == null {
+		return dbool(false), nil
+	}
+
+	vtuple := values.(dtuple)
+
+	if _, ok := arg.(dtuple); !ok && false {
+		// TODO(pmattis): If we're evaluating the expression multiple times we
+		// should use a map when possible. This works as long as arg is not a tuple.
+		m := make(map[Datum]struct{}, len(vtuple))
+		for _, val := range vtuple {
+			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
+				return null, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+					arg.Type(), EQ, val.Type())
+			}
+			m[val] = struct{}{}
+		}
+		if _, ok := m[arg]; ok {
+			return dbool(true), nil
+		}
+	} else {
+		// TODO(pmattis): We should probably first check that all of the values are
+		// type compatible with the arg.
+		for _, val := range vtuple {
+			d, err := evalComparisonOp(EQ, arg, val)
+			if err != nil {
+				return null, err
+			}
+			if v, err := d.Bool(); err != nil {
+				return null, err
+			} else if v {
+				return v, nil
+			}
+		}
+	}
+
+	return dbool(false), nil
 }
