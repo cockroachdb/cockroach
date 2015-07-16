@@ -348,7 +348,9 @@ func (r *Range) updateRangeInfo() error {
 		return util.Errorf("failed to lookup zone config for Range %s: %s", r, err)
 	}
 	r.SetMaxBytes(zone.RangeMaxBytes)
-	// TODO(kkaneda): Update configHashes and other fields as well (#1362)?
+
+	// No need to update configHashes. It will be set when a leader lease calls
+	// maybeGossipConfigs.
 
 	return nil
 }
