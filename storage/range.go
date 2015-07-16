@@ -961,7 +961,10 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 			batch.Close()
 			batch = r.rm.Engine().NewBatch()
 		}
-		// TODO(tamird): remove this when the response cache can handle these errors itself
+		// TODO(tamird): move this into the response cache itself
+		if reply == nil {
+			reply = args.CreateReply()
+		}
 		if reply.Header().Error != nil {
 			panic("the world is on fire")
 		}

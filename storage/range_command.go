@@ -45,15 +45,13 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		// TODO(tamird): Remove the CreateReply when upstream doesn't need it.
-		return args.CreateReply(), nil, err
+		return nil, nil, err
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil {
 		if err := TestingCommandFilter(args); err != nil {
-			// TODO(tamird): Remove the CreateReply when upstream doesn't need it.
-			return args.CreateReply(), nil, err
+			return nil, nil, err
 		}
 	}
 
