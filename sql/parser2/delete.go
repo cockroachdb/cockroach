@@ -32,6 +32,6 @@ type Delete struct {
 }
 
 func (node *Delete) String() string {
-	return fmt.Sprintf("DELETE FROM %v%v",
+	return fmt.Sprintf("DELETE FROM %s%s",
 		node.Table, node.Where)
 }

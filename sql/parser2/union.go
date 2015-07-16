@@ -39,5 +39,5 @@ const (
 )
 
 func (node *Union) String() string {
-	return fmt.Sprintf("%v %s %v", node.Left, node.Type, node.Right)
+	return fmt.Sprintf("%s %s %s", node.Left, node.Type, node.Right)
 }

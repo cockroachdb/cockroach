@@ -36,7 +36,7 @@ type Update struct {
 }
 
 func (node *Update) String() string {
-	return fmt.Sprintf("UPDATE %v SET %v%v",
+	return fmt.Sprintf("UPDATE %s SET %s%s",
 		node.Table, node.Exprs, node.Where)
 }
 
@@ -47,7 +47,7 @@ func (node UpdateExprs) String() string {
 	var prefix string
 	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
@@ -60,5 +60,5 @@ type UpdateExpr struct {
 }
 
 func (node *UpdateExpr) String() string {
-	return fmt.Sprintf("%v = %v", node.Name, node.Expr)
+	return fmt.Sprintf("%s = %s", node.Name, node.Expr)
 }

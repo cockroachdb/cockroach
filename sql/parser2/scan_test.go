@@ -128,9 +128,9 @@ comment */`, "", ""},
 		var lval sqlSymType
 		present, ok := s.scanComment(&lval)
 		if d.err == "" && (!present || !ok) {
-			t.Fatalf("%d: expected success, but found %v", i, lval.str)
+			t.Fatalf("%d: expected success, but found %s", i, lval.str)
 		} else if d.err != "" && (present || ok || d.err != lval.str) {
-			t.Fatalf("%d: expected %s, but found %v", i, d.err, lval.str)
+			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.str)
 		}
 		if r := s.in[s.pos:]; d.remainder != r {
 			t.Fatalf("%d: expected '%s', but found '%s'", i, d.remainder, r)

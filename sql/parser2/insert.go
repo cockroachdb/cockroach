@@ -37,10 +37,10 @@ type Insert struct {
 
 func (node *Insert) String() string {
 	if node.Rows == nil {
-		return fmt.Sprintf("INSERT INTO %v%v DEFAULT VALUES",
+		return fmt.Sprintf("INSERT INTO %s%s DEFAULT VALUES",
 			node.Table, node.Columns)
 	}
-	return fmt.Sprintf("INSERT INTO %v%v %v",
+	return fmt.Sprintf("INSERT INTO %s%s %s",
 		node.Table, node.Columns, node.Rows)
 }
 
@@ -58,7 +58,7 @@ func (node Columns) String() string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString("(")
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%v", prefix, n)
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	_, _ = buf.WriteString(")")
