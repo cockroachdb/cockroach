@@ -27,16 +27,11 @@ import (
 
 // TODO(pmattis):
 //
-// - Support tuples (i.e. []Datum) and tuple operations (a IN (b, c, d)).
-//
 // - Support decimal arithmetic.
 //
 // - Allow partial expression evaluation to simplify expressions before being
 //   used in where clauses. Make Datum implement Expr and change EvalExpr to
 //   return an Expr.
-//
-// - Support IN and NOT IN but converting the right-hand-side into a
-//   map[string]struct{}. Add a Key() method to every Datum implementation.
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
