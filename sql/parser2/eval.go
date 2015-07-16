@@ -34,8 +34,6 @@ import (
 type Datum interface {
 	IsNull() bool
 	ToBool() (Datum, error)
-	ToInt() (Datum, error)
-	ToFloat() (Datum, error)
 	String() string
 }
 
@@ -55,20 +53,6 @@ func (d dbool) ToBool() (Datum, error) {
 	return d, nil
 }
 
-func (d dbool) ToInt() (Datum, error) {
-	if d {
-		return dint(1), nil
-	}
-	return dint(0), nil
-}
-
-func (d dbool) ToFloat() (Datum, error) {
-	if d {
-		return dfloat(1), nil
-	}
-	return dfloat(0), nil
-}
-
 func (d dbool) String() string {
 	if d {
 		return "true"
@@ -86,14 +70,6 @@ func (d dint) ToBool() (Datum, error) {
 	return dbool(d != 0), nil
 }
 
-func (d dint) ToInt() (Datum, error) {
-	return d, nil
-}
-
-func (d dint) ToFloat() (Datum, error) {
-	return dfloat(d), nil
-}
-
 func (d dint) String() string {
 	return strconv.FormatInt(int64(d), 10)
 }
@@ -106,14 +82,6 @@ func (d dfloat) IsNull() bool {
 
 func (d dfloat) ToBool() (Datum, error) {
 	return dbool(d != 0), nil
-}
-
-func (d dfloat) ToInt() (Datum, error) {
-	return dint(d), nil
-}
-
-func (d dfloat) ToFloat() (Datum, error) {
-	return d, nil
 }
 
 func (d dfloat) String() string {
@@ -130,14 +98,6 @@ func (d dstring) ToBool() (Datum, error) {
 	return null, fmt.Errorf("cannot convert string to bool")
 }
 
-func (d dstring) ToInt() (Datum, error) {
-	return null, fmt.Errorf("cannot convert string to int")
-}
-
-func (d dstring) ToFloat() (Datum, error) {
-	return null, fmt.Errorf("cannot convert string to float")
-}
-
 func (d dstring) String() string {
 	return string(d)
 }
@@ -150,14 +110,6 @@ func (d dnull) IsNull() bool {
 
 func (d dnull) ToBool() (Datum, error) {
 	return d, fmt.Errorf("cannot convert NULL to bool")
-}
-
-func (d dnull) ToInt() (Datum, error) {
-	return d, fmt.Errorf("cannot convert NULL to int")
-}
-
-func (d dnull) ToFloat() (Datum, error) {
-	return d, fmt.Errorf("cannot convert NULL to float")
 }
 
 func (d dnull) String() string {
