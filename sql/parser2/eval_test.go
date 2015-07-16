@@ -15,12 +15,11 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package query
+package parser2
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/testutils"
 )
@@ -54,10 +53,10 @@ func TestEvalExpr(t *testing.T) {
 		// Bitwise operators.
 		{`1 & 3`, `1`, nil},
 		{`1 | 3`, `3`, nil},
-		{`1 ^ 3`, `2`, nil},
+		{`1 # 3`, `2`, nil},
 		// Bitwise operators convert their arguments to ints.
 		// TODO(pmattis): Should this be an error instead?
-		{`1.1 ^ 3.1`, `2`, nil},
+		{`1.1 # 3.1`, `2`, nil},
 		// Arithmetic operators.
 		{`1 + 1`, `2`, nil},
 		{`1 - 2`, `-1`, nil},
@@ -76,9 +75,9 @@ func TestEvalExpr(t *testing.T) {
 		{`~0.1`, `18446744073709551615`, nil},
 		{`~0 - 1`, `18446744073709551614`, nil},
 		// Hexadecimal numbers.
-		{`0xa`, `10`, nil},
+		// TODO(pmattis): {`0xa`, `10`, nil},
 		// Octal numbers.
-		{`0755`, `493`, nil},
+		// TODO(pmattis):{`0755`, `493`, nil},
 		// String conversion
 		{`'1' + '2'`, `3`, nil},
 		// Strings convert to floats.
@@ -120,7 +119,6 @@ func TestEvalExpr(t *testing.T) {
 		{`true <= false`, `false`, nil},
 		{`true > false`, `true`, nil},
 		{`true >= false`, `true`, nil},
-		{`true <=> false`, `false`, nil},
 		{`'a' = 'b'`, `false`, nil},
 		{`'a' != 'b'`, `true`, nil},
 		{`'a' < 'b'`, `true`, nil},
@@ -134,7 +132,6 @@ func TestEvalExpr(t *testing.T) {
 		// Comparisons against NULL result in NULL, except for the null-safe equal.
 		{`0 = NULL`, `NULL`, nil},
 		{`NULL = NULL`, `NULL`, nil},
-		{`NULL <=> NULL`, `true`, nil},
 		// NULL checks.
 		{`0 IS NULL`, `false`, nil},
 		{`0 IS NOT NULL`, `true`, nil},
@@ -151,11 +148,11 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
 	}
 	for i, d := range testData {
-		q, err := parser.Parse("SELECT " + d.expr)
+		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%d: %v: %s", i, err, d.expr)
 		}
-		expr := q.(*parser.Select).Exprs[0].(*parser.NonStarExpr).Expr
+		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		r, err := EvalExpr(expr, d.env)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
@@ -178,11 +175,11 @@ func TestEvalExprError(t *testing.T) {
 		// {`~0 + 1`, `0`, nil},
 	}
 	for i, d := range testData {
-		q, err := parser.Parse("SELECT " + d.expr)
+		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%d: %v: %s", i, err, d.expr)
 		}
-		expr := q.(*parser.Select).Exprs[0].(*parser.NonStarExpr).Expr
+		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		if _, err := EvalExpr(expr, mapEnv{}); !testutils.IsError(err, d.expected) {
 			t.Errorf("%d: expected %s, but found %v", i, d.expected, err)
 		}

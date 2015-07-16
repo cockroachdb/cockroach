@@ -15,14 +15,13 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package query
+package parser2
 
 import (
 	"fmt"
 	"math"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
 
@@ -55,94 +54,94 @@ func (e mapEnv) Get(name string) (sqlwire.Datum, bool) {
 // parse tree. The only significant complexity is the handling of types and
 // implicit conversions. See prepareComparisonArgs and prepareBinaryArgs for
 // details.
-func EvalExpr(expr parser.Expr, env Env) (sqlwire.Datum, error) {
+func EvalExpr(expr Expr, env Env) (sqlwire.Datum, error) {
 	switch t := expr.(type) {
-	case *parser.AndExpr:
+	case *AndExpr:
 		return evalAndExpr(t, env)
 
-	case *parser.OrExpr:
+	case *OrExpr:
 		return evalOrExpr(t, env)
 
-	case *parser.NotExpr:
+	case *NotExpr:
 		return evalNotExpr(t, env)
 
-	case *parser.ParenBoolExpr:
+	case *ParenExpr:
 		return EvalExpr(t.Expr, env)
 
-	case *parser.ComparisonExpr:
+	case *ComparisonExpr:
 		return evalComparisonExpr(t, env)
 
-	case *parser.RangeCond:
+	case *RangeCond:
 		return evalRangeCond(t, env)
 
-	case *parser.NullCheck:
+	case *NullCheck:
 		return evalNullCheck(t, env)
 
-	case *parser.ExistsExpr:
+	case *ExistsExpr:
 		// The subquery within the exists should have been executed before
 		// expression evaluation and the exists nodes replaced with the result.
 
-	case parser.BytesVal:
+	case BytesVal:
 		v := string(t)
 		return sqlwire.Datum{StringVal: &v}, nil
 
-	case parser.StrVal:
+	case StrVal:
 		v := string(t)
 		return sqlwire.Datum{StringVal: &v}, nil
 
-	case parser.IntVal:
+	case IntVal:
 		v := uint64(t)
 		return sqlwire.Datum{UintVal: &v}, nil
 
-	case parser.NumVal:
+	case NumVal:
 		v, err := strconv.ParseFloat(string(t), 64)
 		if err != nil {
 			return null, err
 		}
 		return sqlwire.Datum{FloatVal: &v}, nil
 
-	case parser.BoolVal:
+	case BoolVal:
 		return boolToDatum(bool(t)), nil
 
-	case parser.ValArg:
+	case ValArg:
 		// Placeholders should have been replaced before expression evaluation.
 
-	case *parser.NullVal:
+	case NullVal:
 		return null, nil
 
-	case *parser.ColName:
+	case QualifiedName:
 		if d, ok := env.Get(t.String()); ok {
 			return d, nil
 		}
 		return null, fmt.Errorf("column \"%s\" not found", t)
 
-	case parser.ValTuple:
+	case Tuple:
 		if len(t) != 1 {
 			return null, fmt.Errorf("unsupported expression type: %T: %s", expr, expr)
 		}
 		return EvalExpr(t[0], env)
 
-	case *parser.Subquery:
+	case *Subquery:
 		// The subquery should have been executed before expression evaluation and
 		// the result placed into the expression tree.
 
-	case *parser.BinaryExpr:
+	case *BinaryExpr:
 		return evalBinaryExpr(t, env)
 
-	case *parser.UnaryExpr:
+	case *UnaryExpr:
 		return evalUnaryExpr(t, env)
 
-	case *parser.FuncExpr:
+	case *FuncExpr:
 		return evalFuncExpr(t, env)
 
-	case *parser.CaseExpr:
+	case *CaseExpr:
 		return evalCaseExpr(t, env)
 	}
 
 	return null, fmt.Errorf("unsupported expression type: %T", expr)
 }
 
-func evalAndExpr(expr *parser.AndExpr, env Env) (sqlwire.Datum, error) {
+func evalAndExpr(expr *AndExpr, env Env) (sqlwire.Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
@@ -164,7 +163,7 @@ func evalAndExpr(expr *parser.AndExpr, env Env) (sqlwire.Datum, error) {
 	return boolToDatum(true), nil
 }
 
-func evalOrExpr(expr *parser.OrExpr, env Env) (sqlwire.Datum, error) {
+func evalOrExpr(expr *OrExpr, env Env) (sqlwire.Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
@@ -186,7 +185,7 @@ func evalOrExpr(expr *parser.OrExpr, env Env) (sqlwire.Datum, error) {
 	return boolToDatum(false), nil
 }
 
-func evalNotExpr(expr *parser.NotExpr, env Env) (sqlwire.Datum, error) {
+func evalNotExpr(expr *NotExpr, env Env) (sqlwire.Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
@@ -198,16 +197,16 @@ func evalNotExpr(expr *parser.NotExpr, env Env) (sqlwire.Datum, error) {
 	return boolToDatum(!v), nil
 }
 
-func evalRangeCond(expr *parser.RangeCond, env Env) (sqlwire.Datum, error) {
+func evalRangeCond(expr *RangeCond, env Env) (sqlwire.Datum, error) {
 	// TODO(pmattis): This could be more efficient or done ahead of time.
-	d, err := EvalExpr(&parser.AndExpr{
-		Left: &parser.ComparisonExpr{
-			Operator: parser.GE,
+	d, err := EvalExpr(&AndExpr{
+		Left: &ComparisonExpr{
+			Operator: GE,
 			Left:     expr.Left,
 			Right:    expr.From,
 		},
-		Right: &parser.ComparisonExpr{
-			Operator: parser.LE,
+		Right: &ComparisonExpr{
+			Operator: LE,
 			Left:     expr.Left,
 			Right:    expr.To,
 		},
@@ -221,7 +220,7 @@ func evalRangeCond(expr *parser.RangeCond, env Env) (sqlwire.Datum, error) {
 	return d, nil
 }
 
-func evalNullCheck(expr *parser.NullCheck, env Env) (sqlwire.Datum, error) {
+func evalNullCheck(expr *NullCheck, env Env) (sqlwire.Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
@@ -275,7 +274,7 @@ func prepareComparisonArgs(left, right sqlwire.Datum) (opType, sqlwire.Datum, sq
 	return floatOp, left, right, nil
 }
 
-func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, error) {
+func evalComparisonExpr(expr *ComparisonExpr, env Env) (sqlwire.Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
@@ -286,12 +285,6 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 	}
 
 	op := expr.Operator
-	if op == parser.NullSafeEqual {
-		if left.IsNull() && right.IsNull() {
-			return boolToDatum(true), nil
-		}
-		op = parser.EQ
-	}
 
 	if left.IsNull() || right.IsNull() {
 		return null, nil
@@ -301,7 +294,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 	var v bool
 
 	switch op {
-	case parser.EQ:
+	case EQ:
 		typ, left, right, err = prepareComparisonArgs(left, right)
 		switch typ {
 		case intOp:
@@ -316,7 +309,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
-	case parser.LT:
+	case LT:
 		typ, left, right, err = prepareComparisonArgs(left, right)
 		switch typ {
 		case intOp:
@@ -331,7 +324,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
-	case parser.LE:
+	case LE:
 		typ, left, right, err = prepareComparisonArgs(left, right)
 		switch typ {
 		case intOp:
@@ -346,7 +339,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
-	case parser.GT:
+	case GT:
 		typ, left, right, err = prepareComparisonArgs(left, right)
 		switch typ {
 		case intOp:
@@ -361,7 +354,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
-	case parser.GE:
+	case GE:
 		typ, left, right, err = prepareComparisonArgs(left, right)
 		switch typ {
 		case intOp:
@@ -376,7 +369,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
-	case parser.NE:
+	case NE:
 		typ, left, right, err = prepareComparisonArgs(left, right)
 		switch typ {
 		case intOp:
@@ -391,7 +384,7 @@ func evalComparisonExpr(expr *parser.ComparisonExpr, env Env) (sqlwire.Datum, er
 			panic(fmt.Sprintf("unsupported op type: %d", typ))
 		}
 
-	case parser.In, parser.NotIn, parser.Like, parser.NotLike:
+	case In, NotIn, Like, NotLike:
 		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
@@ -458,7 +451,7 @@ func prepareBinaryArgs(typ opType, left, right sqlwire.Datum) (opType, sqlwire.D
 	return floatOp, left, right, nil
 }
 
-func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
+func evalBinaryExpr(expr *BinaryExpr, env Env) (sqlwire.Datum, error) {
 	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
@@ -473,7 +466,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 	var typ opType
 
 	switch expr.Operator {
-	case parser.Bitand:
+	case Bitand:
 		typ, left, right, err = prepareBinaryArgs(intOp, left, right)
 		if err != nil {
 			return null, err
@@ -488,7 +481,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Bitor:
+	case Bitor:
 		typ, left, right, err = prepareBinaryArgs(intOp, left, right)
 		if err != nil {
 			return null, err
@@ -503,7 +496,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Bitxor:
+	case Bitxor:
 		typ, left, right, err = prepareBinaryArgs(intOp, left, right)
 		if err != nil {
 			return null, err
@@ -518,7 +511,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Plus:
+	case Plus:
 		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
@@ -535,7 +528,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Minus:
+	case Minus:
 		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
@@ -559,7 +552,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Mult:
+	case Mult:
 		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
@@ -576,7 +569,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Div:
+	case Div:
 		// Division always operates on floats. TODO(pmattis): Is this correct?
 		left, err = left.ToFloat()
 		if err != nil {
@@ -589,7 +582,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		*left.FloatVal /= *right.FloatVal
 		return left, nil
 
-	case parser.Mod:
+	case Mod:
 		typ, left, right, err = prepareBinaryArgs(floatOp, left, right)
 		if err != nil {
 			return null, err
@@ -606,7 +599,7 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return left, nil
 
-	case parser.Concat:
+	case Concat:
 		s := left.String() + right.String()
 		return sqlwire.Datum{StringVal: &s}, nil
 	}
@@ -614,16 +607,16 @@ func evalBinaryExpr(expr *parser.BinaryExpr, env Env) (sqlwire.Datum, error) {
 	return null, fmt.Errorf("unsupported binary operator: %c", expr.Operator)
 }
 
-func evalUnaryExpr(expr *parser.UnaryExpr, env Env) (sqlwire.Datum, error) {
+func evalUnaryExpr(expr *UnaryExpr, env Env) (sqlwire.Datum, error) {
 	d, err := EvalExpr(expr.Expr, env)
 	if err != nil {
 		return null, err
 	}
 	switch expr.Operator {
-	case parser.UnaryPlus:
+	case UnaryPlus:
 		return d, nil
 
-	case parser.UnaryMinus:
+	case UnaryMinus:
 		var err error
 		if d.IntVal != nil {
 			*d.IntVal = -*d.IntVal
@@ -644,7 +637,7 @@ func evalUnaryExpr(expr *parser.UnaryExpr, env Env) (sqlwire.Datum, error) {
 		}
 		return d, nil
 
-	case parser.UnaryComplement:
+	case UnaryComplement:
 		d, err = d.ToUint()
 		if err != nil {
 			return null, err
@@ -655,11 +648,11 @@ func evalUnaryExpr(expr *parser.UnaryExpr, env Env) (sqlwire.Datum, error) {
 	return null, fmt.Errorf("unsupported unary operator: %c", expr.Operator)
 }
 
-func evalFuncExpr(expr *parser.FuncExpr, env Env) (sqlwire.Datum, error) {
+func evalFuncExpr(expr *FuncExpr, env Env) (sqlwire.Datum, error) {
 	return null, fmt.Errorf("TODO(pmattis): unsupported expression type: %T", expr)
 }
 
-func evalCaseExpr(expr *parser.CaseExpr, env Env) (sqlwire.Datum, error) {
+func evalCaseExpr(expr *CaseExpr, env Env) (sqlwire.Datum, error) {
 	if expr.Expr != nil {
 		// These are expressions of the form `CASE <val> WHEN <val> THEN ...`. The
 		// parser doesn't properly support them yet.
