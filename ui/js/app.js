@@ -601,6 +601,9 @@ var Utils;
         var _messageTags = new RegExp("%s|%d|%v|%+v", "gi");
         function LogEntryMessage(entry) {
             var i = -1;
+            if ((entry.format.length === 0) && (entry.args.length === 1)) {
+                entry.format = "%s";
+            }
             return entry.format.replace(_messageTags, function () {
                 i++;
                 if (entry.args.length > i) {
@@ -649,6 +652,7 @@ var Models;
                 this.endTime = m.prop(null);
                 this.max = m.prop(null);
                 this.level = m.prop(null);
+                this.pattern = m.prop(null);
                 this.refresh = function () {
                     _this._data.refresh();
                 };
@@ -665,6 +669,7 @@ var Models;
                 this.max(null);
                 this.startTime(null);
                 this.endTime(null);
+                this.pattern(null);
             }
             Entries.prototype._url = function () {
                 var url = "/_status/local/log";
@@ -680,6 +685,9 @@ var Models;
                 }
                 if (this.max() != null) {
                     url += "max=" + this.max().toString() + "&";
+                }
+                if ((this.pattern() != null) && (this.pattern().length > 0)) {
+                    url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
                 }
                 return url;
             };
@@ -789,6 +797,10 @@ var AdminViews;
                 }
                 entries.refresh();
             }
+            function onChangePattern(val) {
+                entries.pattern(val);
+                entries.refresh();
+            }
             function view(ctrl) {
                 var rows = [];
                 if (entries.result() != null) {
@@ -805,7 +817,9 @@ var AdminViews;
                             onChange: onChangeSeverity
                         }),
                         m.trust("&nbsp;&nbsp;Max Results: "),
-                        m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() })
+                        m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() }),
+                        m.trust("&nbsp;&nbsp;Regex Filter: "),
+                        m("input", { oninput: m.withAttr("value", onChangePattern), value: entries.pattern() })
                     ]),
                     m("p", rows.length + " log entries retrieved"),
                     m("table", { style: _tableStyle }, [

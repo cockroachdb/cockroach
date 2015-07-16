@@ -42,6 +42,9 @@ module Utils {
     const _messageTags: RegExp = new RegExp("%s|%d|%v|%+v", "gi");
     export function LogEntryMessage(entry: Models.Proto.LogEntry): string {
       let i: number = -1;
+      if ((entry.format.length === 0) && (entry.args.length === 1)) {
+        entry.format = "%s";
+      }
       return entry.format.replace(_messageTags, function(): string {
         i++;
         if (entry.args.length > i) {

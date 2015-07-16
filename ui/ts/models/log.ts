@@ -28,6 +28,7 @@ module Models {
       endTime: Property<number> = m.prop(<number>null);
       max: Property<number> = m.prop(<number>null);
       level: Property<string> = m.prop(<string>null);
+      pattern: Property<string> = m.prop(<string>null);
 
       refresh: () => void = () => {
         this._data.refresh();
@@ -59,6 +60,9 @@ module Models {
         if (this.max() != null) {
           url += "max=" + this.max().toString() + "&";
         }
+        if ((this.pattern() != null) && (this.pattern().length > 0)) {
+          url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
+        }
         return url;
       }
 
@@ -67,6 +71,7 @@ module Models {
         this.max(null);
         this.startTime(null);
         this.endTime(null);
+        this.pattern(null);
       }
     }
 

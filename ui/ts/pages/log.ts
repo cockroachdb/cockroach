@@ -111,6 +111,11 @@ module AdminViews {
         entries.refresh();
       }
 
+      function onChangePattern(val: string): void {
+        entries.pattern(val);
+        entries.refresh();
+      }
+
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         let rows: _mithril.MithrilVirtualElement[] = [];
         if (entries.result() != null) {
@@ -128,7 +133,10 @@ module AdminViews {
               onChange: onChangeSeverity
             }),
             m.trust("&nbsp;&nbsp;Max Results: "),
-            m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() })
+            m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() }),
+            m.trust("&nbsp;&nbsp;Regex Filter: "),
+            m("input", { oninput: m.withAttr("value", onChangePattern), value: entries.pattern() })
+
           ]),
           m("p", rows.length + " log entries retrieved"),
           m("table", { style: _tableStyle }, [
