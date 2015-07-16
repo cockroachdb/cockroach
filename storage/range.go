@@ -522,9 +522,10 @@ func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
 		defer trace.Epoch("admin path")()
 		reply, err = r.addAdminCmd(ctx, args)
 	} else if proto.IsReadOnly(args) {
-		defer trace.Epoch("read path")()
+		defer trace.Epoch("read-only path")()
 		reply, err = r.addReadOnlyCmd(ctx, args)
 	} else if proto.IsWrite(args) {
+		defer trace.Epoch("read-write path")()
 		reply, err = r.addWriteCmd(ctx, args, nil)
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %T", args))
