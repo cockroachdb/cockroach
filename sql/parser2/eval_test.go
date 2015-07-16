@@ -125,6 +125,14 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 END`, `NULL`, nil},
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`, nil},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
+		// Row (tuple) comparisons.
+		{`ROW(1) = ROW(1)`, `true`, nil},
+		{`ROW(1, true) = (1, NOT false)`, `true`, nil},
+		{`(1, 'a') = (1, 'a')`, `true`, nil},
+		{`(1, 'a' || 1) = (1, 'a1')`, `true`, nil},
+		{`(1+1, (2+2, (3+3))) = (2, (4, (6)))`, `true`, nil},
+		{`(1, 'a') != (1, 'a')`, `false`, nil},
+		{`(1, 'a') != (1, 'b')`, `true`, nil},
 	}
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
