@@ -303,21 +303,19 @@ func TestRangeReadConsistency(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	gArgs, gReply := getArgs(proto.Key("a"), 1, tc.store.StoreID())
+	gArgs, _ := getArgs(proto.Key("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
 
 	// Try consistent read and verify success.
 
-	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
-
+	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gArgs.CreateReply()}); err != nil {
 		t.Errorf("expected success on consistent read: %s", err)
 	}
 
 	// Try a consensus read and verify error.
 	gArgs.ReadConsistency = proto.CONSENSUS
 
-	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gReply}); err == nil {
-
+	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gArgs.CreateReply()}); err == nil {
 		t.Errorf("expected error on consensus read")
 	}
 
@@ -325,8 +323,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	gArgs.ReadConsistency = proto.INCONSISTENT
 	gArgs.Txn = newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
 
-	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gReply}); err == nil {
-
+	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gArgs.CreateReply()}); err == nil {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
@@ -342,16 +339,14 @@ func TestRangeReadConsistency(t *testing.T) {
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
 
-	err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gReply})
-
+	err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gArgs.CreateReply()})
 	if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}
 
 	gArgs.ReadConsistency = proto.INCONSISTENT
 
-	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
-
+	if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: gArgs, Reply: gArgs.CreateReply()}); err != nil {
 		t.Errorf("expected success reading with inconsistent: %s", err)
 	}
 }
@@ -2648,6 +2643,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	rlArgs.Key = keys.RangeMetaKey(proto.Key("A"))
 	rlArgs.Timestamp = proto.ZeroTimestamp
 
+	rlReply.Reset()
 	err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply})
 
 	if err != nil {
@@ -2659,6 +2655,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 
 	// Switch to consistent lookups, which should run into the intent.
 	rlArgs.ReadConsistency = proto.CONSISTENT
+	rlReply.Reset()
 	err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply})
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Fatalf("expected WriteIntentError, not %s", err)
@@ -2667,6 +2664,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
 	// First, try this consistently, which should not be allowed.
 	rlArgs.IgnoreIntents = true
+	rlReply.Reset()
 	err = tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: rlArgs, Reply: rlReply})
 	if !testutils.IsError(err, "can not read consistently and skip intents") {
 		t.Fatalf("wanted specific error, not %s", err)

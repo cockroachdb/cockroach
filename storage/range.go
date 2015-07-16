@@ -507,19 +507,29 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue.
 func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
-	args, reply := call.Args, call.Reply
+	args, cReply := call.Args, call.Reply
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
 		defer trace.Epoch("admin path")()
-		return r.addAdminCmd(ctx, args, reply)
+		return r.addAdminCmd(ctx, args, cReply)
 	} else if proto.IsReadOnly(args) {
 		defer trace.Epoch("read path")()
-		return r.addReadOnlyCmd(ctx, args, reply)
+		reply, err := r.addReadOnlyCmd(ctx, args)
+		if reply != nil {
+			gogoproto.Merge(cReply, reply)
+		}
+		if err != nil {
+			if cReply.Header().Error != nil {
+				panic("the world is on fire")
+			}
+			cReply.Header().SetGoError(err)
+		}
+		return err
 	}
-	return r.addWriteCmd(ctx, args, reply, nil)
+	return r.addWriteCmd(ctx, args, cReply, nil)
 }
 
 func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
@@ -595,38 +605,29 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
 		// But disallow any inconsistent reads within txns.
 		if header.Txn != nil {
-			reply.Header().SetGoError(util.Error("cannot allow inconsistent reads within a transaction"))
-			return reply.Header().GoError()
+			return nil, util.Error("cannot allow inconsistent reads within a transaction")
 		}
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
 			header.Timestamp = r.rm.Clock().Now()
 		}
-		executedReply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
-		if executedReply.Header().Error != nil {
-			panic("the world is on fire")
-		}
-		executedReply.Header().SetGoError(err)
-		reply.Reset()
-		gogoproto.Merge(reply, executedReply)
+		reply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
 		if err == nil {
 			r.handleSkippedIntents(args, intents)
 		}
-		return err
+		return reply, err
 	} else if header.ReadConsistency == proto.CONSENSUS {
-		reply.Header().SetGoError(util.Error("consensus reads not implemented"))
-		return reply.Header().GoError()
+		return nil, util.Error("consensus reads not implemented")
 	}
 
 	// Add the read to the command queue to gate subsequent
@@ -636,18 +637,11 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	// This replica must have leader lease to process a consistent read.
 	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, true /* readOnly */)
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// Execute read-only command.
-	executedReply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
-	if executedReply.Header().Error != nil {
-		panic("the world is on fire")
-	}
-	executedReply.Header().SetGoError(err)
-	reply.Reset()
-	gogoproto.Merge(reply, executedReply)
+	reply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.endCmd(cmdKey, args, err, true /* readOnly */)
@@ -655,7 +649,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	if err == nil {
 		r.handleSkippedIntents(args, intents)
 	}
-	return err
+	return reply, err
 }
 
 // addWriteCmd first adds the keys affected by this command as pending writes
