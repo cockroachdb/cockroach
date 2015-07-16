@@ -18,7 +18,9 @@
 package server
 
 import (
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
@@ -31,7 +33,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const (
+	// TestUser is a fixed user used in unittests.
+	// It has a permissions config with read/write permissions
+	// on the 'TestUser' prefix.
+	TestUser = "test-user"
+)
+
 // StartTestServer starts a in-memory test server.
+// Adds a permissions config for 'TestUser' under prefix 'TestUser'.
 func StartTestServer(t util.Tester) *TestServer {
 	s := &TestServer{}
 	if err := s.Start(); err != nil {
@@ -41,6 +51,21 @@ func StartTestServer(t util.Tester) *TestServer {
 			log.Fatalf("Could not start server: %v", err)
 		}
 	}
+
+	// Setup permissions for a test user.
+	err := s.WritePermissionConfig(TestUser,
+		&proto.PermConfig{
+			Read:  []string{TestUser},
+			Write: []string{TestUser},
+		})
+	if err != nil {
+		if t != nil {
+			t.Fatalf("Error adding permissions config for %s: %v", TestUser, err)
+		} else {
+			log.Fatalf("Error adding permissions config for %s: %v", TestUser, err)
+		}
+	}
+
 	log.Infof("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	return s
 }
@@ -179,4 +204,17 @@ func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 		s.SetRangeRetryOptions(ro)
 		return nil
 	})
+}
+
+// WritePermissionConfig writes the passed-in 'cfg' permissions config
+// for the 'path' key prefix.
+func (ts *TestServer) WritePermissionConfig(path string, cfg *proto.PermConfig) error {
+	// The testserver is running as "node". However, things like config changes are generally
+	// done as root.
+	db, err := client.Open(ts.Ctx.RequestScheme() + "://root@" + ts.ServingAddr() + "?certs=test_certs")
+	if err != nil {
+		return err
+	}
+	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(path))
+	return db.Put(key, cfg)
 }

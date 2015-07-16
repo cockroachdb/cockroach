@@ -131,6 +131,13 @@ func Example_permission() {
 	context := testutils.NewRootTestBaseContext()
 	client := client.NewAdminClient(context, s.ServingAddr(), client.Permission)
 
+	// The test server creates a permission config entry for 'server.TestUser'.
+	// Delete it first so it does not interfere with our configs.
+	err := client.Delete(server.TestUser)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	const yamlConfig = `
 read: [readonly, readwrite]
 write: [readwrite, writeonly]

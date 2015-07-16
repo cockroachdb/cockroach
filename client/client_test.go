@@ -46,6 +46,9 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+// testUser has a permissions config for the `TestUser` prefix.
+var testUser = server.TestUser
+
 // notifyingSender is a sender which can set up a notification channel
 // (on call to reset()) for clients which need to wait on a command
 // being sent.
@@ -72,7 +75,11 @@ func (ss *notifyingSender) Send(ctx context.Context, call proto.Call) {
 }
 
 func createTestClient(addr string) *client.DB {
-	db, err := client.Open("https://root@" + addr + "?certs=" + security.EmbeddedCertsDir)
+	return createTestClientFor(addr, testUser)
+}
+
+func createTestClientFor(addr, user string) *client.DB {
+	db, err := client.Open("https://" + user + "@" + addr + "?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -231,7 +238,7 @@ func TestClientRunTransaction(t *testing.T) {
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
-		key := []byte(fmt.Sprintf("key-%t", commit))
+		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(func(txn *client.Txn) error {
@@ -296,7 +303,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 		RangeMaxBytes: 1 << 18, // 256k
 	}
 
-	key := proto.Key("zone-config")
+	key := proto.Key(testUser + "/zone-config")
 	if err := db.Put(key, zoneConfig); err != nil {
 		t.Fatalf("unable to put proto: %s", err)
 	}
@@ -319,10 +326,10 @@ func TestClientGetAndPut(t *testing.T) {
 	db := createTestClient(s.ServingAddr())
 
 	value := []byte("value")
-	if err := db.Put("key", value); err != nil {
+	if err := db.Put(testUser+"/key", value); err != nil {
 		t.Fatalf("unable to put value: %s", err)
 	}
-	gr, err := db.Get("key")
+	gr, err := db.Get(testUser + "/key")
 	if err != nil {
 		t.Fatalf("unable to get value: %v", err)
 	}
@@ -346,19 +353,19 @@ func TestClientEmptyValues(t *testing.T) {
 	defer s.Stop()
 	db := createTestClient(s.ServingAddr())
 
-	if err := db.Put("a", []byte{}); err != nil {
+	if err := db.Put(testUser+"/a", []byte{}); err != nil {
 		t.Error(err)
 	}
-	if gr, err := db.Get("a"); err != nil {
+	if gr, err := db.Get(testUser + "/a"); err != nil {
 		t.Error(err)
 	} else if bytes := gr.ValueBytes(); bytes == nil || len(bytes) != 0 {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 
-	if _, err := db.Inc("b", 0); err != nil {
+	if _, err := db.Inc(testUser+"/b", 0); err != nil {
 		t.Error(err)
 	}
-	if gr, err := db.Get("b"); err != nil {
+	if gr, err := db.Get(testUser + "/b"); err != nil {
 		t.Error(err)
 	} else if gr.Value == nil {
 		t.Errorf("expected non-nil integer")
@@ -378,7 +385,7 @@ func TestClientBatch(t *testing.T) {
 	keys := []proto.Key{}
 	b := &client.Batch{}
 	for i := 0; i < 10; i++ {
-		key := proto.Key(fmt.Sprintf("key %02d", i))
+		key := proto.Key(fmt.Sprintf("%s/key %02d", testUser, i))
 		keys = append(keys, key)
 		b.Inc(key, int64(i))
 	}
@@ -395,8 +402,8 @@ func TestClientBatch(t *testing.T) {
 
 	// Now try 2 scans.
 	b = &client.Batch{}
-	b.Scan("key 00", "key 05", 0)
-	b.Scan("key 05", "key 10", 0)
+	b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
+	b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
 	if err := db.Run(b); err != nil {
 		t.Error(err)
 	}
@@ -437,8 +444,8 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func(i int) {
 			// Read the other key, write key i.
-			readKey := []byte(fmt.Sprintf("value-%d", (i+1)%2))
-			writeKey := []byte(fmt.Sprintf("value-%d", i))
+			readKey := []byte(fmt.Sprintf(testUser+"/value-%d", (i+1)%2))
+			writeKey := []byte(fmt.Sprintf(testUser+"/value-%d", i))
 			defer wgEnd.Done()
 			wgStart.Done()
 			// Wait until the other goroutines are running.
@@ -476,7 +483,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 	total := int64(0)
 	results := []int64(nil)
 	for i := 0; i < 2; i++ {
-		readKey := []byte(fmt.Sprintf("value-%d", i))
+		readKey := []byte(fmt.Sprintf(testUser+"/value-%d", i))
 		gr, err := db.Get(readKey)
 		if err != nil {
 			log.Fatal(err)
@@ -506,10 +513,59 @@ func TestConcurrentIncrements(t *testing.T) {
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
-		if err := db.DelRange("value-0", "value-1x"); err != nil {
+		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
 			t.Fatalf("%d: unable to clean up: %v", k, err)
 		}
 		concurrentIncrements(db, t)
+	}
+}
+
+// TestClientPermissions verifies permission enforcement.
+// This relies on:
+// - r/w permissions config for 'testUser' on the 'testUser' prefix.
+// - permissive checks for 'root' on all paths
+// - all users have client certs
+// Detailed permissions checking (read-only, write-only, etc...) is done elsewhere,
+// this is testing user/path setting by the client.
+func TestClientPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	test := createTestClientFor(s.ServingAddr(), testUser)
+	root := createTestClientFor(s.ServingAddr(), "root")
+
+	testCases := []struct {
+		path    string
+		client  *client.DB
+		success bool
+	}{
+		{"foo", test, false},
+		{"foo", root, true},
+
+		{testUser + "/foo", test, true},
+		{testUser + "/foo", root, true},
+
+		{testUser + "foo", test, true},
+		{testUser + "foo", root, true},
+
+		{testUser, test, true},
+		{testUser, root, true},
+
+		{"unknown/foo", test, false},
+		{"unknown/foo", root, true},
+	}
+
+	value := []byte("value")
+	for tcNum, tc := range testCases {
+		err := tc.client.Put(tc.path, value)
+		if err == nil != tc.success {
+			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, err)
+		}
+		_, err = tc.client.Get(tc.path)
+		if err == nil != tc.success {
+			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, err)
+		}
 	}
 }
 
