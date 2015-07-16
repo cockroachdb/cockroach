@@ -86,8 +86,9 @@ type txnMetadata struct {
 	// is set to 0, a default timeout will be used.
 	timeoutDuration time.Duration
 
-	// txnEnd is closed when the transaction is aborted or committed.
-	txnEnd chan struct{}
+	// txnEnd receives a slice of pre-resolved intents when the transaction is
+	// aborted or committed, prompting the receiver to clean up the intents.
+	txnEnd chan []proto.Key
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -136,19 +137,22 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 	return tm.getLastUpdate() < timeout
 }
 
-// close sends resolve intent commands for all key ranges this
-// transaction has covered, clears the keys cache and closes the
-// metadata heartbeat. Any keys listed in the resolved slice have
-// already been resolved and do not receive resolve intent commands.
-func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolved []proto.Key, sender client.Sender, stopper *stop.Stopper) {
-	close(tm.txnEnd) // stop heartbeat
-	trace.Event("coordinator stops")
+// resolve sends resolve intent commands for all key ranges this transaction
+// has covered. Any keys listed in the resolved slice have already been
+// resolved and are skipped.
+func (tm *txnMetadata) resolve(trace *tracer.Trace, resolved []proto.Key, sender client.Sender) {
+	txn := &tm.txn
 	if tm.keys.Len() > 0 {
 		if log.V(2) {
 			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 		}
 	}
-	// TODO(tschottdorf): Should create a Batch here.
+	// TODO(tschottdorf): Should create a Batch here. However, we're resolving
+	// intents and if those are on meta records, there may be a certain order
+	// in which they need to be resolved so that they can get routed to the
+	// correct range. Since a batch runs its commands one by one and we don't
+	// know the correct order, we prefer to fire them off in parallel.
+	var wg sync.WaitGroup
 	for _, o := range tm.keys.GetOverlaps(proto.KeyMin, proto.KeyMax) {
 		// If the op was range based, end key != start key: resolve a range.
 		var call proto.Call
@@ -170,6 +174,9 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 			found := false
 			for _, k := range resolved {
 				if key.Equal(k) {
+					if log.V(2) {
+						log.Warningf("skipping previously resolved intent at %q", k)
+					}
 					found = true
 				}
 			}
@@ -186,19 +193,23 @@ func (tm *txnMetadata) close(trace *tracer.Trace, txn *proto.Transaction, resolv
 			}
 			call.Reply = &proto.InternalResolveIntentResponse{}
 		}
-		// We don't care about the reply channel; these are best
-		// effort. We simply fire and forget, each in its own goroutine.
 		ctx := tracer.ToCtx(context.Background(), trace.Fork())
-		stopper.RunAsyncTask(func() {
-			if log.V(2) {
-				log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
-			}
+		if log.V(2) {
+			log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+		}
+		// Each operation gets their own goroutine. We only want to return to
+		// the caller after the operations have finished.
+		wg.Add(1)
+		go func() {
 			sender.Send(ctx, call)
+			wg.Done()
 			if call.Reply.Header().Error != nil {
 				log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
 			}
-		})
+		}()
 	}
+	defer trace.Epoch("waiting for intent resolution")()
+	wg.Wait()
 	tm.keys.Clear()
 }
 
@@ -235,9 +246,7 @@ type TxnCoordSender struct {
 }
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
-// distributed DB instance. A TxnCoordSender should be closed when no
-// longer in use via Close(), which also closes the wrapped sender
-// supplied here.
+// distributed DB instance.
 func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer *tracer.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
@@ -463,11 +472,24 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						firstUpdateNanos: tc.clock.PhysicalNow(),
 						lastUpdateNanos:  tc.clock.PhysicalNow(),
 						timeoutDuration:  tc.clientTimeout,
-						txnEnd:           make(chan struct{}),
+						txnEnd:           make(chan []proto.Key, 1),
 					}
 					id := string(txn.ID)
 					tc.txns[id] = txnMeta
-					tc.heartbeat(id)
+					if !tc.stopper.RunAsyncTask(func() {
+						tc.heartbeat(id)
+					}) {
+						// The system is already draining and we can't start the
+						// heartbeat. Since the heartbeat also resolves intents,
+						// and since intent resolution may be critical for
+						// another running task (which may need to see an intent
+						// on the meta adressing records in order to hit the
+						// correct range), we fail here.
+						call.Reply.Header().SetGoError(util.Errorf("system shutting down"))
+						tc.Unlock()
+						tc.unregisterTxn(id)
+						return
+					}
 				}
 				txnMeta.addKeyRange(header.Key, header.EndKey)
 			}
@@ -551,6 +573,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
+// TODO(tschottdorf): modify sendBatch so that it sends truly parallel requests
+// when outside of a Transaction. This can then be used to address the TODO in
+// (*TxnCoordSender).resolve().
 func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.InternalBatchRequest, batchReply *proto.InternalBatchResponse) {
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies
@@ -652,9 +677,9 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 	}
 }
 
-// cleanupTxn is called to resolve write intents which were set down over
-// the course of the transaction. The txnMetadata object is removed from
-// the txns map and taken into account for statistics.
+// cleanupTxn is called when a transaction ends. The transaction record is
+// updated and the heartbeat goroutine signaled to clean up the transaction
+// gracefully.
 func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction, resolved []proto.Key) {
 	tc.Lock()
 	defer tc.Unlock()
@@ -666,17 +691,21 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction,
 	// The supplied txn may be newed than the one in txnMeta, which is relevant
 	// for stats.
 	txnMeta.txn = txn
-	tc.unregisterTxnLocked(txnMeta)
-
-	txnMeta.close(trace, &txn, resolved, tc.wrapped, tc.stopper)
+	// Trigger intent resolution and heartbeat shutdown.
+	trace.Event("coordinator stops")
+	txnMeta.txnEnd <- resolved // buffered, so does not block
+	close(txnMeta.txnEnd)
+	txnMeta.txnEnd = nil
 }
 
-// unregisterTxnLocked idempotently deletes a txnMetadata object from the sender
+// unregisterTxn idempotently deletes a txnMetadata object from the sender
 // and collects its stats.
-func (tc *TxnCoordSender) unregisterTxnLocked(txnMeta *txnMetadata) {
-	id := string(txnMeta.txn.ID)
-	if _, ok := tc.txns[id]; !ok {
-		return
+func (tc *TxnCoordSender) unregisterTxn(id string) {
+	tc.Lock()
+	defer tc.Unlock()
+	txnMeta := tc.txns[id] // guaranteed to exist
+	if txnMeta == nil {
+		panic("attempt to unregister non-existent transaction: " + id)
 	}
 	tc.txnStats.durations = append(tc.txnStats.durations, float64(tc.clock.PhysicalNow()-txnMeta.firstUpdateNanos))
 	tc.txnStats.restarts = append(tc.txnStats.restarts, float64(txnMeta.txn.Epoch))
@@ -691,102 +720,97 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnMeta *txnMetadata) {
 	delete(tc.txns, id)
 }
 
-// heartbeat periodically sends an InternalHeartbeatTxn RPC to an
-// extant transaction, stopping in the event the transaction is
-// aborted or committed or if the TxnCoordSender is closed.
+// heartbeat periodically sends an InternalHeartbeatTxn RPC to an extant
+// transaction, stopping in the event the transaction is aborted or committed
+// after attempting to resolve the intents. When done, unregisters the
+// transaction.
 func (tc *TxnCoordSender) heartbeat(id string) {
-	tc.stopper.RunWorker(func() {
+	var tickChan <-chan time.Time
+	{
 		ticker := time.NewTicker(tc.heartbeatInterval)
+		tickChan = ticker.C
 		defer ticker.Stop()
+	}
+	defer tc.unregisterTxn(id)
 
+	var closer chan []proto.Key
+	var trace *tracer.Trace
+	{
 		tc.Lock()
-		var closer chan struct{}
-		if txnMeta, ok := tc.txns[id]; ok {
-			closer = txnMeta.txnEnd
-		}
+		txnMeta := tc.txns[id] // do not leak to outer scope
+		closer = txnMeta.txnEnd
+		trace = tc.tracer.NewTrace(&txnMeta.txn)
 		tc.Unlock()
-		if closer == nil {
-			return
-		}
+	}
+	ctx := tracer.ToCtx(context.Background(), trace)
+	defer trace.Finalize()
 
-		// Loop with ticker for periodic heartbeats.
-		for {
-			select {
-			case <-ticker.C:
-				tc.Lock()
-				var txn proto.Transaction
-				_, proceed := tc.txns[id]
-				if proceed {
-					txnMeta := tc.txns[id] // assign only here for local scope
-					// Before we send a heartbeat, determine whether this transaction
-					// should be considered abandoned. If so, exit heartbeat.
-					if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
-						tc.unregisterTxnLocked(txnMeta)
-						// TODO(tschottdorf): should we be more proactive here?
-						// The client might be continuing the transaction
-						// through another coordinator, but in the most likely
-						// case it's just gone and the open transaction record
-						// could block concurrent operations.
-						if log.V(1) {
-							log.Infof("transaction %s abandoned; stopping heartbeat",
-								txnMeta.txn)
-						}
-						proceed = false
-					}
-					// txnMeta.txn is possibly replaced concurrently,
-					// so grab a copy.
-					txn = txnMeta.txn
+	// Loop with ticker for periodic heartbeats.
+	for {
+		select {
+		case <-tickChan:
+			tc.Lock()
+			proceed := true
+			txnMeta := tc.txns[id]
+			// Before we send a heartbeat, determine whether this transaction
+			// should be considered abandoned. If so, exit heartbeat.
+			if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
+				// TODO(tschottdorf): should we be more proactive here?
+				// The client might be continuing the transaction
+				// through another coordinator, but in the most likely
+				// case it's just gone and the open transaction record
+				// could block concurrent operations.
+				if log.V(1) {
+					log.Infof("transaction %s abandoned; stopping heartbeat",
+						txnMeta.txn)
 				}
-				tc.Unlock()
-				if !proceed {
-					return
-				}
-
-				request := &proto.InternalHeartbeatTxnRequest{
-					RequestHeader: proto.RequestHeader{
-						Key:  txn.Key,
-						User: security.RootUser,
-						Txn:  &txn,
-					},
-				}
-
-				request.Header().Timestamp = tc.clock.Now()
-				reply := &proto.InternalHeartbeatTxnResponse{}
-				call := proto.Call{
-					Args:  request,
-					Reply: reply,
-				}
-
-				tc.stopper.RunTask(func() {
-					// Each heartbeat gets its own Trace.
-					trace := tc.tracer.NewTrace(&txn)
-					ctx := tracer.ToCtx(context.Background(), trace)
-					epochEnds := trace.Epoch("heartbeat")
-					tc.wrapped.Send(ctx, call)
-					epochEnds()
-					// If the transaction is not in pending state, then we can stop
-					// the heartbeat. It's either aborted or committed, and we resolve
-					// write intents accordingly.
-					if reply.GoError() != nil {
-						log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
-					} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-						tc.cleanupTxn(trace, *reply.Txn, nil)
-						proceed = false
-					}
-					trace.Finalize()
-				})
-				if !proceed {
-					return
-				}
-
-			case <-closer:
-				// Transaction finished.
-				return
-
-			case <-tc.stopper.ShouldStop():
-				// System shutdown.
+				proceed = false
+			}
+			// txnMeta.txn is possibly replaced concurrently,
+			// so grab a copy before unlocking.
+			txn := txnMeta.txn
+			tc.Unlock()
+			if !proceed {
 				return
 			}
+
+			request := &proto.InternalHeartbeatTxnRequest{
+				RequestHeader: proto.RequestHeader{
+					Key:  txn.Key,
+					User: security.RootUser,
+					Txn:  &txn,
+				},
+			}
+
+			request.Header().Timestamp = tc.clock.Now()
+			reply := &proto.InternalHeartbeatTxnResponse{}
+			call := proto.Call{
+				Args:  request,
+				Reply: reply,
+			}
+
+			epochEnds := trace.Epoch("heartbeat")
+			tc.wrapped.Send(ctx, call)
+			epochEnds()
+			// If the transaction is not in pending state, then we can stop
+			// the heartbeat. It's either aborted or committed, and we resolve
+			// write intents accordingly.
+			if reply.GoError() != nil {
+				log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
+			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
+				tc.cleanupTxn(trace, *reply.Txn, nil) // signal closer
+				tickChan = nil                        // wait only for the closer, no more heartbeats
+			}
+
+		case resolved := <-closer:
+			// Transaction finished normally. Clean up intents (and wait for
+			// completion).
+			defer trace.Epoch("intent resolution")()
+			tc.Lock()
+			txnMeta := tc.txns[id]
+			tc.Unlock()
+			txnMeta.resolve(trace, resolved, tc.wrapped)
+			return
 		}
-	})
+	}
 }

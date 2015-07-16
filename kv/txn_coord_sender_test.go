@@ -19,6 +19,8 @@ package kv
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -36,6 +38,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+// teardownHeartbeats goes through the coordinator's active transactions and
+// has the associated heartbeat tasks quit. This is useful for tests which
+// don't finish transactions.
+func teardownHeartbeats(tc *TxnCoordSender) {
+	tc.Lock()
+	for _, tm := range tc.txns {
+		if tm.txnEnd != nil {
+			close(tm.txnEnd)
+		}
+	}
+	defer tc.Unlock()
+}
 
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
@@ -94,6 +109,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
 
 	txn := newTxn(s.Clock, proto.Key("a"))
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
@@ -133,6 +149,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
@@ -173,6 +190,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
 
 	reply := &proto.PutResponse{}
 	s.Sender.Send(context.Background(), proto.Call{
@@ -216,6 +234,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	s := createTestDB(t)
 	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
 	txn := newTxn(s.Clock, proto.Key("a"))
 
 	for _, rng := range ranges {
@@ -251,6 +270,7 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
 
 	txn1 := newTxn(s.Clock, proto.Key("a"))
 	txn2 := newTxn(s.Clock, proto.Key("b"))
@@ -278,6 +298,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
 
 	// Set heartbeat interval to 1ms for testing.
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
@@ -334,20 +355,23 @@ func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transac
 }
 
 func verifyCleanup(key proto.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
-	if len(coord.txns) != 0 {
-		t.Errorf("expected empty transactions map; got %d", len(coord.txns))
-	}
-
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+		coord.Lock()
+		l := len(coord.txns)
+		coord.Unlock()
+		if l != 0 {
+			return fmt.Errorf("expected empty transactions map; got %d", l)
+		}
 		meta := &engine.MVCCMetadata{}
 		ok, _, _, err := eng.GetProto(engine.MVCCEncodeKey(key), meta)
 		if err != nil {
-			t.Errorf("error getting MVCC metadata: %s", err)
+			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}
-		return !ok || meta.Txn == nil
-	}, 500*time.Millisecond); err != nil {
-		t.Errorf("expected intents to be cleaned up within 500ms")
-	}
+		if !ok || meta.Txn == nil {
+			return nil
+		}
+		return errors.New("intents not cleaned up")
+	})
 }
 
 // TestTxnCoordSenderEndTxn verifies that ending a transaction
@@ -556,12 +580,13 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		defer stopper.Stop()
 		ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 			call.Reply.Header().SetGoError(test.err)
 		}), clock, false, nil, stopper)
 		reply := &proto.PutResponse{}
 		ts.Send(context.Background(), proto.Call{Args: testPutReq, Reply: reply})
+		teardownHeartbeats(ts)
+		stopper.Stop()
 
 		if reflect.TypeOf(test.err) != reflect.TypeOf(reply.GoError()) {
 			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())
