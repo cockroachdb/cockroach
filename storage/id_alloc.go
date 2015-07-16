@@ -58,10 +58,10 @@ type idAllocator struct {
 func newIDAllocator(idKey proto.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper) (*idAllocator, error) {
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
-	if minID == 0 {
+	if minID <= 0 {
 		return nil, util.Errorf("minID must be a positive integer: %d", minID)
 	}
-	if blockSize == 0 {
+	if blockSize <= 0 {
 		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &idAllocator{
