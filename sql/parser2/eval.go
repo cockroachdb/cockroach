@@ -774,7 +774,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 			}
 			m[val] = struct{}{}
 		}
-		if _, ok := m[arg]; ok {
+		if _, exists := m[arg]; exists {
 			return dbool(true), nil
 		}
 	} else {
