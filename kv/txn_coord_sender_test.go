@@ -661,3 +661,50 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 		}
 	}
 }
+
+// TestDrainingNodeUnavailable tests that a NodeUnavailableError is received
+// when attempting to run a new transaction on a draining node.
+func TestTestDrainingNodeUnavailable(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := createTestDB(t)
+
+	done := make(chan struct{})
+	// Dummy task that keeps the node in draining state.
+	if !s.Stopper.RunAsyncTask(func() {
+		<-done
+	}) {
+		t.Fatal("stopper draining prematurely")
+	}
+
+	go func() {
+		s.Stopper.Stop()
+	}()
+
+	util.SucceedsWithin(t, time.Second, func() error {
+		if s.Stopper.RunTask(func() {}) {
+			return errors.New("stopper not yet draining")
+		}
+		return nil
+	})
+
+	reply := &proto.PutResponse{}
+	key := proto.Key("key")
+	s.Sender.Send(context.Background(), proto.Call{
+		Args: &proto.PutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  key,
+				User: security.RootUser,
+				Txn: &proto.Transaction{
+					Name: "test txn",
+				},
+			},
+		},
+		Reply: reply,
+	})
+	if _, ok := reply.GoError().(*proto.NodeUnavailableError); !ok {
+		teardownHeartbeats(s.Sender)
+		t.Fatal(reply.GoError())
+	}
+	close(done)
+	<-s.Stopper.IsStopped()
+}

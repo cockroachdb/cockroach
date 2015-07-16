@@ -75,6 +75,11 @@ func (e *Error) SetResponseGoError(err error) {
 }
 
 // Error formats error.
+func (e *NodeUnavailableError) Error() string {
+	return "node unavailable; try another peer"
+}
+
+// Error formats error.
 func (e *NotLeaderError) Error() string {
 	return fmt.Sprintf("replica %s not leader; leader is %s", e.Replica, e.Leader)
 }

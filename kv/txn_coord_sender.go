@@ -485,7 +485,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						// another running task (which may need to see an intent
 						// on the meta adressing records in order to hit the
 						// correct range), we fail here.
-						call.Reply.Header().SetGoError(util.Errorf("system shutting down"))
+						call.Reply.Header().SetGoError(&proto.NodeUnavailableError{})
 						tc.Unlock()
 						tc.unregisterTxn(id)
 						return

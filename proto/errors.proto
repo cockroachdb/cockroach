@@ -36,6 +36,12 @@ message NotLeaderError {
   optional Replica leader = 2;
 }
 
+// A NodeUnavailableError indicates that the sending gateway can
+// not process requests at the time, and that the client should
+// retry the request with another peer.
+message NodeUnavailableError {
+}
+
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 message RangeNotFoundError {
@@ -154,6 +160,7 @@ message ErrorDetail {
     OpRequiresTxnError op_requires_txn = 11;
     ConditionFailedError condition_failed = 12;
     LeaseRejectedError lease_rejected = 13;
+    NodeUnavailableError node_unavailable = 14;
   }
 }
 

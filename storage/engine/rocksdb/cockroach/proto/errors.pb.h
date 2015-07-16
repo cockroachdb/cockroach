@@ -42,6 +42,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
 void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
 
 class NotLeaderError;
+class NodeUnavailableError;
 class RangeNotFoundError;
 class RangeKeyMismatchError;
 class ReadWithinUncertaintyIntervalError;
@@ -179,6 +180,85 @@ class NotLeaderError : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static NotLeaderError* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class NodeUnavailableError : public ::google::protobuf::Message {
+ public:
+  NodeUnavailableError();
+  virtual ~NodeUnavailableError();
+
+  NodeUnavailableError(const NodeUnavailableError& from);
+
+  inline NodeUnavailableError& operator=(const NodeUnavailableError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const NodeUnavailableError& default_instance();
+
+  void Swap(NodeUnavailableError* other);
+
+  // implements Message ----------------------------------------------
+
+  inline NodeUnavailableError* New() const { return New(NULL); }
+
+  NodeUnavailableError* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const NodeUnavailableError& from);
+  void MergeFrom(const NodeUnavailableError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(NodeUnavailableError* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.NodeUnavailableError)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static NodeUnavailableError* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -1401,6 +1481,7 @@ class ErrorDetail : public ::google::protobuf::Message {
     kOpRequiresTxn = 11,
     kConditionFailed = 12,
     kLeaseRejected = 13,
+    kNodeUnavailable = 14,
     VALUE_NOT_SET = 0,
   };
 
@@ -1562,6 +1643,15 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::proto::LeaseRejectedError* release_lease_rejected();
   void set_allocated_lease_rejected(::cockroach::proto::LeaseRejectedError* lease_rejected);
 
+  // optional .cockroach.proto.NodeUnavailableError node_unavailable = 14;
+  bool has_node_unavailable() const;
+  void clear_node_unavailable();
+  static const int kNodeUnavailableFieldNumber = 14;
+  const ::cockroach::proto::NodeUnavailableError& node_unavailable() const;
+  ::cockroach::proto::NodeUnavailableError* mutable_node_unavailable();
+  ::cockroach::proto::NodeUnavailableError* release_node_unavailable();
+  void set_allocated_node_unavailable(::cockroach::proto::NodeUnavailableError* node_unavailable);
+
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.ErrorDetail)
  private:
@@ -1578,6 +1668,7 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void set_has_op_requires_txn();
   inline void set_has_condition_failed();
   inline void set_has_lease_rejected();
+  inline void set_has_node_unavailable();
 
   inline bool has_value() const;
   void clear_value();
@@ -1601,6 +1692,7 @@ class ErrorDetail : public ::google::protobuf::Message {
     ::cockroach::proto::OpRequiresTxnError* op_requires_txn_;
     ::cockroach::proto::ConditionFailedError* condition_failed_;
     ::cockroach::proto::LeaseRejectedError* lease_rejected_;
+    ::cockroach::proto::NodeUnavailableError* node_unavailable_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -1830,6 +1922,10 @@ inline void NotLeaderError::set_allocated_leader(::cockroach::proto::Replica* le
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NotLeaderError.leader)
 }
+
+// -------------------------------------------------------------------
+
+// NodeUnavailableError
 
 // -------------------------------------------------------------------
 
@@ -3277,6 +3373,52 @@ inline void ErrorDetail::set_allocated_lease_rejected(::cockroach::proto::LeaseR
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.lease_rejected)
 }
 
+// optional .cockroach.proto.NodeUnavailableError node_unavailable = 14;
+inline bool ErrorDetail::has_node_unavailable() const {
+  return value_case() == kNodeUnavailable;
+}
+inline void ErrorDetail::set_has_node_unavailable() {
+  _oneof_case_[0] = kNodeUnavailable;
+}
+inline void ErrorDetail::clear_node_unavailable() {
+  if (has_node_unavailable()) {
+    delete value_.node_unavailable_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::NodeUnavailableError& ErrorDetail::node_unavailable() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ErrorDetail.node_unavailable)
+  return has_node_unavailable() ? *value_.node_unavailable_
+                      : ::cockroach::proto::NodeUnavailableError::default_instance();
+}
+inline ::cockroach::proto::NodeUnavailableError* ErrorDetail::mutable_node_unavailable() {
+  if (!has_node_unavailable()) {
+    clear_value();
+    set_has_node_unavailable();
+    value_.node_unavailable_ = new ::cockroach::proto::NodeUnavailableError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ErrorDetail.node_unavailable)
+  return value_.node_unavailable_;
+}
+inline ::cockroach::proto::NodeUnavailableError* ErrorDetail::release_node_unavailable() {
+  if (has_node_unavailable()) {
+    clear_has_value();
+    ::cockroach::proto::NodeUnavailableError* temp = value_.node_unavailable_;
+    value_.node_unavailable_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void ErrorDetail::set_allocated_node_unavailable(::cockroach::proto::NodeUnavailableError* node_unavailable) {
+  clear_value();
+  if (node_unavailable) {
+    set_has_node_unavailable();
+    value_.node_unavailable_ = node_unavailable;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ErrorDetail.node_unavailable)
+}
+
 inline bool ErrorDetail::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -3436,6 +3578,8 @@ inline void Error::set_allocated_detail(::cockroach::proto::ErrorDetail* detail)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
