@@ -833,13 +833,18 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 // MVCCConditionalPut sets the value for a specified key only if the
 // expected value matches. If not, the return a ConditionFailedError
 // containing the actual value.
+//
+// The condition check reads a value from the key using the same operational
+// timestamp as we use to write a value.
 func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, value proto.Value,
 	expValue *proto.Value, txn *proto.Transaction) error {
-	// Handle check for non-existence of key. In order to detect
-	// the potential write intent by another concurrent transaction
-	// with a newer timestamp, we need to use the max timestamp
-	// while reading.
-	existVal, _, err := MVCCGet(engine, key, proto.MaxTimestamp, true /* consistent */, txn)
+	// Use the specified timestamp to read the value. When a write
+	// with newer timestamp exists, either of the following will
+	// happen:
+	// - If the conditional check succeeds, either a WriteTooOldError or WriteIntentError
+	//   is returned, depending on whether the newer write is an intent.
+	// - If the conditional check fails, a ConditionFailedError is returned.
+	existVal, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, txn)
 	if err != nil {
 		return err
 	}

@@ -1236,6 +1236,43 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 }
 
+// TestMVCCConditionalPutOldTimestamp tests a case where a conditional
+// put with an older timestamp happens after a put with a newer timestamp.
+//
+// The conditional put uses the actual value at the timestamp as the
+// basis for comparison first, and then may fail later with a
+// WriteTooOldError if that timestamp isn't recent.
+func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = MVCCPut(engine, nil, testKey1, makeTS(3, 0), value2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(2, 0), value3, &value1, nil)
+	if err == nil {
+		t.Errorf("unexpected success on conditional put")
+	}
+	if _, ok := err.(*proto.WriteTooOldError); !ok {
+		t.Errorf("unexpected error on conditional put: %s", err)
+	}
+
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(2, 0), value3, &value2, nil)
+	if err == nil {
+		t.Errorf("unexpected success on conditional put")
+	}
+	if _, ok := err.(*proto.ConditionFailedError); !ok {
+		t.Errorf("unexpected error on conditional put: %s", err)
+	}
+}
+
 func TestMVCCAbortTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
