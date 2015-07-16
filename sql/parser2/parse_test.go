@@ -273,7 +273,7 @@ func TestParse2(t *testing.T) {
 
 // TestParseSyntax verifieds that parsing succeeds, though the syntax tree
 // likely differs. All of the test cases here should eventually be moved
-// elswhere.
+// elsewhere.
 func TestParseSyntax(t *testing.T) {
 	testData := []struct {
 		sql string
