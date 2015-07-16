@@ -190,44 +190,51 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		case call := <-done:
 			if call.Error == nil {
 				// Verify response data integrity if this is a proto response.
-				if resp, respOk := call.Reply.(proto.Response); respOk {
-					if req, reqOk := call.Args.(proto.Request); reqOk {
+				if req, reqOk := call.Args.(proto.Request); reqOk {
+					if resp, respOk := call.Reply.(proto.Response); respOk {
 						if err := resp.Verify(req); err != nil {
 							call.Error = err
 						}
+					} else {
+						call.Error = util.Error("response to proto request must be a proto")
 					}
 				}
 			}
-			if err := call.Error; err != nil {
-				if log.V(1) {
-					log.Warningf("%s: error reply: %s", method, err)
-				}
-
-				errors++
-				// since we have a reconnecting client here, disconnect errors are retryable
-				if retryErr, ok := err.(retry.Retryable); err == io.ErrUnexpectedEOF || ok && retryErr.CanRetry() {
-					retryableErrors++
-				}
-
-				if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < opts.N {
-					return nil, SendError{
-						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), err),
-						canRetry: remainingNonErrorRPCs+retryableErrors >= opts.N,
-					}
-				}
-				// Send to additional replicas if available.
-				if len(tail) > 0 {
-					trace.Event("error, trying next peer")
-					sendFn(tail[0])
-					tail = tail[1:]
-				}
-			} else {
+			err := call.Error
+			if err == nil {
 				if log.V(2) {
 					log.Infof("%s: successful reply: %+v", method, call.Reply)
 				}
 
 				replies = append(replies, call.Reply.(gogoproto.Message))
+				break // end the select
 			}
+
+			// Error handling.
+			if log.V(1) {
+				log.Warningf("%s: error reply: %s", method, err)
+			}
+
+			errors++
+			// since we have a reconnecting client here, disconnect errors are retryable
+			if retryErr, ok := err.(retry.Retryable); err == io.ErrUnexpectedEOF ||
+				(ok && retryErr.CanRetry()) {
+				retryableErrors++
+			}
+
+			if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < opts.N {
+				return nil, SendError{
+					errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), err),
+					canRetry: remainingNonErrorRPCs+retryableErrors >= opts.N,
+				}
+			}
+			// Send to additional replicas if available.
+			if len(tail) > 0 {
+				trace.Event("error, trying next peer")
+				sendFn(tail[0])
+				tail = tail[1:]
+			}
+
 		case <-time.After(opts.SendNextTimeout):
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(tail) > 0 {
