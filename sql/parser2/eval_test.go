@@ -20,29 +20,8 @@ package parser2
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/testutils"
 )
-
-func dInt(v int64) sqlwire.Datum {
-	return sqlwire.Datum{IntVal: &v}
-}
-
-func dUint(v uint64) sqlwire.Datum {
-	return sqlwire.Datum{UintVal: &v}
-}
-
-func dFloat(v float64) sqlwire.Datum {
-	return sqlwire.Datum{FloatVal: &v}
-}
-
-func dBytes(v []byte) sqlwire.Datum {
-	return sqlwire.Datum{BytesVal: v}
-}
-
-func dString(v string) sqlwire.Datum {
-	return sqlwire.Datum{StringVal: &v}
-}
 
 func TestEvalExpr(t *testing.T) {
 	testData := []struct {
@@ -54,9 +33,6 @@ func TestEvalExpr(t *testing.T) {
 		{`1 & 3`, `1`, nil},
 		{`1 | 3`, `3`, nil},
 		{`1 # 3`, `2`, nil},
-		// Bitwise operators convert their arguments to ints.
-		// TODO(pmattis): Should this be an error instead?
-		{`1.1 # 3.1`, `2`, nil},
 		// Arithmetic operators.
 		{`1 + 1`, `2`, nil},
 		{`1 - 2`, `-1`, nil},
@@ -70,39 +46,44 @@ func TestEvalExpr(t *testing.T) {
 		// Unary operators.
 		{`-3`, `-3`, nil},
 		{`-4.1`, `-4.1`, nil},
-		// Ones complement operates on unsigned integers.
-		{`~0`, `18446744073709551615`, nil},
-		{`~0.1`, `18446744073709551615`, nil},
-		{`~0 - 1`, `18446744073709551614`, nil},
+		// Ones complement operates on signed integers.
+		{`~0`, `-1`, nil},
+		{`~0 - 1`, `-2`, nil},
 		// Hexadecimal numbers.
 		// TODO(pmattis): {`0xa`, `10`, nil},
 		// Octal numbers.
-		// TODO(pmattis):{`0755`, `493`, nil},
-		// String conversion
-		{`'1' + '2'`, `3`, nil},
-		// Strings convert to floats.
-		{`'18446744073709551614' + 1`, `1.8446744073709552e+19`, nil},
+		// TODO(pmattis): {`0755`, `493`, nil},
 		// String concatenation.
 		{`'a' || 'b'`, `ab`, nil},
 		{`'a' || (1 + 2)`, `a3`, nil},
 		// Column lookup.
-		{`a`, `1`, mapEnv{"a": dInt(1)}},
-		{`a`, `2`, mapEnv{"a": dUint(2)}},
-		{`a`, `3.1`, mapEnv{"a": dFloat(3.1)}},
-		{`a`, `b`, mapEnv{"a": dBytes([]byte("b"))}},
-		{`a`, `c`, mapEnv{"a": dString("c")}},
-		{`a.b + 1`, `2`, mapEnv{"a.b": dInt(1)}},
+		{`a`, `1`, mapEnv{"a": dint(1)}},
+		{`a`, `3.1`, mapEnv{"a": dfloat(3.1)}},
+		{`a`, `c`, mapEnv{"a": dstring("c")}},
+		{`a.b + 1`, `2`, mapEnv{"a.b": dint(1)}},
+		{`a OR b`, `true`, mapEnv{"a": dbool(false), "b": dbool(true)}},
 		// Boolean expressions.
 		{`false AND true`, `false`, nil},
+		{`false AND NULL`, `false`, nil},
+		{`false AND false`, `false`, nil},
 		{`true AND true`, `true`, nil},
 		{`true AND false`, `false`, nil},
-		{`false AND false`, `false`, nil},
+		{`true AND NULL`, `NULL`, nil},
+		{`NULL AND true`, `NULL`, nil},
+		{`NULL AND false`, `NULL`, nil},
+		{`NULL AND NULL`, `NULL`, nil},
 		{`false OR true`, `true`, nil},
+		{`false OR NULL`, `NULL`, nil},
+		{`false OR false`, `false`, nil},
 		{`true OR true`, `true`, nil},
 		{`true OR false`, `true`, nil},
-		{`false OR false`, `false`, nil},
+		{`true OR NULL`, `true`, nil},
+		{`NULL OR true`, `true`, nil},
+		{`NULL OR false`, `NULL`, nil},
+		{`NULL OR NULL`, `NULL`, nil},
 		{`NOT false`, `true`, nil},
 		{`NOT true`, `false`, nil},
+		{`NOT NULL`, `NULL`, nil},
 		// Boolean expressions short-circuit the evaluation.
 		{`false AND (a = 1)`, `false`, nil},
 		{`true OR (a = 1)`, `true`, nil},
@@ -126,10 +107,8 @@ func TestEvalExpr(t *testing.T) {
 		{`'a' > 'b'`, `false`, nil},
 		{`'a' >= 'b'`, `false`, nil},
 		{`'a' >= 'b'`, `false`, nil},
-		// Comparison of a string against a number compares using floating point.
 		{`'10' > '2'`, `false`, nil},
-		{`'10' > 2`, `true`, nil},
-		// Comparisons against NULL result in NULL, except for the null-safe equal.
+		// Comparisons against NULL result in NULL.
 		{`0 = NULL`, `NULL`, nil},
 		{`NULL = NULL`, `NULL`, nil},
 		// NULL checks.
@@ -147,18 +126,18 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`, nil},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
 	}
-	for i, d := range testData {
+	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%d: %v: %s", i, err, d.expr)
+			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		r, err := EvalExpr(expr, d.env)
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := r.String(); d.expected != s {
-			t.Errorf("%d: expected %s, but found %s: %s", i, d.expected, s, d.expr)
+			t.Errorf("%s: expected %s, but found %s: %s", d.expr, d.expected, s, d.expr)
 		}
 	}
 }
@@ -168,20 +147,23 @@ func TestEvalExprError(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{`'a' + 0`, `parsing \"a\": invalid syntax`},
-		{`'0a' + 0`, `parsing \"0a\": invalid syntax`},
+		{`'1' + '2'`, `unsupported binary operator:`},
+		{`'a' + 0`, `unsupported binary operator:`},
+		{`1.1 # 3.1`, `unsupported binary operator:`},
+		{`~0.1`, `unsupported unary operator:`},
+		{`'10' > 2`, `unsupported comparison operator:`},
 		{`a`, `column \"a\" not found`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`, nil},
 	}
-	for i, d := range testData {
+	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%d: %v: %s", i, err, d.expr)
+			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		if _, err := EvalExpr(expr, mapEnv{}); !testutils.IsError(err, d.expected) {
-			t.Errorf("%d: expected %s, but found %v", i, d.expected, err)
+			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
 }
