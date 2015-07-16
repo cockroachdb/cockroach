@@ -53,9 +53,8 @@ func (s syncAdapter) exec(args proto.Message, callback func(proto.Message, error
 	}()
 }
 
-// Server is a Cockroach-specific RPC server with an embedded go RPC
-// server struct. By default it handles a simple heartbeat protocol
-// to measure link health. It also supports close callbacks.
+// Server is a Cockroach-specific RPC server. By default it handles a simple
+// heartbeat protocol to measure link health. It also supports close callbacks.
 //
 // TODO(spencer): heartbeat protocol should also measure link latency.
 type Server struct {

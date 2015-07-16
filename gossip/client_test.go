@@ -38,7 +38,6 @@ const (
 
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
-// TODO(mberhault): use a secure context, if possible.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	lclock := hlc.NewClock(hlc.UnixNano)
 	stopper = stop.NewStopper()

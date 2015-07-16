@@ -46,15 +46,16 @@ const (
 var (
 	clientMu          sync.Mutex                      // Protects access to the client cache.
 	clients           map[util.UnresolvedAddr]*Client // Cache of RPC clients by server address.
-	heartbeatInterval time.Duration
-	errClosed         = errors.New("client is closed")
-	errUnstarted      = errors.New("not started yet")
+	heartbeatInterval = defaultHeartbeatInterval
+	// TODO(tschottdorf) err{Closed,Unstarted} are candidates for NodeUnavailableError.
+	errClosed    = errors.New("client is closed")
+	errUnstarted = errors.New("not started yet")
 )
 
 // clientRetryOptions specifies exponential backoff starting
 // at 1s and ending at 30s with indefinite retries.
-// Clients currently never give up. TODO(tamird): Add `MaxRetries` here or
-// otherwise address this.
+// Clients currently never give up.
+// TODO(tamird): Add `MaxRetries` here or otherwise address this.
 var clientRetryOptions = retry.Options{
 	InitialBackoff: 1 * time.Second,  // first backoff at 1s
 	MaxBackoff:     30 * time.Second, // max backoff is 30s
@@ -64,7 +65,6 @@ var clientRetryOptions = retry.Options{
 // init creates a new client RPC cache.
 func init() {
 	clients = map[util.UnresolvedAddr]*Client{}
-	heartbeatInterval = defaultHeartbeatInterval
 }
 
 type internalConn struct {
@@ -72,8 +72,7 @@ type internalConn struct {
 	client *rpc.Client
 }
 
-// Client is a Cockroach-specific RPC client with an embedded go
-// rpc.Client struct.
+// Client is a Cockroach-specific RPC client.
 type Client struct {
 	addr      util.UnresolvedAddr
 	Closed    chan struct{}
@@ -240,7 +239,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 		case <-c.Closed:
 			return
 		case <-time.After(heartbeatInterval):
-			// TODO(tamird): perhaps retry more aggressively when the client is unhealthy
+			// TODO(tamird): Perhaps retry more aggressively when the client is unhealthy.
 		}
 	}
 }
