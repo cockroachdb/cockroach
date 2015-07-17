@@ -27,16 +27,11 @@ import (
 
 // TODO(pmattis):
 //
-// - Support tuples (i.e. []Datum) and tuple operations (a IN (b, c, d)).
-//
 // - Support decimal arithmetic.
 //
 // - Allow partial expression evaluation to simplify expressions before being
 //   used in where clauses. Make Datum implement Expr and change EvalExpr to
 //   return an Expr.
-//
-// - Support IN and NOT IN but converting the right-hand-side into a
-//   map[string]struct{}. Add a Key() method to every Datum implementation.
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
@@ -357,6 +352,12 @@ func init() {
 	// cmpOps is declared. The loop is caused by evalTupleEQ using cmpOps
 	// internally.
 	cmpOps[cmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
+
+	cmpOps[cmpArgs{In, boolType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, intType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, floatType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, stringType, tupleType}] = evalTupleIN
+	cmpOps[cmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
 // Env defines the interface for retrieving column values.
@@ -542,30 +543,44 @@ func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
 }
 
 func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
-	// TODO(pmattis): This could be more efficient or done ahead of time.
-	d, err := EvalExpr(&AndExpr{
-		Left: &ComparisonExpr{
-			Operator: GE,
-			Left:     expr.Left,
-			Right:    expr.From,
-		},
-		Right: &ComparisonExpr{
-			Operator: LE,
-			Left:     expr.Left,
-			Right:    expr.To,
-		},
-	}, nil)
+	// A range such as "left BETWEEN from AND to" is equivalent to "left >= from
+	// AND left <= to". The only tricky part is that we evaluate "left" only
+	// once.
+
+	left, err := EvalExpr(expr.Left, env)
 	if err != nil {
 		return null, err
 	}
-	if expr.Not {
-		v, err := d.Bool()
+
+	limits := [2]struct {
+		op   ComparisonOp
+		expr Expr
+	}{
+		{GE, expr.From},
+		{LE, expr.To},
+	}
+
+	var v dbool
+	for _, l := range limits {
+		arg, err := EvalExpr(l.expr, env)
 		if err != nil {
 			return null, err
 		}
+		cmp, err := evalComparisonOp(l.op, left, arg)
+		if err != nil {
+			return null, err
+		}
+		if v, err = cmp.Bool(); err != nil {
+			return null, err
+		} else if !v {
+			break
+		}
+	}
+
+	if expr.Not {
 		return !v, nil
 	}
-	return d, nil
+	return v, nil
 }
 
 func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
@@ -612,6 +627,10 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 		// GE(left, right) is implemented as LE(right, left)
 		op = LE
 		left, right = right, left
+	case NotIn:
+		// NotIn(left, right) is implemented as !IN(left, right)
+		not = true
+		op = In
 	}
 
 	f := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]
@@ -624,7 +643,7 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	}
 
 	switch op {
-	case In, NotIn, Like, NotLike:
+	case Like, NotLike:
 		return null, fmt.Errorf("TODO(pmattis): unsupported comparison operator: %s", op)
 	}
 
@@ -668,20 +687,41 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 
 func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 	if expr.Expr != nil {
-		// TODO(pmattis): These are expressions of the form `CASE <val> WHEN <val>
-		// THEN ...`.
-		return null, fmt.Errorf("TODO(pmattis): unsupported simple case expression: %T", expr)
-	}
-
-	for _, when := range expr.Whens {
-		d, err := EvalExpr(when.Cond, env)
+		// CASE <val> WHEN <expr> THEN ...
+		//
+		// For each "when" expression we compare for equality to <val>.
+		val, err := EvalExpr(expr.Expr, env)
 		if err != nil {
 			return null, err
 		}
-		if v, err := d.Bool(); err != nil {
-			return null, err
-		} else if v {
-			return EvalExpr(when.Val, env)
+
+		for _, when := range expr.Whens {
+			arg, err := EvalExpr(when.Cond, env)
+			if err != nil {
+				return null, err
+			}
+			d, err := evalComparisonOp(EQ, val, arg)
+			if err != nil {
+				return null, err
+			}
+			if v, err := d.Bool(); err != nil {
+				return null, err
+			} else if v {
+				return EvalExpr(when.Val, env)
+			}
+		}
+	} else {
+		// CASE WHEN <bool-expr> THEN ...
+		for _, when := range expr.Whens {
+			d, err := EvalExpr(when.Cond, env)
+			if err != nil {
+				return null, err
+			}
+			if v, err := d.Bool(); err != nil {
+				return null, err
+			} else if v {
+				return EvalExpr(when.Val, env)
+			}
 		}
 	}
 
@@ -709,4 +749,50 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 		}
 	}
 	return dbool(true), nil
+}
+
+func evalTupleIN(arg, values Datum) (Datum, error) {
+	if arg == null {
+		return dbool(false), nil
+	}
+
+	vtuple := values.(dtuple)
+
+	// TODO(pmattis): If we're evaluating the expression multiple times we should
+	// use a map when possible. This works as long as arg is not a tuple. Note
+	// that the usage of the map is currently disabled via the "&& false" because
+	// building the map is a pessimization if we're only evaluating the
+	// expression once. We need to determine when the expression will be
+	// evaluated multiple times before enabling. Also need to figure out a way to
+	// use the map approach for tuples. One idea is to encode the tuples into
+	// strings and then use a map of strings.
+	if _, ok := arg.(dtuple); !ok && false {
+		m := make(map[Datum]struct{}, len(vtuple))
+		for _, val := range vtuple {
+			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
+				return null, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+					arg.Type(), EQ, val.Type())
+			}
+			m[val] = struct{}{}
+		}
+		if _, exists := m[arg]; exists {
+			return dbool(true), nil
+		}
+	} else {
+		// TODO(pmattis): We should probably first check that all of the values are
+		// type compatible with the arg.
+		for _, val := range vtuple {
+			d, err := evalComparisonOp(EQ, arg, val)
+			if err != nil {
+				return null, err
+			}
+			if v, err := d.Bool(); err != nil {
+				return null, err
+			} else if v {
+				return v, nil
+			}
+		}
+	}
+
+	return dbool(false), nil
 }

@@ -125,6 +125,8 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 END`, `NULL`, nil},
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`, nil},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
+		{`CASE 1+1 WHEN 1 THEN 1 WHEN 2 THEN 2 END`, `2`, nil},
+		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 'doh' END`, `doh`, nil},
 		// Row (tuple) comparisons.
 		{`ROW(1) = ROW(1)`, `true`, nil},
 		{`ROW(1, true) = (1, NOT false)`, `true`, nil},
@@ -133,11 +135,16 @@ func TestEvalExpr(t *testing.T) {
 		{`(1+1, (2+2, (3+3))) = (2, (4, (6)))`, `true`, nil},
 		{`(1, 'a') != (1, 'a')`, `false`, nil},
 		{`(1, 'a') != (1, 'b')`, `true`, nil},
+		// IN and NOT IN expressions.
+		{`1 NOT IN (2, 3, 4)`, `true`, nil},
+		{`1+1 IN (2, 3, 4)`, `true`, nil},
+		{`'a0' IN ('a'||0, 'b'||1, 'c'||2)`, `true`, nil},
+		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`, nil},
 	}
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
+			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		r, err := EvalExpr(expr, d.env)
@@ -145,7 +152,7 @@ func TestEvalExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := r.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s: %s", d.expr, d.expected, s, d.expr)
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
 }
@@ -160,6 +167,7 @@ func TestEvalExprError(t *testing.T) {
 		{`1.1 # 3.1`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
 		{`'10' > 2`, `unsupported comparison operator:`},
+		{`1 IN ('a', 'b')`, `unsupported comparison operator:`},
 		{`a`, `column \"a\" not found`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`, nil},
@@ -167,7 +175,7 @@ func TestEvalExprError(t *testing.T) {
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
 		if err != nil {
-			t.Fatalf("%s: %v: %s", d.expr, err, d.expr)
+			t.Fatalf("%s: %v", d.expr, err)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		if _, err := EvalExpr(expr, mapEnv{}); !testutils.IsError(err, d.expected) {
