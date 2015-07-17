@@ -763,14 +763,8 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	req3 := getArgs(key, raftID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
 
-	calls := []proto.Call{
-		{Args: &req1, Reply: req1.CreateReply()},
-		{Args: &req2, Reply: req2.CreateReply()},
-		{Args: &req3, Reply: req3.CreateReply()},
-	}
-
-	for i, call := range calls {
-		if err := tc.store.ExecuteCmd(tc.rng.context(), call); err != nil {
+	for i, req := range []proto.Request{&req1, &req2, &req3} {
+		if _, err := tc.store.ExecuteCmd(tc.rng.context(), req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -815,18 +809,18 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	req1 := putArgs(key, data, raftID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
-	if err := tc.store.ExecuteCmd(tc.rng.context(), proto.Call{Args: &req1, Reply: req1.CreateReply()}); err != nil {
+	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req1); err != nil {
 		t.Fatal(err)
 	}
 	req2 := endTxnArgs(txn, true /* commit */, raftID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
-	if err := tc.store.ExecuteCmd(tc.rng.context(), proto.Call{Args: &req2, Reply: req2.CreateReply()}); err != nil {
+	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req2); err != nil {
 		t.Fatal(err)
 	}
 	// Execute a get to resolve the intent.
 	req3 := getArgs(key, raftID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
-	if err := tc.store.ExecuteCmd(tc.rng.context(), proto.Call{Args: &req3, Reply: req3.CreateReply()}); err != nil {
+	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2151,10 +2145,11 @@ func TestRangeResolveIntentRange(t *testing.T) {
 
 	// Do a consistent scan to verify intents have been cleared.
 	sArgs := scanArgs(proto.Key("a"), proto.Key("c"), 1, tc.store.StoreID())
-	sReply := sArgs.CreateReply().(*proto.ScanResponse)
-	if err := tc.store.ExecuteCmd(context.Background(), proto.Call{Args: &sArgs, Reply: sReply}); err != nil {
+	reply, err := tc.store.ExecuteCmd(context.Background(), &sArgs)
+	if err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
+	sReply := reply.(*proto.ScanResponse)
 	if len(sReply.Rows) != 2 {
 		t.Errorf("expected 2 rows; got %v", sReply.Rows)
 	}
@@ -2637,19 +2632,17 @@ func TestInternalRangeLookup(t *testing.T) {
 		// implementation.
 		proto.MakeKey(keys.Meta1Prefix, proto.KeyMax),
 	} {
-		reply := proto.InternalRangeLookupResponse{}
-		if err := tc.store.ExecuteCmd(context.Background(), proto.Call{
-			Args: &proto.InternalRangeLookupRequest{
-				RequestHeader: proto.RequestHeader{
-					RaftID: 1,
-					Key:    key,
-				},
-				MaxRanges: 1,
+		resp, err := tc.store.ExecuteCmd(context.Background(), &proto.InternalRangeLookupRequest{
+			RequestHeader: proto.RequestHeader{
+				RaftID: 1,
+				Key:    key,
 			},
-			Reply: &reply,
-		}); err != nil {
+			MaxRanges: 1,
+		})
+		if err != nil {
 			t.Fatal(err)
 		}
+		reply := resp.(*proto.InternalRangeLookupResponse)
 		expected := []proto.RangeDescriptor{*tc.rng.Desc()}
 		if !reflect.DeepEqual(reply.Ranges, expected) {
 			t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)

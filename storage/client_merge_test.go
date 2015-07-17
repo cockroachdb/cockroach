@@ -33,21 +33,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminMergeArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) (*proto.AdminMergeRequest, *proto.AdminMergeResponse) {
-	args := &proto.AdminMergeRequest{
+func adminMergeArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) proto.AdminMergeRequest {
+	return proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
-	reply := &proto.AdminMergeResponse{}
-	return args, reply
 }
 
 func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
-	args, reply := adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	args := adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		return nil, nil, err
 	}
 
@@ -74,8 +72,8 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args, reply := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
-	err = store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
+	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	_, err = store.ExecuteCmd(context.Background(), &args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,30 +102,32 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Write some values left and right of the proposed split key.
-	pArgs, pReply := putArgs([]byte("aaa"), content, aDesc.RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs := putArgs([]byte("aaa"), content, aDesc.RaftID, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	pArgs, pReply = putArgs([]byte("ccc"), content, bDesc.RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs = putArgs([]byte("ccc"), content, bDesc.RaftID, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Confirm the values are there.
-	gArgs, gReply := getArgs([]byte("aaa"), aDesc.RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
-		!bytes.Equal(gReply.Value.Bytes, content) {
+	gArgs := getArgs([]byte("aaa"), aDesc.RaftID, store.StoreID())
+	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
+	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs, gReply = getArgs([]byte("ccc"), bDesc.RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
-		!bytes.Equal(gReply.Value.Bytes, content) {
+	gArgs = getArgs([]byte("ccc"), bDesc.RaftID, store.StoreID())
+	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
+	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
 	// Merge the b range back into the a range.
-	args, reply := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,36 +153,41 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Try to get values from after the merge.
-	gArgs, gReply = getArgs([]byte("aaa"), rangeA.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
-		!bytes.Equal(gReply.Value.Bytes, content) {
+	gArgs = getArgs([]byte("aaa"), rangeA.Desc().RaftID, store.StoreID())
+	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
+	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs, gReply = getArgs([]byte("ccc"), rangeB.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
-		!bytes.Equal(gReply.Value.Bytes, content) {
+	gArgs = getArgs([]byte("ccc"), rangeB.Desc().RaftID, store.StoreID())
+	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
+	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
 	// Put new values after the merge on both sides.
-	pArgs, pReply = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
-	if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
+	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	pArgs, pReply = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
-	if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
+	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to get the newly placed values.
-	gArgs, gReply = getArgs([]byte("aaaa"), rangeA.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil || !bytes.Equal(gReply.Value.Bytes, content) {
+	gArgs = getArgs([]byte("aaaa"), rangeA.Desc().RaftID, store.StoreID())
+	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
+	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs, gReply = getArgs([]byte("cccc"), rangeA.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil ||
-		!bytes.Equal(gReply.Value.Bytes, content) {
+	gArgs = getArgs([]byte("cccc"), rangeA.Desc().RaftID, store.StoreID())
+	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
+	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 }
 
@@ -193,8 +198,8 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Merge last range.
-	args, reply := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	args := adminMergeArgs(proto.KeyMin, 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		t.Fatalf("merge of last range should be a noop: %s", err)
 	}
 }
@@ -207,12 +212,12 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split into 3 ranges
-	argsSplit, replySplit := adminSplitArgs(proto.KeyMin, []byte("d"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: argsSplit, Reply: replySplit}); err != nil {
+	argsSplit := adminSplitArgs(proto.KeyMin, []byte("d"), 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
-	argsSplit, replySplit = adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: argsSplit, Reply: replySplit}); err != nil {
+	argsSplit = adminSplitArgs(proto.KeyMin, []byte("b"), 1, store.StoreID())
+	if _, err := store.ExecuteCmd(context.Background(), &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
 
@@ -253,8 +258,8 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	argsMerge, _ := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
-	if _, err := rangeA.AdminMerge(*argsMerge); !testutils.IsError(err, "ranges not collocated") {
+	argsMerge := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
+	if _, err := rangeA.AdminMerge(argsMerge); !testutils.IsError(err, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", err)
 	}
 

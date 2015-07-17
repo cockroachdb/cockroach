@@ -1204,15 +1204,13 @@ func (s *Store) RangeCount() int {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
-	args, reply := call.Args, call.Reply
+func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
-	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(call.Args)); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+	if err := verifyKeys(header.Key, header.EndKey, proto.IsRange(args)); err != nil {
+		return nil, err
 	}
 	if !header.Timestamp.Equal(proto.ZeroTimestamp) {
 		if s.Clock().MaxOffset() > 0 {
@@ -1222,10 +1220,8 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 			// before we reach that point.
 			offset := time.Duration(header.Timestamp.WallTime - s.Clock().PhysicalNow())
 			if offset > s.Clock().MaxOffset() {
-				err := util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+				return nil, util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
 					header.Timestamp.WallTime, offset)
-				reply.Header().SetGoError(err)
-				return err
 			}
 		}
 		// Update our clock with the incoming request timestamp. This
@@ -1243,30 +1239,20 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 		}
 		return r.Next()
 	}
+	var rng *Range
+	var err error
+	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
-		// Add the command to the range for execution; exit retry loop on success.
-		reply.Reset()
-
 		// Get range and add command to the range for execution.
-		rng, err := s.GetRange(header.RaftID)
+		rng, err = s.GetRange(header.RaftID)
 		if err != nil {
-			reply.Header().SetGoError(err)
-			return err
+			return nil, err
 		}
 
-		addedReply, err := rng.AddCmd(ctx, args)
-		if addedReply != nil {
-			gogoproto.Merge(reply, addedReply)
-		}
-		if reply.Header().Error != nil {
-			panic(proto.ErrorUnexpectedlySet)
-		}
-		if err != nil {
-			reply.Header().SetGoError(err)
-		}
-
+		var reply proto.Response
+		reply, err = rng.AddCmd(ctx, args)
 		if err == nil {
-			return nil
+			return reply, nil
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
@@ -1282,7 +1268,6 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 			}
 
 			err = s.resolveWriteIntentError(ctx, wiErr, rng, args, pushType)
-			reply.Header().SetGoError(err)
 		}
 
 		switch t := err.(type) {
@@ -1318,16 +1303,16 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 			}
 			continue
 		}
-		return reply.Header().GoError()
+		return reply, err
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
 	if header.Txn != nil {
-		reply.Header().SetGoError(proto.NewTransactionRetryError(header.Txn))
+		return nil, proto.NewTransactionRetryError(header.Txn)
 	}
-	return reply.Header().GoError()
+	return nil, err
 }
 
 // resolveWriteIntentError tries to push the conflicting transaction:

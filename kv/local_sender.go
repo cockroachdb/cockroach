@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // A LocalSender provides methods to access a collection of local stores.
@@ -146,6 +147,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	if err == nil {
 		store, err = ls.GetStore(header.Replica.StoreID)
 	}
+	var reply proto.Response
 	if err == nil {
 		// For calls that read data within a txn, we can avoid uncertainty
 		// related retries in certain situations. If the node is in
@@ -157,7 +159,13 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 			trace.Event("read has no clock uncertainty")
 			header.Txn.MaxTimestamp = header.Txn.Timestamp
 		}
-		err = store.ExecuteCmd(ctx, call)
+		reply, err = store.ExecuteCmd(ctx, call.Args)
+	}
+	if reply != nil {
+		gogoproto.Merge(call.Reply, reply)
+	}
+	if call.Reply.Header().Error != nil {
+		panic(proto.ErrorUnexpectedlySet)
 	}
 	if err != nil {
 		call.Reply.Header().SetGoError(err)
