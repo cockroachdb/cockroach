@@ -20,7 +20,6 @@ package storage_test
 import (
 	"bytes"
 	"reflect"
-	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -253,11 +253,9 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	argsMerge, replyMerge := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
-	rangeA.AdminMerge(argsMerge, replyMerge)
-	if replyMerge.Error == nil ||
-		!strings.Contains(replyMerge.Error.Error(), "ranges not collocated") {
-		t.Fatalf("did not got expected error; got %s", replyMerge.Error)
+	argsMerge, _ := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
+	if _, err := rangeA.AdminMerge(argsMerge); !testutils.IsError(err, "ranges not collocated") {
+		t.Fatalf("did not got expected error; got %s", err)
 	}
 
 	// Re-add the range. This is necessary for a clean shutdown.

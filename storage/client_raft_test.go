@@ -788,11 +788,10 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		if rng == nil {
 			t.Fatal("failed to look up min range")
 		}
-		args, reply := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RaftID,
+		args, _ := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RaftID,
 			mtc.stores[0].StoreID())
-		rng.AdminSplit(args, reply)
-		if reply.GoError() != nil {
-			t.Fatal(reply.GoError())
+		if _, err := rng.AdminSplit(args); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -802,11 +801,9 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		if rng == nil {
 			t.Fatal("failed to look up max range")
 		}
-		args, reply := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RaftID,
-			mtc.stores[0].StoreID())
-		rng.AdminSplit(args, reply)
-		if reply.GoError() != nil {
-			t.Fatal(reply.GoError())
+		args, _ := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RaftID, mtc.stores[0].StoreID())
+		if _, err := rng.AdminSplit(args); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

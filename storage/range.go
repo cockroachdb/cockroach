@@ -149,13 +149,17 @@ func usesTimestampCache(r proto.Request) bool {
 	return tsCacheMethods[m]
 }
 
-// A pendingCmd holds the reply buffer and a done channel for a command
-// sent to Raft. Once committed to the Raft log, the command is
-// executed and the result returned via the done channel.
+type responseWithErr struct {
+	reply proto.Response
+	err   error
+}
+
+// A pendingCmd holds a done channel for a command sent to Raft. Once
+// committed to the Raft log, the command is executed and the result returned
+// via the done channel.
 type pendingCmd struct {
-	Reply proto.Response
-	ctx   context.Context
-	done  chan error // Used to signal waiting RPC handler
+	ctx  context.Context
+	done chan responseWithErr // Used to signal waiting RPC handler
 }
 
 // A rangeManager is an interface satisfied by Store through which ranges
@@ -354,11 +358,11 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// checks from normal request machinery, (e.g. the command queue).
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
-	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args, &proto.InternalLeaderLeaseResponse{})
+	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = <-pendingCmd.done
+		err = (<-pendingCmd.done).err
 	}
 	return err
 }
@@ -507,19 +511,39 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // either along the read-only execution path or the read-write Raft
 // command queue.
 func (r *Range) AddCmd(ctx context.Context, call proto.Call) error {
-	args, reply := call.Args, call.Reply
+	args := call.Args
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and read-write.
+	var reply proto.Response
+	var err error
 	if proto.IsAdmin(args) {
 		defer trace.Epoch("admin path")()
-		return r.addAdminCmd(ctx, args, reply)
+		reply, err = r.addAdminCmd(ctx, args)
 	} else if proto.IsReadOnly(args) {
-		defer trace.Epoch("read path")()
-		return r.addReadOnlyCmd(ctx, args, reply)
+		defer trace.Epoch("read-only path")()
+		reply, err = r.addReadOnlyCmd(ctx, args)
+	} else if proto.IsWrite(args) {
+		defer trace.Epoch("read-write path")()
+		reply, err = r.addWriteCmd(ctx, args, nil)
+	} else {
+		panic(fmt.Sprintf("don't know how to handle command %T", args))
 	}
-	return r.addWriteCmd(ctx, args, reply, nil)
+
+	if reply != nil {
+		gogoproto.Merge(call.Reply, reply)
+	}
+
+	if err != nil {
+		replyHeader := call.Reply.Header()
+		if replyHeader.Error != nil {
+			panic("the world is on fire")
+		}
+		replyHeader.SetGoError(err)
+	}
+
+	return err
 }
 
 func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
@@ -567,66 +591,56 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Range) addAdminCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
+func (r *Range) addAdminCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// Admin commands always require the leader lease.
 	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
-	switch args.(type) {
+	switch tArgs := args.(type) {
 	case *proto.AdminSplitRequest:
-		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
+		resp, err := r.AdminSplit(tArgs)
+		return &resp, err
 	case *proto.AdminMergeRequest:
-		r.AdminMerge(args.(*proto.AdminMergeRequest), reply.(*proto.AdminMergeResponse))
+		resp, err := r.AdminMerge(tArgs)
+		return &resp, err
 	default:
-		return util.Error("unrecognized admin command")
+		return nil, util.Error("unrecognized admin command")
 	}
-	return reply.Header().GoError()
 }
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
 		// But disallow any inconsistent reads within txns.
 		if header.Txn != nil {
-			reply.Header().SetGoError(util.Error("cannot allow inconsistent reads within a transaction"))
-			return reply.Header().GoError()
+			return nil, util.Error("cannot allow inconsistent reads within a transaction")
 		}
 		if header.Timestamp.Equal(proto.ZeroTimestamp) {
 			header.Timestamp = r.rm.Clock().Now()
 		}
-		executedReply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
-		if executedReply.Header().Error != nil {
-			panic("the world is on fire")
-		}
-		executedReply.Header().SetGoError(err)
-		reply.Reset()
-		gogoproto.Merge(reply, executedReply)
+		reply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
 		if err == nil {
 			r.handleSkippedIntents(args, intents)
 		}
-		return err
+		return reply, err
 	} else if header.ReadConsistency == proto.CONSENSUS {
-		reply.Header().SetGoError(util.Error("consensus reads not implemented"))
-		return reply.Header().GoError()
+		return nil, util.Error("consensus reads not implemented")
 	}
 
 	// Add the read to the command queue to gate subsequent
@@ -636,18 +650,11 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	// This replica must have leader lease to process a consistent read.
 	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, true /* readOnly */)
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// Execute read-only command.
-	executedReply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
-	if executedReply.Header().Error != nil {
-		panic("the world is on fire")
-	}
-	executedReply.Header().SetGoError(err)
-	reply.Reset()
-	gogoproto.Merge(reply, executedReply)
+	reply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.endCmd(cmdKey, args, err, true /* readOnly */)
@@ -655,7 +662,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 	if err == nil {
 		r.handleSkippedIntents(args, intents)
 	}
-	return err
+	return reply, err
 }
 
 // addWriteCmd first adds the keys affected by this command as pending writes
@@ -666,7 +673,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request, reply pr
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto.Response, wg *sync.WaitGroup) error {
+func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.WaitGroup) (proto.Response, error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -681,8 +688,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	header := args.Header()
 
 	if err := r.checkCmdHeader(args.Header()); err != nil {
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	trace := tracer.FromCtx(ctx)
@@ -699,8 +705,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// This replica must have leader lease to process a write.
 	if err := r.redirectOnOrAcquireLeaderLease(trace, header.Timestamp); err != nil {
 		r.endCmd(cmdKey, args, err, false /* !readOnly */)
-		reply.Header().SetGoError(err)
-		return err
+		return nil, err
 	}
 
 	// Two important invariants of Cockroach: 1) encountering a more
@@ -736,15 +741,17 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 
 	defer trace.Epoch("raft")()
 
-	errChan, pendingCmd := r.proposeRaftCommand(ctx, args, reply)
+	errChan, pendingCmd := r.proposeRaftCommand(ctx, args)
 
 	signal()
 
 	// First wait for raft to commit or abort the command.
 	var err error
+	var reply proto.Response
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = <-pendingCmd.done
+		respWithErr := <-pendingCmd.done
+		reply, err = respWithErr.reply, respWithErr.err
 	} else if err == multiraft.ErrGroupDeleted {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
@@ -754,18 +761,17 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, reply proto
 	// of this write on success. This ensures a strictly higher
 	// timestamp for successive writes to the same key or key range.
 	r.endCmd(cmdKey, args, err, false /* !readOnly */)
-	return err
+	return reply, err
 }
 
 // proposeRaftCommand prepares necessary pending command struct and
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request, reply proto.Response) (<-chan error, *pendingCmd) {
+func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
-		ctx:   ctx,
-		Reply: reply,
-		done:  make(chan error, 1),
+		ctx:  ctx,
+		done: make(chan responseWithErr, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
 		RaftID:       r.Desc().RaftID,
@@ -803,12 +809,9 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	var reply proto.Response
 	var ctx context.Context
 	if cmd != nil {
-		// We initiated this command, so use the caller-supplied reply.
-		reply = cmd.Reply
+		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
 	} else {
-		// This command originated elsewhere so we must create a new reply buffer.
-		reply = args.CreateReply()
 		// TODO(tschottdorf): consider the Trace situation here.
 		ctx = r.context()
 	}
@@ -817,13 +820,12 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	err := r.maybeSetCorrupt(
-		r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args, reply),
-	)
+	reply, err := r.applyRaftCommand(ctx, index, proto.RaftNodeID(raftCmd.OriginNodeID), args)
+	err = r.maybeSetCorrupt(err)
 	execDone()
 
 	if cmd != nil {
-		cmd.done <- err
+		cmd.done <- responseWithErr{reply, err}
 	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
 	}
@@ -835,7 +837,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request, reply proto.Response) error {
+func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request) (proto.Response, error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
@@ -843,17 +845,13 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
 	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-		return newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
+		return nil, newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
 	}
 
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	ms := engine.MVCCStats{}
-	batch, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, args, reply, &ms)
-	// ALWAYS set the reply header error to the error returned by the
-	// helper. This is the definitive result of the execution. The
-	// error must be set before saving to the response cache.
-	reply.Header().SetGoError(rErr)
+	batch, reply, rErr := r.applyRaftCommandInBatch(ctx, index, originNode, args, &ms)
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -885,14 +883,14 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 		}
 	}
 
-	return rErr
+	return reply, rErr
 }
 
 // applyRaftCommandInBatch executes the command in a batch engine and
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
-	args proto.Request, reply proto.Response, ms *engine.MVCCStats) (engine.Engine, error) {
+	args proto.Request, ms *engine.MVCCStats) (engine.Engine, proto.Response, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
 
@@ -914,31 +912,28 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 		// same ClientCmdID and would get the distributed sender stuck in an
 		// infinite loop, retrieving a stale NotLeaderError over and over
 		// again, even when proposing at the correct replica.
-		return batch, r.newNotLeaderError(lease, originNode)
+		return batch, nil, r.newNotLeaderError(lease, originNode)
 	}
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if cachedReply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
+		if reply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
 			// Any error encountered while fetching the response cache entry means corruption.
-			return batch, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
-		} else if cachedReply != nil {
-			// TODO(tamird): this shouldn't be needed
-			gogoproto.Merge(reply, cachedReply)
+			return batch, reply, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
+		} else if reply != nil {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
+			// TODO(tamird): move this into the response cache itself
+			defer func() { reply.Header().Error = nil }()
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return batch, cachedReply.Header().GoError()
+			return batch, reply, reply.Header().GoError()
 		}
 	}
 
 	// Execute the command.
-	executedReply, intents, rErr := r.executeCmd(batch, ms, args)
-	executedReply.Header().SetGoError(rErr)
-	reply.Reset()
-	gogoproto.Merge(reply, executedReply)
+	reply, intents, rErr := r.executeCmd(batch, ms, args)
 	// Regardless of error, add result to the response cache if this is
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
@@ -955,14 +950,23 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 			batch.Close()
 			batch = r.rm.Engine().NewBatch()
 		}
+		// TODO(tamird): move this into the response cache itself
+		if reply == nil {
+			reply = args.CreateReply()
+		}
+		if reply.Header().Error != nil {
+			panic("the world is on fire")
+		}
+		reply.Header().SetGoError(rErr)
 		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
 			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
+		reply.Header().Error = nil
 	}
 
 	// If the execution of the command wasn't successful, stop here.
 	if rErr != nil {
-		return batch, rErr
+		return batch, reply, rErr
 	}
 
 	// On success and only on the replica on which this command originated,
@@ -971,7 +975,7 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 		r.handleSkippedIntents(args, intents)
 	}
 
-	return batch, nil
+	return batch, reply, nil
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas

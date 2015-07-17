@@ -45,15 +45,13 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
-		// TODO(tamird): Remove the CreateReply when upstream doesn't need it.
-		return args.CreateReply(), nil, err
+		return nil, nil, err
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil {
 		if err := TestingCommandFilter(args); err != nil {
-			// TODO(tamird): Remove the CreateReply when upstream doesn't need it.
-			return args.CreateReply(), nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -836,7 +834,9 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 // updates the range addressing metadata. The handover of responsibility for
 // the reassigned key range is carried out seamlessly through a split trigger
 // carried out as part of the commit of that transaction.
-func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
+func (r *Range) AdminSplit(args *proto.AdminSplitRequest) (proto.AdminSplitResponse, error) {
+	var reply proto.AdminSplitResponse
+
 	// Only allow a single split per range at a time.
 	r.metaLock.Lock()
 	defer r.metaLock.Unlock()
@@ -849,34 +849,30 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
 		defer snap.Close()
-		var err error
-		if splitKey, err = engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey); err != nil {
-			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))
-			return
+		foundSplitKey, err := engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey)
+		if err != nil {
+			return reply, util.Errorf("unable to determine split key: %s", err)
 		}
+		splitKey = foundSplitKey
 	}
 	// First verify this condition so that it will not return
 	// proto.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
 	// otherwise it will cause infinite retry loop.
 	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
-		reply.SetGoError(util.Errorf("range is already split at key %s", splitKey))
-		return
+		return reply, util.Errorf("range is already split at key %s", splitKey)
 	}
 	// Verify some properties of split key.
 	if !r.ContainsKey(splitKey) {
-		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, desc))
-		return
+		return reply, proto.NewRangeKeyMismatchError(splitKey, splitKey, desc)
 	}
 	if !engine.IsValidSplitKey(splitKey) {
-		reply.SetGoError(util.Errorf("cannot split range at key %s", splitKey))
-		return
+		return reply, util.Errorf("cannot split range at key %s", splitKey)
 	}
 
 	// Create new range descriptor with newly-allocated replica IDs and Raft IDs.
 	newDesc, err := r.rm.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
-		reply.SetGoError(util.Errorf("unable to allocate new range descriptor: %s", err))
-		return
+		return reply, util.Errorf("unable to allocate new range descriptor: %s", err)
 	}
 
 	// Init updated version of existing range descriptor.
@@ -885,7 +881,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	if err = r.rm.DB().Txn(func(txn *client.Txn) error {
+	if err := r.rm.DB().Txn(func(txn *client.Txn) error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
@@ -929,8 +925,10 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		})
 		return txn.Run(b)
 	}); err != nil {
-		reply.SetGoError(util.Errorf("split at key %s failed: %s", splitKey, err))
+		return reply, util.Errorf("split at key %s failed: %s", splitKey, err)
 	}
+
+	return reply, nil
 }
 
 // splitTrigger is called on a successful commit of an AdminSplit
@@ -1024,7 +1022,9 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 // the reassigned key range is carried out seamlessly through a merge trigger
 // carried out as part of the commit of that transaction.
 // A merge requires that the two ranges are collocate on the same set of replicas.
-func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) {
+func (r *Range) AdminMerge(args *proto.AdminMergeRequest) (proto.AdminMergeResponse, error) {
+	var reply proto.AdminMergeResponse
+
 	// Only allow a single split/merge per range at a time.
 	r.metaLock.Lock()
 	defer r.metaLock.Unlock()
@@ -1033,27 +1033,23 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	desc := r.Desc()
 	if desc.EndKey.Equal(proto.KeyMax) {
 		// Noop.
-		return
+		return reply, nil
 	}
 	subsumedRng := r.rm.LookupRange(desc.EndKey, nil)
 	if subsumedRng == nil {
-		reply.SetGoError(util.Errorf("ranges not collocated; migration of ranges in anticipation of merge not yet implemented"))
-		return
+		return reply, util.Errorf("ranges not collocated; migration of ranges in anticipation of merge not yet implemented")
 	}
 	subsumedDesc := subsumedRng.Desc()
 
 	// Make sure the range being subsumed follows this one.
 	if !bytes.Equal(desc.EndKey, subsumedDesc.StartKey) {
-		reply.SetGoError(util.Errorf("Ranges that are not adjacent cannot be merged, %s != %s",
-			desc.EndKey, subsumedDesc.StartKey))
-		return
+		return reply, util.Errorf("Ranges that are not adjacent cannot be merged, %s != %s", desc.EndKey, subsumedDesc.StartKey)
 	}
 
 	// Ensure that both ranges are collocate by intersecting the store ids from
 	// their replicas.
 	if !replicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
-		reply.SetGoError(util.Error("The two ranges replicas are not collocate"))
-		return
+		return reply, util.Error("The two ranges replicas are not collocate")
 	}
 
 	// Init updated version of existing range descriptor.
@@ -1097,9 +1093,10 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		})
 		return txn.Run(b)
 	}); err != nil {
-		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
-			subsumedDesc.RaftID, desc.RaftID, err))
+		return reply, util.Errorf("merge of range %d into %d failed: %s", subsumedDesc.RaftID, desc.RaftID, err)
 	}
+
+	return reply, nil
 }
 
 // mergeTrigger is called on a successful commit of an AdminMerge
