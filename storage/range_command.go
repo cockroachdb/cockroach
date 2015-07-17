@@ -37,8 +37,8 @@ import (
 )
 
 // executeCmd switches over the method and multiplexes to execute the
-// appropriate storage API command. It returns an error and, for some calls
-// such as inconsistent reads, the intents they skipped.
+// appropriate storage API command. It returns the response, an error,
+// and a slice of intents that were skipped during execution.
 func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request) (proto.Response, []proto.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
