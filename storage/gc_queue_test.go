@@ -181,23 +181,23 @@ func TestGCQueueProcess(t *testing.T) {
 
 	for i, datum := range data {
 		if datum.del {
-			dArgs, dReply := deleteArgs(datum.key, tc.rng.Desc().RaftID, tc.store.StoreID())
+			dArgs := deleteArgs(datum.key, tc.rng.Desc().RaftID, tc.store.StoreID())
 			dArgs.Timestamp = datum.ts
 			if datum.txn {
 				dArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
 				dArgs.Txn.Timestamp = datum.ts
 			}
-			if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: dArgs, Reply: dReply}); err != nil {
+			if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
-			pArgs, pReply := putArgs(datum.key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
+			pArgs := putArgs(datum.key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
 			pArgs.Timestamp = datum.ts
 			if datum.txn {
 				pArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
 				pArgs.Txn.Timestamp = datum.ts
 			}
-			if err := tc.rng.AddCmd(tc.rng.context(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+			if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}

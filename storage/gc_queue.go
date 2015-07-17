@@ -228,7 +228,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 
 	// Send GC request through range.
 	gcArgs.GCMeta = *gcMeta
-	if err := rng.AddCmd(rng.context(), proto.Call{Args: gcArgs, Reply: &proto.InternalGCResponse{}}); err != nil {
+	if _, err := rng.AddCmd(rng.context(), gcArgs); err != nil {
 		return err
 	}
 
@@ -290,7 +290,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *engine.MVCCMe
 			Txn:       pushReply.PusheeTxn,
 		},
 	}
-	if err := rng.AddCmd(rng.context(), proto.Call{Args: resolveArgs, Reply: &proto.InternalResolveIntentResponse{}}); err != nil {
+	if _, err := rng.AddCmd(rng.context(), resolveArgs); err != nil {
 		log.Warningf("resolve of key %q failed: %s", key, err)
 		updateOldestIntent(meta.Timestamp.WallTime)
 	}

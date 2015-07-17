@@ -455,14 +455,14 @@ func TestStoreExecuteCmd(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	gArgs, gReply := getArgs([]byte("a"), 1, store.StoreID())
+	gArgs := getArgs([]byte("a"), 1, store.StoreID())
 
 	// Try a successful get request.
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gArgs.CreateReply()}); err != nil {
 		t.Fatal(err)
 	}
-	pArgs, pReply := putArgs([]byte("a"), []byte("aaa"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs := putArgs([]byte("a"), []byte("aaa"), 1, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -476,58 +476,58 @@ func TestStoreVerifyKeys(t *testing.T) {
 	tooLongKey := proto.Key(strings.Repeat("x", proto.KeyMaxLength+1))
 
 	// Start with a too-long key on a get.
-	gArgs, gReply := getArgs(tooLongKey, 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err == nil {
+	gArgs := getArgs(tooLongKey, 1, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gArgs.CreateReply()}); err == nil {
 		t.Fatal("expected error for key too long")
 	}
 	// Try a start key == KeyMax.
 	gArgs.Key = proto.KeyMax
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gArgs.CreateReply()}); err == nil {
 		t.Fatal("expected error for start key == KeyMax")
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
 	gArgs.EndKey = proto.KeyMax
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gArgs.CreateReply()}); err == nil {
 		t.Fatal("expected error for end key specified on a non-range-based operation")
 	}
 	// Try a scan with too-long EndKey.
-	sArgs, sReply := scanArgs(proto.KeyMin, tooLongKey, 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err == nil {
+	sArgs := scanArgs(proto.KeyMin, tooLongKey, 1, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &sArgs, Reply: sArgs.CreateReply()}); err == nil {
 		t.Fatal("expected error for end key too long")
 	}
 	// Try a scan with end key < start key.
 	sArgs.Key = []byte("b")
 	sArgs.EndKey = []byte("a")
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &sArgs, Reply: sArgs.CreateReply()}); err == nil {
 		t.Fatal("expected error for end key < start")
 	}
 	// Try a scan with start key == end key.
 	sArgs.Key = []byte("a")
 	sArgs.EndKey = sArgs.Key
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &sArgs, Reply: sArgs.CreateReply()}); err == nil {
 		t.Fatal("expected error for start == end key")
 	}
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
 	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, proto.KeyMax)
-	pArgs, pReply := putArgs(meta2KeyMax, []byte("value"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs := putArgs(meta2KeyMax, []byte("value"), 1, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
 	// Try to put a range descriptor record for a start key which is
 	// maximum length.
 	key := append([]byte{}, proto.KeyMax...)
 	key[len(key)-1] = 0x01
-	pArgs, pReply = putArgs(keys.RangeDescriptorKey(key), []byte("value"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	pArgs = putArgs(keys.RangeDescriptorKey(key), []byte("value"), 1, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err != nil {
 		t.Fatalf("unexpected error on put to range descriptor for KeyMax value: %s", err)
 	}
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs, pReply = putArgs(keys.TransactionKey(meta2KeyMax, []byte(uuid.NewUUID4())),
+	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, []byte(uuid.NewUUID4())),
 		[]byte("value"), 1, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", err)
 	}
 }
@@ -537,10 +537,10 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	args, reply := getArgs([]byte("a"), 1, store.StoreID())
+	args := getArgs([]byte("a"), 1, store.StoreID())
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
+	err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -556,11 +556,12 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, mc, stopper := createTestStore(t)
 	defer stopper.Stop()
-	args, reply := getArgs([]byte("a"), 1, store.StoreID())
+	args := getArgs([]byte("a"), 1, store.StoreID())
+	reply := args.CreateReply().(*proto.GetResponse)
 
 	// Set clock to time 1.
 	mc.Set(1)
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
+	err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -579,7 +580,7 @@ func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, mc, stopper := createTestStore(t)
 	defer stopper.Stop()
-	args, reply := getArgs([]byte("a"), 1, store.StoreID())
+	args := getArgs([]byte("a"), 1, store.StoreID())
 
 	// Set clock to time 1.
 	mc.Set(1)
@@ -589,8 +590,7 @@ func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	// Set args timestamp to exceed max offset.
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Timestamp.WallTime += maxOffset.Nanoseconds() + 1
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
-	if err == nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()}); err == nil {
 		t.Error("expected max offset clock error")
 	}
 }
@@ -600,9 +600,9 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	args, reply := getArgs([]byte("0"), 2, store.StoreID()) // no range ID 2
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
-	if err == nil {
+	args := getArgs([]byte("0"), 2, store.StoreID()) // no range ID 2
+
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()}); err == nil {
 		t.Error("expected invalid range")
 	}
 }
@@ -642,16 +642,15 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
-	args, reply := getArgs([]byte("b"), 1, store.StoreID())
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
-	if err == nil {
+	args := getArgs([]byte("b"), 1, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()}); err == nil {
 		t.Error("expected key to be out of range")
 	}
 
 	// Range 2 is from "b" to KeyMax, so reading "a" from range 2 should
 	// fail because it's before the start of the range.
-	args, reply = getArgs([]byte("a"), rng2.Desc().RaftID, store.StoreID())
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err == nil {
+	args = getArgs([]byte("a"), rng2.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()}); err == nil {
 		t.Error("expected key to be out of range")
 	}
 }
@@ -748,9 +747,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("a"))
-	pArgs, pReply := putArgs(key, data, 1, store.StoreID())
+	pArgs := putArgs(key, data, 1, store.StoreID())
 	pArgs.Timestamp = store.ctx.Clock.Now()
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -788,17 +787,17 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		}
 
 		// First lay down intent using the pushee's txn.
-		pArgs, pReply := putArgs(key, []byte("value"), 1, store.StoreID())
+		pArgs := putArgs(key, []byte("value"), 1, store.StoreID())
 		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pushee
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try a put using the pusher's txn.
 		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
-		err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply})
+		err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()})
 		if resolvable {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
@@ -819,7 +818,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.
-			if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err == nil {
+			if err = store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err == nil {
 				t.Errorf("expected another error on latent write intent but succeeded")
 			}
 		}
@@ -840,10 +839,11 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	pusher.Priority = 2 // Pusher will win.
 
 	// First lay down intent using the pushee's txn.
-	args, reply := incrementArgs(key, 1, 1, store.StoreID())
+	args := incrementArgs(key, 1, 1, store.StoreID())
+	reply := args.CreateReply().(*proto.IncrementResponse)
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -851,7 +851,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pusher
 	args.Increment = 2
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 		t.Errorf("expected increment to succeed: %s", err)
 	}
 	if reply.NewValue != 2 {
@@ -894,9 +894,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// First, write original value.
-		args, reply := putArgs(key, []byte("value1"), 1, store.StoreID())
+		args := putArgs(key, []byte("value1"), 1, store.StoreID())
+		reply := args.CreateReply()
 		args.Timestamp = store.ctx.Clock.Now()
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -904,15 +905,16 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		args.Timestamp = store.ctx.Clock.Now()
 		args.Txn = pushee
 		args.Value.Bytes = []byte("value2")
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try to read value using the pusher's txn.
-		gArgs, gReply := getArgs(key, 1, store.StoreID())
+		gArgs := getArgs(key, 1, store.StoreID())
+		gReply := gArgs.CreateReply().(*proto.GetResponse)
 		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.Txn = pusher
-		err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply})
+		err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gReply})
 		if test.resolvable {
 			if err != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, err)
@@ -924,9 +926,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// SNAPSHOT isolation, the commit should work: verify the txn
 			// commit timestamp is equal to gArgs.Timestamp + 1. Otherwise,
 			// verify commit fails with TransactionRetryError.
-			etArgs, etReply := endTxnArgs(pushee, true, 1, store.StoreID())
+			etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
+			etReply := etArgs.CreateReply().(*proto.EndTransactionResponse)
 			etArgs.Timestamp = pushee.Timestamp
-			err := store.ExecuteCmd(context.Background(), proto.Call{Args: etArgs, Reply: etReply})
+			err := store.ExecuteCmd(context.Background(), proto.Call{Args: &etArgs, Reply: etReply})
 
 			expTimestamp := gArgs.Timestamp
 			expTimestamp.Logical++
@@ -979,9 +982,10 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	pusher.Priority = 1 // Pusher would lose based on priority.
 
 	// First, write original value.
-	args, reply := putArgs(key, []byte("value1"), 1, store.StoreID())
+	args := putArgs(key, []byte("value1"), 1, store.StoreID())
+	reply := args.CreateReply()
 	args.Timestamp = store.ctx.Clock.Now()
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -989,15 +993,16 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	args.Value.Bytes = []byte("value2")
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try to read value using the pusher's txn.
-	gArgs, gReply := getArgs(key, 1, store.StoreID())
+	gArgs := getArgs(key, 1, store.StoreID())
+	gReply := gArgs.CreateReply().(*proto.GetResponse)
 	gArgs.Timestamp = store.ctx.Clock.Now()
 	gArgs.Txn = pusher
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gReply}); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
@@ -1006,9 +1011,10 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// Finally, try to end the pushee's transaction; since it's got
 	// SNAPSHOT isolation, the end should work, but verify the txn
 	// commit timestamp is equal to gArgs.Timestamp + 1.
-	etArgs, etReply := endTxnArgs(pushee, true, 1, store.StoreID())
+	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
+	etReply := etArgs.CreateReply().(*proto.EndTransactionResponse)
 	etArgs.Timestamp = pushee.Timestamp
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: etArgs, Reply: etReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &etArgs, Reply: etReply}); err != nil {
 		t.Fatal(err)
 	}
 	expTimestamp := gArgs.Timestamp
@@ -1031,18 +1037,20 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	pushee.Priority = 0 // pushee should lose all conflicts
 
 	// First, lay down intent from pushee.
-	args, reply := putArgs(key, []byte("value1"), 1, store.StoreID())
+	args := putArgs(key, []byte("value1"), 1, store.StoreID())
+	reply := args.CreateReply()
 	args.Timestamp = pushee.Timestamp
 	args.Txn = pushee
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try to read outside a transaction.
-	gArgs, gReply := getArgs(key, 1, store.StoreID())
+	gArgs := getArgs(key, 1, store.StoreID())
+	gReply := gArgs.CreateReply().(*proto.GetResponse)
 	gArgs.Timestamp = store.ctx.Clock.Now()
 	gArgs.UserPriority = gogoproto.Int32(math.MaxInt32)
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gReply}); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
 	} else if gReply.Value != nil {
 		t.Errorf("expected value to be nil, got %+v", gReply.Value)
@@ -1053,7 +1061,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
 	args.UserPriority = gogoproto.Int32(math.MaxInt32)
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 		t.Errorf("expected success aborting pushee's txn; got %s", err)
 	}
 
@@ -1082,9 +1090,9 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Finally, try to end the pushee's transaction; it should have
 	// been aborted.
-	etArgs, etReply := endTxnArgs(pushee, true, 1, store.StoreID())
+	etArgs := endTxnArgs(pushee, true, 1, store.StoreID())
 	etArgs.Timestamp = pushee.Timestamp
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: etArgs, Reply: etReply})
+	err := store.ExecuteCmd(context.Background(), proto.Call{Args: &etArgs, Reply: etArgs.CreateReply()})
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
 	}
@@ -1106,8 +1114,9 @@ func TestStoreReadInconsistent(t *testing.T) {
 		keyB := proto.Key(fmt.Sprintf("%t-b", canPush))
 
 		// First, write keyA.
-		args, reply := putArgs(keyA, []byte("value1"), 1, store.StoreID())
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+		args := putArgs(keyA, []byte("value1"), 1, store.StoreID())
+		reply := args.CreateReply()
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1125,29 +1134,31 @@ func TestStoreReadInconsistent(t *testing.T) {
 			args.Key = txn.Key
 			args.Timestamp = txn.Timestamp
 			args.Txn = txn
-			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: reply}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// End txn B, but without resolving the intent.
-		etArgs, etReply := endTxnArgs(txnB, true, 1, store.StoreID())
+		etArgs := endTxnArgs(txnB, true, 1, store.StoreID())
+		etReply := etArgs.CreateReply().(*proto.EndTransactionResponse)
 		etArgs.Timestamp = txnB.Timestamp
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: etArgs, Reply: etReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &etArgs, Reply: etReply}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, get from both keys and verify. Wether we can push or not,
 		// we will be able to read with INCONSISTENT.
-		gArgs, gReply := getArgs(keyA, 1, store.StoreID())
+		gArgs := getArgs(keyA, 1, store.StoreID())
+		gReply := gArgs.CreateReply().(*proto.GetResponse)
 		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.ReadConsistency = proto.INCONSISTENT
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gReply}); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		} else if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
 			t.Errorf("expected value %q, got %+v", []byte("value1"), gReply.Value)
 		}
 		gArgs.Key = keyB
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gReply}); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		}
 		// The new value of B will not be read at first.
@@ -1157,7 +1168,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// However, it will be read eventually, as B's intent can be
 		// resolved asynchronously as txn B is committed.
 		util.SucceedsWithin(t, 500*time.Millisecond, func() error {
-			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: gArgs, Reply: gReply}); err != nil {
+			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &gArgs, Reply: gReply}); err != nil {
 				return util.Errorf("expected read to succeed: %s", err)
 			} else if gReply.Value == nil || !bytes.Equal(gReply.Value.Bytes, []byte("value2")) {
 				return util.Errorf("expected value %q, got %+v", []byte("value2"), gReply.Value)
@@ -1166,9 +1177,10 @@ func TestStoreReadInconsistent(t *testing.T) {
 		})
 
 		// Scan keys and verify results.
-		sArgs, sReply := scanArgs(keyA, keyB.Next(), 1, store.StoreID())
+		sArgs := scanArgs(keyA, keyB.Next(), 1, store.StoreID())
+		sReply := sArgs.CreateReply().(*proto.ScanResponse)
 		sArgs.ReadConsistency = proto.INCONSISTENT
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &sArgs, Reply: sReply}); err != nil {
 			t.Errorf("expected scan to succeed: %s", err)
 		}
 		if l := len(sReply.Rows); l != 2 {
@@ -1237,16 +1249,17 @@ func TestStoreScanIntents(t *testing.T) {
 				}
 				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, proto.SERIALIZABLE, store.ctx.Clock)
 			}
-			args, reply := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
+			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
 			args.Txn = txn
-			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()}); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		// Scan the range and verify count. Do this in a goroutine in case
 		// it isn't expected to finish.
-		sArgs, sReply := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+		sArgs := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+		sReply := sArgs.CreateReply().(*proto.ScanResponse)
 		sArgs.Timestamp = store.Clock().Now()
 		if !test.consistent {
 			sArgs.ReadConsistency = proto.INCONSISTENT
@@ -1257,7 +1270,7 @@ func TestStoreScanIntents(t *testing.T) {
 				t.Fatal(err)
 			}
 			close(done)
-		}(sArgs, sReply)
+		}(&sArgs, sReply)
 
 		wait := 1 * time.Second
 		if !test.expFinish {
@@ -1276,9 +1289,10 @@ func TestStoreScanIntents(t *testing.T) {
 				t.Errorf("%d: scan failed to finish after %s", i, wait)
 			} else {
 				// Commit the unpushable txn so the read can finish.
-				etArgs, etReply := endTxnArgs(txn, true, 1, store.StoreID())
+				etArgs := endTxnArgs(txn, true, 1, store.StoreID())
+				etReply := etArgs.CreateReply().(*proto.EndTransactionResponse)
 				etArgs.Timestamp = txn.Timestamp
-				if err := store.ExecuteCmd(context.Background(), proto.Call{Args: etArgs, Reply: etReply}); err != nil {
+				if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &etArgs, Reply: etReply}); err != nil {
 					t.Fatal(err)
 				}
 				<-done
@@ -1302,25 +1316,26 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	for j := 0; j < 10; j++ {
 		key := proto.Key(fmt.Sprintf("key%02d", j))
 		keys = append(keys, key)
-		args, reply := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
+		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)), 1, store.StoreID())
 		args.Txn = txn
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &args, Reply: args.CreateReply()}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Now, commit txn without resolving intents.
-	etArgs, etReply := endTxnArgs(txn, true, 1, store.StoreID())
+	etArgs := endTxnArgs(txn, true, 1, store.StoreID())
 	etArgs.Timestamp = txn.Timestamp
-	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: etArgs, Reply: etReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &etArgs, Reply: etArgs.CreateReply()}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Scan the range repeatedly until we've verified count.
-	sArgs, sReply := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+	sArgs := scanArgs(keys[0], keys[9].Next(), 1, store.StoreID())
+	sReply := sArgs.CreateReply().(*proto.ScanResponse)
 	sArgs.ReadConsistency = proto.INCONSISTENT
 	util.SucceedsWithin(t, time.Second, func() error {
-		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: sArgs, Reply: sReply}); err != nil {
+		if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &sArgs, Reply: sReply}); err != nil {
 			return err
 		}
 		if len(sReply.Rows) != 10 {

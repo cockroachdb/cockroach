@@ -1254,7 +1254,18 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 			return err
 		}
 
-		if err = rng.AddCmd(ctx, proto.Call{Args: args, Reply: reply}); err == nil {
+		addedReply, err := rng.AddCmd(ctx, args)
+		if addedReply != nil {
+			gogoproto.Merge(reply, addedReply)
+		}
+		if err != nil {
+			if reply.Header().Error != nil {
+				panic("the world is on fire")
+			}
+			reply.Header().SetGoError(err)
+		}
+
+		if err == nil {
 			return nil
 		}
 
