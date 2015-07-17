@@ -29,7 +29,7 @@ import (
 )
 
 // Iterator is an interface for iterating over key/value pairs in an
-// engine. Iterator implementation are thread safe unless otherwise
+// engine. Iterator implementations are thread safe unless otherwise
 // noted.
 type Iterator interface {
 	// Close frees up resources held by the iterator.
@@ -100,11 +100,11 @@ type Engine interface {
 	Merge(key proto.EncodedKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (proto.StoreCapacity, error)
-	// SetGCTimeouts sets a function which yields timeout values for GC
-	// compaction of transaction and response cache entries. The return
-	// values are in unix nanoseconds for the minimum transaction row
-	// timestamp and the minimum response cache row timestamp respectively.
-	// Rows with timestamps less than the associated value will be GC'd
+	// SetGCTimeouts sets timeout values for GC of transaction and
+	// response cache entries. The values are specified in unix
+	// time in nanoseconds for the minimum transaction row timestamp and
+	// the minimum response cache row timestamp respectively. Rows
+	// with timestamps less than the associated value will be GC'd
 	// during compaction.
 	SetGCTimeouts(minTxnTS, minRCacheTS int64)
 	// ApproximateSize returns the approximate number of bytes the engine is
