@@ -182,7 +182,7 @@ func TestNodeStatusMonitor(t *testing.T) {
 		IntentCount:     6,
 		IntentAge:       6,
 		GCBytesAge:      6,
-		LastUpdateNanos: 6 * 1E9,
+		LastUpdateNanos: 1 * 1E9,
 	}
 
 	if a, e := len(monitor.stores), 3; a != e {

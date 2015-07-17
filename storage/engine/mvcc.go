@@ -83,7 +83,9 @@ func (ms *MVCCStats) Add(oms *MVCCStats) {
 	ms.GCBytesAge += oms.GCBytesAge
 	ms.SysBytes += oms.SysBytes
 	ms.SysCount += oms.SysCount
-	ms.LastUpdateNanos += oms.LastUpdateNanos
+	if oms.LastUpdateNanos > ms.LastUpdateNanos {
+		ms.LastUpdateNanos = oms.LastUpdateNanos
+	}
 }
 
 // Subtract subtracts the values of oms from ms.
@@ -100,7 +102,9 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 	ms.GCBytesAge -= oms.GCBytesAge
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
-	ms.LastUpdateNanos -= oms.LastUpdateNanos
+	if oms.LastUpdateNanos > ms.LastUpdateNanos {
+		ms.LastUpdateNanos = oms.LastUpdateNanos
+	}
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for
