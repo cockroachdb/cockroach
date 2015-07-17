@@ -698,7 +698,7 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction,
 	txnMeta.txnEnd = nil
 }
 
-// unregisterTxn idempotently deletes a txnMetadata object from the sender
+// unregisterTxn deletes a txnMetadata object from the sender
 // and collects its stats.
 func (tc *TxnCoordSender) unregisterTxn(id string) {
 	tc.Lock()

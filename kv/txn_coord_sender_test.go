@@ -662,9 +662,10 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	}
 }
 
-// TestDrainingNodeUnavailable tests that a NodeUnavailableError is received
+// TestTxnDrainingNode tests that pending transactions tasks' intents are resolved
+// if they commit while draining, and that a NodeUnavailableError is received
 // when attempting to run a new transaction on a draining node.
-func TestTestDrainingNodeUnavailable(t *testing.T) {
+func TestTxnDrainingNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
 
@@ -676,6 +677,40 @@ func TestTestDrainingNodeUnavailable(t *testing.T) {
 		t.Fatal("stopper draining prematurely")
 	}
 
+	txn := newTxn(s.Clock, proto.Key("a"))
+	key := proto.Key("a")
+	beginTxn := func() {
+		pReply := &proto.PutResponse{}
+		call := proto.Call{
+			Args:  createPutRequest(key, []byte("value"), txn),
+			Reply: pReply,
+		}
+		if err := sendCall(s.Sender, call); err != nil {
+			t.Fatal(err)
+		}
+		if pReply.GoError() != nil {
+			t.Fatal(pReply.GoError())
+		}
+	}
+	endTxn := func() {
+		etReply := &proto.EndTransactionResponse{}
+		s.Sender.Send(context.Background(), proto.Call{
+			Args: &proto.EndTransactionRequest{
+				RequestHeader: proto.RequestHeader{
+					Key:       txn.Key,
+					Timestamp: txn.Timestamp,
+					Txn:       txn,
+				},
+				Commit: true,
+			},
+			Reply: etReply,
+		})
+		if etReply.Error != nil {
+			t.Fatal(etReply.GoError())
+		}
+	}
+
+	beginTxn() // begin before draining
 	go func() {
 		s.Stopper.Stop()
 	}()
@@ -686,9 +721,12 @@ func TestTestDrainingNodeUnavailable(t *testing.T) {
 		}
 		return nil
 	})
+	endTxn()                               // commit after draining
+	verifyCleanup(key, s.Sender, s.Eng, t) // make sure intent gets resolved
 
+	// Attempt to start another transaction, but it should be too late.
 	reply := &proto.PutResponse{}
-	key := proto.Key("key")
+	key = proto.Key("key")
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
