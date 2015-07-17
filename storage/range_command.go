@@ -235,7 +235,9 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args p
 	if args.Txn == nil {
 		return reply, util.Errorf("no transaction specified to EndTransaction")
 	}
-	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
+	// Make a copy of the transaction in case it's mutated below.
+	txn := *args.Txn
+	key := keys.TransactionKey(txn.Key, txn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -252,13 +254,13 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args p
 			return reply, proto.NewTransactionStatusError(existTxn, "already committed")
 		} else if existTxn.Status == proto.ABORTED {
 			return reply, proto.NewTransactionAbortedError(existTxn)
-		} else if args.Txn.Epoch < existTxn.Epoch {
-			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch))
-		} else if args.Txn.Epoch == existTxn.Epoch && existTxn.Timestamp.Less(args.Txn.OrigTimestamp) {
+		} else if txn.Epoch < existTxn.Epoch {
+			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", txn.Epoch))
+		} else if txn.Epoch == existTxn.Epoch && existTxn.Timestamp.Less(txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
-			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp))
+			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", txn.OrigTimestamp))
 		}
 
 		// Use the persisted transaction record as final transaction.
@@ -266,17 +268,17 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args p
 
 		// Take max of requested epoch and existing epoch. The requester
 		// may have incremented the epoch on retries.
-		if reply.Txn.Epoch < args.Txn.Epoch {
-			reply.Txn.Epoch = args.Txn.Epoch
+		if reply.Txn.Epoch < txn.Epoch {
+			reply.Txn.Epoch = txn.Epoch
 		}
 		// Take max of requested priority and existing priority. This isn't
 		// terribly useful, but we do it for completeness.
-		if reply.Txn.Priority < args.Txn.Priority {
-			reply.Txn.Priority = args.Txn.Priority
+		if reply.Txn.Priority < txn.Priority {
+			reply.Txn.Priority = txn.Priority
 		}
 	} else {
 		// The transaction doesn't exist yet on disk; use the supplied version.
-		reply.Txn = args.Txn
+		reply.Txn = &txn
 	}
 
 	// Take max of requested timestamp and possibly "pushed" txn
@@ -469,13 +471,14 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, 
 
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
-	txn := &proto.Transaction{}
-	if ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, txn); err != nil {
+	var txn proto.Transaction
+	if ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, &txn); err != nil {
 		return reply, err
 	} else if !ok {
-		// If no existing transaction record was found, initialize
-		// to the transaction in the request header.
-		txn = args.Txn
+		// If no existing transaction record was found, initialize to a
+		// shallow copy of the transaction in the request header. We copy
+		// to avoid mutating the original below.
+		txn = *args.Txn
 	}
 
 	if txn.Status == proto.PENDING {
@@ -485,12 +488,12 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, 
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, txn); err != nil {
+		if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err
 		}
 	}
 
-	reply.Txn = txn
+	reply.Txn = &txn
 	return reply, nil
 }
 
