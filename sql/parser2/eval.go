@@ -23,6 +23,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 // TODO(pmattis):
@@ -661,7 +662,30 @@ func evalUnaryExpr(expr *UnaryExpr, env Env) (Datum, error) {
 }
 
 func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
-	return null, fmt.Errorf("TODO(pmattis): unsupported expression type: %T", expr)
+	name := strings.ToLower(expr.Name.String())
+	b, ok := builtins[name]
+	if !ok {
+		return null, fmt.Errorf("%s: unknown function", expr.Name)
+	}
+	if b.nArgs != -1 && b.nArgs != len(expr.Exprs) {
+		return null, fmt.Errorf("%s: incorrect number of arguments: %d vs %d",
+			expr.Name, b.nArgs, len(expr.Exprs))
+	}
+
+	args := make(dtuple, 0, len(expr.Exprs))
+	for _, e := range expr.Exprs {
+		arg, err := EvalExpr(e, env)
+		if err != nil {
+			return null, err
+		}
+		args = append(args, arg)
+	}
+
+	res, err := b.fn(args)
+	if err != nil {
+		return null, fmt.Errorf("%s: %v", expr.Name, err)
+	}
+	return res, nil
 }
 
 func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {

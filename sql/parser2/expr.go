@@ -363,9 +363,9 @@ func (node *UnaryExpr) String() string {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name     string
+	Name     QualifiedName
 	Distinct bool
-	Exprs    SelectExprs
+	Exprs    Exprs
 }
 
 func (node *FuncExpr) String() string {

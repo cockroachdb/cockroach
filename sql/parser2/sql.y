@@ -110,7 +110,8 @@ import "strings"
 %type <str>   name
 %type <empty> index_name opt_index_name
 
-%type <empty> func_name subquery_op
+%type <empty> subquery_op
+%type <qname> func_name
 %type <empty> opt_class
 %type <empty> opt_collate
 
@@ -211,8 +212,8 @@ import "strings"
 %type <empty> rowsfrom_item rowsfrom_list opt_col_def_list
 %type <empty> opt_ordinality
 %type <empty> exclusion_constraint_list exclusion_constraint_elem
-%type <empty> func_arg_list
-%type <empty> func_arg_expr
+%type <exprs> func_arg_list
+%type <expr>  func_arg_expr
 %type <empty> type_list array_expr_list
 %type <exprs> row explicit_row implicit_row
 %type <expr>  case_expr case_arg case_default
@@ -256,7 +257,7 @@ import "strings"
 %type <exprs> var_list
 %type <strs>  var_name
 %type <str>   col_id
-%type <str>   col_label type_function_name param_name
+%type <str>   col_label type_function_name
 %type <str>   non_reserved_word
 %type <expr>  non_reserved_word_or_sconst
 %type <empty> createdb_opt_name
@@ -276,8 +277,8 @@ import "strings"
 
 // %type <empty> opt_check_option
 
-%type <empty> func_application func_expr_common_subexpr
-%type <empty> func_expr func_expr_windowless
+%type <expr>  func_application func_expr_common_subexpr
+%type <expr>  func_expr func_expr_windowless
 %type <empty> common_table_expr
 %type <empty> with_clause opt_with_clause
 %type <empty> cte_list
@@ -298,7 +299,7 @@ import "strings"
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT FCONST SCONST BCONST XCONST
 %token <ival>  ICONST PARAM
-%token <str>   TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
+%token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str>   ERROR
 
@@ -1379,10 +1380,6 @@ opt_nulls_order:
   NULLS_LA FIRST {}
 | NULLS_LA LAST {}
 | /* EMPTY */ {}
-
-// Ideally param_name should be col_id, but that causes too many conflicts.
-param_name:
-  type_function_name
 
 // We would like to make the %TYPE productions here be col_id attrs etc, but
 // that causes reduce/reduce conflicts. type_function_name is next best
@@ -2971,13 +2968,36 @@ c_expr:
 | GROUPING '(' expr_list ')' {}
 
 func_application:
-  func_name '(' ')' {}
-| func_name '(' func_arg_list opt_sort_clause ')' {}
-| func_name '(' VARIADIC func_arg_expr opt_sort_clause ')' {}
-| func_name '(' func_arg_list ',' VARIADIC func_arg_expr opt_sort_clause ')' {}
-| func_name '(' ALL func_arg_list opt_sort_clause ')' {}
-| func_name '(' DISTINCT func_arg_list opt_sort_clause ')' {}
-| func_name '(' '*' ')' {}
+  func_name '(' ')'
+  {
+    $$ = &FuncExpr{Name: $1}
+  }
+| func_name '(' func_arg_list opt_sort_clause ')'
+  {
+    // TODO(pmattis): Support opt_sort_clause or remove it?
+    $$ = &FuncExpr{Name: $1, Exprs: $3}
+  }
+| func_name '(' VARIADIC func_arg_expr opt_sort_clause ')'
+  {
+    panic("TODO(pmattis): unimplemented)")
+  }
+| func_name '(' func_arg_list ',' VARIADIC func_arg_expr opt_sort_clause ')'
+  {
+    panic("TODO(pmattis): unimplemented)")
+  }
+| func_name '(' ALL func_arg_list opt_sort_clause ')'
+  {
+    panic("TODO(pmattis): unimplemented)")
+  }
+| func_name '(' DISTINCT func_arg_list opt_sort_clause ')'
+  {
+    // TODO(pmattis): Support opt_sort_clause or remove it?
+    $$ = &FuncExpr{Name: $1, Distinct: true, Exprs: $4}
+  }
+| func_name '(' '*' ')'
+  {
+    $$ = &FuncExpr{Name: $1, Exprs: Exprs{QualifiedName{"*"}}}
+  }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
 // so that we have classifications for "everything that is a function call or
@@ -2987,8 +3007,16 @@ func_application:
 // many of the special SQL functions wouldn't actually make any sense as
 // functional index entries, but we ignore that consideration here.)
 func_expr:
-  func_application within_group_clause filter_clause over_clause {}
-| func_expr_common_subexpr {}
+  func_application within_group_clause filter_clause over_clause
+  {
+    // TODO(pmattis): Support within_group_clause, filter_clause and
+    // over_clause?
+    $$ = $1
+  }
+| func_expr_common_subexpr
+  {
+    $$ = $1
+  }
 
 // As func_expr but does not accept WINDOW functions directly (but they can
 // still be contained in arguments for functions etc). Use this when window
@@ -3183,15 +3211,18 @@ expr_list:
     $$ = append($1, $3)
   }
 
-// function arguments can have names
 func_arg_list:
-  func_arg_expr {}
-| func_arg_list ',' func_arg_expr {}
+  func_arg_expr
+  {
+    $$ = []Expr{$1}
+  }
+| func_arg_list ',' func_arg_expr
+  {
+    $$ = append($1, $3)
+  }
 
 func_arg_expr:
-  a_expr {}
-| param_name COLON_EQUALS a_expr {}
-| param_name EQUALS_GREATER a_expr {}
+  a_expr
 
 type_list:
   typename {}
@@ -3500,8 +3531,14 @@ index_name:
 // subscripts, and reject that case in the C code. (If we ever implement
 // SQL99-like methods, such syntax may actually become legal!)
 func_name:
-  type_function_name {}
-| col_id indirection {}
+  type_function_name
+  {
+    $$ = QualifiedName{$1}
+  }
+| col_id indirection
+  {
+    $$ = QualifiedName(append([]string{$1}, $2...))
+  }
 
 // Constants
 a_expr_const:
