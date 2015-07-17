@@ -149,17 +149,12 @@ func usesTimestampCache(r proto.Request) bool {
 	return tsCacheMethods[m]
 }
 
-type responseWithErr struct {
-	reply proto.Response
-	err   error
-}
-
 // A pendingCmd holds a done channel for a command sent to Raft. Once
 // committed to the Raft log, the command is executed and the result returned
 // via the done channel.
 type pendingCmd struct {
 	ctx  context.Context
-	done chan responseWithErr // Used to signal waiting RPC handler
+	done chan proto.ResponseWithError // Used to signal waiting RPC handler
 }
 
 // A rangeManager is an interface satisfied by Store through which ranges
@@ -362,7 +357,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = (<-pendingCmd.done).err
+		err = (<-pendingCmd.done).Err
 	}
 	return err
 }
@@ -592,10 +587,10 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request) (proto.Resp
 
 	switch tArgs := args.(type) {
 	case *proto.AdminSplitRequest:
-		resp, err := r.AdminSplit(tArgs)
+		resp, err := r.AdminSplit(*tArgs)
 		return &resp, err
 	case *proto.AdminMergeRequest:
-		resp, err := r.AdminMerge(tArgs)
+		resp, err := r.AdminMerge(*tArgs)
 		return &resp, err
 	default:
 		return nil, util.Error("unrecognized admin command")
@@ -738,7 +733,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.Wa
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		respWithErr := <-pendingCmd.done
-		reply, err = respWithErr.reply, respWithErr.err
+		reply, err = respWithErr.Reply, respWithErr.Err
 	} else if err == multiraft.ErrGroupDeleted {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
@@ -758,7 +753,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.Wa
 func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
 		ctx:  ctx,
-		done: make(chan responseWithErr, 1),
+		done: make(chan proto.ResponseWithError, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
 		RaftID:       r.Desc().RaftID,
@@ -812,7 +807,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	execDone()
 
 	if cmd != nil {
-		cmd.done <- responseWithErr{reply, err}
+		cmd.done <- proto.ResponseWithError{reply, err}
 	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
 	}
@@ -904,18 +899,15 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if reply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
-			// Any error encountered while fetching the response cache entry means corruption.
-			return batch, reply, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
-		} else if reply != nil {
+		if replyWithErr, readErr := r.respCache.GetResponse(batch, args.Header().CmdID); readErr != nil {
+			return batch, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
+		} else if replyWithErr.Reply != nil {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
-			// TODO(tamird): move this into the response cache itself
-			defer func() { reply.Header().Error = nil }()
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return batch, reply, reply.Header().GoError()
+			return batch, replyWithErr.Reply, replyWithErr.Err
 		}
 	}
 
@@ -937,18 +929,12 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 			batch.Close()
 			batch = r.rm.Engine().NewBatch()
 		}
-		// TODO(tamird): move this into the response cache itself
 		if reply == nil {
 			reply = args.CreateReply()
 		}
-		if reply.Header().Error != nil {
-			panic("the world is on fire")
-		}
-		reply.Header().SetGoError(rErr)
-		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
+		if err := r.respCache.PutResponse(batch, args.Header().CmdID, proto.ResponseWithError{reply, rErr}); err != nil {
 			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
-		reply.Header().Error = nil
 	}
 
 	// If the execution of the command wasn't successful, stop here.

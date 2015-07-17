@@ -1258,10 +1258,10 @@ func (s *Store) ExecuteCmd(ctx context.Context, call proto.Call) error {
 		if addedReply != nil {
 			gogoproto.Merge(reply, addedReply)
 		}
+		if reply.Header().Error != nil {
+			panic(proto.ErrorUnexpectedlySet)
+		}
 		if err != nil {
-			if reply.Header().Error != nil {
-				panic("the world is on fire")
-			}
 			reply.Header().SetGoError(err)
 		}
 

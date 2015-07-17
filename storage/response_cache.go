@@ -19,13 +19,13 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -72,26 +72,31 @@ func (rc *ResponseCache) ClearData(e engine.Engine) error {
 	return err
 }
 
-// GetResponse looks up a response matching the specified cmdID and
-// returns true if found. The response is deserialized into the
-// supplied reply parameter. If no response is found, returns
-// false. If a command is pending already for the cmdID, then this
-// method will block until the the command is completed or the
-// response cache is cleared.
-func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (proto.Response, error) {
+// GetResponse looks up a response matching the specified cmdID. If the
+// response is found, it is returned along with its associated error.
+// If the response is not found, nil is returned for both the response
+// and its error. In all cases, the third return value is the error
+// returned from the engine when reading the on-disk cache.
+func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (proto.ResponseWithError, error) {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
-		return nil, nil
+		return proto.ResponseWithError{}, nil
 	}
 
 	// Pull response from the cache and read into reply if available.
-	rwResp := proto.ReadWriteCmdResponse{}
+	var rwResp proto.ReadWriteCmdResponse
 	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
 	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rwResp)
-	if ok && err == nil {
-		return rwResp.GetValue().(proto.Response), nil
+	if err != nil {
+		return proto.ResponseWithError{}, err
 	}
-	return nil, err
+	if ok {
+		resp := rwResp.GetValue().(proto.Response)
+		header := resp.Header()
+		defer func() { header.Error = nil }()
+		return proto.ResponseWithError{resp, header.GoError()}, nil
+	}
+	return proto.ResponseWithError{}, nil
 }
 
 // CopyInto copies all the cached results from this response cache
@@ -158,32 +163,43 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RaftID) er
 	})
 }
 
-// PutResponse writes a response to the cache for the specified cmdID.
-func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, reply proto.Response) error {
+// PutResponse writes a response and an error associated with it to the
+// cache for the specified cmdID.
+func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, replyWithErr proto.ResponseWithError) error {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return nil
 	}
+
 	// Write the response value to the engine.
-	var err error
-	if rc.shouldCacheResponse(reply) {
+	if rc.shouldCacheResponse(replyWithErr) {
+		// Write the error into the reply before caching.
+		header := replyWithErr.Reply.Header()
+		header.SetGoError(replyWithErr.Err)
+		// Be sure to clear it when you're done!
+		defer func() { header.Error = nil }()
+
 		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
-		rwResp := &proto.ReadWriteCmdResponse{}
-		if !rwResp.SetValue(reply) {
-			log.Fatalf("response %T not supported by response cache", reply)
+		var rwResp proto.ReadWriteCmdResponse
+		if !rwResp.SetValue(replyWithErr.Reply) {
+			panic(fmt.Sprintf("response %T not supported by response cache", replyWithErr.Reply))
 		}
-		err = engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, rwResp)
+		return engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, &rwResp)
 	}
 
-	return err
+	return nil
 }
 
 // shouldCacheResponse returns whether the response should be cached.
 // Responses with write-too-old, write-intent and not leader errors
 // are retried on the server, and so are not recorded in the response
 // cache in the hopes of retrying to a successful outcome.
-func (rc *ResponseCache) shouldCacheResponse(reply proto.Response) bool {
-	switch reply.Header().GoError().(type) {
+func (rc *ResponseCache) shouldCacheResponse(replyWithErr proto.ResponseWithError) bool {
+	if err := replyWithErr.Reply.Header().Error; err != nil {
+		panic(proto.ErrorUnexpectedlySet)
+	}
+
+	switch replyWithErr.Err.(type) {
 	case *proto.WriteTooOldError, *proto.WriteIntentError, *proto.NotLeaderError:
 		return false
 	}

@@ -23,6 +23,20 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
+// ResponseWithError is a tuple of a Response and an error. It is used
+// to pass around a Response with its associated error where that
+// entanglement is necessary (e.g. channels, methods that need to
+// return another error in addition to this one).
+type ResponseWithError struct {
+	Reply Response
+	Err   error
+}
+
+// ErrorUnexpectedlySet is the string we panic on when we assert
+// `ResponseHeader.Error == nil` before calling
+// `ResponseHeader.SetGoError()`.
+const ErrorUnexpectedlySet = "error is unexpectedly set"
+
 // TransactionRestartError is an interface implemented by errors that cause
 // a transaction to be restarted.
 type TransactionRestartError interface {
