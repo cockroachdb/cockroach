@@ -587,10 +587,10 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request) (proto.Resp
 
 	switch tArgs := args.(type) {
 	case *proto.AdminSplitRequest:
-		resp, err := r.AdminSplit(tArgs)
+		resp, err := r.AdminSplit(*tArgs)
 		return &resp, err
 	case *proto.AdminMergeRequest:
-		resp, err := r.AdminMerge(tArgs)
+		resp, err := r.AdminMerge(*tArgs)
 		return &resp, err
 	default:
 		return nil, util.Error("unrecognized admin command")

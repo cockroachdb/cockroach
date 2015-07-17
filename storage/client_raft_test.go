@@ -790,7 +790,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		}
 		args, _ := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RaftID,
 			mtc.stores[0].StoreID())
-		if _, err := rng.AdminSplit(args); err != nil {
+		if _, err := rng.AdminSplit(*args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -802,7 +802,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal("failed to look up max range")
 		}
 		args, _ := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RaftID, mtc.stores[0].StoreID())
-		if _, err := rng.AdminSplit(args); err != nil {
+		if _, err := rng.AdminSplit(*args); err != nil {
 			t.Fatal(err)
 		}
 	}
