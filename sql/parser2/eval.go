@@ -758,9 +758,15 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 
 	vtuple := values.(dtuple)
 
+	// TODO(pmattis): If we're evaluating the expression multiple times we should
+	// use a map when possible. This works as long as arg is not a tuple. Note
+	// that the usage of the map is currently disabled via the "&& false" because
+	// building the map is a pessimization if we're only evaluating the
+	// expression once. We need to determine when the expression will be
+	// evaluated multiple times before enabling. Also need to figure out a way to
+	// use the map approach for tuples. One idea is to encode the tuples into
+	// strings and then use a map of strings.
 	if _, ok := arg.(dtuple); !ok && false {
-		// TODO(pmattis): If we're evaluating the expression multiple times we
-		// should use a map when possible. This works as long as arg is not a tuple.
 		m := make(map[Datum]struct{}, len(vtuple))
 		for _, val := range vtuple {
 			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
