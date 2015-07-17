@@ -46,15 +46,16 @@ const (
 var (
 	clientMu          sync.Mutex                      // Protects access to the client cache.
 	clients           map[util.UnresolvedAddr]*Client // Cache of RPC clients by server address.
-	heartbeatInterval time.Duration
-	errClosed         = errors.New("client is closed")
-	errUnstarted      = errors.New("not started yet")
+	heartbeatInterval = defaultHeartbeatInterval
+	// TODO(tschottdorf) err{Closed,Unstarted} are candidates for NodeUnavailableError.
+	errClosed    = errors.New("client is closed")
+	errUnstarted = errors.New("not started yet")
 )
 
 // clientRetryOptions specifies exponential backoff starting
 // at 1s and ending at 30s with indefinite retries.
-// Clients currently never give up. TODO(tamird): Add `MaxRetries` here or
-// otherwise address this.
+// Clients currently never give up.
+// TODO(tamird): Add `MaxRetries` here or otherwise address this.
 var clientRetryOptions = retry.Options{
 	InitialBackoff: 1 * time.Second,  // first backoff at 1s
 	MaxBackoff:     30 * time.Second, // max backoff is 30s
@@ -64,7 +65,6 @@ var clientRetryOptions = retry.Options{
 // init creates a new client RPC cache.
 func init() {
 	clients = map[util.UnresolvedAddr]*Client{}
-	heartbeatInterval = defaultHeartbeatInterval
 }
 
 type internalConn struct {
@@ -72,14 +72,12 @@ type internalConn struct {
 	client *rpc.Client
 }
 
-// Client is a Cockroach-specific RPC client with an embedded go
-// rpc.Client struct.
+// Client is a Cockroach-specific RPC client.
 type Client struct {
 	addr      util.UnresolvedAddr
 	Closed    chan struct{}
 	conn      atomic.Value // holds a `internalConn`
 	healthy   atomic.Value // holds a `chan struct{}` exposed in `Healthy`
-	isClosed  bool
 	tlsConfig *tls.Config
 
 	clock        *hlc.Clock
@@ -135,15 +133,7 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	retryOpts.Stopper = context.Stopper
 
 	context.Stopper.RunWorker(func() {
-		select {
-		case <-context.Stopper.ShouldStop():
-			c.Close()
-		case <-c.Closed:
-		}
-	})
-
-	context.Stopper.RunWorker(func() {
-		c.runHeartbeat(retryOpts)
+		c.runHeartbeat(retryOpts, context.Stopper.ShouldStop())
 
 		if client := c.conn.Load().(internalConn).client; client != nil {
 			client.Close()
@@ -163,6 +153,7 @@ func (c *Client) Call(serviceMethod string, args interface{}, reply interface{})
 	return c.conn.Load().(internalConn).client.Call(serviceMethod, args, reply)
 }
 
+// connect attempts a single connection attempt. On success, updates `c.conn`.
 func (c *Client) connect() error {
 	conn, err := tlsDialHTTP(c.addr.NetworkField, c.addr.StringField, c.tlsConfig)
 	if err != nil {
@@ -177,6 +168,8 @@ func (c *Client) connect() error {
 }
 
 // Healthy returns a channel that is closed when the client becomes healthy.
+// In the event of the client becoming unhealthy, future calls to Healthy()
+// return a new channel.
 func (c *Client) Healthy() <-chan struct{} {
 	return c.healthy.Load().(chan struct{})
 }
@@ -187,19 +180,19 @@ func (c *Client) Close() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 
-	if c.isClosed {
+	select {
+	case <-c.Closed:
 		return
+	default:
+		delete(clients, c.addr)
+		close(c.Closed)
 	}
-
-	c.isClosed = true
-	delete(clients, c.addr)
-	close(c.Closed)
 }
 
-// runHeartbeat sends periodic heartbeats to client. Closes the
-// connection on error. Heartbeats are sent in an infinite loop until
-// an error is encountered.
-func (c *Client) runHeartbeat(retryOpts retry.Options) {
+// runHeartbeat sends periodic heartbeats to client, marking the client healthy
+// or unhealthy and reconnecting appropriately until either the Client or the
+// supplied channel is closed.
+func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 	isHealthy := false
 	setHealthy := func() {
 		if isHealthy {
@@ -215,12 +208,12 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 		}
 	}
 
-	// initial condition
-	connErr := errUnstarted
+	connErr := errUnstarted // initial condition
 	var beatErr error
 	for {
 		for r := retry.Start(retryOpts); r.Next(); {
-			// reconnect if connection failed or heartbeat error is not definitely temporary
+			// Reconnect if connection failed or heartbeat error is not
+			// definitely temporary.
 			if netErr, ok := beatErr.(net.Error); connErr != nil || beatErr != nil && !(ok && netErr.Temporary()) {
 				if connErr = c.connect(); connErr != nil {
 					log.Warning(connErr)
@@ -240,10 +233,13 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 		// Wait after the heartbeat so that the first iteration gets a wait-free
 		// heartbeat attempt.
 		select {
+		case <-closer:
+			c.Close()
+			return
 		case <-c.Closed:
 			return
-			// TODO: perhaps retry more aggressively when the client is unhealthy
 		case <-time.After(heartbeatInterval):
+			// TODO(tamird): Perhaps retry more aggressively when the client is unhealthy.
 		}
 	}
 }
