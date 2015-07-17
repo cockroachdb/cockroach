@@ -1531,16 +1531,11 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	defer tc.Stop()
 
 	cmdID := proto.ClientCmdID{WallTime: 1, Random: 1}
-
 	// Write an error into the response cache.
-	errorReply := &proto.ReadWriteCmdResponse{}
-	errorReply.Increment = &proto.IncrementResponse{}
-	errorReply.Increment.Header().SetGoError(errors.New("boom"))
-	expError := errorReply.Increment.Header().Error
-	key := keys.ResponseCacheKey(tc.rng.Desc().RaftID, &cmdID)
-	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.ZeroTimestamp, nil, errorReply); err != nil {
-		t.Fatal(err)
-	}
+	pastReply := proto.IncrementResponse{}
+	pastError := errors.New("boom")
+	var expError error = &proto.Error{Message: pastError.Error()}
+	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID, &pastReply, pastError)
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID
@@ -1550,7 +1545,7 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	} else if ge, ok := err.(*proto.Error); !ok {
 		t.Fatalf("expected proto.Error but got %s", err)
 	} else if !reflect.DeepEqual(ge, expError) {
-		t.Fatalf("expected %s but got %s", expError, ge)
+		t.Fatalf("expected <%T> %+v but got <%T> %+v", expError, expError, ge, ge)
 	}
 }
 

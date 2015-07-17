@@ -23,6 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
+// ErrorUnexpectedlySet is the string we panic on when we assert
+// `ResponseHeader.Error == nil` before calling
+// `ResponseHeader.SetGoError()`.
+const ErrorUnexpectedlySet = "error is unexpectedly set"
+
 // TransactionRestartError is an interface implemented by errors that cause
 // a transaction to be restarted.
 type TransactionRestartError interface {

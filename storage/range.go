@@ -904,18 +904,15 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 	// Check the response cache to ensure idempotency.
 	if proto.IsWrite(args) {
-		if reply, err := r.respCache.GetResponse(batch, args.Header().CmdID); err != nil {
-			// Any error encountered while fetching the response cache entry means corruption.
-			return batch, reply, newReplicaCorruptionError(util.Errorf("could not read from response cache"), err)
+		if reply, err, readErr := r.respCache.GetResponse(batch, args.Header().CmdID); readErr != nil {
+			return batch, reply, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if reply != nil {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", args.Header().CmdID)
 			}
-			// TODO(tamird): move this into the response cache itself
-			defer func() { reply.Header().Error = nil }()
 			// We successfully read from the response cache, so return whatever error
 			// was present in the cached entry (if any).
-			return batch, reply, reply.Header().GoError()
+			return batch, reply, err
 		}
 	}
 
@@ -937,18 +934,12 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 			batch.Close()
 			batch = r.rm.Engine().NewBatch()
 		}
-		// TODO(tamird): move this into the response cache itself
 		if reply == nil {
 			reply = args.CreateReply()
 		}
-		if reply.Header().Error != nil {
-			panic("the world is on fire")
-		}
-		reply.Header().SetGoError(rErr)
-		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply); err != nil {
+		if err := r.respCache.PutResponse(batch, args.Header().CmdID, reply, rErr); err != nil {
 			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
-		reply.Header().Error = nil
 	}
 
 	// If the execution of the command wasn't successful, stop here.
