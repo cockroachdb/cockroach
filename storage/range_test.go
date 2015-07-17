@@ -285,7 +285,7 @@ func setLeaderLease(t *testing.T, r *Range, l *proto.Lease) {
 	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
-		err = (<-pendingCmd.done).err
+		err = (<-pendingCmd.done).Err
 	}
 	if err != nil {
 		t.Errorf("failed to set lease: %s", err)
@@ -376,7 +376,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
-	if err := (<-pendingCmd.done).err; err == nil {
+	if err := (<-pendingCmd.done).Err; err == nil {
 		t.Fatalf("expected an error")
 	} else if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Fatalf("expected not leader error in return, got %s", err)
@@ -1535,7 +1535,7 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	pastReply := proto.IncrementResponse{}
 	pastError := errors.New("boom")
 	var expError error = &proto.Error{Message: pastError.Error()}
-	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID, &pastReply, pastError)
+	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID, proto.ResponseWithError{&pastReply, pastError})
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID

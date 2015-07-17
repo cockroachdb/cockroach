@@ -50,29 +50,29 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	// Start with a get for an unseen cmdID.
-	if val, err, corruptionErr := rc.GetResponse(e, cmdID); val != nil || err != nil {
-		t.Errorf("expected no response for id %+v; got %+v, %s", cmdID, val, err)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
+		t.Errorf("expected no response for id %+v; got %+v, %s", cmdID, replyWithErr.Reply, replyWithErr.Err)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, &incR, nil); err != nil {
+	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Get should now return 1.
-	if val, err, corruptionErr := rc.GetResponse(e, cmdID); corruptionErr != nil {
-		t.Errorf("unexpected failure getting response: %s", corruptionErr)
-	} else if val == nil || val.(*proto.IncrementResponse).NewValue != 1 || err != nil {
-		t.Errorf("unexpected response: %s, %s", val, err)
+	if replyWithErr, readErr := rc.GetResponse(e, cmdID); readErr != nil {
+		t.Errorf("unexpected failure getting response: %s", readErr)
+	} else if replyWithErr.Reply == nil || replyWithErr.Reply.(*proto.IncrementResponse).NewValue != 1 || replyWithErr.Err != nil {
+		t.Errorf("unexpected response: %s, %s", replyWithErr.Reply, replyWithErr.Err)
 	}
 	if err := rc.ClearData(e); err != nil {
 		t.Error(err)
 	}
 	// The previously present response should be gone.
-	if val, err, corruptionErr := rc.GetResponse(e, cmdID); val != nil || err != nil {
-		t.Errorf("unexpected success getting response: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
+		t.Errorf("unexpected success getting response: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 }
 
@@ -83,14 +83,14 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := proto.ClientCmdID{}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, &incR, nil); err != nil {
+	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Get should return !ok.
-	if val, err, corruptionErr := rc.GetResponse(e, cmdID); val != nil || err != nil {
-		t.Errorf("unexpected success getting response: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
+		t.Errorf("unexpected success getting response: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, &incR, nil); err != nil {
+	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -110,15 +110,15 @@ func TestResponseCacheCopyInto(t *testing.T) {
 		t.Errorf("unexpected error while copying response cache: %s", err)
 	}
 	// Get should return 1 for both caches.
-	if val, err, corruptionErr := rc1.GetResponse(e, cmdID); val == nil && err == nil || val.(*proto.IncrementResponse).NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc1.GetResponse(e, cmdID); replyWithErr.Reply == nil && replyWithErr.Err == nil || replyWithErr.Reply.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
-	if val, err, corruptionErr := rc2.GetResponse(e, cmdID); val == nil && err == nil || val.(*proto.IncrementResponse).NewValue != 1 {
-		t.Errorf("unexpected failure getting response from destination: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc2.GetResponse(e, cmdID); replyWithErr.Reply == nil && replyWithErr.Err == nil || replyWithErr.Reply.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from destination: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, &incR, nil); err != nil {
+	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -140,15 +140,15 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	}
 
 	// Get should return 1 for both caches.
-	if val, err, corruptionErr := rc1.GetResponse(e, cmdID); val == nil && err == nil || val.(*proto.IncrementResponse).NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc1.GetResponse(e, cmdID); replyWithErr.Reply == nil && replyWithErr.Err == nil || replyWithErr.Reply.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
-	if val, err, corruptionErr := rc2.GetResponse(e, cmdID); val == nil && err == nil || val.(*proto.IncrementResponse).NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc2.GetResponse(e, cmdID); replyWithErr.Reply == nil && replyWithErr.Err == nil || replyWithErr.Reply.(*proto.IncrementResponse).NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 }
 
@@ -159,20 +159,20 @@ func TestResponseCacheInflight(t *testing.T) {
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	// Add inflight for cmdID.
-	if val, err, corruptionErr := rc.GetResponse(e, cmdID); val != nil || err != nil {
-		t.Errorf("unexpected response or error: %s", err)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
+		t.Errorf("unexpected response or error: %s", replyWithErr.Err)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 	// Make two requests for response from cmdID, which is inflight.
 	doneChans := []chan struct{}{make(chan struct{}), make(chan struct{})}
 	for _, done := range doneChans {
 		doneChan := done
 		go func() {
-			if val, err, corruptionErr := rc.GetResponse(e, cmdID); val != nil || err != nil {
-				t.Errorf("unexpectedly found value for response cache entry %+v: %s", cmdID, err)
-			} else if corruptionErr != nil {
-				t.Fatalf("unxpected corruption error :%s", corruptionErr)
+			if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
+				t.Errorf("unexpectedly found value for response cache entry %+v: %s", cmdID, replyWithErr.Err)
+			} else if readErr != nil {
+				t.Fatalf("unxpected read error :%s", readErr)
 			}
 			close(doneChan)
 		}()
@@ -216,7 +216,7 @@ func TestResponseCacheShouldCache(t *testing.T) {
 	reply := proto.PutResponse{}
 
 	for i, test := range testCases {
-		if shouldCache := rc.shouldCacheResponse(&reply, test.err); shouldCache != test.shouldCache {
+		if shouldCache := rc.shouldCacheResponse(proto.ResponseWithError{&reply, test.err}); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
 	}
@@ -235,23 +235,23 @@ func TestResponseCacheGC(t *testing.T) {
 	// Add response for cmdID with timestamp at time=1ns.
 	copyIncR := incR
 	copyIncR.Timestamp.WallTime = 1
-	if err := rc.PutResponse(eng, cmdID, &copyIncR, nil); err != nil {
+	if err := rc.PutResponse(eng, cmdID, proto.ResponseWithError{&copyIncR, nil}); err != nil {
 		t.Fatalf("unexpected error putting responpse: %s", err)
 	}
 	eng.SetGCTimeouts(0, 0) // avoids GC
 	eng.CompactRange(nil, nil)
-	if val, err, corruptionErr := rc.GetResponse(eng, cmdID); val == nil && err == nil || val.(*proto.IncrementResponse).NewValue != 1 {
-		t.Fatalf("unexpected response or error: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc.GetResponse(eng, cmdID); replyWithErr.Reply == nil && replyWithErr.Err == nil || replyWithErr.Reply.(*proto.IncrementResponse).NewValue != 1 {
+		t.Fatalf("unexpected response or error: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 
 	// Now set minRCacheTS to 1, which will GC.
 	eng.SetGCTimeouts(0, 1)
 	eng.CompactRange(nil, nil)
-	if val, err, corruptionErr := rc.GetResponse(eng, cmdID); val != nil && err != nil {
-		t.Fatalf("unexpected response or error: %s, %+v", err, val)
-	} else if corruptionErr != nil {
-		t.Fatalf("unxpected corruption error :%s", corruptionErr)
+	if replyWithErr, readErr := rc.GetResponse(eng, cmdID); replyWithErr.Reply != nil && replyWithErr.Err != nil {
+		t.Fatalf("unexpected response or error: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
+	} else if readErr != nil {
+		t.Fatalf("unxpected read error :%s", readErr)
 	}
 }
