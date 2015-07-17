@@ -8,7 +8,7 @@ RUN apt-get update -y && \
 	apt-get install --no-install-recommends --auto-remove -y git build-essential pkg-config file npm && \
  	apt-get clean autoclean && \
  	apt-get autoremove -y && \
- 	rm -rf /tmp/* /var/lib/{apt,dpkg,cache,log} && \
+ 	rm -rf /tmp/* && \
 	ln -s /usr/bin/nodejs /usr/bin/node
 
 ENV GOPATH /go

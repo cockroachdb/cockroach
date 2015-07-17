@@ -13,7 +13,7 @@ RUN apt-get update -y && \
  apt-get install --no-install-recommends --auto-remove -y git build-essential file npm nodejs && \
  apt-get clean autoclean && \
  apt-get autoremove -y && \
- rm -rf /tmp/* /var/lib/{apt,dpkg,cache,log} && \
+ rm -rf /tmp/* && \
  ln -s /usr/bin/nodejs /usr/bin/node && \
  apt-get remove --auto-remove -y npm
 RUN go get golang.org/x/tools/cmd/vet
