@@ -43,7 +43,7 @@ func (node *DropDatabase) String() string {
 
 // DropTable represents a DROP TABLE statement.
 type DropTable struct {
-	Names    []QualifiedName
+	Names    QualifiedNames
 	IfExists bool
 }
 
@@ -53,11 +53,6 @@ func (node *DropTable) String() string {
 	if node.IfExists {
 		_, _ = buf.WriteString("IF EXISTS ")
 	}
-	for i, n := range node.Names {
-		if i > 0 {
-			_, _ = buf.WriteString(", ")
-		}
-		_, _ = buf.WriteString(n.String())
-	}
+	_, _ = buf.WriteString(node.Names.String())
 	return buf.String()
 }

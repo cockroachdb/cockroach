@@ -247,6 +247,19 @@ func (n QualifiedName) Table() string {
 	return n[len(n)-1]
 }
 
+// Column returns the column portion of the name.
+//
+// TODO(pmattis) Handling of qualified names is currently very basic and we
+// consider the column portion of the name to simply be the last
+// component. This is identical to the table portion of the name. Perhaps it
+// would be better to name this the "last" component because context matters in
+// determining whether it is a table or column name. Perhaps we can have
+// different types for use in the different contexts (e.g. ColumnName,
+// TableName, IndexName, etc).
+func (n QualifiedName) Column() string {
+	return n.Table()
+}
+
 func (n QualifiedName) String() string {
 	var buf bytes.Buffer
 	for i, s := range n {
@@ -260,6 +273,21 @@ func (n QualifiedName) String() string {
 		} else {
 			encodeSQLIdent(&buf, s)
 		}
+	}
+	return buf.String()
+}
+
+// QualifiedNames represents a command separated list (see the String method)
+// of qualified names.
+type QualifiedNames []QualifiedName
+
+func (n QualifiedNames) String() string {
+	var buf bytes.Buffer
+	for i, e := range n {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		_, _ = buf.WriteString(e.String())
 	}
 	return buf.String()
 }

@@ -644,31 +644,21 @@ func (s *Server) lookupDatabase(name string) (uint32, error) {
 }
 
 func (s *Server) processColumns(desc *structured.TableDescriptor,
-	node parser.Columns) ([]structured.ColumnDescriptor, error) {
+	node parser.QualifiedNames) ([]structured.ColumnDescriptor, error) {
 	if node == nil {
 		return desc.Columns, nil
 	}
 
 	cols := make([]structured.ColumnDescriptor, len(node))
 	for i, n := range node {
-		switch nt := n.(type) {
-		case *parser.StarExpr:
-			return s.processColumns(desc, nil)
-		case *parser.NonStarExpr:
-			switch et := nt.Expr.(type) {
-			case parser.QualifiedName:
-				// TODO(pmattis): If et.Qualifier is not empty, verify it matches the
-				// table name.
-				var err error
-				col, err := desc.FindColumnByName(et.Table())
-				if err != nil {
-					return nil, err
-				}
-				cols[i] = *col
-			default:
-				return nil, fmt.Errorf("unexpected node: %T", nt.Expr)
-			}
+		// TODO(pmattis): If the name is qualified, verify the table name matches
+		// desc.Name.
+		var err error
+		col, err := desc.FindColumnByName(n.Column())
+		if err != nil {
+			return nil, err
 		}
+		cols[i] = *col
 	}
 
 	return cols, nil
