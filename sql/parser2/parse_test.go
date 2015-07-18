@@ -122,6 +122,7 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM s.t`},
 
 		{`SELECT DISTINCT 1 FROM t`},
+		{`SELECT COUNT(DISTINCT a) FROM t`},
 
 		{`SELECT FROM t WHERE b = -2`},
 		{`SELECT FROM t WHERE a = b`},
@@ -165,6 +166,10 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c ELSE d END`},
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c WHEN b = d THEN d ELSE d END`},
 		{`SELECT FROM t WHERE CASE aa WHEN a = b THEN c END`},
+		{`SELECT FROM t WHERE a = B()`},
+		{`SELECT FROM t WHERE a = B(c)`},
+		{`SELECT FROM t WHERE a = B(c, d)`},
+		{`SELECT FROM t WHERE a = COUNT(*)`},
 		{`SELECT (a.b) FROM t WHERE (b.c) = 2`},
 
 		{`SELECT FROM t HAVING a = b`},
@@ -284,11 +289,6 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT 1 FROM t FOR SHARE`},
 		{`SELECT 1 FROM t FOR KEY SHARE`},
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
-		{`SELECT 1 FROM t WHERE a = B()`},
-		{`SELECT 1 FROM t WHERE a = B(c)`},
-		{`SELECT 1 FROM t WHERE a = B(c, d)`},
-		{`SELECT 1 FROM t WHERE a = IF(b)`},
-		{`SELECT COUNT(DISTINCT a) FROM t`},
 		{`SELECT '\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
 		{`SELECT 1 FROM t GROUP BY a`},

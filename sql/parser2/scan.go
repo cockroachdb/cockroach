@@ -240,24 +240,11 @@ func (s *scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case '=':
-		switch s.peek() {
-		case '>': // =>
-			s.pos++
-			lval.id = EQUALS_GREATER
-			return
-		}
-		return
-
 	case ':':
 		switch s.peek() {
 		case ':': // ::
 			s.pos++
 			lval.id = TYPECAST
-			return
-		case '=': // :=
-			s.pos++
-			lval.id = COLON_EQUALS
 			return
 		}
 		return
