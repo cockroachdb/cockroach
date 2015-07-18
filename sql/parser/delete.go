@@ -21,23 +21,17 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
-import "bytes"
+import "fmt"
 
-// Truncate represents a TRUNCATE statement.
-type Truncate struct {
-	Tables []QualifiedName
+// Delete represents a DELETE statement.
+type Delete struct {
+	Table TableExpr
+	Where *Where
 }
 
-func (node *Truncate) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
-		if i > 0 {
-			_, _ = buf.WriteString(", ")
-		}
-		_, _ = buf.WriteString(n.String())
-	}
-	return buf.String()
+func (node *Delete) String() string {
+	return fmt.Sprintf("DELETE FROM %s%s",
+		node.Table, node.Where)
 }

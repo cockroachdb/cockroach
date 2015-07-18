@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package parser2
+package parser
 
 // name -> id
 var keywords = map[string]int{

@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2014 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,17 +21,18 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
 import "fmt"
 
-// Delete represents a DELETE statement.
-type Delete struct {
-	Table TableExpr
-	Where *Where
+func (*RenameTable) statement() {}
+
+// RenameTable represents a TRUNCATE TABLE statement.
+type RenameTable struct {
+	Name    string
+	NewName string
 }
 
-func (node *Delete) String() string {
-	return fmt.Sprintf("DELETE FROM %s%s",
-		node.Table, node.Where)
+func (node *RenameTable) String() string {
+	return fmt.Sprintf("RENAME TABLE %s %s", node.Name, node.NewName)
 }

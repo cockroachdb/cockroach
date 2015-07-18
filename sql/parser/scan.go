@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package parser2
+package parser
 
 // TODO(pmattis):
 //   - Add support for hexadecimal integer literals. Perhaps octal (0o) and

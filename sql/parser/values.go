@@ -21,23 +21,22 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
-import "fmt"
-
-// Union represents a UNION statement.
-type Union struct {
-	Type        string
-	Left, Right SelectStatement
-}
-
-// Union.Type
-const (
-	astUnion     = "UNION"
-	astExcept    = "EXCEPT"
-	astIntersect = "INTERSECT"
+import (
+	"bytes"
+	"fmt"
 )
 
-func (node *Union) String() string {
-	return fmt.Sprintf("%s %s %s", node.Left, node.Type, node.Right)
+// Values represents a VALUES clause.
+type Values []Tuple
+
+func (node Values) String() string {
+	prefix := "VALUES "
+	var buf bytes.Buffer
+	for _, n := range node {
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
+		prefix = ", "
+	}
+	return buf.String()
 }

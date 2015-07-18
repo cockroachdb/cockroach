@@ -21,52 +21,34 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 )
 
-// ShowColumns represents a SHOW COLUMNS statement.
-type ShowColumns struct {
-	Table QualifiedName
-}
+//go:generate make
 
-func (node *ShowColumns) String() string {
+// StatementList is a list of statements.
+type StatementList []Statement
+
+func (l StatementList) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("SHOW ")
-	fmt.Fprintf(&buf, "COLUMNS FROM %s", node.Table)
-	return buf.String()
-}
-
-// ShowDatabases represents a SHOW DATABASES statement.
-type ShowDatabases struct {
-}
-
-func (node *ShowDatabases) String() string {
-	return "SHOW DATABASES"
-}
-
-// ShowIndex represents a SHOW INDEX statement.
-type ShowIndex struct {
-	Table QualifiedName
-}
-
-func (node *ShowIndex) String() string {
-	return fmt.Sprintf("SHOW INDEX FROM %s", node.Table)
-}
-
-// ShowTables represents a SHOW TABLES statement.
-type ShowTables struct {
-	Name QualifiedName
-}
-
-func (node *ShowTables) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("SHOW TABLES")
-	if node.Name != nil {
-		fmt.Fprintf(&buf, " FROM %s", node.Name)
+	for i, s := range l {
+		if i > 0 {
+			_, _ = buf.WriteString("; ")
+		}
+		_, _ = buf.WriteString(s.String())
 	}
 	return buf.String()
+}
+
+// Parse parses the sql and returns a list of statements.
+func Parse(sql string) (StatementList, error) {
+	s := newScanner(sql)
+	if sqlParse(s) != 0 {
+		return nil, errors.New(s.lastError)
+	}
+	return s.stmts, nil
 }

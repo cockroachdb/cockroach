@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/parser2"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
@@ -155,33 +155,33 @@ func (s *Server) exec(call sqlwire.Call) error {
 			return err
 		}
 	}
-	stmts, err := parser2.Parse(req.Sql)
+	stmts, err := parser.Parse(req.Sql)
 	if err != nil {
 		return err
 	}
 	for _, stmt := range stmts {
 		switch p := stmt.(type) {
-		case *parser2.CreateDatabase:
+		case *parser.CreateDatabase:
 			err = s.CreateDatabase(&session, p, req.Params, resp)
-		case *parser2.CreateTable:
+		case *parser.CreateTable:
 			err = s.CreateTable(&session, p, req.Params, resp)
-		case *parser2.Delete:
+		case *parser.Delete:
 			err = s.Delete(&session, p, req.Params, resp)
-		case *parser2.Insert:
+		case *parser.Insert:
 			err = s.Insert(&session, p, req.Params, resp)
-		case *parser2.Select:
+		case *parser.Select:
 			err = s.Select(&session, p, req.Params, resp)
-		case *parser2.Set:
+		case *parser.Set:
 			err = s.Set(&session, p, req.Params, resp)
-		case *parser2.ShowColumns:
+		case *parser.ShowColumns:
 			err = s.ShowColumns(&session, p, req.Params, resp)
-		case *parser2.ShowDatabases:
+		case *parser.ShowDatabases:
 			err = s.ShowDatabases(&session, p, req.Params, resp)
-		case *parser2.ShowIndex:
+		case *parser.ShowIndex:
 			err = s.ShowIndex(&session, p, req.Params, resp)
-		case *parser2.ShowTables:
+		case *parser.ShowTables:
 			err = s.ShowTables(&session, p, req.Params, resp)
-		case *parser2.Update:
+		case *parser.Update:
 			err = s.Update(&session, p, req.Params, resp)
 		default:
 			err = fmt.Errorf("unknown statement type: %T", stmt)
@@ -197,7 +197,7 @@ func (s *Server) exec(call sqlwire.Call) error {
 }
 
 // ShowColumns of a table
-func (s *Server) ShowColumns(session *Session, p *parser2.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func (s *Server) ShowColumns(session *Session, p *parser2.ShowColumns, args []sq
 }
 
 // ShowDatabases returns all the databases.
-func (s *Server) ShowDatabases(session *Session, p *parser2.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
@@ -249,7 +249,7 @@ func (s *Server) ShowDatabases(session *Session, p *parser2.ShowDatabases, args 
 }
 
 // ShowIndex returns all the indexes for a table.
-func (s *Server) ShowIndex(session *Session, p *parser2.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		return err
@@ -285,7 +285,7 @@ func (s *Server) ShowIndex(session *Session, p *parser2.ShowIndex, args []sqlwir
 }
 
 // ShowTables returns all the tables.
-func (s *Server) ShowTables(session *Session, p *parser2.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if p.Name == nil {
 		if session.Database == "" {
 			return errNoDatabase
@@ -321,7 +321,7 @@ func (s *Server) ShowTables(session *Session, p *parser2.ShowTables, args []sqlw
 }
 
 // CreateDatabase creates a database if it doesn't exist.
-func (s *Server) CreateDatabase(session *Session, p *parser2.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if p.Name == "" {
 		return errEmptyDatabaseName
 	}
@@ -345,7 +345,7 @@ func (s *Server) CreateDatabase(session *Session, p *parser2.CreateDatabase, arg
 }
 
 // CreateTable creates a table if it doesn't already exist.
-func (s *Server) CreateTable(session *Session, p *parser2.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	var err error
 	p.Table, err = s.normalizeTableName(session.Database, p.Table)
 	if err != nil {
@@ -399,12 +399,12 @@ func (s *Server) CreateTable(session *Session, p *parser2.CreateTable, args []sq
 }
 
 // Delete is unimplemented.
-func (s *Server) Delete(session *Session, p *parser2.Delete, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) Delete(session *Session, p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	return fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
 // Insert inserts rows into the database.
-func (s *Server) Insert(session *Session, p *parser2.Insert, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		return err
@@ -471,11 +471,11 @@ func (s *Server) Insert(session *Session, p *parser2.Insert, args []sqlwire.Datu
 }
 
 // Select selects rows from a single table.
-func (s *Server) Select(session *Session, p *parser2.Select, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) error {
 	if len(p.Exprs) != 1 {
 		return fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs)
 	}
-	if _, ok := p.Exprs[0].(*parser2.StarExpr); !ok {
+	if _, ok := p.Exprs[0].(*parser.StarExpr); !ok {
 		return fmt.Errorf("TODO(pmattis): unsupported select expr: %s", p.Exprs)
 	}
 
@@ -484,11 +484,11 @@ func (s *Server) Select(session *Session, p *parser2.Select, args []sqlwire.Datu
 	}
 	var desc *structured.TableDescriptor
 	{
-		ate, ok := p.From[0].(*parser2.AliasedTableExpr)
+		ate, ok := p.From[0].(*parser.AliasedTableExpr)
 		if !ok {
 			return fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
 		}
-		table, ok := ate.Expr.(parser2.QualifiedName)
+		table, ok := ate.Expr.(parser.QualifiedName)
 		if !ok {
 			return fmt.Errorf("TODO(pmattis): unsupported from: %s", p.From)
 		}
@@ -562,7 +562,7 @@ func (s *Server) Select(session *Session, p *parser2.Select, args []sqlwire.Datu
 }
 
 // Set sets session variables.
-func (s *Server) Set(session *Session, p *parser2.Set, args []sqlwire.Datum,
+func (s *Server) Set(session *Session, p *parser.Set, args []sqlwire.Datum,
 	resp *sqlwire.Response) error {
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
@@ -572,7 +572,7 @@ func (s *Server) Set(session *Session, p *parser2.Set, args []sqlwire.Datum,
 		if len(p.Values) != 1 {
 			return fmt.Errorf("database: requires a single string value")
 		}
-		val, err := parser2.EvalExpr(p.Values[0], nil)
+		val, err := parser.EvalExpr(p.Values[0], nil)
 		if err != nil {
 			return err
 		}
@@ -584,12 +584,12 @@ func (s *Server) Set(session *Session, p *parser2.Set, args []sqlwire.Datum,
 }
 
 // Update is unimplemented.
-func (s *Server) Update(session *Session, p *parser2.Update, args []sqlwire.Datum,
+func (s *Server) Update(session *Session, p *parser.Update, args []sqlwire.Datum,
 	resp *sqlwire.Response) error {
 	return fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
-func (s *Server) getTableDesc(database string, qname parser2.QualifiedName) (
+func (s *Server) getTableDesc(database string, qname parser.QualifiedName) (
 	*structured.TableDescriptor, error) {
 	var err error
 	qname, err = s.normalizeTableName(database, qname)
@@ -618,8 +618,8 @@ func (s *Server) getTableDesc(database string, qname parser2.QualifiedName) (
 	return &desc, nil
 }
 
-func (s *Server) normalizeTableName(database string, qname parser2.QualifiedName) (
-	parser2.QualifiedName, error) {
+func (s *Server) normalizeTableName(database string, qname parser.QualifiedName) (
+	parser.QualifiedName, error) {
 	if len(qname) == 0 {
 		return nil, fmt.Errorf("empty table name: %s", qname)
 	}
@@ -627,7 +627,7 @@ func (s *Server) normalizeTableName(database string, qname parser2.QualifiedName
 		if database == "" {
 			return nil, fmt.Errorf("no database specified")
 		}
-		qname = append(parser2.QualifiedName{database}, qname[0])
+		qname = append(parser.QualifiedName{database}, qname[0])
 	}
 	return qname, nil
 }
@@ -644,7 +644,7 @@ func (s *Server) lookupDatabase(name string) (uint32, error) {
 }
 
 func (s *Server) processColumns(desc *structured.TableDescriptor,
-	node parser2.Columns) ([]structured.ColumnDescriptor, error) {
+	node parser.Columns) ([]structured.ColumnDescriptor, error) {
 	if node == nil {
 		return desc.Columns, nil
 	}
@@ -652,11 +652,11 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 	cols := make([]structured.ColumnDescriptor, len(node))
 	for i, n := range node {
 		switch nt := n.(type) {
-		case *parser2.StarExpr:
+		case *parser.StarExpr:
 			return s.processColumns(desc, nil)
-		case *parser2.NonStarExpr:
+		case *parser.NonStarExpr:
 			switch et := nt.Expr.(type) {
-			case parser2.QualifiedName:
+			case parser.QualifiedName:
 				// TODO(pmattis): If et.Qualifier is not empty, verify it matches the
 				// table name.
 				var err error
@@ -674,22 +674,22 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 	return cols, nil
 }
 
-func (s *Server) processInsertRows(node parser2.SelectStatement) (rows []sqlwire.Result_Row, err error) {
+func (s *Server) processInsertRows(node parser.SelectStatement) (rows []sqlwire.Result_Row, err error) {
 	switch nt := node.(type) {
-	case parser2.Values:
+	case parser.Values:
 		for _, row := range nt {
 			var vals []sqlwire.Datum
 			for _, val := range row {
 				switch vt := val.(type) {
-				case parser2.StrVal:
+				case parser.StrVal:
 					tmp := string(vt)
 					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
-				case parser2.NumVal:
+				case parser.NumVal:
 					tmp := string(vt)
 					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
-				case parser2.ValArg:
+				case parser.ValArg:
 					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
-				case parser2.BytesVal:
+				case parser.BytesVal:
 					tmp := string(vt)
 					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
 				default:
@@ -699,9 +699,9 @@ func (s *Server) processInsertRows(node parser2.SelectStatement) (rows []sqlwire
 			rows = append(rows, sqlwire.Result_Row{Values: vals})
 		}
 		return rows, nil
-	case *parser2.Select:
+	case *parser.Select:
 		// TODO(vivek): return s.query(nt.stmt, nil)
-	case *parser2.Union:
+	case *parser.Union:
 		// TODO(vivek): return s.query(nt.stmt, nil)
 	}
 	return rows, util.Errorf("TODO(pmattis): unsupported node: %T", node)
