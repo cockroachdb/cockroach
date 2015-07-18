@@ -6963,7 +6963,7 @@ sqldefault:
 	case 209:
 		//line sql.y:1172
 		{
-			sqlVAL.tableDef = &IndexTableDef{PrimaryKey: true, Columns: sqlS[sqlpt-1].strs}
+			sqlVAL.tableDef = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: sqlS[sqlpt-1].strs}
 		}
 	case 210:
 		//line sql.y:1175

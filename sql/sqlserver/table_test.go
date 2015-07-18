@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/parser2"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -40,18 +40,18 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
-			"INT(2)",
-			structured.ColumnType{Kind: structured.ColumnType_INT, Width: 2},
+			"INT",
+			structured.ColumnType{Kind: structured.ColumnType_INT},
 			true,
 		},
 		{
-			"FLOAT(3,4)",
-			structured.ColumnType{Kind: structured.ColumnType_FLOAT, Width: 3, Precision: 4},
+			"FLOAT(3)",
+			structured.ColumnType{Kind: structured.ColumnType_FLOAT, Precision: 3},
 			true,
 		},
 		{
 			"DECIMAL(5,6)",
-			structured.ColumnType{Kind: structured.ColumnType_DECIMAL, Width: 5, Precision: 6},
+			structured.ColumnType{Kind: structured.ColumnType_DECIMAL, Precision: 5, Width: 6},
 			true,
 		},
 		{
@@ -62,11 +62,6 @@ func TestMakeTableDescColumns(t *testing.T) {
 		{
 			"TIME",
 			structured.ColumnType{Kind: structured.ColumnType_TIME},
-			true,
-		},
-		{
-			"DATETIME",
-			structured.ColumnType{Kind: structured.ColumnType_DATETIME},
 			true,
 		},
 		{
@@ -90,16 +85,6 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
-			"ENUM(a)",
-			structured.ColumnType{Kind: structured.ColumnType_ENUM, Vals: []string{"a"}},
-			true,
-		},
-		{
-			"SET(b)",
-			structured.ColumnType{Kind: structured.ColumnType_SET, Vals: []string{"b"}},
-			true,
-		},
-		{
 			"INT NOT NULL",
 			structured.ColumnType{Kind: structured.ColumnType_INT},
 			false,
@@ -111,11 +96,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.Parse("CREATE TABLE test (a " + d.sqlType + ")")
+		stmt, err := parser2.Parse("CREATE TABLE test (a " + d.sqlType + ")")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(stmt.(*parser.CreateTable))
+		schema, err := makeTableDesc(stmt[0].(*parser2.CreateTable))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -152,7 +137,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			},
 		},
 		{
-			"a INT, b INT, INDEX c (a, b)",
+			"a INT, b INT, CONSTRAINT c INDEX (a, b)",
 			structured.IndexDescriptor{
 				Name:        "c",
 				Unique:      false,
@@ -160,7 +145,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			},
 		},
 		{
-			"a INT, b INT, UNIQUE INDEX c (a, b)",
+			"a INT, b INT, CONSTRAINT c UNIQUE (a, b)",
 			structured.IndexDescriptor{
 				Name:        "c",
 				Unique:      true,
@@ -170,18 +155,18 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
 			structured.IndexDescriptor{
-				Name:        "primary",
+				Name:        "",
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.Parse("CREATE TABLE test (" + d.sql + ")")
+		stmt, err := parser2.Parse("CREATE TABLE test (" + d.sql + ")")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(stmt.(*parser.CreateTable))
+		schema, err := makeTableDesc(stmt[0].(*parser2.CreateTable))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}

@@ -20,7 +20,6 @@ package driver
 import (
 	"database/sql/driver"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
@@ -100,12 +99,6 @@ func (c *conn) send(args sqlwire.Request) (*rows, error) {
 				t[j] = *datum.BoolVal
 			} else if datum.IntVal != nil {
 				t[j] = *datum.IntVal
-			} else if datum.UintVal != nil {
-				// uint64 not supported by the driver.Value interface.
-				if *datum.UintVal >= math.MaxInt64 {
-					return &rows{}, fmt.Errorf("cannot convert very large uint64 %d returned by database", *datum.UintVal)
-				}
-				t[j] = int64(*datum.UintVal)
 			} else if datum.FloatVal != nil {
 				t[j] = *datum.FloatVal
 			} else if datum.BytesVal != nil {

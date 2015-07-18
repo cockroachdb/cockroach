@@ -39,14 +39,10 @@ const (
 	ColumnType_DECIMAL   ColumnType_Kind = 3
 	ColumnType_DATE      ColumnType_Kind = 4
 	ColumnType_TIME      ColumnType_Kind = 5
-	ColumnType_DATETIME  ColumnType_Kind = 6
 	ColumnType_TIMESTAMP ColumnType_Kind = 7
 	ColumnType_CHAR      ColumnType_Kind = 8
-	ColumnType_BINARY    ColumnType_Kind = 9
-	ColumnType_TEXT      ColumnType_Kind = 10
-	ColumnType_BLOB      ColumnType_Kind = 11
-	ColumnType_ENUM      ColumnType_Kind = 12
-	ColumnType_SET       ColumnType_Kind = 13
+	ColumnType_TEXT      ColumnType_Kind = 9
+	ColumnType_BLOB      ColumnType_Kind = 10
 )
 
 var ColumnType_Kind_name = map[int32]string{
@@ -56,14 +52,10 @@ var ColumnType_Kind_name = map[int32]string{
 	3:  "DECIMAL",
 	4:  "DATE",
 	5:  "TIME",
-	6:  "DATETIME",
 	7:  "TIMESTAMP",
 	8:  "CHAR",
-	9:  "BINARY",
-	10: "TEXT",
-	11: "BLOB",
-	12: "ENUM",
-	13: "SET",
+	9:  "TEXT",
+	10: "BLOB",
 }
 var ColumnType_Kind_value = map[string]int32{
 	"BIT":       0,
@@ -72,14 +64,10 @@ var ColumnType_Kind_value = map[string]int32{
 	"DECIMAL":   3,
 	"DATE":      4,
 	"TIME":      5,
-	"DATETIME":  6,
 	"TIMESTAMP": 7,
 	"CHAR":      8,
-	"BINARY":    9,
-	"TEXT":      10,
-	"BLOB":      11,
-	"ENUM":      12,
-	"SET":       13,
+	"TEXT":      9,
+	"BLOB":      10,
 }
 
 func (x ColumnType_Kind) Enum() *ColumnType_Kind {
@@ -104,10 +92,8 @@ type ColumnType struct {
 	// BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
 	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
 	// FLOAT and DECIMAL.
-	Precision int32 `protobuf:"varint,3,opt,name=precision" json:"precision"`
-	// ENUM and SET.
-	Vals             []string `protobuf:"bytes,4,rep,name=vals" json:"vals,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Precision        int32  `protobuf:"varint,3,opt,name=precision" json:"precision"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *ColumnType) Reset()         { *m = ColumnType{} }
@@ -133,13 +119,6 @@ func (m *ColumnType) GetPrecision() int32 {
 		return m.Precision
 	}
 	return 0
-}
-
-func (m *ColumnType) GetVals() []string {
-	if m != nil {
-		return m.Vals
-	}
-	return nil
 }
 
 type ColumnDescriptor struct {
@@ -364,28 +343,6 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Vals", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Vals = append(m.Vals, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -917,12 +874,6 @@ func (m *ColumnType) Size() (n int) {
 	n += 1 + sovStructured(uint64(m.Kind))
 	n += 1 + sovStructured(uint64(m.Width))
 	n += 1 + sovStructured(uint64(m.Precision))
-	if len(m.Vals) > 0 {
-		for _, s := range m.Vals {
-			l = len(s)
-			n += 1 + l + sovStructured(uint64(l))
-		}
-	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1031,21 +982,6 @@ func (m *ColumnType) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Precision))
-	if len(m.Vals) > 0 {
-		for _, s := range m.Vals {
-			data[i] = 0x22
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
