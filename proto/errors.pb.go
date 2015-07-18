@@ -85,6 +85,16 @@ func (m *NotLeaderError) GetLeader() *Replica {
 	return nil
 }
 
+// A NodeUnavailableError indicates that the sending gateway can
+// not process requests at the time, and that the client should
+// retry the request with another peer.
+type NodeUnavailableError struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *NodeUnavailableError) Reset()      { *m = NodeUnavailableError{} }
+func (*NodeUnavailableError) ProtoMessage() {}
+
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 type RangeNotFoundError struct {
@@ -360,6 +370,7 @@ type ErrorDetail struct {
 	OpRequiresTxn                 *OpRequiresTxnError                 `protobuf:"bytes,11,opt,name=op_requires_txn" json:"op_requires_txn,omitempty"`
 	ConditionFailed               *ConditionFailedError               `protobuf:"bytes,12,opt,name=condition_failed" json:"condition_failed,omitempty"`
 	LeaseRejected                 *LeaseRejectedError                 `protobuf:"bytes,13,opt,name=lease_rejected" json:"lease_rejected,omitempty"`
+	NodeUnavailable               *NodeUnavailableError               `protobuf:"bytes,14,opt,name=node_unavailable" json:"node_unavailable,omitempty"`
 	XXX_unrecognized              []byte                              `json:"-"`
 }
 
@@ -453,6 +464,13 @@ func (m *ErrorDetail) GetConditionFailed() *ConditionFailedError {
 func (m *ErrorDetail) GetLeaseRejected() *LeaseRejectedError {
 	if m != nil {
 		return m.LeaseRejected
+	}
+	return nil
+}
+
+func (m *ErrorDetail) GetNodeUnavailable() *NodeUnavailableError {
+	if m != nil {
+		return m.NodeUnavailable
 	}
 	return nil
 }
@@ -581,6 +599,48 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
+func (m *NodeUnavailableError) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		switch fieldNum {
 		default:
 			var sizeOfWire int
 			for {
@@ -1934,6 +1994,33 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 14:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeUnavailable", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NodeUnavailable == nil {
+				m.NodeUnavailable = &NodeUnavailableError{}
+			}
+			if err := m.NodeUnavailable.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -2206,6 +2293,9 @@ func (this *ErrorDetail) GetValue() interface{} {
 	if this.LeaseRejected != nil {
 		return this.LeaseRejected
 	}
+	if this.NodeUnavailable != nil {
+		return this.NodeUnavailable
+	}
 	return nil
 }
 
@@ -2237,6 +2327,8 @@ func (this *ErrorDetail) SetValue(value interface{}) bool {
 		this.ConditionFailed = vt
 	case *LeaseRejectedError:
 		this.LeaseRejected = vt
+	case *NodeUnavailableError:
+		this.NodeUnavailable = vt
 	default:
 		return false
 	}
@@ -2253,6 +2345,15 @@ func (m *NotLeaderError) Size() (n int) {
 		l = m.Leader.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *NodeUnavailableError) Size() (n int) {
+	var l int
+	_ = l
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2472,6 +2573,10 @@ func (m *ErrorDetail) Size() (n int) {
 		l = m.LeaseRejected.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
+	if m.NodeUnavailable != nil {
+		l = m.NodeUnavailable.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2543,6 +2648,27 @@ func (m *NotLeaderError) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n2
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *NodeUnavailableError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *NodeUnavailableError) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3095,6 +3221,16 @@ func (m *ErrorDetail) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n28
 	}
+	if m.NodeUnavailable != nil {
+		data[i] = 0x72
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
+		n29, err := m.NodeUnavailable.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n29
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3132,11 +3268,11 @@ func (m *Error) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n29, err := m.Detail.MarshalTo(data[i:])
+		n30, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n30
 	}
 	data[i] = 0x20
 	i++

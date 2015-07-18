@@ -51,12 +51,12 @@ type Context struct {
 	// the server is running ("node"), or the user passed in client calls.
 	User string
 
+	// Protects both clientTLSConfig and serverTLSConfig.
+	tlsConfigMu sync.Mutex
 	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
 	clientTLSConfig *tls.Config
 	// serverTLSConfig is the loaded server tlsConfig. It is initialized lazily.
 	serverTLSConfig *tls.Config
-	// Protects both clientTLSConfig and serverTLSConfig.
-	tlsConfigMu sync.Mutex
 
 	// httpClient is a lazily-initialized http client.
 	// It should be accessed through Context.GetHTTPClient() which will
