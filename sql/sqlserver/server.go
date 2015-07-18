@@ -458,8 +458,6 @@ func (s *Server) Insert(session *Session, p *parser2.Insert, args []sqlwire.Datu
 				b.Put(key, *val.BoolVal)
 			} else if val.IntVal != nil {
 				b.Put(key, *val.IntVal)
-			} else if val.UintVal != nil {
-				b.Put(key, *val.UintVal)
 			} else if val.FloatVal != nil {
 				b.Put(key, *val.FloatVal)
 			} else if val.BytesVal != nil {
@@ -759,8 +757,6 @@ func encodeTableKey(b []byte, v sqlwire.Datum) ([]byte, error) {
 		return encoding.EncodeVarint(b, 0), nil
 	} else if v.IntVal != nil {
 		return encoding.EncodeVarint(b, *v.IntVal), nil
-	} else if v.UintVal != nil {
-		return encoding.EncodeUvarint(b, *v.UintVal), nil
 	} else if v.FloatVal != nil {
 		return encoding.EncodeNumericFloat(b, *v.FloatVal), nil
 	} else if v.BytesVal != nil {
