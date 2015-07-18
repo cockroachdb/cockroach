@@ -78,7 +78,7 @@ func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowN
 	defer rs.Unlock()
 	// Augment the current intent age.
 	diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
-	ms.LastUpdateNanos = nowNanos - rs.LastUpdateNanos
+	ms.LastUpdateNanos = nowNanos
 	ms.IntentAge += rs.IntentCount * diffSeconds
 	ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
 	rs.MVCCStats.Add(ms)

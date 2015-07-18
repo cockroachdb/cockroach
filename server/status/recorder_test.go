@@ -241,7 +241,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(1, "intentcount", 100, 24),
 		generateStoreData(1, "intentage", 100, 27),
 		generateStoreData(1, "gcbytesage", 100, 30),
-		generateStoreData(1, "lastupdatenanos", 100, 3*1e9),
+		generateStoreData(1, "lastupdatenanos", 100, 1*1e9),
 		generateStoreData(1, "ranges", 100, 2),
 		generateStoreData(1, "ranges.leader", 100, 1),
 		generateStoreData(1, "ranges.available", 100, 2),
