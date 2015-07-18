@@ -104,6 +104,8 @@ func (s *scanner) Error(e string) {
 	i := strings.Index(s.in[s.lastTok.pos:], "\n")
 	if i == -1 {
 		i = len(s.in)
+	} else {
+		i += s.lastTok.pos
 	}
 	// Find the beginning of the line containing the last token. Note that
 	// LastIndex returns -1 if "\n" could not be found.

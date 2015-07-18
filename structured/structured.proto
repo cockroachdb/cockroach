@@ -31,18 +31,14 @@ message ColumnType {
   enum Kind {
     BIT = 0;        // BIT(width)
     INT = 1;        // INT(width)
-    FLOAT = 2;      // FLOAT(width, precision)
-    DECIMAL = 3;    // DECIMAL(width, precision)
+    FLOAT = 2;      // FLOAT(precision)
+    DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
     DATE = 4;
     TIME = 5;
-    DATETIME = 6;
     TIMESTAMP = 7;
     CHAR = 8;       // CHAR(width)
-    BINARY = 9;     // BINARY(width)
-    TEXT = 10;
-    BLOB = 11;
-    ENUM = 12;      // ENUM(vals)
-    SET = 13;       // SET(vals)
+    TEXT = 9;
+    BLOB = 10;
   }
 
   optional Kind kind = 1 [(gogoproto.nullable) = false];
@@ -50,8 +46,6 @@ message ColumnType {
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // FLOAT and DECIMAL.
   optional int32 precision = 3 [(gogoproto.nullable) = false];
-  // ENUM and SET.
-  repeated string vals = 4;
 }
 
 message ColumnDescriptor {

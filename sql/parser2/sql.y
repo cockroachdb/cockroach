@@ -1170,7 +1170,7 @@ constraint_elem:
   }
 | PRIMARY KEY '(' column_list ')'
   {
-    $$ = &IndexTableDef{PrimaryKey: true, Columns: $4}
+    $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: $4}
   }
 | PRIMARY KEY existing_index {}
 | EXCLUDE access_method_clause '(' exclusion_constraint_list ')'

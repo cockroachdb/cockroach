@@ -234,6 +234,19 @@ func (NullVal) String() string {
 // QualifiedName is a dot separated list of names.
 type QualifiedName []string
 
+// Database returns the database portion of the name.
+func (n QualifiedName) Database() string {
+	if len(n) > 1 {
+		return n[0]
+	}
+	return ""
+}
+
+// Table returns the table portion of the name.
+func (n QualifiedName) Table() string {
+	return n[len(n)-1]
+}
+
 func (n QualifiedName) String() string {
 	var buf bytes.Buffer
 	for i, s := range n {

@@ -20,60 +20,48 @@ package sqlserver
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/parser2"
 	"github.com/cockroachdb/cockroach/structured"
 )
 
-func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
+func makeTableDesc(p *parser2.CreateTable) (structured.TableDescriptor, error) {
 	desc := structured.TableDescriptor{}
 	desc.Name = p.Table.String()
 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
-		case *parser.ColumnTableDef:
+		case *parser2.ColumnTableDef:
 			col := structured.ColumnDescriptor{
 				Name:     d.Name,
-				Nullable: (d.Nullable != parser.NotNull),
+				Nullable: (d.Nullable != parser2.NotNull),
 			}
 			switch t := d.Type.(type) {
-			case *parser.BitType:
+			case *parser2.BitType:
 				col.Type.Kind = structured.ColumnType_BIT
 				col.Type.Width = int32(t.N)
-			case *parser.IntType:
+			case *parser2.IntType:
 				col.Type.Kind = structured.ColumnType_INT
 				col.Type.Width = int32(t.N)
-			case *parser.FloatType:
+			case *parser2.FloatType:
 				col.Type.Kind = structured.ColumnType_FLOAT
-				col.Type.Width = int32(t.N)
 				col.Type.Precision = int32(t.Prec)
-			case *parser.DecimalType:
+			case *parser2.DecimalType:
 				col.Type.Kind = structured.ColumnType_DECIMAL
-				col.Type.Width = int32(t.N)
+				col.Type.Width = int32(t.Scale)
 				col.Type.Precision = int32(t.Prec)
-			case *parser.DateType:
+			case *parser2.DateType:
 				col.Type.Kind = structured.ColumnType_DATE
-			case *parser.TimeType:
+			case *parser2.TimeType:
 				col.Type.Kind = structured.ColumnType_TIME
-			case *parser.DateTimeType:
-				col.Type.Kind = structured.ColumnType_DATETIME
-			case *parser.TimestampType:
+			case *parser2.TimestampType:
 				col.Type.Kind = structured.ColumnType_TIMESTAMP
-			case *parser.CharType:
+			case *parser2.CharType:
 				col.Type.Kind = structured.ColumnType_CHAR
 				col.Type.Width = int32(t.N)
-			case *parser.BinaryType:
-				col.Type.Kind = structured.ColumnType_BINARY
-				col.Type.Width = int32(t.N)
-			case *parser.TextType:
+			case *parser2.TextType:
 				col.Type.Kind = structured.ColumnType_TEXT
-			case *parser.BlobType:
+			case *parser2.BlobType:
 				col.Type.Kind = structured.ColumnType_BLOB
-			case *parser.EnumType:
-				col.Type.Kind = structured.ColumnType_ENUM
-				col.Type.Vals = t.Vals
-			case *parser.SetType:
-				col.Type.Kind = structured.ColumnType_SET
-				col.Type.Vals = t.Vals
 			}
 			desc.Columns = append(desc.Columns, col)
 
@@ -88,7 +76,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				}
 				desc.Indexes = append(desc.Indexes, index)
 			}
-		case *parser.IndexTableDef:
+		case *parser2.IndexTableDef:
 			index := structured.IndexDescriptor{
 				Name:        d.Name,
 				Unique:      d.Unique,

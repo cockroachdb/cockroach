@@ -17,10 +17,7 @@
 
 package structured
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
@@ -211,19 +208,21 @@ func (desc *TableDescriptor) FindColumnByID(id uint32) (*ColumnDescriptor, error
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {
-	case ColumnType_BIT, ColumnType_INT, ColumnType_CHAR, ColumnType_BINARY:
+	case ColumnType_BIT, ColumnType_INT, ColumnType_CHAR:
 		if c.Width > 0 {
 			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
 		}
-	case ColumnType_FLOAT, ColumnType_DECIMAL:
-		if c.Width > 0 {
-			if c.Precision > 0 {
-				return fmt.Sprintf("%s(%d,%d)", c.Kind.String(), c.Width, c.Precision)
+	case ColumnType_FLOAT:
+		if c.Precision > 0 {
+			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Precision)
+		}
+	case ColumnType_DECIMAL:
+		if c.Precision > 0 {
+			if c.Width > 0 {
+				return fmt.Sprintf("%s(%d,%d)", c.Kind.String(), c.Precision, c.Width)
 			}
-			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
+			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Precision)
 		}
-	case ColumnType_ENUM, ColumnType_SET:
-		return fmt.Sprintf("%s(%s)", c.Kind.String(), strings.Join(c.Vals, ","))
 	}
 	return c.Kind.String()
 }

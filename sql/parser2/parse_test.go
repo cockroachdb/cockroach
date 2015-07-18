@@ -342,6 +342,13 @@ SELECT 1 /* hello
 SELECT '1
        ^
 `},
+		{`CREATE TABLE test (
+  INDEX foo (bar)
+)`, `syntax error at or near "foo"
+CREATE TABLE test (
+  INDEX foo (bar)
+        ^
+`},
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)

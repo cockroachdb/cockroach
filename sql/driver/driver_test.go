@@ -75,16 +75,16 @@ func TestCreateDatabase(t *testing.T) {
 	s, db := setup(t)
 	defer cleanup(s, db)
 
-	if _, err := db.Exec("CREATE DATABASE foo"); err != nil {
+	if _, err := db.Exec(`CREATE DATABASE foo`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("CREATE DATABASE foo"); !isError(err, "database .* already exists") {
+	if _, err := db.Exec(`CREATE DATABASE foo`); !isError(err, "database .* already exists") {
 		t.Fatalf("expected failure, but found success")
 	}
-	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS foo"); err != nil {
+	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS foo`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("CREATE DATABASE ``"); !isError(err, "empty database name") {
+	if _, err := db.Exec(`CREATE DATABASE ""`); !isError(err, "empty database name") {
 		t.Fatal(err)
 	}
 }
@@ -140,7 +140,7 @@ func TestCreateTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec("USE t"); err != nil {
+	if _, err := db.Exec("SET DATABASE = t"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("CREATE TABLE users " + cols); !isError(err, "table .* already exists") {
@@ -188,7 +188,7 @@ func TestShowTables(t *testing.T) {
 	if _, err := db.Query("SHOW TABLES"); !isError(err, "no database specified") {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("USE t"); err != nil {
+	if _, err := db.Exec("SET DATABASE = t"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,8 +255,8 @@ func TestShowIndex(t *testing.T) {
 CREATE TABLE t.users (
   id    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
-  INDEX foo (name),
-  UNIQUE INDEX bar (id, name)
+  CONSTRAINT foo INDEX (name),
+  CONSTRAINT bar UNIQUE (id, name)
 )`
 
 	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "database .* does not exist") {
@@ -307,22 +307,22 @@ CREATE TABLE t.kv (
 	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO t.kv VALUES ("a", "b")`); !isError(err, "table .* does not exist") {
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ('a', 'b')`); !isError(err, "table .* does not exist") {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO t.kv VALUES ("a")`); !isError(err, "invalid values for columns") {
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ('a')`); !isError(err, "invalid values for columns") {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO t.kv (v) VALUES ("a")`); !isError(err, "missing .* primary key column") {
+	if _, err := db.Exec(`INSERT INTO t.kv (v) VALUES ('a')`); !isError(err, "missing .* primary key column") {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO t.kv (k,v) VALUES ("a", "b"), ("c", "d")`); err != nil {
+	if _, err := db.Exec(`INSERT INTO t.kv (k,v) VALUES ('a', 'b'), ('c', 'd')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO t.kv VALUES ("e", "f")`); err != nil {
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ('e', 'f')`); err != nil {
 		t.Fatal(err)
 	}
 
