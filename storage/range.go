@@ -354,12 +354,11 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
-	var err error
-	if err = <-errChan; err == nil {
-		// Next if the command was committed, wait for the range to apply it.
-		err = (<-pendingCmd.done).Err
+	if err := <-errChan; err != nil {
+		return err
 	}
-	return err
+	// Next if the command was committed, wait for the range to apply it.
+	return (<-pendingCmd.done).Err
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
