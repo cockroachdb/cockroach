@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/parser2"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -96,11 +96,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser2.Parse("CREATE TABLE test (a " + d.sqlType + ")")
+		stmt, err := parser.Parse("CREATE TABLE test (a " + d.sqlType + ")")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(stmt[0].(*parser2.CreateTable))
+		schema, err := makeTableDesc(stmt[0].(*parser.CreateTable))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -162,11 +162,11 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser2.Parse("CREATE TABLE test (" + d.sql + ")")
+		stmt, err := parser.Parse("CREATE TABLE test (" + d.sql + ")")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(stmt[0].(*parser2.CreateTable))
+		schema, err := makeTableDesc(stmt[0].(*parser.CreateTable))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}

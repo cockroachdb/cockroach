@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package parser2
+package parser
 
 import (
 	"reflect"

@@ -21,19 +21,43 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
-import "fmt"
+import "bytes"
 
-// Set represents a SET statement.
-type Set struct {
-	Name   QualifiedName
-	Values Exprs
+// DropDatabase represents a DROP DATABASE statement.
+type DropDatabase struct {
+	Name     string
+	IfExists bool
 }
 
-func (node *Set) String() string {
-	if node.Values == nil {
-		return fmt.Sprintf("SET %s = DEFAULT", node.Name)
+func (node *DropDatabase) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("DROP DATABASE ")
+	if node.IfExists {
+		_, _ = buf.WriteString("IF EXISTS ")
 	}
-	return fmt.Sprintf("SET %s = %v", node.Name, node.Values)
+	_, _ = buf.WriteString(node.Name)
+	return buf.String()
+}
+
+// DropTable represents a DROP TABLE statement.
+type DropTable struct {
+	Names    []QualifiedName
+	IfExists bool
+}
+
+func (node *DropTable) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("DROP TABLE ")
+	if node.IfExists {
+		_, _ = buf.WriteString("IF EXISTS ")
+	}
+	for i, n := range node.Names {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		_, _ = buf.WriteString(n.String())
+	}
+	return buf.String()
 }

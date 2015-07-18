@@ -21,44 +21,19 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "fmt"
 
-// Update represents an UPDATE statement.
-type Update struct {
-	Table TableExpr
-	Exprs UpdateExprs
-	Where *Where
+// Set represents a SET statement.
+type Set struct {
+	Name   QualifiedName
+	Values Exprs
 }
 
-func (node *Update) String() string {
-	return fmt.Sprintf("UPDATE %s SET %s%s",
-		node.Table, node.Exprs, node.Where)
-}
-
-// UpdateExprs represents a list of update expressions.
-type UpdateExprs []*UpdateExpr
-
-func (node UpdateExprs) String() string {
-	var prefix string
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+func (node *Set) String() string {
+	if node.Values == nil {
+		return fmt.Sprintf("SET %s = DEFAULT", node.Name)
 	}
-	return buf.String()
-}
-
-// UpdateExpr represents an update expression.
-type UpdateExpr struct {
-	Name QualifiedName
-	Expr Expr
-}
-
-func (node *UpdateExpr) String() string {
-	return fmt.Sprintf("%s = %s", node.Name, node.Expr)
+	return fmt.Sprintf("SET %s = %v", node.Name, node.Values)
 }

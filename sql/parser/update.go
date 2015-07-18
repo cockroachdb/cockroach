@@ -21,22 +21,44 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser2
+package parser
 
 import (
 	"bytes"
 	"fmt"
 )
 
-// Values represents a VALUES clause.
-type Values []Tuple
+// Update represents an UPDATE statement.
+type Update struct {
+	Table TableExpr
+	Exprs UpdateExprs
+	Where *Where
+}
 
-func (node Values) String() string {
-	prefix := "VALUES "
+func (node *Update) String() string {
+	return fmt.Sprintf("UPDATE %s SET %s%s",
+		node.Table, node.Exprs, node.Where)
+}
+
+// UpdateExprs represents a list of update expressions.
+type UpdateExprs []*UpdateExpr
+
+func (node UpdateExprs) String() string {
+	var prefix string
 	var buf bytes.Buffer
 	for _, n := range node {
 		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
 	return buf.String()
+}
+
+// UpdateExpr represents an update expression.
+type UpdateExpr struct {
+	Name QualifiedName
+	Expr Expr
+}
+
+func (node *UpdateExpr) String() string {
+	return fmt.Sprintf("%s = %s", node.Name, node.Expr)
 }
