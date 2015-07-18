@@ -213,9 +213,9 @@ type FileInfo struct {
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	infos, err := ioutil.ReadDir(*logDir)
-	if err != nil {
-		return results, err
+	infos, readDirErr := ioutil.ReadDir(*logDir)
+	if readDirErr != nil {
+		return results, readDirErr
 	}
 	for _, info := range infos {
 		details, err := getFileDetails(info)
@@ -297,9 +297,9 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 // 'pattern' if provided. The logs entries are returned in reverse chronological
 // order.
 func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, error) {
-	logFiles, err := ListLogFiles()
-	if err != nil {
-		return nil, err
+	logFiles, listErr := ListLogFiles()
+	if listErr != nil {
+		return nil, listErr
 	}
 
 	selectedFiles := selectFiles(logFiles, severity, endTimestamp)

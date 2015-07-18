@@ -116,8 +116,7 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 			}
 			// Read from value.
 			fromAccount := &Account{}
-			err := fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes())
-			if err != nil {
+			if err := fromAccount.decode(batchRead.Results[0].Rows[0].ValueBytes()); err != nil {
 				return err
 			}
 			// Ensure there is enough cash.
@@ -134,24 +133,24 @@ func (bank *Bank) continuouslyTransferMoney(cash int64) {
 			batchWrite := &client.Batch{}
 			fromAccount.Balance -= exchangeAmount
 			toAccount.Balance += exchangeAmount
-			if fromValue, err := fromAccount.encode(); err != nil {
-				return err
-			} else if toValue, err := toAccount.encode(); err != nil {
-				return err
+			if fromValue, fromErr := fromAccount.encode(); fromErr != nil {
+				return fromErr
+			} else if toValue, toErr := toAccount.encode(); toErr != nil {
+				return toErr
 			} else {
 				batchWrite.Put(from, fromValue)
 				batchWrite.Put(to, toValue)
 			}
 			return runner.Run(batchWrite)
 		}
-		var err error
 		if *useTransaction {
-			err = bank.db.Txn(func(txn *client.Txn) error { return transferMoney(txn) })
+			if err := bank.db.Txn(func(txn *client.Txn) error { return transferMoney(txn) }); err != nil {
+				log.Fatal(err)
+			}
 		} else {
-			err = transferMoney(bank.db)
-		}
-		if err != nil {
-			log.Fatal(err)
+			if err := transferMoney(bank.db); err != nil {
+				log.Fatal(err)
+			}
 		}
 		atomic.AddInt32(&bank.numTransfers, 1)
 	}

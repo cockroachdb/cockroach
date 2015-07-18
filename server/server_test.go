@@ -230,9 +230,9 @@ func TestAcceptEncoding(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 	// We can't use the standard test client. Create our own.
-	tlsConfig, err := testContext.GetClientTLSConfig()
-	if err != nil {
-		t.Fatal(err)
+	tlsConfig, tlsErr := testContext.GetClientTLSConfig()
+	if tlsErr != nil {
+		t.Fatal(tlsErr)
 	}
 	client := &http.Client{
 		Transport: &http.Transport{

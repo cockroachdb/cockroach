@@ -296,11 +296,11 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *proto.InternalTimeSeriesData {
 	}
 	var mvccValue MVCCMetadata
 	if err := gogoproto.Unmarshal(b, &mvccValue); err != nil {
-		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
+		t.Fatalf("error unmarshalling time series in text: %s", err)
 	}
 	valueTS, err := proto.InternalTimeSeriesDataFromValue(mvccValue.Value)
 	if err != nil {
-		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
+		t.Fatalf("error unmarshalling time series in text: %s", err)
 	}
 	return valueTS
 }

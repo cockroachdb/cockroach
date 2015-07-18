@@ -155,9 +155,9 @@ func (ts *TestServer) Start() error {
 		ts.Ctx = NewTestContext()
 	}
 
-	var err error
-	ts.Server, err = NewServer(ts.Ctx, stop.NewStopper())
-	if err != nil {
+	if s, err := NewServer(ts.Ctx, stop.NewStopper()); err == nil {
+		ts.Server = s
+	} else {
 		return err
 	}
 
@@ -179,12 +179,7 @@ func (ts *TestServer) Start() error {
 		}
 		stopper.Stop()
 	}
-	err = ts.Server.Start(true)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ts.Server.Start(true)
 }
 
 // ServingAddr returns the rpc server's address. Should be used by clients.

@@ -112,9 +112,9 @@ func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 			return err
 		}
 		for _, idata := range idatas {
-			value, err := idata.ToValue()
-			if err != nil {
-				return err
+			value, toValueErr := idata.ToValue()
+			if toValueErr != nil {
+				return toValueErr
 			}
 			kvs = append(kvs, proto.KeyValue{
 				Key:   MakeDataKey(d.Name, d.Source, r, idata.StartTimestampNanos),

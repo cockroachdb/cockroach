@@ -76,8 +76,8 @@ func TestStatusLocalStacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify match with at least two goroutine stacks.
-	if matches, err := regexp.Match("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", body); !matches || err != nil {
-		t.Errorf("expected match: %t; err nil: %s", matches, err)
+	if re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*"); !re.Match(body) {
+		t.Errorf("expected %s to match %s", body, re)
 	}
 }
 
@@ -94,9 +94,9 @@ func TestStatusJson(t *testing.T) {
 		expected  string
 	}
 
-	addr, err := s.Gossip().GetNodeIDAddress(s.Gossip().GetNodeID())
-	if err != nil {
-		t.Fatal(err)
+	addr, gossipErr := s.Gossip().GetNodeIDAddress(s.Gossip().GetNodeID())
+	if gossipErr != nil {
+		t.Fatal(gossipErr)
 	}
 	testCases := []TestCase{
 		{statusNodeKeyPrefix, "\\\"d\\\":"},
@@ -124,9 +124,9 @@ func TestStatusJson(t *testing.T) {
 }`, addr.Network(), addr.String())})
 	}
 
-	httpClient, err := testContext.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
+	httpClient, clientErr := testContext.GetHTTPClient()
+	if clientErr != nil {
+		t.Fatal(clientErr)
 	}
 	for _, spec := range testCases {
 		contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
@@ -152,8 +152,9 @@ func TestStatusJson(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if matches, err := regexp.Match(spec.expected, body); !matches || err != nil {
-				t.Errorf("expected match %s; got %s; err nil: %s", spec.expected, body, err)
+			re := regexp.MustCompile(spec.expected)
+			if !re.Match(body) {
+				t.Errorf("expected %s to match %s", body, spec.expected)
 			}
 		}
 	}
@@ -197,9 +198,9 @@ func TestStatusGossipJson(t *testing.T) {
 		} `json:"infos"`
 	}
 
-	httpClient, err := testContext.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
+	httpClient, clientErr := testContext.GetHTTPClient()
+	if clientErr != nil {
+		t.Fatal(clientErr)
 	}
 	contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 	for _, contentType := range contentTypes {
@@ -325,17 +326,17 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	dir, err := ioutil.TempDir("", "local_log_test")
-	if err != nil {
+	if dir, err := ioutil.TempDir("", "local_log_test"); err != nil {
 		t.Fatal(err)
+	} else {
+		log.EnableLogFileOutput(dir)
+		defer func() {
+			log.DisableLogFileOutput()
+			if err := os.RemoveAll(dir); err != nil {
+				t.Fatal(err)
+			}
+		}()
 	}
-	log.EnableLogFileOutput(dir)
-	defer func() {
-		log.DisableLogFileOutput()
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
 	ts, body := startServerAndGetStatus(t, statusLocalLogFileKeyPrefix)
 	defer ts.Stop()
 

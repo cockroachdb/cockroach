@@ -202,7 +202,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx := &base.Context{}
+	ctx := base.Context{}
 	ctx.InitDefaults()
 	if u.User != nil {
 		ctx.User = u.User.Username()
@@ -213,7 +213,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		ctx.Certs = dir[0]
 	}
 
-	sender, err := newSender(u, ctx)
+	sender, err := newSender(u, &ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -225,11 +225,11 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	}
 
 	if priority := q["priority"]; len(priority) > 0 {
-		p, err := strconv.Atoi(priority[0])
-		if err != nil {
-			return nil, err
+		if p, parseErr := strconv.Atoi(priority[0]); parseErr == nil {
+			db.userPriority = int32(p)
+		} else {
+			return nil, parseErr
 		}
-		db.userPriority = int32(p)
 	}
 
 	for _, opt := range opts {

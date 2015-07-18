@@ -69,7 +69,7 @@ func TestLocalSenderVisitStores(t *testing.T) {
 	visit := make([]bool, numStores)
 	err := ls.VisitStores(func(s *storage.Store) error { visit[s.Ident.StoreID] = true; return nil })
 	if err != nil {
-		t.Errorf("unexpected error on visit: %s", err.Error())
+		t.Errorf("unexpected error on visit: %s", err)
 	}
 
 	for i, visited := range visit {
@@ -102,7 +102,7 @@ func TestLocalSenderGetStore(t *testing.T) {
 		t.Errorf("expected storeID to be %d but was %d",
 			s.Ident.StoreID, store.Ident.StoreID)
 	} else if err != nil {
-		t.Errorf("expected no error, instead had err=%s", err.Error())
+		t.Errorf("expected no error, instead had err=%s", err)
 	}
 }
 

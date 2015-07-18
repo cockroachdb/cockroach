@@ -432,9 +432,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount, s.stopper)
-	if err != nil {
-		return err
+	idAlloc, idAllocErr := newIDAllocator(keys.RaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount, s.stopper)
+	if idAllocErr != nil {
+		return idAllocErr
 	}
 	s.raftIDAlloc = idAlloc
 
@@ -456,7 +456,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	start := keys.RangeDescriptorKey(proto.KeyMin)
 	end := keys.RangeDescriptorKey(proto.KeyMax)
 
-	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
+	if mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
 		Transport:              s.ctx.Transport,
 		Storage:                s,
 		StateMachine:           s,
@@ -468,7 +468,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// unbuffered. Temporarily give it some breathing room until the underlying
 		// deadlock is fixed. See #1185, #1193.
 		EventBufferSize: 1000,
-	}, s.stopper); err != nil {
+	}, s.stopper); err == nil {
+		s.multiraft = mr
+	} else {
 		return err
 	}
 
@@ -513,7 +515,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
-	if err = s.multiraft.Start(); err != nil {
+	if err := s.multiraft.Start(); err != nil {
 		return err
 	}
 	s.processRaft()
@@ -772,22 +774,19 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *stop.Stopper) error {
 	}
 	stopper.AddCloser(s.engine)
 	s.Ident = ident
-	kvs, err := engine.Scan(s.engine, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 1)
-	if err != nil {
-		return util.Errorf("store %s: unable to access: %s", s.engine, err)
+	kvs, scanErr := engine.Scan(s.engine, proto.EncodedKey(proto.KeyMin), proto.EncodedKey(proto.KeyMax), 1)
+	if scanErr != nil {
+		return util.Errorf("store %s: unable to access: %s", s.engine, scanErr)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident)
-		if err != nil {
+		if ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident); err != nil {
 			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
-		}
-		if ok {
+		} else if ok {
 			return util.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
 		}
 		return util.Errorf("store %s is not-empty and has invalid contents (first key: %q)", s.engine, kvs[0].Key)
 	}
-	err = engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
-	return err
+	return engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
 }
 
 // GetRange fetches a range by Raft ID. Returns an error if no range is found.

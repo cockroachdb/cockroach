@@ -184,9 +184,9 @@ func TestEvalExprError(t *testing.T) {
 		// {`~0 + 1`, `0`, nil},
 	}
 	for _, d := range testData {
-		q, err := Parse("SELECT " + d.expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
+		q, parseErr := Parse("SELECT " + d.expr)
+		if parseErr != nil {
+			t.Fatalf("%s: %v", d.expr, parseErr)
 		}
 		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
 		if _, err := EvalExpr(expr, mapEnv{}); !testutils.IsError(err, d.expected) {

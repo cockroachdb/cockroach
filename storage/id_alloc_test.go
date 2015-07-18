@@ -20,7 +20,6 @@ package storage
 import (
 	"log"
 	"sort"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -42,9 +42,9 @@ func TestIDAllocator(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	allocd := make(chan int, 100)
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
-	if err != nil {
-		t.Errorf("failed to create idAllocator: %v", err)
+	idAlloc, idAllocErr := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	if idAllocErr != nil {
+		t.Errorf("failed to create idAllocator: %v", idAllocErr)
 	}
 
 	for i := 0; i < 10; i++ {
@@ -137,16 +137,14 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	allocd := make(chan int, 10)
 
 	// Firstly create a valid IDAllocator to get some ID.
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
-	if err != nil {
-		t.Errorf("failed to create IDAllocator: %v", err)
+	idAlloc, idAllocErr := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	if idAllocErr != nil {
+		t.Errorf("failed to create IDAllocator: %v", idAllocErr)
 	}
 
-	firstID, err := idAlloc.Allocate()
-	if err != nil {
+	if firstID, err := idAlloc.Allocate(); err != nil {
 		t.Fatal(err)
-	}
-	if firstID != 2 {
+	} else if firstID != 2 {
 		t.Errorf("expected ID is 2, but got: %d", firstID)
 	}
 
@@ -221,16 +219,14 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 func TestAllocateWithStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
-	if err != nil {
-		log.Fatal(err)
+	idAlloc, idAllocErr := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	if idAllocErr != nil {
+		log.Fatal(idAllocErr)
 	}
 
 	stopper.Stop()
 
-	if _, err := idAlloc.Allocate(); err == nil {
-		t.Errorf("unexpected success")
-	} else if !strings.Contains(err.Error(), "system is draining") {
+	if _, err := idAlloc.Allocate(); !testutils.IsError(err, "system is draining") {
 		t.Errorf("unexpected error: %s", err)
 	}
 }

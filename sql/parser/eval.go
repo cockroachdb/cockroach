@@ -457,8 +457,8 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	if left == null {
 		return null, nil
 	}
-	if v, err := getBool(left); err != nil {
-		return null, err
+	if v, getBoolErr := getBool(left); getBoolErr != nil {
+		return null, getBoolErr
 	} else if !v {
 		return v, nil
 	}
@@ -469,8 +469,8 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	if right == null {
 		return null, nil
 	}
-	if v, err := getBool(right); err != nil {
-		return null, err
+	if v, getBoolErr := getBool(right); getBoolErr != nil {
+		return null, getBoolErr
 	} else if !v {
 		return v, nil
 	}
@@ -483,8 +483,8 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 		return null, err
 	}
 	if left != null {
-		if v, err := getBool(left); err != nil {
-			return null, err
+		if v, getBoolErr := getBool(left); getBoolErr != nil {
+			return null, getBoolErr
 		} else if v {
 			return v, nil
 		}
@@ -496,8 +496,8 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	if right == null {
 		return null, nil
 	}
-	if v, err := getBool(right); err != nil {
-		return null, err
+	if v, getBoolErr := getBool(right); getBoolErr != nil {
+		return null, getBoolErr
 	} else if v {
 		return v, nil
 	}
@@ -527,9 +527,9 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 	// AND left <= to". The only tricky part is that we evaluate "left" only
 	// once.
 
-	left, err := EvalExpr(expr.Left, env)
-	if err != nil {
-		return null, err
+	left, evalErr := EvalExpr(expr.Left, env)
+	if evalErr != nil {
+		return null, evalErr
 	}
 
 	limits := [2]struct {
@@ -693,9 +693,9 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 		// CASE <val> WHEN <expr> THEN ...
 		//
 		// For each "when" expression we compare for equality to <val>.
-		val, err := EvalExpr(expr.Expr, env)
-		if err != nil {
-			return null, err
+		val, evalErr := EvalExpr(expr.Expr, env)
+		if evalErr != nil {
+			return null, evalErr
 		}
 
 		for _, when := range expr.Whens {
@@ -707,8 +707,8 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 			if err != nil {
 				return null, err
 			}
-			if v, err := getBool(d); err != nil {
-				return null, err
+			if v, getBoolErr := getBool(d); getBoolErr != nil {
+				return null, getBoolErr
 			} else if v {
 				return EvalExpr(when.Val, env)
 			}
@@ -720,8 +720,8 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 			if err != nil {
 				return null, err
 			}
-			if v, err := getBool(d); err != nil {
-				return null, err
+			if v, getBoolErr := getBool(d); getBoolErr != nil {
+				return null, getBoolErr
 			} else if v {
 				return EvalExpr(when.Val, env)
 			}
@@ -745,8 +745,8 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 		if err != nil {
 			return null, err
 		}
-		if v, err := getBool(d); err != nil {
-			return null, err
+		if v, getBoolErr := getBool(d); getBoolErr != nil {
+			return null, getBoolErr
 		} else if !v {
 			return v, nil
 		}
@@ -789,8 +789,8 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 			if err != nil {
 				return null, err
 			}
-			if v, err := getBool(d); err != nil {
-				return null, err
+			if v, getBoolErr := getBool(d); getBoolErr != nil {
+				return null, getBoolErr
 			} else if v {
 				return v, nil
 			}

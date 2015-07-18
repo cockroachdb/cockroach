@@ -48,30 +48,24 @@ func TestTimeSeriesToValue(t *testing.T) {
 	}
 
 	// Wrap the TSD into a Value
-	valueOriginal, err := tsOriginal.ToValue()
-	if err != nil {
-		t.Fatalf("error marshaling InternalTimeSeriesData: %s", err.Error())
-	}
-	if a, e := valueOriginal.GetTag(), _CR_TS.String(); a != e {
+	if valueOriginal, originalErr := tsOriginal.ToValue(); originalErr != nil {
+		t.Fatalf("error marshaling InternalTimeSeriesData: %s", originalErr)
+	} else if a, e := valueOriginal.GetTag(), _CR_TS.String(); a != e {
 		t.Errorf("Value did not have expected tag value of %s, had %s", e, a)
-	}
+	} else {
+		// Ensure the Value's 'bytes' field contains the marshalled TSD
+		if tsEncoded, err := gogoproto.Marshal(tsOriginal); err != nil {
+			t.Fatalf("error marshaling TimeSeriesData: %s", err)
+		} else if a, e := valueOriginal.Bytes, tsEncoded; !bytes.Equal(a, e) {
+			t.Errorf("bytes field was not properly encoded: expected %v, got %v", e, a)
+		}
 
-	// Ensure the Value's 'bytes' field contains the marshalled TSD
-	tsEncoded, err := gogoproto.Marshal(tsOriginal)
-	if err != nil {
-		t.Fatalf("error marshaling TimeSeriesData: %s", err.Error())
-	}
-	if a, e := valueOriginal.Bytes, tsEncoded; !bytes.Equal(a, e) {
-		t.Errorf("bytes field was not properly encoded: expected %v, got %v", e, a)
-	}
-
-	// Extract the TSD from the Value
-	tsNew, err := InternalTimeSeriesDataFromValue(valueOriginal)
-	if err != nil {
-		t.Errorf("error extracting Time Series: %s", err.Error())
-	}
-	if !gogoproto.Equal(tsOriginal, tsNew) {
-		t.Errorf("extracted time series not equivalent to original; %v != %v", tsNew, tsOriginal)
+		// Extract the TSD from the Value
+		if tsNew, err := InternalTimeSeriesDataFromValue(valueOriginal); err != nil {
+			t.Errorf("error extracting Time Series: %s", err)
+		} else if !gogoproto.Equal(tsOriginal, tsNew) {
+			t.Errorf("extracted time series not equivalent to original; %v != %v", tsNew, tsOriginal)
+		}
 	}
 
 	// Make sure ExtractTimeSeries doesn't work on non-TimeSeries values

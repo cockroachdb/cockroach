@@ -155,8 +155,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -177,8 +176,7 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -413,11 +411,9 @@ func TestMVCCGetUncertainty(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Read with transaction, should get a value back.
-	val, _, err := MVCCGet(engine, testKey1, makeTS(7, 0), true, txn)
-	if err != nil {
+	if val, _, err := MVCCGet(engine, testKey1, makeTS(7, 0), true, txn); err != nil {
 		t.Fatal(err)
-	}
-	if val == nil || !bytes.Equal(val.Bytes, value1.Bytes) {
+	} else if val == nil || !bytes.Equal(val.Bytes, value1.Bytes) {
 		t.Fatalf("wanted %q, got %v", value1.Bytes, val)
 	}
 
@@ -689,12 +685,10 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	defer engine.Close()
 
 	// Put two values to key 1, the latest with a txn.
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -721,8 +715,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 
 	// Write a single intent for key 2 and verify get returns empty.
-	err = MVCCPut(engine, nil, testKey2, makeTS(2, 0), value1, txn2)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), value1, txn2); err != nil {
 		t.Fatal(err)
 	}
 	val, intents, err := MVCCGet(engine, testKey2, makeTS(2, 0), false, nil)
@@ -770,15 +763,9 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	// Inconsistent get will fetch value1 for any timestamp.
 	for _, ts := range []proto.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
 		val.Reset()
-		found, err := MVCCGetProto(engine, testKey1, ts, false, nil, val)
-		if ts.Less(makeTS(2, 0)) {
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else if err != nil {
-			t.Fatal(err)
-		}
-		if !found {
+		if found, getProtoErr := MVCCGetProto(engine, testKey1, ts, false, nil, val); getProtoErr != nil {
+			t.Fatal(getProtoErr)
+		} else if !found {
 			t.Errorf("expected to find result with inconsistent read")
 		}
 		if !bytes.Equal(val.Value, []byte("value1")) {

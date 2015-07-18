@@ -172,9 +172,9 @@ func PutProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (keyBy
 // value is returned.
 func Increment(engine Engine, key proto.EncodedKey, inc int64) (int64, error) {
 	// First retrieve existing value.
-	val, err := engine.Get(key)
-	if err != nil {
-		return 0, err
+	val, getErr := engine.Get(key)
+	if getErr != nil {
+		return 0, getErr
 	}
 	var int64Val int64
 	// If the value exists, attempt to decode it as a varint.

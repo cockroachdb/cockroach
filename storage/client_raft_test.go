@@ -20,7 +20,6 @@ package storage_test
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -206,16 +206,15 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng, err := mtc.stores[0].GetRange(1)
-	if err != nil {
-		t.Fatal(err)
+	rng, getRangeErr := mtc.stores[0].GetRange(1)
+	if getRangeErr != nil {
+		t.Fatal(getRangeErr)
 	}
 
-	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		}); err != nil {
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
@@ -262,9 +261,9 @@ func TestRestoreReplicas(t *testing.T) {
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
-	firstRng, err := mtc.stores[0].GetRange(1)
-	if err != nil {
-		t.Fatal(err)
+	firstRng, getRangeErr := mtc.stores[0].GetRange(1)
+	if getRangeErr != nil {
+		t.Fatal(getRangeErr)
 	}
 
 	// Perform an increment before replication to ensure that commands are not
@@ -274,11 +273,10 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := firstRng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		}); err != nil {
+	if err := firstRng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -303,9 +301,10 @@ func TestRestoreReplicas(t *testing.T) {
 	// The follower will return a not leader error, indicating the command
 	// should be forwarded to the leader.
 	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
-	err = mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp})
-	if _, ok := err.(*proto.NotLeaderError); !ok {
-		t.Fatalf("expected not leader error; got %s", err)
+	if err := mtc.stores[1].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
+		if _, ok := err.(*proto.NotLeaderError); !ok {
+			t.Fatalf("expected not leader error; got %s", err)
+		}
 	}
 	incArgs.Replica.StoreID = mtc.stores[0].StoreID()
 	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
@@ -361,17 +360,15 @@ func TestFailedReplicaChange(t *testing.T) {
 		return nil
 	}
 
-	rng, err := mtc.stores[0].GetRange(1)
-	if err != nil {
-		t.Fatal(err)
+	rng, getRangeErr := mtc.stores[0].GetRange(1)
+	if getRangeErr != nil {
+		t.Fatal(getRangeErr)
 	}
 
-	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		})
-	if err == nil || !strings.Contains(err.Error(), "boom") {
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	}); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %s", err)
 	}
 
@@ -385,12 +382,10 @@ func TestFailedReplicaChange(t *testing.T) {
 	// can succeed.
 	runFilter.Store(false)
 
-	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		})
-	if err != nil {
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -450,11 +445,10 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	mvcc := rng.GetMVCCStats()
 
 	// Now add the second replica.
-	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		}); err != nil {
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	}); err != nil {
 		t.Fatal(err)
 	}
 

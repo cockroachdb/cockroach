@@ -185,8 +185,7 @@ func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
-	if err != nil {
+	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	stopper.Stop()
@@ -400,9 +399,9 @@ func TestStatusSummaries(t *testing.T) {
 	defer ts.Stop()
 
 	// Retrieve the first store from the Node.
-	s, err := ts.node.lSender.GetStore(proto.StoreID(1))
-	if err != nil {
-		t.Fatal(err)
+	s, storeErr := ts.node.lSender.GetStore(proto.StoreID(1))
+	if storeErr != nil {
+		t.Fatal(storeErr)
 	}
 
 	s.WaitForInit()
@@ -412,9 +411,9 @@ func TestStatusSummaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	storeDesc, err := s.Descriptor()
-	if err != nil {
-		t.Fatal(err)
+	storeDesc, descErr := s.Descriptor()
+	if descErr != nil {
+		t.Fatal(descErr)
 	}
 
 	expectedNodeStatus := &status.NodeStatus{

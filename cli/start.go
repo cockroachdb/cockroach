@@ -60,8 +60,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	// Default user for servers.
 	Context.User = security.NodeUser
 	// First initialize the Context as it is used in other places.
-	err := Context.Init("init")
-	if err != nil {
+	if err := Context.Init("init"); err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
 	}
