@@ -202,7 +202,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx := &base.Context{}
+	ctx := base.Context{}
 	ctx.InitDefaults()
 	if u.User != nil {
 		ctx.User = u.User.Username()
@@ -213,7 +213,7 @@ func Open(addr string, opts ...Option) (*DB, error) {
 		ctx.Certs = dir[0]
 	}
 
-	sender, err := newSender(u, ctx)
+	sender, err := newSender(u, &ctx)
 	if err != nil {
 		return nil, err
 	}

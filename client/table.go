@@ -353,13 +353,13 @@ func (db *DB) RenameTable(oldPath, newPath string) error {
 			return err
 		}
 		newNameKey := keys.MakeNameMetadataKey(newNSID, newName)
-		b := &Batch{}
+		b := Batch{}
 		b.Put(descKey, &desc)
 		// If the new name already exists the conditional put will fail causing the
 		// transaction to fail.
 		b.CPut(newNameKey, descKey, nil)
 		b.Del(oldNameKey)
-		return txn.Commit(b)
+		return txn.Commit(&b)
 	})
 }
 
