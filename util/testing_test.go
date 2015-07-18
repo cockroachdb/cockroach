@@ -26,10 +26,9 @@ import (
 // verifyAddr starts a server listener at the specified addr and
 // then dials a client to verify a connection is established.
 func verifyAddr(addr net.Addr, t *testing.T) {
-	ln, err := net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		t.Error(err)
-		return
+	ln, listenErr := net.Listen(addr.Network(), addr.String())
+	if listenErr != nil {
+		t.Fatal(listenErr)
 	}
 
 	acceptChan := make(chan struct{})
@@ -44,8 +43,7 @@ func verifyAddr(addr net.Addr, t *testing.T) {
 	addr = ln.Addr()
 	conn, err := net.Dial(addr.Network(), addr.String())
 	if err != nil {
-		t.Errorf("could not connect to %s", addr)
-		return
+		t.Fatalf("could not connect to %s", addr)
 	}
 	select {
 	case <-acceptChan:

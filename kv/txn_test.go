@@ -22,7 +22,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -176,30 +175,26 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			txnClock.SetMaxOffset(maxOffset)
 
 			sender := NewTxnCoordSender(s.lSender, txnClock, false, nil, s.Stopper)
-			txnDB, err := client.Open("//root@", client.SenderOpt(sender))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if err := txnDB.Txn(func(txn *client.Txn) error {
-				// Read within the transaction.
-				gr, err := txn.Get(key)
-				if err != nil {
-					if _, ok := err.(*proto.ReadWithinUncertaintyIntervalError); ok {
-						return err
+			if txnDB, openErr := client.Open("//root@", client.SenderOpt(sender)); openErr != nil {
+				t.Fatal(openErr)
+			} else {
+				if err := txnDB.Txn(func(txn *client.Txn) error {
+					// Read within the transaction.
+					if gr, err := txn.Get(key); err != nil {
+						if _, ok := err.(*proto.ReadWithinUncertaintyIntervalError); ok {
+							return err
+						}
+						return util.Errorf("unexpected read error of type %T: %s", err, err)
+					} else if !gr.Exists() {
+						return util.Errorf("no value read")
+					} else if !bytes.Equal(gr.ValueBytes(), readValue) {
+						return util.Errorf("%d: read wrong value %v at %s, wanted %q",
+							i, gr.Value, futureTS, readValue)
 					}
-					return util.Errorf("unexpected read error of type %s: %s", reflect.TypeOf(err), err)
+					return nil
+				}); err != nil {
+					t.Error(err)
 				}
-				if !gr.Exists() {
-					return util.Errorf("no value read")
-				}
-				if !bytes.Equal(gr.ValueBytes(), readValue) {
-					return util.Errorf("%d: read wrong value %v at %s, wanted %q",
-						i, gr.Value, futureTS, readValue)
-				}
-				return nil
-			}); err != nil {
-				t.Error(err)
 			}
 		}(i)
 	}
@@ -528,9 +523,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		txn.SetSnapshotIsolation()
 
 		// First get keyC, value will be nil.
-		gr1, err := txn.Get(keyC)
-		if err != nil {
-			return err
+		gr1, gr1Err := txn.Get(keyC)
+		if gr1Err != nil {
+			return gr1Err
 		}
 		s.Manual.Set(time.Second.Nanoseconds())
 		// Split range by keyB.
@@ -554,9 +549,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Wait for txnA finish commit.
 		<-ch
 		// Get(c) again.
-		gr2, err := txn.Get(keyC)
-		if err != nil {
-			return err
+		gr2, gr2Err := txn.Get(keyC)
+		if gr2Err != nil {
+			return gr2Err
 		}
 
 		if !gr1.Exists() && gr2.Exists() {

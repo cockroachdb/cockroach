@@ -4,7 +4,6 @@ cmd github.com/cockroachdb/yacc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
 cmd github.com/jteeuwen/go-bindata/go-bindata
-cmd github.com/kisielk/errcheck
 cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
@@ -26,7 +25,6 @@ github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata 38ae5514e62bacad046221ad7f54e7a54e3ccd7b
 github.com/julienschmidt/httprouter 70708e46004c7bcb09b70e685a8b74a690135387
-github.com/kisielk/errcheck 76bf61ee4096ee72636739d4472186b5de5641db
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
 github.com/lib/pq a8d8d01c4f91602f876bf5aa210274e8203a6b45
 github.com/montanaflynn/stats 44fb56da2a2a67d394dec0e18a82dd316f192529

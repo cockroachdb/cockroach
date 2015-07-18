@@ -115,9 +115,9 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	defer snap.Close()
 
 	// Lookup the GC policy for the zone containing this key range.
-	policy, err := gcq.lookupGCPolicy(rng)
-	if err != nil {
-		return err
+	policy, lookupErr := gcq.lookupGCPolicy(rng)
+	if lookupErr != nil {
+		return lookupErr
 	}
 
 	gcMeta := proto.NewGCMetadata(now.WallTime)

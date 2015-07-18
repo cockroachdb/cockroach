@@ -134,11 +134,9 @@ func TestSameKeyInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	group := newGroup("a", 1, MinGroup)
 	info1 := newTestInfo("a.a", int64(1))
-	changed, err := group.addInfo(info1)
-	if err != nil {
+	if changed, err := group.addInfo(info1); err != nil {
 		t.Error(err)
-	}
-	if !changed {
+	} else if !changed {
 		t.Error("expected changed contents to be true on first insert")
 	}
 
@@ -152,20 +150,16 @@ func TestSameKeyInserts(t *testing.T) {
 	// Two successively larger timestamps always win.
 	info3 := newTestInfo("a.a", int64(1))
 	info3.Timestamp = info1.Timestamp + 1
-	changed, err = group.addInfo(info3)
-	if err != nil {
+	if changed, err := group.addInfo(info3); err != nil {
 		t.Error(err)
-	}
-	if changed {
+	} else if changed {
 		t.Error("expected changed to be false on successive timestamp but same value")
 	}
 	info4 := newTestInfo("a.a", int64(2)) // change value
 	info4.Timestamp = info1.Timestamp + 2
-	changed, err = group.addInfo(info4)
-	if err != nil {
+	if changed, err := group.addInfo(info4); err != nil {
 		t.Error(err)
-	}
-	if !changed {
+	} else if !changed {
 		t.Error("expected changed to be true on successive timestamp with different value")
 	}
 }

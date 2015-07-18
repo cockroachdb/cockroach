@@ -221,17 +221,25 @@ func (l *Cluster) initCluster() {
 			Cmd:        []string{"init", "--stores=ssd=" + data(0)},
 		})
 	}
-	c, err := create()
-	if err == dockerclient.ErrNotFound && *cockroachImage == builderImage {
-		log.Infof("pulling %s", *cockroachImage)
-		err = l.client.PullImage(*cockroachImage, nil)
-		if err == nil {
-			c, err = create()
+	container := func() *Container {
+		if container, err := create(); err != nil {
+			if err == dockerclient.ErrNotFound && *cockroachImage == builderImage {
+				log.Infof("pulling %s", *cockroachImage)
+				if pullErr := l.client.PullImage(*cockroachImage, nil); pullErr != nil {
+					panic(pullErr)
+				} else {
+					if container, err = create(); err != nil {
+						panic(err)
+					} else {
+						return container
+					}
+				}
+			}
+			panic(err)
+		} else {
+			return container
 		}
-	}
-	if err != nil {
-		panic(err)
-	}
+	}()
 
 	// Create the temporary certs directory in the current working
 	// directory. Boot2docker's handling of binding local directories
@@ -239,9 +247,10 @@ func (l *Cluster) initCluster() {
 	// bound has a parent directory that exists in the boot2docker VM
 	// then that directory is bound into the container. In particular,
 	// that means that binds of /tmp and /var will be problematic.
-	l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
-	if err != nil {
+	if certsDir, err := ioutil.TempDir(pwd, ".localcluster.certs."); err != nil {
 		panic(err)
+	} else {
+		l.CertsDir = certsDir
 	}
 
 	binds := []string{l.CertsDir + ":/certs"}
@@ -250,17 +259,17 @@ func (l *Cluster) initCluster() {
 		binds = append(binds, l.LogDir+":/logs")
 	}
 	if *cockroachImage == builderImage {
-		path, err := filepath.Abs(*cockroachBinary)
-		if err != nil {
+		if path, err := filepath.Abs(*cockroachBinary); err != nil {
 			panic(err)
+		} else {
+			binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
 		}
-		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
 	}
 
-	maybePanic(c.Start(binds, nil, nil))
-	maybePanic(c.Wait())
-	c.containerInfo.Name = "volumes"
-	l.vols = c
+	maybePanic(container.Start(binds, nil, nil))
+	maybePanic(container.Wait())
+	container.containerInfo.Name = "volumes"
+	l.vols = container
 }
 
 func (l *Cluster) createRoach(i int, cmd ...string) *Container {

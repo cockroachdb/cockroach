@@ -108,8 +108,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, ctx.Clock, false, nil, stopper)
-	var err error
-	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if db, err := client.Open("//root@", client.SenderOpt(sender)); err == nil {
+		ctx.DB = db
+	} else {
 		return nil, err
 	}
 	ctx.Transport = multiraft.NewLocalRPCTransport()

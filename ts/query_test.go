@@ -216,9 +216,9 @@ func (tm *testModel) assertQuery(name string, agg *proto.TimeSeriesQueryAggregat
 		Name:       name,
 		Aggregator: agg,
 	}
-	actualDatapoints, actualSources, err := tm.DB.Query(q, r, start, end)
-	if err != nil {
-		tm.t.Fatal(err)
+	actualDatapoints, actualSources, queryErr := tm.DB.Query(q, r, start, end)
+	if queryErr != nil {
+		tm.t.Fatal(queryErr)
 	}
 	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
 		tm.t.Fatalf("query expected %d datapoints, got %d", e, a)

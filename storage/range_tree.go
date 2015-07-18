@@ -236,9 +236,9 @@ func (tc *treeContext) walkUpRot23(node *proto.RangeTreeNode) (*proto.RangeTreeN
 		return nil, err
 	}
 	if left != nil {
-		leftLeft, err := tc.getNode(left.LeftKey)
-		if err != nil {
-			return nil, err
+		leftLeft, leftLeftErr := tc.getNode(left.LeftKey)
+		if leftLeftErr != nil {
+			return nil, leftLeftErr
 		}
 		if isRed(left) && isRed(leftLeft) {
 			node, err = tc.rotateRight(node)

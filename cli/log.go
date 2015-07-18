@@ -44,16 +44,20 @@ unless --color=off is specified.
 // log file named in arguments.
 func runLog(cmd *cobra.Command, args []string) {
 	for _, arg := range args {
-		reader, err := log.GetLogReader(arg, true /* allowAbsolute */)
-		if err != nil {
+		if err := func() error {
+			if reader, err := log.GetLogReader(arg, true /* allowAbsolute */); err == nil {
+				defer reader.Close()
+				if _, err = io.Copy(os.Stdout, log.NewTermEntryReader(reader)); err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+			return nil
+		}(); err != nil {
 			log.Error(err)
 			break
 		}
-		if _, err := io.Copy(os.Stdout, log.NewTermEntryReader(reader)); err != nil {
-			log.Error(err)
-			break
-		}
-		reader.Close()
 	}
 }
 

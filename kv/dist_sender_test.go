@@ -65,7 +65,7 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 		{proto.KeyMin, nil, permConfig},
 	})
 	if err != nil {
-		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
+		t.Fatalf("failed to make prefix config map, err: %s", err)
 	}
 	if err := g.AddInfo(gossip.KeySentinel, "cluster1", time.Hour); err != nil {
 		t.Fatal(err)
@@ -607,7 +607,7 @@ func TestVerifyPermissions(t *testing.T) {
 	}
 	configMap, err := storage.NewPrefixConfigMap(configs)
 	if err != nil {
-		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
+		t.Fatalf("failed to make prefix config map, err: %s", err)
 	}
 	if err := ds.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour); err != nil {
 		t.Fatal(err)

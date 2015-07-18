@@ -337,9 +337,10 @@ func TestRangeReadConsistency(t *testing.T) {
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
 
-	_, err := tc.rng.AddCmd(tc.rng.context(), &gArgs)
-	if _, ok := err.(*proto.NotLeaderError); !ok {
-		t.Errorf("expected not leader error; got %s", err)
+	if _, err := tc.rng.AddCmd(tc.rng.context(), &gArgs); err != nil {
+		if _, ok := err.(*proto.NotLeaderError); !ok {
+			t.Errorf("expected not leader error; got %s", err)
+		}
 	}
 
 	gArgs.ReadConsistency = proto.INCONSISTENT
@@ -663,9 +664,9 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Perm)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(db1Perm)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	req := proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
@@ -704,9 +705,9 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Perm)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(db1Perm)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	req := proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
@@ -749,9 +750,9 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	raftID := proto.RaftID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
-	data, err := gogoproto.Marshal(db1Perm)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(db1Perm)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	req1 := putArgs(key, data, raftID, tc.store.StoreID())
 	req1.Txn = txn
@@ -1359,9 +1360,9 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 
-		reply, err := tc.rng.AddCmd(tc.rng.context(), &pArgs)
-		if err != nil {
-			t.Fatalf("test %d: %s", i, err)
+		reply, addErr := tc.rng.AddCmd(tc.rng.context(), &pArgs)
+		if addErr != nil {
+			t.Fatalf("test %d: %s", i, addErr)
 		}
 		pReply := reply.(*proto.PutResponse)
 
@@ -2251,7 +2252,7 @@ func TestInternalMerge(t *testing.T) {
 		mergeArgs := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1, tc.store.StoreID())
 
 		if _, err := tc.rng.AddCmd(tc.rng.context(), &mergeArgs); err != nil {
-			t.Fatalf("unexpected error from InternalMerge: %s", err.Error())
+			t.Fatalf("unexpected error from InternalMerge: %s", err)
 		}
 	}
 
@@ -2542,21 +2543,20 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	}
 
 	var rlReply *proto.InternalRangeLookupResponse
-
-	reply, err := tc.rng.AddCmd(tc.rng.context(), rlArgs)
-	if err != nil {
+	if reply, err := tc.rng.AddCmd(tc.rng.context(), rlArgs); err == nil {
+		rlReply = reply.(*proto.InternalRangeLookupResponse)
+	} else {
 		t.Fatal(err)
 	}
-	rlReply = reply.(*proto.InternalRangeLookupResponse)
 
 	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
 	newDesc.EndKey = key
 
 	// Write the new descriptor as an intent.
-	data, err := gogoproto.Marshal(&newDesc)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(&newDesc)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(key), data, 1, tc.store.StoreID())
 	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
@@ -2571,28 +2571,30 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	rlArgs.Key = keys.RangeMetaKey(proto.Key("A"))
 	rlArgs.Timestamp = proto.ZeroTimestamp
 
-	reply, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
-	if err != nil {
+	if reply, err := tc.rng.AddCmd(tc.rng.context(), rlArgs); err != nil {
 		t.Errorf("unexpected lookup error: %s", err)
-	}
-	rlReply = reply.(*proto.InternalRangeLookupResponse)
-	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
-		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
+	} else {
+		rlReply = reply.(*proto.InternalRangeLookupResponse)
+		if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
+			t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
+		}
 	}
 
 	// Switch to consistent lookups, which should run into the intent.
 	rlArgs.ReadConsistency = proto.CONSISTENT
-	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
-	if _, ok := err.(*proto.WriteIntentError); !ok {
-		t.Fatalf("expected WriteIntentError, not %s", err)
+	if _, err := tc.rng.AddCmd(tc.rng.context(), rlArgs); err != nil {
+		if _, ok := err.(*proto.WriteIntentError); !ok {
+			t.Fatalf("expected WriteIntentError, not %s", err)
+		}
 	}
 
 	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
 	// First, try this consistently, which should not be allowed.
 	rlArgs.IgnoreIntents = true
-	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
-	if !testutils.IsError(err, "can not read consistently and skip intents") {
-		t.Fatalf("wanted specific error, not %s", err)
+	if _, err := tc.rng.AddCmd(tc.rng.context(), rlArgs); err != nil {
+		if !testutils.IsError(err, "can not read consistently and skip intents") {
+			t.Fatalf("wanted specific error, not %s", err)
+		}
 	}
 	// After changing back to inconsistent lookups, should be good to go.
 	rlArgs.ReadConsistency = proto.INCONSISTENT
@@ -2604,11 +2606,12 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.InternalRangeLookupRequest)
 		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 
-		reply, err = tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
-		if err != nil {
+		if reply, err := tc.rng.AddCmd(tc.rng.context(), clonedRLArgs); err == nil {
+			rlReply = reply.(*proto.InternalRangeLookupResponse)
+		} else {
 			t.Fatal(err)
 		}
-		rlReply = reply.(*proto.InternalRangeLookupResponse)
+
 		seen := rlReply.Ranges[0]
 		if reflect.DeepEqual(seen, origDesc) {
 			origSeen = true

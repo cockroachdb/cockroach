@@ -281,7 +281,8 @@ func (db *DB) CreateTable(desc *structured.TableDescriptor) error {
 	// This isn't strictly necessary as the conditional put below will fail if
 	// the key already exists, but it seems good to avoid the table ID allocation
 	// in most cases when the table already exists.
-	if gr, err := db.Get(nameKey); err != nil {
+	gr, err := db.Get(nameKey)
+	if err != nil {
 		return err
 	} else if gr.Exists() {
 		return fmt.Errorf("table \"%s\" already exists", desc.Name)
@@ -336,11 +337,10 @@ func (db *DB) RenameTable(oldPath, newPath string) error {
 
 	return db.Txn(func(txn *Txn) error {
 		oldNameKey := keys.MakeNameMetadataKey(oldNSID, oldName)
-		gr, err := txn.Get(oldNameKey)
-		if err != nil {
-			return err
-		}
-		if !gr.Exists() {
+		gr, getErr := txn.Get(oldNameKey)
+		if getErr != nil {
+			return getErr
+		} else if !gr.Exists() {
 			return fmt.Errorf("unable to find table \"%s\"", oldPath)
 		}
 		descKey := gr.ValueBytes()
@@ -688,9 +688,9 @@ func (b *Batch) PutStruct(obj interface{}, columns ...string) {
 			log.Infof("Put %q -> %v", key, value.Interface())
 		}
 
-		v, err := marshalValue(value)
-		if err != nil {
-			b.initResult(0, 0, err)
+		v, marshalErr := marshalValue(value)
+		if marshalErr != nil {
+			b.initResult(0, 0, marshalErr)
 			return
 		}
 
@@ -837,13 +837,13 @@ func (b *Batch) ScanStruct(dest, start, end interface{}, maxRows int64, columns 
 					sliceV = reflect.Append(sliceV, result)
 					result.Set(zero)
 				}
-				_, err := m.decodePrimaryKey(primaryKey, result)
-				if err != nil {
-					return err
+				if _, decodeErr := m.decodePrimaryKey(primaryKey, result); decodeErr != nil {
+					return decodeErr
 				}
 			}
 
-			remaining, err := m.decodePrimaryKey([]byte(row.Key), result)
+			var remaining []byte
+			remaining, err = m.decodePrimaryKey([]byte(row.Key), result)
 			if err != nil {
 				return err
 			}

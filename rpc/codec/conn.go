@@ -88,9 +88,9 @@ func (c *baseConn) write(w io.Writer, data []byte) error {
 
 func (c *baseConn) recvProto(m proto.Message,
 	uncompressedSize uint32, decompressor decompressFunc) error {
-	size, err := binary.ReadUvarint(c.r)
-	if err != nil {
-		return err
+	size, readErr := binary.ReadUvarint(c.r)
+	if readErr != nil {
+		return readErr
 	}
 	if size == 0 {
 		return nil

@@ -111,9 +111,9 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 func (r *Range) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
 	if err == raft.ErrUnavailable {
-		ts, err := r.raftTruncatedState()
-		if err != nil {
-			return 0, err
+		ts, truncateErr := r.raftTruncatedState()
+		if truncateErr != nil {
+			return 0, truncateErr
 		}
 		if i == ts.Index {
 			return ts.Term, nil
@@ -197,7 +197,6 @@ func setAppliedIndex(eng engine.Engine, raftID proto.RaftID, appliedIndex uint64
 
 // loadLastIndex retrieves the last index from storage.
 func (r *Range) loadLastIndex() (uint64, error) {
-	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(r.rm.Engine(),
 		keys.RaftLastIndexKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true /* consistent */, nil)
@@ -205,18 +204,17 @@ func (r *Range) loadLastIndex() (uint64, error) {
 		return 0, err
 	}
 	if v != nil {
-		_, lastIndex = encoding.DecodeUint64(v.Bytes)
-	} else {
-		// The log is empty, which means we are either starting from scratch
-		// or the entire log has been truncated away. raftTruncatedState
-		// handles both cases.
-		lastEnt, err := r.raftTruncatedState()
-		if err != nil {
-			return 0, err
-		}
-		lastIndex = lastEnt.Index
+		_, lastIndex := encoding.DecodeUint64(v.Bytes)
+		return lastIndex, nil
 	}
-	return lastIndex, nil
+	// The log is empty, which means we are either starting from scratch
+	// or the entire log has been truncated away. raftTruncatedState
+	// handles both cases.
+	lastEnt, truncateErr := r.raftTruncatedState()
+	if truncateErr != nil {
+		return 0, truncateErr
+	}
+	return lastEnt.Index, nil
 }
 
 // setLastIndex persists a new last index.

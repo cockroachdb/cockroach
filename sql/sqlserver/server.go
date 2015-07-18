@@ -346,9 +346,9 @@ func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args
 
 // CreateTable creates a table if it doesn't already exist.
 func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) error {
-	var err error
-	p.Table, err = s.normalizeTableName(session.Database, p.Table)
-	if err != nil {
+	if table, err := s.normalizeTableName(session.Database, p.Table); err == nil {
+		p.Table = table
+	} else {
 		return err
 	}
 
@@ -370,8 +370,8 @@ func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sql
 	// This isn't strictly necessary as the conditional put below will fail if
 	// the key already exists, but it seems good to avoid the table ID allocation
 	// in most cases when the table already exists.
-	if gr, err := s.db.Get(nameKey); err != nil {
-		return err
+	if gr, getErr := s.db.Get(nameKey); getErr != nil {
+		return getErr
 	} else if gr.Exists() {
 		if p.IfNotExists {
 			return nil
@@ -443,9 +443,9 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 			return fmt.Errorf("invalid values for columns: %d != %d", len(row.Values), len(cols))
 		}
 		indexKey := encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID)
-		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, cols, row.Values, indexKey)
-		if err != nil {
-			return err
+		primaryKey, encodeErr := encodeIndexKey(desc.Indexes[0], colMap, cols, row.Values, indexKey)
+		if encodeErr != nil {
+			return encodeErr
 		}
 		for i, val := range row.Values {
 			key := encodeColumnKey(desc, cols[i], primaryKey)
@@ -502,9 +502,9 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 	// Retrieve all of the keys that start with our index key prefix.
 	startKey := proto.Key(encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID))
 	endKey := startKey.PrefixEnd()
-	sr, err := s.db.Scan(startKey, endKey, 0)
-	if err != nil {
-		return err
+	sr, scanErr := s.db.Scan(startKey, endKey, 0)
+	if scanErr != nil {
+		return scanErr
 	}
 
 	// All of the columns for a particular row will be grouped together. We loop
@@ -533,9 +533,6 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 		primaryKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
 
 		_, colID := encoding.DecodeUvarint(remaining)
-		if err != nil {
-			return err
-		}
 		col, err := desc.FindColumnByID(uint32(colID))
 		if err != nil {
 			return err

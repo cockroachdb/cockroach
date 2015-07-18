@@ -1004,20 +1004,18 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 		if err := iter.ValueProto(&buf.meta); err != nil {
 			return nil, err
 		}
-		value, newIntents, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
+		value, newIntents, getErr := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 		intents = append(intents, newIntents...)
 		if value != nil {
-			done, err := f(proto.KeyValue{Key: key, Value: *value})
-			if err != nil {
+			if done, err := f(proto.KeyValue{Key: key, Value: *value}); err != nil {
 				return nil, err
-			}
-			if done {
+			} else if done {
 				break
 			}
 		}
 
-		if err != nil {
-			switch tErr := err.(type) {
+		if getErr != nil {
+			switch tErr := getErr.(type) {
 			case *proto.WriteIntentError:
 				// In the case of WriteIntentErrors, accumulate affected keys but continue scan.
 				if wiErr == nil {
@@ -1026,7 +1024,7 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 					wiErr.(*proto.WriteIntentError).Intents = append(wiErr.(*proto.WriteIntentError).Intents, tErr.Intents...)
 				}
 			default:
-				return nil, err
+				return nil, getErr
 			}
 		}
 		encKey = mvccEncodeKey(keyBuf, key.Next())
@@ -1064,9 +1062,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 
 	metaKey := MVCCEncodeKey(key)
 	meta := &MVCCMetadata{}
-	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, meta)
-	if err != nil {
-		return err
+	ok, origMetaKeySize, origMetaValSize, getErr := engine.GetProto(metaKey, meta)
+	if getErr != nil {
+		return getErr
 	}
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
@@ -1092,9 +1090,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		} else {
 			newMeta.Txn = nil
 		}
-		metaKeySize, metaValSize, err := PutProto(engine, metaKey, &newMeta)
-		if err != nil {
-			return err
+		metaKeySize, metaValSize, putErr := PutProto(engine, metaKey, &newMeta)
+		if putErr != nil {
+			return putErr
 		}
 
 		// Update stat counters related to resolving the intent.
@@ -1143,13 +1141,13 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	nextKey := latestKey.Next()
 	// Compute the last possible mvcc value for this key.
 	endScanKey := MVCCEncodeKey(key.Next())
-	kvs, err := Scan(engine, nextKey, endScanKey, 1)
-	if err != nil {
-		return err
+	kvs, scanErr := Scan(engine, nextKey, endScanKey, 1)
+	if scanErr != nil {
+		return scanErr
 	}
 	// If there is no other version, we should just clean up the key entirely.
 	if len(kvs) == 0 {
-		if err = engine.Clear(metaKey); err != nil {
+		if err := engine.Clear(metaKey); err != nil {
 			return err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -1161,10 +1159,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		}
 		// Get the bytes for the next version so we have size for stat counts.
 		value := MVCCValue{}
-		var valueSize int64
-		ok, _, valueSize, err = engine.GetProto(kvs[0].Key, &value)
-		if err != nil || !ok {
-			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
+		getOK, _, valueSize, err := engine.GetProto(kvs[0].Key, &value)
+		if err != nil || !getOK {
+			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, getOK, err)
 		}
 		// Update the keyMetadata with the next version.
 		newMeta := &MVCCMetadata{

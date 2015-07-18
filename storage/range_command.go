@@ -431,9 +431,9 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args proto.InternalRang
 		// the other value (within a few tries).
 		if rand.Intn(2) == 0 {
 			key, txn := intents[0].Key, &intents[0].Txn
-			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
-			if err != nil {
-				return reply, nil, err
+			val, _, getErr := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
+			if getErr != nil {
+				return reply, nil, getErr
 			}
 			kvs = []proto.KeyValue{{Key: key, Value: *val}}
 		}

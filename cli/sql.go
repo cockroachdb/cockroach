@@ -127,13 +127,13 @@ func runTerm(cmd *cobra.Command, args []string) {
 
 	// We need to switch to raw mode. Unfortunately, this masks
 	// signals-from-keyboard, meaning that ctrl-C cannot be caught.
-	oldState, err := terminal.MakeRaw(0)
-	if err != nil {
+	if oldState, err := terminal.MakeRaw(0); err != nil {
 		panic(err)
+	} else {
+		defer func() {
+			_ = terminal.Restore(0, oldState)
+		}()
 	}
-	defer func() {
-		_ = terminal.Restore(0, oldState)
-	}()
 
 	term := terminal.NewTerminal(readWriter, "> ")
 	for {

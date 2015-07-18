@@ -94,9 +94,9 @@ func TestAll(t *testing.T) {
 }
 
 func listenAndServeArithAndEchoService(network, addr string) (net.Addr, error) {
-	clients, err := net.Listen(network, addr)
-	if err != nil {
-		return nil, err
+	clients, listenErr := net.Listen(network, addr)
+	if listenErr != nil {
+		return nil, listenErr
 	}
 	srv := rpc.NewServer()
 	if err := srv.RegisterName("ArithService", new(Arith)); err != nil {
@@ -157,14 +157,14 @@ func testArithClient(t *testing.T, client *rpc.Client) {
 	args.A = 1
 	args.B = 0
 	if err = client.Call("ArithService.Div", &args, &reply); err.Error() != "divide by zero" {
-		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "divide by zero", err.Error())
+		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "divide by zero", err)
 	}
 
 	// Error
 	args.A = 1
 	args.B = 2
 	if err = client.Call("ArithService.Error", &args, &reply); err.Error() != "ArithError" {
-		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "ArithError", err.Error())
+		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "ArithError", err)
 	}
 }
 
@@ -277,10 +277,9 @@ func randString(n int) string {
 
 func listenAndServeEchoService(network, addr string,
 	serveConn func(srv *rpc.Server, conn io.ReadWriteCloser)) (net.Listener, error) {
-	l, err := net.Listen(network, addr)
-	if err != nil {
-		fmt.Printf("failed to listen on %s: %s\n", addr, err)
-		return nil, err
+	l, listenErr := net.Listen(network, addr)
+	if listenErr != nil {
+		return nil, listenErr
 	}
 	srv := rpc.NewServer()
 	if err := srv.RegisterName("EchoService", new(Echo)); err != nil {
@@ -408,9 +407,9 @@ func BenchmarkEchoProtoRPC64K(b *testing.B) {
 }
 
 func benchmarkEchoProtoHTTP(b *testing.B, size int) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		b.Fatal(err)
+	l, listenErr := net.Listen("tcp", "127.0.0.1:0")
+	if listenErr != nil {
+		b.Fatal(listenErr)
 	}
 	defer l.Close()
 

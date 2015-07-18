@@ -98,9 +98,9 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
+	aDesc, bDesc, splitErr := createSplitRanges(store)
+	if splitErr != nil {
+		t.Fatal(splitErr)
 	}
 
 	// Write some values left and right of the proposed split key.
@@ -166,11 +166,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Put new values after the merge on both sides.
 	pArgs, pReply = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
-	if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 	pArgs, pReply = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
-	if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 
