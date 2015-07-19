@@ -27,7 +27,7 @@ import "bytes"
 
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
-	Tables []QualifiedName
+	Tables QualifiedNames
 }
 
 func (node *Truncate) String() string {
