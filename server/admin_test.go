@@ -88,12 +88,10 @@ func TestAdminDebugPprof(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(s.Ctx.RequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "pprof/block")
-	if err != nil {
+	if body, err := getText(s.Ctx.RequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "pprof/block"); err != nil {
 		t.Fatal(err)
-	}
-	if matches, err := regexp.MatchString(".*contention:\ncycles/second=.*", string(body)); !matches || err != nil {
-		t.Errorf("expected match: %t; err nil: %v", matches, err)
+	} else if re := regexp.MustCompile(".*contention:\ncycles/second=.*"); !re.Match(body) {
+		t.Errorf("expected %s to match %s", body, re)
 	}
 }
 
@@ -131,7 +129,6 @@ range_max_bytes: 67108864
 		t.Fatal(err)
 	}
 	for i, test := range testData {
-		re := regexp.MustCompile(test.expErr)
 		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", s.Ctx.RequestScheme(), s.ServingAddr(), zonePathPrefix, "foo"), strings.NewReader(test.zone))
 		if err != nil {
 			t.Fatal(err)
@@ -148,7 +145,7 @@ range_max_bytes: 67108864
 		}
 		if resp.StatusCode == http.StatusOK {
 			t.Errorf("%d: expected error", i)
-		} else if !re.MatchString(string(b)) {
+		} else if re := regexp.MustCompile(test.expErr); !re.MatchString(string(b)) {
 			t.Errorf("%d: expected error matching %q; got %s", i, test.expErr, b)
 		}
 	}

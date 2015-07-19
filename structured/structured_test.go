@@ -244,7 +244,7 @@ func TestValidateTableDesc(t *testing.T) {
 		if err := d.desc.Validate(); err == nil {
 			t.Errorf("%d: expected error, but found success: %+v", i, d.desc)
 		} else if d.err != err.Error() {
-			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, d.err, err.Error())
+			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, d.err, err)
 		}
 	}
 }

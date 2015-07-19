@@ -82,16 +82,15 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	values, err := g.GetGroupInfos("i")
-	if err != nil {
+	if values, err := g.GetGroupInfos("i"); err != nil {
 		t.Errorf("error fetching int64 group: %v", err)
-	}
-	if len(values) != 3 {
+	} else if len(values) != 3 {
 		t.Errorf("incorrect number of values in group: %v", values)
-	}
-	for i := 0; i < 3; i++ {
-		if values[i].(int64) != int64(i) {
-			t.Errorf("index %d has incorrect value: %d, expected %d", i, values[i].(int64), i)
+	} else {
+		for i := 0; i < 3; i++ {
+			if values[i].(int64) != int64(i) {
+				t.Errorf("index %d has incorrect value: %d, expected %d", i, values[i].(int64), i)
+			}
 		}
 	}
 	if _, err := g.GetGroupInfos("i2"); err == nil {
@@ -107,16 +106,15 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	values, err = g.GetGroupInfos("f")
-	if err != nil {
+	if values, err := g.GetGroupInfos("f"); err != nil {
 		t.Errorf("error fetching float64 group: %v", err)
-	}
-	if len(values) != 3 {
+	} else if len(values) != 3 {
 		t.Errorf("incorrect number of values in group: %v", values)
-	}
-	for i := 0; i < 3; i++ {
-		if values[i].(float64) != float64(i) {
-			t.Errorf("index %d has incorrect value: %f, expected %d", i, values[i].(float64), i)
+	} else {
+		for i := 0; i < 3; i++ {
+			if values[i].(float64) != float64(i) {
+				t.Errorf("index %d has incorrect value: %f, expected %d", i, values[i].(float64), i)
+			}
 		}
 	}
 
@@ -129,16 +127,15 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	values, err = g.GetGroupInfos("s")
-	if err != nil {
+	if values, err := g.GetGroupInfos("s"); err != nil {
 		t.Errorf("error fetching string group: %v", err)
-	}
-	if len(values) != 3 {
+	} else if len(values) != 3 {
 		t.Errorf("incorrect number of values in group: %v", values)
-	}
-	for i := 0; i < 3; i++ {
-		if values[i].(string) != fmt.Sprintf("%d", i) {
-			t.Errorf("index %d has incorrect value: %d, expected %s", i, values[i], fmt.Sprintf("%d", i))
+	} else {
+		for i := 0; i < 3; i++ {
+			if values[i].(string) != fmt.Sprintf("%d", i) {
+				t.Errorf("index %d has incorrect value: %d, expected %s", i, values[i], fmt.Sprintf("%d", i))
+			}
 		}
 	}
 }

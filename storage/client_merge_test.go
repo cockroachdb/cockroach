@@ -166,11 +166,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Put new values after the merge on both sides.
 	pArgs, pReply = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
-	if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 	pArgs, pReply = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
-	if err = store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: pArgs, Reply: pReply}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -101,20 +101,19 @@ func TestStoreRangeSplitBetweenConfigPrefix(t *testing.T) {
 	key := keys.MakeKey(keys.SystemPrefix, []byte("tsd"))
 
 	args, reply := adminSplitArgs(proto.KeyMin, key, 1, store.StoreID())
-	err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply})
-	if err != nil {
+	if err := store.ExecuteCmd(context.Background(), proto.Call{Args: args, Reply: reply}); err != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, err)
 	}
 
 	// Update configs to trigger gossip in both of the ranges.
 	acctConfig := &proto.AcctConfig{}
 	key = keys.MakeKey(keys.ConfigAccountingPrefix, proto.KeyMin)
-	if err = store.DB().Put(key, acctConfig); err != nil {
+	if err := store.DB().Put(key, acctConfig); err != nil {
 		t.Fatal(err)
 	}
 	zoneConfig := &proto.ZoneConfig{}
 	key = keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
-	if err = store.DB().Put(key, zoneConfig); err != nil {
+	if err := store.DB().Put(key, zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 }

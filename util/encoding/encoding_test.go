@@ -56,8 +56,7 @@ func TestChecksums(t *testing.T) {
 		return err == nil
 	}
 
-	_, err := unwrapChecksum([]byte("does not matter"), []byte("srt"))
-	if err == nil {
+	if _, err := unwrapChecksum([]byte("does not matter"), []byte("srt")); err == nil {
 		t.Fatalf("expected error unwrapping a too short string")
 	}
 

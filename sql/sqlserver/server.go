@@ -128,7 +128,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// on the reply.
-	if err = s.exec(sqlwire.Call{Args: args, Reply: reply}); err != nil {
+	if err := s.exec(sqlwire.Call{Args: args, Reply: reply}); err != nil {
 		errProto := proto.Error{}
 		errProto.SetResponseGoError(err)
 		reply.Error = &errProto
@@ -346,9 +346,9 @@ func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args
 
 // CreateTable creates a table if it doesn't already exist.
 func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) error {
-	var err error
-	p.Table, err = s.normalizeTableName(session.Database, p.Table)
-	if err != nil {
+	if table, err := s.normalizeTableName(session.Database, p.Table); err == nil {
+		p.Table = table
+	} else {
 		return err
 	}
 
@@ -379,11 +379,11 @@ func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sql
 		return fmt.Errorf("table \"%s\" already exists", p.Table)
 	}
 
-	ir, err := s.db.Inc(keys.DescIDGenerator, 1)
-	if err != nil {
+	if ir, err := s.db.Inc(keys.DescIDGenerator, 1); err == nil {
+		desc.ID = uint32(ir.ValueInt() - 1)
+	} else {
 		return err
 	}
-	desc.ID = uint32(ir.ValueInt() - 1)
 
 	// TODO(pmattis): Be cognizant of error messages when this is ported to the
 	// server. The error currently returned below is likely going to be difficult
@@ -533,9 +533,6 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 		primaryKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
 
 		_, colID := encoding.DecodeUvarint(remaining)
-		if err != nil {
-			return err
-		}
 		col, err := desc.FindColumnByID(uint32(colID))
 		if err != nil {
 			return err

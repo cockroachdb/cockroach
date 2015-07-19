@@ -95,9 +95,9 @@ func TestUnregisteredMethod(t *testing.T) {
 
 	// Sending an invalid method fails cleanly, but leaves the connection
 	// in a valid state.
-	_, err := sendRPC(opts, []net.Addr{s.Addr()}, nodeContext, "Foo.Bar",
-		&proto.PingRequest{}, &proto.PingResponse{})
-	if !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {
+	if _, err := sendRPC(
+		opts, []net.Addr{s.Addr()}, nodeContext, "Foo.Bar", &proto.PingRequest{}, &proto.PingResponse{},
+	); !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {
 		t.Fatalf("expected 'couldn't find method' but got %s", err)
 	}
 	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {

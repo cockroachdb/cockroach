@@ -43,15 +43,15 @@ func TestLoadTLSConfig(t *testing.T) {
 		t.Fatalf("Couldn't parse test cert: %v", err)
 	}
 
-	if err = verifyX509Cert(x509Cert, "localhost", config.RootCAs); err != nil {
+	if err := verifyX509Cert(x509Cert, "localhost", config.RootCAs); err != nil {
 		t.Errorf("Couldn't verify test cert against server CA: %v", err)
 	}
 
-	if err = verifyX509Cert(x509Cert, "localhost", config.ClientCAs); err != nil {
+	if err := verifyX509Cert(x509Cert, "localhost", config.ClientCAs); err != nil {
 		t.Errorf("Couldn't verify test cert against client CA: %v", err)
 	}
 
-	if err = verifyX509Cert(x509Cert, "google.com", config.RootCAs); err == nil {
+	if err := verifyX509Cert(x509Cert, "google.com", config.RootCAs); err == nil {
 		t.Errorf("Verified test cert for wrong hostname")
 	}
 }

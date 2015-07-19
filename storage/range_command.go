@@ -431,11 +431,11 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args proto.InternalRang
 		// the other value (within a few tries).
 		if rand.Intn(2) == 0 {
 			key, txn := intents[0].Key, &intents[0].Txn
-			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
-			if err != nil {
+			if val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn); err == nil {
+				kvs = []proto.KeyValue{{Key: key, Value: *val}}
+			} else {
 				return reply, nil, err
 			}
-			kvs = []proto.KeyValue{{Key: key, Value: *val}}
 		}
 	}
 
@@ -454,7 +454,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args proto.InternalRang
 	for i := range kvs {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError, once we
 		// introduce that.
-		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
+		if err := gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
 			return reply, nil, err
 		}
 	}
@@ -731,7 +731,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 	}
 	start := keys.RaftLogKey(r.Desc().RaftID, 0)
 	end := keys.RaftLogKey(r.Desc().RaftID, args.Index)
-	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
+	if err := batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
 		return false, batch.Clear(kv.Key)
 	}); err != nil {
 		return reply, err
@@ -977,7 +977,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	}
 
 	// Initialize the new range's response cache by copying the original's.
-	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
+	if err := r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
@@ -996,7 +996,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
-	if err = newRng.stats.SetMVCCStats(batch, ms); err != nil {
+	if err := newRng.stats.SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -1132,7 +1132,7 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for the range after merge: %s", err)
 	}
-	if err = r.stats.SetMVCCStats(batch, ms); err != nil {
+	if err := r.stats.SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 

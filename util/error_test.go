@@ -31,7 +31,7 @@ func TestErrorf(t *testing.T) {
 	file, line, _ := caller.Lookup(0)
 	expected := fmt.Sprintf("%sfoo: 1 3.140000", fmt.Sprintf(errorPrefixFormat, file, line-1))
 	if expected != err.Error() {
-		t.Errorf("expected %s, got %s", expected, err.Error())
+		t.Errorf("expected %s, got %s", expected, err)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestErrorfSkipFrames(t *testing.T) {
 	file, line, _ := caller.Lookup(0)
 	expected := fmt.Sprintf("%sfoo: 1 3.140000", fmt.Sprintf(errorPrefixFormat, file, line-1))
 	if expected != err.Error() {
-		t.Errorf("expected %s, got %s", expected, err.Error())
+		t.Errorf("expected %s, got %s", expected, err)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestError(t *testing.T) {
 	file, line, _ := caller.Lookup(0)
 	expected := fmt.Sprintf("%sfoo 1 3.14", fmt.Sprintf(errorPrefixFormat, file, line-1))
 	if expected != err.Error() {
-		t.Errorf("expected %s, got %s", expected, err.Error())
+		t.Errorf("expected %s, got %s", expected, err)
 	}
 }
 
@@ -70,6 +70,6 @@ func TestErrorSkipFrames(t *testing.T) {
 	file, line, _ := caller.Lookup(0)
 	expected := fmt.Sprintf("%sfoo 1 3.14", fmt.Sprintf(errorPrefixFormat, file, line-1))
 	if expected != err.Error() {
-		t.Errorf("expected %s, got %s", expected, err.Error())
+		t.Errorf("expected %s, got %s", expected, err)
 	}
 }

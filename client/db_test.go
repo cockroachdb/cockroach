@@ -87,7 +87,7 @@ func ExampleDB_CPut() {
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
-	if err = db.CPut("aa", "3", "1"); err == nil {
+	if err := db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
 	result, err = db.Get("aa")
@@ -96,7 +96,7 @@ func ExampleDB_CPut() {
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
-	if err = db.CPut("bb", "4", "1"); err == nil {
+	if err := db.CPut("bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
 	result, err = db.Get("bb")
@@ -104,7 +104,7 @@ func ExampleDB_CPut() {
 		panic(err)
 	}
 	fmt.Printf("bb=%s\n", result.ValueBytes())
-	if err = db.CPut("bb", "4", nil); err != nil {
+	if err := db.CPut("bb", "4", nil); err != nil {
 		panic(err)
 	}
 	result, err = db.Get("bb")

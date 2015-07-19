@@ -287,11 +287,11 @@ func (db *DB) CreateTable(desc *structured.TableDescriptor) error {
 		return fmt.Errorf("table \"%s\" already exists", desc.Name)
 	}
 
-	ir, err := db.Inc(keys.DescIDGenerator, 1)
-	if err != nil {
+	if ir, err := db.Inc(keys.DescIDGenerator, 1); err == nil {
+		desc.ID = uint32(ir.ValueInt() - 1)
+	} else {
 		return err
 	}
-	desc.ID = uint32(ir.ValueInt() - 1)
 
 	// TODO(pmattis): Be cognizant of error messages when this is ported to the
 	// server. The error currently returned below is likely going to be difficult

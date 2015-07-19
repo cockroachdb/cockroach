@@ -888,7 +888,7 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key proto.Key, value proto.Value) e
 	if err != nil {
 		return err
 	}
-	if err = engine.Merge(metaKey, data); err != nil {
+	if err := engine.Merge(metaKey, data); err != nil {
 		return err
 	}
 	updateStatsOnMerge(ms, key, int64(len(value.Bytes)))
@@ -908,8 +908,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max in
 
 	num := int64(0)
 	for _, kv := range kvs {
-		err = MVCCDelete(engine, ms, kv.Key, timestamp, txn)
-		if err != nil {
+		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
 			return num, err
 		}
 		num++
@@ -1063,8 +1062,8 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	}
 
 	metaKey := MVCCEncodeKey(key)
-	meta := &MVCCMetadata{}
-	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, meta)
+	var meta MVCCMetadata
+	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, &meta)
 	if err != nil {
 		return err
 	}
@@ -1085,7 +1084,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	pushed := txn.Status == proto.PENDING && meta.Txn.Timestamp.Less(txn.Timestamp)
 	if (commit || pushed) && meta.Txn.Epoch == txn.Epoch {
 		origTimestamp := meta.Timestamp
-		newMeta := *meta
+		newMeta := meta
 		newMeta.Timestamp = txn.Timestamp
 		if pushed { // keep intent if we're pushing timestamp
 			newMeta.Txn = txn
@@ -1111,10 +1110,10 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 			if err != nil {
 				return err
 			}
-			if err = engine.Clear(origKey); err != nil {
+			if err := engine.Clear(origKey); err != nil {
 				return err
 			}
-			if err = engine.Put(newKey, valBytes); err != nil {
+			if err := engine.Put(newKey, valBytes); err != nil {
 				return err
 			}
 		}
@@ -1149,38 +1148,37 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	}
 	// If there is no other version, we should just clean up the key entirely.
 	if len(kvs) == 0 {
-		if err = engine.Clear(metaKey); err != nil {
+		if err := engine.Clear(metaKey); err != nil {
 			return err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
-		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, origAgeSeconds, 0)
+		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, 0, 0, &meta, nil, origAgeSeconds, 0)
 	} else {
 		_, ts, isValue := MVCCDecodeKey(kvs[0].Key)
 		if !isValue {
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
 		// Get the bytes for the next version so we have size for stat counts.
-		value := MVCCValue{}
-		var valueSize int64
-		ok, _, valueSize, err = engine.GetProto(kvs[0].Key, &value)
+		var value MVCCValue
+		ok, _, valueSize, err := engine.GetProto(kvs[0].Key, &value)
 		if err != nil || !ok {
 			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
 		}
 		// Update the keyMetadata with the next version.
-		newMeta := &MVCCMetadata{
+		newMeta := MVCCMetadata{
 			Timestamp: ts,
 			Deleted:   value.Deleted,
 			KeyBytes:  mvccVersionTimestampSize,
 			ValBytes:  valueSize,
 		}
-		metaKeySize, metaValSize, err := PutProto(engine, metaKey, newMeta)
+		metaKeySize, metaValSize, err := PutProto(engine, metaKey, &newMeta)
 		if err != nil {
 			return err
 		}
 		restoredAgeSeconds := timestamp.WallTime/1E9 - ts.WallTime/1E9
 
 		// Update stat counters with older version.
-		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, origAgeSeconds, restoredAgeSeconds)
+		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &meta, &newMeta, origAgeSeconds, restoredAgeSeconds)
 	}
 
 	return nil
@@ -1214,8 +1212,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto
 		if isValue {
 			return 0, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
 		}
-		err = MVCCResolveWriteIntent(engine, ms, currentKey, timestamp, txn)
-		if err != nil {
+		if err := MVCCResolveWriteIntent(engine, ms, currentKey, timestamp, txn); err != nil {
 			log.Warningf("failed to resolve intent for key %q: %v", currentKey, err)
 		} else {
 			num++

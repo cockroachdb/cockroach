@@ -52,7 +52,7 @@ func getJSON(arg interface{}) []byte {
 
 	jsonBytes, err := json.Marshal(arg)
 	if err != nil {
-		return []byte(fmt.Sprintf("{\"error\": %q}", err.Error()))
+		return []byte(fmt.Sprintf("{\"error\": %s}", err))
 	}
 	return jsonBytes
 }

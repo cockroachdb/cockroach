@@ -185,8 +185,7 @@ func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
-	if err != nil {
+	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	stopper.Stop()
@@ -247,7 +246,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		NodeID:    1,
 		StoreID:   1,
 	}
-	if err = engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -540,13 +539,9 @@ func TestStatusSummaries(t *testing.T) {
 		},
 		SplitKey: splitKey,
 	}
-	var reply *proto.AdminSplitResponse
 	if replyI, err := ts.node.executeCmd(args); err != nil {
 		t.Fatal(err)
-	} else {
-		reply = replyI.(*proto.AdminSplitResponse)
-	}
-	if reply.Error != nil {
+	} else if reply := replyI.(*proto.AdminSplitResponse); reply.Error != nil {
 		t.Fatal(reply.Error)
 	}
 

@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -155,8 +156,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -177,8 +177,7 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -413,11 +412,9 @@ func TestMVCCGetUncertainty(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Read with transaction, should get a value back.
-	val, _, err := MVCCGet(engine, testKey1, makeTS(7, 0), true, txn)
-	if err != nil {
+	if val, _, err := MVCCGet(engine, testKey1, makeTS(7, 0), true, txn); err != nil {
 		t.Fatal(err)
-	}
-	if val == nil || !bytes.Equal(val.Bytes, value1.Bytes) {
+	} else if val == nil || !bytes.Equal(val.Bytes, value1.Bytes) {
 		t.Fatalf("wanted %q, got %v", value1.Bytes, val)
 	}
 
@@ -689,12 +686,10 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	defer engine.Close()
 
 	// Put two values to key 1, the latest with a txn.
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -721,8 +716,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 
 	// Write a single intent for key 2 and verify get returns empty.
-	err = MVCCPut(engine, nil, testKey2, makeTS(2, 0), value1, txn2)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), value1, txn2); err != nil {
 		t.Fatal(err)
 	}
 	val, intents, err := MVCCGet(engine, testKey2, makeTS(2, 0), false, nil)
@@ -770,15 +764,9 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	// Inconsistent get will fetch value1 for any timestamp.
 	for _, ts := range []proto.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
 		val.Reset()
-		found, err := MVCCGetProto(engine, testKey1, ts, false, nil, val)
-		if ts.Less(makeTS(2, 0)) {
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else if err != nil {
+		if found, err := MVCCGetProto(engine, testKey1, ts, false, nil, val); err != nil {
 			t.Fatal(err)
-		}
-		if !found {
+		} else if !found {
 			t.Errorf("expected to find result with inconsistent read")
 		}
 		if !bytes.Equal(val.Value, []byte("value1")) {
@@ -790,11 +778,9 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), proto.Value{Bytes: value1}, txn2); err != nil {
 		t.Fatal(err)
 	}
-	found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, val)
-	if err != nil {
+	if found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, val); err != nil {
 		t.Fatal(err)
-	}
-	if found {
+	} else if found {
 		t.Errorf("expected no result; got %+v", val)
 	}
 
@@ -808,14 +794,10 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	val.Reset()
-	found, err = MVCCGetProto(engine, testKey3, makeTS(1, 0), false, nil, val)
-	if err == nil {
-		t.Errorf("expected error reading malformed data")
-	} else if !strings.Contains(err.Error(), "unexpected EOF") {
-		t.Errorf("expected EOF error, got %s", err)
-	}
-	if !found {
+	if found, err := MVCCGetProto(engine, testKey3, makeTS(1, 0), false, nil, val); !found {
 		t.Errorf("expected to find result with malformed data")
+	} else if !testutils.IsError(err, "unexpected EOF") {
+		t.Errorf("expected EOF error, got %s", err)
 	}
 }
 
@@ -1508,7 +1490,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1Commit, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1548,7 +1530,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
-	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 

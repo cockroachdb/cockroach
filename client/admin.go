@@ -120,7 +120,7 @@ func (a *AdminClient) List() ([]string, error) {
 		Data []string `json:"d"`
 	}
 	var w wrapper
-	if err = json.Unmarshal(body, &w); err != nil {
+	if err := json.Unmarshal(body, &w); err != nil {
 		return nil, util.Errorf("unable to parse response %q: %s", body, err)
 	}
 

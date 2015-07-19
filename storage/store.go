@@ -456,7 +456,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	start := keys.RangeDescriptorKey(proto.KeyMin)
 	end := keys.RangeDescriptorKey(proto.KeyMax)
 
-	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
+	if mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
 		Transport:              s.ctx.Transport,
 		Storage:                s,
 		StateMachine:           s,
@@ -468,7 +468,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// unbuffered. Temporarily give it some breathing room until the underlying
 		// deadlock is fixed. See #1185, #1193.
 		EventBufferSize: 1000,
-	}, s.stopper); err != nil {
+	}, s.stopper); err == nil {
+		s.multiraft = mr
+	} else {
 		return err
 	}
 
@@ -513,7 +515,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
-	if err = s.multiraft.Start(); err != nil {
+	if err := s.multiraft.Start(); err != nil {
 		return err
 	}
 	s.processRaft()
@@ -777,17 +779,14 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *stop.Stopper) error {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident)
-		if err != nil {
+		if ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident); err != nil {
 			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
-		}
-		if ok {
+		} else if ok {
 			return util.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
 		}
 		return util.Errorf("store %s is not-empty and has invalid contents (first key: %q)", s.engine, kvs[0].Key)
 	}
-	err = engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
-	return err
+	return engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
 }
 
 // GetRange fetches a range by Raft ID. Returns an error if no range is found.
@@ -1051,7 +1050,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	}
 
 	// Remove and destroy the subsumed range.
-	if err = s.RemoveRange(subsumedRng); err != nil {
+	if err := s.RemoveRange(subsumedRng); err != nil {
 		return util.Errorf("cannot remove range %s", err)
 	}
 
@@ -1552,18 +1551,17 @@ func (s *Store) GroupStorage(groupID proto.RaftID) multiraft.WriteableGroupStora
 	r, ok := s.ranges[groupID]
 	if !ok {
 		var err error
-		r, err = NewRange(&proto.RangeDescriptor{
+		if r, err = NewRange(&proto.RangeDescriptor{
 			RaftID: groupID,
 			// TODO(bdarnell): other fields are unknown; need to populate them from
 			// snapshot.
-		}, s)
-		if err != nil {
+		}, s); err != nil {
 			panic(err) // TODO(bdarnell)
 		}
 		// Add the range to range map, but not rangesByKey since
 		// the range's start key is unknown. The range will be
 		// added to rangesByKey later when a snapshot is applied.
-		if err = s.addRangeToRangeMap(r); err != nil {
+		if err := s.addRangeToRangeMap(r); err != nil {
 			panic(err) // TODO(bdarnell)
 		}
 		s.uninitRanges[r.Desc().RaftID] = r
