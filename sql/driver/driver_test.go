@@ -340,4 +340,20 @@ CREATE TABLE t.kv (
 	if !reflect.DeepEqual(expectedResults, results) {
 		t.Fatalf("expected %s, but got %s", expectedResults, results)
 	}
+
+	// TODO(pmattis): We need much more testing of WHERE clauses. Need to think
+	// through the whole testing story in general.
+	rows, err = db.Query("SELECT * FROM t.kv WHERE k IN ('a', 'c')")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results = readAll(t, rows)
+	expectedResults = [][]string{
+		{"k", "v"},
+		{"a", "b"},
+		{"c", "d"},
+	}
+	if !reflect.DeepEqual(expectedResults, results) {
+		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	}
 }

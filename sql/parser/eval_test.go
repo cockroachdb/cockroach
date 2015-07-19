@@ -57,11 +57,11 @@ func TestEvalExpr(t *testing.T) {
 		{`'a' || 'b'`, `ab`, nil},
 		{`'a' || (1 + 2)`, `a3`, nil},
 		// Column lookup.
-		{`a`, `1`, mapEnv{"a": dint(1)}},
-		{`a`, `3.1`, mapEnv{"a": dfloat(3.1)}},
-		{`a`, `c`, mapEnv{"a": dstring("c")}},
-		{`a.b + 1`, `2`, mapEnv{"a.b": dint(1)}},
-		{`a OR b`, `true`, mapEnv{"a": dbool(false), "b": dbool(true)}},
+		{`a`, `1`, mapEnv{"a": DInt(1)}},
+		{`a`, `3.1`, mapEnv{"a": DFloat(3.1)}},
+		{`a`, `c`, mapEnv{"a": DString("c")}},
+		{`a.b + 1`, `2`, mapEnv{"a.b": DInt(1)}},
+		{`a OR b`, `true`, mapEnv{"a": DBool(false), "b": DBool(true)}},
 		// Boolean expressions.
 		{`false AND true`, `false`, nil},
 		{`false AND NULL`, `false`, nil},

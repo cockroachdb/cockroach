@@ -40,70 +40,80 @@ type Datum interface {
 	String() string
 }
 
-var _ Datum = dbool(false)
-var _ Datum = dint(0)
-var _ Datum = dfloat(0)
-var _ Datum = dstring("")
-var _ Datum = dtuple{}
-var _ Datum = dnull{}
+var _ Datum = DBool(false)
+var _ Datum = DInt(0)
+var _ Datum = DFloat(0)
+var _ Datum = DString("")
+var _ Datum = DTuple{}
+var _ Datum = DNull{}
 
-type dbool bool
+// DBool is the boolean Datum.
+type DBool bool
 
-func getBool(d Datum) (dbool, error) {
-	if v, ok := d.(dbool); ok {
+func getBool(d Datum) (DBool, error) {
+	if v, ok := d.(DBool); ok {
 		return v, nil
 	}
 	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
 }
 
-func (d dbool) Type() string {
+// Type implements the Datum interface.
+func (d DBool) Type() string {
 	return "bool"
 }
 
-func (d dbool) String() string {
+func (d DBool) String() string {
 	if d {
 		return "true"
 	}
 	return "false"
 }
 
-type dint int64
+// DInt is the int Datum.
+type DInt int64
 
-func (d dint) Type() string {
+// Type implements the Datum interface.
+func (d DInt) Type() string {
 	return "int"
 }
 
-func (d dint) String() string {
+func (d DInt) String() string {
 	return strconv.FormatInt(int64(d), 10)
 }
 
-type dfloat float64
+// DFloat is the float Datum.
+type DFloat float64
 
-func (d dfloat) Type() string {
+// Type implements the Datum interface.
+func (d DFloat) Type() string {
 	return "float"
 }
 
-func (d dfloat) String() string {
+func (d DFloat) String() string {
 	return strconv.FormatFloat(float64(d), 'g', -1, 64)
 }
 
-type dstring string
+// DString is the string Datum.
+type DString string
 
-func (d dstring) Type() string {
+// Type implements the Datum interface.
+func (d DString) Type() string {
 	return "string"
 }
 
-func (d dstring) String() string {
+func (d DString) String() string {
 	return string(d)
 }
 
-type dtuple []Datum
+// DTuple is the tuple Datum.
+type DTuple []Datum
 
-func (d dtuple) Type() string {
+// Type implements the Datum interface.
+func (d DTuple) Type() string {
 	return "tuple"
 }
 
-func (d dtuple) String() string {
+func (d DTuple) String() string {
 	var buf bytes.Buffer
 	_ = buf.WriteByte('(')
 	for i, v := range d {
@@ -116,24 +126,26 @@ func (d dtuple) String() string {
 	return buf.String()
 }
 
-type dnull struct{}
+// DNull is the NULL Datum.
+type DNull struct{}
 
-var null = dnull{}
+var null = DNull{}
 
-func (d dnull) Type() string {
+// Type implements the Datum interface.
+func (d DNull) Type() string {
 	return "NULL"
 }
 
-func (d dnull) String() string {
+func (d DNull) String() string {
 	return "NULL"
 }
 
 var (
-	boolType   = reflect.TypeOf(dbool(false))
-	intType    = reflect.TypeOf(dint(0))
-	floatType  = reflect.TypeOf(dfloat(0))
-	stringType = reflect.TypeOf(dstring(""))
-	tupleType  = reflect.TypeOf(dtuple{})
+	boolType   = reflect.TypeOf(DBool(false))
+	intType    = reflect.TypeOf(DInt(0))
+	floatType  = reflect.TypeOf(DFloat(0))
+	stringType = reflect.TypeOf(DString(""))
+	tupleType  = reflect.TypeOf(DTuple{})
 	nullType   = reflect.TypeOf(null)
 )
 
@@ -153,14 +165,14 @@ var unaryOps = map[unaryArgs]func(Datum) (Datum, error){
 	},
 
 	unaryArgs{UnaryMinus, intType}: func(d Datum) (Datum, error) {
-		return -d.(dint), nil
+		return -d.(DInt), nil
 	},
 	unaryArgs{UnaryMinus, floatType}: func(d Datum) (Datum, error) {
-		return -d.(dfloat), nil
+		return -d.(DFloat), nil
 	},
 
 	unaryArgs{UnaryComplement, intType}: func(d Datum) (Datum, error) {
-		return ^d.(dint), nil
+		return ^d.(DInt), nil
 	},
 }
 
@@ -174,15 +186,15 @@ type binArgs struct {
 // types.
 var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	binArgs{Bitand, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) & right.(dint), nil
+		return left.(DInt) & right.(DInt), nil
 	},
 
 	binArgs{Bitor, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) | right.(dint), nil
+		return left.(DInt) | right.(DInt), nil
 	},
 
 	binArgs{Bitxor, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) ^ right.(dint), nil
+		return left.(DInt) ^ right.(DInt), nil
 	},
 
 	// TODO(pmattis): Overflow/underflow checks?
@@ -191,90 +203,90 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	// below. Once we have cast operators we could remove them. See #1626.
 
 	binArgs{Plus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) + right.(dint), nil
+		return left.(DInt) + right.(DInt), nil
 	},
 	binArgs{Plus, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(left.(dint)) + right.(dfloat), nil
+		return DFloat(left.(DInt)) + right.(DFloat), nil
 	},
 	binArgs{Plus, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) + dfloat(right.(dint)), nil
+		return left.(DFloat) + DFloat(right.(DInt)), nil
 	},
 	binArgs{Plus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) + right.(dfloat), nil
+		return left.(DFloat) + right.(DFloat), nil
 	},
 
 	binArgs{Minus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) - right.(dint), nil
+		return left.(DInt) - right.(DInt), nil
 	},
 	binArgs{Minus, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(left.(dint)) - right.(dfloat), nil
+		return DFloat(left.(DInt)) - right.(DFloat), nil
 	},
 	binArgs{Minus, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) - dfloat(right.(dint)), nil
+		return left.(DFloat) - DFloat(right.(DInt)), nil
 	},
 	binArgs{Minus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) - right.(dfloat), nil
+		return left.(DFloat) - right.(DFloat), nil
 	},
 
 	binArgs{Mult, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) * right.(dint), nil
+		return left.(DInt) * right.(DInt), nil
 	},
 	binArgs{Mult, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(left.(dint)) * right.(dfloat), nil
+		return DFloat(left.(DInt)) * right.(DFloat), nil
 	},
 	binArgs{Mult, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) * dfloat(right.(dint)), nil
+		return left.(DFloat) * DFloat(right.(DInt)), nil
 	},
 	binArgs{Mult, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) * right.(dfloat), nil
+		return left.(DFloat) * right.(DFloat), nil
 	},
 
 	binArgs{Div, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(left.(dint)) / dfloat(right.(dint)), nil
+		return DFloat(left.(DInt)) / DFloat(right.(DInt)), nil
 	},
 	binArgs{Div, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(left.(dint)) / right.(dfloat), nil
+		return DFloat(left.(DInt)) / right.(DFloat), nil
 	},
 	binArgs{Div, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) / dfloat(right.(dint)), nil
+		return left.(DFloat) / DFloat(right.(DInt)), nil
 	},
 	binArgs{Div, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dfloat) / right.(dfloat), nil
+		return left.(DFloat) / right.(DFloat), nil
 	},
 
 	binArgs{Mod, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dint) % right.(dint), nil
+		return left.(DInt) % right.(DInt), nil
 	},
 	binArgs{Mod, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(math.Mod(float64(left.(dint)), float64(right.(dfloat)))), nil
+		return DFloat(math.Mod(float64(left.(DInt)), float64(right.(DFloat)))), nil
 	},
 	binArgs{Mod, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(math.Mod(float64(left.(dfloat)), float64(right.(dint)))), nil
+		return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DInt)))), nil
 	},
 	binArgs{Mod, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dfloat(math.Mod(float64(left.(dfloat)), float64(right.(dfloat)))), nil
+		return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DFloat)))), nil
 	},
 
 	binArgs{Concat, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dstring) + right.(dstring), nil
+		return left.(DString) + right.(DString), nil
 	},
 	binArgs{Concat, boolType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return dstring(left.String()) + right.(dstring), nil
+		return DString(left.String()) + right.(DString), nil
 	},
 	binArgs{Concat, stringType, boolType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dstring) + dstring(right.String()), nil
+		return left.(DString) + DString(right.String()), nil
 	},
 	binArgs{Concat, intType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return dstring(left.String()) + right.(dstring), nil
+		return DString(left.String()) + right.(DString), nil
 	},
 	binArgs{Concat, stringType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dstring) + dstring(right.String()), nil
+		return left.(DString) + DString(right.String()), nil
 	},
 	binArgs{Concat, floatType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return dstring(left.String()) + right.(dstring), nil
+		return DString(left.String()) + right.(DString), nil
 	},
 	binArgs{Concat, stringType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(dstring) + dstring(right.String()), nil
+		return left.(DString) + DString(right.String()), nil
 	},
 }
 
@@ -288,42 +300,42 @@ type cmpArgs struct {
 // argument types.
 var cmpOps = map[cmpArgs]func(Datum, Datum) (Datum, error){
 	cmpArgs{EQ, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dstring) == right.(dstring)), nil
+		return DBool(left.(DString) == right.(DString)), nil
 	},
 	cmpArgs{EQ, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dbool) == right.(dbool)), nil
+		return DBool(left.(DBool) == right.(DBool)), nil
 	},
 	cmpArgs{EQ, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dint) == right.(dint)), nil
+		return DBool(left.(DInt) == right.(DInt)), nil
 	},
 	cmpArgs{EQ, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dfloat) == right.(dfloat)), nil
+		return DBool(left.(DFloat) == right.(DFloat)), nil
 	},
 
 	cmpArgs{LT, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dstring) < right.(dstring)), nil
+		return DBool(left.(DString) < right.(DString)), nil
 	},
 	cmpArgs{LT, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(!left.(dbool) && right.(dbool)), nil
+		return DBool(!left.(DBool) && right.(DBool)), nil
 	},
 	cmpArgs{LT, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dint) < right.(dint)), nil
+		return DBool(left.(DInt) < right.(DInt)), nil
 	},
 	cmpArgs{LT, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dfloat) < right.(dfloat)), nil
+		return DBool(left.(DFloat) < right.(DFloat)), nil
 	},
 
 	cmpArgs{LE, stringType, stringType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dstring) <= right.(dstring)), nil
+		return DBool(left.(DString) <= right.(DString)), nil
 	},
 	cmpArgs{LE, boolType, boolType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(!left.(dbool) || right.(dbool)), nil
+		return DBool(!left.(DBool) || right.(DBool)), nil
 	},
 	cmpArgs{LE, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dint) <= right.(dint)), nil
+		return DBool(left.(DInt) <= right.(DInt)), nil
 	},
 	cmpArgs{LE, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return dbool(left.(dfloat) <= right.(dfloat)), nil
+		return DBool(left.(DFloat) <= right.(DFloat)), nil
 	},
 }
 
@@ -385,23 +397,23 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		// expression evaluation and the exists nodes replaced with the result.
 
 	case BytesVal:
-		return dstring(t), nil
+		return DString(t), nil
 
 	case StrVal:
-		return dstring(t), nil
+		return DString(t), nil
 
 	case IntVal:
-		return dint(t), nil
+		return DInt(t), nil
 
 	case NumVal:
 		v, err := strconv.ParseFloat(string(t), 64)
 		if err != nil {
 			return null, err
 		}
-		return dfloat(v), nil
+		return DFloat(v), nil
 
 	case BoolVal:
-		return dbool(t), nil
+		return DBool(t), nil
 
 	case ValArg:
 		// Placeholders should have been replaced before expression evaluation.
@@ -419,7 +431,7 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		if len(t) == 1 {
 			return EvalExpr(t[0], env)
 		}
-		tuple := make(dtuple, 0, len(t))
+		tuple := make(DTuple, 0, len(t))
 		for _, v := range t {
 			d, err := EvalExpr(v, env)
 			if err != nil {
@@ -474,7 +486,7 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	} else if !v {
 		return v, nil
 	}
-	return dbool(true), nil
+	return DBool(true), nil
 }
 
 func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
@@ -504,7 +516,7 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 	if left == null {
 		return null, nil
 	}
-	return dbool(false), nil
+	return DBool(false), nil
 }
 
 func evalNotExpr(expr *NotExpr, env Env) (Datum, error) {
@@ -540,7 +552,7 @@ func evalRangeCond(expr *RangeCond, env Env) (Datum, error) {
 		{LE, expr.To},
 	}
 
-	var v dbool
+	var v DBool
 	for _, l := range limits {
 		arg, err := EvalExpr(l.expr, env)
 		if err != nil {
@@ -572,7 +584,7 @@ func evalNullCheck(expr *NullCheck, env Env) (Datum, error) {
 	if expr.Not {
 		v = !v
 	}
-	return dbool(v), nil
+	return DBool(v), nil
 }
 
 func evalComparisonExpr(expr *ComparisonExpr, env Env) (Datum, error) {
@@ -617,7 +629,7 @@ func evalComparisonOp(op ComparisonOp, left, right Datum) (Datum, error) {
 	if f != nil {
 		d, err := f(left, right)
 		if err == nil && not {
-			return !d.(dbool), nil
+			return !d.(DBool), nil
 		}
 		return d, err
 	}
@@ -672,7 +684,7 @@ func evalFuncExpr(expr *FuncExpr, env Env) (Datum, error) {
 			expr.Name, b.nArgs, len(expr.Exprs))
 	}
 
-	args := make(dtuple, 0, len(expr.Exprs))
+	args := make(DTuple, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := EvalExpr(e, env)
 		if err != nil {
@@ -735,10 +747,10 @@ func evalCaseExpr(expr *CaseExpr, env Env) (Datum, error) {
 }
 
 func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
-	left := ldatum.(dtuple)
-	right := rdatum.(dtuple)
+	left := ldatum.(DTuple)
+	right := rdatum.(DTuple)
 	if len(left) != len(right) {
-		return dbool(false), nil
+		return DBool(false), nil
 	}
 	for i := range left {
 		d, err := evalComparisonOp(EQ, left[i], right[i])
@@ -751,15 +763,15 @@ func evalTupleEQ(ldatum, rdatum Datum) (Datum, error) {
 			return v, nil
 		}
 	}
-	return dbool(true), nil
+	return DBool(true), nil
 }
 
 func evalTupleIN(arg, values Datum) (Datum, error) {
 	if arg == null {
-		return dbool(false), nil
+		return DBool(false), nil
 	}
 
-	vtuple := values.(dtuple)
+	vtuple := values.(DTuple)
 
 	// TODO(pmattis): If we're evaluating the expression multiple times we should
 	// use a map when possible. This works as long as arg is not a tuple. Note
@@ -769,7 +781,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 	// evaluated multiple times before enabling. Also need to figure out a way to
 	// use the map approach for tuples. One idea is to encode the tuples into
 	// strings and then use a map of strings.
-	if _, ok := arg.(dtuple); !ok && false {
+	if _, ok := arg.(DTuple); !ok && false {
 		m := make(map[Datum]struct{}, len(vtuple))
 		for _, val := range vtuple {
 			if reflect.TypeOf(arg) != reflect.TypeOf(val) {
@@ -779,7 +791,7 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 			m[val] = struct{}{}
 		}
 		if _, exists := m[arg]; exists {
-			return dbool(true), nil
+			return DBool(true), nil
 		}
 	} else {
 		// TODO(pmattis): We should probably first check that all of the values are
@@ -797,5 +809,5 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 		}
 	}
 
-	return dbool(false), nil
+	return DBool(false), nil
 }

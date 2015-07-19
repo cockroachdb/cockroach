@@ -24,7 +24,7 @@ import (
 
 type builtin struct {
 	nArgs int
-	fn    func(args dtuple) (Datum, error)
+	fn    func(args DTuple) (Datum, error)
 }
 
 // The map from function name to function data. Keep the list of functions
@@ -62,15 +62,15 @@ type builtin struct {
 // functions.
 var builtins = map[string]builtin{
 	"length": stringBuiltin(func(s string) (Datum, error) {
-		return dint(len(s)), nil
+		return DInt(len(s)), nil
 	}),
 
 	"lower": stringBuiltin(func(s string) (Datum, error) {
-		return dstring(strings.ToLower(s)), nil
+		return DString(strings.ToLower(s)), nil
 	}),
 
 	"upper": stringBuiltin(func(s string) (Datum, error) {
-		return dstring(strings.ToUpper(s)), nil
+		return DString(strings.ToUpper(s)), nil
 	}),
 }
 
@@ -82,8 +82,8 @@ func argTypeError(arg Datum, expected string) error {
 func stringBuiltin(f func(string) (Datum, error)) builtin {
 	return builtin{
 		nArgs: 1,
-		fn: func(args dtuple) (Datum, error) {
-			s, ok := args[0].(dstring)
+		fn: func(args DTuple) (Datum, error) {
+			s, ok := args[0].(DString)
 			if !ok {
 				return null, argTypeError(args[0], "string")
 			}
