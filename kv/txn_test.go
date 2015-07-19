@@ -540,9 +540,11 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Check that we split 1 times in allotted time.
 		if err := util.IsTrueWithin(func() bool {
 			// Scan the meta records.
-			rows, err := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-			if err != nil {
-				t.Fatalf("failed to scan meta2 keys: %s", err)
+			var rows []client.KeyValue
+			if r, scanErr := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0); err == nil {
+				rows = r
+			} else {
+				t.Fatalf("failed to scan meta2 keys: %s", scanErr)
 			}
 			return len(rows) >= 2
 		}, 6*time.Second); err != nil {

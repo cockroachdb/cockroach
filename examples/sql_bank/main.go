@@ -52,8 +52,10 @@ func moveMoney(db *sql.DB) {
 		if _, err := tx.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
 			log.Fatal(err)
 		}
-		rows, err := tx.Query("SELECT id, balance FROM accounts WHERE id IN ($1, $2)", from, to)
-		if err != nil {
+		var rows *sql.Rows
+		if r, err := tx.Query("SELECT id, balance FROM accounts WHERE id IN ($1, $2)", from, to); err == nil {
+			rows = r
+		} else {
 			if log.V(1) {
 				log.Warning(err)
 			}

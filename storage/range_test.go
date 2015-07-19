@@ -2506,14 +2506,13 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		MaxRanges: 1,
 	}
 
-	var rlReply *proto.InternalRangeLookupResponse
+	var origDesc proto.RangeDescriptor
 	if reply, err := tc.rng.AddCmd(tc.rng.context(), rlArgs); err == nil {
-		rlReply = reply.(*proto.InternalRangeLookupResponse)
+		origDesc = reply.(*proto.InternalRangeLookupResponse).Ranges[0]
 	} else {
 		t.Fatal(err)
 	}
 
-	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
 	newDesc.EndKey = key
 

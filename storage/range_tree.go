@@ -224,15 +224,17 @@ func (tc *treeContext) walkUpRot23(node *proto.RangeTreeNode) (*proto.RangeTreeN
 		return nil, err
 	}
 	if isRed(right) && !isRed(left) {
-		node, err = tc.rotateLeft(node)
-		if err != nil {
+		if rotatedLeft, err := tc.rotateLeft(node); err == nil {
+			node = rotatedLeft
+		} else {
 			return nil, err
 		}
 	}
 
 	// Should we rotate right?
-	left, err = tc.getNode(node.LeftKey)
-	if err != nil {
+	if newLeft, err := tc.getNode(node.LeftKey); err == nil {
+		left = newLeft
+	} else {
 		return nil, err
 	}
 	if left != nil {
@@ -241,25 +243,29 @@ func (tc *treeContext) walkUpRot23(node *proto.RangeTreeNode) (*proto.RangeTreeN
 			return nil, err
 		}
 		if isRed(left) && isRed(leftLeft) {
-			node, err = tc.rotateRight(node)
-			if err != nil {
+			if rotatedRight, err := tc.rotateRight(node); err == nil {
+				node = rotatedRight
+			} else {
 				return nil, err
 			}
 		}
 	}
 
 	// Should we flip?
-	right, err = tc.getNode(node.RightKey)
-	if err != nil {
+	if newRight, err := tc.getNode(node.RightKey); err == nil {
+		right = newRight
+	} else {
 		return nil, err
 	}
-	left, err = tc.getNode(node.LeftKey)
-	if err != nil {
+	if newLeft, err := tc.getNode(node.LeftKey); err == nil {
+		left = newLeft
+	} else {
 		return nil, err
 	}
 	if isRed(left) && isRed(right) {
-		node, err = tc.flip(node)
-		if err != nil {
+		if flipped, err := tc.flip(node); err == nil {
+			node = flipped
+		} else {
 			return nil, err
 		}
 	}

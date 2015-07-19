@@ -798,7 +798,17 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
 		err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()})
-		if resolvable {
+		if !resolvable {
+			if rErr, ok := err.(*proto.TransactionPushError); !ok {
+				t.Errorf("expected txn push error; got %s", err)
+			} else if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
+				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
+			}
+			// Trying again should fail again.
+			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err == nil {
+				t.Errorf("expected another error on latent write intent but succeeded")
+			}
+		} else {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
 			}
@@ -809,16 +819,6 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			}
 			if txn.Status != proto.ABORTED {
 				t.Errorf("expected pushee to be aborted; got %s", txn.Status)
-			}
-		} else {
-			if rErr, ok := err.(*proto.TransactionPushError); !ok {
-				t.Errorf("expected txn push error; got %s", err)
-			} else if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
-				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
-			}
-			// Trying again should fail again.
-			if err := store.ExecuteCmd(context.Background(), proto.Call{Args: &pArgs, Reply: pArgs.CreateReply()}); err == nil {
-				t.Errorf("expected another error on latent write intent but succeeded")
 			}
 		}
 	}
