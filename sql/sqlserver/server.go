@@ -519,11 +519,15 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 
 	var rows []sqlwire.Result_Row
 	var primaryKey []byte
-	vals := map[string]sqlwire.Datum{}
+	vals := valMap{}
 	for _, kv := range sr {
 		if primaryKey != nil && !bytes.HasPrefix(kv.Key, primaryKey) {
-			rows = append(rows, outputRow(desc.Columns, vals))
-			vals = map[string]sqlwire.Datum{}
+			if output, err := shouldOutputRow(p.Where, vals); err != nil {
+				return err
+			} else if output {
+				rows = append(rows, outputRow(desc.Columns, vals))
+			}
+			vals = valMap{}
 		}
 
 		remaining, err := decodeIndexKey(desc, desc.Indexes[0], vals, kv.Key)
@@ -547,7 +551,11 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 		}
 	}
 
-	rows = append(rows, outputRow(desc.Columns, vals))
+	if output, err := shouldOutputRow(p.Where, vals); err != nil {
+		return err
+	} else if output {
+		rows = append(rows, outputRow(desc.Columns, vals))
+	}
 
 	resp.Results = []sqlwire.Result{
 		{
@@ -821,6 +829,21 @@ func outputRow(cols []structured.ColumnDescriptor, vals map[string]sqlwire.Datum
 	return row
 }
 
+func shouldOutputRow(where *parser.Where, vals valMap) (bool, error) {
+	if where == nil {
+		return true, nil
+	}
+	d, err := parser.EvalExpr(where.Expr, vals)
+	if err != nil {
+		return false, err
+	}
+	v, ok := d.(parser.DBool)
+	if !ok {
+		return false, fmt.Errorf("WHERE clause did not evaluate to a boolean")
+	}
+	return bool(v), nil
+}
+
 func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) sqlwire.Datum {
 	var d sqlwire.Datum
 	if !kv.Exists() {
@@ -841,4 +864,29 @@ func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) sqlwire
 		d.StringVal = &tmp
 	}
 	return d
+}
+
+type valMap map[string]sqlwire.Datum
+
+func (m valMap) Get(name string) (parser.Datum, bool) {
+	d, ok := m[name]
+	if !ok {
+		return nil, false
+	}
+	if d.BoolVal != nil {
+		return parser.DBool(*d.BoolVal), true
+	}
+	if d.IntVal != nil {
+		return parser.DInt(*d.IntVal), true
+	}
+	if d.FloatVal != nil {
+		return parser.DFloat(*d.FloatVal), true
+	}
+	if d.BytesVal != nil {
+		return parser.DString(d.BytesVal), true
+	}
+	if d.StringVal != nil {
+		return parser.DString(*d.StringVal), true
+	}
+	return parser.DNull{}, true
 }
