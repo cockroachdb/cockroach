@@ -60,9 +60,9 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	// Advance the leader's clock ahead of the followers (by more than
 	// MaxOffset but less than the leader lease) and execute a command.
 	manuals[0].Increment(int64(500 * time.Millisecond))
-	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+	incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 	incArgs.Timestamp = clocks[0].Now()
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
+	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,8 +110,8 @@ func TestRejectFutureCommand(t *testing.T) {
 
 	// First do a write. The first write will advance the clock by MaxOffset
 	// because of the read cache's low water mark.
-	getArgs, getResp := putArgs([]byte("b"), []byte("b"), 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: getArgs, Reply: getResp}); err != nil {
+	getArgs := putArgs([]byte("b"), []byte("b"), 1, mtc.stores[0].StoreID())
+	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &getArgs); err != nil {
 		t.Fatal(err)
 	}
 	if now := clock.Now(); now.WallTime != int64(maxOffset) {
@@ -126,9 +126,9 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Commands with a future timestamp that is within the MaxOffset
 	// bound will be accepted and will cause the clock to advance.
 	for i := int64(0); i < 3; i++ {
-		incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+		incArgs := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 		incArgs.Timestamp.WallTime = startTime + ((i+1)*30)*int64(time.Millisecond)
-		if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err != nil {
+		if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -137,9 +137,9 @@ func TestRejectFutureCommand(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	incArgs, incResp := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
+	incArgs := incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
 	incArgs.Timestamp.WallTime = int64((time.Duration(startTime) + maxOffset + 1) * time.Millisecond)
-	if err := mtc.stores[0].ExecuteCmd(context.Background(), proto.Call{Args: incArgs, Reply: incResp}); err == nil {
+	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
@@ -292,13 +292,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
-	getCall := proto.Call{
-		Args: &proto.GetRequest{
-			RequestHeader: requestHeader,
-		},
-		Reply: &proto.GetResponse{},
-	}
-	err = store.ExecuteCmd(context.Background(), getCall)
+	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
 	if err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
@@ -314,14 +308,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	requestHeader.Timestamp = clock.Now()
-	getCall = proto.Call{
-		Args: &proto.GetRequest{
-			RequestHeader: requestHeader,
-		},
-		Reply: &proto.GetResponse{},
-	}
-
-	err = store.ExecuteCmd(context.Background(), getCall)
+	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
 	if err == nil {
 		t.Fatal("unexpected success of get")
 	}
