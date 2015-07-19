@@ -119,7 +119,7 @@ func TestStatusJson(t *testing.T) {
 				t.Fatal(err)
 			}
 			if re := regexp.MustCompile(spec.expected); !re.Match(body) {
-				t.Errorf("expected match %s; got %s", spec.expected, body)
+				t.Errorf("expected %s to match %s", body, spec.expected)
 			}
 		}
 	}
@@ -192,7 +192,7 @@ func TestStatusGossipJson(t *testing.T) {
 			t.Fatal(err)
 		}
 		data := &infos{}
-		if err = json.Unmarshal(body, &data); err != nil {
+		if err := json.Unmarshal(body, &data); err != nil {
 			t.Fatal(err)
 		}
 		if data.Infos.Accounting == nil {
@@ -289,17 +289,17 @@ func startServer(t *testing.T, keyPrefix string) TestServer {
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	dir, err := ioutil.TempDir("", "local_log_test")
-	if err != nil {
+	if dir, err := ioutil.TempDir("", "local_log_test"); err != nil {
 		t.Fatal(err)
+	} else {
+		log.EnableLogFileOutput(dir)
+		defer func() {
+			log.DisableLogFileOutput()
+			if err := os.RemoveAll(dir); err != nil {
+				t.Fatal(err)
+			}
+		}()
 	}
-	log.EnableLogFileOutput(dir)
-	defer func() {
-		log.DisableLogFileOutput()
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
 
 	ts := startServer(t, statusLocalLogFileKeyPrefix)
 	defer ts.Stop()

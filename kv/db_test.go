@@ -200,7 +200,7 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		txn.SetSnapshotIsolation()
 
@@ -222,8 +222,7 @@ func TestKVDBTransaction(t *testing.T) {
 			t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		t.Errorf("expected success on commit; got %s", err)
 	}
 

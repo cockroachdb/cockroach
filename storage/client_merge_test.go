@@ -111,8 +111,10 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var gArgs proto.GetRequest
+
 	// Confirm the values are there.
-	gArgs := getArgs([]byte("aaa"), aDesc.RaftID, store.StoreID())
+	gArgs = getArgs([]byte("aaa"), aDesc.RaftID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
@@ -168,11 +170,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Put new values after the merge on both sides.
 	pArgs = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
-	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
-	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
+	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 

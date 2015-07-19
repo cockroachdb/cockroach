@@ -40,8 +40,7 @@ func delMeta(b *client.Batch, key proto.Key, desc *proto.RangeDescriptor) {
 // and meta2 range addressing records for the left and right ranges
 // caused by a split.
 func splitRangeAddressing(b *client.Batch, left, right *proto.RangeDescriptor) error {
-	var err error
-	if err = rangeAddressing(b, left, putMeta); err != nil {
+	if err := rangeAddressing(b, left, putMeta); err != nil {
 		return err
 	}
 	return rangeAddressing(b, right, putMeta)
@@ -52,8 +51,7 @@ func splitRangeAddressing(b *client.Batch, left, right *proto.RangeDescriptor) e
 // the new merged range. Left is the range descriptor for the "left"
 // range before merging and merged describes the left to right merge.
 func mergeRangeAddressing(b *client.Batch, left, merged *proto.RangeDescriptor) error {
-	var err error
-	if err = rangeAddressing(b, left, delMeta); err != nil {
+	if err := rangeAddressing(b, left, delMeta); err != nil {
 		return err
 	}
 	return rangeAddressing(b, merged, putMeta)

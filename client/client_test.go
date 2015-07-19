@@ -558,12 +558,10 @@ func TestClientPermissions(t *testing.T) {
 
 	value := []byte("value")
 	for tcNum, tc := range testCases {
-		err := tc.client.Put(tc.path, value)
-		if err == nil != tc.success {
+		if err := tc.client.Put(tc.path, value); err == nil != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, err)
 		}
-		_, err = tc.client.Get(tc.path)
-		if err == nil != tc.success {
+		if _, err := tc.client.Get(tc.path); err == nil != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, err)
 		}
 	}

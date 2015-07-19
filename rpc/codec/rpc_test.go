@@ -121,12 +121,11 @@ func listenAndServeArithAndEchoService(network, addr string) (net.Addr, error) {
 func testArithClient(t *testing.T, client *rpc.Client) {
 	var args message.ArithRequest
 	var reply message.ArithResponse
-	var err error
 
 	// Add
 	args.A = 1
 	args.B = 2
-	if err = client.Call("ArithService.Add", &args, &reply); err != nil {
+	if err := client.Call("ArithService.Add", &args, &reply); err != nil {
 		t.Fatalf(`arith.Add: %v`, err)
 	}
 	if reply.GetC() != 3 {
@@ -136,7 +135,7 @@ func testArithClient(t *testing.T, client *rpc.Client) {
 	// Mul
 	args.A = 2
 	args.B = 3
-	if err = client.Call("ArithService.Mul", &args, &reply); err != nil {
+	if err := client.Call("ArithService.Mul", &args, &reply); err != nil {
 		t.Fatalf(`arith.Mul: %v`, err)
 	}
 	if reply.GetC() != 6 {
@@ -146,7 +145,7 @@ func testArithClient(t *testing.T, client *rpc.Client) {
 	// Div
 	args.A = 13
 	args.B = 5
-	if err = client.Call("ArithService.Div", &args, &reply); err != nil {
+	if err := client.Call("ArithService.Div", &args, &reply); err != nil {
 		t.Fatalf(`arith.Div: %v`, err)
 	}
 	if reply.GetC() != 2 {
@@ -156,15 +155,15 @@ func testArithClient(t *testing.T, client *rpc.Client) {
 	// Div zero
 	args.A = 1
 	args.B = 0
-	if err = client.Call("ArithService.Div", &args, &reply); err.Error() != "divide by zero" {
-		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "divide by zero", err.Error())
+	if err := client.Call("ArithService.Div", &args, &reply); err.Error() != "divide by zero" {
+		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "divide by zero", err)
 	}
 
 	// Error
 	args.A = 1
 	args.B = 2
-	if err = client.Call("ArithService.Error", &args, &reply); err.Error() != "ArithError" {
-		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "ArithError", err.Error())
+	if err := client.Call("ArithService.Error", &args, &reply); err.Error() != "ArithError" {
+		t.Fatalf(`arith.Error: expected = "%s", got = "%s"`, "ArithError", err)
 	}
 }
 
@@ -246,11 +245,10 @@ func testArithClientAsync(t *testing.T, client *rpc.Client) {
 func testEchoClient(t *testing.T, client *rpc.Client) {
 	var args message.EchoRequest
 	var reply message.EchoResponse
-	var err error
 
 	// EchoService.Echo
 	args.Msg = "Hello, Protobuf-RPC"
-	if err = client.Call("EchoService.Echo", &args, &reply); err != nil {
+	if err := client.Call("EchoService.Echo", &args, &reply); err != nil {
 		t.Fatalf(`EchoService.Echo: %v`, err)
 	}
 	if reply.GetMsg() != args.GetMsg() {
@@ -279,7 +277,6 @@ func listenAndServeEchoService(network, addr string,
 	serveConn func(srv *rpc.Server, conn io.ReadWriteCloser)) (net.Listener, error) {
 	l, err := net.Listen(network, addr)
 	if err != nil {
-		fmt.Printf("failed to listen on %s: %s\n", addr, err)
 		return nil, err
 	}
 	srv := rpc.NewServer()

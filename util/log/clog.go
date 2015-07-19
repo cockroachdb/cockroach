@@ -934,11 +934,13 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 			return err
 		}
 	}
-	var err error
-	sb.file, _, err = create(sb.sev, now)
-	sb.nbytes = 0
-	if err != nil {
-		return err
+	{
+		file, _, err := create(sb.sev, now)
+		sb.nbytes = 0
+		if err != nil {
+			return err
+		}
+		sb.file = file
 	}
 
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
@@ -962,7 +964,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}
 		sb.nbytes += uint64(n)
 	}
-	return err
+	return nil
 }
 
 // bufferSize sizes the buffer associated with each log file. It's large

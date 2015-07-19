@@ -252,13 +252,12 @@ func TestServerNodeEventFeed(t *testing.T) {
 	}
 
 	// Add some data in a transaction
-	err = db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		b := &client.Batch{}
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")
 		return txn.Commit(b)
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("error putting data to db: %s", err)
 	}
 
@@ -268,7 +267,7 @@ func TestServerNodeEventFeed(t *testing.T) {
 	}
 
 	// Scan, which should fail.
-	if _, err = db.Scan("b", "a", 0); err == nil {
+	if _, err := db.Scan("b", "a", 0); err == nil {
 		t.Fatal("expected scan to fail.")
 	}
 

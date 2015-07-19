@@ -237,8 +237,7 @@ func (c *Container) Wait() error {
 		return err
 	}
 	var r struct{ StatusCode int }
-	err = json.Unmarshal(body, &r)
-	if err != nil {
+	if err := json.Unmarshal(body, &r); err != nil {
 		return err
 	}
 	if r.StatusCode != 0 {
