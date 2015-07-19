@@ -130,13 +130,12 @@ acceptance:
 .PHONY: check
 check:
 	! git grep -F '"path"' -- '*.go'
+	! go tool vet --shadow .  2>&1 | grep -vE '(\.pb\.go|cannot process directory \.git)'
 	! errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,database/sql:Close,github.com/spf13/cobra:Usage' $(PKG) | grep -vE 'yacc\.go:'
-	! go-nyet $(PKG) | grep -vE '(Weird type of StarExpr|Unknown types|`matchIndex`|`c`|Illegal range|cannot process directory \.git|yacc\.go:)' # TODO(tamird): https://github.com/barakmich/go-nyet/pull/10
 	# https://golang.org/pkg/database/sql/driver/#Result :(
 	! golint $(PKG) | grep -vE '(\.pb\.go|embedded\.go|yyEofCode|_string\.go|LastInsertId|sql\.y|yacc\.go)'
 	! gofmt -s -l . | grep -vF 'No Exceptions'
 	! goimports -l . | grep -vF 'No Exceptions'
-	! go tool vet --shadow --shadowstrict . 2>&1 | grep -vE '(\.pb\.go|yacc\.go|declaration of err shadows|cannot process directory \.git)'
 
 .PHONY: clean
 clean:
