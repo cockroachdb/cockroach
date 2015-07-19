@@ -88,12 +88,10 @@ func Example_accounting() {
 	fmt.Printf("Accounting prefixes: %q\n", keys)
 
 	// Remove keys: the default one cannot be removed.
-	err = client.Delete("")
-	if err == nil {
+	if err := client.Delete(""); err == nil {
 		log.Fatal("expected error")
 	}
-	err = client.Delete("db 2")
-	if err != nil {
+	if err := client.Delete("db 2"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -199,12 +197,10 @@ write: [readwrite, writeonly]
 	fmt.Printf("Permission prefixes: %q\n", keys)
 
 	// Remove keys: the default one cannot be removed.
-	err = client.Delete("")
-	if err == nil {
+	if err := client.Delete(""); err == nil {
 		log.Fatal("expected error")
 	}
-	err = client.Delete("db 2")
-	if err != nil {
+	if err := client.Delete("db 2"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -311,12 +307,10 @@ func Example_user() {
 	fmt.Printf("Users: %q\n", keys)
 
 	// Remove keys: the default one cannot be removed.
-	err = client.Delete("")
-	if err == nil {
+	if err := client.Delete(""); err == nil {
 		log.Fatal("expected error")
 	}
-	err = client.Delete("db 2")
-	if err != nil {
+	if err := client.Delete("db 2"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -434,12 +428,10 @@ range_max_bytes: 67108864
 	fmt.Printf("Zone prefixes: %q\n", keys)
 
 	// Remove keys: the default one cannot be removed.
-	err = client.Delete("")
-	if err == nil {
+	if err := client.Delete(""); err == nil {
 		log.Fatal("expected error")
 	}
-	err = client.Delete("db 2")
-	if err != nil {
+	if err := client.Delete("db 2"); err != nil {
 		log.Fatal(err)
 	}
 

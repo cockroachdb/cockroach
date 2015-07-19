@@ -130,7 +130,7 @@ func TestToInternal(t *testing.T) {
 		actual, err := tc.input.ToInternal(tc.keyDuration, tc.sampleDuration)
 		if err != nil {
 			if !tc.expectsError {
-				t.Errorf("unexpected error from case %d: %s", i, err.Error())
+				t.Errorf("unexpected error from case %d: %s", i, err)
 			}
 			continue
 		} else if tc.expectsError {

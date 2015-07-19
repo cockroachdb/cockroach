@@ -108,8 +108,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, ctx.Clock, false, nil, stopper)
-	var err error
-	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
+	if db, err := client.Open("//root@", client.SenderOpt(sender)); err == nil {
+		ctx.DB = db
+	} else {
 		return nil, err
 	}
 	ctx.Transport = multiraft.NewLocalRPCTransport()
@@ -218,7 +219,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
 	log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
-	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+	if err := n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 }

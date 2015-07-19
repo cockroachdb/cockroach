@@ -76,8 +76,8 @@ func TestStatusLocalStacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify match with at least two goroutine stacks.
-	if matches, err := regexp.Match("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", body); !matches || err != nil {
-		t.Errorf("expected match: %t; err nil: %s", matches, err)
+	if re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*"); !re.Match(body) {
+		t.Errorf("expected %s to match %s", body, re)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestStatusJson(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if matches, err := regexp.Match(spec.expected, body); !matches || err != nil {
-				t.Errorf("expected match %s; got %s; err nil: %s", spec.expected, body, err)
+			if re := regexp.MustCompile(spec.expected); !re.Match(body) {
+				t.Errorf("expected %s to match %s", body, spec.expected)
 			}
 		}
 	}
@@ -226,7 +226,7 @@ func TestStatusGossipJson(t *testing.T) {
 			t.Fatal(err)
 		}
 		data := &infos{}
-		if err = json.Unmarshal(body, &data); err != nil {
+		if err := json.Unmarshal(body, &data); err != nil {
 			t.Fatal(err)
 		}
 		if data.Infos.Accounting == nil {
@@ -325,17 +325,17 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	dir, err := ioutil.TempDir("", "local_log_test")
-	if err != nil {
+	if dir, err := ioutil.TempDir("", "local_log_test"); err != nil {
 		t.Fatal(err)
+	} else {
+		log.EnableLogFileOutput(dir)
+		defer func() {
+			log.DisableLogFileOutput()
+			if err := os.RemoveAll(dir); err != nil {
+				t.Fatal(err)
+			}
+		}()
 	}
-	log.EnableLogFileOutput(dir)
-	defer func() {
-		log.DisableLogFileOutput()
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
 	ts, body := startServerAndGetStatus(t, statusLocalLogFileKeyPrefix)
 	defer ts.Stop()
 

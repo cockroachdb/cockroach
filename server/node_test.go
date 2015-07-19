@@ -185,8 +185,7 @@ func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
-	if err != nil {
+	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	stopper.Stop()
@@ -247,7 +246,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		NodeID:    1,
 		StoreID:   1,
 	}
-	if err = engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -399,20 +398,22 @@ func TestStatusSummaries(t *testing.T) {
 	}
 	defer ts.Stop()
 
+	var store *storage.Store
 	// Retrieve the first store from the Node.
-	s, err := ts.node.lSender.GetStore(proto.StoreID(1))
-	if err != nil {
+	if s, err := ts.node.lSender.GetStore(proto.StoreID(1)); err == nil {
+		store = s
+	} else {
 		t.Fatal(err)
 	}
 
-	s.WaitForInit()
+	store.WaitForInit()
 	// Perform a read from the range to ensure that the raft election has
 	// completed.  We do not expect a response.
 	if _, err := ts.db.Get("a"); err != nil {
 		t.Fatal(err)
 	}
 
-	storeDesc, err := s.Descriptor()
+	storeDesc, err := store.Descriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +480,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	forceWriteStatus()
 	oldNodeStats := compareNodeStatus(t, ts, expectedNodeStatus, 0)
-	oldStoreStats := compareStoreStatus(t, ts, s, expectedStoreStatus, 0)
+	oldStoreStats := compareStoreStatus(t, ts, store, expectedStoreStatus, 0)
 
 	// Write some values left and right of the proposed split key.
 	content := proto.Key("test content")
@@ -527,26 +528,22 @@ func TestStatusSummaries(t *testing.T) {
 
 	forceWriteStatus()
 	oldNodeStats = compareNodeStatus(t, ts, expectedNodeStatus, 1)
-	oldStoreStats = compareStoreStatus(t, ts, s, expectedStoreStatus, 1)
+	oldStoreStats = compareStoreStatus(t, ts, store, expectedStoreStatus, 1)
 
 	// Split the range.
 	splitKey := proto.Key("b")
-	rng := s.LookupRange(splitKey, nil)
+	rng := store.LookupRange(splitKey, nil)
 	args := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     proto.KeyMin,
 			RaftID:  rng.Desc().RaftID,
-			Replica: proto.Replica{StoreID: s.Ident.StoreID},
+			Replica: proto.Replica{StoreID: store.Ident.StoreID},
 		},
 		SplitKey: splitKey,
 	}
-	var reply *proto.AdminSplitResponse
 	if replyI, err := ts.node.executeCmd(args); err != nil {
 		t.Fatal(err)
-	} else {
-		reply = replyI.(*proto.AdminSplitResponse)
-	}
-	if reply.Error != nil {
+	} else if reply := replyI.(*proto.AdminSplitResponse); reply.Error != nil {
 		t.Fatal(reply.Error)
 	}
 
@@ -586,7 +583,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 	forceWriteStatus()
 	oldNodeStats = compareNodeStatus(t, ts, expectedNodeStatus, 2)
-	oldStoreStats = compareStoreStatus(t, ts, s, expectedStoreStatus, 2)
+	oldStoreStats = compareStoreStatus(t, ts, store, expectedStoreStatus, 2)
 
 	// Write some values left and right of the proposed split key.
 	if err := ts.db.Put("aa", content); err != nil {
@@ -632,5 +629,5 @@ func TestStatusSummaries(t *testing.T) {
 	}
 	forceWriteStatus()
 	compareNodeStatus(t, ts, expectedNodeStatus, 3)
-	compareStoreStatus(t, ts, s, expectedStoreStatus, 3)
+	compareStoreStatus(t, ts, store, expectedStoreStatus, 3)
 }

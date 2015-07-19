@@ -49,15 +49,17 @@ func moveMoney(db *sql.DB) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if _, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
+		if _, err := tx.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
 			log.Fatal(err)
 		}
-		rows, err := tx.Query("SELECT id, balance FROM accounts WHERE id IN ($1, $2)", from, to)
-		if err != nil {
+		var rows *sql.Rows
+		if r, err := tx.Query("SELECT id, balance FROM accounts WHERE id IN ($1, $2)", from, to); err == nil {
+			rows = r
+		} else {
 			if log.V(1) {
 				log.Warning(err)
 			}
-			if err = tx.Rollback(); err != nil {
+			if err := tx.Rollback(); err != nil {
 				log.Fatal(err)
 			}
 			continue
@@ -65,7 +67,7 @@ func moveMoney(db *sql.DB) {
 		var fromBalance, toBalance int
 		for rows.Next() {
 			var id, balance int
-			if err = rows.Scan(&id, &balance); err != nil {
+			if err := rows.Scan(&id, &balance); err != nil {
 				log.Fatal(err)
 			}
 			switch id {
@@ -78,25 +80,25 @@ func moveMoney(db *sql.DB) {
 			}
 		}
 
-		if _, err = tx.Exec("UPDATE accounts SET balance=$2 WHERE id=$1", from, fromBalance-amount); err != nil {
+		if _, err := tx.Exec("UPDATE accounts SET balance=$2 WHERE id=$1", from, fromBalance-amount); err != nil {
 			if log.V(1) {
 				log.Warning(err)
 			}
-			if err = tx.Rollback(); err != nil {
+			if err := tx.Rollback(); err != nil {
 				log.Fatal(err)
 			}
 			continue
 		}
-		if _, err = tx.Exec("UPDATE accounts SET balance=$2 WHERE id=$1", to, toBalance+amount); err != nil {
+		if _, err := tx.Exec("UPDATE accounts SET balance=$2 WHERE id=$1", to, toBalance+amount); err != nil {
 			if log.V(1) {
 				log.Warning(err)
 			}
-			if err = tx.Rollback(); err != nil {
+			if err := tx.Rollback(); err != nil {
 				log.Fatal(err)
 			}
 			continue
 		}
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			if log.V(1) {
 				log.Warning(err)
 			}
@@ -124,12 +126,12 @@ func verifyBank(db *sql.DB) {
 		}
 		for rows.Next() {
 			var balance int64
-			if err = rows.Scan(&balance); err != nil {
+			if err := rows.Scan(&balance); err != nil {
 				log.Fatal(err)
 			}
 			sum += balance
 		}
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -160,16 +162,16 @@ func main() {
 
 	db.SetMaxOpenConns(concurrency)
 
-	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS accounts (id BIGINT UNIQUE NOT NULL, balance BIGINT NOT NULL)"); err != nil {
+	if _, err := db.Exec("CREATE TABLE IF NOT EXISTS accounts (id BIGINT UNIQUE NOT NULL, balance BIGINT NOT NULL)"); err != nil {
 		log.Fatal(err)
 	}
 
-	if _, err = db.Exec("TRUNCATE TABLE accounts"); err != nil {
+	if _, err := db.Exec("TRUNCATE TABLE accounts"); err != nil {
 		log.Fatal(err)
 	}
 
 	for i := 0; i < numAccounts; i++ {
-		if _, err = db.Exec("INSERT INTO accounts (id, balance) VALUES ($1, $2)", i, 0); err != nil {
+		if _, err := db.Exec("INSERT INTO accounts (id, balance) VALUES ($1, $2)", i, 0); err != nil {
 			log.Fatal(err)
 		}
 	}

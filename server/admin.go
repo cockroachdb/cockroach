@@ -191,7 +191,7 @@ func (s *adminServer) handlePutAction(handler actionHandler, w http.ResponseWrit
 		return
 	}
 	defer r.Body.Close()
-	if err = handler.Put(path, b, r); err != nil {
+	if err := handler.Put(path, b, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -219,7 +219,7 @@ func (s *adminServer) handleDeleteAction(handler actionHandler, w http.ResponseW
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err = handler.Delete(path, r); err != nil {
+	if err := handler.Delete(path, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

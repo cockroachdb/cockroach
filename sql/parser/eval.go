@@ -450,9 +450,9 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 }
 
 func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
-	left, err := EvalExpr(expr.Left, env)
-	if err != nil {
-		return null, err
+	left, leftErr := EvalExpr(expr.Left, env)
+	if leftErr != nil {
+		return null, leftErr
 	}
 	if left == null {
 		return null, nil
@@ -462,9 +462,9 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 	} else if !v {
 		return v, nil
 	}
-	right, err := EvalExpr(expr.Right, env)
-	if err != nil {
-		return null, err
+	right, rightErr := EvalExpr(expr.Right, env)
+	if rightErr != nil {
+		return null, rightErr
 	}
 	if right == null {
 		return null, nil
@@ -478,9 +478,9 @@ func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
 }
 
 func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
-	left, err := EvalExpr(expr.Left, env)
-	if err != nil {
-		return null, err
+	left, leftErr := EvalExpr(expr.Left, env)
+	if leftErr != nil {
+		return null, leftErr
 	}
 	if left != null {
 		if v, err := getBool(left); err != nil {
@@ -489,9 +489,9 @@ func evalOrExpr(expr *OrExpr, env Env) (Datum, error) {
 			return v, nil
 		}
 	}
-	right, err := EvalExpr(expr.Right, env)
-	if err != nil {
-		return null, err
+	right, rightErr := EvalExpr(expr.Right, env)
+	if rightErr != nil {
+		return null, rightErr
 	}
 	if right == null {
 		return null, nil

@@ -1,0 +1,1824 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"left",
+				"leftErr	error ν"
+			],
+			[
+				"Err",
+				"Error	 ƒ"
+			],
+			[
+				"error",
+				"ErrorDetail	struct ʈ"
+			],
+			[
+				"Sprint",
+				"Sprintf	string ƒ"
+			],
+			[
+				"reply",
+				"replyErr	error ν"
+			],
+			[
+				"Increme",
+				"IncrementResponse	struct ʈ"
+			],
+			[
+				"Endtra",
+				"EndTransactionResponse	struct ʈ"
+			],
+			[
+				"entra",
+				"EndTransactionResponse	struct ʈ"
+			],
+			[
+				"pushtxn",
+				"InternalPushTxnResponse	struct ʈ"
+			],
+			[
+				"endtran",
+				"EndTransactionResponse	struct ʈ"
+			],
+			[
+				"Internalrangelook",
+				"InternalRangeLookupResponse	struct ʈ"
+			],
+			[
+				"InternalRangeLook",
+				"InternalRangeLookupResponse	struct ʈ"
+			],
+			[
+				"InternalRange",
+				"InternalRangeLookupResponse	struct ʈ"
+			],
+			[
+				"GetRE",
+				"GetResponse	struct ʈ"
+			],
+			[
+				"ex",
+				"expErrRegexp	string ν"
+			],
+			[
+				"Erro",
+				"Errorf	 ƒ"
+			],
+			[
+				"Heartbea",
+				"InternalHeartbeatTxnResponse	struct ʈ"
+			],
+			[
+				"split",
+				"splitKey	proto.Key ν"
+			],
+			[
+				"request",
+				"Request	interface ¡"
+			],
+			[
+				"batch",
+				"batchReply	proto.Response ν"
+			],
+			[
+				"prin",
+				"Printf	n int, err error ƒ"
+			],
+			[
+				"er",
+				"Error	*proto.Error ν"
+			],
+			[
+				"respon",
+				"responseWithErr	struct ʈ"
+			],
+			[
+				"AdminMer",
+				"AdminMergeResponse	struct ʈ"
+			],
+			[
+				"adminspli",
+				"AdminSplitResponse	struct ʈ"
+			],
+			[
+				"end",
+				"EndTransactionResponse	struct ʈ"
+			],
+			[
+				"deleterange",
+				"DeleteRangeResponse	struct ʈ"
+			],
+			[
+				"increme",
+				"IncrementResponse	struct ʈ"
+			],
+			[
+				"conditio",
+				"ConditionalPutResponse	struct ʈ"
+			],
+			[
+				"intenrleaderle",
+				"InternalLeaderLeaseResponse	struct ʈ"
+			],
+			[
+				"interntrun",
+				"InternalTruncateLogResponse	struct ʈ"
+			],
+			[
+				"internapush",
+				"InternalPushTxnResponse	struct ʈ"
+			],
+			[
+				"internahea",
+				"InternalHeartbeatTxnResponse	struct ʈ"
+			],
+			[
+				"endtra",
+				"EndTransactionResponse	struct ʈ"
+			],
+			[
+				"cached",
+				"cachedReply	proto.Response ν"
+			],
+			[
+				"str",
+				"String	string ƒ"
+			],
+			[
+				"me",
+				"Message	interface ¡"
+			],
+			[
+				"End",
+				"EndTransactionResponse	struct ʈ"
+			],
+			[
+				"putReq",
+				"putReq2	*proto.PutRequest ν"
+			],
+			[
+				"va",
+				"SetValue	bool ƒ"
+			],
+			[
+				"InternaBatch",
+				"InternalBatchResponse	struct ʈ"
+			],
+			[
+				"proto",
+				"protoError	proto.Error ν"
+			],
+			[
+				"rejected",
+				"rejectedCommit	uint64 ν"
+			],
+			[
+				"re",
+				"rejectedCommit	uint64 ν"
+			],
+			[
+				"reje",
+				"rejectedIndex	uint64 ν"
+			],
+			[
+				"Sp",
+				"Sprintf	string ƒ"
+			],
+			[
+				"resp",
+				"respWithError	sqlwire.ResponseWithError ν"
+			],
+			[
+				"Request",
+				"Request	struct ʈ"
+			],
+			[
+				"E",
+				"Error	*proto.Error ν"
+			],
+			[
+				"Res",
+				"ResponseWithError	struct ʈ"
+			],
+			[
+				"response",
+				"ResponseWithError	struct ʈ"
+			],
+			[
+				"ra",
+				"GetRange	*storage.Range, error ƒ"
+			],
+			[
+				"stop",
+				"stopper	*stop.Stopper ν"
+			],
+			[
+				"Er",
+				"Error	error ƒ"
+			],
+			[
+				"Info",
+				"Infof	 ƒ"
+			],
+			[
+				"Inf",
+				"Infof	 ƒ"
+			],
+			[
+				"err",
+				"Error	error ƒ"
+			],
+			[
+				"ma",
+				"MakeUnresolvedAddr	util.UnresolvedAddr ƒ"
+			],
+			[
+				"un",
+				"UnresolvedAddr	struct ʈ"
+			],
+			[
+				"string",
+				"StringField	string ν"
+			],
+			[
+				"close",
+				"Closed	chan struct ν"
+			],
+			[
+				"hea",
+				"Healthy	<-chan struct ƒ"
+			],
+			[
+				"set",
+				"setUnhealthy	 ƒ"
+			],
+			[
+				"key",
+				"keyDelimeter	 Ɩ"
+			],
+			[
+				"account",
+				"Account	struct ʈ"
+			],
+			[
+				"db",
+				"dbName	*string ν"
+			],
+			[
+				"heart",
+				"Heartbeat	struct ʈ"
+			],
+			[
+				"pr",
+				"Println	n int, err error ƒ"
+			],
+			[
+				"Fata",
+				"Fatal	 ƒ"
+			],
+			[
+				"clo",
+				"Close	 ƒ"
+			],
+			[
+				"retry",
+				"retryOpts	retry.Options ν"
+			],
+			[
+				"s",
+				"IsStopped	<-chan struct ƒ"
+			],
+			[
+				"tls",
+				"tlsConfig	*tls.Config ν"
+			],
+			[
+				"get",
+				"GetClientTLSConfig	*tls.Config, error ƒ"
+			],
+			[
+				"war",
+				"Warning	 ƒ"
+			],
+			[
+				"Store",
+				"StoreID	int32 ʈ"
+			],
+			[
+				"count",
+				"countset	[]string ν"
+			],
+			[
+				"In",
+				"IntSlice	[]int ʈ"
+			],
+			[
+				"int",
+				"IntSlice	[]int ʈ"
+			],
+			[
+				"GO",
+				"GOMAXPROCS	int ƒ"
+			],
+			[
+				"wg",
+				"wgReady	sync.WaitGroup ν"
+			],
+			[
+				"fal",
+				"failureChan	chan error ν"
+			],
+			[
+				"fail",
+				"failureChan	chan error ν"
+			],
+			[
+				"mi",
+				"Microsecond	 Ɩ"
+			],
+			[
+				"expected",
+				"expectedUpdateCount	map[proto.StoreID][]int ν"
+			],
+			[
+				"F",
+				"Fprintf	n int, err error ƒ"
+			],
+			[
+				"Inter",
+				"InternalLeaderLease	 Ɩ"
+			],
+			[
+				"load",
+				"LoadUint32	val uint32 ƒ"
+			],
+			[
+				"uint32",
+				"StoreUint32	 ƒ"
+			],
+			[
+				"add",
+				"AddUint32	new uint32 ƒ"
+			],
+			[
+				"G",
+				"GetValue	interface{} ƒ"
+			],
+			[
+				"Respo",
+				"ResponseWithError	interface ¡"
+			],
+			[
+				"Prin",
+				"Println	n int, err error ƒ"
+			],
+			[
+				"Inc",
+				"increment	int64 ν"
+			],
+			[
+				"Response",
+				"ResponseWithHeader	struct ʈ"
+			],
+			[
+				"res",
+				"ResponseHeader	ResponseHeader ν"
+			],
+			[
+				"orig",
+				"origSeen	bool ν"
+			],
+			[
+				"stopper",
+				"NewStopper	*util.Stopper ƒ"
+			],
+			[
+				"ori",
+				"origSeen	bool ν"
+			],
+			[
+				"internalresol",
+				"InternalResolveIntentRange	 ƒ"
+			],
+			[
+				"args",
+				"argsBounded	bool ν"
+			],
+			[
+				"incre",
+				"incrementFunc	func(idx int, args proto.IncrementRequest, reply proto.IncrementResponse) int64 ν"
+			],
+			[
+				"c",
+				"context	context.Context ƒ"
+			],
+			[
+				"ENGINE",
+				"ENGINE_ROOT"
+			],
+			[
+				"CPU",
+				"CPUS"
+			],
+			[
+				"Reigster",
+				"RegisterName	error ƒ"
+			],
+			[
+				"server",
+				"Server	struct ʈ"
+			],
+			[
+				"ser",
+				"Server	*rpc.Server ν"
+			],
+			[
+				"NewServer",
+				"NewServerTestContext	*Context ƒ"
+			],
+			[
+				"NewSer",
+				"NewServerTestContext	*Context ƒ"
+			],
+			[
+				"ctx",
+				"context	*Context ν"
+			],
+			[
+				"g",
+				"GoError	error ƒ"
+			],
+			[
+				"cur",
+				"currentInterval	time.Duration ƒ"
+			],
+			[
+				"info",
+				"Infof	 ƒ"
+			],
+			[
+				"CP",
+				"CPP_PROTOS"
+			],
+			[
+				"ini",
+				"InitialInterval	time.Duration ν"
+			],
+			[
+				"status",
+				"StatusOK	 Ɩ"
+			],
+			[
+				"Status",
+				"StatusCode	int ν"
+			],
+			[
+				"con",
+				"Continue	 Ɩ"
+			],
+			[
+				"sprin",
+				"Sprintf	string ƒ"
+			],
+			[
+				"sp",
+				"Sprintf	string ƒ"
+			],
+			[
+				"flo",
+				"Float64	float64 ƒ"
+			],
+			[
+				"alt",
+				"AltProtoContentType	 Ɩ"
+			],
+			[
+				"json",
+				"AltJSONContentType	 Ɩ"
+			],
+			[
+				"conten",
+				"ContentTypeHeader	 Ɩ"
+			],
+			[
+				"currn",
+				"currentAttempt	int ν"
+			],
+			[
+				"max",
+				"MaxInterval	time.Duration ν"
+			],
+			[
+				"Engin",
+				"ENGINE_ROOT"
+			]
+		]
+	},
+	"buffers":
+	[
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 287.0,
+		"last_filter": "blame",
+		"selected_items":
+		[
+			[
+				"blame",
+				"Git: Blame"
+			],
+			[
+				"rust",
+				"Set Syntax: Rust"
+			],
+			[
+				"syngo",
+				"Set Syntax: Go"
+			],
+			[
+				"sort",
+				"Sort Lines"
+			],
+			[
+				"syntaxgo",
+				"Set Syntax: Go"
+			],
+			[
+				"makefile",
+				"Set Syntax: Makefile"
+			],
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"blae",
+				"Git: Blame"
+			],
+			[
+				"makfile",
+				"Set Syntax: Makefile"
+			],
+			[
+				"ruby",
+				"Set Syntax: Ruby"
+			],
+			[
+				"lam",
+				"Git: Blame"
+			],
+			[
+				"makefil",
+				"Set Syntax: Makefile"
+			],
+			[
+				"shell",
+				"Set Syntax: Shell Script (Bash)"
+			],
+			[
+				"make",
+				"Set Syntax: Makefile"
+			],
+			[
+				"blam",
+				"Git: Blame"
+			],
+			[
+				"docker",
+				"Set Syntax: Dockerfile"
+			],
+			[
+				"upp",
+				"Convert Case: Upper Case"
+			],
+			[
+				"uper",
+				"Convert Case: Upper Case"
+			],
+			[
+				"upper",
+				"Convert Case: Upper Case"
+			],
+			[
+				"bash",
+				"Set Syntax: Shell Script (Bash)"
+			],
+			[
+				"makei",
+				"Set Syntax: Makefile"
+			],
+			[
+				"makrdown",
+				"Markdown Preview: Preview in Browser"
+			],
+			[
+				"remove",
+				"Package Control: Remove Package"
+			],
+			[
+				"markdown",
+				"Set Syntax: Markdown GFM"
+			],
+			[
+				"python",
+				"Set Syntax: Python"
+			],
+			[
+				"balme",
+				"Set Syntax: Git Blame"
+			],
+			[
+				"c++",
+				"Set Syntax: C++"
+			],
+			[
+				"go",
+				"Git: Open Modified Files"
+			],
+			[
+				"balem",
+				"GoSublime: Changes & Announcements"
+			],
+			[
+				"insta",
+				"Package Control: Install Package"
+			],
+			[
+				"instal",
+				"Package Control: Install Package"
+			],
+			[
+				"defini",
+				"GoSublime: Goto Definition"
+			]
+		],
+		"width": 467.0
+	},
+	"console":
+	{
+		"height": 256.0,
+		"history":
+		[
+			"clear",
+			"import urllib.request,os,hashlib; h = 'eb2297e1a458f27d836c04bb0cbaf282' + 'd0e7a3098092775ccb37ca9d6b2e4b7d'; pf = 'Package Control.sublime-package'; ipp = sublime.installed_packages_path(); urllib.request.install_opener( urllib.request.build_opener( urllib.request.ProxyHandler()) ); by = urllib.request.urlopen( 'http://packagecontrol.io/' + pf.replace(' ', '%20')).read(); dh = hashlib.sha256(by).hexdigest(); print('Error validating download (got %s instead of %s), please try manual install' % (dh, h)) if dh != h else open(os.path.join( ipp, pf), 'wb' ).write(by)"
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util"
+	],
+	"file_history":
+	[
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/client_raft_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/mvcc.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/id_alloc_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/ts/db_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/client_merge_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/engine.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/client_range_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/store_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/ts/db.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/ts/server.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/dist_sender_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/local_sender_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/range_cache_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/codec/rpc_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/range_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/merge_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/log/structured.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/ts/query_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/range_raftstorage.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/mvcc_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/store.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/client_event_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/log/clog.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/log/file.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/encoding/encoding_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/testing_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/.git/COMMIT_EDITMSG",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/gc_queue.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/range_command.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/range_tree.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/server.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/sqlserver/server.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/encoding/encoding.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/parser/eval_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/Makefile",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/proto/internal_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/parser/eval.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/testserver.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/acceptance/localcluster/localcluster.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/gossip/gossip_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/gossip/group_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/status/feed_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/status_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/gossip/infostore.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/admin_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/server_test.go",
+		"/Users/tamird/src/go1.4.2/src/regexp/regexp.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/node.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/raft_transport.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/node_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/examples/kv_bank/main.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/server_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/codec/conn.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/table.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/txn_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/db.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/.git/rebase-merge/git-rebase-todo",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/cli/start.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/cli/sql.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/dist_sender.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/db_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/cli/log.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/util.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/local_sender.go",
+		"/Users/tamird/Desktop/golang_meetup_talk.md",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/GLOCKFILE",
+		"/Users/tamird/src/go/src/golang.org/x/crypto/ssh/terminal/terminal.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/client_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/sender.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/gc.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/txn_coord_sender.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/parser/ast.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/parser/show.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/proto/errors.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/range.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/response_cache.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/response_cache_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/keys/errors.go",
+		"/Users/tamird/src/rust/.git/COMMIT_EDITMSG",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/proto/api.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/.git/addp-hunk-edit.diff",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/proto/api.pb.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/proto/data.pb.go",
+		"/Users/tamird/src/rust/src/libstd/sys/unix/backtrace.rs",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/sqlwire/wire.proto",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/sql/sqlwire/wire.pb.go",
+		"/Users/tamird/src/go/src/github.com/gogo/protobuf/proto/clone.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/client_split_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/client_test.go",
+		"/Users/tamird/src/rust-build/configure",
+		"/Users/tamird/src/rust-build/config",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/rocksdb.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/id_alloc.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/gc_queue_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/split_queue.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/.git/MERGE_MSG",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/tracer/tracer.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/cli/cli.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/tabwriter.go",
+		"/Users/tamird/src/go1.4.2/src/text/tabwriter/tabwriter.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/cockroach.sublime-project",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/range_cache.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/txn_test.go",
+		"/Users/tamird/src/go/src/github.com/gogo/protobuf/proto/lib.go",
+		"/Users/tamird/Library/Application Support/Sublime Text 3/Packages/User/Preferences.sublime-settings",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/batch.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/range_gc_queue.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/rpc/rpc_sender.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/txn.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/http_sender_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/db_internal_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/http_sender.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/proto/call.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/engine/batch_test.go",
+		"/Users/tamird/Library/Application Support/Sublime Text 3/Packages/GoOracle/User.sublime-settings",
+		"/Users/tamird/Library/Application Support/Sublime Text 3/Packages/GoOracle/Default.sublime-settings",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/status.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/client/admin_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/client.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/dist_sender_server_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/kv/txn_coord_sender_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/send.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/send_test.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/gossip/client.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/gossip/server.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/util/stop/stopper.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/rpc/server.go",
+		"/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/storage/queue.go"
+	],
+	"find":
+	{
+		"height": 35.0
+	},
+	"find_in_files":
+	{
+		"height": 93.0,
+		"where_history":
+		[
+			"",
+			"storage/",
+			"storage.",
+			"",
+			"storage/",
+			"proto/",
+			"storage/",
+			"",
+			"storage/",
+			"",
+			"storage/",
+			"",
+			"storage/",
+			"",
+			"-*_test.go",
+			"-*_test.go, storage/",
+			"-*_test.go",
+			"storage/",
+			"",
+			"storage/, -*_test.go",
+			"storage/",
+			"",
+			"storage/",
+			"",
+			"-*_test.go, -proto/",
+			"-*_test.go",
+			"",
+			"client/",
+			"client.",
+			"",
+			"-*.pb.go",
+			"",
+			"sql/",
+			"",
+			"multiraft/",
+			"sql/",
+			"",
+			"log/",
+			"*.go",
+			"",
+			"multiraft/",
+			"",
+			"\\",
+			"multiraft/",
+			"",
+			"*.rs",
+			"",
+			"-*_test.go",
+			"",
+			"*.go",
+			"",
+			"-*_test.go",
+			"-_test.go",
+			"",
+			"log/",
+			"",
+			"engine/",
+			"",
+			"storage/",
+			"",
+			"rocksdb_native/",
+			"",
+			"*.cc",
+			"engine/",
+			"",
+			"proto/",
+			"proto",
+			"log/",
+			"",
+			"-*_test.go",
+			"",
+			"storage/*.go",
+			"storage/",
+			"",
+			"*_test.go",
+			"",
+			"storage/",
+			"-*_test.go",
+			"",
+			"-*.pb.*,-*_test.go,*.go",
+			"",
+			"-*.pb.*,-*_test.go,*.go",
+			"-*.pb.*,-*_test.go",
+			"-*.pb.*",
+			"-*.pb.go",
+			"",
+			"-*_test.go",
+			"",
+			"cli/",
+			"/cli",
+			"-*.pb.*",
+			"",
+			"storage/",
+			"",
+			"storage/*.go",
+			"server/*.go",
+			"server/*",
+			"",
+			"storage/engine/",
+			"*.go, -*.pb.go",
+			"",
+			"kv/",
+			"",
+			"gossip/",
+			"",
+			"-*_test.go, *.go",
+			"-*_test.go",
+			"",
+			"-status/",
+			"",
+			"-*.pb.go, -*.js, -*.ts, -*_test.go",
+			"-*.pb.go, -*.js, -*.ts",
+			"*.go",
+			"",
+			"*.proto",
+			"",
+			"status/",
+			"",
+			"status/",
+			"-status/",
+			"",
+			"status/",
+			"",
+			"status/",
+			"-*.pb.go, -*.js, -*.ts",
+			"-*.pb.go",
+			"",
+			"engine/"
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": true,
+		"find_history":
+		[
+			"err",
+			"newTs",
+			"existing",
+			"existingTs",
+			"newTs",
+			"err",
+			"		proto.Replica{",
+			"err",
+			"val",
+			"int64Val",
+			"err",
+			"\", err.Error()",
+			"err.Error()",
+			"err",
+			"value",
+			"err",
+			"return",
+			"Errorf",
+			"Error",
+			"err",
+			"pReply",
+			"reply",
+			"err",
+			"data",
+			"err",
+			"firstID",
+			"err",
+			"idAllocErr",
+			"err",
+			"kvs",
+			"err",
+			"lastIndex",
+			"ok",
+			"err",
+			"reply",
+			"err",
+			"leftLeft",
+			"err",
+			"v",
+			"lastIndex",
+			"err",
+			"ents",
+			"txn",
+			"err",
+			"val",
+			"err",
+			"policy",
+			"err",
+			"colID",
+			"err",
+			"primaryKey",
+			"err",
+			"gr",
+			"gr, err :=",
+			"gr, err := s.db.Get",
+			"break",
+			"done",
+			"intents",
+			"encKey",
+			"err",
+			"val",
+			"found",
+			"err",
+			"val",
+			"err",
+			"expr",
+			"q",
+			"err",
+			"v",
+			"cmp",
+			"arg",
+			"left",
+			"err",
+			"getBoolErr",
+			"err",
+			"	if v, err := getBool(left); err != nil {\n		return null, err\n	} else if !v {\n		return v, nil\n	}",
+			"err",
+			"arg",
+			", ",
+			"err",
+			"left, err := EvalExpr(expr.Left, env)",
+			"err",
+			"left",
+			"err",
+			"left",
+			"err",
+			"err.Error()",
+			"err",
+			"etReply",
+			" :=",
+			"reply",
+			"err",
+			"reply",
+			"valueOriginal",
+			"values, err = g.GetGroupInfos(\"s\")",
+			"values",
+			"container",
+			"l",
+			"Client",
+			"client",
+			"err",
+			"dir",
+			"err",
+			"re",
+			"re := regexp.MustCompile(",
+			"re",
+			"re := regexp.MustCompile(",
+			"re := regexp.MustCompile(spec.expected)",
+			"err",
+			"req",
+			"err",
+			"matches",
+			"str",
+			"err",
+			"engines",
+			"err",
+			"tlsConfig",
+			"err",
+			"replyI",
+			"err",
+			"req",
+			"pprofRegex",
+			"err",
+			"MustCompile",
+			"err",
+			"body",
+			"err",
+			"addr"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+			"\", err",
+			"aCall",
+			"	",
+			"RejectIndex:",
+			".RejectIndex",
+			"mtc.StartMultiTestContext",
+			"mtc.MultiTestContext",
+			"testing.MultiTestContext",
+			"storage.StartMultiTestContext",
+			"MultiTestContext",
+			"var wire",
+			".GoError()",
+			".ResponseHeader.",
+			"engine.StoreStatus",
+			"NodeStatus",
+			"engine.MVCCStats",
+			"MVCCStats",
+			"StoreStats",
+			"status.StoreStats",
+			"StoreStats",
+			"status.StoreStatus",
+			"status.NodeStatus",
+			"engine.MVCCStats",
+			"status.MVCCStats",
+			"engine.MVCCMetadata",
+			"engine.MVCCValue",
+			"MVCCMetadata",
+			"MVCCValue",
+			"!= http.StatusOK",
+			"util.AcceptHeader",
+			"MaxRetries:",
+			"	Multiplier:",
+			"	InitialBackoff:",
+			"util.GetMethod",
+			"util.PostMethod",
+			"util.GzipEncoding",
+			"util.PlaintextContentType",
+			"util.SnappyEncoding",
+			"util.YAMLContentType",
+			"util.ContentTypeHeader",
+			"util.JSONContentType",
+			"util.AcceptEncodingHeader",
+			"util.ProtoContentType",
+			"",
+			"ExponentialBackOff{\nClock:               backoff.SystemClock,",
+			"",
+			"backoff.ExponentialBackOff{",
+			"return",
+			"return err",
+			"r.Reset()\nreturn err",
+			"r.Stop()\n",
+			"r.Stop\nreturn err",
+			"func(r *retry.Retry) error {",
+			"return nil",
+			"",
+			"Abort",
+			"retry.Flunk",
+			"retry.Succeed",
+			"Error",
+			"Success, nil",
+			"import \"proto",
+			"[(gogoproto.casttype) = \"Key\"];",
+			"\n	",
+			"	",
+			"gogoroach",
+			"",
+			"gogofast",
+			"gofast",
+			"gogoslick_out",
+			"$(GOPATH_BIN)/protoc-gen-gogoslick",
+			"rb_str_new_cstr",
+			"gogoproto.casttype",
+			"(gogoproto.customtype) = \"EncodedKey\"];",
+			"(gogoproto.customtype) = \"Key\"];",
+			"gogoproto.casttype",
+			"\"github.com/gogo/protobuf/proto\"",
+			"  ",
+			"",
+			"createTestConfigFile(t, ",
+			"defer util.CleanupDir(testConfigFn)",
+			"testing.",
+			"testing.CreateTestAddr",
+			"server.StartTestServer(t)",
+			"clustertest.CreateTestDB",
+			"testutils.$1",
+			"testutils$1",
+			"*EmbeddedServer",
+			"EmbeddedServer{}",
+			".EmbeddedServer",
+			"local_test_cluster.LocalTestCluster",
+			"\n		",
+			"$1--$2",
+			"= cobra.Command{",
+			"// Flag: *flag.CommandLine,",
+			"Use:",
+			"cobra.",
+			"\"code.google.com/p/go-commander\""
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 23.0
+	},
+	"input":
+	{
+		"height": 31.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.9o:///Users/tamird/src/go/src/github.com/cockroachdb/cockroach/server/cli":
+	{
+		"height": 100.0
+	},
+	"output.GoSublime-output":
+	{
+		"height": 100.0
+	},
+	"output.GsDoc-output-output":
+	{
+		"height": 100.0
+	},
+	"output.MarGo-output":
+	{
+		"height": 100.0
+	},
+	"output.Oracle Output":
+	{
+		"height": 100.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "",
+	"project": "cockroach.sublime-project",
+	"replace":
+	{
+		"height": 42.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"store_test",
+				"storage/store_test.go"
+			],
+			[
+				"evaltest",
+				"sql/parser/eval_test.go"
+			],
+			[
+				"makefile",
+				"Makefile"
+			],
+			[
+				"make",
+				"Makefile"
+			],
+			[
+				"glockfile",
+				"GLOCKFILE"
+			],
+			[
+				"makef",
+				"Makefile"
+			],
+			[
+				"store.go",
+				"storage/store.go"
+			],
+			[
+				"store.ggo",
+				"storage/engine/gc.go"
+			],
+			[
+				"protoerrors.go",
+				"proto/errors.go"
+			],
+			[
+				"protoerro",
+				"proto/errors.go"
+			],
+			[
+				"errors",
+				"keys/errors.go"
+			],
+			[
+				"responsecache",
+				"storage/response_cache.go"
+			],
+			[
+				"rangetest",
+				"storage/range_test.go"
+			],
+			[
+				"responsecach",
+				"storage/response_cache.go"
+			],
+			[
+				"protoapi.pb.go",
+				"proto/api.pb.go"
+			],
+			[
+				"rangecommand",
+				"storage/range_command.go"
+			],
+			[
+				"wire.pro",
+				"sql/sqlwire/wire.proto"
+			],
+			[
+				"kvlocal",
+				"kv/local_sender.go"
+			],
+			[
+				"protoerror.go",
+				"proto/errors.go"
+			],
+			[
+				"kvlocalsender",
+				"kv/local_sender.go"
+			],
+			[
+				"store",
+				"storage/store.go"
+			],
+			[
+				"mvcc.go",
+				"storage/engine/mvcc.go"
+			],
+			[
+				"range.go",
+				"storage/range.go"
+			],
+			[
+				"rangecomm",
+				"storage/range_command.go"
+			],
+			[
+				"range.",
+				"storage/range.go"
+			],
+			[
+				"storage/client_raft_test.go",
+				"storage/client_raft_test.go"
+			],
+			[
+				"cli/sql.go",
+				"cli/sql.go"
+			],
+			[
+				"proto.pb",
+				"proto/api.pb.go"
+			],
+			[
+				"protoapi.pb",
+				"proto/api.pb.go"
+			],
+			[
+				"txn_test",
+				"kv/txn_test.go"
+			],
+			[
+				"txntest",
+				"kv/txn_test.go"
+			],
+			[
+				"txncoo",
+				"kv/txn_coord_sender.go"
+			],
+			[
+				"batch.go",
+				"client/batch.go"
+			],
+			[
+				"call.go",
+				"proto/call.go"
+			],
+			[
+				"batchtest",
+				"storage/engine/batch_test.go"
+			],
+			[
+				"admin_test",
+				"client/admin_test.go"
+			],
+			[
+				"rpcclien",
+				"rpc/client.go"
+			],
+			[
+				"gossip/client.go",
+				"gossip/client.go"
+			],
+			[
+				"rpc/",
+				"rpc/client.go"
+			],
+			[
+				"cliento",
+				"rpc/client.go"
+			],
+			[
+				"send.go",
+				"rpc/send.go"
+			],
+			[
+				"rpcclient",
+				"rpc/client.go"
+			],
+			[
+				"api.prot",
+				"proto/api.proto"
+			],
+			[
+				"protoapi",
+				"proto/api.go"
+			],
+			[
+				"client.go",
+				"rpc/client.go"
+			],
+			[
+				"proto",
+				"proto/errors.proto"
+			],
+			[
+				"protoerr",
+				"proto/errors.go"
+			],
+			[
+				"dissn",
+				"kv/dist_sender.go"
+			],
+			[
+				"sendtest",
+				"rpc/send_test.go"
+			],
+			[
+				"rpcsend",
+				"rpc/send.go"
+			],
+			[
+				"sqlserver",
+				"sql/sqlserver/server.go"
+			],
+			[
+				"sqlsender",
+				"sql/driver/sender.go"
+			],
+			[
+				"sender.go",
+				"client/sender.go"
+			],
+			[
+				"httpsender",
+				"sql/driver/http_sender.go"
+			],
+			[
+				"sender",
+				"sql/driver/sender.go"
+			],
+			[
+				"genproto",
+				"scripts/genproto.sh"
+			],
+			[
+				"raft.proto",
+				"raftpb/raft.proto"
+			],
+			[
+				"progress",
+				"progress.go"
+			],
+			[
+				"multiraft",
+				"multiraft/heartbeat_test.go"
+			],
+			[
+				"sqlserverser",
+				"sql/sqlserver/server.go"
+			],
+			[
+				"httppos",
+				"client/http_post.go"
+			],
+			[
+				"drivertest",
+				"sql/driver/driver_test.go"
+			],
+			[
+				"sqlwire",
+				"sql/sqlwire/wire.proto"
+			],
+			[
+				"wire.proto",
+				"sql/sqlwire/wire.proto"
+			],
+			[
+				"multiraft/",
+				"multiraft/events.go"
+			],
+			[
+				"storetest",
+				"storage/store_test.go"
+			],
+			[
+				"rangecomma",
+				"storage/range_command.go"
+			],
+			[
+				"commandqu",
+				"storage/command_queue.go"
+			],
+			[
+				"range",
+				"storage/range.go"
+			],
+			[
+				"bitflag",
+				"src/librustc_bitflags/lib.rs"
+			],
+			[
+				"try",
+				"src/rt/rust_try.ll"
+			],
+			[
+				".ll",
+				"src/rt/rust_try_msvc_64.ll"
+			],
+			[
+				"transmod.rs",
+				"src/librustc_trans/trans/mod.rs"
+			],
+			[
+				"rustll",
+				"src/rt/rust_try.ll"
+			],
+			[
+				"transcommon",
+				"src/librustc_trans/trans/common.rs"
+			],
+			[
+				"localluste",
+				"run/local-cluster.sh"
+			],
+			[
+				"rpcserver",
+				"rpc/server.go"
+			],
+			[
+				"localcluster",
+				"acceptance/localcluster/localcluster.go"
+			],
+			[
+				"rpcsend.go",
+				"rpc/send.go"
+			],
+			[
+				"rcpsend",
+				"client/rpc/rpc_sender.go"
+			],
+			[
+				"dis",
+				"kv/dist_sender.go"
+			],
+			[
+				"client",
+				"rpc/client.go"
+			],
+			[
+				"circle",
+				"circle.yml"
+			],
+			[
+				"dist",
+				"kv/dist_sender.go"
+			],
+			[
+				"server.go",
+				"rpc/server.go"
+			],
+			[
+				"servero",
+				"rpc/server.go"
+			],
+			[
+				"utiladdr",
+				"util/unresolved_addr.go"
+			],
+			[
+				"client.",
+				"rpc/client.go"
+			],
+			[
+				"local",
+				"run/local-cluster.sh"
+			],
+			[
+				"tracer",
+				"util/tracer/tracer.go"
+			],
+			[
+				"devdocker",
+				"build/devbase/Dockerfile"
+			],
+			[
+				"racer",
+				"util/tracer/tracer.go"
+			],
+			[
+				"circl",
+				"circle.yml"
+			],
+			[
+				"localclu",
+				"run/local-cluster.sh"
+			],
+			[
+				"send",
+				"rpc/send.go"
+			],
+			[
+				"dist_sender",
+				"kv/dist_sender.go"
+			],
+			[
+				"server/server",
+				"server/server.go"
+			],
+			[
+				"stopper.",
+				"util/stop/stopper.go"
+			],
+			[
+				"tracer.",
+				"util/tracer/tracer.go"
+			],
+			[
+				"stopper",
+				"util/stop/stopper.go"
+			],
+			[
+				"rpctest",
+				"rpc_test.go"
+			],
+			[
+				"",
+				"client.go"
+			],
+			[
+				"rpcserver.go",
+				"rpc/server.go"
+			],
+			[
+				"mvcc_test",
+				"storage/engine/mvcc_test.go"
+			],
+			[
+				"makefil",
+				"Makefile"
+			],
+			[
+				"hlc",
+				"util/hlc/hlc.go"
+			],
+			[
+				"rpccclient",
+				"rpc/codec/client.go"
+			],
+			[
+				"distsn",
+				"kv/dist_sender.go"
+			],
+			[
+				"gossipserver",
+				"gossip/server.go"
+			],
+			[
+				"gossip",
+				"gossip/gossip.go"
+			],
+			[
+				"contr",
+				"CONTRIBUTING.md"
+			],
+			[
+				"readme",
+				"README.md"
+			],
+			[
+				"sqlproto",
+				"sql/sqlwire/wire.proto"
+			],
+			[
+				"leaktest",
+				"util/leaktest/leaktest.go"
+			],
+			[
+				"keys.go",
+				"gossip/keys.go"
+			],
+			[
+				"raftrr",
+				"server/raft_transport.go"
+			],
+			[
+				"sqlbank",
+				"examples/sql_bank/main.go"
+			],
+			[
+				"bank.",
+				"examples/bank/bank.go"
+			],
+			[
+				"rocksdb",
+				"storage/engine/rocksdb.go"
+			],
+			[
+				"snappy.go",
+				"rpc/codec/snappy.go"
+			],
+			[
+				"protobu",
+				"build/protobuf.mk"
+			],
+			[
+				"ma",
+				"Makefile"
+			],
+			[
+				"engine",
+				"storage/engine/engine.go"
+			],
+			[
+				"util",
+				"util/error.go"
+			],
+			[
+				"rcpserver",
+				"rpc/server.go"
+			],
+			[
+				"lz4",
+				"rpc/codec/lz4.go"
+			],
+			[
+				"encoding.cc",
+				"storage/engine/rocksdb_native/encoding.cc"
+			],
+			[
+				"encoding",
+				"storage/engine/encoding.h"
+			]
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 252.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}

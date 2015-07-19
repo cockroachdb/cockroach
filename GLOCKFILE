@@ -1,4 +1,3 @@
-cmd github.com/barakmich/go-nyet
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/yacc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
@@ -10,7 +9,6 @@ cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
-github.com/barakmich/go-nyet fba7607fa3f727680833b0c44f35b448dbe5c5a8
 github.com/biogo/store e1f74b3c58befe661feed7fa4cf52436de753128
 github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 0f9ab7b988ca7474cf76b9a961ab03c0552abcb3

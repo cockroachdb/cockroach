@@ -79,7 +79,7 @@ func (tm *testModel) getActualData() map[string]*proto.Value {
 	endKey := keyDataPrefix.PrefixEnd()
 	keyValues, _, err := engine.MVCCScan(tm.Eng, startKey, endKey, 0, tm.Clock.Now(), true, nil)
 	if err != nil {
-		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())
+		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}
 
 	kvMap := make(map[string]*proto.Value)
@@ -152,28 +152,28 @@ func (tm *testModel) storeInModel(r Resolution, data proto.TimeSeriesData) {
 	// Process and store data in the model.
 	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
 	if err != nil {
-		tm.t.Fatalf("test could not convert time series to internal format: %s", err.Error())
+		tm.t.Fatalf("test could not convert time series to internal format: %s", err)
 	}
 
 	for _, idata := range internalData {
 		key := MakeDataKey(data.Name, data.Source, r, idata.StartTimestampNanos)
 		keyStr := string(key)
 
-		existing, ok := tm.modelData[keyStr]
 		var newTs *proto.InternalTimeSeriesData
-		if ok {
+		if existing, ok := tm.modelData[keyStr]; ok {
 			existingTs, err := proto.InternalTimeSeriesDataFromValue(existing)
 			if err != nil {
-				tm.t.Fatalf("test could not extract time series from existing model value: %s", err.Error())
+				tm.t.Fatalf("test could not extract time series from existing model value: %s", err)
 			}
 			newTs, err = engine.MergeInternalTimeSeriesData(existingTs, idata)
 			if err != nil {
-				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
+				tm.t.Fatalf("test could not merge time series into model value: %s", err)
 			}
 		} else {
+			var err error
 			newTs, err = engine.MergeInternalTimeSeriesData(idata)
 			if err != nil {
-				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
+				tm.t.Fatalf("test could not merge time series into model value: %s", err)
 			}
 		}
 		val, err := newTs.ToValue()
@@ -189,7 +189,7 @@ func (tm *testModel) storeInModel(r Resolution, data proto.TimeSeriesData) {
 func (tm *testModel) storeTimeSeriesData(r Resolution, data []proto.TimeSeriesData) {
 	// Store data in the system under test.
 	if err := tm.DB.StoreData(r, data); err != nil {
-		tm.t.Fatalf("error storing time series data: %s", err.Error())
+		tm.t.Fatalf("error storing time series data: %s", err)
 	}
 
 	// Store data in the model.

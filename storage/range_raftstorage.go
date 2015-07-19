@@ -110,16 +110,14 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 // Term implements the raft.Storage interface.
 func (r *Range) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
-	if err == raft.ErrUnavailable {
-		ts, err := r.raftTruncatedState()
-		if err != nil {
-			return 0, err
+	if err != nil {
+		if err == raft.ErrUnavailable {
+			if ts, truncateErr := r.raftTruncatedState(); truncateErr != nil {
+				return 0, truncateErr
+			} else if i == ts.Index {
+				return ts.Term, nil
+			}
 		}
-		if i == ts.Index {
-			return ts.Term, nil
-		}
-		return 0, raft.ErrUnavailable
-	} else if err != nil {
 		return 0, err
 	}
 	if len(ents) == 0 {

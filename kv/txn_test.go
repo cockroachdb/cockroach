@@ -22,7 +22,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -188,7 +187,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 					if _, ok := err.(*proto.ReadWithinUncertaintyIntervalError); ok {
 						return err
 					}
-					return util.Errorf("unexpected read error of type %s: %s", reflect.TypeOf(err), err)
+					return util.Errorf("unexpected read error of type %T: %s", err, err)
 				}
 				if !gr.Exists() {
 					return util.Errorf("no value read")
@@ -523,7 +522,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	err := s.DB.Txn(func(txn *client.Txn) error {
+	if err := s.DB.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation.
 		txn.SetSnapshotIsolation()
 
@@ -541,9 +540,11 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Check that we split 1 times in allotted time.
 		if err := util.IsTrueWithin(func() bool {
 			// Scan the meta records.
-			rows, err := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-			if err != nil {
-				t.Fatalf("failed to scan meta2 keys: %s", err)
+			var rows []client.KeyValue
+			if r, scanErr := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0); err == nil {
+				rows = r
+			} else {
+				t.Fatalf("failed to scan meta2 keys: %s", scanErr)
 			}
 			return len(rows) >= 2
 		}, 6*time.Second); err != nil {
@@ -563,8 +564,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			t.Fatalf("Repeat read same key in same txn but get different value gr1 nil gr2 %v", gr2.Value)
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 }

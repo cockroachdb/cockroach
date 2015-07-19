@@ -155,9 +155,9 @@ func (ts *TestServer) Start() error {
 		ts.Ctx = NewTestContext()
 	}
 
-	var err error
-	ts.Server, err = NewServer(ts.Ctx, stop.NewStopper())
-	if err != nil {
+	if s, err := NewServer(ts.Ctx, stop.NewStopper()); err == nil {
+		ts.Server = s
+	} else {
 		return err
 	}
 
@@ -173,18 +173,12 @@ func (ts *TestServer) Start() error {
 
 	if !ts.SkipBootstrap {
 		stopper := stop.NewStopper()
-		_, err := BootstrapCluster("cluster-1", ts.Ctx.Engines, stopper)
-		if err != nil {
+		if _, err := BootstrapCluster("cluster-1", ts.Ctx.Engines, stopper); err != nil {
 			return util.Errorf("could not bootstrap cluster: %s", err)
 		}
 		stopper.Stop()
 	}
-	err = ts.Server.Start(true)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ts.Server.Start(true)
 }
 
 // ServingAddr returns the rpc server's address. Should be used by clients.

@@ -216,8 +216,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Put an initial value.
 	initVal := []byte("initVal")
-	err := store.DB().Put(key, initVal)
-	if err != nil {
+	if err := store.DB().Put(key, initVal); err != nil {
 		t.Fatalf("failed to put: %s", err)
 	}
 
@@ -298,8 +297,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		},
 		Reply: &proto.GetResponse{},
 	}
-	err = store.ExecuteCmd(context.Background(), getCall)
-	if err != nil {
+	if err := store.ExecuteCmd(context.Background(), getCall); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -321,8 +319,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Reply: &proto.GetResponse{},
 	}
 
-	err = store.ExecuteCmd(context.Background(), getCall)
-	if err == nil {
+	if err := store.ExecuteCmd(context.Background(), getCall); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 
