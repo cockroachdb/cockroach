@@ -953,9 +953,9 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 			Line:   int32(line),
 			Format: format,
 		}
-		n, err := sb.file.Write(encodeLogEntry(&entry))
-		if err != nil {
-			panic(err)
+		n, writeErr := sb.file.Write(encodeLogEntry(&entry))
+		if writeErr != nil {
+			panic(writeErr)
 		}
 		sb.nbytes += uint64(n)
 	}

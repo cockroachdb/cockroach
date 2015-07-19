@@ -179,14 +179,14 @@ func Increment(engine Engine, key proto.EncodedKey, inc int64) (int64, error) {
 	var int64Val int64
 	// If the value exists, attempt to decode it as a varint.
 	if len(val) != 0 {
-		if decoded, err := encoding.Decode(key, val); err == nil {
+		if decoded, decodingErr := encoding.Decode(key, val); decodingErr == nil {
 			if in64decoded, ok := decoded.(int64); ok {
 				int64Val = in64decoded
 			} else {
 				return 0, util.Errorf("received value of wrong type %T", decoded)
 			}
 		} else {
-			return 0, err
+			return 0, decodingErr
 		}
 	}
 

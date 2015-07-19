@@ -1006,9 +1006,9 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 		value, newIntents, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 		intents = append(intents, newIntents...)
 		if value != nil {
-			done, err := f(proto.KeyValue{Key: key, Value: *value})
-			if err != nil {
-				return nil, err
+			done, cbErr := f(proto.KeyValue{Key: key, Value: *value})
+			if cbErr != nil {
+				return nil, cbErr
 			}
 			if done {
 				break
@@ -1091,9 +1091,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		} else {
 			newMeta.Txn = nil
 		}
-		metaKeySize, metaValSize, err := PutProto(engine, metaKey, &newMeta)
-		if err != nil {
-			return err
+		metaKeySize, metaValSize, putErr := PutProto(engine, metaKey, &newMeta)
+		if putErr != nil {
+			return putErr
 		}
 
 		// Update stat counters related to resolving the intent.
@@ -1106,9 +1106,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		if !origTimestamp.Equal(txn.Timestamp) {
 			origKey := MVCCEncodeVersionKey(key, origTimestamp)
 			newKey := MVCCEncodeVersionKey(key, txn.Timestamp)
-			valBytes, err := engine.Get(origKey)
-			if err != nil {
-				return err
+			valBytes, getErr := engine.Get(origKey)
+			if getErr != nil {
+				return getErr
 			}
 			if err := engine.Clear(origKey); err != nil {
 				return err

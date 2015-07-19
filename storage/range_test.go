@@ -661,9 +661,9 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Perm)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(db1Perm)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	req := proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
@@ -702,9 +702,9 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	data, err := gogoproto.Marshal(db1Perm)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(db1Perm)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	req := proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
@@ -2517,9 +2517,9 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	newDesc.EndKey = key
 
 	// Write the new descriptor as an intent.
-	data, err := gogoproto.Marshal(&newDesc)
-	if err != nil {
-		t.Fatal(err)
+	data, marshalErr := gogoproto.Marshal(&newDesc)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(key), data, 1, tc.store.StoreID())
 	pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, tc.clock)
@@ -2545,7 +2545,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 
 	// Switch to consistent lookups, which should run into the intent.
 	rlArgs.ReadConsistency = proto.CONSISTENT
-	_, err = tc.rng.AddCmd(tc.rng.context(), rlArgs)
+	_, err := tc.rng.AddCmd(tc.rng.context(), rlArgs)
 	if _, ok := err.(*proto.WriteIntentError); !ok {
 		t.Fatalf("expected WriteIntentError, not %s", err)
 	}

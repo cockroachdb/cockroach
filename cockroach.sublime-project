@@ -1,0 +1,14 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings":
+  {
+    "GoOracle": {
+      "oracle_scope": ["github.com/cockroachdb/cockroach"],
+      "env": { "GOPATH": "$HOME/src/go", "PATH": "$GOPATH/bin:/Users/tamird/src/go1.4.2/bin:$PATH" },
+    }
+  },
+}

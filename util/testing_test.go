@@ -33,8 +33,8 @@ func verifyAddr(addr net.Addr, t *testing.T) {
 
 	acceptChan := make(chan struct{})
 	go func() {
-		if _, err := ln.Accept(); err != nil {
-			t.Error(err)
+		if _, acceptErr := ln.Accept(); acceptErr != nil {
+			t.Error(acceptErr)
 		}
 		close(acceptChan)
 	}()

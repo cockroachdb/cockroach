@@ -112,8 +112,8 @@ func (r *Range) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
 	if err != nil {
 		if err == raft.ErrUnavailable {
-			if ts, err := r.raftTruncatedState(); err != nil {
-				return 0, err
+			if ts, truncateErr := r.raftTruncatedState(); truncateErr != nil {
+				return 0, truncateErr
 			} else if i == ts.Index {
 				return ts.Term, nil
 			}
