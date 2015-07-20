@@ -365,11 +365,25 @@ func (e mapEnv) Get(name string) (Datum, bool) {
 	return d, ok
 }
 
+// nilEnv is an empty environment. It's useful to avoid nil checks.
+type nilEnv struct{}
+
+func (*nilEnv) Get(_ string) (Datum, bool) {
+	return nil, false
+}
+
+var emptyEnv *nilEnv
+
 // EvalExpr evaluates an SQL expression in the context of an
 // environment. Expression evaluation is a mostly straightforward walk over the
 // parse tree. The only significant complexity is the handling of types and
 // implicit conversions. See binOps and cmpOps for more details.
 func EvalExpr(expr Expr, env Env) (Datum, error) {
+	if env == nil {
+		// This avoids having to worry about `env` being a nil interface
+		// anywhere else.
+		env = emptyEnv
+	}
 	switch t := expr.(type) {
 	case *AndExpr:
 		return evalAndExpr(t, env)
