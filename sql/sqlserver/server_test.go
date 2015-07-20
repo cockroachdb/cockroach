@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
 
-func TestProcessInsertRows(t *testing.T) {
+func TestProcessSelect(t *testing.T) {
 	s := (*Server)(nil) // enough for now
 
 	vInt := int64(5)
@@ -82,7 +82,7 @@ func TestProcessInsertRows(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		rows, err := s.processInsertRows(tc.stmt)
+		rows, err := s.processSelect(tc.stmt)
 		if err == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}

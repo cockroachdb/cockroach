@@ -434,7 +434,7 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	r, err := s.processInsertRows(p.Rows)
+	r, err := s.processSelect(p.Rows)
 	if err != nil {
 		return err
 	}
@@ -674,7 +674,7 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 	return cols, nil
 }
 
-func (s *Server) processInsertRows(node parser.SelectStatement) (rows []sqlwire.Result_Row, err error) {
+func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Result_Row, err error) {
 	switch nt := node.(type) {
 	// case *parser.Select:
 	// case *parser.Union:
