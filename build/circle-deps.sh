@@ -21,6 +21,10 @@ fi
 
 gopath0="${GOPATH%%:*}"
 cachedir="${gopath0}/pkg/cache"
+
+# The tag for the cockroachdb/builder image. If the image is changed
+# (for example, adding "npm"), a new image should be pushed using
+# "build/builder.sh push" and the new tag value placed here.
 tag="20150719-133944"
 
 mkdir -p "${cachedir}"
@@ -42,8 +46,8 @@ if ! docker images | grep -q "${tag}"; then
     fi
 fi
 
-HOME= go get -d -u github.com/cockroachdb/build-cache
-HOME= go get -u github.com/robfig/glock
+HOME="" go get -d -u github.com/cockroachdb/build-cache
+HOME="" go get -u github.com/robfig/glock
 grep -v '^cmd' GLOCKFILE | glock sync -n
 
 # Pretend we're already bootstrapped, so that `make` doesn't go

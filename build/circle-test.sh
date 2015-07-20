@@ -46,7 +46,9 @@ find "${outdir}" -name 'test*.log' -type f -exec \
 find "${outdir}" -name 'test*.log' -type f -exec \
      grep -B 5 -A 10 -E "^\-{0,3} *FAIL|${match}" {} ';' > "${outdir}/excerpt.txt"
 if [ -s "${outdir}/excerpt.txt" ]; then
-    echo "FAIL: excerpt.txt is not empty"
+    echo "FAIL: excerpt.txt is not empty (${outdir}/excerpt.txt)"
+    echo
+    head -100 "${outdir}/excerpt.txt"
 
     if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ]; then
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
