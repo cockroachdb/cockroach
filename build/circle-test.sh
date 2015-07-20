@@ -10,16 +10,19 @@ fi
 builder=$(dirname $0)/builder.sh
 
 # 1. Run "make check" to verify coding guidelines.
+echo "make check"
 time ${builder} make GITHOOKS= check | tee "${outdir}/check.log"; test ${PIPESTATUS[0]} -eq 0
 
 # 2. Verify that "go generate" was run.
+echo "verifying generated files"
 time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"; test ${PIPESTATUS[0]} -eq 0
 
 # 3. Run "make testrace".
 match='^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE'
+echo "make testrace"
 time ${builder} make GITHOOKS= testrace \
      RACETIMEOUT=5m TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
-    tee "${outdir}/testrace.log" | \
+    tr -d '\r' | tee "${outdir}/testrace.log" | \
     grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}"
 
 # 3a. Translate the log output to xml to integrate with CircleCI
