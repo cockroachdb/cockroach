@@ -2,8 +2,19 @@
 
 set -ex
 
-if [ "$1" = "docker" ]; then
+# This is mildly trick: This script runs itself recursively. The first
+# time it is run it does not take the if-branch below and executes on
+# the host computer. As a final step it uses the builder.sh script to
+# run itself inside of docker passing "docker" as the argument causing
+# the commands in the if-branch to be executed within the docker
+# container.
+if [ "${1:-}" = "docker" ]; then
     cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
+
+    # Pretend we're already bootstrapped, so that `make` doesn't go
+    # through the bootstrap process which would glock sync and run
+    # build/devbase/deps.sh (unnecessarily).
+    touch .bootstrap
 
     # Restore previously cached build artifacts.
     time go install github.com/cockroachdb/build-cache
@@ -11,7 +22,7 @@ if [ "$1" = "docker" ]; then
     # Build everything needed by circle-test.sh.
     time go test -race -v -i ./...
     time go install -v ${cmds}
-    time make install
+    time make GITHOOKS= install
     time (cd acceptance; go test -v -c -tags acceptance)
     # Cache the current build artifacts for future builds.
     time build-cache save . .:race,test ${cmds}
@@ -46,14 +57,15 @@ if ! docker images | grep -q "${tag}"; then
     fi
 fi
 
+# TODO(pmattis): This script differs from build/devbase/deps.sh. It
+# would be nice to re-unify the two. The problematic part is that this
+# script performs "git" work in the host environment and "go" work
+# inside the docker container. The "deps.sh" script doesn't know about
+# the separation between the two environments.
+
 HOME="" go get -d -u github.com/cockroachdb/build-cache
 HOME="" go get -u github.com/robfig/glock
 grep -v '^cmd' GLOCKFILE | glock sync -n
-
-# Pretend we're already bootstrapped, so that `make` doesn't go
-# through the bootstrap process which would glock sync and run
-# build/devbase/deps.sh (unnecessarily).
-touch .bootstrap
 
 # Recursively invoke this script inside the builder docker container,
 # passing "docker" as the first argument.

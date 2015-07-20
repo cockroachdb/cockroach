@@ -36,7 +36,7 @@ fi
 
 gopath0="${GOPATH%%:*}"
 
-if [ "${CIRCLE_ARTIFACTS:-}" != "" ]; then
+if [ "${CIRCLECI:-}" = "true" ]; then
     # HACK: Removal of docker containers fails on circleci with the
     # error: "Driver btrfs failed to remove root filesystem". So if
     # we're running on circleci, just leave the containers around.

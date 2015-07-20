@@ -146,7 +146,7 @@ func maybePanic(err error) {
 // Remove removes the container from docker. It is an error to remove a running
 // container.
 func (c *Container) Remove() error {
-	if os.Getenv("CIRCLE_ARTIFACTS") != "" {
+	if os.Getenv("CIRCLECI") == "true" {
 		// HACK: Removal of docker containers fails on circleci with the error:
 		// "Driver btrfs failed to remove root filesystem". So if we're running on
 		// circleci, just leave the containers around.

@@ -2,6 +2,10 @@
 
 set -e
 
+# Prevent installation of the GITHOOKS for the make invocations
+# below. This is needed to prevent undesirable bootstrapping.
+export GITHOOKS=
+
 outdir="${TMPDIR}"
 if [ "${CIRCLE_ARTIFACTS}" != "" ]; then
     outdir="${CIRCLE_ARTIFACTS}"
@@ -9,46 +13,79 @@ fi
 
 builder=$(dirname $0)/builder.sh
 
-# 1. Run "make check" to verify coding guidelines.
+# 1. Run "make check" to verify coding guidelines. 
 echo "make check"
-time ${builder} make GITHOOKS= check | tee "${outdir}/check.log"; test ${PIPESTATUS[0]} -eq 0
+time ${builder} make check | tee "${outdir}/check.log"
+# Early exit on failure.
+test ${PIPESTATUS[0]} -eq 0
 
 # 2. Verify that "go generate" was run.
 echo "verifying generated files"
-time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"; test ${PIPESTATUS[0]} -eq 0
+time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
+# Early exit on failure.
+test ${PIPESTATUS[0]} -eq 0
 
-# 3. Run "make testrace".
+# 3. Run "make test".
 match='^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE'
-echo "make testrace"
-time ${builder} make GITHOOKS= testrace \
-     RACETIMEOUT=5m TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
-    tr -d '\r' | tee "${outdir}/testrace.log" | \
-    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}"
+echo "make test"
+time ${builder} make test \
+     TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
+     tr -d '\r' | tee "${outdir}/test.log" | \
+     grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+     awk '{print "test:", $0}'
+test_status=${PIPESTATUS[0]}
+testrace_status=0
 
-# 3a. Translate the log output to xml to integrate with CircleCI
+# 4. Run "make testrace" only if "make test" succeeded.
+if [ ${test_status} -eq 0 ]; then
+    echo "make testrace"
+    time ${builder} make testrace \
+	 TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
+	 tr -d '\r' | tee "${outdir}/testrace.log" | \
+	 grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+	 awk '{print "race:", $0}'
+    testrace_status=${PIPESTATUS[0]}
+else
+    testrace_status=0
+fi
+
+# 5a. Translate the log output to xml to integrate with CircleCI
 # better.
 if [ "${CIRCLE_TEST_REPORTS}" != "" ]; then
+    if [ -f "${outdir}/test.log" ]; then
+	mkdir -p "${CIRCLE_TEST_REPORTS}/go"
+	${builder} go2xunit < "${outdir}/test.log" \
+	       > "${CIRCLE_TEST_REPORTS}/go/test.xml"
+    fi
     if [ -f "${outdir}/testrace.log" ]; then
-        mkdir -p "${CIRCLE_TEST_REPORTS}/race"
+	mkdir -p "${CIRCLE_TEST_REPORTS}/race"
 	${builder} go2xunit < "${outdir}/testrace.log" \
 	       > "${CIRCLE_TEST_REPORTS}/race/testrace.xml"
     fi
 fi
 
-# 3b. Generate the slow test output.
+# 5b. Generate the slow test output.
 find "${outdir}" -name 'test*.log' -type f -exec \
      grep -F ': Test' {} ';' | \
      sed -E 's/(--- PASS: |\(|\))//g' | \
      awk '{ print $2, $1 }' | sort -rn | head -n 10 \
      > "${outdir}/slow.txt"
 
-# 3c. Generate the excerpt output and fail if it is non-empty.
+# 5c. Generate the excerpt output and fail if it is non-empty.
 find "${outdir}" -name 'test*.log' -type f -exec \
      grep -B 5 -A 10 -E "^\-{0,3} *FAIL|${match}" {} ';' > "${outdir}/excerpt.txt"
-if [ -s "${outdir}/excerpt.txt" ]; then
-    echo "FAIL: excerpt.txt is not empty (${outdir}/excerpt.txt)"
-    echo
-    head -100 "${outdir}/excerpt.txt"
+if [ -s "${outdir}/excerpt.txt" -o ${test_status} -ne 0 -o ${testrace_status} -ne 0 ]; then
+    if [ ${test_status} -ne 0 ]; then
+	echo "FAIL: 'make test' exited with ${test_status}"
+    fi
+    if [ ${testrace_status} -ne 0 ]; then
+	echo "FAIL: 'make testrace' exited with ${testrace_status}"
+    fi
+    if [ -s "${outdir}/excerpt.txt" ]; then
+	echo "FAIL: excerpt.txt is not empty (${outdir}/excerpt.txt)"
+	echo
+	head -100 "${outdir}/excerpt.txt"
+    fi
 
     if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ]; then
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
@@ -60,7 +97,7 @@ if [ -s "${outdir}/excerpt.txt" ]; then
     exit 1
 fi
 
-# 4. Run the acceptance tests (only on Linux). We can run the
+# 6. Run the acceptance tests (only on Linux). We can run the
 # acceptance tests on the Mac's, but circle-deps.sh only built the
 # acceptance tests for Linux.
 if [ "$(uname)" = "Linux" ]; then
