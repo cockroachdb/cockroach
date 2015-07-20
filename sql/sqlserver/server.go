@@ -680,21 +680,32 @@ func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Resu
 	// case *parser.Union:
 	// TODO(vivek): return s.query(nt.stmt, nil)
 	case parser.Values:
-		for _, row := range nt {
+		for _, tuple := range nt {
+			data, err := parser.EvalExpr(tuple, nil)
+			if err != nil {
+				return rows, err
+			}
+			dTuple, ok := data.(parser.DTuple)
+			if !ok {
+				// A one-element DTuple is currently turned into whatever its
+				// underlying element is, so we have to massage here.
+				// TODO(tschottdorf): Is that desired behaviour on behalf of
+				// EvalExpr?
+				dTuple = parser.DTuple([]parser.Datum{data})
+			}
 			var vals []sqlwire.Datum
-			for _, val := range row {
+			for _, val := range dTuple {
 				switch vt := val.(type) {
-				case parser.StrVal:
-					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
-				case parser.BytesVal:
-					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
-				case parser.IntVal:
-					vals = append(vals, sqlwire.Datum{IntVal: (*int64)(&vt)})
-				case parser.NumVal:
-					// TODO(tschottdorf): should this be a IntVal/FloatVal?
-					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
-				case parser.BoolVal:
+				case parser.DBool:
 					vals = append(vals, sqlwire.Datum{BoolVal: (*bool)(&vt)})
+				case parser.DInt:
+					vals = append(vals, sqlwire.Datum{IntVal: (*int64)(&vt)})
+				case parser.DFloat:
+					vals = append(vals, sqlwire.Datum{FloatVal: (*float64)(&vt)})
+				case parser.DString:
+					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
+				case parser.DNull:
+					vals = append(vals, sqlwire.Datum{})
 				default:
 					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
 				}

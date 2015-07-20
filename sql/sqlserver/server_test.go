@@ -19,6 +19,7 @@ package sqlserver
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -29,18 +30,22 @@ func TestProcessSelect(t *testing.T) {
 	s := (*Server)(nil) // enough for now
 
 	vInt := int64(5)
-	vFloat := float64(3.14159)
-	vStr := "five"
+	vNum := "3.14159"
+	vStr := "two furs one cub"
 	vBool := true
 
 	dInt := sqlwire.Datum{IntVal: &vInt}
-	dFloat := sqlwire.Datum{FloatVal: &vFloat}
+	dFloat := func() sqlwire.Datum {
+		tmp, err := strconv.ParseFloat(vNum, 64)
+		if err != nil {
+			panic(err)
+		}
+		return sqlwire.Datum{FloatVal: &tmp}
+	}()
 	dStr := sqlwire.Datum{StringVal: &vStr}
 	dBool := sqlwire.Datum{BoolVal: &vBool}
 
-	// Floats aren't generated from processInsertRows. A parser.NumVal currently
-	// turns into a StringVal datum.
-	_, _ = vFloat, dFloat
+	unsupp := &parser.RangeCond{}
 
 	asRow := func(datums ...sqlwire.Datum) []sqlwire.Result_Row {
 		return []sqlwire.Result_Row{
@@ -59,9 +64,13 @@ func TestProcessSelect(t *testing.T) {
 			true,
 		},
 		{
-			// This one will likely have to change.
-			parser.Values{{parser.NumVal("five")}},
-			asRow(dStr),
+			parser.Values{{parser.IntVal(vInt), parser.IntVal(vInt)}},
+			asRow(dInt, dInt),
+			true,
+		},
+		{
+			parser.Values{{parser.NumVal(vNum)}},
+			asRow(dFloat),
 			true,
 		},
 		{
@@ -71,13 +80,18 @@ func TestProcessSelect(t *testing.T) {
 		},
 		{
 			parser.Values{{parser.BytesVal(vStr)}},
-			asRow(dStr), // string, not bytes!
+			asRow(dStr), // string, not bytes, returned!
 			true,
 		},
 		{
 			parser.Values{{parser.BoolVal(vBool)}},
 			asRow(dBool),
 			true,
+		},
+		{
+			parser.Values{{unsupp}},
+			nil,
+			false,
 		},
 	}
 
