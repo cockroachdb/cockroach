@@ -40,15 +40,15 @@ body {
 }
 .appNav {
   height: 50px;
-  background-color: #fff;
-  border-bottom: 1px solid #ddd;
+  background-color: #292929;
+  border-bottom: 1px solid #333;
   padding: 10px 20px;
 }
 .appNav-link:link,
 .appNav-link:visited {
   text-decoration: none;
   text-transform: uppercase;
-  color: #333;
+  color: #f1f2f3;
   display: inline-block;
   margin-right: 20px;
 }
@@ -72,13 +72,13 @@ body {
   background-color: #fff;
 }
 .stats-table td {
-  background-color: #eee;
-}
-.stats-table td:nth-child(even) {
   background-color: #ddd;
 }
+.stats-table td:nth-child(even) {
+  background-color: #eee;
+}
 .stats-table td:first-child {
-  background-color: #fff;
+  background-color: #f1f2f3;
 }
 .stats-table td,
 .stats-table th {

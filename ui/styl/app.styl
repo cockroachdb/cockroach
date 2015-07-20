@@ -16,6 +16,32 @@ for names of contributors.
 
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
+
+// ---- Color Palette ----
+$palette = {
+  // Light basic content color, shaded from lightest to darkest.
+  'light': {
+    '0': #ffffff,
+    '1': #f1f2f3,
+    '2': #EEE,
+    '3': #DDD,
+    '4': #CCC
+  },
+  // Dark basic content color, shaded from darkest to lightest.
+  'dark': {
+      '0': #292929,
+      '1': #333333,
+      '2': #414141,
+      '3': #555555,
+      '4': #666666,
+  },
+}
+
+$color(base, val)
+  return $palette[base][val]
+
+
+// ---- Top Level Elements ----
 *
   margin: 0
   padding: 0
@@ -28,8 +54,8 @@ body
   height: 100%
 
 body
-  background-color: #f1f2f3
-  color: #333
+  background-color: $color('light', '1')
+  color: $color('dark', '1')
   font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
   font-weight: 400
   font-size: 14px
@@ -38,17 +64,18 @@ body
   height: calc(100% - 50px)
   /* Keep in line with height of .appNav */
 
+// ---- Navigation ----
 .appNav
   height: 50px
-  background-color: #fff
-  border-bottom: 1px solid #ddd
+  background-color: $color('dark', '0')
+  border-bottom: 1px solid $color('dark', '1')
   padding: 10px 20px
 
 .appNav-link:link,
 .appNav-link:visited
   text-decoration: none
   text-transform: uppercase
-  color: #333
+  color: $color('light', '1')
   display: inline-block
   margin-right: 20px
 
@@ -58,25 +85,25 @@ body
   text-transform: none
   vertical-align: -2px
 
+// ---- Data table ---- 
 .stats-table
   table
     border-collapse: collapse;
   tr
     height: 2em
-    border-bottom: 1px solid #CCC
+    border-bottom: 1px solid $color('light', '4')
     &:first-child
-      border-top: 1px solid #CCC
+      border-top: 1px solid $color('light', '4')
   th
-    background-color: #FFF
+    background-color: $color('light', '0')
   td
-    background-color: #EEE
+    background-color: $color('light', '3')
     &:nth-child(even)
-      background-color: #DDD
+      background-color: $color('light', '2')
     &:first-child
-      background-color:#FFF
+      background-color: $color('light', '1')
 
   td
   th
     padding-left: 1em
     padding-right: 1em
-
