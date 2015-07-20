@@ -88,6 +88,7 @@ func NewServer(ctx *base.Context, db *client.DB) *Server {
 // present, in the same format as the request's incoming Content-Type
 // header.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	method := r.URL.Path
 	if !strings.HasPrefix(method, sqlwire.Endpoint) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -110,7 +111,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Unmarshal the request.
 	reqBody, err := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
