@@ -88,6 +88,7 @@ func NewServer(ctx *base.Context, db *client.DB) *Server {
 // present, in the same format as the request's incoming Content-Type
 // header.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	method := r.URL.Path
 	if !strings.HasPrefix(method, sqlwire.Endpoint) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -110,7 +111,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Unmarshal the request.
 	reqBody, err := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -151,6 +151,8 @@ func (s *Server) exec(call sqlwire.Call) error {
 	// Pick up current session state.
 	var session Session
 	if req.Session != nil {
+		// TODO(tschottdorf) will have to validate the Session information (for
+		// instance, whether access to the stored database is permitted).
 		if err := gogoproto.Unmarshal(req.Session, &session); err != nil {
 			return err
 		}
@@ -432,7 +434,7 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	r, err := s.processInsertRows(p.Rows)
+	r, err := s.processSelect(p.Rows)
 	if err != nil {
 		return err
 	}
@@ -672,37 +674,46 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 	return cols, nil
 }
 
-func (s *Server) processInsertRows(node parser.SelectStatement) (rows []sqlwire.Result_Row, err error) {
+func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Result_Row, _ error) {
 	switch nt := node.(type) {
+	// case *parser.Select:
+	// case *parser.Union:
+	// TODO(vivek): return s.query(nt.stmt, nil)
 	case parser.Values:
-		for _, row := range nt {
+		for _, tuple := range nt {
+			data, err := parser.EvalExpr(tuple, nil)
+			if err != nil {
+				return rows, err
+			}
+			dTuple, ok := data.(parser.DTuple)
+			if !ok {
+				// A one-element DTuple is currently turned into whatever its
+				// underlying element is, so we have to massage here.
+				// See #1741.
+				dTuple = parser.DTuple([]parser.Datum{data})
+			}
 			var vals []sqlwire.Datum
-			for _, val := range row {
+			for _, val := range dTuple {
 				switch vt := val.(type) {
-				case parser.StrVal:
-					tmp := string(vt)
-					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
-				case parser.NumVal:
-					tmp := string(vt)
-					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
-				case parser.ValArg:
-					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
-				case parser.BytesVal:
-					tmp := string(vt)
-					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
+				case parser.DBool:
+					vals = append(vals, sqlwire.Datum{BoolVal: (*bool)(&vt)})
+				case parser.DInt:
+					vals = append(vals, sqlwire.Datum{IntVal: (*int64)(&vt)})
+				case parser.DFloat:
+					vals = append(vals, sqlwire.Datum{FloatVal: (*float64)(&vt)})
+				case parser.DString:
+					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
+				case parser.DNull:
+					vals = append(vals, sqlwire.Datum{})
 				default:
-					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
+					return rows, util.Errorf("unsupported node: %T", val)
 				}
 			}
 			rows = append(rows, sqlwire.Result_Row{Values: vals})
 		}
 		return rows, nil
-	case *parser.Select:
-		// TODO(vivek): return s.query(nt.stmt, nil)
-	case *parser.Union:
-		// TODO(vivek): return s.query(nt.stmt, nil)
 	}
-	return rows, util.Errorf("TODO(pmattis): unsupported node: %T", node)
+	return nil, util.Errorf("TODO(pmattis): unsupported node: %T", node)
 }
 
 // TODO(pmattis): The key encoding and decoding routines belong in either
