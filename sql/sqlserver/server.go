@@ -676,22 +676,25 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 
 func (s *Server) processInsertRows(node parser.SelectStatement) (rows []sqlwire.Result_Row, err error) {
 	switch nt := node.(type) {
+	// case *parser.Select:
+	// case *parser.Union:
+	// TODO(vivek): return s.query(nt.stmt, nil)
 	case parser.Values:
 		for _, row := range nt {
 			var vals []sqlwire.Datum
 			for _, val := range row {
 				switch vt := val.(type) {
 				case parser.StrVal:
-					tmp := string(vt)
-					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
-				case parser.NumVal:
-					tmp := string(vt)
-					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
-				case parser.ValArg:
-					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
+					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
 				case parser.BytesVal:
-					tmp := string(vt)
-					vals = append(vals, sqlwire.Datum{StringVal: &tmp})
+					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
+				case parser.IntVal:
+					vals = append(vals, sqlwire.Datum{IntVal: (*int64)(&vt)})
+				case parser.NumVal:
+					// TODO(tschottdorf): should this be a IntVal/FloatVal?
+					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
+				case parser.BoolVal:
+					vals = append(vals, sqlwire.Datum{BoolVal: (*bool)(&vt)})
 				default:
 					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
 				}
@@ -699,10 +702,6 @@ func (s *Server) processInsertRows(node parser.SelectStatement) (rows []sqlwire.
 			rows = append(rows, sqlwire.Result_Row{Values: vals})
 		}
 		return rows, nil
-	case *parser.Select:
-		// TODO(vivek): return s.query(nt.stmt, nil)
-	case *parser.Union:
-		// TODO(vivek): return s.query(nt.stmt, nil)
 	}
 	return rows, util.Errorf("TODO(pmattis): unsupported node: %T", node)
 }
