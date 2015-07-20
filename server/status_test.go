@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"regexp"
@@ -35,43 +34,20 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// startStatusServer launches a new status server using minimal engine
-// and local database setup. Returns the new http test server, which
-// should be cleaned up by caller via httptest.Server.Close(). The
-// Cockroach KV client address is set to the address of the test server.
-func startStatusServer() (*httptest.Server, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	db, err := BootstrapCluster("cluster-1", []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}, stopper)
-	if err != nil {
-		log.Fatal(err)
-	}
-	status := newStatusServer(db, nil)
-	httpServer := httptest.NewUnstartedServer(status.router)
-	tlsConfig, err := testContext.GetServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	httpServer.TLS = tlsConfig
-	httpServer.StartTLS()
-	stopper.AddCloser(httpServer)
-	return httpServer, stopper
-}
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/local/stacks endpoint.
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, stopper := startStatusServer()
-	defer stopper.Stop()
-	body, err := getText(s.URL + statusLocalStacksKey)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	body, err := getText(testContext.RequestScheme() + "://" + s.ServingAddr() + statusLocalStacksKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,7 +403,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	for i, testCase := range testCases {
 		var url bytes.Buffer
-		fmt.Fprintf(&url, "%s%s?", statusLocalLogKeyPrefix, testCase.Level.Name())
+		fmt.Fprintf(&url, "%s?level=%s&", statusLogKeyPrefix, testCase.Level.Name())
 		if testCase.MaxEntities > 0 {
 			fmt.Fprintf(&url, "max=%d&", testCase.MaxEntities)
 		}
