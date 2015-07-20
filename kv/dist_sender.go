@@ -290,17 +290,18 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 		MaxRanges:     ds.rangeLookupMaxRanges,
 		IgnoreIntents: options.ignoreIntents,
 	}
-	reply := &proto.InternalRangeLookupResponse{}
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	if err := ds.sendRPC(nil /* Trace */, desc.RaftID, replicas, rpc.OrderRandom, args, reply); err != nil {
+	reply, err := ds.sendRPC(nil /* Trace */, desc.RaftID, replicas, rpc.OrderRandom, args)
+	if err != nil {
 		return nil, err
 	}
-	if reply.Error != nil {
-		return nil, reply.GoError()
+	rlReply := reply.(*proto.InternalRangeLookupResponse)
+	if rlReply.Error != nil {
+		return nil, rlReply.GoError()
 	}
-	return reply.Ranges, nil
+	return rlReply.Ranges, nil
 }
 
 // getFirstRangeDescriptor returns the RangeDescriptor for the first range on
@@ -408,9 +409,9 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas replicaSlice, order rpc.OrderingPolicy,
-	args proto.Request, reply proto.Response) error {
+	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
-		return util.Errorf("%s: replicas set is empty", args.Method())
+		return nil, util.Errorf("%s: replicas set is empty", args.Method())
 	}
 
 	// Build a slice of replica addresses (if gossiped).
@@ -423,7 +424,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas
 		replicaMap[addr.String()] = &replicas[i].Replica
 	}
 	if len(addrs) == 0 {
-		return noNodeAddrsAvailError{}
+		return nil, noNodeAddrsAvailError{}
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
@@ -467,13 +468,10 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas
 
 	replies, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
 		addrs, getArgs, getReply, ds.gossip.RPCContext)
-	if err == nil {
-		// Set content of replies[0] back to reply
-		dst := reflect.ValueOf(reply).Elem()
-		dst.Set(reflect.ValueOf(replies[0]).Elem())
+	if err != nil {
+		return nil, err
 	}
-
-	return err
+	return replies[0].(proto.Response), nil
 }
 
 // getDescriptors takes a call and looks up the corresponding range
@@ -554,7 +552,13 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, reply
 		}
 	}
 
-	return ds.sendRPC(trace, desc.RaftID, replicas, order, args, reply)
+	rpcReply, err := ds.sendRPC(trace, desc.RaftID, replicas, order, args)
+	if err == nil {
+		// Modify at the pointer's target
+		dst := reflect.ValueOf(reply).Elem()
+		dst.Set(reflect.ValueOf(rpcReply).Elem())
+	}
+	return err
 }
 
 // Send implements the client.Sender interface. It verifies
