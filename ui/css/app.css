@@ -58,3 +58,30 @@ body {
   text-transform: none;
   vertical-align: -2px;
 }
+.stats-table table {
+  border-collapse: collapse;
+}
+.stats-table tr {
+  height: 2em;
+  border-bottom: 1px solid #ccc;
+}
+.stats-table tr:first-child {
+  border-top: 1px solid #ccc;
+}
+.stats-table th {
+  background-color: #fff;
+}
+.stats-table td {
+  background-color: #eee;
+}
+.stats-table td:nth-child(even) {
+  background-color: #ddd;
+}
+.stats-table td:first-child {
+  background-color: #fff;
+}
+.stats-table td,
+.stats-table th {
+  padding-left: 1em;
+  padding-right: 1em;
+}

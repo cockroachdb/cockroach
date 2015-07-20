@@ -969,6 +969,11 @@ var Models;
             Stores.prototype.GetStoreIds = function () {
                 return Object.keys(this._data.result()).sort();
             };
+            Stores.prototype.GetAllStatuses = function () {
+                var data = this._data.result();
+                var keys = Object.keys(data).sort();
+                return keys.map(function (key) { return data[key]; });
+            };
             Stores.prototype.GetDesc = function (storeId) {
                 return this._data.result()[storeId].desc;
             };
@@ -1050,6 +1055,11 @@ var Models;
             Nodes.prototype.GetNodeIds = function () {
                 return Object.keys(this._data.result()).sort();
             };
+            Nodes.prototype.GetAllStatuses = function () {
+                var data = this._data.result();
+                var keys = Object.keys(data).sort();
+                return keys.map(function (key) { return data[key]; });
+            };
             Nodes.prototype.GetDesc = function (nodeId) {
                 return this._data.result()[nodeId].desc;
             };
@@ -1118,10 +1128,57 @@ var Models;
         Status.Nodes = Nodes;
     })(Status = Models.Status || (Models.Status = {}));
 })(Models || (Models = {}));
+// source: components/table.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Components;
+(function (Components) {
+    "use strict";
+    var Table;
+    (function (Table) {
+        var Controller = (function () {
+            function Controller(data) {
+                this.data = data;
+            }
+            Controller.prototype.renderHeaders = function () {
+                var cols = this.data.columns();
+                var renderedCols = cols.map(function (col) { return m("th", col.title); });
+                return m("tr", renderedCols);
+            };
+            Controller.prototype.renderRows = function () {
+                var cols = this.data.columns();
+                var rows = this.data.rows();
+                var renderedRows = rows.map(function (row) {
+                    var renderedCols = cols.map(function (col) { return m("td", col.data(row)); });
+                    return m("tr", renderedCols);
+                });
+                return renderedRows;
+            };
+            return Controller;
+        })();
+        function controller(data) {
+            return new Controller(data);
+        }
+        Table.controller = controller;
+        function view(ctrl) {
+            return m("table", [
+                ctrl.renderHeaders(),
+                ctrl.renderRows(),
+            ]);
+        }
+        Table.view = view;
+        function create(data) {
+            return m.component(Table, data);
+        }
+        Table.create = create;
+    })(Table = Components.Table || (Components.Table = {}));
+})(Components || (Components = {}));
 // source: pages/nodes.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
+/// <reference path="../components/table.ts" />
+/// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
     "use strict";
@@ -1143,9 +1200,35 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
+                Controller.prototype.GetColumns = function () {
+                    return Controller.comparisonColumns;
+                };
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
                 };
+                Controller.comparisonColumns = [
+                    {
+                        title: "Node ID",
+                        data: function (status) {
+                            return m("a", { href: "/nodes/" + status.desc.node_id, config: m.route }, status.desc.node_id.toString());
+                        }
+                    },
+                    {
+                        title: "Address",
+                        data: function (status) { return status.desc.address.address; }
+                    },
+                    {
+                        title: "Started At",
+                        data: function (status) {
+                            var date = new Date(Utils.Convert.NanoToMilli(status.started_at));
+                            return Utils.Format.Date(date);
+                        }
+                    },
+                    {
+                        title: "Live Bytes",
+                        data: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); }
+                    }
+                ];
                 Controller._queryEveryMS = 10000;
                 return Controller;
             })();
@@ -1154,16 +1237,13 @@ var AdminViews;
             }
             NodesPage.controller = controller;
             function view(ctrl) {
+                var comparisonData = {
+                    columns: ctrl.GetColumns,
+                    rows: function () { return nodeStatuses.GetAllStatuses(); }
+                };
                 return m("div", [
                     m("h2", "Nodes List"),
-                    m("ul", [nodeStatuses.GetNodeIds().map(function (nodeId) {
-                            var desc = nodeStatuses.GetDesc(nodeId);
-                            return m("li", { key: desc.node_id }, m("div", [
-                                m.trust("&nbsp;&bull;&nbsp;"),
-                                m("a[href=/nodes/" + desc.node_id + "]", { config: m.route }, "Node:" + desc.node_id),
-                                " with Address:" + desc.address.network + "-" + desc.address.address
-                            ]));
-                        })]),
+                    m(".stats-table", Components.Table.create(comparisonData)),
                     nodeStatuses.AllDetails()
                 ]);
             }
@@ -1231,6 +1311,7 @@ var AdminViews;
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
+/// <reference path="../components/table.ts" />
 var AdminViews;
 (function (AdminViews) {
     "use strict";
@@ -1252,9 +1333,41 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
+                Controller.prototype.GetColumns = function () {
+                    return Controller.comparisonColumns;
+                };
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
                 };
+                Controller.comparisonColumns = [
+                    {
+                        title: "Store ID",
+                        data: function (status) {
+                            return m("a", { href: "/stores/" + status.desc.store_id, config: m.route }, status.desc.store_id.toString());
+                        }
+                    },
+                    {
+                        title: "Node ID",
+                        data: function (status) {
+                            return m("a", { href: "/nodes/" + status.desc.node.node_id, config: m.route }, status.desc.node.node_id.toString());
+                        }
+                    },
+                    {
+                        title: "Address",
+                        data: function (status) { return status.desc.node.address.address; }
+                    },
+                    {
+                        title: "Started At",
+                        data: function (status) {
+                            var date = new Date(Utils.Convert.NanoToMilli(status.started_at));
+                            return Utils.Format.Date(date);
+                        }
+                    },
+                    {
+                        title: "Live Bytes",
+                        data: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); }
+                    }
+                ];
                 Controller._queryEveryMS = 10000;
                 return Controller;
             })();
@@ -1263,18 +1376,13 @@ var AdminViews;
             }
             StoresPage.controller = controller;
             function view(ctrl) {
+                var comparisonData = {
+                    columns: ctrl.GetColumns,
+                    rows: function () { return storeStatuses.GetAllStatuses(); }
+                };
                 return m("div", [
-                    m("h2", "Nodes List"),
-                    m("ul", [storeStatuses.GetStoreIds().map(function (storeId) {
-                            var desc = storeStatuses.GetDesc(storeId);
-                            return m("li", { key: desc.store_id }, m("div", [
-                                m.trust("&nbsp;&bull;&nbsp;"),
-                                m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
-                                " on ",
-                                m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
-                                " with Address:" + desc.node.address.network + "-" + desc.node.address.address
-                            ]));
-                        })]),
+                    m("h2", "Stores List"),
+                    m(".stats-table", Components.Table.create(comparisonData)),
                     storeStatuses.AllDetails()
                 ]);
             }
