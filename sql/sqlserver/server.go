@@ -151,6 +151,8 @@ func (s *Server) exec(call sqlwire.Call) error {
 	// Pick up current session state.
 	var session Session
 	if req.Session != nil {
+		// TODO(tschottdorf) will have to validate the Session information (for
+		// instance, whether access to the stored database is permitted).
 		if err := gogoproto.Unmarshal(req.Session, &session); err != nil {
 			return err
 		}
