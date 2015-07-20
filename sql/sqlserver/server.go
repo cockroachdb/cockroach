@@ -674,7 +674,7 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 	return cols, nil
 }
 
-func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Result_Row, err error) {
+func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Result_Row, _ error) {
 	switch nt := node.(type) {
 	// case *parser.Select:
 	// case *parser.Union:
@@ -689,8 +689,7 @@ func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Resu
 			if !ok {
 				// A one-element DTuple is currently turned into whatever its
 				// underlying element is, so we have to massage here.
-				// TODO(tschottdorf): Is that desired behaviour on behalf of
-				// EvalExpr?
+				// See #1741.
 				dTuple = parser.DTuple([]parser.Datum{data})
 			}
 			var vals []sqlwire.Datum
@@ -707,14 +706,14 @@ func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Resu
 				case parser.DNull:
 					vals = append(vals, sqlwire.Datum{})
 				default:
-					return rows, util.Errorf("TODO(pmattis): unsupported node: %T", val)
+					return rows, util.Errorf("unsupported node: %T", val)
 				}
 			}
 			rows = append(rows, sqlwire.Result_Row{Values: vals})
 		}
 		return rows, nil
 	}
-	return rows, util.Errorf("TODO(pmattis): unsupported node: %T", node)
+	return nil, util.Errorf("TODO(pmattis): unsupported node: %T", node)
 }
 
 // TODO(pmattis): The key encoding and decoding routines belong in either
