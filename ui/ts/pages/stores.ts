@@ -2,6 +2,7 @@
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
+/// <reference path="../components/table.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -17,6 +18,8 @@ module AdminViews {
    */
   export module Stores {
     import Metrics = Models.Metrics;
+    import Table = Components.Table;
+    import StoreStatus = Models.Proto.StoreStatus;
     let storeStatuses: Models.Status.Stores = new Models.Status.Stores();
 
     function _storeMetric(storeId: string, metric: string): string {
@@ -28,6 +31,36 @@ module AdminViews {
      */
     export module StoresPage {
       class Controller {
+        private static comparisonColumns: Table.TableColumn<StoreStatus>[] = [
+          {
+            title: "Store ID",
+            data: (status: StoreStatus): _mithril.MithrilVirtualElement => {
+              return m("a", {href: "/stores/" + status.desc.store_id, config: m.route}, status.desc.store_id.toString());
+            }
+          },
+          {
+            title: "Node ID",
+            data: (status: StoreStatus): _mithril.MithrilVirtualElement => {
+              return m("a", {href: "/nodes/" + status.desc.node.node_id, config: m.route}, status.desc.node.node_id.toString());
+            }
+          },
+          {
+            title: "Address",
+            data: (status: StoreStatus): string => status.desc.node.address.address
+          },
+          {
+            title: "Started At",
+            data: (status: StoreStatus): string => {
+              let date = new Date(Utils.Convert.NanoToMilli(status.started_at));
+              return Utils.Format.Date(date);
+            }
+          },
+          {
+            title: "Live Bytes",
+            data: (status: StoreStatus): string => Utils.Format.Bytes(status.stats.live_bytes)
+          }
+        ];
+
         private static _queryEveryMS: number = 10000;
         private _interval: number;
 
@@ -40,6 +73,10 @@ module AdminViews {
           clearInterval(this._interval);
         }
 
+        public GetColumns(): Table.TableColumn<StoreStatus>[] {
+          return Controller.comparisonColumns;
+        }
+
         private _refresh(): void {
           storeStatuses.refresh();
         }
@@ -50,18 +87,13 @@ module AdminViews {
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
+        let comparisonData: Table.TableData<StoreStatus> = {
+          columns: ctrl.GetColumns,
+          rows: (): StoreStatus[] => storeStatuses.GetAllStatuses()
+        };
         return m("div", [
-          m("h2", "Nodes List"),
-          m("ul", [storeStatuses.GetStoreIds().map((storeId: string): _mithril.MithrilVirtualElement => {
-            let desc: Models.Proto.StoreDescriptor = storeStatuses.GetDesc(storeId);
-            return m("li", { key: desc.store_id }, m("div", [
-              m.trust("&nbsp;&bull;&nbsp;"),
-              m("a[href=/stores/" + storeId + "]", { config: m.route }, "Store:" + storeId),
-              " on ",
-              m("a[href=/nodes/" + desc.node.node_id + "]", { config: m.route }, "Node:" + desc.node.node_id),
-              " with Address:" + desc.node.address.network + "-" + desc.node.address.address
-            ]));
-          })]),
+          m("h2", "Stores List"),
+          m(".stats-table", Components.Table.create(comparisonData)),
           storeStatuses.AllDetails()
         ]);
       }

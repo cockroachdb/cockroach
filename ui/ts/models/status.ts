@@ -57,6 +57,12 @@ module Models {
         return Object.keys(this._data.result()).sort();
       }
 
+      public GetAllStatuses(): Proto.StoreStatus[] {
+        let data = this._data.result();
+        let keys = Object.keys(data).sort();
+        return keys.map((key: string) => data[key]);
+      }
+
       public GetDesc(storeId: string): Proto.StoreDescriptor {
         return this._data.result()[storeId].desc;
       }
@@ -148,6 +154,12 @@ module Models {
 
       public GetNodeIds(): string[] {
         return Object.keys(this._data.result()).sort();
+      }
+
+      public GetAllStatuses(): Proto.NodeStatus[] {
+        let data = this._data.result();
+        let keys = Object.keys(data).sort();
+        return keys.map((key: string) => data[key]);
       }
 
       public GetDesc(nodeId: string): Proto.NodeDescriptor {
