@@ -1729,6 +1729,7 @@ func TestFindSplitKey(t *testing.T) {
 	// facility. Assuming that this translates roughly into same-length
 	// values after MVCC encoding, the split key should hence be chosen
 	// as the middle key of the interval.
+	splitReservoirSize := 100
 	for i := 0; i < splitReservoirSize; i++ {
 		k := fmt.Sprintf("%09d", i)
 		v := strings.Repeat("X", 10-len(k))
