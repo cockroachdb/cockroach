@@ -17,7 +17,7 @@
 //
 //go:generate stringer -type=Method
 
-package sqlwire
+package driver
 
 // Method is the enumerated type for methods.
 type Method int

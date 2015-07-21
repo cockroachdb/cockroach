@@ -15,9 +15,13 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sqlwire
+package driver
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/util/leaktest"
+)
 
 func dBool(v bool) Datum {
 	return Datum{BoolVal: &v}
@@ -40,6 +44,8 @@ func dString(v string) Datum {
 }
 
 func TestDatumString(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
 	testData := []struct {
 		datum    Datum
 		expected string

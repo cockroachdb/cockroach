@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -48,7 +47,7 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 	sender := &httpSender{
 		ctx: client.PostContext{
 			Server:    server,
-			Endpoint:  sqlwire.Endpoint,
+			Endpoint:  Endpoint,
 			Context:   ctx,
 			RetryOpts: retryOpts,
 		},
@@ -64,11 +63,11 @@ func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
 // which are retryable are retried with backoff in a loop using the
 // default retry options.
-func (s *httpSender) Send(args sqlwire.Request) (sqlwire.Response, error) {
+func (s *httpSender) Send(args Request) (Response, error) {
 	// Prepare the args.
 	if args.GetUser() == "" {
 		args.User = s.ctx.Context.User
 	}
-	reply := sqlwire.Response{}
+	reply := Response{}
 	return reply, client.HTTPPost(s.ctx, &args, &reply, args.Method())
 }

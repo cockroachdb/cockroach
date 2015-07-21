@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -43,29 +43,10 @@ import (
 )
 
 var (
-	allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
-	allMethods       = map[string]sqlwire.Method{
-		sqlwire.Execute.String(): sqlwire.Execute,
-	}
-
+	allowedEncodings     = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 	errNoDatabase        = errors.New("no database specified")
 	errEmptyDatabaseName = errors.New("empty database name")
 )
-
-// createArgsAndReply returns allocated request and response pairs
-// according to the specified method. Note that createArgsAndReply
-// only knows about public methods and explicitly returns nil for
-// internal methods. Do not change this behavior without also fixing
-// Server.ServeHTTP.
-func createArgsAndReply(method string) (*sqlwire.Request, *sqlwire.Response) {
-	if m, ok := allMethods[method]; ok {
-		switch m {
-		case sqlwire.Execute:
-			return &sqlwire.Request{}, &sqlwire.Response{}
-		}
-	}
-	return nil, nil
-}
 
 // A Server provides an HTTP server endpoint serving the SQL API.
 // It accepts either JSON or serialized protobuf content types.
@@ -90,7 +71,7 @@ func NewServer(ctx *base.Context, db *client.DB) *Server {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	method := r.URL.Path
-	if !strings.HasPrefix(method, sqlwire.Endpoint) {
+	if !strings.HasPrefix(method, driver.Endpoint) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
@@ -102,9 +83,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	method = strings.TrimPrefix(method, sqlwire.Endpoint)
-	args, reply := createArgsAndReply(method)
-	if args == nil {
+	method = strings.TrimPrefix(method, driver.Endpoint)
+	if method != driver.Execute.String() {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
@@ -115,6 +95,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	args := &driver.Request{}
 	if err := util.UnmarshalRequest(r, reqBody, args, allowedEncodings); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -128,7 +110,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// on the reply.
-	if err = s.exec(sqlwire.Call{Args: args, Reply: reply}); err != nil {
+	reply, err := s.exec(args)
+	if err != nil {
 		errProto := proto.Error{}
 		errProto.SetResponseGoError(err)
 		reply.Error = &errProto
@@ -146,21 +129,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // exec executes the call. Any error encountered is returned; it is the
 // caller's responsibility to update the reply.
-func (s *Server) exec(call sqlwire.Call) error {
-	req := call.Args
-	resp := call.Reply
+func (s *Server) exec(req *driver.Request) (*driver.Response, error) {
+	resp := &driver.Response{}
+
 	// Pick up current session state.
 	var session Session
 	if req.Session != nil {
 		// TODO(tschottdorf) will have to validate the Session information (for
 		// instance, whether access to the stored database is permitted).
 		if err := gogoproto.Unmarshal(req.Session, &session); err != nil {
-			return err
+			return resp, err
 		}
 	}
 	stmts, err := parser.Parse(req.Sql)
 	if err != nil {
-		return err
+		return resp, err
 	}
 	for _, stmt := range stmts {
 		switch p := stmt.(type) {
@@ -190,26 +173,26 @@ func (s *Server) exec(call sqlwire.Call) error {
 			err = fmt.Errorf("unknown statement type: %T", stmt)
 		}
 		if err != nil {
-			return err
+			return resp, err
 		}
 	}
 
 	// Update session state.
 	resp.Session, err = gogoproto.Marshal(&session)
-	return err
+	return resp, err
 }
 
 // ShowColumns of a table
-func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []driver.Datum, resp *driver.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		return err
 	}
-	var rows []sqlwire.Result_Row
+	var rows []driver.Result_Row
 	for i, col := range desc.Columns {
 		t := col.Type.SQLString()
-		rows = append(rows, sqlwire.Result_Row{
-			Values: []sqlwire.Datum{
+		rows = append(rows, driver.Result_Row{
+			Values: []driver.Datum{
 				{StringVal: &desc.Columns[i].Name},
 				{StringVal: &t},
 				{BoolVal: &desc.Columns[i].Nullable},
@@ -217,7 +200,7 @@ func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sql
 		})
 	}
 	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
-	resp.Results = []sqlwire.Result{
+	resp.Results = []driver.Result{
 		{
 			Columns: []string{"Field", "Type", "Null"},
 			Rows:    rows,
@@ -227,22 +210,22 @@ func (s *Server) ShowColumns(session *Session, p *parser.ShowColumns, args []sql
 }
 
 // ShowDatabases returns all the databases.
-func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args []driver.Datum, resp *driver.Response) error {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := s.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return err
 	}
-	var rows []sqlwire.Result_Row
+	var rows []driver.Result_Row
 	for _, row := range sr {
 		name := string(bytes.TrimPrefix(row.Key, prefix))
-		rows = append(rows, sqlwire.Result_Row{
-			Values: []sqlwire.Datum{
+		rows = append(rows, driver.Result_Row{
+			Values: []driver.Datum{
 				{StringVal: &name},
 			},
 		})
 	}
-	resp.Results = []sqlwire.Result{
+	resp.Results = []driver.Result{
 		{
 			Columns: []string{"Database"},
 			Rows:    rows,
@@ -252,22 +235,22 @@ func (s *Server) ShowDatabases(session *Session, p *parser.ShowDatabases, args [
 }
 
 // ShowIndex returns all the indexes for a table.
-func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []driver.Datum, resp *driver.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		return err
 	}
 
 	// TODO(pmattis): This output doesn't match up with MySQL. Should it?
-	var rows []sqlwire.Result_Row
+	var rows []driver.Result_Row
 
 	name := p.Table.Table()
 	for i, index := range desc.Indexes {
 		for j, col := range index.ColumnNames {
 			seq := int64(j + 1)
 			c := col
-			rows = append(rows, sqlwire.Result_Row{
-				Values: []sqlwire.Datum{
+			rows = append(rows, driver.Result_Row{
+				Values: []driver.Datum{
 					{StringVal: &name},
 					{StringVal: &desc.Indexes[i].Name},
 					{BoolVal: &desc.Indexes[i].Unique},
@@ -277,7 +260,7 @@ func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire
 			})
 		}
 	}
-	resp.Results = []sqlwire.Result{
+	resp.Results = []driver.Result{
 		{
 			// TODO(pmattis): This output doesn't match up with MySQL. Should it?
 			Columns: []string{"Table", "Name", "Unique", "Seq", "Column"},
@@ -288,7 +271,7 @@ func (s *Server) ShowIndex(session *Session, p *parser.ShowIndex, args []sqlwire
 }
 
 // ShowTables returns all the tables.
-func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []driver.Datum, resp *driver.Response) error {
 	if p.Name == nil {
 		if session.Database == "" {
 			return errNoDatabase
@@ -304,17 +287,17 @@ func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwi
 	if err != nil {
 		return err
 	}
-	var rows []sqlwire.Result_Row
+	var rows []driver.Result_Row
 
 	for _, row := range sr {
 		name := string(bytes.TrimPrefix(row.Key, prefix))
-		rows = append(rows, sqlwire.Result_Row{
-			Values: []sqlwire.Datum{
+		rows = append(rows, driver.Result_Row{
+			Values: []driver.Datum{
 				{StringVal: &name},
 			},
 		})
 	}
-	resp.Results = []sqlwire.Result{
+	resp.Results = []driver.Result{
 		{
 			Columns: []string{"tables"},
 			Rows:    rows,
@@ -324,7 +307,7 @@ func (s *Server) ShowTables(session *Session, p *parser.ShowTables, args []sqlwi
 }
 
 // CreateDatabase creates a database if it doesn't exist.
-func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args []driver.Datum, resp *driver.Response) error {
 	if p.Name == "" {
 		return errEmptyDatabaseName
 	}
@@ -348,7 +331,7 @@ func (s *Server) CreateDatabase(session *Session, p *parser.CreateDatabase, args
 }
 
 // CreateTable creates a table if it doesn't already exist.
-func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []driver.Datum, resp *driver.Response) error {
 	var err error
 	p.Table, err = s.normalizeTableName(session.Database, p.Table)
 	if err != nil {
@@ -402,12 +385,12 @@ func (s *Server) CreateTable(session *Session, p *parser.CreateTable, args []sql
 }
 
 // Delete is unimplemented.
-func (s *Server) Delete(session *Session, p *parser.Delete, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) Delete(session *Session, p *parser.Delete, args []driver.Datum, resp *driver.Response) error {
 	return fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
 // Insert inserts rows into the database.
-func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) Insert(session *Session, p *parser.Insert, args []driver.Datum, resp *driver.Response) error {
 	desc, err := s.getTableDesc(session.Database, p.Table)
 	if err != nil {
 		return err
@@ -474,7 +457,7 @@ func (s *Server) Insert(session *Session, p *parser.Insert, args []sqlwire.Datum
 }
 
 // Select selects rows from a single table.
-func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum, resp *sqlwire.Response) error {
+func (s *Server) Select(session *Session, p *parser.Select, args []driver.Datum, resp *driver.Response) error {
 	if len(p.Exprs) != 1 {
 		return fmt.Errorf("TODO(pmattis): unsupported select exprs: %s", p.Exprs)
 	}
@@ -520,7 +503,7 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 	// The TODOs here are too numerous to list. This is only performing a full
 	// table scan using the primary key.
 
-	var rows []sqlwire.Result_Row
+	var rows []driver.Result_Row
 	var primaryKey []byte
 	vals := valMap{}
 	l := len(sr)
@@ -568,7 +551,7 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 		}
 	}
 
-	resp.Results = []sqlwire.Result{
+	resp.Results = []driver.Result{
 		{
 			Columns: make([]string, len(desc.Columns)),
 			Rows:    rows,
@@ -581,8 +564,8 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 }
 
 // Set sets session variables.
-func (s *Server) Set(session *Session, p *parser.Set, args []sqlwire.Datum,
-	resp *sqlwire.Response) error {
+func (s *Server) Set(session *Session, p *parser.Set, args []driver.Datum,
+	resp *driver.Response) error {
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
 	name := strings.ToLower(p.Name.String())
@@ -603,8 +586,8 @@ func (s *Server) Set(session *Session, p *parser.Set, args []sqlwire.Datum,
 }
 
 // Update is unimplemented.
-func (s *Server) Update(session *Session, p *parser.Update, args []sqlwire.Datum,
-	resp *sqlwire.Response) error {
+func (s *Server) Update(session *Session, p *parser.Update, args []driver.Datum,
+	resp *driver.Response) error {
 	return fmt.Errorf("TODO(pmattis): unimplemented: %T %s", p, p)
 }
 
@@ -683,7 +666,7 @@ func (s *Server) processColumns(desc *structured.TableDescriptor,
 	return cols, nil
 }
 
-func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Result_Row, _ error) {
+func (s *Server) processSelect(node parser.SelectStatement) (rows []driver.Result_Row, _ error) {
 	switch nt := node.(type) {
 	// case *parser.Select:
 	// case *parser.Union:
@@ -698,24 +681,24 @@ func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Resu
 			if !ok {
 				return nil, fmt.Errorf("expected a tuple, but found %T", data)
 			}
-			var vals []sqlwire.Datum
+			var vals []driver.Datum
 			for _, val := range dTuple {
 				switch vt := val.(type) {
 				case parser.DBool:
-					vals = append(vals, sqlwire.Datum{BoolVal: (*bool)(&vt)})
+					vals = append(vals, driver.Datum{BoolVal: (*bool)(&vt)})
 				case parser.DInt:
-					vals = append(vals, sqlwire.Datum{IntVal: (*int64)(&vt)})
+					vals = append(vals, driver.Datum{IntVal: (*int64)(&vt)})
 				case parser.DFloat:
-					vals = append(vals, sqlwire.Datum{FloatVal: (*float64)(&vt)})
+					vals = append(vals, driver.Datum{FloatVal: (*float64)(&vt)})
 				case parser.DString:
-					vals = append(vals, sqlwire.Datum{StringVal: (*string)(&vt)})
+					vals = append(vals, driver.Datum{StringVal: (*string)(&vt)})
 				case parser.DNull:
-					vals = append(vals, sqlwire.Datum{})
+					vals = append(vals, driver.Datum{})
 				default:
 					return rows, util.Errorf("unsupported node: %T", val)
 				}
 			}
-			rows = append(rows, sqlwire.Result_Row{Values: vals})
+			rows = append(rows, driver.Result_Row{Values: vals})
 		}
 		return rows, nil
 	}
@@ -736,7 +719,7 @@ func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 
 func encodeIndexKey(index structured.IndexDescriptor,
 	colMap map[uint32]int, cols []structured.ColumnDescriptor,
-	row []sqlwire.Datum, indexKey []byte) ([]byte, error) {
+	row []driver.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
@@ -764,7 +747,7 @@ func encodeColumnKey(desc *structured.TableDescriptor,
 	return encoding.EncodeUvarint(key, uint64(col.ID))
 }
 
-func encodeTableKey(b []byte, v sqlwire.Datum) ([]byte, error) {
+func encodeTableKey(b []byte, v driver.Datum) ([]byte, error) {
 	if v.BoolVal != nil {
 		if *v.BoolVal {
 			return encoding.EncodeVarint(b, 1), nil
@@ -783,7 +766,7 @@ func encodeTableKey(b []byte, v sqlwire.Datum) ([]byte, error) {
 }
 
 func decodeIndexKey(desc *structured.TableDescriptor,
-	index structured.IndexDescriptor, vals map[string]sqlwire.Datum, key []byte) ([]byte, error) {
+	index structured.IndexDescriptor, vals map[string]driver.Datum, key []byte) ([]byte, error) {
 	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
 		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -810,16 +793,16 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 		case structured.ColumnType_BIT, structured.ColumnType_INT:
 			var i int64
 			key, i = encoding.DecodeVarint(key)
-			vals[col.Name] = sqlwire.Datum{IntVal: &i}
+			vals[col.Name] = driver.Datum{IntVal: &i}
 		case structured.ColumnType_FLOAT:
 			var f float64
 			key, f = encoding.DecodeNumericFloat(key)
-			vals[col.Name] = sqlwire.Datum{FloatVal: &f}
+			vals[col.Name] = driver.Datum{FloatVal: &f}
 		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
 			structured.ColumnType_BLOB:
 			var r []byte
 			key, r = encoding.DecodeBytes(key, nil)
-			vals[col.Name] = sqlwire.Datum{BytesVal: r}
+			vals[col.Name] = driver.Datum{BytesVal: r}
 		default:
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}
@@ -828,8 +811,8 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 	return key, nil
 }
 
-func outputRow(cols []structured.ColumnDescriptor, vals map[string]sqlwire.Datum) sqlwire.Result_Row {
-	row := sqlwire.Result_Row{Values: make([]sqlwire.Datum, len(cols))}
+func outputRow(cols []structured.ColumnDescriptor, vals map[string]driver.Datum) driver.Result_Row {
+	row := driver.Result_Row{Values: make([]driver.Datum, len(cols))}
 	for i, col := range cols {
 		row.Values[i] = vals[col.Name]
 	}
@@ -851,8 +834,8 @@ func shouldOutputRow(where *parser.Where, vals valMap) (bool, error) {
 	return bool(v), nil
 }
 
-func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) sqlwire.Datum {
-	var d sqlwire.Datum
+func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) driver.Datum {
+	var d driver.Datum
 	if !kv.Exists() {
 		return d
 	}
@@ -873,7 +856,7 @@ func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) sqlwire
 	return d
 }
 
-type valMap map[string]sqlwire.Datum
+type valMap map[string]driver.Datum
 
 func (m valMap) Get(name string) (parser.Datum, bool) {
 	d, ok := m[name]

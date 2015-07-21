@@ -22,8 +22,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
 
 func TestProcessSelect(t *testing.T) {
@@ -34,28 +34,28 @@ func TestProcessSelect(t *testing.T) {
 	vStr := "two furs one cub"
 	vBool := true
 
-	dInt := sqlwire.Datum{IntVal: &vInt}
-	dFloat := func() sqlwire.Datum {
+	dInt := driver.Datum{IntVal: &vInt}
+	dFloat := func() driver.Datum {
 		tmp, err := strconv.ParseFloat(vNum, 64)
 		if err != nil {
 			panic(err)
 		}
-		return sqlwire.Datum{FloatVal: &tmp}
+		return driver.Datum{FloatVal: &tmp}
 	}()
-	dStr := sqlwire.Datum{StringVal: &vStr}
-	dBool := sqlwire.Datum{BoolVal: &vBool}
+	dStr := driver.Datum{StringVal: &vStr}
+	dBool := driver.Datum{BoolVal: &vBool}
 
 	unsupp := &parser.RangeCond{}
 
-	asRow := func(datums ...sqlwire.Datum) []sqlwire.Result_Row {
-		return []sqlwire.Result_Row{
+	asRow := func(datums ...driver.Datum) []driver.Result_Row {
+		return []driver.Result_Row{
 			{Values: datums},
 		}
 	}
 
 	testCases := []struct {
 		stmt parser.SelectStatement
-		rows []sqlwire.Result_Row
+		rows []driver.Result_Row
 		ok   bool
 	}{
 		{

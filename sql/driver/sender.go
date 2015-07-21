@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -39,9 +38,9 @@ var defaultRetryOptions = retry.Options{
 
 // Sender is an interface for sending a request to a SQL database backend.
 type Sender interface {
-	// Send dispatches a `sqlwire.Request` and returns the resulting
-	// `sqlwire.Response` with an optional transmission error.
-	Send(sqlwire.Request) (sqlwire.Response, error)
+	// Send dispatches a `Request` and returns the resulting `Response` with an
+	// optional transmission error.
+	Send(Request) (Response, error)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.

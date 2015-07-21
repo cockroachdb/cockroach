@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -452,7 +452,7 @@ func TestSQLServer(t *testing.T) {
 	// sendURL sends a request to the server and returns a StatusCode
 	sendURL := func(t *testing.T, command string, body []byte) int {
 		url := fmt.Sprintf("%s://root@%s%s%s?certs=test_certs", testContext.RequestScheme(),
-			s.ServingAddr(), sqlwire.Endpoint, command)
+			s.ServingAddr(), driver.Endpoint, command)
 		httpClient, _ := testContext.GetHTTPClient()
 		req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
@@ -465,7 +465,7 @@ func TestSQLServer(t *testing.T) {
 		defer resp.Body.Close()
 		return resp.StatusCode
 	}
-	body, _ := gogoproto.Marshal(&sqlwire.Request{RequestHeader: sqlwire.RequestHeader{User: security.RootUser}})
+	body, _ := gogoproto.Marshal(&driver.Request{RequestHeader: driver.RequestHeader{User: security.RootUser}})
 	testCases := []struct {
 		command       string
 		body          []byte
