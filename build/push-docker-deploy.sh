@@ -2,12 +2,13 @@
 
 set -eux
 
-export COCKROACH_IMAGE=cockroachdb/cockroach
+$(dirname $0)/build-docker-deploy.sh
 
-./build/build-docker-deploy.sh
-run/local-cluster.sh stop
-run/local-cluster.sh start
-run/local-cluster.sh stop
+cd $(dirname $0)/../acceptance
+if [ -f ./acceptance.test ]; then
+    time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach \
+	 -test.v -test.timeout -5m
+fi
 
 docker tag cockroachdb/cockroach:latest cockroachdb/cockroach:${VERSION}
 

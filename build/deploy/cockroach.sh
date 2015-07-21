@@ -2,8 +2,8 @@
 
 set -eu
 
-if [ -f ./test.sh ]; then
-  ./test.sh
+if [ -f ../build/test.sh ]; then
+  ../build/test.sh
 fi
 
 if [ "${1:-}" = "shell" ]; then

@@ -12,26 +12,35 @@
 
 set -euo pipefail
 
+# This is mildly trick: This script runs itself recursively. The first
+# time it is run it does not take the if-branch below and executes on
+# the host computer. It uses the builder.sh script to run itself
+# inside of docker passing "docker" as the argument causing the
+# commands in the if-branch to be executed within the docker
+# container.
+if [ "${1:-}" = "docker" ]; then
+    time make testbuild
+    time make STATIC=1 release
+
+    # Make sure the created binary is statically linked.  Seems
+    # awkward to do this programmatically, but this should work.
+    file cockroach | grep -F 'statically linked' > /dev/null
+
+    rm -fr build/deploy/build
+    mkdir -p build/deploy/build
+    mv cockroach *.test build/deploy/build
+    cp build/deploy/test.sh build/deploy/build/test.sh
+
+    exit 0
+fi
+
+# Build the cockroach and test binaries.
+$(dirname $0)/../builder.sh $0 docker
+
 cd -P "$(dirname $0)"
 DIR=$(pwd -P)
 
-function cleanup() {
-  # Files in ./build may belong to root, so let's delete that folder via this hack.
-  docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "rm -rf /build/*"
-}
-trap cleanup EXIT
-
-mkdir -p build
-docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
-  rm -rf /build/* && \
-  make testbuild && \
-  make STATIC=1 release && \
-  cp -r cockroach *.test /build/"
-
-# Make sure the created binary is statically linked.
-# Seems awkward to do this programmatically, but
-# this should work.
-file build/cockroach | grep -F 'statically linked' > /dev/null
-
+# Build the image.
 docker build -t cockroachdb/cockroach .
+# Run the tests.
 docker run -v "${DIR}/build":/build cockroachdb/cockroach
