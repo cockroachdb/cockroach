@@ -268,6 +268,40 @@ func TestMVCCIncrement(t *testing.T) {
 	}
 }
 
+// TestMVCCIncrementOldTimestamp tests a case where MVCCIncrement is
+// called with an old timestamp. The test verifies that a value is
+// read with the same timestamp as we use to write a value.
+func TestMVCCIncrementOldTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	// Write a non-interger value.
+	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Override the non-integer value.
+	val := proto.Value{}
+	val.SetInteger(1)
+	err = MVCCPut(engine, nil, testKey1, makeTS(3, 0), val, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to increment a value with an older timestamp than
+	// the previous put. This will fail with type mismatch (not
+	// with WriteTooOldError).
+	_, err = MVCCIncrement(engine, nil, testKey1, makeTS(2, 0), nil, 1)
+	if err == nil {
+		t.Fatalf("unexpected success of increment")
+	}
+	if !strings.Contains(err.Error(), "does not contain an integer value") {
+		t.Fatalf("unexpected error %s", err)
+	}
+}
+
 func TestMVCCUpdateExistingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()

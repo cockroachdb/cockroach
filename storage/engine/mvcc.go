@@ -801,12 +801,18 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 // MVCCIncrement fetches the value for key, and assuming the value is
 // an "integer" type, increments it by inc and stores the new
 // value. The newly incremented value is returned.
+//
+// An initial value is read from the key using the same operational
+// timestamp as we use to write a value.
 func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, inc int64) (int64, error) {
-	// Handle check for non-existence of key. In order to detect
-	// the potential write intent by another concurrent transaction
-	// with a newer timestamp, we need to use the max timestamp
-	// while reading.
-	value, _, err := MVCCGet(engine, key, proto.MaxTimestamp, true /* consistent */, txn)
+	// Use the specified timestamp to read the value. When a write
+	// with newer timestamp exists, one of the following will
+	// happen:
+	// - If the read value is not an integer value or overflow
+	//   happens, returns an error with an appropriate message.
+	// - Otherwise, either a WriteTooOldError or WriteIntentError is returned,
+	//   depending on whether the newer write is an intent.
+	value, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, txn)
 	if err != nil {
 		return 0, err
 	}
