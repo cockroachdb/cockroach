@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/sql/sqlserver"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
@@ -66,7 +66,7 @@ type Server struct {
 	gossip        *gossip.Gossip
 	db            *client.DB
 	kvDB          *kv.DBServer
-	sqlServer     *sqlserver.Server
+	sqlServer     *sql.Server
 	node          *Node
 	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
@@ -139,8 +139,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	//
-	s.sqlServer = sqlserver.NewServer(&s.ctx.Context, s.db)
+	s.sqlServer = sql.NewServer(&s.ctx.Context, s.db)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
