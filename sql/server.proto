@@ -16,8 +16,8 @@
 // Author: Vivek Menezes (vivek@cockroachlabs.com) 
 
 syntax = "proto2";
-package cockroach.sqlserver;
-option go_package = "sqlserver";
+package cockroach.sql;
+option go_package = "sql";
 
 import "gogoproto/gogo.proto";
 

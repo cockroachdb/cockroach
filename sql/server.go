@@ -16,7 +16,7 @@
 // Author: Peter Mattis (peter@cockroachlabs.com)
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
 
-package sqlserver
+package sql
 
 import (
 	"bytes"

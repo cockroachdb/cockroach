@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sqlserver
+package sql
 
 import (
 	"reflect"

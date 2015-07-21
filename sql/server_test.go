@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf
 
-package sqlserver
+package sql
 
 import (
 	"reflect"
