@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -63,15 +64,6 @@ const (
 	// logfiles/{file}
 	statusLocalLogFileKeyPattern = statusLocalLogFileKeyPrefix + ":file"
 
-	// statusLocalLogKeyPrefix exposes a list of logs for the node.
-	// log -> equivalent to logs/info
-	// log/ -> equivalent to logs/info
-	// log/{level} -> returns the logs for the provided level and higher
-	statusLocalLogKeyPrefix = statusLocalKeyPrefix + "log/"
-	// statusLocalLogKeyPattern is the pattern to match
-	// log/{level}
-	statusLocalLogKeyPattern = statusLocalLogKeyPrefix + ":level"
-
 	// statusLocalStacksKey exposes stack traces of running goroutines.
 	statusLocalStacksKey = statusLocalKeyPrefix + "stacks"
 
@@ -80,8 +72,7 @@ const (
 	// nodes/ -> lists all nodes
 	// nodes/{NodeID} -> shows only the status for that specific node
 	statusNodeKeyPrefix = statusKeyPrefix + "nodes/"
-	// statusNodeKeyPattern is the pattern to match
-	// nodes/{NodeID}
+	// statusNodeKeyPattern is the pattern to match nodes/{NodeID}
 	statusNodeKeyPattern = statusNodeKeyPrefix + ":id"
 
 	// statusStoreKeyPrefix exposes status for each store.
@@ -89,38 +80,63 @@ const (
 	// stores/ -> lists all nodes
 	// stores/{StoreID} -> shows only the status for that specific store
 	statusStoreKeyPrefix = statusKeyPrefix + "stores/"
-	// statusStoreKeyPattern is the pattern to match
-	// stores/{StoreID}
+	// statusStoreKeyPattern is the pattern to match stores/{StoreID}
 	statusStoreKeyPattern = statusStoreKeyPrefix + ":id"
+
+	// statusLogKeyPrefix exposes the logs for each node
+	// logs -> list log entries for the local node
+	// logs/ -> list log entries for the local node
+	// logs/{NodeID} -> list logs entries for that specific node
+	statusLogKeyPrefix = statusKeyPrefix + "logs/"
+	// statusLogKeyPattern is the pattern to match log/{NodeID}
+	statusLogKeyPattern = statusLogKeyPrefix + ":node_id"
 
 	// statusTransactionsKeyPrefix exposes transaction statistics.
 	statusTransactionsKeyPrefix = statusKeyPrefix + "txns/"
 
 	// Default Maximum number of log entries returned.
 	defaultMaxLogEntries = 1000
+
+	// Timeout for used for looking up log entries in another node.
+	logEntriesTimeout = time.Second
 )
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	db     *client.DB
-	gossip *gossip.Gossip
-	router *httprouter.Router
+	db          *client.DB
+	gossip      *gossip.Gossip
+	router      *httprouter.Router
+	ctx         *Context
+	proxyClient *http.Client
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db *client.DB, gossip *gossip.Gossip) *statusServer {
+func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *statusServer {
+	// Create an http client with a timeout
+	tlsConfig, err := ctx.GetClientTLSConfig()
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+	httpClient := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: tlsConfig},
+		Timeout:   logEntriesTimeout,
+	}
+
 	server := &statusServer{
-		db:     db,
-		gossip: gossip,
-		router: httprouter.New(),
+		db:          db,
+		gossip:      gossip,
+		router:      httprouter.New(),
+		ctx:         ctx,
+		proxyClient: httpClient,
 	}
 
 	server.router.GET(statusGossipKeyPrefix, server.handleGossipStatus)
 	server.router.GET(statusLocalKeyPrefix, server.handleLocalStatus)
 	server.router.GET(statusLocalLogFileKeyPrefix, server.handleLocalLogFiles)
 	server.router.GET(statusLocalLogFileKeyPattern, server.handleLocalLogFile)
-	server.router.GET(statusLocalLogKeyPrefix, server.handleLocalLog)
-	server.router.GET(statusLocalLogKeyPattern, server.handleLocalLog)
+	server.router.GET(statusLogKeyPrefix, server.handleLocalLog)
+	server.router.GET(statusLogKeyPattern, server.handleLogs)
 	server.router.GET(statusLocalStacksKey, server.handleLocalStacks)
 	server.router.GET(statusNodeKeyPrefix, server.handleNodesStatus)
 	server.router.GET(statusNodeKeyPattern, server.handleNodeStatus)
@@ -142,7 +158,7 @@ func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request
 	b, err := s.gossip.GetInfosAsJSON()
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	w.Write(b)
 }
@@ -161,7 +177,7 @@ func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request,
 	b, contentType, err := util.MarshalResponse(r, local, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
@@ -174,14 +190,14 @@ func (s *statusServer) handleLocalLogFiles(w http.ResponseWriter, r *http.Reques
 	logFiles, err := log.ListLogFiles()
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	b, contentType, err := util.MarshalResponse(r, logFiles, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
@@ -196,7 +212,7 @@ func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request
 	file := ps.ByName("file")
 	reader, err := log.GetLogReader(file, false /* !allowAbsolute */)
 	if reader == nil || err != nil {
-		log.Errorf("unable to open log file %s: %s", file, err)
+		log.Errorf("log file %s could not be opened: %s", file, err)
 		http.NotFound(w, r)
 		return
 	}
@@ -211,7 +227,7 @@ func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request
 				break
 			}
 			log.Error(err)
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		entries = append(entries, entry)
@@ -220,7 +236,7 @@ func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request
 	b, contentType, err := util.MarshalResponse(r, entries, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
@@ -253,11 +269,12 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   pattern if it exists. Defaults to nil.
 // * "max" query parameter is the hard limit of the number of returned log
 //   entries. Defaults to defaultMaxLogEntries.
-// * "level" which is an optional part of the URL filters the log entries to be
-//   those of the corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+// * "level" query parameter filters the log entries to be those of the
+//   corresponding severity level or worse. Defaults to "info".
+func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	log.Flush()
-	level := ps.ByName("level")
+
+	level := r.URL.Query().Get("level")
 	var sev log.Severity
 	if len(level) == 0 {
 		sev = log.InfoLog
@@ -265,8 +282,9 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 		var sevFound bool
 		sev, sevFound = log.SeverityByName(level)
 		if !sevFound {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "could not determine level %s", level)
+			http.Error(w,
+				fmt.Sprintf("level could not be determined: %s", level),
+				http.StatusBadRequest)
 			return
 		}
 	}
@@ -275,8 +293,9 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 		r.URL.Query().Get("starttime"),
 		time.Now().AddDate(0, 0, -1).UnixNano())
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "starttime could not be parsed:%s", err)
+		http.Error(w,
+			fmt.Sprintf("starttime could not be parsed: %s", err),
+			http.StatusBadRequest)
 		return
 	}
 
@@ -284,14 +303,16 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 		r.URL.Query().Get("endtime"),
 		time.Now().UnixNano())
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "endtime could not be parsed:%s", err)
+		http.Error(w,
+			fmt.Sprintf("endtime could not be parsed: %s", err),
+			http.StatusBadRequest)
 		return
 	}
 
 	if startTimestamp > endTimestamp {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "startime:%d is greater than endtime:%d", startTimestamp, endTimestamp)
+		http.Error(w,
+			fmt.Sprintf("startime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp),
+			http.StatusBadRequest)
 		return
 	}
 
@@ -299,13 +320,15 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 		r.URL.Query().Get("max"),
 		defaultMaxLogEntries)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "max could not be parsed:%s", err)
+		http.Error(w,
+			fmt.Sprintf("max could not be parsed: %s", err),
+			http.StatusBadRequest)
 		return
 	}
 	if maxEntries < 1 {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, "max must be set to a value greater than 0")
+		http.Error(w,
+			fmt.Sprintf("max: %s should be set to a value greater than 0", maxEntries),
+			http.StatusBadRequest)
 		return
 	}
 
@@ -314,7 +337,7 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 	if len(pattern) > 0 {
 		if regex, err = regexp.Compile(pattern); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "could not compile regex pattern:%s", err)
+			fmt.Fprintf(w, "regex pattern could not be compiled: %s", err)
 			return
 		}
 	}
@@ -322,18 +345,86 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, ps
 	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries), regex)
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	b, contentType, err := util.MarshalResponse(r, entries, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
+}
+
+// handleLog checks the node_id parameter and if it matches that of the current
+// node, returns the local log entries. Otherwise, it looks up the specified
+// node in gossip and if it exists, sends a request directly to the node to get
+// its logs. It passes all other query parameters along to this new request.
+func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeIDParam := ps.ByName("node_id")
+	if len(nodeIDParam) == 0 {
+		s.handleLocalLog(w, r, ps)
+		return
+	}
+
+	id, err := strconv.ParseInt(nodeIDParam, 10, 64)
+	if err != nil {
+		http.Error(w,
+			fmt.Sprintf("node id could not be parsed: %s", err),
+			http.StatusBadRequest)
+		return
+	}
+	nodeID := proto.NodeID(id)
+
+	if s.gossip.GetNodeID() == nodeID {
+		s.handleLocalLog(w, r, ps)
+		return
+	}
+
+	addr, err := s.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		http.Error(w,
+			fmt.Sprintf("node could not be located: %s", nodeIDParam),
+			http.StatusBadRequest)
+		return
+	}
+
+	// Create a call to the correct node. We might want to consider moving this
+	// and any other larger calls to an RPC instead of just proxying the http
+	// request to the correct node.
+	// Generate the redirect url and copy all the parameters to it.
+	url := fmt.Sprintf("%s://%s%s?%s", s.ctx.RequestScheme(), addr, statusLogKeyPrefix, r.URL.RawQuery)
+
+	// Call the other node.
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	resp, err := s.proxyClient.Do(req)
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set(util.ContentTypeHeader, resp.Header.Get(util.ContentTypeHeader))
+
+	// Only pass through a whitelisted set of status codes.
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNotFound, http.StatusBadRequest, http.StatusInternalServerError:
+		w.WriteHeader(resp.StatusCode)
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	defer resp.Body.Close()
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 // handleLocalStacks handles GET requests for goroutines stack traces.
@@ -362,7 +453,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	rows, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -371,7 +462,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 		nodeStatus := &status.NodeStatus{}
 		if err := row.ValueProto(nodeStatus); err != nil {
 			log.Error(err)
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		nodeStatuses = append(nodeStatuses, *nodeStatus)
@@ -379,7 +470,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	b, contentType, err := util.MarshalResponse(r, nodeStatuses, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
@@ -392,7 +483,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	id, err := strconv.ParseInt(ps.ByName("id"), 10, 64)
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	key := keys.NodeStatusKey(int32(id))
@@ -400,14 +491,14 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	nodeStatus := &status.NodeStatus{}
 	if err := s.db.GetProto(key, nodeStatus); err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	b, contentType, err := util.MarshalResponse(r, nodeStatus, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
@@ -422,7 +513,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	rows, err := s.db.Scan(startKey, endKey, 0)
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -431,7 +522,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 		storeStatus := &storage.StoreStatus{}
 		if err := row.ValueProto(storeStatus); err != nil {
 			log.Error(err)
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		storeStatuses = append(storeStatuses, *storeStatus)
@@ -439,7 +530,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	b, contentType, err := util.MarshalResponse(r, storeStatuses, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)
@@ -452,7 +543,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	id, err := strconv.ParseInt(ps.ByName("id"), 10, 32)
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	key := keys.StoreStatusKey(int32(id))
@@ -460,14 +551,14 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	storeStatus := &storage.StoreStatus{}
 	if err := s.db.GetProto(key, storeStatus); err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	b, contentType, err := util.MarshalResponse(r, storeStatus, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(util.ContentTypeHeader, contentType)

@@ -154,7 +154,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.db, s.stopper)
-	s.status = newStatusServer(s.db, s.gossip)
+	s.status = newStatusServer(s.db, s.gossip, ctx)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 	s.stopper.AddCloser(nCtx.EventFeed)
