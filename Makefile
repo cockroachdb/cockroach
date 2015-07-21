@@ -114,15 +114,6 @@ coverage:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) -cpu $(CPUS) $(PKG) $(TESTFLAGS)
 
-# Build, but do not run the tests. This is used to verify the deployable
-# Docker image which comes without the build environment. See ./build/deploy
-# for details.
-.PHONY: testbuild
-testbuild:
-	for p in $(shell $(GO) list $(PKG)); do \
-	  $(GO) test -tags '$(TAGS)' $(GOFLAGS) -c -i $$p || exit $?; \
-	done
-
 .PHONY: acceptance
 acceptance:
 	@acceptance/run.sh

@@ -2,12 +2,12 @@
 
 set -ex
 
-# This is mildly trick: This script runs itself recursively. The first
-# time it is run it does not take the if-branch below and executes on
-# the host computer. As a final step it uses the builder.sh script to
-# run itself inside of docker passing "docker" as the argument causing
-# the commands in the if-branch to be executed within the docker
-# container.
+# This is mildly tricky: This script runs itself recursively. The
+# first time it is run it does not take the if-branch below and
+# executes on the host computer. As a final step it uses the
+# builder.sh script to run itself inside of docker passing "docker" as
+# the argument causing the commands in the if-branch to be executed
+# within the docker container.
 if [ "${1:-}" = "docker" ]; then
     cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
