@@ -647,8 +647,7 @@ var putBufferPool = sync.Pool{
 
 // MVCCPut sets the value for a specified key. It will save the value
 // with different versions according to its timestamp and update the
-// key metadata. We assume the range will check for an existing write
-// intent before executing any Put action at the MVCC level.
+// key metadata.
 //
 // If the timestamp is specifed as proto.ZeroTimestamp, the value is
 // inlined instead of being written as a timestamp-versioned value. A
