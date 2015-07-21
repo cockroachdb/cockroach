@@ -21,54 +21,88 @@
 //          Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = "This file is designed to add the header to the top of the combined js file.";
+// source: util/property.ts
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Utils;
+(function (Utils) {
+    "use strict";
+    function Prop(initial) {
+        var obj = initial;
+        var epoch = 0;
+        var propFn = function (value) {
+            if (value === undefined) {
+                return obj;
+            }
+            obj = value;
+            epoch++;
+            return obj;
+        };
+        propFn.Epoch = function () { return epoch; };
+        propFn.Update = function () { epoch++; };
+        return propFn;
+    }
+    Utils.Prop = Prop;
+    function Computed() {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i - 0] = arguments[_i];
+        }
+        var obj = null;
+        var lastProcessedEpoch = -1;
+        var fn = args.pop();
+        var parentProps = args;
+        var epochFn = function () {
+            var sum = 0;
+            parentProps.forEach(function (p) { return sum += p.Epoch(); });
+            return sum;
+        };
+        var propFn = function (value) {
+            var epoch = epochFn();
+            if (epoch > lastProcessedEpoch) {
+                var values = parentProps.map(function (p) { return p(); });
+                obj = fn.apply(this, values);
+                lastProcessedEpoch = epoch;
+            }
+            return obj;
+        };
+        propFn.Epoch = epochFn;
+        return propFn;
+    }
+    Utils.Computed = Computed;
+})(Utils || (Utils = {}));
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../util/property.ts" />
 var Utils;
 (function (Utils) {
     "use strict";
     var QueryCache = (function () {
         function QueryCache(_query) {
             this._query = _query;
-            this._result = null;
-            this._error = null;
-            this._epoch = 0;
+            this._result = Utils.Prop(null);
+            this._error = Utils.Prop(null);
+            this._inFlight = false;
+            this.result = this._result;
+            this.error = this._error;
             this.refresh();
         }
         QueryCache.prototype.refresh = function () {
-            this.processOutstanding();
-            if (!this._outstanding) {
-                this._outstanding = {
-                    result: this._query(),
-                    error: m.prop(null)
-                };
-                this._outstanding.result.then(null, this._outstanding.error);
+            var _this = this;
+            if (this._inFlight) {
+                return;
             }
+            this._inFlight = true;
+            this._query().then(function (obj) {
+                _this._error(null);
+                _this._inFlight = false;
+                return _this._result(obj);
+            }, function (err) {
+                _this._result(null);
+                _this._inFlight = false;
+                return _this._error(err);
+            });
         };
         QueryCache.prototype.hasData = function () {
-            this.processOutstanding();
-            return this._epoch > 0;
-        };
-        QueryCache.prototype.result = function () {
-            this.processOutstanding();
-            return this._result;
-        };
-        QueryCache.prototype.error = function () {
-            this.processOutstanding();
-            return this._error;
-        };
-        QueryCache.prototype.epoch = function () {
-            this.processOutstanding();
-            return this._epoch;
-        };
-        QueryCache.prototype.processOutstanding = function () {
-            if (this._outstanding) {
-                var completed = (this._outstanding.error() != null) || (this._outstanding.result() != null);
-                if (completed) {
-                    this._result = this._outstanding.result();
-                    this._error = this._outstanding.error();
-                    this._outstanding = null;
-                    this._epoch++;
-                }
-            }
+            return this.result.Epoch() > 0 || this.error.Epoch() > 0;
         };
         return QueryCache;
     })();
@@ -403,7 +437,9 @@ var Components;
                             nv.addGraph(_this.chart);
                         }
                         var shouldRender = false;
-                        shouldRender = shouldRender || !context.epoch || context.epoch < _this.vm.query.epoch();
+                        shouldRender = shouldRender ||
+                            !context.epoch ||
+                            context.epoch < _this.vm.query.result.Epoch();
                         if (shouldRender) {
                             _this.chart.showLegend(_this.vm.axis.selectors().length > 1);
                             var formattedData = [];
@@ -428,7 +464,7 @@ var Components;
                                 .transition().duration(500)
                                 .call(_this.chart);
                         }
-                        context.epoch = _this.vm.query.epoch();
+                        context.epoch = _this.vm.query.result.Epoch();
                     };
                     this.chart.xAxis
                         .tickFormat(d3.time.format("%H:%M:%S"))
@@ -441,7 +477,7 @@ var Components;
                     }
                 }
                 Controller.prototype.hasData = function () {
-                    return this.vm.query.epoch() > 0;
+                    return this.vm.query.result.Epoch() > 0;
                 };
                 Controller.colors = d3.scale.category10();
                 return Controller;

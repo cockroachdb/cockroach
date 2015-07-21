@@ -83,7 +83,9 @@ module Components {
 					// after every change, so we need to figure out the best way
 					// to signal to components like this.
 					let shouldRender: boolean = false;
-					shouldRender = shouldRender || !context.epoch || context.epoch < this.vm.query.epoch();
+					shouldRender = shouldRender ||
+                      !context.epoch ||
+                      context.epoch < this.vm.query.result.Epoch();
 
 					if (shouldRender) {
 						this.chart.showLegend(this.vm.axis.selectors().length > 1);
@@ -117,14 +119,14 @@ module Components {
 							.call(this.chart);
 					}
 
-					context.epoch = this.vm.query.epoch();
+					context.epoch = this.vm.query.result.Epoch();
 				};
 
 				/**
 				 * hasData returns true if graph data is available to render.
 				 */
 				hasData(): boolean {
-					return this.vm.query.epoch() > 0;
+					return this.vm.query.result.Epoch() > 0;
 				}
 			}
 
