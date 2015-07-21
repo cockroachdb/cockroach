@@ -363,3 +363,29 @@ CREATE TABLE t.kv (
 		t.Fatalf("expected %s, but got %s", expectedResults, results)
 	}
 }
+
+func TestInsecure(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	// Start test server in insecure mode.
+	s := &server.TestServer{}
+	s.Ctx = server.NewTestContext()
+	s.Ctx.Insecure = true
+	if err := s.Start(); err != nil {
+		t.Fatalf("Could not start server: %v", err)
+	}
+	t.Logf("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
+	defer s.Stop()
+
+	// We can't attempt a connection through HTTPS since the client just retries forever.
+	// DB connection using plain HTTP.
+	db, err := sql.Open("cockroach", "http://root@"+s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+}
