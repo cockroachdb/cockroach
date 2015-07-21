@@ -523,14 +523,28 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 	var rows []sqlwire.Result_Row
 	var primaryKey []byte
 	vals := valMap{}
-	for _, kv := range sr {
-		if primaryKey != nil && !bytes.HasPrefix(kv.Key, primaryKey) {
+	l := len(sr)
+	// Iterate through the scan result set. We decide at the beginning of each
+	// new row whether the previous row is to be output. To deal with the very
+	// last one, the loop below goes an extra iteration (i==l).
+	for i := 0; ; i++ {
+		var kv client.KeyValue
+		if i < l {
+			kv = sr[i]
+		}
+		if primaryKey != nil && (i == l || !bytes.HasPrefix(kv.Key, primaryKey)) {
+			// The current key belongs to a new row. Decide whether the last
+			// row is to be output.
 			if output, err := shouldOutputRow(p.Where, vals); err != nil {
 				return err
 			} else if output {
 				rows = append(rows, outputRow(desc.Columns, vals))
 			}
 			vals = valMap{}
+		}
+
+		if i >= l {
+			break
 		}
 
 		remaining, err := decodeIndexKey(desc, desc.Indexes[0], vals, kv.Key)
@@ -552,12 +566,6 @@ func (s *Server) Select(session *Session, p *parser.Select, args []sqlwire.Datum
 		if log.V(2) {
 			log.Infof("Scan %q -> %v", kv.Key, vals[col.Name])
 		}
-	}
-
-	if output, err := shouldOutputRow(p.Where, vals); err != nil {
-		return err
-	} else if output {
-		rows = append(rows, outputRow(desc.Columns, vals))
 	}
 
 	resp.Results = []sqlwire.Result{
