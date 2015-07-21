@@ -18,74 +18,60 @@
 package sql
 
 import (
+	"fmt"
 	"reflect"
-	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-func TestProcessSelect(t *testing.T) {
-	s := (*Server)(nil) // enough for now
+func TestValues(t *testing.T) {
+	p := planner{}
 
 	vInt := int64(5)
-	vNum := "3.14159"
+	vNum := 3.14159
 	vStr := "two furs one cub"
 	vBool := true
 
-	dInt := driver.Datum{IntVal: &vInt}
-	dFloat := func() driver.Datum {
-		tmp, err := strconv.ParseFloat(vNum, 64)
-		if err != nil {
-			panic(err)
-		}
-		return driver.Datum{FloatVal: &tmp}
-	}()
-	dStr := driver.Datum{StringVal: &vStr}
-	dBool := driver.Datum{BoolVal: &vBool}
-
 	unsupp := &parser.RangeCond{}
 
-	asRow := func(datums ...driver.Datum) []driver.Result_Row {
-		return []driver.Result_Row{
-			{Values: datums},
-		}
+	asRow := func(datums ...parser.Datum) []parser.DTuple {
+		return []parser.DTuple{datums}
 	}
 
 	testCases := []struct {
-		stmt parser.SelectStatement
-		rows []driver.Result_Row
+		stmt parser.Values
+		rows []parser.DTuple
 		ok   bool
 	}{
 		{
 			parser.Values{{parser.IntVal(vInt)}},
-			asRow(dInt),
+			asRow(parser.DInt(vInt)),
 			true,
 		},
 		{
 			parser.Values{{parser.IntVal(vInt), parser.IntVal(vInt)}},
-			asRow(dInt, dInt),
+			asRow(parser.DInt(vInt), parser.DInt(vInt)),
 			true,
 		},
 		{
-			parser.Values{{parser.NumVal(vNum)}},
-			asRow(dFloat),
+			parser.Values{{parser.NumVal(fmt.Sprintf("%0.5f", vNum))}},
+			asRow(parser.DFloat(vNum)),
 			true,
 		},
 		{
 			parser.Values{{parser.StrVal(vStr)}},
-			asRow(dStr),
+			asRow(parser.DString(vStr)),
 			true,
 		},
 		{
 			parser.Values{{parser.BytesVal(vStr)}},
-			asRow(dStr), // string, not bytes, returned!
+			asRow(parser.DString(vStr)),
 			true,
 		},
 		{
 			parser.Values{{parser.BoolVal(vBool)}},
-			asRow(dBool),
+			asRow(parser.DBool(vBool)),
 			true,
 		},
 		{
@@ -96,12 +82,18 @@ func TestProcessSelect(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		rows, err := s.processSelect(tc.stmt)
+		plan, err := p.Values(tc.stmt)
 		if err == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}
-		if !reflect.DeepEqual(rows, tc.rows) {
-			t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
+		if plan != nil {
+			var rows []parser.DTuple
+			for plan.Next() {
+				rows = append(rows, plan.Values())
+			}
+			if !reflect.DeepEqual(rows, tc.rows) {
+				t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
+			}
 		}
 	}
 }
