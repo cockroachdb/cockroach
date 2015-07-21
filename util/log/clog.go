@@ -510,13 +510,16 @@ func formatHeader(s Severity, now time.Time, threadID int32, file string, line i
 	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
 	tmp[n] = ' '
 	n++
-	n += buf.nDigits(7, n, int(threadID), ' ')
+	n += buf.someDigits(n, int(threadID))
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
 	buf.WriteString(file)
 	tmp[0] = ':'
 	n = buf.someDigits(1, int(line))
+	n++
+	// Extra space between the header and the actual message for scannability.
+	tmp[n] = ' '
 	n++
 	if colors != nil {
 		n += copy(tmp[n:], []byte("\033[0m")) // reset
