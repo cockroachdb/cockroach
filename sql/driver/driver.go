@@ -23,7 +23,6 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
 )
 
 func init() {
@@ -49,7 +48,7 @@ func (d *roachDriver) Open(dsn string) (driver.Conn, error) {
 		ctx.Certs = dir[0]
 	}
 
-	sender, err := newHTTPSender(u.Host, ctx, client.DefaultTxnRetryOptions)
+	sender, err := newSender(u, ctx)
 	if err != nil {
 		return nil, err
 	}
