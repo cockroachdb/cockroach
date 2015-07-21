@@ -144,7 +144,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-// Send forwards the call for further processing.
+// exec executes the call. Any error encountered is returned; it is the
+// caller's responsibility to update the reply.
 func (s *Server) exec(call sqlwire.Call) error {
 	req := call.Args
 	resp := call.Reply
