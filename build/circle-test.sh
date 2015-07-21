@@ -2,10 +2,6 @@
 
 set -e
 
-# Prevent installation of the GITHOOKS for the make invocations
-# below. This is needed to prevent undesirable bootstrapping.
-export GITHOOKS=
-
 outdir="${TMPDIR}"
 if [ "${CIRCLE_ARTIFACTS}" != "" ]; then
     outdir="${CIRCLE_ARTIFACTS}"
@@ -15,7 +11,7 @@ builder=$(dirname $0)/builder.sh
 
 # 1. Run "make check" to verify coding guidelines. 
 echo "make check"
-time ${builder} make check | tee "${outdir}/check.log"
+time ${builder} make GITHOOKS= check | tee "${outdir}/check.log"
 # Early exit on failure.
 test ${PIPESTATUS[0]} -eq 0
 
@@ -28,7 +24,7 @@ test ${PIPESTATUS[0]} -eq 0
 # 3. Run "make test".
 match='^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE'
 echo "make test"
-time ${builder} make test \
+time ${builder} make GITHOOKS= test \
      TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
      tr -d '\r' | tee "${outdir}/test.log" | \
      grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
@@ -39,7 +35,7 @@ testrace_status=0
 # 4. Run "make testrace" only if "make test" succeeded.
 if [ ${test_status} -eq 0 ]; then
     echo "make testrace"
-    time ${builder} make testrace \
+    time ${builder} make GITHOOKS= testrace \
 	 TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
 	 tr -d '\r' | tee "${outdir}/testrace.log" | \
 	 grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
