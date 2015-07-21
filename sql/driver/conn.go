@@ -39,7 +39,7 @@ import (
 // be stateful and is not used concurrently by multiple goroutines; See
 // https://golang.org/pkg/database/sql/driver/#Conn.
 type conn struct {
-	sender  *httpSender
+	sender  Sender
 	session []byte
 }
 
@@ -69,7 +69,7 @@ func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 	return c.send(sqlwire.Request{RequestHeader: sqlwire.RequestHeader{Session: c.session}, Sql: stmt})
 }
 
-// Send sends the call to the server.
+// send sends the call to the server.
 func (c *conn) send(args sqlwire.Request) (*rows, error) {
 	resp, err := c.sender.Send(args)
 	if err != nil {
