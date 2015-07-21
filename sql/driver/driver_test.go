@@ -45,6 +45,8 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 }
 
 func readAll(t *testing.T, rows *sql.Rows) [][]string {
+	defer rows.Close()
+
 	cols, err := rows.Columns()
 	if err != nil {
 		t.Fatal(err)
