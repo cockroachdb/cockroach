@@ -177,6 +177,7 @@ module Models {
         }
 
         return m("div", [
+          m("h4", m("a[href=/logs/" + nodeId + "]", { config: m.route }, "Logs")),
           m("table", [
             m("tr", [m("td", "Stores (" + node.store_ids.length + "):"),
               m("td", [node.store_ids.map(function(storeId: number): _mithril.MithrilVirtualElement {

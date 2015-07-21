@@ -18,7 +18,6 @@
 // for names of contributors.
 //
 // Authors: Bram Gruneir (bram+code@cockroachlabs.com)
-//          Andrew Bonventre (andybons@gmail.com)
 //          Matt Tracy (matt@cockroachlabs.com)
 //
 var headerDescription = "This file is designed to add the header to the top of the combined js file.";
@@ -653,11 +652,18 @@ var Models;
                 this.max = m.prop(null);
                 this.level = m.prop(null);
                 this.pattern = m.prop(null);
+                this.node = m.prop(null);
                 this.refresh = function () {
                     _this._data.refresh();
                 };
                 this.result = function () {
                     return _this._data.result();
+                };
+                this.nodeName = function () {
+                    if (_this.node() != null) {
+                        return _this.node();
+                    }
+                    return "Local";
                 };
                 this._data = new Utils.QueryCache(function () {
                     return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
@@ -670,21 +676,25 @@ var Models;
                 this.startTime(null);
                 this.endTime(null);
                 this.pattern(null);
+                this.node(null);
             }
             Entries.prototype._url = function () {
-                var url = "/_status/local/log";
-                if (this.level() != null) {
-                    url += "/" + this.level();
+                var url = "/_status/logs/";
+                if (this.node() != null) {
+                    url += this.node();
                 }
                 url += "?";
+                if (this.level() != null) {
+                    url += "level=" + encodeURIComponent(this.level()) + "&";
+                }
                 if (this.startTime() != null) {
-                    url += "startTime=" + this.startTime().toString() + "&";
+                    url += "startTime=" + encodeURIComponent(this.startTime().toString()) + "&";
                 }
                 if (this.endTime() != null) {
-                    url += "entTime=" + this.endTime().toString() + "&";
+                    url += "entTime=" + encodeURIComponent(this.endTime().toString()) + "&";
                 }
                 if (this.max() != null) {
-                    url += "max=" + this.max().toString() + "&";
+                    url += "max=" + encodeURIComponent(this.max().toString()) + "&";
                 }
                 if ((this.pattern() != null) && (this.pattern().length > 0)) {
                     url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
@@ -714,8 +724,9 @@ var AdminViews;
         var Page;
         (function (Page) {
             var Controller = (function () {
-                function Controller() {
+                function Controller(nodeId) {
                     var _this = this;
+                    entries.node(nodeId);
                     this._Refresh();
                     this._interval = setInterval(function () { return _this._Refresh(); }, Controller._queryEveryMS);
                 }
@@ -730,7 +741,8 @@ var AdminViews;
             })();
             ;
             function controller() {
-                return new Controller();
+                var nodeId = m.route.param("node_id");
+                return new Controller(nodeId);
             }
             Page.controller = controller;
             ;
@@ -809,6 +821,7 @@ var AdminViews;
                     }
                 }
                 return m("div", [
+                    m("h2", "Node " + entries.nodeName() + " Log"),
                     m("form", [
                         m.trust("Severity: "),
                         m.component(Components.Select, {
@@ -1072,6 +1085,7 @@ var Models;
                     return m("div", "No data present yet.");
                 }
                 return m("div", [
+                    m("h4", m("a[href=/logs/" + nodeId + "]", { config: m.route }, "Logs")),
                     m("table", [
                         m("tr", [m("td", "Stores (" + node.store_ids.length + "):"),
                             m("td", [node.store_ids.map(function (storeId) {
@@ -1227,6 +1241,12 @@ var AdminViews;
                     {
                         title: "Live Bytes",
                         data: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); }
+                    },
+                    {
+                        title: "Logs",
+                        data: function (status) {
+                            return m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log");
+                        }
                     }
                 ];
                 Controller._queryEveryMS = 10000;
@@ -1469,7 +1489,8 @@ var AdminViews;
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/nodes", {
     "/graph": AdminViews.Graph.Page,
-    "/log": AdminViews.Log.Page,
+    "/logs": AdminViews.Log.Page,
+    "/logs/:node_id": AdminViews.Log.Page,
     "/monitor": AdminViews.Monitor.Page,
     "/node": AdminViews.Nodes.NodesPage,
     "/nodes": AdminViews.Nodes.NodesPage,
