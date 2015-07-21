@@ -293,7 +293,7 @@ CREATE TABLE t.users (
 	}
 }
 
-func TestInsert(t *testing.T) {
+func TestInsertSelect(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setup(t)
 	defer cleanup(s, db)
@@ -312,6 +312,11 @@ CREATE TABLE t.kv (
 	}
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatal(err)
+	}
+	if rows, err := db.Query(`SELECT * FROM t.kv`); err != nil {
+		t.Fatal(err)
+	} else if results := readAll(t, rows); len(results) > 1 {
+		t.Fatalf("non-empty result set from empty table: %s", results)
 	}
 	if _, err := db.Exec(`INSERT INTO t.kv VALUES ('a')`); !isError(err, "invalid values for columns") {
 		t.Fatal(err)
