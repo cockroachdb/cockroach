@@ -48,7 +48,7 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 ### Code review workflow
 
 + All contributors need to sign the
-  [Contributor License Agreement](https://www.clahub.com/agreements/cockroachdb/cockroach).
+  [Contributor License Agreement](https://cla-assistant.io/cockroachdb/cockroach).
 
 + Create a local feature branch to do work on, ideally on one thing at a time.
   If you are working on your own fork, see
@@ -80,4 +80,3 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
   `git fetch origin; git rebase -i origin/master` and update the PR again. Otherwise, you are free to merge your branch into origin/master directly or rebase first as you deem appropriate.
 
 + If you get a test failure in CircleCI, check the Test Failure tab to see why the test failed. When the failure is logged in `excerpt.txt`, you can find the file from the Artifacts tab and see log messages. (You need to sign in to see the Artifacts tab.)
-
