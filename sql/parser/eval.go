@@ -442,9 +442,6 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		return null, fmt.Errorf("column \"%s\" not found", t)
 
 	case Tuple:
-		if len(t) == 1 {
-			return EvalExpr(t[0], env)
-		}
 		tuple := make(DTuple, 0, len(t))
 		for _, v := range t {
 			d, err := EvalExpr(v, env)

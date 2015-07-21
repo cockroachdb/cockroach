@@ -687,10 +687,7 @@ func (s *Server) processSelect(node parser.SelectStatement) (rows []sqlwire.Resu
 			}
 			dTuple, ok := data.(parser.DTuple)
 			if !ok {
-				// A one-element DTuple is currently turned into whatever its
-				// underlying element is, so we have to massage here.
-				// See #1741.
-				dTuple = parser.DTuple([]parser.Datum{data})
+				return nil, fmt.Errorf("expected a tuple, but found %T", data)
 			}
 			var vals []sqlwire.Datum
 			for _, val := range dTuple {
