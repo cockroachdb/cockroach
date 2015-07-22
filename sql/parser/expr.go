@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Expr represents an expression.
@@ -268,7 +269,7 @@ func (n QualifiedName) String() string {
 		}
 		if s == "*" {
 			_, _ = buf.WriteString(s)
-		} else if _, ok := keywords[s]; ok {
+		} else if _, ok := keywords[strings.ToUpper(s)]; ok {
 			fmt.Fprintf(&buf, "\"%s\"", s)
 		} else {
 			encodeSQLIdent(&buf, s)
