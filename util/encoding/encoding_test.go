@@ -424,12 +424,7 @@ func TestDecodeInvalid(t *testing.T) {
 					return
 				}
 				str := fmt.Sprint(r)
-				match, err := regexp.MatchString(test.pattern, str)
-				if err != nil {
-					t.Errorf("%q, couldn't match regexp: %v", test.name, err)
-					return
-				}
-				if !match {
+				if !regexp.MustCompile(test.pattern).MatchString(str) {
 					t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, str)
 				}
 			}()
@@ -649,9 +644,7 @@ func TestEncodeDecodeKeyInvalidFormat(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
 					t.Error("expected panic")
-				} else if ok, err := regexp.MatchString(c.expected, r.(string)); err != nil {
-					t.Error(err)
-				} else if !ok {
+				} else if !regexp.MustCompile(c.expected).MatchString(r.(string)) {
 					t.Errorf("expected match \"%s\", but got %s", c.expected, r)
 				}
 			}()

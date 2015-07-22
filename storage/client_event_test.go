@@ -192,8 +192,8 @@ func checkMatch(patternMap, lineMap map[proto.StoreID][]string) bool {
 			return false
 		}
 		for i := 0; i < len(patterns); i++ {
-			if match, err := regexp.Match(patterns[i], []byte(lines[i])); !match || err != nil {
-				log.Errorf("%d: %s did not match %s: %v", i, patterns[i], lines[i], err)
+			if !regexp.MustCompile(patterns[i]).MatchString(lines[i]) {
+				log.Errorf("%d: %s did not match %s", i, patterns[i], lines[i])
 				return false
 			}
 		}

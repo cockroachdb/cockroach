@@ -51,8 +51,8 @@ func TestStatusLocalStacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify match with at least two goroutine stacks.
-	if matches, err := regexp.Match("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", body); !matches || err != nil {
-		t.Errorf("expected match: %t; err nil: %s", matches, err)
+	if re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*"); !re.Match(body) {
+		t.Errorf("expected %s to match %s", body, re)
 	}
 }
 
@@ -315,8 +315,8 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Fatalf("expected 3 log files; got %d", l)
 	}
 	for i, pat := range []string{`.*log.ERROR.*`, `.*log.INFO.*`, `.*log.WARNING.*`} {
-		if ok, err := regexp.MatchString(pat, logs.Data[i].Name); !ok || err != nil {
-			t.Errorf("expected log file %s to match %q: %s", logs.Data[i].Name, pat, err)
+		if !regexp.MustCompile(pat).MatchString(logs.Data[i].Name) {
+			t.Errorf("expected log file %s to match %q", logs.Data[i].Name, pat)
 		}
 	}
 

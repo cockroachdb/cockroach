@@ -92,8 +92,8 @@ func TestAdminDebugPprof(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if matches, err := regexp.MatchString(".*contention:\ncycles/second=.*", string(body)); !matches || err != nil {
-		t.Errorf("expected match: %t; err nil: %v", matches, err)
+	if re := regexp.MustCompile(".*contention:\ncycles/second=.*"); !re.Match(body) {
+		t.Errorf("expected %s to match %s", body, re)
 	}
 }
 

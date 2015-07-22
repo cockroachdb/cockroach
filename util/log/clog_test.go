@@ -164,7 +164,7 @@ func TestJSONLogFormat(t *testing.T) {
   "format": "test",
   "args": null
 }`
-	if ok, _ := regexp.Match(expPat, json); !ok {
+	if !regexp.MustCompile(expPat).Match(json) {
 		t.Errorf("expected json match; got %s", json)
 	}
 }
