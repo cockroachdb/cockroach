@@ -57,7 +57,7 @@ module Components {
 				constructor(public vm: ViewModel) {
 					// Set xAxis ticks to properly format.
 					this.chart.xAxis
-						.tickFormat(d3.time.format("%I:%M:%S"))
+						.tickFormat(d3.time.format("%H:%M:%S"))
 						.showMaxMin(false);
 					this.chart.yAxis
 						.axisLabel(vm.axis.label())
