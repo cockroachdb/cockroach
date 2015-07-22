@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -313,9 +314,9 @@ func TestStatusLocalLogs(t *testing.T) {
 	if a, e := len(logs.Data), 3; a != e {
 		t.Fatalf("expected %d log files; got %d", e, a)
 	}
-	for i, pat := range []string{`.*log.ERROR.*`, `.*log.INFO.*`, `.*log.WARNING.*`} {
-		if !regexp.MustCompile(pat).MatchString(logs.Data[i].Name) {
-			t.Errorf("expected log file %s to match %q", logs.Data[i].Name, pat)
+	for i, name := range []string{"log.ERROR", "log.INFO", "log.WARNING"} {
+		if !strings.Contains(logs.Data[i].Name, name) {
+			t.Errorf("expected log file name %s to contain %q", logs.Data[i].Name, name)
 		}
 	}
 

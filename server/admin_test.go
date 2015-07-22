@@ -18,6 +18,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -92,8 +93,8 @@ func TestAdminDebugPprof(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if re := regexp.MustCompile(".*contention:\ncycles/second=.*"); !re.Match(body) {
-		t.Errorf("expected %s to match %s", body, re)
+	if exp := "contention:\ncycles/second="; !bytes.Contains(body, []byte(exp)) {
+		t.Errorf("expected %s to contain %s", body, exp)
 	}
 }
 
