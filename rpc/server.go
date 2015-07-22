@@ -40,7 +40,7 @@ type method struct {
 }
 
 type serverResponse struct {
-	req   *rpc.Request
+	req   rpc.Request
 	reply proto.Message
 	err   error
 }
@@ -373,10 +373,9 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 }
 
 // readRequest reads a single request from a connection.
-func (s *Server) readRequest(codec rpc.ServerCodec) (req *rpc.Request, m method,
+func (s *Server) readRequest(codec rpc.ServerCodec) (req rpc.Request, m method,
 	args proto.Message, err error) {
-	req = &rpc.Request{}
-	if err = codec.ReadRequestHeader(req); err != nil {
+	if err = codec.ReadRequestHeader(&req); err != nil {
 		return
 	}
 
