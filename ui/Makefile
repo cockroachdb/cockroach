@@ -21,6 +21,7 @@ GITHUB_ROOT  := $(ORG_ROOT)/..
 NODE_MODULES := node_modules
 TS_ROOT      := ts
 CSS_ROOT     := css
+TEST_ROOT    := ts/test
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -32,12 +33,13 @@ GOPATH_BIN := $(GOPATH)/bin
 GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
 TYPESCRIPT_TARGET      := js/app.js
+TEST_TARGET            := js/test.js
 GOBINDATA_SOURCES      := $(TYPESCRIPT_TARGET) index.html $(shell find css js/libs -type f)
 GOBINDATA_TARGET       := ./embedded.go
 GOBINDATA_DEBUG_TARGET := ./embedded_debug.go
 
 .PHONY:
-all: $(GOBINDATA_TARGET)
+all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY:
@@ -50,11 +52,14 @@ npm.installed: npm-shrinkwrap.json
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) npm.installed
 	$(NODE_MODULES)/.bin/tsc -p $(TS_ROOT)
-	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(addprefix -f , $(shell find $(TS_ROOT) -name *.ts -not -path *typings*))
+	$(NODE_MODULES)/.bin/tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name *.ts -not -path *typings*)
+
+$(TEST_TARGET): $(shell find $(TS_ROOT)) npm.installed
+	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
 
 css/%.css: styl/%.styl npm.installed
 	$(NODE_MODULES)/.bin/stylus $< --out css
-	
+
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^
 	gofmt -s -w $@

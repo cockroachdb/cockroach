@@ -8,11 +8,10 @@
     "noEmitOnError": true,
     "removeComments": true,
     "noLib": false,
-    "out": "./js/app.js",
+    "out": "./js/test.js",
     "sourceMap": false
   },
   "files": [
-    "./header.ts",
-    "./app.ts"
+    "./util.ts"
   ]
 }

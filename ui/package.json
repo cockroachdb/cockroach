@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "typescript": ">=1.5.0-beta",
+    "chai": ">=3.2.0",
+    "mocha": ">=2.2.5",
+    "stylus": ">=0.51.1",
     "tslint": ">=2.3.1-beta",
-    "stylus": ">=0.51.1"
+    "typescript": ">=1.5.0-beta"
   }
 }
