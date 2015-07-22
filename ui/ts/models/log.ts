@@ -29,6 +29,7 @@ module Models {
       max: Property<number> = m.prop(<number>null);
       level: Property<string> = m.prop(<string>null);
       pattern: Property<string> = m.prop(<string>null);
+      node: Property<string> = m.prop(<string>null);
 
       refresh: () => void = () => {
         this._data.refresh();
@@ -36,6 +37,13 @@ module Models {
 
       result: () => Proto.LogEntry[] = () => {
         return this._data.result();
+      };
+
+      nodeName: () => string = () => {
+        if (this.node() != null) {
+          return this.node();
+        }
+        return "Local";
       };
 
       private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache((): Promise<Proto.LogEntry[]> => {
@@ -46,19 +54,22 @@ module Models {
       });
 
       private _url(): string {
-        let url: string = "/_status/local/log";
-        if (this.level() != null) {
-          url += "/" + this.level();
+        let url: string = "/_status/logs/";
+        if (this.node() != null) {
+          url += this.node();
         }
         url += "?";
+        if (this.level() != null) {
+          url += "level=" + encodeURIComponent(this.level()) + "&";
+        }
         if (this.startTime() != null) {
-          url += "startTime=" + this.startTime().toString() + "&";
+          url += "startTime=" + encodeURIComponent(this.startTime().toString()) + "&";
         }
         if (this.endTime() != null) {
-          url += "entTime=" + this.endTime().toString() + "&";
+          url += "entTime=" + encodeURIComponent(this.endTime().toString()) + "&";
         }
         if (this.max() != null) {
-          url += "max=" + this.max().toString() + "&";
+          url += "max=" + encodeURIComponent(this.max().toString()) + "&";
         }
         if ((this.pattern() != null) && (this.pattern().length > 0)) {
           url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
@@ -72,6 +83,7 @@ module Models {
         this.startTime(null);
         this.endTime(null);
         this.pattern(null);
+        this.node(null);
       }
     }
 

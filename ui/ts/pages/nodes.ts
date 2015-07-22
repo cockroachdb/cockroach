@@ -54,6 +54,12 @@ module AdminViews {
           {
             title: "Live Bytes",
             data: (status: NodeStatus): string => Utils.Format.Bytes(status.stats.live_bytes)
+          },
+          {
+            title: "Logs",
+            data: (status: NodeStatus): _mithril.MithrilVirtualElement => {
+              return m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log");
+            }
           }
         ];
 

@@ -18,7 +18,6 @@
 // for names of contributors.
 //
 // Authors: Bram Gruneir (bram+code@cockroachlabs.com)
-//          Andrew Bonventre (andybons@gmail.com)
 //          Matt Tracy (matt@cockroachlabs.com)
 //
 

@@ -12,7 +12,8 @@
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/nodes", {
   "/graph": AdminViews.Graph.Page,
-  "/log": AdminViews.Log.Page,
+  "/logs": AdminViews.Log.Page,
+  "/logs/:node_id": AdminViews.Log.Page,
   "/monitor": AdminViews.Monitor.Page,
   "/node": AdminViews.Nodes.NodesPage,
   "/nodes": AdminViews.Nodes.NodesPage,

@@ -36,14 +36,16 @@ module AdminViews {
           entries.refresh();
         }
 
-        constructor() {
+        constructor(nodeId?: string) {
+          entries.node(nodeId);
           this._Refresh();
           this._interval = setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
       };
 
       export function controller(): Controller {
-        return new Controller();
+        let nodeId: string = m.route.param("node_id");
+        return new Controller(nodeId);
       };
 
       // TODO(bram): Move these into css classes.
@@ -125,6 +127,7 @@ module AdminViews {
         }
 
         return m("div", [
+          m("h2", "Node " + entries.nodeName() + " Log"),
           m("form", [
             m.trust("Severity: "),
             m.component(Components.Select, {
@@ -136,7 +139,6 @@ module AdminViews {
             m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() }),
             m.trust("&nbsp;&nbsp;Regex Filter: "),
             m("input", { oninput: m.withAttr("value", onChangePattern), value: entries.pattern() })
-
           ]),
           m("p", rows.length + " log entries retrieved"),
           m("table", { style: _tableStyle }, [
