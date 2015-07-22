@@ -96,14 +96,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	args := &driver.Request{}
-	if err := util.UnmarshalRequest(r, reqBody, args, allowedEncodings); err != nil {
+	var args driver.Request
+	if err := util.UnmarshalRequest(r, reqBody, &args, allowedEncodings); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Check request user against client certificate user.
-	if err := authenticationHook(args); err != nil {
+	if err := authenticationHook(&args); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -118,7 +118,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Marshal the response.
-	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
+	body, contentType, err := util.MarshalResponse(r, &reply, allowedEncodings)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -129,8 +129,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (s *Server) exec(req *driver.Request) (*driver.Response, error) {
-	resp := &driver.Response{}
+func (s *Server) exec(req driver.Request) (driver.Response, error) {
+	var resp driver.Response
 
 	// Pick up current session state.
 	var session Session
@@ -148,27 +148,27 @@ func (s *Server) exec(req *driver.Request) (*driver.Response, error) {
 	for _, stmt := range stmts {
 		switch p := stmt.(type) {
 		case *parser.CreateDatabase:
-			err = s.CreateDatabase(&session, p, req.Params, resp)
+			err = s.CreateDatabase(&session, p, req.Params, &resp)
 		case *parser.CreateTable:
-			err = s.CreateTable(&session, p, req.Params, resp)
+			err = s.CreateTable(&session, p, req.Params, &resp)
 		case *parser.Delete:
-			err = s.Delete(&session, p, req.Params, resp)
+			err = s.Delete(&session, p, req.Params, &resp)
 		case *parser.Insert:
-			err = s.Insert(&session, p, req.Params, resp)
+			err = s.Insert(&session, p, req.Params, &resp)
 		case *parser.Select:
-			err = s.Select(&session, p, req.Params, resp)
+			err = s.Select(&session, p, req.Params, &resp)
 		case *parser.Set:
-			err = s.Set(&session, p, req.Params, resp)
+			err = s.Set(&session, p, req.Params, &resp)
 		case *parser.ShowColumns:
-			err = s.ShowColumns(&session, p, req.Params, resp)
+			err = s.ShowColumns(&session, p, req.Params, &resp)
 		case *parser.ShowDatabases:
-			err = s.ShowDatabases(&session, p, req.Params, resp)
+			err = s.ShowDatabases(&session, p, req.Params, &resp)
 		case *parser.ShowIndex:
-			err = s.ShowIndex(&session, p, req.Params, resp)
+			err = s.ShowIndex(&session, p, req.Params, &resp)
 		case *parser.ShowTables:
-			err = s.ShowTables(&session, p, req.Params, resp)
+			err = s.ShowTables(&session, p, req.Params, &resp)
 		case *parser.Update:
-			err = s.Update(&session, p, req.Params, resp)
+			err = s.Update(&session, p, req.Params, &resp)
 		default:
 			err = fmt.Errorf("unknown statement type: %T", stmt)
 		}
