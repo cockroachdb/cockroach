@@ -341,8 +341,8 @@ func TestStatusLocalLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 		var found bool
-		for i := len(logW.Data) - 1; i >= 0; i-- {
-			if logW.Data[i].Format == "TestStatusLocalLogFile test message-Error" {
+		for _, data := range logW.Data {
+			if data.Format == "TestStatusLocalLogFile test message-Error" {
 				found = true
 				break
 			}
