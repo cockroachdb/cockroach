@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
+	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
@@ -220,7 +220,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(kv.DBPrefix, s.kvDB)
 	// The SQL endpoints handles its own authentication, verifying user
 	// credentials against the requested user.
-	s.mux.Handle(sqlwire.Endpoint, s.sqlServer)
+	s.mux.Handle(driver.Endpoint, s.sqlServer)
 }
 
 // startWriteSummaries begins periodically persisting status summaries for the

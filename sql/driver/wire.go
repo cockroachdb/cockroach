@@ -13,9 +13,11 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Vivek Menezes (vivek@cockroachlabs.com)
+// Author: Peter Mattis (peter@cockroachlabs.com)
 
-package sqlwire
+package driver
+
+import "strconv"
 
 const (
 	// Endpoint is the URL path prefix which accepts incoming
@@ -23,10 +25,26 @@ const (
 	Endpoint = "/sql/"
 )
 
-// A Call is a pending database API call.
-type Call struct {
-	Args  *Request  // The argument to the command
-	Reply *Response // The reply from the command
+func (d Datum) String() string {
+	if d.BoolVal != nil {
+		if *d.BoolVal {
+			return "true"
+		}
+		return "false"
+	}
+	if d.IntVal != nil {
+		return strconv.FormatInt(*d.IntVal, 10)
+	}
+	if d.FloatVal != nil {
+		return strconv.FormatFloat(*d.FloatVal, 'g', -1, 64)
+	}
+	if d.BytesVal != nil {
+		return string(d.BytesVal)
+	}
+	if d.StringVal != nil {
+		return *d.StringVal
+	}
+	return "NULL"
 }
 
 // Header returns the request header.

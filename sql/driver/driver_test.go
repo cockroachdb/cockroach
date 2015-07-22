@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package driver
+package driver_test
 
 import (
 	"database/sql"

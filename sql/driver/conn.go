@@ -20,8 +20,6 @@ package driver
 import (
 	"database/sql/driver"
 	"fmt"
-
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 )
 
 // TODO(pmattis):
@@ -66,11 +64,11 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 
 func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 	// TODO(vivek): Add the args to the Call.
-	return c.send(sqlwire.Request{RequestHeader: sqlwire.RequestHeader{Session: c.session}, Sql: stmt})
+	return c.send(Request{RequestHeader: RequestHeader{Session: c.session}, Sql: stmt})
 }
 
 // send sends the call to the server.
-func (c *conn) send(args sqlwire.Request) (*rows, error) {
+func (c *conn) send(args Request) (*rows, error) {
 	resp, err := c.sender.Send(args)
 	if err != nil {
 		return nil, err

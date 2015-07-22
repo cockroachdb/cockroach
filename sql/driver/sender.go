@@ -24,10 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/sql/sqlwire"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -41,18 +38,9 @@ var defaultRetryOptions = retry.Options{
 
 // Sender is an interface for sending a request to a SQL database backend.
 type Sender interface {
-	// Send dispatches a `sqlwire.Request` and returns the resulting
-	// `sqlwire.Response` with an optional transmission error.
-	Send(sqlwire.Request) (sqlwire.Response, error)
-}
-
-// SenderFunc is an adapter to allow the use of ordinary functions
-// as Senders.
-type SenderFunc func(context.Context, sqlwire.Call)
-
-// Send calls f(ctx, c).
-func (f SenderFunc) Send(ctx context.Context, c sqlwire.Call) {
-	f(ctx, c)
+	// Send dispatches a `Request` and returns the resulting `Response` with an
+	// optional transmission error.
+	Send(Request) (Response, error)
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.

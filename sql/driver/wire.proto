@@ -16,8 +16,8 @@
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.sqlwire;
-option go_package = "sqlwire";
+package cockroach.driver;
+option go_package = "driver";
 
 import "cockroach/proto/api.proto";
 import "cockroach/proto/errors.proto";
