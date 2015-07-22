@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package server
 
@@ -41,25 +42,34 @@ import (
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
-// via the /_status/local/stacks endpoint.
+// via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(testContext.RequestScheme() + "://" + s.ServingAddr() + statusLocalStacksKey)
+	body, err := getText(testContext.RequestScheme() + "://" + s.ServingAddr() + "/_status/stacks/local")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Verify match with at least two goroutine stacks.
-	if re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*"); !re.Match(body) {
+	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
+	if !re.Match(body) {
+		t.Errorf("expected %s to match %s", body, re)
+	}
+
+	body, err = getText(testContext.RequestScheme() + "://" + s.ServingAddr() + "/_status/stacks/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify match with at least two goroutine stacks.
+	if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
 	}
 }
 
-// TestStatusJson verifies that status endpoints return expected
-// Json results. The content type of the responses is always
-// util.JSONContentType.
+// TestStatusJson verifies that status endpoints return expected Json results.
+// The content type of the responses is always util.JSONContentType.
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
@@ -75,9 +85,9 @@ func TestStatusJson(t *testing.T) {
 		t.Fatal(err)
 	}
 	testCases := []TestCase{
-		{statusNodeKeyPrefix, "\\\"d\\\":"},
+		{statusNodesPrefix, "\\\"d\\\":"},
 	}
-	testCases = append(testCases, TestCase{statusLocalKeyPrefix, fmt.Sprintf(`{
+	expectedResult := fmt.Sprintf(`{
   "address": {
     "network": "%s",
     "string": "%s"
@@ -88,7 +98,9 @@ func TestStatusJson(t *testing.T) {
     "time": "",
     "dependencies": ""
   }
-}`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))})
+}`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
+	testCases = append(testCases, TestCase{"/_status/details/local", expectedResult})
+	testCases = append(testCases, TestCase{"/_status/details/1", expectedResult})
 
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
@@ -169,7 +181,7 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 	contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 	for _, contentType := range contentTypes {
-		req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+statusGossipKeyPrefix, nil)
+		req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+"/_status/gossip/local", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -301,7 +313,7 @@ func TestStatusLocalLogs(t *testing.T) {
 		}
 	}()
 
-	ts := startServer(t, statusLocalLogFileKeyPrefix)
+	ts := startServer(t, "/_status/logfiles/local")
 	defer ts.Stop()
 
 	// Log an error which we expect to show up on every log file.
@@ -313,7 +325,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	log.Infof("TestStatusLocalLogFile test message-Info")
 	timestampEWI := time.Now().UnixNano()
 
-	body := getRequest(t, ts, statusLocalLogFileKeyPrefix)
+	body := getRequest(t, ts, "/_status/logfiles/local")
 
 	type logsWrapper struct {
 		Data []log.FileInfo `json:"d"`
@@ -337,7 +349,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	}
 	// Check each individual log can be fetched and is non-empty.
 	for _, log := range logs.Data {
-		body = getRequest(t, ts, fmt.Sprintf("%s%s", statusLocalLogFileKeyPrefix, log.Name))
+		body = getRequest(t, ts, fmt.Sprintf("%s/%s", "/_status/logfiles/local", log.Name))
 		logW := logWrapper{}
 		if err := json.Unmarshal(body, &logW); err != nil {
 			t.Fatal(err)
@@ -394,7 +406,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	for i, testCase := range testCases {
 		var url bytes.Buffer
-		fmt.Fprintf(&url, "%s?level=%s&", statusLogKeyPrefix, testCase.Level.Name())
+		fmt.Fprintf(&url, "%s?level=%s&", "/_status/logs/local", testCase.Level.Name())
 		if testCase.MaxEntities > 0 {
 			fmt.Fprintf(&url, "max=%d&", testCase.MaxEntities)
 		}
@@ -441,10 +453,10 @@ func TestStatusLocalLogs(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ts := startServer(t, statusNodeKeyPrefix)
+	ts := startServer(t, statusNodesPrefix)
 	defer ts.Stop()
 
-	body := getRequest(t, ts, statusNodeKeyPrefix)
+	body := getRequest(t, ts, statusNodesPrefix)
 
 	// First fetch all the node statuses.
 	type nsWrapper struct {
@@ -467,7 +479,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := &status.NodeStatus{}
-		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodeKeyPrefix, oldNodeStatus.Desc.NodeID))
+		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodesPrefix, oldNodeStatus.Desc.NodeID))
 		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
@@ -481,10 +493,10 @@ func TestNodeStatusResponse(t *testing.T) {
 // results.
 func TestStoreStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ts := startServer(t, statusStoreKeyPrefix)
+	ts := startServer(t, statusStoresPrefix)
 	defer ts.Stop()
 
-	body := getRequest(t, ts, statusStoreKeyPrefix)
+	body := getRequest(t, ts, statusStoresPrefix)
 
 	type ssWrapper struct {
 		Data []storage.StoreStatus `json:"d"`
@@ -517,7 +529,7 @@ func TestStoreStatusResponse(t *testing.T) {
 
 		// Also fetch the each status individually.
 		fetchedStoreStatus := &storage.StoreStatus{}
-		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoreKeyPrefix, storeStatus.Desc.StoreID))
+		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoresPrefix, storeStatus.Desc.StoreID))
 		if err := json.Unmarshal(requestBody, &fetchedStoreStatus); err != nil {
 			t.Fatal(err)
 		}

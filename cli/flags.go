@@ -77,7 +77,8 @@ var flagUsage = map[string]string{
           or "self" for single-node systems.
         - unix: unix socket
         - lb: RPC load balancer fowarding to an arbitrary node
-        - http-lb: HTTP load balancer: we query http(s)://<address>/_status/local
+        - http-lb: HTTP load balancer: we query
+          http(s)://<address>/_status/details/local
 `,
 	"gossip-interval": `
         Approximate interval (time.Duration) for gossiping new information to peers.

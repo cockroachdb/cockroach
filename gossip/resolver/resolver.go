@@ -48,7 +48,8 @@ var validTypes = map[string]struct{}{
 // - tcp: plain hostname of ip address
 // - lb: load balancer host name or ip: points to an unknown number of backends
 // - unix: unix sockets
-// - http-lb: http load balancer: queries http(s)://<lb>/_status/local for node addresses
+// - http-lb: http load balancer: queries http(s)://<lb>/_status/details/local
+//   for node addresses
 // If "network type" is not specified, "tcp" is assumed.
 func NewResolver(context *base.Context, spec string) (Resolver, error) {
 	parts := strings.Split(spec, "=")

@@ -55,7 +55,7 @@ func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
 
 		for i, node := range l.Nodes {
 			var m map[string]interface{}
-			if err := node.GetJSON("", "/_status/gossip", &m); err != nil {
+			if err := node.GetJSON("", "/_status/gossip/local", &m); err != nil {
 				return err
 			}
 			infos := m["infos"].(map[string]interface{})

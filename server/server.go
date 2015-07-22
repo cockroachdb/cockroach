@@ -212,7 +212,7 @@ func (s *Server) initHTTP() {
 	// apply it for all web endpoints.
 	s.mux.Handle(adminEndpoint, s.admin)
 	s.mux.Handle(debugEndpoint, s.admin)
-	s.mux.Handle(statusKeyPrefix, s.status)
+	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(ts.URLPrefix, s.tsServer)
 
 	// KV handles its own authentication, verifying user certificates against

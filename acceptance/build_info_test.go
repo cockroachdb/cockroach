@@ -42,7 +42,7 @@ func TestBuildInfo(t *testing.T) {
 		var r struct {
 			BuildInfo map[string]string
 		}
-		if err := l.Nodes[0].GetJSON("", "/_status/local/", &r); err != nil {
+		if err := l.Nodes[0].GetJSON("", "/_status/details/local", &r); err != nil {
 			return err
 		}
 		for _, key := range []string{"goVersion", "tag", "time", "dependencies"} {
