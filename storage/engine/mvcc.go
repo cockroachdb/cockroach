@@ -33,8 +33,6 @@ import (
 )
 
 const (
-	// The size of the reservoir used by FindSplitKey.
-	splitReservoirSize = 100
 	// The size of the timestamp portion of MVCC version keys (used to update stats).
 	mvccVersionTimestampSize int64 = 12
 )
