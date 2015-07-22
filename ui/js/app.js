@@ -431,7 +431,7 @@ var Components;
                         context.epoch = _this.vm.query.epoch();
                     };
                     this.chart.xAxis
-                        .tickFormat(d3.time.format("%I:%M:%S"))
+                        .tickFormat(d3.time.format("%H:%M:%S"))
                         .showMaxMin(false);
                     this.chart.yAxis
                         .axisLabel(vm.axis.label())
