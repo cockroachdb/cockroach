@@ -311,8 +311,8 @@ func TestStatusLocalLogs(t *testing.T) {
 	if err := json.Unmarshal(body, &logs); err != nil {
 		t.Fatal(err)
 	}
-	if l := len(logs.Data); l != 3 {
-		t.Fatalf("expected 3 log files; got %d", l)
+	if a, e := len(logs.Data), 3; a != e {
+		t.Fatalf("expected %d log files; got %d", e, a)
 	}
 	for i, pat := range []string{`.*log.ERROR.*`, `.*log.INFO.*`, `.*log.WARNING.*`} {
 		if !regexp.MustCompile(pat).MatchString(logs.Data[i].Name) {
