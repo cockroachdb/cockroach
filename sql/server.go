@@ -127,8 +127,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-// exec executes the call. Any error encountered is returned; it is the
-// caller's responsibility to update the reply.
+// exec executes the request. Any error encountered is returned; it is
+// the caller's responsibility to update the response.
 func (s *Server) exec(req *driver.Request) (*driver.Response, error) {
 	resp := &driver.Response{}
 
