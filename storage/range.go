@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -733,11 +732,8 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.Wa
 		// Next if the command was committed, wait for the range to apply it.
 		respWithErr := <-pendingCmd.done
 		reply, err = respWithErr.Reply, respWithErr.Err
-	} else if err == multiraft.ErrGroupDeleted {
-		// This error needs to be converted appropriately so that
-		// clients will retry.
-		err = proto.NewRangeNotFoundError(r.Desc().RaftID)
 	}
+
 	// As for reads, update timestamp cache with the timestamp
 	// of this write on success. This ensures a strictly higher
 	// timestamp for successive writes to the same key or key range.
