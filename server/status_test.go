@@ -281,8 +281,7 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 		t.Fatalf("error writing summaries: %s", err)
 	}
 
-	body := getRequest(t, ts, keyPrefix)
-	return ts, body
+	return ts, getRequest(t, ts, keyPrefix)
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
