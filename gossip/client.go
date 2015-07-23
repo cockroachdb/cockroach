@@ -36,15 +36,6 @@ const (
 	maxWaitForNewGossip = 1 * time.Minute
 )
 
-// init pre-registers net.UnixAddr and net.TCPAddr concrete types with
-// gob. If other implementations of net.Addr are passed, they must be
-// added here as well.
-func init() {
-	gob.Register(&net.TCPAddr{})
-	gob.Register(&net.UnixAddr{})
-	gob.Register(&util.UnresolvedAddr{})
-}
-
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
 	peerID      proto.NodeID  // Peer node ID; 0 until first gossip response
