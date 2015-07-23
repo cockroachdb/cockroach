@@ -18,7 +18,6 @@
 package engine
 
 import (
-	"encoding/gob"
 	"fmt"
 	"math/rand"
 	"os"
@@ -73,7 +72,6 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 // cache and transaction entries.
 func TestRocksDBCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	gob.Register(proto.Timestamp{})
 	rocksdb := newMemRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	err := rocksdb.Open()
 	if err != nil {

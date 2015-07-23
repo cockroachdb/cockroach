@@ -103,6 +103,13 @@ var (
 
 func init() {
 	gob.Register(&proto.NodeDescriptor{})
+	gob.Register(&proto.ZoneConfig{})
+	gob.Register(proto.AcctConfig{})
+	gob.Register(proto.PermConfig{})
+	gob.Register(proto.RangeDescriptor{})
+	gob.Register(proto.StoreDescriptor{})
+	gob.Register(proto.UserConfig{})
+	gob.Register(util.UnresolvedAddr{})
 }
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.

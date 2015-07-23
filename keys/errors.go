@@ -18,7 +18,6 @@
 package keys
 
 import (
-	"encoding/gob"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -39,9 +38,4 @@ func NewInvalidRangeMetaKeyError(msg string, k proto.Key) *InvalidRangeMetaKeyEr
 // Error formats error string.
 func (i *InvalidRangeMetaKeyError) Error() string {
 	return fmt.Sprintf("%q is not valid range metadata key: %s", string(i.Key), i.Msg)
-}
-
-// Init registers engine error types with Gob.
-func init() {
-	gob.Register(&InvalidRangeMetaKeyError{})
 }

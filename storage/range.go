@@ -47,16 +47,10 @@ import (
 	"golang.org/x/net/context"
 )
 
-// init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
+// init pre-registers PrefixConfigMap for gossip. This is here rather
+// than in gossip/gossip.go to avoid a circular dependency.
 func init() {
-	gob.Register(proto.StoreDescriptor{})
 	gob.Register(PrefixConfigMap{})
-	gob.Register(&proto.AcctConfig{})
-	gob.Register(&proto.PermConfig{})
-	gob.Register(&proto.UserConfig{})
-	gob.Register(&proto.ZoneConfig{})
-	gob.Register(proto.RangeDescriptor{})
-	gob.Register(proto.Transaction{})
 }
 
 var (
