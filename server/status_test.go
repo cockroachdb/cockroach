@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,7 +218,7 @@ func TestStatusGossipJson(t *testing.T) {
 
 // getRequest returns the the results of a get request to the test server with
 // the given path.  It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts *TestServer, path string) []byte {
+func getRequest(t *testing.T, ts TestServer, path string) []byte {
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -246,13 +247,12 @@ func getRequest(t *testing.T, ts *TestServer, path string) []byte {
 	return body
 }
 
-// startServerAndGetStatus will startup a server with a short scan interval,
-// wait for the scan to completed, fetch the request status based on the
-// keyPrefix. The test server and fetched status are returned. The caller is
-// responsible to stop the server.
+// startServer will start a server with a short scan interval, wait for
+// the scan to complete, and return the server. The caller is
+// responsible for stopping the server.
 // TODO(Bram): Add more nodes.
-func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byte) {
-	ts := &TestServer{}
+func startServer(t *testing.T, keyPrefix string) TestServer {
+	var ts TestServer
 	ts.Ctx = NewTestContext()
 	ts.Ctx.ScanInterval = time.Duration(5 * time.Millisecond)
 	ts.StoresPerNode = 3
@@ -281,8 +281,7 @@ func startServerAndGetStatus(t *testing.T, keyPrefix string) (*TestServer, []byt
 		t.Fatalf("error writing summaries: %s", err)
 	}
 
-	body := getRequest(t, ts, keyPrefix)
-	return ts, body
+	return ts
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
@@ -301,24 +300,9 @@ func TestStatusLocalLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
-	ts, body := startServerAndGetStatus(t, statusLocalLogFileKeyPrefix)
-	defer ts.Stop()
 
-	type logsWrapper struct {
-		Data []log.FileInfo `json:"d"`
-	}
-	logs := logsWrapper{}
-	if err := json.Unmarshal(body, &logs); err != nil {
-		t.Fatal(err)
-	}
-	if l := len(logs.Data); l != 3 {
-		t.Fatalf("expected 3 log files; got %d", l)
-	}
-	for i, pat := range []string{`.*log.ERROR.*`, `.*log.INFO.*`, `.*log.WARNING.*`} {
-		if !regexp.MustCompile(pat).MatchString(logs.Data[i].Name) {
-			t.Errorf("expected log file %s to match %q", logs.Data[i].Name, pat)
-		}
-	}
+	ts := startServer(t, statusLocalLogFileKeyPrefix)
+	defer ts.Stop()
 
 	// Log an error which we expect to show up on every log file.
 	timestamp := time.Now().UnixNano()
@@ -328,6 +312,24 @@ func TestStatusLocalLogs(t *testing.T) {
 	timestampEW := time.Now().UnixNano()
 	log.Infof("TestStatusLocalLogFile test message-Info")
 	timestampEWI := time.Now().UnixNano()
+
+	body := getRequest(t, ts, statusLocalLogFileKeyPrefix)
+
+	type logsWrapper struct {
+		Data []log.FileInfo `json:"d"`
+	}
+	logs := logsWrapper{}
+	if err := json.Unmarshal(body, &logs); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := len(logs.Data), 3; a != e {
+		t.Fatalf("expected %d log files; got %d", e, a)
+	}
+	for i, name := range []string{"log.ERROR", "log.INFO", "log.WARNING"} {
+		if !strings.Contains(logs.Data[i].Name, name) {
+			t.Errorf("expected log file name %s to contain %q", logs.Data[i].Name, name)
+		}
+	}
 
 	// Fetch a each listed log directly.
 	type logWrapper struct {
@@ -341,8 +343,8 @@ func TestStatusLocalLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 		var found bool
-		for i := len(logW.Data) - 1; i >= 0; i-- {
-			if logW.Data[i].Format == "TestStatusLocalLogFile test message-Error" {
+		for _, data := range logW.Data {
+			if data.Format == "TestStatusLocalLogFile test message-Error" {
 				found = true
 				break
 			}
@@ -439,8 +441,10 @@ func TestStatusLocalLogs(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ts, body := startServerAndGetStatus(t, statusNodeKeyPrefix)
+	ts := startServer(t, statusNodeKeyPrefix)
 	defer ts.Stop()
+
+	body := getRequest(t, ts, statusNodeKeyPrefix)
 
 	// First fetch all the node statuses.
 	type nsWrapper struct {
@@ -477,8 +481,11 @@ func TestNodeStatusResponse(t *testing.T) {
 // results.
 func TestStoreStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ts, body := startServerAndGetStatus(t, statusStoreKeyPrefix)
+	ts := startServer(t, statusStoreKeyPrefix)
 	defer ts.Stop()
+
+	body := getRequest(t, ts, statusStoreKeyPrefix)
+
 	type ssWrapper struct {
 		Data []storage.StoreStatus `json:"d"`
 	}

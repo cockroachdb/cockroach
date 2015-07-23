@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -179,8 +180,11 @@ func (ts *TestServer) Start() error {
 		}
 		stopper.Stop()
 	}
-	err = ts.Server.Start(true)
-	if err != nil {
+	if err := ts.Server.Start(true); err != nil {
+		return err
+	}
+
+	if err := testutils.SetDefaultRangeReplicaNum(ts.db, 1); err != nil {
 		return err
 	}
 
