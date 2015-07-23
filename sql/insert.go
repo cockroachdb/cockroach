@@ -95,6 +95,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err := p.db.Run(&b); err != nil {
 		return nil, err
 	}
+	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil
 }
 
