@@ -134,7 +134,7 @@ type planNode interface {
 	Err() error
 }
 
-// var _ planNode = &scanNode{}
+var _ planNode = &scanNode{}
 var _ planNode = &valuesNode{}
 
 // TODO(pmattis): orderByNode, groupByNode, joinNode.
