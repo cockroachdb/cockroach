@@ -25,6 +25,7 @@ import (
 
 // Expr represents an expression.
 type Expr interface {
+	fmt.Stringer
 	expr()
 }
 
