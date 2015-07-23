@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -65,6 +66,18 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	default:
 		return nil, fmt.Errorf("unknown statement type: %T", stmt)
 	}
+}
+
+func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDescriptor, error) {
+	ate, ok := n.(*parser.AliasedTableExpr)
+	if !ok {
+		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+	}
+	table, ok := ate.Expr.(parser.QualifiedName)
+	if !ok {
+		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+	}
+	return p.getTableDesc(table)
 }
 
 func (p *planner) getTableDesc(qname parser.QualifiedName) (
