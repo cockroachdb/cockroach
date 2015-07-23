@@ -255,12 +255,13 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(key, met
 	}
 	// Also clear any descriptors which are subsumed by the one we're
 	// going to cache. This could happen on a merge (and also happens
-	// when there's a lot of concurrency). Iterate from StartKey.Next().
+	// when there's a lot of concurrency). Iterate from the range meta key
+	// after RangeMetaKey(desc.StartKey) to the range meta key for desc.EndKey.
 	rdc.rangeCache.DoRange(func(k, v interface{}) {
 		if log.V(1) {
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*proto.RangeDescriptor))
 		}
 		rdc.rangeCache.Del(k.(rangeCacheKey))
-	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey.Next())),
+	}, rangeCacheKey(keys.RangeMetaKey(desc.StartKey).Next()),
 		rangeCacheKey(keys.RangeMetaKey(desc.EndKey)))
 }
