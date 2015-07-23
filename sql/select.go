@@ -90,30 +90,3 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	}
 	return s, nil
 }
-
-func outputRow(exprs []parser.Expr, vals valMap) ([]parser.Datum, error) {
-	row := make([]parser.Datum, len(exprs))
-	for i, e := range exprs {
-		var err error
-		row[i], err = parser.EvalExpr(e, vals)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return row, nil
-}
-
-func shouldOutputRow(where *parser.Where, vals valMap) (bool, error) {
-	if where == nil {
-		return true, nil
-	}
-	d, err := parser.EvalExpr(where.Expr, vals)
-	if err != nil {
-		return false, err
-	}
-	v, ok := d.(parser.DBool)
-	if !ok {
-		return false, fmt.Errorf("WHERE clause did not evaluate to a boolean")
-	}
-	return bool(v), nil
-}
