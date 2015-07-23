@@ -33,31 +33,72 @@ import (
 
 // Select selects rows from a single table.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
-	if len(n.Exprs) != 1 {
-		return nil, util.Errorf("TODO(pmattis): unsupported select exprs: %s", n.Exprs)
-	}
-	if _, ok := n.Exprs[0].(*parser.StarExpr); !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported select expr: %s", n.Exprs)
-	}
-
-	if len(n.From) != 1 {
-		return nil, util.Errorf("TODO(pmattis): unsupported from: %s", n.From)
-	}
 	var desc *structured.TableDescriptor
-	{
+
+	switch len(n.From) {
+	case 0:
+		// desc remains nil.
+
+	case 1:
 		ate, ok := n.From[0].(*parser.AliasedTableExpr)
 		if !ok {
-			return nil, util.Errorf("TODO(pmattis): unsupported from: %s", n.From)
+			return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
 		}
 		table, ok := ate.Expr.(parser.QualifiedName)
 		if !ok {
-			return nil, util.Errorf("TODO(pmattis): unsupported from: %s", n.From)
+			return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
 		}
 		var err error
 		desc, err = p.getTableDesc(table)
 		if err != nil {
 			return nil, err
 		}
+
+	default:
+		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
+	}
+
+	v := &valuesNode{
+		columns: make([]string, 0, len(n.Exprs)),
+	}
+
+	// Loop over the select expressions and expand them into the expressions
+	// we're going to use to generate the returned column set and the names for
+	// those columns.
+	exprs := make([]parser.Expr, 0, len(n.Exprs))
+	for _, e := range n.Exprs {
+		switch t := e.(type) {
+		case *parser.StarExpr:
+			if desc == nil {
+				return nil, fmt.Errorf("* with no tables specified is not valid")
+			}
+			for _, col := range desc.Columns {
+				v.columns = append(v.columns, col.Name)
+				exprs = append(exprs, parser.QualifiedName{col.Name})
+			}
+		case *parser.NonStarExpr:
+			exprs = append(exprs, t.Expr)
+			if t.As != "" {
+				v.columns = append(v.columns, t.As)
+			} else {
+				v.columns = append(v.columns, t.Expr.String())
+			}
+		}
+	}
+
+	if desc == nil {
+		// No data to read, pretend there is a single empty row.
+		vals := valMap{}
+		if output, err := shouldOutputRow(n.Where, vals); err != nil {
+			return nil, err
+		} else if output {
+			row, err := outputRow(exprs, vals)
+			if err != nil {
+				return nil, err
+			}
+			v.rows = append(v.rows, row)
+		}
+		return v, nil
 	}
 
 	// Retrieve all of the keys that start with our index key prefix.
@@ -79,7 +120,6 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	// table scan using the primary key.
 
 	// TODO(pmattis): Use a scanNode instead of a valuesNode here.
-	v := &valuesNode{}
 	var primaryKey []byte
 	vals := valMap{}
 	l := len(sr)
@@ -97,7 +137,11 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 			if output, err := shouldOutputRow(n.Where, vals); err != nil {
 				return nil, err
 			} else if output {
-				v.rows = append(v.rows, outputRow(desc.Columns, vals))
+				row, err := outputRow(exprs, vals)
+				if err != nil {
+					return nil, err
+				}
+				v.rows = append(v.rows, row)
 			}
 			vals = valMap{}
 		}
@@ -127,19 +171,19 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		}
 	}
 
-	v.columns = make([]string, len(desc.Columns))
-	for i, col := range desc.Columns {
-		v.columns[i] = col.Name
-	}
 	return v, nil
 }
 
-func outputRow(cols []structured.ColumnDescriptor, vals map[string]parser.Datum) []parser.Datum {
-	row := make([]parser.Datum, len(cols))
-	for i, col := range cols {
-		row[i] = vals[col.Name]
+func outputRow(exprs []parser.Expr, vals valMap) ([]parser.Datum, error) {
+	row := make([]parser.Datum, len(exprs))
+	for i, e := range exprs {
+		var err error
+		row[i], err = parser.EvalExpr(e, vals)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return row
+	return row, nil
 }
 
 func shouldOutputRow(where *parser.Where, vals valMap) (bool, error) {

@@ -19,6 +19,7 @@ package driver_test
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -363,6 +364,99 @@ CREATE TABLE t.kv (
 	}
 	if !reflect.DeepEqual(expectedResults, results) {
 		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	}
+}
+
+func TestSelectExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	schema := `
+CREATE TABLE t.kv (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)`
+
+	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES (1, 2, 3)`); err != nil {
+		t.Fatal(err)
+	}
+
+	testData := []struct {
+		expr     string
+		expected [][]string
+	}{
+		{`*`, [][]string{
+			{"a", "b", "c"},
+			{"1", "2", "3"},
+		}},
+		{`*,*`, [][]string{
+			{"a", "b", "c", "a", "b", "c"},
+			{"1", "2", "3", "1", "2", "3"},
+		}},
+		{`a,a,a,a`, [][]string{
+			{"a", "a", "a", "a"},
+			{"1", "1", "1", "1"},
+		}},
+		{`a,c`, [][]string{
+			{"a", "c"},
+			{"1", "3"},
+		}},
+		{`a+b+c`, [][]string{
+			{"a+b+c"},
+			{"6"},
+		}},
+		{`a+b AS foo`, [][]string{
+			{"foo"},
+			{"3"},
+		}},
+	}
+	for _, d := range testData {
+		rows, err := db.Query(fmt.Sprintf("SELECT %s FROM t.kv", d.expr))
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		results := readAll(t, rows)
+		if !reflect.DeepEqual(d.expected, results) {
+			t.Fatalf("%s: expected %s, but got %s", d.expr, d.expected, results)
+		}
+	}
+}
+
+func TestSelectNoTable(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	testData := []struct {
+		expr     string
+		expected [][]string
+	}{
+		{`1`, [][]string{
+			{"1"},
+			{"1"},
+		}},
+		{`1+1 AS two, 2+2 AS four`, [][]string{
+			{"two", "four"},
+			{"2", "4"},
+		}},
+	}
+	for _, d := range testData {
+		rows, err := db.Query(fmt.Sprintf("SELECT %s", d.expr))
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		results := readAll(t, rows)
+		if !reflect.DeepEqual(d.expected, results) {
+			t.Fatalf("%s: expected %s, but got %s", d.expr, d.expected, results)
+		}
 	}
 }
 
