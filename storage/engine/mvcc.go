@@ -900,11 +900,19 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key proto.Key, value proto.Value) e
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
+//
+// The specified keys are first scanned to check their existence. The
+// scan uses same operational timestamp as we use to delete values.
 func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
-	// In order to detect the potential write intent by another
-	// concurrent transaction with a newer timestamp, we need
-	// to use the max timestamp for scan.
-	kvs, _, err := MVCCScan(engine, key, endKey, max, proto.MaxTimestamp, true /* consistent */, txn)
+	// Use the specified timestamp to scan values. When a write
+	// with newer timestamp exists, either of the following will
+	// happen:
+	// - If the key existed at the timestamp, either a
+	//   WriteTooOldError or WriteIntentError is returned, depending
+	//   on whether the newer write is an intent.
+	// - If the key didn't exist at the timestamp, the key will be
+	//   ignored and will not be deleted.
+	kvs, _, err := MVCCScan(engine, key, endKey, max, timestamp, true /* consistent */, txn)
 	if err != nil {
 		return 0, err
 	}

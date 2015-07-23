@@ -1146,14 +1146,43 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, txn1)
-	err = MVCCPut(engine, nil, testKey3, makeTS(2, 0), value3, txn2)
-	err = MVCCPut(engine, nil, testKey4, makeTS(1, 0), value4, nil)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, txn1); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), value3, txn2); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
 
-	_, err = MVCCDeleteRange(engine, nil, testKey2, testKey4, 0, makeTS(1, 0), txn1)
-	if err == nil {
+	if _, err := MVCCDeleteRange(engine, nil, testKey2, testKey4, 0, makeTS(1, 0), txn1); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
+	}
+}
+
+// TestMVCCDeleteRangeOldTimestampNoValue verifies that
+// MVCCDeleteRange does not return an error if there is a write
+// intent, but the key did not exist at the specified timestamp.
+func TestMVCCDeleteRangeOldTimestampNoValue(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey2, makeTS(3, 0), value3, txn2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MVCCDeleteRange(engine, nil, testKey1, testKey3, 0, makeTS(2, 0), txn1); err != nil {
+		t.Fatal(err)
 	}
 }
 
