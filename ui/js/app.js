@@ -436,10 +436,7 @@ var Components;
                         if (!isInitialized) {
                             nv.addGraph(_this.chart);
                         }
-                        var shouldRender = false;
-                        shouldRender = shouldRender ||
-                            !context.epoch ||
-                            context.epoch < _this.vm.query.result.Epoch();
+                        var shouldRender = !context.epoch || context.epoch < _this.vm.query.result.Epoch();
                         if (shouldRender) {
                             _this.chart.showLegend(_this.vm.axis.selectors().length > 1);
                             var formattedData = [];
