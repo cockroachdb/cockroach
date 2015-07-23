@@ -1294,7 +1294,7 @@ it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
 split to a duplicate range comprising the new configuration.
 
-### Permissions
+## Permissions
 permissions are stored in the map with keys prefixed by *\0perm* followed by
 the key prefix and user to which the specified permissions apply. The format of
 permissions keys is:
