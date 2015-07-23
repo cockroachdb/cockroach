@@ -18,17 +18,11 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
-	"math"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Select selects rows from a single table.
@@ -58,14 +52,11 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
 	}
 
-	v := &valuesNode{
-		columns: make([]string, 0, len(n.Exprs)),
-	}
-
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	exprs := make([]parser.Expr, 0, len(n.Exprs))
+	columns := make([]string, 0, len(n.Exprs))
 	for _, e := range n.Exprs {
 		switch t := e.(type) {
 		case *parser.StarExpr:
@@ -73,105 +64,31 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 				return nil, fmt.Errorf("* with no tables specified is not valid")
 			}
 			for _, col := range desc.Columns {
-				v.columns = append(v.columns, col.Name)
+				columns = append(columns, col.Name)
 				exprs = append(exprs, parser.QualifiedName{col.Name})
 			}
 		case *parser.NonStarExpr:
 			exprs = append(exprs, t.Expr)
 			if t.As != "" {
-				v.columns = append(v.columns, t.As)
+				columns = append(columns, t.As)
 			} else {
-				v.columns = append(v.columns, t.Expr.String())
+				// TODO(pmattis): Should verify at this point that any referenced
+				// columns are represented in the tables being selected from.
+				columns = append(columns, t.Expr.String())
 			}
 		}
 	}
 
-	if desc == nil {
-		// No data to read, pretend there is a single empty row.
-		vals := valMap{}
-		if output, err := shouldOutputRow(n.Where, vals); err != nil {
-			return nil, err
-		} else if output {
-			row, err := outputRow(exprs, vals)
-			if err != nil {
-				return nil, err
-			}
-			v.rows = append(v.rows, row)
-		}
-		return v, nil
+	s := &scanNode{
+		db:      p.db,
+		desc:    desc,
+		columns: columns,
+		render:  exprs,
 	}
-
-	// Retrieve all of the keys that start with our index key prefix.
-	startKey := proto.Key(encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID))
-	endKey := startKey.PrefixEnd()
-	sr, err := p.db.Scan(startKey, endKey, 0)
-	if err != nil {
-		return nil, err
+	if n.Where != nil {
+		s.filter = n.Where.Expr
 	}
-
-	// All of the columns for a particular row will be grouped together. We loop
-	// over the returned key/value pairs and decode the key to extract the
-	// columns encoded within the key and the column ID. We use the column ID to
-	// lookup the column and decode the value. All of these values go into a map
-	// keyed by column name. When the index key changes we output a row
-	// containing the current values.
-	//
-	// The TODOs here are too numerous to list. This is only performing a full
-	// table scan using the primary key.
-
-	// TODO(pmattis): Use a scanNode instead of a valuesNode here.
-	var primaryKey []byte
-	vals := valMap{}
-	l := len(sr)
-	// Iterate through the scan result set. We decide at the beginning of each
-	// new row whether the previous row is to be output. To deal with the very
-	// last one, the loop below goes an extra iteration (i==l).
-	for i := 0; ; i++ {
-		var kv client.KeyValue
-		if i < l {
-			kv = sr[i]
-		}
-		if primaryKey != nil && (i == l || !bytes.HasPrefix(kv.Key, primaryKey)) {
-			// The current key belongs to a new row. Decide whether the last
-			// row is to be output.
-			if output, err := shouldOutputRow(n.Where, vals); err != nil {
-				return nil, err
-			} else if output {
-				row, err := outputRow(exprs, vals)
-				if err != nil {
-					return nil, err
-				}
-				v.rows = append(v.rows, row)
-			}
-			vals = valMap{}
-		}
-
-		if i >= l {
-			break
-		}
-
-		remaining, err := decodeIndexKey(desc, desc.Indexes[0], vals, kv.Key)
-		if err != nil {
-			return nil, err
-		}
-		primaryKey = []byte(kv.Key[:len(kv.Key)-len(remaining)])
-
-		_, colID := encoding.DecodeUvarint(remaining)
-		if err != nil {
-			return nil, err
-		}
-		col, err := desc.FindColumnByID(uint32(colID))
-		if err != nil {
-			return nil, err
-		}
-		vals[col.Name] = unmarshalValue(*col, kv)
-
-		if log.V(2) {
-			log.Infof("Scan %q -> %v", kv.Key, vals[col.Name])
-		}
-	}
-
-	return v, nil
+	return s, nil
 }
 
 func outputRow(exprs []parser.Expr, vals valMap) ([]parser.Datum, error) {
@@ -199,26 +116,4 @@ func shouldOutputRow(where *parser.Where, vals valMap) (bool, error) {
 		return false, fmt.Errorf("WHERE clause did not evaluate to a boolean")
 	}
 	return bool(v), nil
-}
-
-func unmarshalValue(col structured.ColumnDescriptor, kv client.KeyValue) parser.Datum {
-	if kv.Exists() {
-		switch col.Type.Kind {
-		case structured.ColumnType_BIT, structured.ColumnType_INT:
-			return parser.DInt(kv.ValueInt())
-		case structured.ColumnType_FLOAT:
-			return parser.DFloat(math.Float64frombits(uint64(kv.ValueInt())))
-		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
-			structured.ColumnType_BLOB:
-			return parser.DString(kv.ValueBytes())
-		}
-	}
-	return parser.DNull{}
-}
-
-type valMap map[string]parser.Datum
-
-func (m valMap) Get(name string) (parser.Datum, bool) {
-	d, ok := m[name]
-	return d, ok
 }
