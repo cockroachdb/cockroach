@@ -60,7 +60,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
-	b := &client.Batch{}
+	b := client.Batch{}
 	for rows.Next() {
 		values := rows.Values()
 		if len(values) != len(cols) {
@@ -92,7 +92,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if err := p.db.Run(b); err != nil {
+	if err := p.db.Run(&b); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil
