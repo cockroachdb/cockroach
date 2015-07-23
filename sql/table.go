@@ -128,8 +128,7 @@ func encodeIndexKey(index structured.IndexDescriptor,
 	return key, nil
 }
 
-func encodeColumnKey(desc *structured.TableDescriptor,
-	col structured.ColumnDescriptor, primaryKey []byte) []byte {
+func encodeColumnKey(col structured.ColumnDescriptor, primaryKey []byte) []byte {
 	var key []byte
 	key = append(key, primaryKey...)
 	return encoding.EncodeUvarint(key, uint64(col.ID))

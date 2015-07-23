@@ -72,7 +72,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			return nil, err
 		}
 		for i, val := range values {
-			key := encodeColumnKey(desc, cols[i], primaryKey)
+			key := encodeColumnKey(cols[i], primaryKey)
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
