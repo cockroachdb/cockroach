@@ -234,23 +234,23 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
 
 	// Now, add a new, overlapping set of descriptors.
-	minToADesc := &proto.RangeDescriptor{
+	minToBDesc := &proto.RangeDescriptor{
 		StartKey: proto.KeyMin,
 		EndKey:   proto.Key("b"),
 	}
-	aToMaxDesc := &proto.RangeDescriptor{
+	bToMaxDesc := &proto.RangeDescriptor{
 		StartKey: proto.Key("b"),
 		EndKey:   proto.KeyMax,
 	}
-	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToADesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToADesc)
+	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToBDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToBDesc)
 	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), aToMaxDesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), aToMaxDesc)
-	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != aToMaxDesc {
-		t.Errorf("expected descriptor %s; got %s", aToMaxDesc, desc)
+	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), bToMaxDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), bToMaxDesc)
+	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != bToMaxDesc {
+		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
@@ -261,4 +261,46 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
 		}
 	}
+}
+
+// TestRangeCacheClearOverlappingMeta prevents regression of a bug which caused
+// a panic when clearing overlapping descriptors for [KeyMin, Meta2Key). The
+// issue was that when attempting to clear out descriptors which were subsumed
+// by the above range, an iteration over the corresponding meta keys was
+// performed, with the left endpoint excluded. This exclusion was incorrect: it
+// first incremented the start key (KeyMin) and then formed the meta key; for
+// KeyMin this leads to Meta2Prefix\x00. For the above EndKey, the meta key is
+// a Meta1key which sorts before Meta2Prefix\x00, causing a panic. The fix was
+// simply to increment the meta key for StartKey, not StartKey itself.
+func TestRangeCacheClearOverlappingMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	firstDesc := &proto.RangeDescriptor{
+		StartKey: proto.KeyMin,
+		EndKey:   proto.Key("zzz"),
+	}
+	restDesc := &proto.RangeDescriptor{
+		StartKey: firstDesc.StartKey,
+		EndKey:   proto.KeyMax,
+	}
+
+	cache := newRangeDescriptorCache(nil, 2<<10)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(firstDesc.EndKey)),
+		firstDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(restDesc.EndKey)),
+		restDesc)
+
+	// Add new range, corresponding to splitting the first range at a meta key.
+	metaSplitDesc := &proto.RangeDescriptor{
+		StartKey: proto.KeyMin,
+		EndKey:   proto.Key(keys.RangeMetaKey(proto.Key("foo"))),
+	}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("invocation of clearOverlappingCachedRangeDescriptors panicked: %v", r)
+			}
+		}()
+		cache.clearOverlappingCachedRangeDescriptors(metaSplitDesc.EndKey, keys.RangeMetaKey(metaSplitDesc.EndKey), metaSplitDesc)
+	}()
 }
