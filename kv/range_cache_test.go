@@ -234,23 +234,23 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), defDesc)
 
 	// Now, add a new, overlapping set of descriptors.
-	minToADesc := &proto.RangeDescriptor{
+	minToBDesc := &proto.RangeDescriptor{
 		StartKey: proto.KeyMin,
 		EndKey:   proto.Key("b"),
 	}
-	aToMaxDesc := &proto.RangeDescriptor{
+	bToMaxDesc := &proto.RangeDescriptor{
 		StartKey: proto.Key("b"),
 		EndKey:   proto.KeyMax,
 	}
-	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToADesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToADesc)
+	cache.clearOverlappingCachedRangeDescriptors(proto.Key("b"), keys.RangeMetaKey(proto.Key("b")), minToBDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.Key("b"))), minToBDesc)
 	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), aToMaxDesc)
-	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), aToMaxDesc)
-	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != aToMaxDesc {
-		t.Errorf("expected descriptor %s; got %s", aToMaxDesc, desc)
+	cache.clearOverlappingCachedRangeDescriptors(proto.KeyMax, keys.RangeMetaKey(proto.KeyMax), bToMaxDesc)
+	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(proto.KeyMax)), bToMaxDesc)
+	if _, desc := cache.getCachedRangeDescriptor(proto.Key("b")); desc != bToMaxDesc {
+		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
