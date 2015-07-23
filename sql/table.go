@@ -18,10 +18,14 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
@@ -88,4 +92,105 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 		}
 	}
 	return desc, nil
+}
+
+func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
+	var key []byte
+	key = append(key, keys.TableDataPrefix...)
+	key = encoding.EncodeUvarint(key, uint64(tableID))
+	key = encoding.EncodeUvarint(key, uint64(indexID))
+	return key
+}
+
+func encodeIndexKey(index structured.IndexDescriptor,
+	colMap map[uint32]int, cols []structured.ColumnDescriptor,
+	row []parser.Datum, indexKey []byte) ([]byte, error) {
+	var key []byte
+	key = append(key, indexKey...)
+
+	for i, id := range index.ColumnIDs {
+		j, ok := colMap[id]
+		if !ok {
+			return nil, fmt.Errorf("missing \"%s\" primary key column",
+				index.ColumnNames[i])
+		}
+		// TOOD(pmattis): Need to convert the row[i] value to the type expected by
+		// the column.
+		var err error
+		key, err = encodeTableKey(key, row[j])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return key, nil
+}
+
+func encodeColumnKey(desc *structured.TableDescriptor,
+	col structured.ColumnDescriptor, primaryKey []byte) []byte {
+	var key []byte
+	key = append(key, primaryKey...)
+	return encoding.EncodeUvarint(key, uint64(col.ID))
+}
+
+func encodeTableKey(b []byte, v parser.Datum) ([]byte, error) {
+	switch t := v.(type) {
+	case parser.DBool:
+		if t {
+			return encoding.EncodeVarint(b, 1), nil
+		}
+		return encoding.EncodeVarint(b, 0), nil
+	case parser.DInt:
+		return encoding.EncodeVarint(b, int64(t)), nil
+	case parser.DFloat:
+		return encoding.EncodeNumericFloat(b, float64(t)), nil
+	case parser.DString:
+		return encoding.EncodeBytes(b, []byte(t)), nil
+	}
+	return nil, fmt.Errorf("unable to encode table key: %T", v)
+}
+
+func decodeIndexKey(desc *structured.TableDescriptor,
+	index structured.IndexDescriptor, vals map[string]parser.Datum, key []byte) ([]byte, error) {
+	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
+		return nil, fmt.Errorf("%s: invalid key prefix: %q", desc.Name, key)
+	}
+	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
+
+	var tableID uint64
+	key, tableID = encoding.DecodeUvarint(key)
+	if uint32(tableID) != desc.ID {
+		return nil, fmt.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+	}
+
+	var indexID uint64
+	key, indexID = encoding.DecodeUvarint(key)
+	if uint32(indexID) != index.ID {
+		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
+	}
+
+	for _, id := range index.ColumnIDs {
+		col, err := desc.FindColumnByID(id)
+		if err != nil {
+			return nil, err
+		}
+		switch col.Type.Kind {
+		case structured.ColumnType_BIT, structured.ColumnType_INT:
+			var i int64
+			key, i = encoding.DecodeVarint(key)
+			vals[col.Name] = parser.DInt(i)
+		case structured.ColumnType_FLOAT:
+			var f float64
+			key, f = encoding.DecodeNumericFloat(key)
+			vals[col.Name] = parser.DFloat(f)
+		case structured.ColumnType_CHAR, structured.ColumnType_TEXT,
+			structured.ColumnType_BLOB:
+			var r []byte
+			key, r = encoding.DecodeBytes(key, nil)
+			vals[col.Name] = parser.DString(r)
+		default:
+			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
+		}
+	}
+
+	return key, nil
 }
