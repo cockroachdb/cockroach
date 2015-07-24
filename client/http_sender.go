@@ -54,19 +54,19 @@ type httpSender struct {
 
 // newHTTPSender returns a new instance of httpSender.
 func newHTTPSender(server string, ctx *base.Context, retryOpts retry.Options) (*httpSender, error) {
-	sender := &httpSender{
+	// Ensure that the context returns an HTTPClient.
+	if _, err := ctx.GetHTTPClient(); err != nil {
+		return nil, err
+	}
+
+	return &httpSender{
 		ctx: PostContext{
 			Server:    server,
 			Endpoint:  KVDBEndpoint,
 			Context:   ctx,
 			RetryOpts: retryOpts,
 		},
-	}
-	// Ensure that the context returns an HTTPClient.
-	if _, err := ctx.GetHTTPClient(); err != nil {
-		return nil, err
-	}
-	return sender, nil
+	}, nil
 }
 
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
