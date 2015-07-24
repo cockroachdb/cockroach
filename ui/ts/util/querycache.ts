@@ -1,12 +1,12 @@
 // source: util/querycache.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 //
 module Utils {
   "use strict";
 
   import promise = _mithril.MithrilPromise;
-  import property = _mithril.MithrilProperty;
 
   /**
    * QueryCache supports caching the result of an arbitrary query so that the
@@ -24,19 +24,23 @@ module Utils {
    * the value of QueryCache.epoch() is increased.
    */
   export class QueryCache<T> {
-    private _result: T = null;
-    private _error: Error = null;
-    private _epoch: number = 0;
+    /**
+     * result returns the result of most recent invocation of the underlying
+     * query. If the most recent invocation returned an error, this method will
+     * return null.
+     */
+    result: Utils.ReadOnlyProperty<T>;
 
     /**
-     * This structure will be non-null when a query is in-flight, or has
-     * completed but not been processed. When an in-flight query
-     * completes, one and only one of these fields will contain a value.
+     * error returns any error that resulted from the most recent
+     * invocation of the underlying query. If the most recent invocation did
+     * not return an error, this method will return null.
      */
-    private _outstanding: {
-      result: promise<T>;
-      error: property<Error>;
-    };
+    error: Utils.ReadOnlyProperty<Error>;
+
+    private _result: Utils.Property<T> = Utils.Prop(<T> null);
+    private _error: Utils.Property<Error> = Utils.Prop(<Error> null);
+    private _inFlight: boolean = false;
 
     /**
      * Construct a new QueryCache which caches the ultimate results of the
@@ -44,6 +48,8 @@ module Utils {
      * a promise for results.
      */
     constructor(private _query: () => promise<T>) {
+      this.result = this._result;
+      this.error = this._error;
       this.refresh();
     }
 
@@ -53,15 +59,22 @@ module Utils {
      * any) are not replaced until the query invocation completes.
      */
     refresh(): void {
-      // Clear outstanding result if it has already returned.
-      this.processOutstanding();
-      if (!this._outstanding) {
-        this._outstanding = {
-          result: this._query(),
-          error: m.prop(<Error> null)
-        };
-        this._outstanding.result.then(null, this._outstanding.error);
+      if (this._inFlight) {
+        return;
       }
+      this._inFlight = true;
+
+      this._query().then(
+        (obj: T): T => {
+          this._error(null);
+          this._inFlight = false;
+          return this._result(obj);
+        },
+        (err: Error): Error => {
+          this._result(null);
+          this._inFlight = false;
+          return this._error(err);
+        });
     }
 
     /**
@@ -70,55 +83,7 @@ module Utils {
      * non-null.
      */
     hasData(): boolean {
-      this.processOutstanding();
-      return this._epoch > 0;
-    }
-
-    /**
-     * result returns the result of most recent invocation of the underlying
-     * query. If the most recent invocation returned an error, this method will
-     * return null.
-     */
-    result(): T {
-      this.processOutstanding();
-      return this._result;
-    }
-
-    /**
-     * result returns any error that resulted from the most recent
-     * invocation of the underlying query. If the most recent invocation did
-     * not return an error, this method will return null.
-     */
-    error(): Error {
-      this.processOutstanding();
-      return this._error;
-    }
-
-    /**
-     * epoch returns the current epoch of the cached query. The epoch is
-     * incremented each time the cached result is refreshed; the first
-     * result has an epoch of 1.
-     */
-    epoch(): number {
-      this.processOutstanding();
-      return this._epoch;
-    }
-
-    /**
-     * Check for a completed outstanding query, replacing cached results
-     * with the result.
-     */
-    private processOutstanding(): void {
-      if (this._outstanding) {
-        const completed: boolean = (this._outstanding.error() != null) || (this._outstanding.result() != null);
-
-        if (completed) {
-          this._result = this._outstanding.result();
-          this._error = this._outstanding.error();
-          this._outstanding = null;
-          this._epoch++;
-        }
-      }
+      return this.result.Epoch() > 0 || this.error.Epoch() > 0;
     }
   }
 }

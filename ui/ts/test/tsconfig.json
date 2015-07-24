@@ -12,6 +12,7 @@
     "sourceMap": false
   },
   "files": [
+    "./header.ts",
     "./util.ts"
   ]
 }
