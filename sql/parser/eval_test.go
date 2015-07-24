@@ -56,12 +56,12 @@ func TestEvalExpr(t *testing.T) {
 		// Octal numbers.
 		// TODO(pmattis): {`0755`, `493`, nil},
 		// String concatenation.
-		{`'a' || 'b'`, `ab`, nil},
-		{`'a' || (1 + 2)`, `a3`, nil},
+		{`'a' || 'b'`, `'ab'`, nil},
+		{`'a' || (1 + 2)`, `'a3'`, nil},
 		// Column lookup.
 		{`a`, `1`, mapEnv{"a": DInt(1)}},
 		{`a`, `3.1`, mapEnv{"a": DFloat(3.1)}},
-		{`a`, `c`, mapEnv{"a": DString("c")}},
+		{`a`, `'c'`, mapEnv{"a": DString("c")}},
 		{`a.b + 1`, `2`, mapEnv{"a.b": DInt(1)}},
 		{`a OR b`, `true`, mapEnv{"a": DBool(false), "b": DBool(true)}},
 		// Boolean expressions.
@@ -128,7 +128,7 @@ func TestEvalExpr(t *testing.T) {
 		{`CASE WHEN false THEN 1 ELSE 2 END`, `2`, nil},
 		{`CASE WHEN false THEN 1 WHEN false THEN 2 END`, `NULL`, nil},
 		{`CASE 1+1 WHEN 1 THEN 1 WHEN 2 THEN 2 END`, `2`, nil},
-		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 'doh' END`, `doh`, nil},
+		{`CASE 1+2 WHEN 1 THEN 1 WHEN 2 THEN 2 ELSE 'doh' END`, `'doh'`, nil},
 		// Row (tuple) comparisons.
 		{`ROW(1) = ROW(1)`, `true`, nil},
 		{`ROW(1, true) = (1, NOT false)`, `true`, nil},
@@ -144,8 +144,8 @@ func TestEvalExpr(t *testing.T) {
 		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`, nil},
 		// Func expressions.
 		{`length('hel'||'lo')`, `5`, nil},
-		{`lower('HELLO')`, `hello`, nil},
-		{`UPPER('hello')`, `HELLO`, nil},
+		{`lower('HELLO')`, `'hello'`, nil},
+		{`UPPER('hello')`, `'HELLO'`, nil},
 		// Cast expressions.
 		{`true::boolean`, `true`, nil},
 		{`true::int`, `1`, nil},
@@ -181,9 +181,9 @@ func TestEvalExpr(t *testing.T) {
 		{`'0x123'::int + 1`, `292`, nil},
 		{`'0123'::int + 1`, `84`, nil}, // TODO(pmattis): Should we support octal notation?
 		{`'1.23'::float + 1.0`, `2.23`, nil},
-		{`'hello'::text`, `hello`, nil},
+		{`'hello'::text`, `'hello'`, nil},
 		{`CAST('123' AS int) + 1`, `124`, nil},
-		{`'hello'::char(2)`, `he`, nil},
+		{`'hello'::char(2)`, `'he'`, nil},
 	}
 	for _, d := range testData {
 		q, err := Parse("SELECT " + d.expr)
