@@ -20,7 +20,8 @@ package parser
 import "fmt"
 
 // The Visitor Visit method is invoked for each Expr node encountered by
-// WalkExpr. The returned Expr
+// WalkExpr. The returned Expr replaces the pointer to the visited expression
+// in the parent node and can be used for rewriting expressions.
 type Visitor interface {
 	Visit(expr Expr) Expr
 }
