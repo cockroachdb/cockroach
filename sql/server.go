@@ -140,8 +140,8 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 	}
 	for _, stmt := range stmts {
 		// TODO(pmattis): Fill placeholders.
-		var plan planNode
-		if plan, err = planner.makePlan(stmt); err != nil {
+		plan, err := planner.makePlan(stmt)
+		if err != nil {
 			return resp, err
 		}
 

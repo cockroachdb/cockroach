@@ -216,8 +216,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Put an initial value.
 	initVal := []byte("initVal")
-	err := store.DB().Put(key, initVal)
-	if err != nil {
+	if err := store.DB().Put(key, initVal); err != nil {
 		t.Fatalf("failed to put: %s", err)
 	}
 
@@ -292,8 +291,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),
 	}
-	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
-	if err != nil {
+
+	if _, err := store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
 
@@ -308,8 +307,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	requestHeader.Timestamp = clock.Now()
-	_, err = store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader})
-	if err == nil {
+
+	if _, err := store.ExecuteCmd(context.Background(), &proto.GetRequest{RequestHeader: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 

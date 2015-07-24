@@ -322,15 +322,9 @@ func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) 
 // subsequent ranges which are likely to be requested soon by the current
 // workload.
 func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
-	var (
-		// metadataKey is sent to internalRangeLookup to find the
-		// RangeDescriptor which contains key.
-		metadataKey = keys.RangeMetaKey(key)
-		// desc is the RangeDescriptor for the range which contains
-		// metadataKey.
-		desc *proto.RangeDescriptor
-		err  error
-	)
+	// metadataKey is sent to internalRangeLookup to find the
+	// RangeDescriptor which contains key.
+	metadataKey := keys.RangeMetaKey(key)
 	if bytes.Equal(metadataKey, proto.KeyMin) {
 		// In this case, the requested key is stored in the cluster's first
 		// range. Return the first range, which is always gossiped and not
@@ -341,9 +335,15 @@ func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) 
 		}
 		return []proto.RangeDescriptor{*rd}, nil
 	}
+
+	// desc is the RangeDescriptor for the range which contains
+	// metadataKey.
+	var desc *proto.RangeDescriptor
+	var err error
 	if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
 		// In this case, desc is the cluster's first range.
-		if desc, err = ds.getFirstRangeDescriptor(); err != nil {
+		desc, err = ds.getFirstRangeDescriptor()
+		if err != nil {
 			return nil, err
 		}
 	} else {

@@ -28,14 +28,12 @@ import (
 func verifyAddr(addr net.Addr, t *testing.T) {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	acceptChan := make(chan struct{})
 	go func() {
-		_, err := ln.Accept()
-		if err != nil {
+		if _, err := ln.Accept(); err != nil {
 			t.Error(err)
 		}
 		close(acceptChan)
@@ -44,8 +42,7 @@ func verifyAddr(addr net.Addr, t *testing.T) {
 	addr = ln.Addr()
 	conn, err := net.Dial(addr.Network(), addr.String())
 	if err != nil {
-		t.Errorf("could not connect to %s", addr)
-		return
+		t.Fatalf("could not connect to %s: %s", addr, err)
 	}
 	select {
 	case <-acceptChan:

@@ -20,7 +20,6 @@ package storage
 import (
 	"log"
 	"sort"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -142,11 +142,9 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
 
-	firstID, err := idAlloc.Allocate()
-	if err != nil {
+	if firstID, err := idAlloc.Allocate(); err != nil {
 		t.Fatal(err)
-	}
-	if firstID != 2 {
+	} else if firstID != 2 {
 		t.Errorf("expected ID is 2, but got: %d", firstID)
 	}
 
@@ -228,9 +226,7 @@ func TestAllocateWithStopper(t *testing.T) {
 
 	stopper.Stop()
 
-	if _, err := idAlloc.Allocate(); err == nil {
-		t.Errorf("unexpected success")
-	} else if !strings.Contains(err.Error(), "system is draining") {
+	if _, err := idAlloc.Allocate(); !testutils.IsError(err, "system is draining") {
 		t.Errorf("unexpected error: %s", err)
 	}
 }

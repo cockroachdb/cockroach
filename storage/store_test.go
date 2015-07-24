@@ -439,7 +439,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
 	rng := createRange(store, 11, proto.Key("a000"), proto.Key("a01"))
-	if err = store.SplitRange(store.LookupRange(proto.Key("a00"), nil), rng); err != nil {
+	if err := store.SplitRange(store.LookupRange(proto.Key("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
 	// Estimated count will still be 9, as it's cached.
@@ -639,7 +639,7 @@ func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SplitRange(rng, newRng); err != nil {
+	if err := store.SplitRange(rng, newRng); err != nil {
 		t.Fatal(err)
 	}
 	return newRng
@@ -818,8 +818,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			}
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn proto.Transaction
-			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn)
-			if !ok || err != nil {
+			if ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn); !ok || err != nil {
 				t.Fatalf("not found or err: %s", err)
 			}
 			if txn.Status != proto.ABORTED {
@@ -832,7 +831,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.
-			if _, err = store.ExecuteCmd(context.Background(), &pArgs); err == nil {
+			if _, err := store.ExecuteCmd(context.Background(), &pArgs); err == nil {
 				t.Errorf("expected another error on latent write intent but succeeded")
 			}
 		}

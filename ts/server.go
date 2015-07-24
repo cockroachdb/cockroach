@@ -61,18 +61,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // for one or more metrics over a specific time span. Query requests have a
 // significant body and thus are POST requests.
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	request := &proto.TimeSeriesQueryRequest{}
+	request := proto.TimeSeriesQueryRequest{}
 
 	// Unmarshal query request.
-	reqBody, err := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := util.UnmarshalRequest(r, reqBody, request, util.AllEncodings); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	{
+		reqBody, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := util.UnmarshalRequest(r, reqBody, &request, util.AllEncodings); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	if len(request.Queries) == 0 {

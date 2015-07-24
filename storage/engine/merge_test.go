@@ -262,7 +262,7 @@ func TestGoMerge(t *testing.T) {
 		// operates directly on marshalled bytes.
 		result, err := goMerge(c.existing, c.update)
 		if err != nil {
-			t.Errorf("goMerge error on case %d: %s", i, err.Error())
+			t.Errorf("goMerge error on case %d: %s", i, err)
 			continue
 		}
 		resultTS := unmarshalTimeSeries(t, result)
@@ -277,7 +277,7 @@ func TestGoMerge(t *testing.T) {
 			resultTS, err = MergeInternalTimeSeriesData(existingTS, updateTS)
 		}
 		if err != nil {
-			t.Errorf("MergeInternalTimeSeriesData error on case %d: %s", i, err.Error())
+			t.Errorf("MergeInternalTimeSeriesData error on case %d: %s", i, err)
 			continue
 		}
 		if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
@@ -296,11 +296,11 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *proto.InternalTimeSeriesData {
 	}
 	var mvccValue MVCCMetadata
 	if err := gogoproto.Unmarshal(b, &mvccValue); err != nil {
-		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
+		t.Fatalf("error unmarshalling time series in text: %s", err)
 	}
 	valueTS, err := proto.InternalTimeSeriesDataFromValue(mvccValue.Value)
 	if err != nil {
-		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
+		t.Fatalf("error unmarshalling time series in text: %s", err)
 	}
 	return valueTS
 }

@@ -130,7 +130,7 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 			MeasuredAt:  20,
 		},
 	}
-	if err = client.connect(); err != nil {
+	if err := client.connect(); err != nil {
 		t.Fatal(err)
 	}
 

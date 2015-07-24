@@ -131,7 +131,7 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *proto.RangeDescriptor {
 	r, err := rc.LookupRangeDescriptor(proto.Key(key), lookupOptions{})
 	if err != nil {
-		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
+		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err)
 	}
 	if !r.ContainsKey(keys.KeyAddress(proto.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
