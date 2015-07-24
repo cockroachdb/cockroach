@@ -205,24 +205,12 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	binArgs{Plus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DInt) + right.(DInt), nil
 	},
-	binArgs{Plus, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(left.(DInt)) + right.(DFloat), nil
-	},
-	binArgs{Plus, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) + DFloat(right.(DInt)), nil
-	},
 	binArgs{Plus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DFloat) + right.(DFloat), nil
 	},
 
 	binArgs{Minus, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DInt) - right.(DInt), nil
-	},
-	binArgs{Minus, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(left.(DInt)) - right.(DFloat), nil
-	},
-	binArgs{Minus, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) - DFloat(right.(DInt)), nil
 	},
 	binArgs{Minus, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DFloat) - right.(DFloat), nil
@@ -231,12 +219,6 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	binArgs{Mult, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DInt) * right.(DInt), nil
 	},
-	binArgs{Mult, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(left.(DInt)) * right.(DFloat), nil
-	},
-	binArgs{Mult, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) * DFloat(right.(DInt)), nil
-	},
 	binArgs{Mult, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DFloat) * right.(DFloat), nil
 	},
@@ -244,24 +226,12 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	binArgs{Div, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		return DFloat(left.(DInt)) / DFloat(right.(DInt)), nil
 	},
-	binArgs{Div, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(left.(DInt)) / right.(DFloat), nil
-	},
-	binArgs{Div, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DFloat) / DFloat(right.(DInt)), nil
-	},
 	binArgs{Div, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DFloat) / right.(DFloat), nil
 	},
 
 	binArgs{Mod, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		return left.(DInt) % right.(DInt), nil
-	},
-	binArgs{Mod, intType, floatType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(math.Mod(float64(left.(DInt)), float64(right.(DFloat)))), nil
-	},
-	binArgs{Mod, floatType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DInt)))), nil
 	},
 	binArgs{Mod, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DFloat)))), nil
@@ -467,6 +437,9 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 
 	case *CaseExpr:
 		return evalCaseExpr(t, env)
+
+	case *CastExpr:
+		return evalCastExpr(t, env)
 	}
 
 	return null, fmt.Errorf("unsupported expression type: %T", expr)
@@ -821,4 +794,95 @@ func evalTupleIN(arg, values Datum) (Datum, error) {
 	}
 
 	return DBool(false), nil
+}
+
+func evalCastExpr(expr *CastExpr, env Env) (Datum, error) {
+	d, err := EvalExpr(expr.Expr, env)
+	if err != nil {
+		return null, err
+	}
+
+	switch expr.Type.(type) {
+	case *BoolType:
+		switch v := d.(type) {
+		case DBool:
+			return d, nil
+		case DInt:
+			return DBool(v != 0), nil
+		case DFloat:
+			return DBool(v != 0), nil
+		case DString:
+			// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
+			// spec. Is that ok?
+			b, err := strconv.ParseBool(string(v))
+			if err != nil {
+				return null, err
+			}
+			return DBool(b), nil
+		}
+
+	case *IntType:
+		switch v := d.(type) {
+		case DBool:
+			if v {
+				return DInt(1), nil
+			}
+			return DInt(0), nil
+		case DInt:
+			return d, nil
+		case DFloat:
+			return DInt(v), nil
+		case DString:
+			i, err := strconv.ParseInt(string(v), 0, 64)
+			if err != nil {
+				return null, err
+			}
+			return DInt(i), nil
+		}
+
+	case *FloatType:
+		switch v := d.(type) {
+		case DBool:
+			if v {
+				return DFloat(1), nil
+			}
+			return DFloat(0), nil
+		case DInt:
+			return DFloat(v), nil
+		case DFloat:
+			return d, nil
+		case DString:
+			f, err := strconv.ParseFloat(string(v), 64)
+			if err != nil {
+				return null, err
+			}
+			return DFloat(f), nil
+		}
+
+	case *CharType, *TextType, *BlobType:
+		var s DString
+		switch d.(type) {
+		case DBool, DInt, DFloat, DNull:
+			s = DString(d.String())
+		case DString:
+			s = d.(DString)
+		}
+		if c, ok := expr.Type.(*CharType); ok {
+			// If the CHAR type specifies a limit we truncate to that limit:
+			//   'hello'::CHAR(2) -> 'he'
+			if c.N > 0 && c.N < len(s) {
+				s = s[:c.N]
+			}
+		}
+		return s, nil
+
+		// TODO(pmattis): unimplemented.
+		// case *BitType:
+		// case *DecimalType:
+		// case *DateType:
+		// case *TimeType:
+		// case *TimestampType:
+	}
+
+	return null, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
 }

@@ -2593,7 +2593,10 @@ interval_second:
 // So we use %prec annotations freely to set precedences.
 a_expr:
   c_expr
-| a_expr TYPECAST typename {}
+| a_expr TYPECAST typename
+  {
+    $$ = &CastExpr{Expr: $1, Type: $3}
+  }
 | a_expr COLLATE any_name {}
 | a_expr AT TIME ZONE a_expr %prec AT {}
   // These operators must be called out explicitly in order to make use of
@@ -2773,7 +2776,10 @@ a_expr:
 // eliminate all the boolean-keyword-operator productions from b_expr.
 b_expr:
   c_expr
-| b_expr TYPECAST typename {}
+| b_expr TYPECAST typename
+  {
+    $$ = &CastExpr{Expr: $1, Type: $3}
+  }
 | '+' b_expr %prec UMINUS
   {
     $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
@@ -2980,7 +2986,10 @@ func_expr_common_subexpr:
 | USER {}
 | CURRENT_CATALOG {}
 | CURRENT_SCHEMA {}
-| CAST '(' a_expr AS typename ')' {}
+| CAST '(' a_expr AS typename ')'
+  {
+    $$ = &CastExpr{Expr: $3, Type: $5}
+  }
 | EXTRACT '(' extract_list ')' {}
 | OVERLAY '(' overlay_list ')' {}
 | POSITION '(' position_list ')' {}

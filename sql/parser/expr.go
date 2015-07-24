@@ -51,6 +51,7 @@ func (*BinaryExpr) expr()     {}
 func (*UnaryExpr) expr()      {}
 func (*FuncExpr) expr()       {}
 func (*CaseExpr) expr()       {}
+func (*CastExpr) expr()       {}
 
 // AndExpr represents an AND expression.
 type AndExpr struct {
@@ -450,4 +451,14 @@ type When struct {
 
 func (node *When) String() string {
 	return fmt.Sprintf("WHEN %s THEN %s", node.Cond, node.Val)
+}
+
+// CastExpr represents a CAST(expr AS type) expression.
+type CastExpr struct {
+	Expr Expr
+	Type ColumnType
+}
+
+func (n *CastExpr) String() string {
+	return fmt.Sprintf("CAST(%s AS %s)", n.Expr, n.Type)
 }
