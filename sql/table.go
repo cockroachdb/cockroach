@@ -106,8 +106,7 @@ func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 }
 
 func encodeIndexKey(index structured.IndexDescriptor,
-	colMap map[uint32]int, cols []structured.ColumnDescriptor,
-	row []parser.Datum, indexKey []byte) ([]byte, error) {
+	colMap map[uint32]int, row []parser.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
