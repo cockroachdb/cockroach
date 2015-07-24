@@ -19,6 +19,7 @@ package parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -231,7 +232,11 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	},
 
 	binArgs{Mod, intType, intType}: func(left Datum, right Datum) (Datum, error) {
-		return left.(DInt) % right.(DInt), nil
+		r := right.(DInt)
+		if r == 0 {
+			return nil, errors.New("zero modulus")
+		}
+		return left.(DInt) % r, nil
 	},
 	binArgs{Mod, floatType, floatType}: func(left Datum, right Datum) (Datum, error) {
 		return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DFloat)))), nil
