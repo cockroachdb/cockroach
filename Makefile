@@ -126,15 +126,13 @@ check:
 	@! errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,database/sql:Close,github.com/spf13/cobra:Usage' $(PKG) | grep -vE 'yacc\.go:'
 	@echo "vet"
 	@! go tool vet --shadow . 2>&1 | \
-	  grep -vE '(\.pb\.go|yacc\.go|declaration of err shadows|cannot process directory \.git)'
+	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
 	@echo "golint"
 	@! golint $(PKG) | \
-	  grep -vE '(\.pb\.go|embedded\.go|yyEofCode|_string\.go|LastInsertId|sql\.y|yacc\.go)' \
+	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql\.y)' \
 	  # https://golang.org/pkg/database/sql/driver/#Result :(
 	@echo "gofmt (simplify)"
-	@! gofmt -s -l . 2>&1 | \
-	  grep -v '^\.git/' | \
-	  grep -vF 'No Exceptions'
+	@! gofmt -s -l . 2>&1 | grep -vE '^\.git/'
 	@echo "goimports"
 	@! goimports -l . | grep -vF 'No Exceptions'
 
