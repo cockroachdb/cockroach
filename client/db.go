@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -156,10 +155,6 @@ type DB struct {
 	// ignored.
 	userPriority    int32
 	txnRetryOptions retry.Options
-
-	// TODO(pmattis): Need locking here, but this struct is copied by value into
-	// Txn. Probably need to separate out the fields above.
-	experimentalModels map[reflect.Type]*model
 }
 
 // Option is the signature for a function which applies an option to a DB.
