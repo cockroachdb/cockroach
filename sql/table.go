@@ -86,6 +86,9 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				Unique:      d.Unique,
 				ColumnNames: d.Columns,
 			}
+			if d.PrimaryKey {
+				index.Name = "primary"
+			}
 			desc.Indexes = append(desc.Indexes, index)
 		default:
 			return desc, fmt.Errorf("unsupported table def: %T", def)
