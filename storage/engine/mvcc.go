@@ -534,6 +534,10 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey,
 		// we're now reading. In this case, we skip the intent.
 		var err error
 		if ownIntent && txn.Epoch != meta.Txn.Epoch {
+			if txn.Epoch < meta.Txn.Epoch {
+				return nil, nil, util.Errorf("failed to read with epoch %d due to a write intent with epoch %d",
+					txn.Epoch, meta.Txn.Epoch)
+			}
 			valueKey, err = getValue(engine, latestKey.Next(), MVCCEncodeKey(key.Next()), value)
 		} else {
 			var ok bool

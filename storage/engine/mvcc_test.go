@@ -1469,6 +1469,22 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 	}
 }
 
+// TestMVCCReadWithOldEpoch writes a value first using epoch 2, then
+// reads using epoch 1 to verify that the read will fail.
+func TestMVCCReadWithOldEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	engine := createTestEngine()
+	defer engine.Close()
+
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1e2); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, txn1)
+	if err == nil {
+		t.Fatalf("unexpected success of get")
+	}
+}
+
 // TestMVCCReadWithPushedTimestamp verifies that a read for a value
 // written by the transaction, but then subsequently pushed, can still
 // be read by the txn at the later timestamp, even if an earlier
