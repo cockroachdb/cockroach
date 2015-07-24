@@ -916,7 +916,7 @@ const sqlEofCode = 1
 const sqlErrCode = 2
 const sqlMaxDepth = 200
 
-//line sql.y:4004
+//line sql.y:4013
 
 //line yacctab:1
 var sqlExca = []int{
@@ -8662,411 +8662,413 @@ sqldefault:
 	case 611:
 		sqlVAL.expr = sqlS[sqlpt-0].expr
 	case 612:
-		//line sql.y:2596
+		//line sql.y:2597
 		{
+			sqlVAL.expr = &CastExpr{Expr: sqlS[sqlpt-2].expr, Type: sqlS[sqlpt-0].colType}
 		}
 	case 613:
-		//line sql.y:2597
+		//line sql.y:2600
 		{
 		}
 	case 614:
-		//line sql.y:2598
+		//line sql.y:2601
 		{
 		}
 	case 615:
-		//line sql.y:2607
+		//line sql.y:2610
 		{
 			sqlVAL.expr = &UnaryExpr{Operator: UnaryPlus, Expr: sqlS[sqlpt-0].expr}
 		}
 	case 616:
-		//line sql.y:2611
+		//line sql.y:2614
 		{
 			sqlVAL.expr = &UnaryExpr{Operator: UnaryMinus, Expr: sqlS[sqlpt-0].expr}
 		}
 	case 617:
-		//line sql.y:2615
+		//line sql.y:2618
 		{
 			sqlVAL.expr = &UnaryExpr{Operator: UnaryComplement, Expr: sqlS[sqlpt-0].expr}
 		}
 	case 618:
-		//line sql.y:2619
+		//line sql.y:2622
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Plus, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 619:
-		//line sql.y:2623
+		//line sql.y:2626
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Minus, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 620:
-		//line sql.y:2627
+		//line sql.y:2630
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Mult, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 621:
-		//line sql.y:2631
+		//line sql.y:2634
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Div, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 622:
-		//line sql.y:2635
+		//line sql.y:2638
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Mod, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 623:
-		//line sql.y:2639
+		//line sql.y:2642
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Exp, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 624:
-		//line sql.y:2643
+		//line sql.y:2646
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Bitand, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 625:
-		//line sql.y:2647
+		//line sql.y:2650
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Bitor, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 626:
-		//line sql.y:2651
+		//line sql.y:2654
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Bitxor, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 627:
-		//line sql.y:2655
+		//line sql.y:2658
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: LT, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 628:
-		//line sql.y:2659
+		//line sql.y:2662
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: GT, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 629:
-		//line sql.y:2663
+		//line sql.y:2666
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: EQ, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 630:
-		//line sql.y:2667
+		//line sql.y:2670
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Concat, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 631:
-		//line sql.y:2671
+		//line sql.y:2674
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: LE, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 632:
-		//line sql.y:2675
+		//line sql.y:2678
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: GE, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 633:
-		//line sql.y:2679
+		//line sql.y:2682
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: NE, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 634:
-		//line sql.y:2683
+		//line sql.y:2686
 		{
 			sqlVAL.expr = &AndExpr{Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 635:
-		//line sql.y:2687
+		//line sql.y:2690
 		{
 			sqlVAL.expr = &OrExpr{Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 636:
-		//line sql.y:2691
+		//line sql.y:2694
 		{
 			sqlVAL.expr = &NotExpr{Expr: sqlS[sqlpt-0].expr}
 		}
 	case 637:
-		//line sql.y:2695
+		//line sql.y:2698
 		{
 			sqlVAL.expr = &NotExpr{Expr: sqlS[sqlpt-0].expr}
 		}
 	case 638:
-		//line sql.y:2699
+		//line sql.y:2702
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: Like, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 639:
-		//line sql.y:2703
+		//line sql.y:2706
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: Like, Left: sqlS[sqlpt-4].expr, Right: sqlS[sqlpt-2].expr}
 		}
 	case 640:
-		//line sql.y:2707
+		//line sql.y:2710
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: NotLike, Left: sqlS[sqlpt-3].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 641:
-		//line sql.y:2711
+		//line sql.y:2714
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: NotLike, Left: sqlS[sqlpt-5].expr, Right: sqlS[sqlpt-2].expr}
 		}
 	case 642:
-		//line sql.y:2714
-		{
-		}
-	case 643:
-		//line sql.y:2715
-		{
-		}
-	case 644:
-		//line sql.y:2716
-		{
-		}
-	case 645:
 		//line sql.y:2717
 		{
 		}
-	case 646:
+	case 643:
+		//line sql.y:2718
+		{
+		}
+	case 644:
 		//line sql.y:2719
+		{
+		}
+	case 645:
+		//line sql.y:2720
+		{
+		}
+	case 646:
+		//line sql.y:2722
 		{
 			sqlVAL.expr = &NullCheck{Expr: sqlS[sqlpt-2].expr}
 		}
 	case 647:
-		//line sql.y:2723
+		//line sql.y:2726
 		{
 			sqlVAL.expr = &NullCheck{Not: true, Expr: sqlS[sqlpt-3].expr}
 		}
 	case 648:
-		//line sql.y:2726
-		{
-		}
-	case 649:
-		//line sql.y:2727
-		{
-		}
-	case 650:
-		//line sql.y:2728
-		{
-		}
-	case 651:
 		//line sql.y:2729
 		{
 		}
-	case 652:
+	case 649:
 		//line sql.y:2730
 		{
 		}
-	case 653:
+	case 650:
 		//line sql.y:2731
 		{
 		}
-	case 654:
+	case 651:
 		//line sql.y:2732
 		{
 		}
-	case 655:
+	case 652:
 		//line sql.y:2733
 		{
 		}
-	case 656:
+	case 653:
 		//line sql.y:2734
 		{
 		}
-	case 657:
+	case 654:
 		//line sql.y:2735
 		{
 		}
-	case 658:
+	case 655:
 		//line sql.y:2736
 		{
 		}
-	case 659:
+	case 656:
+		//line sql.y:2737
+		{
+		}
+	case 657:
 		//line sql.y:2738
+		{
+		}
+	case 658:
+		//line sql.y:2739
+		{
+		}
+	case 659:
+		//line sql.y:2741
 		{
 			sqlVAL.expr = &RangeCond{Left: sqlS[sqlpt-5].expr, From: sqlS[sqlpt-2].expr, To: sqlS[sqlpt-0].expr}
 		}
 	case 660:
-		//line sql.y:2742
+		//line sql.y:2745
 		{
 			sqlVAL.expr = &RangeCond{Not: true, Left: sqlS[sqlpt-6].expr, From: sqlS[sqlpt-2].expr, To: sqlS[sqlpt-0].expr}
 		}
 	case 661:
-		//line sql.y:2746
+		//line sql.y:2749
 		{
 			sqlVAL.expr = &RangeCond{Left: sqlS[sqlpt-5].expr, From: sqlS[sqlpt-2].expr, To: sqlS[sqlpt-0].expr}
 		}
 	case 662:
-		//line sql.y:2750
+		//line sql.y:2753
 		{
 			sqlVAL.expr = &RangeCond{Not: true, Left: sqlS[sqlpt-6].expr, From: sqlS[sqlpt-2].expr, To: sqlS[sqlpt-0].expr}
 		}
 	case 663:
-		//line sql.y:2754
+		//line sql.y:2757
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: In, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 664:
-		//line sql.y:2758
+		//line sql.y:2761
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: NotIn, Left: sqlS[sqlpt-3].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 665:
-		//line sql.y:2761
-		{
-		}
-	case 666:
-		//line sql.y:2762
-		{
-		}
-	case 667:
-		//line sql.y:2763
-		{
-		}
-	case 668:
 		//line sql.y:2764
 		{
 		}
-	case 669:
+	case 666:
 		//line sql.y:2765
+		{
+		}
+	case 667:
+		//line sql.y:2766
+		{
+		}
+	case 668:
+		//line sql.y:2767
+		{
+		}
+	case 669:
+		//line sql.y:2768
 		{
 		}
 	case 670:
 		sqlVAL.expr = sqlS[sqlpt-0].expr
 	case 671:
-		//line sql.y:2776
+		//line sql.y:2780
 		{
+			sqlVAL.expr = &CastExpr{Expr: sqlS[sqlpt-2].expr, Type: sqlS[sqlpt-0].colType}
 		}
 	case 672:
-		//line sql.y:2778
+		//line sql.y:2784
 		{
 			sqlVAL.expr = &UnaryExpr{Operator: UnaryPlus, Expr: sqlS[sqlpt-0].expr}
 		}
 	case 673:
-		//line sql.y:2782
+		//line sql.y:2788
 		{
 			sqlVAL.expr = &UnaryExpr{Operator: UnaryMinus, Expr: sqlS[sqlpt-0].expr}
 		}
 	case 674:
-		//line sql.y:2786
+		//line sql.y:2792
 		{
 			sqlVAL.expr = &UnaryExpr{Operator: UnaryComplement, Expr: sqlS[sqlpt-0].expr}
 		}
 	case 675:
-		//line sql.y:2790
+		//line sql.y:2796
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Plus, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 676:
-		//line sql.y:2794
+		//line sql.y:2800
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Minus, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 677:
-		//line sql.y:2798
+		//line sql.y:2804
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Mult, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 678:
-		//line sql.y:2802
+		//line sql.y:2808
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Div, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 679:
-		//line sql.y:2806
+		//line sql.y:2812
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Mod, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 680:
-		//line sql.y:2810
+		//line sql.y:2816
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Exp, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 681:
-		//line sql.y:2814
+		//line sql.y:2820
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Bitand, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 682:
-		//line sql.y:2818
+		//line sql.y:2824
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Bitor, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 683:
-		//line sql.y:2822
+		//line sql.y:2828
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Bitxor, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 684:
-		//line sql.y:2826
+		//line sql.y:2832
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: LT, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 685:
-		//line sql.y:2830
+		//line sql.y:2836
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: GT, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 686:
-		//line sql.y:2834
+		//line sql.y:2840
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: EQ, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 687:
-		//line sql.y:2838
+		//line sql.y:2844
 		{
 			sqlVAL.expr = &BinaryExpr{Operator: Concat, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 688:
-		//line sql.y:2842
+		//line sql.y:2848
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: LE, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 689:
-		//line sql.y:2846
+		//line sql.y:2852
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: GE, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 690:
-		//line sql.y:2850
+		//line sql.y:2856
 		{
 			sqlVAL.expr = &ComparisonExpr{Operator: NE, Left: sqlS[sqlpt-2].expr, Right: sqlS[sqlpt-0].expr}
 		}
 	case 691:
-		//line sql.y:2853
+		//line sql.y:2859
 		{
 		}
 	case 692:
-		//line sql.y:2854
+		//line sql.y:2860
 		{
 		}
 	case 693:
-		//line sql.y:2855
+		//line sql.y:2861
 		{
 		}
 	case 694:
-		//line sql.y:2856
+		//line sql.y:2862
 		{
 		}
 	case 695:
-		//line sql.y:2857
+		//line sql.y:2863
 		{
 		}
 	case 696:
-		//line sql.y:2858
+		//line sql.y:2864
 		{
 		}
 	case 697:
-		//line sql.y:2868
+		//line sql.y:2874
 		{
 			sqlVAL.expr = sqlS[sqlpt-0].qname
 		}
 	case 698:
 		sqlVAL.expr = sqlS[sqlpt-0].expr
 	case 699:
-		//line sql.y:2873
+		//line sql.y:2879
 		{
 			sqlVAL.expr = ValArg(sqlS[sqlpt-1].ival)
 		}
 	case 700:
-		//line sql.y:2877
+		//line sql.y:2883
 		{
 			sqlVAL.expr = &ParenExpr{Expr: sqlS[sqlpt-2].expr}
 		}
@@ -9075,862 +9077,863 @@ sqldefault:
 	case 702:
 		sqlVAL.expr = sqlS[sqlpt-0].expr
 	case 703:
-		//line sql.y:2883
+		//line sql.y:2889
 		{
 			sqlVAL.expr = &Subquery{Select: sqlS[sqlpt-0].stmt.(SelectStatement)}
 		}
 	case 704:
-		//line sql.y:2887
+		//line sql.y:2893
 		{
 			sqlVAL.expr = &Subquery{Select: sqlS[sqlpt-1].stmt.(SelectStatement)}
 		}
 	case 705:
-		//line sql.y:2891
+		//line sql.y:2897
 		{
 			sqlVAL.expr = &ExistsExpr{Subquery: &Subquery{Select: sqlS[sqlpt-0].stmt.(SelectStatement)}}
 		}
 	case 706:
-		//line sql.y:2894
+		//line sql.y:2900
 		{
 		}
 	case 707:
-		//line sql.y:2895
+		//line sql.y:2901
 		{
 		}
 	case 708:
-		//line sql.y:2897
+		//line sql.y:2903
 		{
 			sqlVAL.expr = Tuple(sqlS[sqlpt-0].exprs)
 		}
 	case 709:
-		//line sql.y:2901
+		//line sql.y:2907
 		{
 			sqlVAL.expr = Tuple(sqlS[sqlpt-0].exprs)
 		}
 	case 710:
-		//line sql.y:2904
+		//line sql.y:2910
 		{
 		}
 	case 711:
-		//line sql.y:2908
+		//line sql.y:2914
 		{
 			sqlVAL.expr = &FuncExpr{Name: sqlS[sqlpt-2].qname}
 		}
 	case 712:
-		//line sql.y:2912
+		//line sql.y:2918
 		{
 			// TODO(pmattis): Support opt_sort_clause or remove it?
 			sqlVAL.expr = &FuncExpr{Name: sqlS[sqlpt-4].qname, Exprs: sqlS[sqlpt-2].exprs}
 		}
 	case 713:
-		//line sql.y:2917
+		//line sql.y:2923
 		{
 			panic("TODO(pmattis): unimplemented)")
 		}
 	case 714:
-		//line sql.y:2921
+		//line sql.y:2927
 		{
 			panic("TODO(pmattis): unimplemented)")
 		}
 	case 715:
-		//line sql.y:2925
+		//line sql.y:2931
 		{
 			panic("TODO(pmattis): unimplemented)")
 		}
 	case 716:
-		//line sql.y:2929
+		//line sql.y:2935
 		{
 			// TODO(pmattis): Support opt_sort_clause or remove it?
 			sqlVAL.expr = &FuncExpr{Name: sqlS[sqlpt-5].qname, Distinct: true, Exprs: sqlS[sqlpt-2].exprs}
 		}
 	case 717:
-		//line sql.y:2934
+		//line sql.y:2940
 		{
 			sqlVAL.expr = &FuncExpr{Name: sqlS[sqlpt-3].qname, Exprs: Exprs{QualifiedName{"*"}}}
 		}
 	case 718:
-		//line sql.y:2947
+		//line sql.y:2953
 		{
 			// TODO(pmattis): Support within_group_clause, filter_clause and
 			// over_clause?
 			sqlVAL.expr = sqlS[sqlpt-3].expr
 		}
 	case 719:
-		//line sql.y:2953
+		//line sql.y:2959
 		{
 			sqlVAL.expr = sqlS[sqlpt-0].expr
 		}
 	case 720:
-		//line sql.y:2962
-		{
-		}
-	case 721:
-		//line sql.y:2963
-		{
-		}
-	case 722:
-		//line sql.y:2967
-		{
-		}
-	case 723:
 		//line sql.y:2968
 		{
 		}
-	case 724:
+	case 721:
 		//line sql.y:2969
 		{
 		}
-	case 725:
-		//line sql.y:2970
-		{
-		}
-	case 726:
-		//line sql.y:2971
-		{
-		}
-	case 727:
-		//line sql.y:2972
-		{
-		}
-	case 728:
+	case 722:
 		//line sql.y:2973
 		{
 		}
-	case 729:
+	case 723:
 		//line sql.y:2974
 		{
 		}
-	case 730:
+	case 724:
 		//line sql.y:2975
 		{
 		}
-	case 731:
+	case 725:
 		//line sql.y:2976
 		{
 		}
-	case 732:
+	case 726:
 		//line sql.y:2977
 		{
 		}
-	case 733:
+	case 727:
 		//line sql.y:2978
 		{
 		}
-	case 734:
+	case 728:
 		//line sql.y:2979
 		{
 		}
-	case 735:
+	case 729:
 		//line sql.y:2980
 		{
 		}
-	case 736:
+	case 730:
 		//line sql.y:2981
 		{
 		}
-	case 737:
+	case 731:
 		//line sql.y:2982
 		{
 		}
-	case 738:
+	case 732:
 		//line sql.y:2983
 		{
 		}
-	case 739:
+	case 733:
 		//line sql.y:2984
 		{
 		}
-	case 740:
+	case 734:
 		//line sql.y:2985
 		{
 		}
-	case 741:
+	case 735:
 		//line sql.y:2986
 		{
 		}
-	case 742:
+	case 736:
 		//line sql.y:2987
 		{
 		}
-	case 743:
+	case 737:
 		//line sql.y:2988
 		{
 		}
-	case 744:
-		//line sql.y:2989
-		{
-		}
-	case 745:
+	case 738:
 		//line sql.y:2990
 		{
+			sqlVAL.expr = &CastExpr{Expr: sqlS[sqlpt-3].expr, Type: sqlS[sqlpt-1].colType}
 		}
-	case 746:
-		//line sql.y:2991
-		{
-		}
-	case 747:
-		//line sql.y:2992
-		{
-		}
-	case 748:
+	case 739:
 		//line sql.y:2993
 		{
 		}
-	case 749:
+	case 740:
 		//line sql.y:2994
 		{
 		}
-	case 750:
+	case 741:
 		//line sql.y:2995
 		{
 		}
-	case 751:
+	case 742:
 		//line sql.y:2996
 		{
 		}
-	case 752:
+	case 743:
+		//line sql.y:2997
+		{
+		}
+	case 744:
+		//line sql.y:2998
+		{
+		}
+	case 745:
+		//line sql.y:2999
+		{
+		}
+	case 746:
 		//line sql.y:3000
 		{
 		}
-	case 753:
+	case 747:
 		//line sql.y:3001
 		{
 		}
-	case 754:
+	case 748:
+		//line sql.y:3002
+		{
+		}
+	case 749:
+		//line sql.y:3003
+		{
+		}
+	case 750:
 		//line sql.y:3004
 		{
 		}
-	case 755:
+	case 751:
 		//line sql.y:3005
 		{
 		}
-	case 756:
+	case 752:
 		//line sql.y:3009
 		{
 		}
-	case 757:
+	case 753:
 		//line sql.y:3010
 		{
 		}
-	case 758:
+	case 754:
 		//line sql.y:3013
 		{
 		}
-	case 759:
+	case 755:
 		//line sql.y:3014
 		{
 		}
-	case 760:
-		//line sql.y:3017
+	case 756:
+		//line sql.y:3018
 		{
 		}
-	case 761:
-		//line sql.y:3020
+	case 757:
+		//line sql.y:3019
 		{
 		}
-	case 762:
-		//line sql.y:3021
-		{
-		}
-	case 763:
+	case 758:
 		//line sql.y:3022
 		{
 		}
-	case 764:
+	case 759:
+		//line sql.y:3023
+		{
+		}
+	case 760:
 		//line sql.y:3026
 		{
 		}
+	case 761:
+		//line sql.y:3029
+		{
+		}
+	case 762:
+		//line sql.y:3030
+		{
+		}
+	case 763:
+		//line sql.y:3031
+		{
+		}
+	case 764:
+		//line sql.y:3035
+		{
+		}
 	case 765:
-		//line sql.y:3037
+		//line sql.y:3046
 		{
 		}
 	case 766:
-		//line sql.y:3038
+		//line sql.y:3047
 		{
 		}
 	case 767:
-		//line sql.y:3041
-		{
-		}
-	case 768:
-		//line sql.y:3042
-		{
-		}
-	case 769:
 		//line sql.y:3050
 		{
 		}
-	case 770:
+	case 768:
 		//line sql.y:3051
 		{
 		}
+	case 769:
+		//line sql.y:3059
+		{
+		}
+	case 770:
+		//line sql.y:3060
+		{
+		}
 	case 771:
-		//line sql.y:3052
+		//line sql.y:3061
 		{
 		}
 	case 772:
-		//line sql.y:3055
-		{
-		}
-	case 773:
-		//line sql.y:3056
-		{
-		}
-	case 774:
-		//line sql.y:3062
-		{
-		}
-	case 775:
-		//line sql.y:3063
-		{
-		}
-	case 776:
 		//line sql.y:3064
 		{
 		}
-	case 777:
+	case 773:
 		//line sql.y:3065
 		{
 		}
+	case 774:
+		//line sql.y:3071
+		{
+		}
+	case 775:
+		//line sql.y:3072
+		{
+		}
+	case 776:
+		//line sql.y:3073
+		{
+		}
+	case 777:
+		//line sql.y:3074
+		{
+		}
 	case 778:
-		//line sql.y:3066
+		//line sql.y:3075
 		{
 		}
 	case 779:
-		//line sql.y:3077
+		//line sql.y:3086
 		{
 			sqlVAL.exprs = sqlS[sqlpt-1].exprs
 		}
 	case 780:
-		//line sql.y:3081
+		//line sql.y:3090
 		{
 			sqlVAL.exprs = nil
 		}
 	case 781:
-		//line sql.y:3085
+		//line sql.y:3094
 		{
 			sqlVAL.exprs = append(sqlS[sqlpt-3].exprs, sqlS[sqlpt-1].expr)
 		}
 	case 782:
-		//line sql.y:3091
+		//line sql.y:3100
 		{
 			sqlVAL.exprs = sqlS[sqlpt-1].exprs
 		}
 	case 783:
-		//line sql.y:3095
+		//line sql.y:3104
 		{
 			sqlVAL.exprs = nil
 		}
 	case 784:
-		//line sql.y:3101
+		//line sql.y:3110
 		{
 			sqlVAL.exprs = append(sqlS[sqlpt-3].exprs, sqlS[sqlpt-1].expr)
 		}
 	case 785:
-		//line sql.y:3106
-		{
-		}
-	case 786:
-		//line sql.y:3107
-		{
-		}
-	case 787:
-		//line sql.y:3108
-		{
-		}
-	case 788:
-		//line sql.y:3111
-		{
-		}
-	case 789:
-		//line sql.y:3112
-		{
-		}
-	case 790:
-		//line sql.y:3113
-		{
-		}
-	case 791:
-		//line sql.y:3114
-		{
-		}
-	case 792:
 		//line sql.y:3115
 		{
 		}
-	case 793:
+	case 786:
 		//line sql.y:3116
 		{
 		}
-	case 794:
+	case 787:
 		//line sql.y:3117
 		{
 		}
-	case 795:
-		//line sql.y:3118
-		{
-		}
-	case 796:
-		//line sql.y:3119
-		{
-		}
-	case 797:
+	case 788:
 		//line sql.y:3120
 		{
 		}
-	case 798:
+	case 789:
 		//line sql.y:3121
 		{
 		}
-	case 799:
+	case 790:
 		//line sql.y:3122
 		{
 		}
-	case 800:
+	case 791:
 		//line sql.y:3123
 		{
 		}
-	case 801:
+	case 792:
 		//line sql.y:3124
 		{
 		}
-	case 802:
+	case 793:
 		//line sql.y:3125
 		{
 		}
-	case 803:
+	case 794:
 		//line sql.y:3126
 		{
 		}
-	case 804:
+	case 795:
+		//line sql.y:3127
+		{
+		}
+	case 796:
+		//line sql.y:3128
+		{
+		}
+	case 797:
 		//line sql.y:3129
 		{
 		}
-	case 805:
+	case 798:
 		//line sql.y:3130
 		{
 		}
-	case 806:
+	case 799:
 		//line sql.y:3131
 		{
 		}
+	case 800:
+		//line sql.y:3132
+		{
+		}
+	case 801:
+		//line sql.y:3133
+		{
+		}
+	case 802:
+		//line sql.y:3134
+		{
+		}
+	case 803:
+		//line sql.y:3135
+		{
+		}
+	case 804:
+		//line sql.y:3138
+		{
+		}
+	case 805:
+		//line sql.y:3139
+		{
+		}
+	case 806:
+		//line sql.y:3140
+		{
+		}
 	case 807:
-		//line sql.y:3142
+		//line sql.y:3151
 		{
 			sqlVAL.exprs = Exprs{sqlS[sqlpt-0].expr}
 		}
 	case 808:
-		//line sql.y:3146
+		//line sql.y:3155
 		{
 			sqlVAL.exprs = append(sqlS[sqlpt-2].exprs, sqlS[sqlpt-0].expr)
 		}
 	case 809:
-		//line sql.y:3151
-		{
-		}
-	case 810:
-		//line sql.y:3152
-		{
-		}
-	case 811:
-		//line sql.y:3155
-		{
-		}
-	case 812:
-		//line sql.y:3156
-		{
-		}
-	case 813:
-		//line sql.y:3157
-		{
-		}
-	case 814:
 		//line sql.y:3160
 		{
 		}
-	case 815:
+	case 810:
 		//line sql.y:3161
 		{
 		}
-	case 816:
+	case 811:
 		//line sql.y:3164
 		{
 		}
-	case 817:
+	case 812:
 		//line sql.y:3165
 		{
 		}
-	case 818:
+	case 813:
+		//line sql.y:3166
+		{
+		}
+	case 814:
+		//line sql.y:3169
+		{
+		}
+	case 815:
 		//line sql.y:3170
 		{
 		}
-	case 819:
-		//line sql.y:3171
-		{
-		}
-	case 820:
-		//line sql.y:3172
-		{
-		}
-	case 821:
+	case 816:
 		//line sql.y:3173
 		{
 		}
-	case 822:
+	case 817:
 		//line sql.y:3174
 		{
 		}
+	case 818:
+		//line sql.y:3179
+		{
+		}
+	case 819:
+		//line sql.y:3180
+		{
+		}
+	case 820:
+		//line sql.y:3181
+		{
+		}
+	case 821:
+		//line sql.y:3182
+		{
+		}
+	case 822:
+		//line sql.y:3183
+		{
+		}
 	case 823:
-		//line sql.y:3175
+		//line sql.y:3184
 		{
 		}
 	case 824:
-		//line sql.y:3176
-		{
-		}
-	case 825:
-		//line sql.y:3177
-		{
-		}
-	case 826:
 		//line sql.y:3185
 		{
 		}
-	case 827:
+	case 825:
 		//line sql.y:3186
 		{
 		}
-	case 828:
-		//line sql.y:3189
-		{
-		}
-	case 829:
-		//line sql.y:3193
-		{
-		}
-	case 830:
+	case 826:
 		//line sql.y:3194
 		{
 		}
+	case 827:
+		//line sql.y:3195
+		{
+		}
+	case 828:
+		//line sql.y:3198
+		{
+		}
+	case 829:
+		//line sql.y:3202
+		{
+		}
+	case 830:
+		//line sql.y:3203
+		{
+		}
 	case 831:
-		//line sql.y:3208
+		//line sql.y:3217
 		{
 		}
 	case 832:
-		//line sql.y:3209
+		//line sql.y:3218
 		{
 		}
 	case 833:
-		//line sql.y:3210
-		{
-		}
-	case 834:
-		//line sql.y:3211
-		{
-		}
-	case 835:
-		//line sql.y:3212
-		{
-		}
-	case 836:
-		//line sql.y:3213
-		{
-		}
-	case 837:
-		//line sql.y:3216
-		{
-		}
-	case 838:
 		//line sql.y:3219
 		{
 		}
-	case 839:
+	case 834:
+		//line sql.y:3220
+		{
+		}
+	case 835:
+		//line sql.y:3221
+		{
+		}
+	case 836:
 		//line sql.y:3222
 		{
 		}
+	case 837:
+		//line sql.y:3225
+		{
+		}
+	case 838:
+		//line sql.y:3228
+		{
+		}
+	case 839:
+		//line sql.y:3231
+		{
+		}
 	case 840:
-		//line sql.y:3223
+		//line sql.y:3232
 		{
 		}
 	case 841:
-		//line sql.y:3224
+		//line sql.y:3233
 		{
 		}
 	case 842:
-		//line sql.y:3228
+		//line sql.y:3237
 		{
 			sqlVAL.expr = &Subquery{Select: sqlS[sqlpt-0].stmt.(SelectStatement)}
 		}
 	case 843:
-		//line sql.y:3232
+		//line sql.y:3241
 		{
 			sqlVAL.expr = Tuple(sqlS[sqlpt-1].exprs)
 		}
 	case 844:
-		//line sql.y:3243
+		//line sql.y:3252
 		{
 			sqlVAL.expr = &CaseExpr{Expr: sqlS[sqlpt-3].expr, Whens: sqlS[sqlpt-2].whens, Else: sqlS[sqlpt-1].expr}
 		}
 	case 845:
-		//line sql.y:3250
+		//line sql.y:3259
 		{
 			sqlVAL.whens = []*When{sqlS[sqlpt-0].when}
 		}
 	case 846:
-		//line sql.y:3254
+		//line sql.y:3263
 		{
 			sqlVAL.whens = append(sqlS[sqlpt-1].whens, sqlS[sqlpt-0].when)
 		}
 	case 847:
-		//line sql.y:3260
+		//line sql.y:3269
 		{
 			sqlVAL.when = &When{Cond: sqlS[sqlpt-2].expr, Val: sqlS[sqlpt-0].expr}
 		}
 	case 848:
-		//line sql.y:3266
+		//line sql.y:3275
 		{
 			sqlVAL.expr = sqlS[sqlpt-0].expr
 		}
 	case 849:
-		//line sql.y:3270
+		//line sql.y:3279
 		{
 			sqlVAL.expr = nil
 		}
 	case 850:
 		sqlVAL.expr = sqlS[sqlpt-0].expr
 	case 851:
-		//line sql.y:3277
+		//line sql.y:3286
 		{
 			sqlVAL.expr = nil
 		}
 	case 852:
-		//line sql.y:3283
+		//line sql.y:3292
 		{
 			sqlVAL.str = sqlS[sqlpt-0].str
 		}
 	case 853:
-		//line sql.y:3287
+		//line sql.y:3296
 		{
 			sqlVAL.str = "*"
 		}
 	case 854:
-		//line sql.y:3291
+		//line sql.y:3300
 		{
 			sqlVAL.str = ""
 		}
 	case 855:
-		//line sql.y:3295
+		//line sql.y:3304
 		{
 			sqlVAL.str = ""
 		}
 	case 856:
-		//line sql.y:3301
+		//line sql.y:3310
 		{
 			sqlVAL.strs = []string{sqlS[sqlpt-0].str}
 		}
 	case 857:
-		//line sql.y:3305
+		//line sql.y:3314
 		{
 			sqlVAL.strs = append(sqlS[sqlpt-1].strs, sqlS[sqlpt-0].str)
 		}
 	case 858:
-		//line sql.y:3311
+		//line sql.y:3320
 		{
 			sqlVAL.strs = nil
 		}
 	case 859:
-		//line sql.y:3315
+		//line sql.y:3324
 		{
 			sqlVAL.strs = append(sqlS[sqlpt-1].strs, sqlS[sqlpt-0].str)
 		}
 	case 860:
-		//line sql.y:3320
+		//line sql.y:3329
 		{
 		}
 	case 861:
-		//line sql.y:3321
+		//line sql.y:3330
 		{
 		}
 	case 862:
 		sqlVAL.expr = sqlS[sqlpt-0].expr
 	case 863:
-		//line sql.y:3330
+		//line sql.y:3339
 		{
 			sqlVAL.expr = nil
 		}
 	case 864:
-		//line sql.y:3336
+		//line sql.y:3345
 		{
 			sqlVAL.exprs = []Expr{sqlS[sqlpt-0].expr}
 		}
 	case 865:
-		//line sql.y:3340
+		//line sql.y:3349
 		{
 			sqlVAL.exprs = append(sqlS[sqlpt-2].exprs, sqlS[sqlpt-0].expr)
 		}
 	case 866:
-		//line sql.y:3349
+		//line sql.y:3358
 		{
 			sqlVAL.exprs = sqlS[sqlpt-1].exprs
 		}
 	case 867:
 		sqlVAL.selExprs = sqlS[sqlpt-0].selExprs
 	case 868:
-		//line sql.y:3357
+		//line sql.y:3366
 		{
 			sqlVAL.selExprs = nil
 		}
 	case 869:
-		//line sql.y:3363
+		//line sql.y:3372
 		{
 			sqlVAL.selExprs = SelectExprs{sqlS[sqlpt-0].selExpr}
 		}
 	case 870:
-		//line sql.y:3367
+		//line sql.y:3376
 		{
 			sqlVAL.selExprs = append(sqlS[sqlpt-2].selExprs, sqlS[sqlpt-0].selExpr)
 		}
 	case 871:
-		//line sql.y:3373
+		//line sql.y:3382
 		{
 			sqlVAL.selExpr = &NonStarExpr{Expr: sqlS[sqlpt-2].expr, As: sqlS[sqlpt-0].str}
 		}
 	case 872:
-		//line sql.y:3382
+		//line sql.y:3391
 		{
 			sqlVAL.selExpr = &NonStarExpr{Expr: sqlS[sqlpt-1].expr, As: sqlS[sqlpt-0].str}
 		}
 	case 873:
-		//line sql.y:3386
+		//line sql.y:3395
 		{
 			sqlVAL.selExpr = &NonStarExpr{Expr: sqlS[sqlpt-0].expr}
 		}
 	case 874:
-		//line sql.y:3390
+		//line sql.y:3399
 		{
 			sqlVAL.selExpr = &StarExpr{}
 		}
 	case 875:
-		//line sql.y:3398
+		//line sql.y:3407
 		{
 			sqlVAL.qnames = QualifiedNames{sqlS[sqlpt-0].qname}
 		}
 	case 876:
-		//line sql.y:3402
+		//line sql.y:3411
 		{
 			sqlVAL.qnames = append(sqlS[sqlpt-2].qnames, sqlS[sqlpt-0].qname)
 		}
 	case 877:
-		//line sql.y:3413
+		//line sql.y:3422
 		{
 			sqlVAL.qname = []string{sqlS[sqlpt-0].str}
 		}
 	case 878:
-		//line sql.y:3417
+		//line sql.y:3426
 		{
 			sqlVAL.qname = append([]string{sqlS[sqlpt-1].str}, sqlS[sqlpt-0].strs...)
 		}
 	case 879:
-		//line sql.y:3423
+		//line sql.y:3432
 		{
 			sqlVAL.strs = []string{sqlS[sqlpt-0].str}
 		}
 	case 880:
-		//line sql.y:3427
+		//line sql.y:3436
 		{
 			sqlVAL.strs = append(sqlS[sqlpt-2].strs, sqlS[sqlpt-0].str)
 		}
 	case 881:
-		//line sql.y:3433
+		//line sql.y:3442
 		{
 			sqlVAL.strs = sqlS[sqlpt-1].strs
 		}
 	case 882:
-		//line sql.y:3436
+		//line sql.y:3445
 		{
 		}
 	case 883:
-		//line sql.y:3446
+		//line sql.y:3455
 		{
 			sqlVAL.qname = QualifiedName{sqlS[sqlpt-0].str}
 		}
 	case 884:
-		//line sql.y:3450
+		//line sql.y:3459
 		{
 			sqlVAL.qname = QualifiedName(append([]string{sqlS[sqlpt-1].str}, sqlS[sqlpt-0].strs...))
 		}
 	case 885:
-		//line sql.y:3457
+		//line sql.y:3466
 		{
 			sqlVAL.expr = IntVal(sqlS[sqlpt-0].ival)
 		}
 	case 886:
-		//line sql.y:3461
+		//line sql.y:3470
 		{
 			sqlVAL.expr = NumVal(sqlS[sqlpt-0].str)
 		}
 	case 887:
-		//line sql.y:3465
+		//line sql.y:3474
 		{
 			// TODO(pmattis): string literal
 			sqlVAL.expr = StrVal(sqlS[sqlpt-0].str)
 		}
 	case 888:
-		//line sql.y:3470
+		//line sql.y:3479
 		{
 			// TODO(pmattis): bit literal.
 			sqlVAL.expr = StrVal(sqlS[sqlpt-0].str)
 		}
 	case 889:
-		//line sql.y:3475
+		//line sql.y:3484
 		{
 			// TODO(pmattis): hex literal.
 			sqlVAL.expr = StrVal(sqlS[sqlpt-0].str)
 		}
 	case 890:
-		//line sql.y:3479
+		//line sql.y:3488
 		{
 		}
 	case 891:
-		//line sql.y:3480
+		//line sql.y:3489
 		{
 		}
 	case 892:
-		//line sql.y:3481
+		//line sql.y:3490
 		{
 		}
 	case 893:
-		//line sql.y:3482
+		//line sql.y:3491
 		{
 		}
 	case 894:
-		//line sql.y:3483
+		//line sql.y:3492
 		{
 		}
 	case 895:
-		//line sql.y:3485
+		//line sql.y:3494
 		{
 			sqlVAL.expr = BoolVal(true)
 		}
 	case 896:
-		//line sql.y:3489
+		//line sql.y:3498
 		{
 			sqlVAL.expr = BoolVal(false)
 		}
 	case 897:
-		//line sql.y:3493
+		//line sql.y:3502
 		{
 			sqlVAL.expr = NullVal{}
 		}
 	case 898:
 		sqlVAL.ival = sqlS[sqlpt-0].ival
 	case 899:
-		//line sql.y:3500
+		//line sql.y:3509
 		{
 			sqlVAL.ival = +sqlS[sqlpt-0].ival
 		}
 	case 900:
-		//line sql.y:3504
+		//line sql.y:3513
 		{
 			sqlVAL.ival = -sqlS[sqlpt-0].ival
 		}
@@ -9943,7 +9946,7 @@ sqldefault:
 	case 904:
 		sqlVAL.str = sqlS[sqlpt-0].str
 	case 905:
-		//line sql.y:3531
+		//line sql.y:3540
 		{
 			sqlVAL.str = ""
 		}

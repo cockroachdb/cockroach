@@ -114,6 +114,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a\\na' FROM t`},
 		{`SELECT '\\n' FROM t`},
 		{`SELECT "FROM" FROM t`},
+		{`SELECT CAST(1 AS TEXT)`},
 		{`SELECT FROM t AS bar`},
 		{`SELECT FROM (SELECT 1 FROM t)`},
 		{`SELECT FROM (SELECT 1 FROM t) AS bar`},
@@ -263,6 +264,9 @@ func TestParse2(t *testing.T) {
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT FROM t OFFSET a LIMIT b`,
 			`SELECT FROM t LIMIT b OFFSET a`},
+		// Shorthand type cast.
+		{`SELECT '1'::INT`,
+			`SELECT CAST('1' AS INT)`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
