@@ -242,7 +242,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		if err := d.desc.Validate(); err == nil {
-			t.Errorf("%d: expected error, but found success: %+v", i, d.desc)
+			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, d.err, err.Error())
 		}

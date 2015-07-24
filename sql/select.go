@@ -34,16 +34,8 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		// desc remains nil.
 
 	case 1:
-		ate, ok := n.From[0].(*parser.AliasedTableExpr)
-		if !ok {
-			return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
-		}
-		table, ok := ate.Expr.(parser.QualifiedName)
-		if !ok {
-			return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n.From)
-		}
 		var err error
-		desc, err = p.getTableDesc(table)
+		desc, err = p.getAliasedTableDesc(n.From[0])
 		if err != nil {
 			return nil, err
 		}

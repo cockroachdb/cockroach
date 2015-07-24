@@ -86,6 +86,9 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				Unique:      d.Unique,
 				ColumnNames: d.Columns,
 			}
+			if d.PrimaryKey {
+				index.Name = "primary"
+			}
 			desc.Indexes = append(desc.Indexes, index)
 		default:
 			return desc, fmt.Errorf("unsupported table def: %T", def)
@@ -103,8 +106,7 @@ func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 }
 
 func encodeIndexKey(index structured.IndexDescriptor,
-	colMap map[uint32]int, cols []structured.ColumnDescriptor,
-	row []parser.Datum, indexKey []byte) ([]byte, error) {
+	colMap map[uint32]int, row []parser.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
@@ -125,8 +127,7 @@ func encodeIndexKey(index structured.IndexDescriptor,
 	return key, nil
 }
 
-func encodeColumnKey(desc *structured.TableDescriptor,
-	col structured.ColumnDescriptor, primaryKey []byte) []byte {
+func encodeColumnKey(col structured.ColumnDescriptor, primaryKey []byte) []byte {
 	var key []byte
 	key = append(key, primaryKey...)
 	return encoding.EncodeUvarint(key, uint64(col.ID))

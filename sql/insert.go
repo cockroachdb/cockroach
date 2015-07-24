@@ -60,19 +60,19 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
-	b := &client.Batch{}
+	b := client.Batch{}
 	for rows.Next() {
 		values := rows.Values()
 		if len(values) != len(cols) {
 			return nil, fmt.Errorf("invalid values for columns: %d != %d", len(values), len(cols))
 		}
 		indexKey := encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID)
-		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, cols, values, indexKey)
+		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, values, indexKey)
 		if err != nil {
 			return nil, err
 		}
 		for i, val := range values {
-			key := encodeColumnKey(desc, cols[i], primaryKey)
+			key := encodeColumnKey(cols[i], primaryKey)
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
@@ -92,9 +92,10 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if err := p.db.Run(b); err != nil {
+	if err := p.db.Run(&b); err != nil {
 		return nil, err
 	}
+	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil
 }
 

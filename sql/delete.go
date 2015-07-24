@@ -18,11 +18,65 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
-// Delete TODO(pmattis): document.
+// Delete deletes rows from a table.
 func (p *planner) Delete(n *parser.Delete) (planNode, error) {
-	return nil, util.Errorf("TODO(pmattis): unimplemented")
+	tableDesc, err := p.getAliasedTableDesc(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
+	// and decoding keys. Also, avoiding Select may provide more
+	// convenient access to index keys which we are not currently
+	// deleting.
+	node, err := p.Select(&parser.Select{
+		Exprs: parser.SelectExprs{
+			&parser.StarExpr{TableName: tableDesc.Name},
+		},
+		From:  parser.TableExprs{n.Table},
+		Where: n.Where,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	colMap := map[uint32]int{}
+	for i, name := range node.Columns() {
+		c, err := tableDesc.FindColumnByName(name)
+		if err != nil {
+			return nil, err
+		}
+		colMap[c.ID] = i
+	}
+
+	index := tableDesc.Indexes[0]
+	indexKey := encodeIndexKeyPrefix(tableDesc.ID, index.ID)
+
+	b := client.Batch{}
+
+	for node.Next() {
+		if err := node.Err(); err != nil {
+			return nil, err
+		}
+
+		// TODO(tamird/pmattis): delete the secondary indexes too
+		primaryKey, err := encodeIndexKey(index, colMap, node.Values(), indexKey)
+		if err != nil {
+			return nil, err
+		}
+		rowStartKey := proto.Key(primaryKey)
+		b.DelRange(rowStartKey, rowStartKey.PrefixEnd())
+	}
+
+	if err := p.db.Run(&b); err != nil {
+		return nil, err
+	}
+
+	// TODO(tamird/pmattis): return the number of affected rows
+	return &valuesNode{}, nil
 }
