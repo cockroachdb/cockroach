@@ -20,6 +20,7 @@ package parser
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
@@ -363,8 +364,7 @@ CREATE TABLE test (
 }
 
 func TestParsePanic(t *testing.T) {
-	// TODO(tschottdorf): see #1801; when fixed, remove this and next line.
-	t.Skip()
+	// Replicates #1801.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatal(r)
@@ -381,6 +381,9 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-
-	_, _ = Parse(s)
+	_, err := Parse(s)
+	expected := `syntax error at or near "EOF"`
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected %s, but found %v", expected, err)
+	}
 }

@@ -129,7 +129,7 @@ check:
 	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
 	@echo "golint"
 	@! golint $(PKG) | \
-	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql\.y)' \
+	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)' \
 	  # https://golang.org/pkg/database/sql/driver/#Result :(
 	@echo "gofmt (simplify)"
 	@! gofmt -s -l . 2>&1 | grep -vE '^\.git/'
