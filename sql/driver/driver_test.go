@@ -30,7 +30,6 @@ import (
 
 var isError = testutils.IsError
 
-// TODO(mberhault): should have one insecure test as well.
 func setup(t *testing.T) (*server.TestServer, *sql.DB) {
 	s := server.StartTestServer(nil)
 	db, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
