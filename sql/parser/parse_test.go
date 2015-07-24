@@ -361,3 +361,26 @@ CREATE TABLE test (
 		}
 	}
 }
+
+func TestParsePanic(t *testing.T) {
+	// TODO(tschottdorf): see #1801; when fixed, remove this and next line.
+	t.Skip()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal(r)
+		}
+	}()
+	s := "SELECT(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(T" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F(F" +
+		"(F(F(F(F(F(F(F(F(F((" +
+		"F(0"
+
+	_, _ = Parse(s)
+}
