@@ -37,8 +37,8 @@ import (
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
+	Expr
 	Type() string
-	String() string
 }
 
 var _ Datum = DBool(false)
@@ -64,10 +64,7 @@ func (d DBool) Type() string {
 }
 
 func (d DBool) String() string {
-	if d {
-		return "true"
-	}
-	return "false"
+	return BoolVal(d).String()
 }
 
 // DInt is the int Datum.
@@ -103,7 +100,7 @@ func (d DString) Type() string {
 }
 
 func (d DString) String() string {
-	return string(d)
+	return StrVal(d).String()
 }
 
 // DTuple is the tuple Datum.
@@ -426,6 +423,9 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 			tuple = append(tuple, d)
 		}
 		return tuple, nil
+
+	case Datum:
+		return t, nil
 
 	case *Subquery:
 		// The subquery should have been executed before expression evaluation and

@@ -52,6 +52,12 @@ func (*UnaryExpr) expr()      {}
 func (*FuncExpr) expr()       {}
 func (*CaseExpr) expr()       {}
 func (*CastExpr) expr()       {}
+func (DBool) expr()           {}
+func (DInt) expr()            {}
+func (DFloat) expr()          {}
+func (DString) expr()         {}
+func (DTuple) expr()          {}
+func (DNull) expr()           {}
 
 // AndExpr represents an AND expression.
 type AndExpr struct {
