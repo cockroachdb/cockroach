@@ -424,15 +424,6 @@ func (db *DB) send(calls ...proto.Call) (err error) {
 		return nil
 	}
 
-	// First check if any call contains an error. This allows the
-	// generation of a Call to create an error that is reported
-	// here. See PutProto for an example.
-	for _, call := range calls {
-		if call.Err != nil {
-			return call.Err
-		}
-	}
-
 	if len(calls) == 1 {
 		c := calls[0]
 		if c.Args.Header().UserPriority == nil && db.userPriority != 0 {
