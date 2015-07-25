@@ -2938,7 +2938,7 @@ func_application:
   }
 | func_name '(' '*' ')'
   {
-    $$ = &FuncExpr{Name: $1, Exprs: Exprs{QualifiedName{"*"}}}
+    $$ = &FuncExpr{Name: $1, Exprs: Exprs{&StarExpr{}}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
