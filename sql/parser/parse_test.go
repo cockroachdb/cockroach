@@ -274,6 +274,8 @@ func TestParse2(t *testing.T) {
 			`SELECT *, - -5`},
 		{"SELECT -\n-5",
 			`SELECT - -5`},
+		{"SELECT 1e-\n-1",
+			`SELECT 1e- -1`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

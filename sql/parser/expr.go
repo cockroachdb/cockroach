@@ -213,7 +213,11 @@ func (node IntVal) String() string {
 type NumVal string
 
 func (node NumVal) String() string {
-	return string(node)
+	s := string(node)
+	if l := len(s); l > 0 && s[l-1] == '-' {
+		s += " "
+	}
+	return s
 }
 
 // BoolVal represents a boolean.
