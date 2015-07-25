@@ -293,6 +293,9 @@ func TestParse2(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("expected %s, but found %s", d.expected, s)
 		}
+		if _, err := Parse(s); err != nil {
+			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
+		}
 	}
 }
 
