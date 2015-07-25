@@ -116,7 +116,8 @@ func (node *NonStarExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s", node.Expr)
 	if node.As != "" {
-		fmt.Fprintf(&buf, " AS %s", node.As)
+		buf.WriteString(" AS ")
+		encodeSQLIdent(&buf, node.As)
 	}
 	return buf.String()
 }

@@ -117,6 +117,10 @@ func TestParse(t *testing.T) {
 		{`SELECT a.b FROM t`},
 		{`SELECT 'a' FROM t`},
 		{`SELECT 'a\'a' FROM t`},
+
+		{`SELECT 'a' AS "12345"`},
+		{`SELECT 'a' AS clnm`},
+
 		{`SELECT 'a\\na' FROM t`},
 		{`SELECT '\\n' FROM t`},
 		{`SELECT "FROM" FROM t`},
