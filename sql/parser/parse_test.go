@@ -30,6 +30,10 @@ func TestParse(t *testing.T) {
 	testData := []struct {
 		sql string
 	}{
+		// TODO(tschottdorf): shouldn't these below error?
+		{``},
+		{`VALUES ("")`},
+
 		{`CREATE DATABASE a`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
 		{`CREATE TABLE a ()`},
