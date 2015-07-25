@@ -29,6 +29,8 @@ import (
 )
 
 const eof = -1
+const errUnterminated = "unterminated string"
+const errUnsupportedEscape = "octal, hex and unicode escape not supported"
 
 type scanner struct {
 	in        string
@@ -514,6 +516,12 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 					s.pos++
 					start = s.pos
 					continue
+				case 'x', 'u', 'U':
+					fallthrough
+				case '0', '1', '2', '3', '4', '5', '6', '7':
+					lval.id = ERROR
+					lval.str = errUnsupportedEscape
+					return false
 				}
 
 				// If we end up here, it's a redundant escape - simply drop the
@@ -525,7 +533,7 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 
 		case eof:
 			lval.id = ERROR
-			lval.str = "unterminated string"
+			lval.str = errUnterminated
 			return false
 		}
 	}
