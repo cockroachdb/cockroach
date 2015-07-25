@@ -79,16 +79,16 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a.b VALUES (1)`},
 		{`INSERT INTO a VALUES (1, 2)`},
 		{`INSERT INTO a VALUES (1, 2), (3, 4)`},
-		{`INSERT INTO a VALUES (a+1, 2*3)`},
+		{`INSERT INTO a VALUES (a + 1, 2 * 3)`},
 		{`INSERT INTO a(a, b) VALUES (1, 2)`},
 		{`INSERT INTO a(a, a.b) VALUES (1, 2)`},
 		{`INSERT INTO a SELECT b, c FROM d`},
 		{`INSERT INTO a DEFAULT VALUES`},
 
-		{`SELECT 1+1`},
-		{`SELECT - -5`},
-		{`SELECT -1`},
-		{`SELECT +1`},
+		{`SELECT 1 + 1`},
+		{`SELECT - - 5`},
+		{`SELECT - 1`},
+		{`SELECT + 1`},
 		{`SELECT .1`},
 		{`SELECT 1.2e1`},
 		{`SELECT 1.2e+1`},
@@ -131,7 +131,7 @@ func TestParse(t *testing.T) {
 		{`SELECT DISTINCT 1 FROM t`},
 		{`SELECT COUNT(DISTINCT a) FROM t`},
 
-		{`SELECT FROM t WHERE b = -2`},
+		{`SELECT FROM t WHERE b = - 2`},
 		{`SELECT FROM t WHERE a = b`},
 		{`SELECT FROM t WHERE a = b AND a = c`},
 		{`SELECT FROM t WHERE a = b OR a = c`},
@@ -156,19 +156,19 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM t WHERE a != b`},
 		{`SELECT FROM t WHERE a = (SELECT a FROM t)`},
 		{`SELECT FROM t WHERE a = (b)`},
-		{`SELECT FROM t WHERE a = b&c`},
-		{`SELECT FROM t WHERE a = b|c`},
-		{`SELECT FROM t WHERE a = b^c`},
-		{`SELECT FROM t WHERE a = b+c`},
-		{`SELECT FROM t WHERE a = b-c`},
-		{`SELECT FROM t WHERE a = b*c`},
-		{`SELECT FROM t WHERE a = b/c`},
-		{`SELECT FROM t WHERE a = b%c`},
-		{`SELECT FROM t WHERE a = b#c`},
-		{`SELECT FROM t WHERE a = b||c`},
-		{`SELECT FROM t WHERE a = +b`},
-		{`SELECT FROM t WHERE a = -b`},
-		{`SELECT FROM t WHERE a = ~b`},
+		{`SELECT FROM t WHERE a = b & c`},
+		{`SELECT FROM t WHERE a = b | c`},
+		{`SELECT FROM t WHERE a = b ^ c`},
+		{`SELECT FROM t WHERE a = b + c`},
+		{`SELECT FROM t WHERE a = b - c`},
+		{`SELECT FROM t WHERE a = b * c`},
+		{`SELECT FROM t WHERE a = b / c`},
+		{`SELECT FROM t WHERE a = b % c`},
+		{`SELECT FROM t WHERE a = b # c`},
+		{`SELECT FROM t WHERE a = b || c`},
+		{`SELECT FROM t WHERE a = + b`},
+		{`SELECT FROM t WHERE a = - b`},
+		{`SELECT FROM t WHERE a = ~ b`},
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c END`},
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c ELSE d END`},
 		{`SELECT FROM t WHERE CASE WHEN a = b THEN c WHEN b = d THEN d ELSE d END`},
@@ -212,7 +212,7 @@ func TestParse(t *testing.T) {
 		{`UPDATE a.b SET b = 3`},
 		{`UPDATE a SET b.c = 3`},
 		{`UPDATE a SET b = 3, c = 4`},
-		{`UPDATE a SET b = 3+4`},
+		{`UPDATE a SET b = 3 + 4`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
 	}
 	for _, d := range testData {
@@ -222,7 +222,7 @@ func TestParse(t *testing.T) {
 		}
 		s := stmts.String()
 		if d.sql != s {
-			t.Fatalf("expected %s, but found %s", d.sql, s)
+			t.Errorf("expected %s, but found %s", d.sql, s)
 		}
 	}
 }
@@ -275,9 +275,14 @@ func TestParse2(t *testing.T) {
 			`SELECT CAST('1' AS INT)`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
-			`SELECT *, - -5`},
+			`SELECT *, - - 5`},
 		{"SELECT -\n-5",
-			`SELECT - -5`},
+			`SELECT - - 5`},
+		{"SELECT 1e-\n-1",
+			`SELECT 1e- - 1`},
+		{`SELECT -0.-/*test*/-1`,
+			`SELECT - 0. - - 1`,
+		},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
@@ -286,7 +291,7 @@ func TestParse2(t *testing.T) {
 		}
 		s := stmts.String()
 		if d.expected != s {
-			t.Fatalf("expected %s, but found %s", d.expected, s)
+			t.Errorf("expected %s, but found %s", d.expected, s)
 		}
 	}
 }
