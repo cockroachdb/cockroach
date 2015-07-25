@@ -375,7 +375,7 @@ type BinaryExpr struct {
 }
 
 func (node *BinaryExpr) String() string {
-	return fmt.Sprintf("%s%s%s", node.Left, node.Operator, node.Right)
+	return fmt.Sprintf("%s %s %s", node.Left, node.Operator, node.Right)
 }
 
 // UnaryOp represents a unary operator.
@@ -408,15 +408,7 @@ type UnaryExpr struct {
 }
 
 func (node *UnaryExpr) String() string {
-	extra := ""
-	if node.Operator == UnaryMinus {
-		// We don't want to end up printing --5 since `--` indicates a comment.
-		// Instead, space them out to "- -".
-		if nNode, ok := node.Expr.(*UnaryExpr); ok && nNode.Operator == UnaryMinus {
-			extra = " "
-		}
-	}
-	return fmt.Sprintf("%s%s%s", node.Operator, extra, node.Expr)
+	return fmt.Sprintf("%s %s", node.Operator, node.Expr)
 }
 
 // FuncExpr represents a function call.

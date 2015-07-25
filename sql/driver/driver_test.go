@@ -458,7 +458,7 @@ CREATE TABLE t.kv (
 			{"1", "3"},
 		}},
 		{`a+b+c`, [][]string{
-			{"a+b+c"},
+			{"a + b + c"},
 			{"6"},
 		}},
 		{`a+b AS foo`, [][]string{
