@@ -81,6 +81,7 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a DEFAULT VALUES`},
 
 		{`SELECT 1+1`},
+		{`SELECT - -5`},
 		{`SELECT -1`},
 		{`SELECT +1`},
 		{`SELECT .1`},
@@ -267,6 +268,11 @@ func TestParse2(t *testing.T) {
 		// Shorthand type cast.
 		{`SELECT '1'::INT`,
 			`SELECT CAST('1' AS INT)`},
+		// Double negation. See #1800.
+		{`SELECT *,-/* comment */-5`,
+			`SELECT *, - -5`},
+		{"SELECT -\n-5",
+			`SELECT - -5`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
