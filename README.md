@@ -100,10 +100,10 @@ Now let's talk to this node. The easiest way to do that is to use the `cockroach
 # Counters are also available:
 ./cockroach kv inc mycnt 5
 # 5
-./cockroach kv inc mycnt -3
+./cockroach kv inc mycnt -- -3
 #2
 ./cockroach kv get mycnt
-#2
+#"\x00\x00\x00\x00\x00\x00\x00\x02"
 ```
 
 Check out `./cockroach help` to see all available commands.
