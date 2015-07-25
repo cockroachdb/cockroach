@@ -531,7 +531,7 @@ func isDigit(ch int) bool {
 }
 
 func isIdent(s string) bool {
-	if !isIdentStart(int(s[0])) {
+	if len(s) == 0 || !isIdentStart(int(s[0])) {
 		return false
 	}
 	for i := 1; i < len(s); i++ {
