@@ -498,24 +498,29 @@ func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
 
 		case '\\':
 			t := s.peek()
-			// We always allow the quote character and "\" to be escaped.
-			if t == ch || t == '\\' {
-				lval.str += s.in[start : s.pos-1]
-				start = s.pos
-				s.pos++
-				continue
-			}
 			if allowEscapes {
+				lval.str += s.in[start : s.pos-1]
+				if t == ch || t == '\\' {
+					start = s.pos
+					s.pos++
+					continue
+				}
+
 				switch t {
-				case 'b', 'f', 'n', 'r', 't', '\'', '"':
-					lval.str += s.in[start : s.pos-1]
+				// TODO(pmattis): Handle other back-slash escapes? Octal? Hexadecimal?
+				// Unicode?
+				case 'b', 'f', 'n', 'r', 't', '\'':
 					lval.str += string(decodeMap[byte(t)])
 					s.pos++
 					start = s.pos
 					continue
 				}
-				// TODO(pmattis): Handle other back-slash escapes? Octal? Hexadecimal?
-				// Unicode?
+
+				// If we end up here, it's a redundant escape - simply drop the
+				// backslash. For example, e'\"' is equivalent to e'"', and
+				// e'\a\b' to e'a\b'. This is what Postgres does:
+				// http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html#SQL-SYNTAX-STRINGS-ESCAPE
+				start = s.pos
 			}
 
 		case eof:

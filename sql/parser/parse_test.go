@@ -117,13 +117,21 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t`},
 		{`SELECT a.b FROM t`},
 		{`SELECT 'a' FROM t`},
-		{`SELECT 'a\'a' FROM t`},
 
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},
 
-		{`SELECT 'a\\na' FROM t`},
-		{`SELECT '\\n' FROM t`},
+		// Escaping may change since the scanning process loses information
+		// (you can write e'\'' or ''''), but these are the idempotent cases.
+		// Generally, anything that needs to escape plus \ and ' leads to an
+		// escaped string.
+		{`SELECT e'a\'a' FROM t`},
+		{`SELECT e'a\\\\na' FROM t`},
+		{`SELECT e'\\\\n' FROM t`},
+		{`SELECT "a""a" FROM t`},
+		{`SELECT a FROM "t\n"`}, // no escaping in sql identifiers
+		{`SELECT a FROM "t"""`}, // no escaping in sql identifiers
+
 		{`SELECT "FROM" FROM t`},
 		{`SELECT CAST(1 AS TEXT)`},
 		{`SELECT FROM t AS bar`},
@@ -246,11 +254,19 @@ func TestParse2(t *testing.T) {
 		// {`SELECT 010 FROM t`, ``},
 		// {`SELECT 0xf0 FROM t`, ``},
 		// {`SELECT 0xF0 FROM t`, ``},
-		// Escaped string literals are not always escaped the same.
-		{`SELECT 'a''a' FROM t`,
-			`SELECT 'a\'a' FROM t`},
-		{`SELECT "a""a" FROM t`,
-			`SELECT "a\"a" FROM t`},
+		// Escaped string literals are not always escaped the same because
+		// '''' and e'\'' scan to the same token. It's more convenient to
+		// prefer escaping ' and \, so we do that.
+		{`SELECT 'a''a'`,
+			`SELECT e'a\'a'`},
+		{`SELECT 'a\a'`,
+			`SELECT e'a\\a'`},
+		{`SELECT 'a\n'`,
+			`SELECT e'a\\n'`},
+		{"SELECT '\n'",
+			`SELECT e'\n'`},
+		{"SELECT '\n\\'",
+			`SELECT e'\n\\'`},
 		{`SELECT "a'a" FROM t`,
 			`SELECT "a'a" FROM t`},
 		// Comments are stripped.
@@ -319,7 +335,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT 1 FROM t FOR SHARE`},
 		{`SELECT 1 FROM t FOR KEY SHARE`},
 		{`SELECT ((1)) FROM t WHERE ((a)) IN (((1))) AND ((a, b)) IN ((((1, 1))), ((2, 2)))`},
-		{`SELECT '\'\"\b\n\r\t\\' FROM t`},
+		{`SELECT e'\'\"\b\n\r\t\\' FROM t`},
 		{`SELECT '\x' FROM t`},
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t ORDER BY a`},
