@@ -26,7 +26,6 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 // SelectStatement any SELECT statement.
@@ -160,7 +159,8 @@ func (node *AliasedTableExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s", node.Expr)
 	if node.As != "" {
-		fmt.Fprintf(&buf, " AS %s", node.As)
+		buf.WriteString(" AS ")
+		encodeSQLIdent(&buf, node.As)
 	}
 	return buf.String()
 }
@@ -233,7 +233,14 @@ type UsingJoinCond struct {
 }
 
 func (node *UsingJoinCond) String() string {
-	return fmt.Sprintf(" USING (%s)", strings.Join(node.Cols, ", "))
+	var buf bytes.Buffer
+	for i, col := range node.Cols {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		encodeSQLIdent(&buf, col)
+	}
+	return fmt.Sprintf(" USING (%s)", buf.Bytes())
 }
 
 // Where represents a WHERE or HAVING clause.

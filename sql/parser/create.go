@@ -26,7 +26,6 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
@@ -114,7 +113,7 @@ func newColumnTableDef(name string, typ ColumnType,
 
 func (node *ColumnTableDef) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
+	fmt.Fprintf(&buf, "%s %s", encIdent(node.Name), node.Type)
 	switch node.Nullable {
 	case Null:
 		_, _ = buf.WriteString(" NULL")
@@ -163,7 +162,7 @@ type IndexTableDef struct {
 func (node *IndexTableDef) String() string {
 	var buf bytes.Buffer
 	if node.Name != "" {
-		fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
+		fmt.Fprintf(&buf, "CONSTRAINT %s ", encIdent(node.Name))
 	}
 	if node.PrimaryKey {
 		_, _ = buf.WriteString("PRIMARY KEY ")
@@ -172,7 +171,14 @@ func (node *IndexTableDef) String() string {
 	} else {
 		_, _ = buf.WriteString("INDEX ")
 	}
-	fmt.Fprintf(&buf, "(%s)", strings.Join(node.Columns, ", "))
+	buf.WriteString("(")
+	for i, col := range node.Columns {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		encodeSQLIdent(&buf, col)
+	}
+	buf.WriteString(")")
 	return buf.String()
 }
 

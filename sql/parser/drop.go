@@ -37,7 +37,7 @@ func (node *DropDatabase) String() string {
 	if node.IfExists {
 		_, _ = buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(node.Name)
+	encodeSQLIdent(&buf, node.Name)
 	return buf.String()
 }
 

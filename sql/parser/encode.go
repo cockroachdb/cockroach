@@ -79,6 +79,14 @@ func encodeSQLIdent(buf *bytes.Buffer, s string) {
 	_ = buf.WriteByte('"')
 }
 
+// Convenience around encodeSQLIdent.
+// TODO(tschottdorf): always use this? After all, performance not an issue.
+func encIdent(s string) string {
+	var buf bytes.Buffer
+	encodeSQLIdent(&buf, s)
+	return buf.String()
+}
+
 func encodeSQLBytes(buf []byte, v []byte) []byte {
 	buf = append(buf, "x'"...)
 	for _, d := range v {

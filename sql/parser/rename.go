@@ -34,5 +34,5 @@ type RenameTable struct {
 }
 
 func (node *RenameTable) String() string {
-	return fmt.Sprintf("RENAME TABLE %s %s", node.Name, node.NewName)
+	return fmt.Sprintf("RENAME TABLE %s %s", encIdent(node.Name), encIdent(node.NewName))
 }
