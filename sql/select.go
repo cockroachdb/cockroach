@@ -62,7 +62,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		case *parser.NonStarExpr:
 			exprs = append(exprs, t.Expr)
 			if t.As != "" {
-				columns = append(columns, t.As)
+				columns = append(columns, string(t.As))
 			} else {
 				// TODO(pmattis): Should verify at this point that any referenced
 				// columns are represented in the tables being selected from.

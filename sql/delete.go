@@ -36,7 +36,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	// deleting.
 	node, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{
-			&parser.StarExpr{TableName: tableDesc.Name},
+			&parser.StarExpr{TableName: parser.Name(tableDesc.Name)},
 		},
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
