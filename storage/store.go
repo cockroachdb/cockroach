@@ -1251,6 +1251,10 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 		reply, err = rng.AddCmd(ctx, args)
 		if err == nil {
 			return reply, nil
+		} else if err == multiraft.ErrGroupDeleted {
+			// This error needs to be converted appropriately so that
+			// clients will retry.
+			err = proto.NewRangeNotFoundError(rng.Desc().RaftID)
 		}
 
 		// Maybe resolve a potential write intent error. We do this here
