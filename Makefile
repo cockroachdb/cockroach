@@ -132,7 +132,7 @@ check:
 	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)' \
 	  # https://golang.org/pkg/database/sql/driver/#Result :(
 	@echo "gofmt (simplify)"
-	@! gofmt -s -l . 2>&1 | grep -vE '^\.git/'
+	@! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
 	@echo "goimports"
 	@! goimports -l . | grep -vF 'No Exceptions'
 
