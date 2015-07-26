@@ -124,6 +124,9 @@ var flagUsage = map[string]string{
 
           --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.
 `,
+	"max-results": `
+        Define the maximum number of results that will be retrieved.
+`,
 }
 
 func normalizeStdFlagName(s string) string {
@@ -208,6 +211,12 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+	}
+
+	{
+		// Max results flag for scan
+		f := scanCmd.Flags()
+		f.Int64Var(&maxResults, "max-results", defaultMaxResults, flagUsage["max-results"])
 	}
 }
 
