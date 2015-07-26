@@ -76,9 +76,9 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", debugEndpoint + "vars", insecureContext, false, -1},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusNodeKeyPrefix, certsContext, true, http.StatusOK},
-		{"GET", statusNodeKeyPrefix, noCertsContext, true, http.StatusOK},
-		{"GET", statusNodeKeyPrefix, insecureContext, false, -1},
+		{"GET", statusNodesPrefix, certsContext, true, http.StatusOK},
+		{"GET", statusNodesPrefix, noCertsContext, true, http.StatusOK},
+		{"GET", statusNodesPrefix, insecureContext, false, -1},
 
 		// /ts/: ts.Server: no auth.
 		{"GET", ts.URLPrefix, certsContext, true, http.StatusNotFound},

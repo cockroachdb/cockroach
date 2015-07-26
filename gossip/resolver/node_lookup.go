@@ -33,8 +33,8 @@ import (
 const lookupTimeout = time.Second * 3
 
 // nodeLookupResolver implements Resolver.
-// It queries http(s)://<address>/_status/local and extracts the node's address.
-// This is useful for http load balancers which will not forward RPC.
+// It queries http(s)://<address>/_status/details/local and extracts the node's
+// address. This is useful for http load balancers which will not forward RPC.
 // It is never exhausted.
 type nodeLookupResolver struct {
 	context   *base.Context
@@ -79,7 +79,7 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 
 	nl.exhausted = true
 	// TODO(marc): put common URIs in base and reuse everywhere.
-	url := fmt.Sprintf("%s://%s/_status/local", nl.context.RequestScheme(), nl.addr)
+	url := fmt.Sprintf("%s://%s/_status/details/local", nl.context.RequestScheme(), nl.addr)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err

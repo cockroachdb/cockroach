@@ -13,8 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Shawn Morel (shawn@strangemonad.com)
-// Author: Bram Gruneir (bram@cockroachlabs.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package server
 
@@ -39,67 +38,65 @@ import (
 )
 
 const (
-	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
-	stackTraceApproxSize = 1024
+	/*
+		Note that :node_id can always be replaced by the value "local" to see
+		the local nodes response.
 
-	// statusKeyPrefix is the root of the RESTful cluster statistics and metrics API.
-	statusKeyPrefix = "/_status/"
+		/_status/details/:node_id		 - specific node's details
+		/_status/gossip/:node_id         - specific node's gossip
+		/_status/logfiles/:node_id       - list log files
+		/_status/logfiles/:node_id/:file - returns the contents of the specific
+										   log files on specific node
+		/_status/logs/:node_id           - log entries from a specific node
+		/_status/stacks/:node_id		 - exposes stack traces of running
+										   goroutines
+		/_status/nodes				     - all nodes' status
+		/_status/nodes/:node_id		     - a specific node's status
+		/_status/stores                  - all stores' status
+		/_status/stores/:store_id        - a specific store's status
+	*/
 
-	// statusGossipKeyPrefix exposes a view of the gossip network.
-	statusGossipKeyPrefix = statusKeyPrefix + "gossip"
+	// statusPrefix is the root of the cluster statistics and metrics API.
+	statusPrefix = "/_status/"
 
-	// statusLocalKeyPrefix is the key prefix for all local status
-	// info. Unadorned, the URL exposes the status of the node serving
-	// the request.  This is equivalent to GETing
-	// statusNodesKeyPrefix/<current-node-id>.  Useful for debugging
-	// nodes that aren't communicating with the cluster properly.
-	statusLocalKeyPrefix = statusKeyPrefix + "local/"
+	// statusGossipPattern exposes a view of the gossip network.
+	statusGossipPattern = "/_status/gossip/:node_id"
 
-	// statusLocalLogKeyPrefix exposes a list of log files for the node.
-	// logfiles -> lists available log files
-	// logfiles/ -> lists available log files
-	// logfiles/{file} -> fetches contents of named log
-	statusLocalLogFileKeyPrefix = statusLocalKeyPrefix + "logfiles/"
-	// statusLocalLogFileKeyPattern is the pattern to match
-	// logfiles/{file}
-	statusLocalLogFileKeyPattern = statusLocalLogFileKeyPrefix + ":file"
+	// statusDetailsPattern exposes a node's details.
+	statusDetailsPattern = "/_status/details/:node_id"
 
-	// statusLocalStacksKey exposes stack traces of running goroutines.
-	statusLocalStacksKey = statusLocalKeyPrefix + "stacks"
+	// statusLogFilesListPattern exposes a list of log files.
+	statusLogFilesListPattern = "/_status/logfiles/:node_id"
+	// statusLogFilePattern exposes a specific file on a node.
+	statusLogFilePattern = "/_status/logfiles/:node_id/:file"
 
-	// statusNodeKeyPrefix exposes status for each of the nodes the cluster.
-	// nodes -> lists all nodes
-	// nodes/ -> lists all nodes
-	// nodes/{NodeID} -> shows only the status for that specific node
-	statusNodeKeyPrefix = statusKeyPrefix + "nodes/"
-	// statusNodeKeyPattern is the pattern to match nodes/{NodeID}
-	statusNodeKeyPattern = statusNodeKeyPrefix + ":id"
-
-	// statusStoreKeyPrefix exposes status for each store.
-	// stores -> lists all nodes
-	// stores/ -> lists all nodes
-	// stores/{StoreID} -> shows only the status for that specific store
-	statusStoreKeyPrefix = statusKeyPrefix + "stores/"
-	// statusStoreKeyPattern is the pattern to match stores/{StoreID}
-	statusStoreKeyPattern = statusStoreKeyPrefix + ":id"
-
-	// statusLogKeyPrefix exposes the logs for each node
-	// logs -> list log entries for the local node
-	// logs/ -> list log entries for the local node
-	// logs/{NodeID} -> list logs entries for that specific node
-	statusLogKeyPrefix = statusKeyPrefix + "logs/"
-	// statusLogKeyPattern is the pattern to match log/{NodeID}
-	statusLogKeyPattern = statusLogKeyPrefix + ":node_id"
-
-	// statusTransactionsKeyPrefix exposes transaction statistics.
-	statusTransactionsKeyPrefix = statusKeyPrefix + "txns/"
-
+	// statusLogKeyPrefix exposes the logs for each node.
+	statusLogsPattern = "/_status/logs/:node_id"
 	// Default Maximum number of log entries returned.
 	defaultMaxLogEntries = 1000
 
-	// Timeout for used for looking up log entries in another node.
-	logEntriesTimeout = time.Second
+	// statusStacksPattern exposes the stack traces of running goroutines.
+	statusStacksPattern = "/_status/stacks/:node_id"
+	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
+	stackTraceApproxSize = 1024
+
+	// statusNodesPrefix exposes status for all nodes in the cluster.
+	statusNodesPrefix = "/_status/nodes/"
+	// statusNodePattern exposes status for a single node.
+	statusNodePattern = "/_status/nodes/:node_id"
+
+	// statusStoresPrefix exposes status for all stores in the cluster.
+	statusStoresPrefix = "/_status/stores/"
+	// statusStorePattern exposes status for a single store.
+	statusStorePattern = "/_status/stores/:store_id"
+
+	// statusProxyTimeout is the timeout used when proxying a request to another
+	// node.
+	statusProxyTimeout = time.Second
 )
+
+// Pattern for local used when determining the node ID.
+var localRE = regexp.MustCompile(`(?i)local`)
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
@@ -120,7 +117,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 	}
 	httpClient := &http.Client{
 		Transport: &http.Transport{TLSClientConfig: tlsConfig},
-		Timeout:   logEntriesTimeout,
+		Timeout:   statusProxyTimeout,
 	}
 
 	server := &statusServer{
@@ -131,18 +128,16 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 		proxyClient: httpClient,
 	}
 
-	server.router.GET(statusGossipKeyPrefix, server.handleGossipStatus)
-	server.router.GET(statusLocalKeyPrefix, server.handleLocalStatus)
-	server.router.GET(statusLocalLogFileKeyPrefix, server.handleLocalLogFiles)
-	server.router.GET(statusLocalLogFileKeyPattern, server.handleLocalLogFile)
-	server.router.GET(statusLogKeyPrefix, server.handleLocalLog)
-	server.router.GET(statusLogKeyPattern, server.handleLogs)
-	server.router.GET(statusLocalStacksKey, server.handleLocalStacks)
-	server.router.GET(statusNodeKeyPrefix, server.handleNodesStatus)
-	server.router.GET(statusNodeKeyPattern, server.handleNodeStatus)
-	server.router.GET(statusStoreKeyPrefix, server.handleStoresStatus)
-	server.router.GET(statusStoreKeyPattern, server.handleStoreStatus)
-	server.router.GET(statusTransactionsKeyPrefix, server.handleTransactionStatus)
+	server.router.GET(statusGossipPattern, server.handleGossip)
+	server.router.GET(statusDetailsPattern, server.handleDetails)
+	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
+	server.router.GET(statusLogFilePattern, server.handleLogFile)
+	server.router.GET(statusLogsPattern, server.handleLogs)
+	server.router.GET(statusStacksPattern, server.handleStacks)
+	server.router.GET(statusNodesPrefix, server.handleNodesStatus)
+	server.router.GET(statusNodePattern, server.handleNodeStatus)
+	server.router.GET(statusStoresPrefix, server.handleStoresStatus)
+	server.router.GET(statusStorePattern, server.handleStoreStatus)
 
 	return server
 }
@@ -152,19 +147,95 @@ func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 
-// handleGossipStatus handles GET requests for gossip network status.
-func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
+// extractNodeID examines the node_id URL parameter and returns the nodeID and a
+// boolean showing if it is this node. If node_id is "local" or not present, it
+// returns the local nodeID.
+func (s *statusServer) extractNodeID(ps httprouter.Params) (proto.NodeID, bool, error) {
+	nodeIDParam := ps.ByName("node_id")
+
+	// No parameter provided or set to local.
+	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
+		return s.gossip.GetNodeID(), true, nil
+	}
+
+	id, err := strconv.ParseInt(nodeIDParam, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("node id could not be parsed: %s", err)
+	}
+	nodeID := proto.NodeID(id)
+	return nodeID, nodeID == s.gossip.GetNodeID(), nil
+}
+
+// proxyRequest performs a GET request to another node's status server.
+func (s *statusServer) proxyRequest(nodeID proto.NodeID, w http.ResponseWriter, r *http.Request) {
+	addr, err := s.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		http.Error(w,
+			fmt.Sprintf("node could not be located: %s", nodeID),
+			http.StatusBadRequest)
+		return
+	}
+
+	// Create a call to the other node. We might want to consider moving this
+	// to an RPC instead of just proxying it.
+	// Generate the redirect url and copy all the parameters to it.
+	requestURL := fmt.Sprintf("%s://%s%s?%s", s.ctx.RequestScheme(), addr, r.URL.Path, r.URL.RawQuery)
+	req, err := http.NewRequest("GET", requestURL, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	resp, err := s.proxyClient.Do(req)
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set(util.ContentTypeHeader, resp.Header.Get(util.ContentTypeHeader))
+
+	// Only pass through a whitelisted set of status codes.
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNotFound, http.StatusBadRequest, http.StatusInternalServerError:
+		w.WriteHeader(resp.StatusCode)
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	defer resp.Body.Close()
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		log.Error(err)
+	}
+}
+
+// handleGossipLocal handles local requests for gossip network status.
+func (s *statusServer) handleGossipLocal(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	b, err := s.gossip.GetInfosAsJSON()
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
 	w.Write(b)
 }
 
-// handleLocalStatus handles GET requests for local-node status.
-func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+// handleGossip handles GET requests for gossip network status.
+func (s *statusServer) handleGossip(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if local {
+		s.handleGossipLocal(w, r, ps)
+	} else {
+		s.proxyRequest(nodeID, w, r)
+	}
+}
+
+// handleDetailsLocal handles local requests for node details.
+func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	local := struct {
 		Address   util.UnresolvedAddr `json:"address"`
 		BuildInfo util.BuildInfo      `json:"buildInfo"`
@@ -184,8 +255,23 @@ func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request,
 	w.Write(b)
 }
 
-// handleLocalLogFiles handles GET requests for list of available logs.
-func (s *statusServer) handleLocalLogFiles(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// handleDetails handles GET requests for node details.
+func (s *statusServer) handleDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if local {
+		s.handleDetailsLocal(w, r, ps)
+	} else {
+		s.proxyRequest(nodeID, w, r)
+	}
+}
+
+// handleLogFilesList handles local requests for a list of available log files.
+func (s *statusServer) handleLogFilesListLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	log.Flush()
 	logFiles, err := log.ListLogFiles()
 	if err != nil {
@@ -204,10 +290,25 @@ func (s *statusServer) handleLocalLogFiles(w http.ResponseWriter, r *http.Reques
 	w.Write(b)
 }
 
-// handleLocalLogFile handles GET requests for a single log. If no filename is
+// handleLogFilesList handles GET requests for a list of available log files.
+func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if local {
+		s.handleLogFilesListLocal(w, r, ps)
+	} else {
+		s.proxyRequest(nodeID, w, r)
+	}
+}
+
+// handleLocalLogFile handles local requests for a single log. If no filename is
 // available, it returns 404. The log contents are returned in structured
 // format as JSON.
-func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	log.Flush()
 	file := ps.ByName("file")
 	reader, err := log.GetLogReader(file, false /* !allowAbsolute */)
@@ -243,6 +344,21 @@ func (s *statusServer) handleLocalLogFile(w http.ResponseWriter, r *http.Request
 	w.Write(b)
 }
 
+// handleLogFile handles GET requests for a single log file.
+func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if local {
+		s.handleLogFileLocal(w, r, ps)
+	} else {
+		s.proxyRequest(nodeID, w, r)
+	}
+}
+
 // parseInt64WithDefault attempts to parse the passed in string. If an empty
 // string is supplied or parsing results in an error the default value is
 // returned.  If an error does occur during parsing, the error is returned as
@@ -258,7 +374,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 	return result, nil
 }
 
-// handleLocalLog returns the log entries parsed from the log files stored on
+// handleLogsLocal returns the log entries parsed from the log files stored on
 // the server. Log entries are returned in reverse chronological order. The
 // following options are available:
 // * "starttime" query parameter filters the log entries to only ones that
@@ -271,7 +387,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   entries. Defaults to defaultMaxLogEntries.
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	log.Flush()
 
 	level := r.URL.Query().Get("level")
@@ -359,76 +475,23 @@ func (s *statusServer) handleLocalLog(w http.ResponseWriter, r *http.Request, _ 
 	w.Write(b)
 }
 
-// handleLog checks the node_id parameter and if it matches that of the current
-// node, returns the local log entries. Otherwise, it looks up the specified
-// node in gossip and if it exists, sends a request directly to the node to get
-// its logs. It passes all other query parameters along to this new request.
+// handleLogs handles GET requests for log entires.
 func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeIDParam := ps.ByName("node_id")
-	if len(nodeIDParam) == 0 {
-		s.handleLocalLog(w, r, ps)
-		return
-	}
-
-	id, err := strconv.ParseInt(nodeIDParam, 10, 64)
+	nodeID, local, err := s.extractNodeID(ps)
 	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("node id could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
-	}
-	nodeID := proto.NodeID(id)
-
-	if s.gossip.GetNodeID() == nodeID {
-		s.handleLocalLog(w, r, ps)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	addr, err := s.gossip.GetNodeIDAddress(nodeID)
-	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("node could not be located: %s", nodeIDParam),
-			http.StatusBadRequest)
-		return
-	}
-
-	// Create a call to the correct node. We might want to consider moving this
-	// and any other larger calls to an RPC instead of just proxying the http
-	// request to the correct node.
-	// Generate the redirect url and copy all the parameters to it.
-	url := fmt.Sprintf("%s://%s%s?%s", s.ctx.RequestScheme(), addr, statusLogKeyPrefix, r.URL.RawQuery)
-
-	// Call the other node.
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	resp, err := s.proxyClient.Do(req)
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(util.ContentTypeHeader, resp.Header.Get(util.ContentTypeHeader))
-
-	// Only pass through a whitelisted set of status codes.
-	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNotFound, http.StatusBadRequest, http.StatusInternalServerError:
-		w.WriteHeader(resp.StatusCode)
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-
-	defer resp.Body.Close()
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		log.Error(err)
+	if local {
+		s.handleLogsLocal(w, r, ps)
+	} else {
+		s.proxyRequest(nodeID, w, r)
 	}
 }
 
-// handleLocalStacks handles GET requests for goroutines stack traces.
-func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// handleStacksLocal handles local requests for goroutines stack traces.
+func (s *statusServer) handleStacksLocal(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	bufSize := runtime.NumGoroutine() * stackTraceApproxSize
 	for {
 		buf := make([]byte, bufSize)
@@ -442,6 +505,21 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request,
 		w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 		w.Write(buf[:length])
 		return
+	}
+}
+
+// handleStacksLocal handles GET requests for goroutine stack traces.
+func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if local {
+		s.handleStacksLocal(w, r, ps)
+	} else {
+		s.proxyRequest(nodeID, w, r)
 	}
 }
 
@@ -477,19 +555,17 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	w.Write(b)
 }
 
-// handleNodeStatus handles GET requests for a single node's status. If no id is
-// available, it calls handleNodesStatus to return all node's statuses.
+// handleNodeStatus handles GET requests for a single node's status.
 func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id, err := strconv.ParseInt(ps.ByName("id"), 10, 64)
+	nodeID, _, err := s.extractNodeID(ps)
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	key := keys.NodeStatusKey(int32(id))
 
+	key := keys.NodeStatusKey(int32(nodeID))
 	nodeStatus := &status.NodeStatus{}
-	if err := s.db.GetProto(key, nodeStatus); err != nil {
+	if err = s.db.GetProto(key, nodeStatus); err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -537,17 +613,18 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	w.Write(b)
 }
 
-// handleStoreStatus handles GET requests for a single node's status. If no id
-// is available, it calls handleStoresStatus to return all store's statuses.
+// handleStoreStatus handles GET requests for a single node's status.
 func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id, err := strconv.ParseInt(ps.ByName("id"), 10, 32)
+
+	id, err := strconv.ParseInt(ps.ByName("store_id"), 10, 32)
 	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w,
+			fmt.Sprintf("store id could not be parsed: %s", err),
+			http.StatusBadRequest)
 		return
 	}
-	key := keys.StoreStatusKey(int32(id))
 
+	key := keys.StoreStatusKey(int32(id))
 	storeStatus := &storage.StoreStatus{}
 	if err := s.db.GetProto(key, storeStatus); err != nil {
 		log.Error(err)
@@ -561,12 +638,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set(util.ContentTypeHeader, contentType)
 	w.Write(b)
-}
-
-// handleTransactionStatus handles GET requests for transaction status.
-func (s *statusServer) handleTransactionStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
-	w.Write([]byte(`{"transactions": []}`))
 }
