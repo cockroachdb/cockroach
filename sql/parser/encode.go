@@ -38,15 +38,22 @@ var (
 )
 
 func encodeSQLString(buf []byte, in []byte) []byte {
-	buf = append(buf, '\'')
-	for _, ch := range in {
-		if encodedChar := encodeMap[ch]; encodedChar == dontEscape {
-			buf = append(buf, ch)
-		} else {
-			buf = append(buf, '\\')
-			buf = append(buf, encodedChar)
+	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
+	start := 0
+	for i, ch := range in {
+		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+			if start == 0 {
+				buf = append(buf, 'e', '\'') // begin e'xxx' string
+			}
+			buf = append(buf, in[start:i]...)
+			buf = append(buf, '\\', encodedChar)
+			start = i + 1
 		}
 	}
+	if start == 0 {
+		buf = append(buf, '\'') // begin 'xxx' string if nothing was escaped
+	}
+	buf = append(buf, in[start:]...)
 	buf = append(buf, '\'')
 	return buf
 }
@@ -59,18 +66,18 @@ func encodeSQLIdent(buf *bytes.Buffer, s string) {
 		return
 	}
 
-	// The only characters we need to escape are '"' and '\\'.
+	// The only character that requires escaping is a double quote.
 	_ = buf.WriteByte('"')
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
 		ch := s[i]
-		if ch == '"' || ch == '\\' {
+		if ch == '"' {
 			if start != i {
 				_, _ = buf.WriteString(s[start:i])
 			}
 			start = i + 1
-			_ = buf.WriteByte('\\')
 			_ = buf.WriteByte(ch)
+			_ = buf.WriteByte(ch) // add extra copy of ch
 		}
 	}
 	if start < len(s) {
@@ -99,14 +106,13 @@ func encodeSQLBytes(buf []byte, v []byte) []byte {
 func init() {
 	encodeRef := map[byte]byte{
 		'\x00': '0',
-		'\'':   '\'',
-		'"':    '"',
 		'\b':   'b',
 		'\f':   'f',
 		'\n':   'n',
 		'\r':   'r',
 		'\t':   't',
 		'\\':   '\\',
+		'\'':   '\'',
 	}
 
 	for i := range encodeMap {

@@ -19,6 +19,7 @@ package parser
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -216,10 +217,11 @@ func TestScanString(t *testing.T) {
 		{`'a''b'`, `a'b`},
 		{`"a" "b"`, `a`},
 		{`'a' 'b'`, `a`},
-		{`'\n'`, "\\n"},
-		{`"\""`, `"`},
-		{`'\''`, `'`},
-		{`'\0\'\"\b\f\n\r\t\\'`, `\0'\"\b\f\n\r\t\`},
+		{`'\n'`, `\n`},
+		{`e'\n'`, "\n"},
+		{`'\\n'`, `\\n`},
+		{`'\'''`, `\'`},
+		{`'\0\'`, `\0\`},
 		{`"a"
 	"b"`, `ab`},
 		{`"a"
@@ -228,7 +230,19 @@ func TestScanString(t *testing.T) {
 	'b'`, `ab`},
 		{`'a'
 	"b"`, `a`},
-		{`e'foo\"\'\\\b\f\n\r\tbar'`, "foo\"'\\\b\f\n\r\tbar"},
+		{`e'\"'`, `"`}, // redundant escape
+		{`e'\a'`, `a`}, // redundant escape
+		{"'\n\\'", "\n\\"},
+		{`e'foo\"\'\\\b\f\n\r\tbar'`,
+			strings.Join([]string{`foo"'\`, "\b\f\n\r\t", `bar`}, "")},
+		{`e'\\0'`, `\0`},
+		{`'\0'`, `\0`},
+		{`e'\0'`, errUnsupportedEscape},
+		{`"''"`, `''`},
+		{`'""'''`, `""'`},
+		{`""""`, `"`},
+		{`''''`, `'`},
+		{`''''''`, `''`},
 	}
 	for _, d := range testData {
 		s := newScanner(d.sql)
