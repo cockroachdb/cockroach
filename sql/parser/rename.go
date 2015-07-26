@@ -25,12 +25,13 @@ package parser
 
 import "fmt"
 
+// TODO(tschottdorf): This isn't even referenced from the grammar yet.
 func (*RenameTable) statement() {}
 
 // RenameTable represents a TRUNCATE TABLE statement.
 type RenameTable struct {
-	Name    string
-	NewName string
+	Name    Name
+	NewName Name
 }
 
 func (node *RenameTable) String() string {

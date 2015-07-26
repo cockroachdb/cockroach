@@ -26,13 +26,12 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
 type CreateDatabase struct {
 	IfNotExists bool
-	Name        string
+	Name        Name
 }
 
 func (node *CreateDatabase) String() string {
@@ -41,7 +40,7 @@ func (node *CreateDatabase) String() string {
 	if node.IfNotExists {
 		_, _ = buf.WriteString("IF NOT EXISTS ")
 	}
-	_, _ = buf.WriteString(node.Name)
+	_, _ = buf.WriteString(node.Name.String())
 	return buf.String()
 }
 
@@ -83,14 +82,14 @@ const (
 // ColumnTableDef represents a column dlefinition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
-	Name       string
+	Name       Name
 	Type       ColumnType
 	Nullable   Nullability
 	PrimaryKey bool
 	Unique     bool
 }
 
-func newColumnTableDef(name string, typ ColumnType,
+func newColumnTableDef(name Name, typ ColumnType,
 	constraints []ColumnConstraint) *ColumnTableDef {
 	d := &ColumnTableDef{
 		Name:     name,
@@ -154,10 +153,10 @@ type UniqueConstraint struct{}
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name       string
+	Name       Name
 	PrimaryKey bool
 	Unique     bool
-	Columns    []string
+	Columns    NameList
 }
 
 func (node *IndexTableDef) String() string {
@@ -172,7 +171,7 @@ func (node *IndexTableDef) String() string {
 	} else {
 		_, _ = buf.WriteString("INDEX ")
 	}
-	fmt.Fprintf(&buf, "(%s)", strings.Join(node.Columns, ", "))
+	fmt.Fprintf(&buf, "(%s)", node.Columns)
 	return buf.String()
 }
 

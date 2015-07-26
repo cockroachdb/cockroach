@@ -25,34 +25,27 @@ package parser
 
 import "bytes"
 
-// DropDatabase represents a DROP DATABASE statement.
-type DropDatabase struct {
-	Name     Name
-	IfExists bool
+// A Name is an SQL identifier.
+type Name string
+
+// String formats an SQL identifier, applying proper escaping rules.
+func (n Name) String() string {
+	return encIdent(string(n))
 }
 
-func (node *DropDatabase) String() string {
+// A NameList is a list of identifier.
+// TODO(tschottdorf): would be nicer to have []Name here but unless we want
+// to introduce new types to the grammar, NameList([]string{...}) needs to work.
+type NameList []string
+
+// String formats the contained names as a comma-separated, escaped string.
+func (l NameList) String() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteString("DROP DATABASE ")
-	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+	for i, n := range l {
+		if i > 0 {
+			_, _ = buf.WriteString(", ")
+		}
+		buf.WriteString(Name(n).String())
 	}
-	_, _ = buf.WriteString(node.Name.String())
-	return buf.String()
-}
-
-// DropTable represents a DROP TABLE statement.
-type DropTable struct {
-	Names    QualifiedNames
-	IfExists bool
-}
-
-func (node *DropTable) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("DROP TABLE ")
-	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
-	}
-	_, _ = buf.WriteString(node.Names.String())
 	return buf.String()
 }

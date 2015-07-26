@@ -36,7 +36,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
 			col := structured.ColumnDescriptor{
-				Name:     d.Name,
+				Name:     string(d.Name),
 				Nullable: (d.Nullable != parser.NotNull),
 			}
 			switch t := d.Type.(type) {
@@ -73,7 +73,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 			if d.PrimaryKey || d.Unique {
 				index := structured.IndexDescriptor{
 					Unique:      true,
-					ColumnNames: []string{d.Name},
+					ColumnNames: []string{string(d.Name)},
 				}
 				if d.PrimaryKey {
 					index.Name = "primary"
@@ -82,7 +82,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 			}
 		case *parser.IndexTableDef:
 			index := structured.IndexDescriptor{
-				Name:        d.Name,
+				Name:        string(d.Name),
 				Unique:      d.Unique,
 				ColumnNames: d.Columns,
 			}

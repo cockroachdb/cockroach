@@ -47,7 +47,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT UNIQUE)`},
 		{`CREATE TABLE a (b INT NULL PRIMARY KEY)`},
-		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c))`},
+		// "0" lost quotes previously.
+		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
 		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d INDEX (b, c))`},
 		{`CREATE TABLE a (b INT, UNIQUE (b))`},
@@ -117,6 +118,10 @@ func TestParse(t *testing.T) {
 		{`SELECT a.b FROM t`},
 		{`SELECT 'a' FROM t`},
 		{`SELECT 'a\'a' FROM t`},
+
+		{`SELECT 'a' AS "12345"`},
+		{`SELECT 'a' AS clnm`},
+
 		{`SELECT 'a\\na' FROM t`},
 		{`SELECT '\\n' FROM t`},
 		{`SELECT "FROM" FROM t`},
@@ -214,6 +219,8 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b = 3, c = 4`},
 		{`UPDATE a SET b = 3 + 4`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
+		{`UPDATE T AS "0" SET K = ''`},                 // "0" lost its quotes
+		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

@@ -685,11 +685,11 @@ drop_stmt:
   }
 | DROP DATABASE name
   {
-    $$ = &DropDatabase{Name: $3, IfExists: false}
+    $$ = &DropDatabase{Name: Name($3), IfExists: false}
   }
 | DROP DATABASE IF EXISTS name
   {
-    $$ = &DropDatabase{Name: $5, IfExists: true}
+    $$ = &DropDatabase{Name: Name($5), IfExists: true}
   }
 | DROP TABLE any_name_list
   {
@@ -1056,7 +1056,7 @@ typed_table_elem:
 column_def:
   name typename col_qual_list
   {
-    $$ = newColumnTableDef($1, $2, $3)
+    $$ = newColumnTableDef(Name($1), $2, $3)
   }
 
 column_options:
@@ -1138,7 +1138,7 @@ table_constraint:
   {
     $$ = $3
     if i, ok := $$.(*IndexTableDef); ok {
-      i.Name = $2
+      i.Name = Name($2)
     }
   }
 | constraint_elem
@@ -1150,16 +1150,16 @@ constraint_elem:
   CHECK '(' a_expr ')' {}
 | UNIQUE '(' name_list ')'
   {
-    $$ = &IndexTableDef{Unique: true, Columns: $3}
+    $$ = &IndexTableDef{Unique: true, Columns: NameList($3)}
   }
 | UNIQUE existing_index {}
 | INDEX '(' name_list ')'
   {
-    $$ = &IndexTableDef{Columns: $3}
+    $$ = &IndexTableDef{Columns: NameList($3)}
   }
 | PRIMARY KEY '(' name_list ')'
   {
-    $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: $4}
+    $$ = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList($4)}
   }
 | PRIMARY KEY existing_index {}
 | EXCLUDE access_method_clause '(' exclusion_constraint_list ')'
@@ -1539,12 +1539,12 @@ create_database_stmt:
   CREATE DATABASE name createdb_opt_with createdb_opt_list
   {
     // TODO(pmattis): Handle options.
-    $$ = &CreateDatabase{Name: $3}
+    $$ = &CreateDatabase{Name: Name($3)}
   }
 | CREATE DATABASE IF NOT EXISTS name createdb_opt_with createdb_opt_list
   {
     // TODO(pmattis): Handle options.
-    $$ = &CreateDatabase{IfNotExists: true, Name: $6}
+    $$ = &CreateDatabase{IfNotExists: true, Name: Name($6)}
   }
 
 createdb_opt_with:
@@ -2108,13 +2108,13 @@ from_list:
 table_ref:
   relation_expr opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: $2}
+    $$ = &AliasedTableExpr{Expr: $1, As: Name($2)}
   }
 | func_table func_alias_clause {}
 | LATERAL func_table func_alias_clause {}
 | select_with_parens opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1.(SelectStatement)}, As: $2}
+    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1.(SelectStatement)}, As: Name($2)}
   }
 | LATERAL select_with_parens opt_alias_clause {}
 | joined_table
@@ -2221,7 +2221,7 @@ join_outer:
 join_qual:
   USING '(' name_list ')'
   {
-    $$ = &UsingJoinCond{Cols: $3}
+    $$ = &UsingJoinCond{Cols: NameList($3)}
   }
 | ON a_expr
   {
@@ -2272,11 +2272,11 @@ relation_expr_opt_alias:
   }
 | relation_expr name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: $2}
+    $$ = &AliasedTableExpr{Expr: $1, As: Name($2)}
   }
 | relation_expr AS name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: $3}
+    $$ = &AliasedTableExpr{Expr: $1, As: Name($3)}
   }
 
 // func_table represents a function invocation in a FROM list. It can be a
@@ -3380,7 +3380,7 @@ target_list:
 target_elem:
   a_expr AS col_label
   {
-    $$ = &NonStarExpr{Expr: $1, As: $3}
+    $$ = &NonStarExpr{Expr: $1, As: Name($3)}
   }
   // We support omitting AS only for column labels that aren't any known
   // keyword. There is an ambiguity against postfix operators: is "a ! b" an
@@ -3389,7 +3389,7 @@ target_elem:
   // IDENT a precedence higher than POSTFIXOP.
 | a_expr IDENT
   {
-    $$ = &NonStarExpr{Expr: $1, As: $2}
+    $$ = &NonStarExpr{Expr: $1, As: Name($2)}
   }
 | a_expr
   {

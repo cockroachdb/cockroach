@@ -26,7 +26,6 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 // SelectStatement any SELECT statement.
@@ -93,8 +92,10 @@ func (*StarExpr) selectExpr()    {}
 func (*NonStarExpr) selectExpr() {}
 
 // StarExpr defines a '*' or 'table.*' expression.
+// TODO(tschottdorf): needs work, see #1810. TableName is never even referenced
+// in the grammar so far.
 type StarExpr struct {
-	TableName string
+	TableName Name
 }
 
 func (node *StarExpr) String() string {
@@ -109,7 +110,7 @@ func (node *StarExpr) String() string {
 // NonStarExpr defines a non-'*' select expr.
 type NonStarExpr struct {
 	Expr Expr
-	As   string
+	As   Name
 }
 
 func (node *NonStarExpr) String() string {
@@ -152,7 +153,7 @@ func (*JoinTableExpr) tableExpr()    {}
 // alias.
 type AliasedTableExpr struct {
 	Expr SimpleTableExpr
-	As   string
+	As   Name
 }
 
 func (node *AliasedTableExpr) String() string {
@@ -228,11 +229,11 @@ func (node *OnJoinCond) String() string {
 
 // UsingJoinCond represents a USING join condition.
 type UsingJoinCond struct {
-	Cols []string
+	Cols NameList
 }
 
 func (node *UsingJoinCond) String() string {
-	return fmt.Sprintf(" USING (%s)", strings.Join(node.Cols, ", "))
+	return fmt.Sprintf(" USING (%s)", node.Cols)
 }
 
 // Where represents a WHERE or HAVING clause.

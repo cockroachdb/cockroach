@@ -6513,13 +6513,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:687
 		{
-			sqlVAL.stmt = &DropDatabase{Name: sqlDollar[3].str, IfExists: false}
+			sqlVAL.stmt = &DropDatabase{Name: Name(sqlDollar[3].str), IfExists: false}
 		}
 	case 81:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:691
 		{
-			sqlVAL.stmt = &DropDatabase{Name: sqlDollar[5].str, IfExists: true}
+			sqlVAL.stmt = &DropDatabase{Name: Name(sqlDollar[5].str), IfExists: true}
 		}
 	case 82:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -6986,7 +6986,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1058
 		{
-			sqlVAL.tblDef = newColumnTableDef(sqlDollar[1].str, sqlDollar[2].colType, sqlDollar[3].colConstraints)
+			sqlVAL.tblDef = newColumnTableDef(Name(sqlDollar[1].str), sqlDollar[2].colType, sqlDollar[3].colConstraints)
 		}
 	case 180:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -7112,7 +7112,7 @@ sqldefault:
 		{
 			sqlVAL.tblDef = sqlDollar[3].tblDef
 			if i, ok := sqlVAL.tblDef.(*IndexTableDef); ok {
-				i.Name = sqlDollar[2].str
+				i.Name = Name(sqlDollar[2].str)
 			}
 		}
 	case 204:
@@ -7130,7 +7130,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1152
 		{
-			sqlVAL.tblDef = &IndexTableDef{Unique: true, Columns: sqlDollar[3].strs}
+			sqlVAL.tblDef = &IndexTableDef{Unique: true, Columns: NameList(sqlDollar[3].strs)}
 		}
 	case 207:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -7141,13 +7141,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1157
 		{
-			sqlVAL.tblDef = &IndexTableDef{Columns: sqlDollar[3].strs}
+			sqlVAL.tblDef = &IndexTableDef{Columns: NameList(sqlDollar[3].strs)}
 		}
 	case 209:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:1161
 		{
-			sqlVAL.tblDef = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: sqlDollar[4].strs}
+			sqlVAL.tblDef = &IndexTableDef{PrimaryKey: true, Unique: true, Columns: NameList(sqlDollar[4].strs)}
 		}
 	case 210:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -7807,14 +7807,14 @@ sqldefault:
 		//line sql.y:1540
 		{
 			// TODO(pmattis): Handle options.
-			sqlVAL.stmt = &CreateDatabase{Name: sqlDollar[3].str}
+			sqlVAL.stmt = &CreateDatabase{Name: Name(sqlDollar[3].str)}
 		}
 	case 335:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
 		//line sql.y:1545
 		{
 			// TODO(pmattis): Handle options.
-			sqlVAL.stmt = &CreateDatabase{IfNotExists: true, Name: sqlDollar[6].str}
+			sqlVAL.stmt = &CreateDatabase{IfNotExists: true, Name: Name(sqlDollar[6].str)}
 		}
 	case 336:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -8519,7 +8519,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2110
 		{
-			sqlVAL.tblExpr = &AliasedTableExpr{Expr: sqlDollar[1].qname, As: sqlDollar[2].str}
+			sqlVAL.tblExpr = &AliasedTableExpr{Expr: sqlDollar[1].qname, As: Name(sqlDollar[2].str)}
 		}
 	case 476:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -8535,7 +8535,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2116
 		{
-			sqlVAL.tblExpr = &AliasedTableExpr{Expr: &Subquery{Select: sqlDollar[1].stmt.(SelectStatement)}, As: sqlDollar[2].str}
+			sqlVAL.tblExpr = &AliasedTableExpr{Expr: &Subquery{Select: sqlDollar[1].stmt.(SelectStatement)}, As: Name(sqlDollar[2].str)}
 		}
 	case 479:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -8674,7 +8674,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2223
 		{
-			sqlVAL.joinCond = &UsingJoinCond{Cols: sqlDollar[3].strs}
+			sqlVAL.joinCond = &UsingJoinCond{Cols: NameList(sqlDollar[3].strs)}
 		}
 	case 506:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -8730,13 +8730,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2274
 		{
-			sqlVAL.tblExpr = &AliasedTableExpr{Expr: sqlDollar[1].qname, As: sqlDollar[2].str}
+			sqlVAL.tblExpr = &AliasedTableExpr{Expr: sqlDollar[1].qname, As: Name(sqlDollar[2].str)}
 		}
 	case 515:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2278
 		{
-			sqlVAL.tblExpr = &AliasedTableExpr{Expr: sqlDollar[1].qname, As: sqlDollar[3].str}
+			sqlVAL.tblExpr = &AliasedTableExpr{Expr: sqlDollar[1].qname, As: Name(sqlDollar[3].str)}
 		}
 	case 516:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -10544,13 +10544,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3382
 		{
-			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr, As: sqlDollar[3].str}
+			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[3].str)}
 		}
 	case 872:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3391
 		{
-			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr, As: sqlDollar[2].str}
+			sqlVAL.selExpr = &NonStarExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[2].str)}
 		}
 	case 873:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
