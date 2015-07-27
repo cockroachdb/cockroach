@@ -25,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc/codec"
@@ -76,8 +77,8 @@ type internalConn struct {
 type Client struct {
 	addr      util.UnresolvedAddr
 	Closed    chan struct{}
-	conn      atomic.Value // holds a `internalConn`
-	healthy   atomic.Value // holds a `chan struct{}` exposed in `Healthy`
+	conn      unsafe.Pointer // holds a `internalConn`
+	healthy   atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
 	tlsConfig *tls.Config
 
 	clock        *hlc.Clock
@@ -122,8 +123,6 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	c.healthy.Store(make(chan struct{}))
-	// Must store junk in here so `Load()` doesn't blow up
-	c.conn.Store(internalConn{})
 
 	if !context.DisableCache {
 		clients[key] = c
@@ -135,8 +134,8 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	context.Stopper.RunWorker(func() {
 		c.runHeartbeat(retryOpts, context.Stopper.ShouldStop())
 
-		if client := c.conn.Load().(internalConn).client; client != nil {
-			client.Close()
+		if conn := c.internalConn(); conn != nil {
+			conn.client.Close()
 		}
 	})
 
@@ -145,12 +144,16 @@ func NewClient(addr net.Addr, context *Context) *Client {
 
 // Go delegates to net/rpc.Client.Go.
 func (c *Client) Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call {
-	return c.conn.Load().(internalConn).client.Go(serviceMethod, args, reply, done)
+	return c.internalConn().client.Go(serviceMethod, args, reply, done)
 }
 
 // Call delegates to net/rpc.Client.Call.
 func (c *Client) Call(serviceMethod string, args interface{}, reply interface{}) error {
-	return c.conn.Load().(internalConn).client.Call(serviceMethod, args, reply)
+	return c.internalConn().client.Call(serviceMethod, args, reply)
+}
+
+func (c *Client) internalConn() *internalConn {
+	return (*internalConn)(atomic.LoadPointer(&c.conn))
 }
 
 // connect attempts a single connection attempt. On success, updates `c.conn`.
@@ -159,10 +162,12 @@ func (c *Client) connect() error {
 	if err != nil {
 		return err
 	}
-	c.conn.Store(internalConn{
+	if oldConn := (*internalConn)(atomic.SwapPointer(&c.conn, unsafe.Pointer(&internalConn{
 		conn:   conn,
 		client: rpc.NewClientWithCodec(codec.NewClientCodec(conn)),
-	})
+	}))); oldConn != nil {
+		oldConn.conn.Close()
+	}
 
 	return nil
 }
@@ -246,7 +251,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 
 // LocalAddr returns the local address of the client.
 func (c *Client) LocalAddr() net.Addr {
-	return c.conn.Load().(internalConn).conn.LocalAddr()
+	return c.internalConn().conn.LocalAddr()
 }
 
 // RemoteAddr returns remote address of the client.
