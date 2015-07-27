@@ -134,7 +134,7 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	context.Stopper.RunWorker(func() {
 		c.runHeartbeat(retryOpts, context.Stopper.ShouldStop())
 
-		if conn := (*internalConn)(atomic.LoadPointer(&c.conn)); conn != nil {
+		if conn := c.internalConn(); conn != nil {
 			conn.client.Close()
 		}
 	})
@@ -144,12 +144,16 @@ func NewClient(addr net.Addr, context *Context) *Client {
 
 // Go delegates to net/rpc.Client.Go.
 func (c *Client) Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call {
-	return (*internalConn)(atomic.LoadPointer(&c.conn)).client.Go(serviceMethod, args, reply, done)
+	return c.internalConn().client.Go(serviceMethod, args, reply, done)
 }
 
 // Call delegates to net/rpc.Client.Call.
 func (c *Client) Call(serviceMethod string, args interface{}, reply interface{}) error {
-	return (*internalConn)(atomic.LoadPointer(&c.conn)).client.Call(serviceMethod, args, reply)
+	return c.internalConn().client.Call(serviceMethod, args, reply)
+}
+
+func (c *Client) internalConn() *internalConn {
+	return (*internalConn)(atomic.LoadPointer(&c.conn))
 }
 
 // connect attempts a single connection attempt. On success, updates `c.conn`.
@@ -247,7 +251,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 
 // LocalAddr returns the local address of the client.
 func (c *Client) LocalAddr() net.Addr {
-	return (*internalConn)(atomic.LoadPointer(&c.conn)).conn.LocalAddr()
+	return c.internalConn().conn.LocalAddr()
 }
 
 // RemoteAddr returns remote address of the client.
