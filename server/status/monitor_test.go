@@ -59,11 +59,12 @@ func TestNodeStatusMonitor(t *testing.T) {
 	storeStopper := stop.NewStopper()
 	feed := &util.Feed{}
 	monitor := NewNodeStatusMonitor()
-	storeSub := feed.Subscribe()
-	nodeSub := feed.Subscribe()
+	sub := feed.Subscribe()
 	monitorStopper.RunWorker(func() {
-		storage.ProcessStoreEvents(monitor, storeSub)
-		ProcessNodeEvents(monitor, nodeSub)
+		for event := range sub.Events() {
+			storage.ProcessStoreEvent(monitor, event)
+			ProcessNodeEvent(monitor, event)
+		}
 	})
 
 	for i := 0; i < 3; i++ {

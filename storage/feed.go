@@ -251,34 +251,29 @@ type StoreEventListener interface {
 	OnReplicationStatus(event *ReplicationStatusEvent)
 }
 
-// ProcessStoreEvents reads store events from the supplied channel and passes
-// them to the correct methods of the supplied StoreEventListener. This method
-// will run until the Subscription's events channel is closed.
-func ProcessStoreEvents(l StoreEventListener, sub *util.Subscription) {
-	for event := range sub.Events() {
-		// TODO(tamird): https://github.com/barakmich/go-nyet/issues/7
-		switch specificEvent := event.(type) {
-		case *StartStoreEvent:
-			l.OnStartStore(specificEvent)
-		case *RegisterRangeEvent:
-			l.OnRegisterRange(specificEvent)
-		case *UpdateRangeEvent:
-			l.OnUpdateRange(specificEvent)
-		case *RemoveRangeEvent:
-			l.OnRemoveRange(specificEvent)
-		case *SplitRangeEvent:
-			l.OnSplitRange(specificEvent)
-		case *MergeRangeEvent:
-			l.OnMergeRange(specificEvent)
-		case *BeginScanRangesEvent:
-			l.OnBeginScanRanges(specificEvent)
-		case *EndScanRangesEvent:
-			l.OnEndScanRanges(specificEvent)
-		case *StoreStatusEvent:
-			l.OnStoreStatus(specificEvent)
-		case *ReplicationStatusEvent:
-			l.OnReplicationStatus(specificEvent)
-		}
+// ProcessStoreEvent dispatches an event on the StoreEventListener.
+func ProcessStoreEvent(l StoreEventListener, event interface{}) {
+	switch specificEvent := event.(type) {
+	case *StartStoreEvent:
+		l.OnStartStore(specificEvent)
+	case *RegisterRangeEvent:
+		l.OnRegisterRange(specificEvent)
+	case *UpdateRangeEvent:
+		l.OnUpdateRange(specificEvent)
+	case *RemoveRangeEvent:
+		l.OnRemoveRange(specificEvent)
+	case *SplitRangeEvent:
+		l.OnSplitRange(specificEvent)
+	case *MergeRangeEvent:
+		l.OnMergeRange(specificEvent)
+	case *BeginScanRangesEvent:
+		l.OnBeginScanRanges(specificEvent)
+	case *EndScanRangesEvent:
+		l.OnEndScanRanges(specificEvent)
+	case *StoreStatusEvent:
+		l.OnStoreStatus(specificEvent)
+	case *ReplicationStatusEvent:
+		l.OnReplicationStatus(specificEvent)
 	}
 }
 
