@@ -43,6 +43,8 @@ func TestCallResolver(t *testing.T) {
 }
 
 func TestDefaultCallResolver(t *testing.T) {
+	defer func() { defaultCallResolver.cache = map[uintptr]*cachedLookup{} }()
+
 	for i := 0; i < 2; i++ {
 		if l := len(defaultCallResolver.cache); l != i {
 			t.Fatalf("cache has %d entries, expected %d", l, i)
