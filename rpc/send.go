@@ -216,9 +216,10 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			}
 
 			errors++
+
 			// Since we have a reconnecting client here, disconnect errors are retryable.
-			if retryErr, ok := err.(retry.Retryable); err == io.ErrUnexpectedEOF ||
-				(ok && retryErr.CanRetry()) {
+			disconnected := err.Error() == "connection is shut down" || err == io.ErrUnexpectedEOF
+			if retryErr, ok := err.(retry.Retryable); disconnected || (ok && retryErr.CanRetry()) {
 				retryableErrors++
 			}
 

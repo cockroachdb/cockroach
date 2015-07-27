@@ -325,13 +325,11 @@ func TestStatusLocalLogs(t *testing.T) {
 	log.Infof("TestStatusLocalLogFile test message-Info")
 	timestampEWI := time.Now().UnixNano()
 
-	body := getRequest(t, ts, "/_status/logfiles/local")
-
 	type logsWrapper struct {
 		Data []log.FileInfo `json:"d"`
 	}
-	logs := logsWrapper{}
-	if err := json.Unmarshal(body, &logs); err != nil {
+	var logs logsWrapper
+	if err := json.Unmarshal(getRequest(t, ts, "/_status/logfiles/local"), &logs); err != nil {
 		t.Fatal(err)
 	}
 	if a, e := len(logs.Data), 3; a != e {
@@ -343,32 +341,32 @@ func TestStatusLocalLogs(t *testing.T) {
 		}
 	}
 
-	// Fetch a each listed log directly.
+	// Fetch the full list of log entries.
 	type logWrapper struct {
 		Data []log.LogEntry `json:"d"`
 	}
+
 	// Check each individual log can be fetched and is non-empty.
-	for _, log := range logs.Data {
-		body = getRequest(t, ts, fmt.Sprintf("%s/%s", "/_status/logfiles/local", log.Name))
-		logW := logWrapper{}
-		if err := json.Unmarshal(body, &logW); err != nil {
+	var foundInfo, foundWarning, foundError bool
+	for _, file := range logs.Data {
+		var log logWrapper
+		if err := json.Unmarshal(getRequest(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name)), &log); err != nil {
 			t.Fatal(err)
 		}
-		var found bool
-		for _, data := range logW.Data {
-			if data.Format == "TestStatusLocalLogFile test message-Error" {
-				found = true
-				break
+		for _, entry := range log.Data {
+			switch entry.Format {
+			case "TestStatusLocalLogFile test message-Error":
+				foundError = true
+			case "TestStatusLocalLogFile test message-Warning":
+				foundWarning = true
+			case "TestStatusLocalLogFile test message-Info":
+				foundInfo = true
 			}
-		}
-		if !found {
-			t.Errorf("expected to find test message in %v", logW.Data)
 		}
 	}
 
-	// Fetch the full list of log entries.
-	type entryWrapper struct {
-		Data []log.LogEntry `json:"d"`
+	if !(foundInfo && foundWarning && foundError) {
+		t.Errorf("expected to find test messages in %v", logs.Data)
 	}
 
 	testCases := []struct {
@@ -385,10 +383,11 @@ func TestStatusLocalLogs(t *testing.T) {
 		{log.InfoLog, 0, 0, 0, "", true, true, true},
 		{log.WarningLog, 0, 0, 0, "", true, true, false},
 		{log.ErrorLog, 0, 0, 0, "", true, false, false},
+		// Test entry limit. Ignore Info/Warning/Error filters.
+		{log.InfoLog, 1, timestamp, timestampEWI, "", false, false, false},
+		{log.InfoLog, 2, timestamp, timestampEWI, "", false, false, false},
+		{log.InfoLog, 3, timestamp, timestampEWI, "", false, false, false},
 		// Test filtering in different timestamp windows.
-		{log.InfoLog, 1, timestamp, timestampEWI, "", true, false, false},
-		{log.InfoLog, 2, timestamp, timestampEWI, "", true, true, false},
-		{log.InfoLog, 3, timestamp, timestampEWI, "", true, true, true},
 		{log.InfoLog, 0, timestamp, timestamp, "", false, false, false},
 		{log.InfoLog, 0, timestamp, timestampE, "", true, false, false},
 		{log.InfoLog, 0, timestampE, timestampEW, "", false, true, false},
@@ -406,45 +405,60 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	for i, testCase := range testCases {
 		var url bytes.Buffer
-		fmt.Fprintf(&url, "%s?level=%s&", "/_status/logs/local", testCase.Level.Name())
+		fmt.Fprintf(&url, "/_status/logs/local?level=%s", testCase.Level.Name())
 		if testCase.MaxEntities > 0 {
-			fmt.Fprintf(&url, "max=%d&", testCase.MaxEntities)
+			fmt.Fprintf(&url, "&max=%d", testCase.MaxEntities)
 		}
 		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "starttime=%d&", testCase.StartTimestamp)
+			fmt.Fprintf(&url, "&starttime=%d", testCase.StartTimestamp)
 		}
 		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "endtime=%d&", testCase.EndTimestamp)
+			fmt.Fprintf(&url, "&endtime=%d", testCase.EndTimestamp)
 		}
 		if len(testCase.Pattern) > 0 {
-			fmt.Fprintf(&url, "pattern=%s&", testCase.Pattern)
+			fmt.Fprintf(&url, "&pattern=%s", testCase.Pattern)
 		}
 
-		body = getRequest(t, ts, url.String())
-		entities := entryWrapper{}
-		if err := json.Unmarshal(body, &entities); err != nil {
+		var log logWrapper
+		path := url.String()
+		if err := json.Unmarshal(getRequest(t, ts, path), &log); err != nil {
 			t.Fatal(err)
 		}
-		var actualInfo, actualWarning, actualError bool
-		for _, entity := range entities.Data {
-			switch entity.Format {
-			case "TestStatusLocalLogFile test message-Error":
-				actualError = true
-			case "TestStatusLocalLogFile test message-Warning":
-				actualWarning = true
-			case "TestStatusLocalLogFile test message-Info":
-				actualInfo = true
-			}
-		}
 
-		if testCase.ExpectedError != actualError {
-			t.Errorf("%d: expected error:%t, actual error:%t", i, testCase.ExpectedError, actualError)
-		}
-		if testCase.ExpectedWarning != actualWarning {
-			t.Errorf("%d: expected warning:%t, actual warning:%t", i, testCase.ExpectedWarning, actualWarning)
-		}
-		if testCase.ExpectedInfo != actualInfo {
-			t.Errorf("%d: expected info:%t, actual info:%t", i, testCase.ExpectedInfo, actualInfo)
+		if testCase.MaxEntities > 0 {
+			if a, e := len(log.Data), testCase.MaxEntities; a != e {
+				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, log.Data)
+			}
+		} else {
+			var actualInfo, actualWarning, actualError bool
+			var formats bytes.Buffer
+			for _, entry := range log.Data {
+				fmt.Fprintf(&formats, "%s\n", entry.Format)
+
+				switch entry.Format {
+				case "TestStatusLocalLogFile test message-Error":
+					actualError = true
+				case "TestStatusLocalLogFile test message-Warning":
+					actualWarning = true
+				case "TestStatusLocalLogFile test message-Info":
+					actualInfo = true
+				}
+			}
+
+			if !(testCase.ExpectedInfo == actualInfo &&
+				testCase.ExpectedWarning == actualWarning &&
+				testCase.ExpectedError == actualError) {
+
+				t.Errorf(
+					"%d: expected info, warning, error: (%t, %t, %t) from %s, got:\n%s",
+					i,
+					testCase.ExpectedInfo,
+					testCase.ExpectedWarning,
+					testCase.ExpectedError,
+					path,
+					formats.String(),
+				)
+			}
 		}
 	}
 }
@@ -508,7 +522,7 @@ func TestStoreStatusResponse(t *testing.T) {
 	storeStatuses := wrapper.Data
 
 	if len(storeStatuses) != ts.node.lSender.GetStoreCount() {
-		t.Errorf("too many node statuses returned - expected:%d, actual:%d", ts.node.lSender.GetStoreCount(), len(storeStatuses))
+		t.Errorf("expected %d node statuses, got %d", ts.node.lSender.GetStoreCount(), len(storeStatuses))
 	}
 	for _, storeStatus := range storeStatuses {
 		storeID := storeStatus.Desc.StoreID
