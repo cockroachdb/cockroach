@@ -84,6 +84,8 @@ func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
 // encapsulated NodeStatusMonitor.
 func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 	nsr.RLock()
+	defer nsr.RUnlock()
+
 	if nsr.desc.NodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
@@ -91,7 +93,6 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 		}
 		return nil
 	}
-	nsr.RUnlock()
 
 	data := make([]proto.TimeSeriesData, 0, nsr.lastDataCount)
 
@@ -101,7 +102,7 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 	data = append(data, nsr.recordInt(now, "calls.error", atomic.LoadInt64(&nsr.callErrors)))
 
 	// Record per store stats.
-	nsr.VisitStoreMonitors(func(ssm *StoreStatusMonitor) {
+	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		now := nsr.clock.PhysicalNow()
 		ssr := storeStatusRecorder{ssm, now}
 		data = append(data, ssr.recordInt("livebytes", ssr.stats.LiveBytes))
@@ -135,6 +136,8 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []proto.TimeSeriesData {
 // a status summary for every individual store within the node.
 func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.StoreStatus) {
 	nsr.RLock()
+	defer nsr.RUnlock()
+
 	if nsr.desc.NodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
@@ -152,12 +155,11 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 		StartedAt: nsr.startedAt,
 		StoreIDs:  make([]proto.StoreID, 0, nsr.lastSummaryCount),
 	}
-	nsr.RUnlock()
 
 	storeStats := make([]storage.StoreStatus, 0, nsr.lastSummaryCount)
 	// Generate status summaries for stores, while accumulating data into the
 	// NodeStatus.
-	nsr.VisitStoreMonitors(func(ssm *StoreStatusMonitor) {
+	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		// Accumulate per-store values into node status.
 		nodeStat.StoreIDs = append(nodeStat.StoreIDs, ssm.ID)
 		nodeStat.Stats.Add(&ssm.stats)

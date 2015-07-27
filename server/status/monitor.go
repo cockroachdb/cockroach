@@ -90,12 +90,10 @@ func (nsm *NodeStatusMonitor) GetStoreMonitor(id proto.StoreID) *StoreStatusMoni
 	return s
 }
 
-// VisitStoreMonitors calls the supplied visitor function with every
+// visitStoreMonitors calls the supplied visitor function with every
 // StoreStatusMonitor currently in this monitor's collection. A lock is taken on
 // each StoreStatusMonitor before it is passed to the visitor function.
-func (nsm *NodeStatusMonitor) VisitStoreMonitors(visitor func(*StoreStatusMonitor)) {
-	nsm.RLock()
-	defer nsm.RUnlock()
+func (nsm *NodeStatusMonitor) visitStoreMonitors(visitor func(*StoreStatusMonitor)) {
 	for _, ssm := range nsm.stores {
 		ssm.Lock()
 		visitor(ssm)
