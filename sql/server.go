@@ -120,6 +120,65 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
+type parameters struct {
+	params []driver.Datum
+}
+
+// Arg implements the Args interface
+func (p parameters) Arg(i int) (parser.Datum, bool) {
+	if i < 1 || i > len(p.params) {
+		return parser.DNull{}, false
+	}
+	d := p.params[i-1]
+	if d.BoolVal != nil {
+		return parser.DBool(*d.BoolVal), true
+	} else if d.IntVal != nil {
+		return parser.DInt(*d.IntVal), true
+	} else if d.FloatVal != nil {
+		return parser.DFloat(*d.FloatVal), true
+	} else if d.BytesVal != nil {
+		// TODO(vivek): Add DBytes
+		return parser.DString(d.BytesVal), true
+	} else if d.StringVal != nil {
+		return parser.DString(*d.StringVal), true
+	}
+	return parser.DNull{}, false
+}
+
+// bindValues binds the placeholder variables in stmt to the params.
+func (s *Server) bindValues(stmt parser.Statement, params parameters) error {
+	switch stmt := stmt.(type) {
+	case *parser.Select:
+		for _, expr := range stmt.Exprs {
+			switch expr := expr.(type) {
+			case *parser.NonStarExpr:
+				_, err := parser.FillArgs(expr.Expr, params)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if stmt.Where != nil {
+			_, err := parser.FillArgs(stmt.Where.Expr, params)
+			if err != nil {
+				return err
+			}
+		}
+	case *parser.Insert:
+		switch rows := stmt.Rows.(type) {
+		case parser.Values:
+			for _, tuple := range rows {
+				_, err := parser.FillArgs(tuple, params)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// TODO(vivek): Implement variable substitution for the other stmts.
+	return nil
+}
+
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
 func (s *Server) exec(req driver.Request) (driver.Response, error) {
@@ -139,7 +198,10 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 		return resp, err
 	}
 	for _, stmt := range stmts {
-		// TODO(pmattis): Fill placeholders.
+		// Bind all the placeholder variables in the stmt to actual values.
+		if err = s.bindValues(stmt, parameters{params: req.Params}); err != nil {
+			return resp, err
+		}
 		var plan planNode
 		if plan, err = planner.makePlan(stmt); err != nil {
 			return resp, err

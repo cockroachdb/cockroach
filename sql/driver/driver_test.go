@@ -349,7 +349,6 @@ func TestInsertSelectDelete(t *testing.T) {
 		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('e', 'f')`, testcase.db)); err != nil {
 			t.Fatal(err)
 		}
-
 		// TODO(pmattis): We need much more testing of WHERE clauses. Need to think
 		// through the whole testing story in general.
 		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k IN ('a', 'c')`, testcase.db)); err != nil {
@@ -506,6 +505,59 @@ func TestSelectNoTable(t *testing.T) {
 			t.Fatalf("%s: expected %s, but got %s", d.expr, d.expected, results)
 		}
 	}
+}
+func TestSelectParameters(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	testcases := []struct {
+		db     string
+		schema string
+	}{
+		{
+			"t1",
+			`CREATE TABLE %s.kv (
+  k CHAR PRIMARY KEY,
+  v CHAR
+)`,
+		},
+		{
+			"t2",
+			`CREATE TABLE %s.kv (
+	k CHAR,
+	v CHAR,
+	PRIMARY KEY (k, v)
+)`,
+		},
+	}
+
+	for _, testcase := range testcases {
+		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(testcase.schema, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ($1, $2)`, testcase.db), "c", "d"); err != nil {
+			t.Fatal(err)
+		}
+		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k IN ($1, $2)`, testcase.db), "a", "c"); err != nil {
+			t.Fatal(err)
+		} else {
+			results := readAll(t, rows)
+			expectedResults := [][]string{
+				{"k", "v"},
+				{"a", "b"},
+				{"c", "d"},
+			}
+			if !reflect.DeepEqual(expectedResults, results) {
+				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			}
+		}
+
+	}
+
 }
 
 func TestInsecure(t *testing.T) {
