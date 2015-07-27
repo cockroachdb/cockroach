@@ -406,9 +406,12 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	s.WaitForInit()
-	// Perform a read from the range to ensure that the raft election has
-	// completed.  We do not expect a response.
-	if _, err := ts.db.Get("a"); err != nil {
+
+	content := "junk"
+	leftKey := "a"
+
+	// Write to the range to ensure that the raft machinery is running.
+	if err := ts.db.Put(leftKey, content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -452,26 +455,23 @@ func TestStatusSummaries(t *testing.T) {
 		},
 	}
 
-	// Function to ensure that the event feed has been fully flushed.
-	syncFeed := func() {
-		syncEvent := status.NewTestSyncEvent(1)
-		ts.EventFeed().Publish(syncEvent)
-		if err := syncEvent.Sync(5 * time.Second); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	// Function to force summaries to be written synchronously, including all
 	// data currently in the event pipeline. Only one of the stores has
 	// replicas, so there are no concerns related to quorum writes; if there
 	// were multiple replicas, more care would need to be taken in the initial
 	// syncFeed().
 	forceWriteStatus := func() {
-		syncFeed()
 		if err := ts.node.publishStoreStatuses(); err != nil {
 			t.Fatalf("error publishing store statuses: %s", err)
 		}
-		syncFeed()
+
+		// Ensure that the event feed has been fully flushed.
+		syncEvent := status.NewTestSyncEvent(1)
+		ts.EventFeed().Publish(syncEvent)
+		if err := syncEvent.Sync(5 * time.Second); err != nil {
+			t.Fatal(err)
+		}
+
 		if err := ts.writeSummaries(); err != nil {
 			t.Fatalf("error writing summaries: %s", err)
 		}
@@ -481,12 +481,15 @@ func TestStatusSummaries(t *testing.T) {
 	oldNodeStats := compareNodeStatus(t, ts, expectedNodeStatus, 0)
 	oldStoreStats := compareStoreStatus(t, ts, s, expectedStoreStatus, 0)
 
-	// Write some values left and right of the proposed split key.
-	content := proto.Key("test content")
-	if err := ts.db.Put("a", content); err != nil {
+	splitKey := "b"
+	rightKey := "c"
+
+	// Write some values left and right of the proposed split key. No
+	// particular reason.
+	if err := ts.db.Put(leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put("c", content); err != nil {
+	if err := ts.db.Put(rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -530,24 +533,17 @@ func TestStatusSummaries(t *testing.T) {
 	oldStoreStats = compareStoreStatus(t, ts, s, expectedStoreStatus, 1)
 
 	// Split the range.
-	splitKey := proto.Key("b")
-	rng := s.LookupRange(splitKey, nil)
-	args := &proto.AdminSplitRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:     proto.KeyMin,
-			RaftID:  rng.Desc().RaftID,
-			Replica: proto.Replica{StoreID: s.Ident.StoreID},
-		},
-		SplitKey: splitKey,
-	}
-	var reply *proto.AdminSplitResponse
-	if replyI, err := ts.node.executeCmd(args); err != nil {
+	if err := ts.db.AdminSplit(splitKey); err != nil {
 		t.Fatal(err)
-	} else {
-		reply = replyI.(*proto.AdminSplitResponse)
 	}
-	if reply.Error != nil {
-		t.Fatal(reply.Error)
+
+	// Write on both sides of the split to ensure that the raft machinery
+	// is running.
+	if err := ts.db.Put(leftKey, content); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.db.Put(rightKey, content); err != nil {
+		t.Fatal(err)
 	}
 
 	expectedNodeStatus = &status.NodeStatus{
@@ -558,7 +554,7 @@ func TestStatusSummaries(t *testing.T) {
 		Desc:                 ts.node.Descriptor,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 1,
+		ReplicatedRangeCount: 2,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -574,7 +570,7 @@ func TestStatusSummaries(t *testing.T) {
 		RangeCount:           2,
 		LeaderRangeCount:     2,
 		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 1,
+		ReplicatedRangeCount: 2,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -582,52 +578,6 @@ func TestStatusSummaries(t *testing.T) {
 			LiveCount: oldStoreStats.Stats.LiveCount,
 			KeyCount:  oldStoreStats.Stats.KeyCount,
 			ValCount:  oldStoreStats.Stats.ValCount,
-		},
-	}
-	forceWriteStatus()
-	oldNodeStats = compareNodeStatus(t, ts, expectedNodeStatus, 2)
-	oldStoreStats = compareStoreStatus(t, ts, s, expectedStoreStatus, 2)
-
-	// Write some values left and right of the proposed split key.
-	if err := ts.db.Put("aa", content); err != nil {
-		t.Fatal(err)
-	}
-	if err := ts.db.Put("cc", content); err != nil {
-		t.Fatal(err)
-	}
-
-	expectedNodeStatus = &status.NodeStatus{
-		RangeCount:           2,
-		StoreIDs:             []proto.StoreID{1, 2, 3},
-		StartedAt:            oldNodeStats.StartedAt,
-		UpdatedAt:            oldNodeStats.UpdatedAt,
-		Desc:                 ts.node.Descriptor,
-		LeaderRangeCount:     2,
-		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 2,
-		Stats: engine.MVCCStats{
-			LiveBytes: 1,
-			KeyBytes:  1,
-			ValBytes:  1,
-			LiveCount: oldNodeStats.Stats.LiveCount + 1,
-			KeyCount:  oldNodeStats.Stats.KeyCount + 1,
-			ValCount:  oldNodeStats.Stats.ValCount + 1,
-		},
-	}
-	expectedStoreStatus = &storage.StoreStatus{
-		Desc:                 oldStoreStats.Desc,
-		NodeID:               1,
-		RangeCount:           2,
-		LeaderRangeCount:     2,
-		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 2,
-		Stats: engine.MVCCStats{
-			LiveBytes: 1,
-			KeyBytes:  1,
-			ValBytes:  1,
-			LiveCount: oldStoreStats.Stats.LiveCount + 1,
-			KeyCount:  oldStoreStats.Stats.KeyCount + 1,
-			ValCount:  oldStoreStats.Stats.ValCount + 1,
 		},
 	}
 	forceWriteStatus()
