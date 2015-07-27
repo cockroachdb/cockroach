@@ -96,12 +96,20 @@ body
       border-top: 1px solid $color('light', '4')
   th
     background-color: $color('light', '0')
-  td
-    background-color: $color('light', '3')
-    &:nth-child(even)
-      background-color: $color('light', '2')
-    &:first-child
+    &.sorted
       background-color: $color('light', '1')
+      &:after
+        content:"▼"
+      &.ascending
+        &:after
+          content:"▲"
+          
+  td
+    background-color: $color('light', '2')
+    &:nth-child(even)
+      background-color: $color('light', '3')
+    &.sorted
+      background-color: $color('light', '0')
 
   td
   th

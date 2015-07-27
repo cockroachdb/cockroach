@@ -13,6 +13,7 @@
   },
   "files": [
     "./header.ts",
-    "./util.ts"
+    "./util.ts",
+    "./components.ts"
   ]
 }

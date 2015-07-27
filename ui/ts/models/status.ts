@@ -41,6 +41,8 @@ module Models {
     }
 
     export class Stores {
+      public allStatuses: Utils.ReadOnlyProperty<Proto.StoreStatus[]>;
+
       private _data: Utils.QueryCache<StoreStatusMap> = new Utils.QueryCache((): promise<StoreStatusMap> => {
         return Utils.Http.Get("/_status/stores/")
           .then((results: StoreStatusResponseSet) => {
@@ -53,14 +55,15 @@ module Models {
           });
       });
 
-      public GetStoreIds(): string[] {
-        return Object.keys(this._data.result()).sort();
+      constructor() {
+        this.allStatuses = Utils.Computed(this._data.result, (map: StoreStatusMap) => {
+          let keys = Object.keys(map).sort();
+          return keys.map((key: string) => map[key]);
+        });
       }
 
-      public GetAllStatuses(): Proto.StoreStatus[] {
-        let data = this._data.result();
-        let keys = Object.keys(data).sort();
-        return keys.map((key: string) => data[key]);
+      public GetStoreIds(): string[] {
+        return Object.keys(this._data.result()).sort();
       }
 
       public GetDesc(storeId: string): Proto.StoreDescriptor {
@@ -140,6 +143,8 @@ module Models {
     }
 
     export class Nodes {
+      public allStatuses: Utils.ReadOnlyProperty<Proto.NodeStatus[]>;
+
       private _data: Utils.QueryCache<NodeStatusMap> = new Utils.QueryCache((): promise<NodeStatusMap> => {
         return Utils.Http.Get("/_status/nodes/")
           .then((results: NodeStatusResponseSet) => {
@@ -152,14 +157,15 @@ module Models {
           });
       });
 
-      public GetNodeIds(): string[] {
-        return Object.keys(this._data.result()).sort();
+      constructor() {
+        this.allStatuses = Utils.Computed(this._data.result, (map: NodeStatusMap) => {
+          let keys = Object.keys(map).sort();
+          return keys.map((key: string) => map[key]);
+        });
       }
 
-      public GetAllStatuses(): Proto.NodeStatus[] {
-        let data = this._data.result();
-        let keys = Object.keys(data).sort();
-        return keys.map((key: string) => data[key]);
+      public GetNodeIds(): string[] {
+        return Object.keys(this._data.result()).sort();
       }
 
       public GetDesc(nodeId: string): Proto.NodeDescriptor {
