@@ -383,10 +383,11 @@ func TestStatusLocalLogs(t *testing.T) {
 		{log.InfoLog, 0, 0, 0, "", true, true, true},
 		{log.WarningLog, 0, 0, 0, "", true, true, false},
 		{log.ErrorLog, 0, 0, 0, "", true, false, false},
+		// Test entry limit. Ignore Info/Warning/Error filters.
+		{log.InfoLog, 1, timestamp, timestampEWI, "", false, false, false},
+		{log.InfoLog, 2, timestamp, timestampEWI, "", false, false, false},
+		{log.InfoLog, 3, timestamp, timestampEWI, "", false, false, false},
 		// Test filtering in different timestamp windows.
-		{log.InfoLog, 1, timestamp, timestampEWI, "", true, false, false},
-		{log.InfoLog, 2, timestamp, timestampEWI, "", true, true, false},
-		{log.InfoLog, 3, timestamp, timestampEWI, "", true, true, true},
 		{log.InfoLog, 0, timestamp, timestamp, "", false, false, false},
 		{log.InfoLog, 0, timestamp, timestampE, "", true, false, false},
 		{log.InfoLog, 0, timestampE, timestampEW, "", false, true, false},
@@ -423,34 +424,41 @@ func TestStatusLocalLogs(t *testing.T) {
 		if err := json.Unmarshal(getRequest(t, ts, path), &log); err != nil {
 			t.Fatal(err)
 		}
-		var actualInfo, actualWarning, actualError bool
-		var formats bytes.Buffer
-		for _, entry := range log.Data {
-			fmt.Fprintf(&formats, "%s\n", entry.Format)
 
-			switch entry.Format {
-			case "TestStatusLocalLogFile test message-Error":
-				actualError = true
-			case "TestStatusLocalLogFile test message-Warning":
-				actualWarning = true
-			case "TestStatusLocalLogFile test message-Info":
-				actualInfo = true
+		if testCase.MaxEntities > 0 {
+			if a, e := len(log.Data), testCase.MaxEntities; a != e {
+				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, log.Data)
 			}
-		}
+		} else {
+			var actualInfo, actualWarning, actualError bool
+			var formats bytes.Buffer
+			for _, entry := range log.Data {
+				fmt.Fprintf(&formats, "%s\n", entry.Format)
 
-		if !(testCase.ExpectedInfo == actualInfo &&
-			testCase.ExpectedWarning == actualWarning &&
-			testCase.ExpectedError == actualError) {
+				switch entry.Format {
+				case "TestStatusLocalLogFile test message-Error":
+					actualError = true
+				case "TestStatusLocalLogFile test message-Warning":
+					actualWarning = true
+				case "TestStatusLocalLogFile test message-Info":
+					actualInfo = true
+				}
+			}
 
-			t.Errorf(
-				"%d: expected info, warning, error: (%t, %t, %t) from %s, got:\n%s",
-				i,
-				testCase.ExpectedInfo,
-				testCase.ExpectedWarning,
-				testCase.ExpectedError,
-				path,
-				formats.String(),
-			)
+			if !(testCase.ExpectedInfo == actualInfo &&
+				testCase.ExpectedWarning == actualWarning &&
+				testCase.ExpectedError == actualError) {
+
+				t.Errorf(
+					"%d: expected info, warning, error: (%t, %t, %t) from %s, got:\n%s",
+					i,
+					testCase.ExpectedInfo,
+					testCase.ExpectedWarning,
+					testCase.ExpectedError,
+					path,
+					formats.String(),
+				)
+			}
 		}
 	}
 }
