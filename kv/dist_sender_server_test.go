@@ -55,7 +55,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	key := keys.MakeKey(keys.Meta1Prefix, proto.KeyMax)
 	now := s.Clock().Now()
 	txn := proto.NewTransaction("txn", proto.Key("foobar"), 0, proto.SERIALIZABLE, now, 0)
-	if err := engine.MVCCPutProto(s.Engines[0], nil, key, now, txn, &proto.RangeDescriptor{}); err != nil {
+	if err := engine.MVCCPutProto(s.Ctx.Engines[0], nil, key, now, txn, &proto.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
 
