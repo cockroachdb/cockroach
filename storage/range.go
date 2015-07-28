@@ -796,7 +796,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 	execDone()
 
 	if cmd != nil {
-		cmd.done <- proto.ResponseWithError{reply, err}
+		cmd.done <- proto.ResponseWithError{Reply: reply, Err: err}
 	} else if err != nil && log.V(1) {
 		log.Errorc(r.context(), "error executing raft command %s: %s", args.Method(), err)
 	}
@@ -921,7 +921,8 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 		if reply == nil {
 			reply = args.CreateReply()
 		}
-		if err := r.respCache.PutResponse(batch, args.Header().CmdID, proto.ResponseWithError{reply, rErr}); err != nil {
+		if err := r.respCache.PutResponse(batch, args.Header().CmdID,
+			proto.ResponseWithError{Reply: reply, Err: rErr}); err != nil {
 			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
 		}
 	}

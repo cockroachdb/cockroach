@@ -56,7 +56,7 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 		t.Fatalf("unxpected read error :%s", readErr)
 	}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
+	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &incR, Err: nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Get should now return 1.
@@ -83,7 +83,7 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	rc, e := createTestResponseCache(t, 1)
 	cmdID := proto.ClientCmdID{}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
+	if err := rc.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &incR, Err: nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Get should return !ok.
@@ -102,7 +102,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
+	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &incR, Err: nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -130,7 +130,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{&incR, nil}); err != nil {
+	if err := rc1.PutResponse(e, cmdID, proto.ResponseWithError{Reply: &incR, Err: nil}); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -216,7 +216,7 @@ func TestResponseCacheShouldCache(t *testing.T) {
 	reply := proto.PutResponse{}
 
 	for i, test := range testCases {
-		if shouldCache := rc.shouldCacheResponse(proto.ResponseWithError{&reply, test.err}); shouldCache != test.shouldCache {
+		if shouldCache := rc.shouldCacheResponse(proto.ResponseWithError{Reply: &reply, Err: test.err}); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
 	}
@@ -235,7 +235,7 @@ func TestResponseCacheGC(t *testing.T) {
 	// Add response for cmdID with timestamp at time=1ns.
 	copyIncR := incR
 	copyIncR.Timestamp.WallTime = 1
-	if err := rc.PutResponse(eng, cmdID, proto.ResponseWithError{&copyIncR, nil}); err != nil {
+	if err := rc.PutResponse(eng, cmdID, proto.ResponseWithError{Reply: &copyIncR, Err: nil}); err != nil {
 		t.Fatalf("unexpected error putting responpse: %s", err)
 	}
 	eng.SetGCTimeouts(0, 0) // avoids GC

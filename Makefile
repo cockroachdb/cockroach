@@ -127,6 +127,9 @@ check:
 	@echo "errcheck"
 	@! errcheck -ignore 'bytes:Write.*,io:(Close|Write),net:Close,net/http:(Close|Write),net/rpc:Close,os:Close,database/sql:Close,github.com/spf13/cobra:Usage' $(PKG) | grep -vE 'yacc\.go:'
 	@echo "vet"
+	@! go tool vet . 2>&1 | \
+	  grep -vE '^vet: cannot process directory .git'
+	@echo "vet --shadow"
 	@! go tool vet --shadow . 2>&1 | \
 	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
 	@echo "golint"

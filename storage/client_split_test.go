@@ -243,13 +243,13 @@ func TestStoreRangeSplit(t *testing.T) {
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("x"), newRng.Desc().RaftID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
 	// Send out an increment request copied from above (same ClientCmdID) which

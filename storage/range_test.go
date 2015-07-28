@@ -1529,7 +1529,8 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	pastReply := proto.IncrementResponse{}
 	pastError := errors.New("boom")
 	var expError error = &proto.Error{Message: pastError.Error()}
-	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID, proto.ResponseWithError{&pastReply, pastError})
+	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
+		proto.ResponseWithError{Reply: &pastReply, Err: pastError})
 
 	args := incrementArgs([]byte("a"), 1, 1, tc.store.StoreID())
 	args.CmdID = cmdID
