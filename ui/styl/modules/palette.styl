@@ -17,8 +17,25 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-@require 'modules/*'
+// ---- Color Palette ----
+$palette = {
+  // Light basic content color, shaded from lightest to darkest.
+  'light': {
+    '0': #ffffff,
+    '1': #f1f2f3,
+    '2': #EEE,
+    '3': #DDD,
+    '4': #CCC
+  },
+  // Dark basic content color, shaded from darkest to lightest.
+  'dark': {
+      '0': #292929,
+      '1': #333333,
+      '2': #414141,
+      '3': #555555,
+      '4': #666666,
+  },
+}
 
-@require 'partials/layout.styl'
-@require 'partials/navigation-bar.styl'
-@require 'partials/stats-table.styl'
+-color(base, val)
+  return $palette[base][val]

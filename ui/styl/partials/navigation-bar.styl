@@ -17,8 +17,25 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-@require 'modules/*'
+@require '../modules/*'
 
-@require 'partials/layout.styl'
-@require 'partials/navigation-bar.styl'
-@require 'partials/stats-table.styl'
+// ---- Navigation ----
+.appNav
+  height: 50px
+  background-color: -color('dark', '0')
+  border-bottom: 1px solid -color('dark', '1')
+  padding: 10px 20px
+
+.appNav-link:link,
+.appNav-link:visited
+  text-decoration: none
+  text-transform: uppercase
+  color: -color('light', '1')
+  display: inline-block
+  margin-right: 20px
+
+.appNav-link.appNav-homeName
+  font-weight: 800
+  font-size: 22px
+  text-transform: none
+  vertical-align: -2px

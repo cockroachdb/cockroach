@@ -17,8 +17,24 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-@require 'modules/*'
+*
+  margin: 0  
+  padding: 0
+  -moz-box-sizing: border-box
+  -webkit-box-sizing: border-box
+  box-sizing: border-box
 
-@require 'partials/layout.styl'
-@require 'partials/navigation-bar.styl'
-@require 'partials/stats-table.styl'
+html,
+body
+  height: 100%
+
+body
+  background-color: -color('light', '1')
+  color: -color('dark', '1')
+  font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
+  font-weight: 400
+  font-size: 14px
+
+.fullHeightContainer
+  height: calc(100% - 50px)
+  /* Keep in line with height of .appNav */
