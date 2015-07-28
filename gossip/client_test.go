@@ -101,7 +101,7 @@ func TestClientGossip(t *testing.T) {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
-	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+	util.SucceedsWithin(t, 5*time.Minute, func() error {
 		if _, err := remote.GetInfo("local-key"); err != nil {
 			return err
 		}
