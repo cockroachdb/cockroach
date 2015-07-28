@@ -237,9 +237,11 @@ func (s *statusServer) handleGossip(w http.ResponseWriter, r *http.Request, ps h
 // handleDetailsLocal handles local requests for node details.
 func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	local := struct {
+		NodeID    proto.NodeID        `json:"nodeID"`
 		Address   util.UnresolvedAddr `json:"address"`
 		BuildInfo util.BuildInfo      `json:"buildInfo"`
 	}{
+		NodeID:    s.gossip.GetNodeID(),
 		BuildInfo: util.GetBuildInfo(),
 	}
 	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {

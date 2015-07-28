@@ -115,6 +115,7 @@ type Cluster struct {
 	CertsDir       string
 	monitorStopper chan struct{}
 	LogDir         string
+	ForceLogging   bool
 }
 
 // Create creates a new local cockroach cluster. The stopper is used to
@@ -245,8 +246,15 @@ func (l *Cluster) initCluster() {
 	}
 
 	binds := []string{l.CertsDir + ":/certs"}
+
 	if logDirectory != nil && len(*logDirectory) > 0 {
 		l.LogDir = filepath.Join(pwd, *logDirectory)
+		binds = append(binds, l.LogDir+":/logs")
+	} else if l.ForceLogging {
+		l.LogDir, err = ioutil.TempDir(pwd, ".localcluster.logs.")
+		if err != nil {
+			panic(err)
+		}
 		binds = append(binds, l.LogDir+":/logs")
 	}
 	if *cockroachImage == builderImage {
@@ -323,7 +331,7 @@ func (l *Cluster) startNode(i int) *Container {
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
-	if logDirectory != nil && len(*logDirectory) > 0 {
+	if len(l.LogDir) > 0 {
 		dockerDir := "/logs/" + node(i)
 		localDir := l.LogDir + "/" + node(i)
 		if !exists(localDir) {
@@ -466,5 +474,13 @@ func (l *Cluster) Stop() {
 			maybePanic(n.Kill())
 			l.Nodes[i] = nil
 		}
+	}
+	// Only delete the logging directory if forceLogging was set and there was
+	// no passed in logDirectory flag. This must be after the killing of the
+	// nodes or there might be a panic when it tries to log that's it is killing
+	// the node.
+	if l.ForceLogging && !(logDirectory != nil && len(*logDirectory) > 0) {
+		_ = os.RemoveAll(l.LogDir)
+		l.LogDir = ""
 	}
 }
