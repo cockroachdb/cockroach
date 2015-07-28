@@ -695,7 +695,6 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction,
 	trace.Event("coordinator stops")
 	txnMeta.txnEnd <- resolved // buffered, so does not block
 	close(txnMeta.txnEnd)
-	txnMeta.txnEnd = nil
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
@@ -733,7 +732,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 	}
 	defer tc.unregisterTxn(id)
 
-	var closer chan []proto.Key
+	var closer <-chan []proto.Key
 	var trace *tracer.Trace
 	{
 		tc.Lock()
