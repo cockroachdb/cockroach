@@ -120,6 +120,8 @@ acceptance:
 
 .PHONY: check
 check:
+	@echo "checking for tabs in shell scripts"
+	@! git grep -F '	' -- '*.sh'
 	@echo "checking for \"path\" imports"
 	@! git grep -F '"path"' -- '*.go'
 	@echo "errcheck"
