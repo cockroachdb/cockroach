@@ -95,7 +95,7 @@ func TestRetryReset(t *testing.T) {
 
 func TestRetryStop(t *testing.T) {
 	opts := Options{
-		InitialBackoff: time.Microsecond * 10,
+		InitialBackoff: time.Second,
 		MaxBackoff:     time.Second,
 		Multiplier:     2,
 		Stopper:        stop.NewStopper(),

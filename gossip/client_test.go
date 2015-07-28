@@ -98,13 +98,15 @@ func TestClientGossip(t *testing.T) {
 	rpcContext := rpc.NewContext(nodeTestBaseContext, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
-	if err := util.IsTrueWithin(func() bool {
-		_, lerr := remote.GetInfo("local-key")
-		_, rerr := local.GetInfo("remote-key")
-		return lerr == nil && rerr == nil
-	}, 500*time.Millisecond); err != nil {
-		t.Errorf("gossip exchange failed or taking too long")
-	}
+	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+		if _, err := remote.GetInfo("local-key"); err != nil {
+			return err
+		}
+		if _, err := local.GetInfo("remote-key"); err != nil {
+			return err
+		}
+		return nil
+	})
 
 	stopper.Stop()
 	log.Info("done serving")
