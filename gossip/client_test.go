@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -84,15 +83,23 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 func TestClientGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	local, remote, stopper := startGossip(t)
+	disconnected := make(chan *client, 1)
+	client := newClient(remote.is.NodeAddr)
+
+	defer func() {
+		stopper.Stop()
+		if client != <-disconnected {
+			t.Errorf("expected client disconnect after remote close")
+		}
+	}()
+
 	if err := local.AddInfo("local-key", "local value", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if err := remote.AddInfo("remote-key", "remote value", time.Second); err != nil {
 		t.Fatal(err)
 	}
-	disconnected := make(chan *client, 1)
 
-	client := newClient(remote.is.NodeAddr)
 	// Use an insecure context. We're talking to unix socket which are not in the certs.
 	lclock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(nodeTestBaseContext, lclock, stopper)
@@ -107,12 +114,6 @@ func TestClientGossip(t *testing.T) {
 		}
 		return nil
 	})
-
-	stopper.Stop()
-	log.Info("done serving")
-	if client != <-disconnected {
-		t.Errorf("expected client disconnect after remote close")
-	}
 }
 
 // TestClientDisconnectRedundant verifies that the gossip server
