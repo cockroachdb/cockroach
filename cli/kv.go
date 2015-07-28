@@ -33,6 +33,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const defaultMaxResults = 1000
+
+var maxResults int64
+
 var osExit = os.Exit
 var osStderr = os.Stderr
 
@@ -224,9 +228,7 @@ var scanCmd = &cobra.Command{
 Fetches and display the key/value pairs for a range. If no <start-key>
 is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
-are retrieved.
-
-Caveat: Currently only retrieves up to 1000 keys.
+are retrieved. 
 `,
 	Run: runScan,
 }
@@ -256,8 +258,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	if kvDB == nil {
 		return
 	}
-	// TODO(pmattis): Add a flag for the number of results to scan.
-	rows, err := kvDB.Scan(startKey, endKey, 1000)
+	rows, err := kvDB.Scan(startKey, endKey, maxResults)
 	if err != nil {
 		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
 		osExit(1)

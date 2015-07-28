@@ -230,3 +230,20 @@ func Example_logging() {
 	// kv --verbosity=0 scan
 	// kv --vmodule=foo=1 scan
 }
+
+func Example_max_results() {
+	c := newCLITest()
+
+	c.Run("kv put a 1 b 2 c 3 d 4")
+	c.Run("kv scan --max-results=3")
+	c.Run("quit")
+
+	// Output:
+	// kv put a 1 b 2 c 3 d 4
+	// kv scan --max-results=3
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// quit
+	// node drained and shutdown: ok
+}
