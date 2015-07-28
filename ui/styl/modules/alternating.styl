@@ -17,24 +17,7 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-*
-  margin: 0  
-  padding: 0
-  -moz-box-sizing: border-box
-  -webkit-box-sizing: border-box
-  box-sizing: border-box
-
-html,
-body
-  height: 100%
-
-body
-  background-color: -color('light')
-  color: -color('dark', 'light')
-  font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
-  font-weight: 400
-  font-size: 14px
-
-.fullHeightContainer
-  height: calc(100% - 50px)
-  /* Keep in line with height of .appNav */
+alternating-background($even, $odd)
+  background-color: $even
+  &:nth-child(odd)
+    background-color: $odd

@@ -28,8 +28,8 @@ body {
   height: 100%;
 }
 body {
-  background-color: #f1f2f3;
-  color: #333;
+  background-color: #f1f1f1;
+  color: #5b5b5b;
   font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif;
   font-weight: 400;
   font-size: 14px;
@@ -40,15 +40,14 @@ body {
 }
 .appNav {
   height: 50px;
-  background-color: #292929;
-  border-bottom: 1px solid #333;
+  background-color: #3d3d3d;
   padding: 10px 20px;
 }
 .appNav-link:link,
 .appNav-link:visited {
   text-decoration: none;
   text-transform: uppercase;
-  color: #f1f2f3;
+  color: #f1f1f1;
   display: inline-block;
   margin-right: 20px;
 }
@@ -58,21 +57,27 @@ body {
   text-transform: none;
   vertical-align: -2px;
 }
+.stats-table {
+  color: #515151;
+}
 .stats-table table {
   border-collapse: collapse;
+  border-top: 1px solid #a3a3a3;
 }
 .stats-table tr {
   height: 2em;
   border-bottom: 1px solid #ccc;
 }
-.stats-table tr:first-child {
-  border-top: 1px solid #ccc;
-}
 .stats-table th {
-  background-color: #fff;
+  color: #f8f8f8;
+  font-weight: normal;
+  background-color: #c1c1c1;
+}
+.stats-table th:nth-child(odd) {
+  background-color: #b7b7b7;
 }
 .stats-table th.sorted {
-  background-color: #f1f2f3;
+  background-color: #ccc;
 }
 .stats-table th.sorted:after {
   content: "▼";
@@ -81,10 +86,10 @@ body {
   content: "▲";
 }
 .stats-table td {
-  background-color: #eee;
+  background-color: #f8f8f8;
 }
-.stats-table td:nth-child(even) {
-  background-color: #ddd;
+.stats-table td:nth-child(odd) {
+  background-color: #f1f1f1;
 }
 .stats-table td.sorted {
   background-color: #fff;
