@@ -28,8 +28,8 @@ import (
 	// Import cockroach driver.
 	_ "github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
 )
 
 func makeSQLClient() *sql.DB {
@@ -60,39 +60,27 @@ Open a sql shell running against the cockroach database at --addr.
 // processOneLine takes a line from the terminal, runs it,
 // and displays the result.
 // TODO(marc): handle multi-line, this will require ';' terminated statements.
-func processOneLine(db *sql.DB, line string, w io.Writer) (bool, error) {
-	// Look for the first word in the statement and use it to decide what to do.
-	words := strings.Split(line, " ")
-	if len(words) == 0 {
-		return false, nil
-	}
-
-	// This is a really terrible way of figuring out how to handle
-	// the input.
-	command := strings.ToUpper(words[0])
-	if command == "EXIT" || command == "QUIT" {
-		return true, nil
-	}
+func processOneLine(db *sql.DB, line string) error {
 	// Issues a query and examine returned Rows.
 	rows, err := db.Query(line)
 	if err != nil {
-		return false, util.Errorf("query error: %s", err)
+		return util.Errorf("query error: %s", err)
 	}
 
 	defer rows.Close()
 	cols, err := rows.Columns()
 	if err != nil {
-		return false, util.Errorf("rows.Columns() error: %s", err)
+		return util.Errorf("rows.Columns() error: %s", err)
 	}
 
 	if len(cols) == 0 {
 		// This operation did not return rows, just show success.
-		fmt.Fprintf(w, "OK\n")
-		return false, nil
+		fmt.Printf("OK\n")
+		return nil
 	}
 
 	// Format all rows using tabwriter.
-	tw := tabwriter.NewWriter(w, 0, 8, 0, '\t', 0)
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
 	strs := make([]string, len(cols))
 	vals := make([]interface{}, len(cols))
@@ -101,12 +89,12 @@ func processOneLine(db *sql.DB, line string, w io.Writer) (bool, error) {
 			vals[i] = &strs[i]
 		}
 		if err := rows.Scan(vals...); err != nil {
-			return false, util.Errorf("scan error: %s", err)
+			return util.Errorf("scan error: %s", err)
 		}
 		fmt.Fprintf(tw, "%s\n", strings.Join(strs, "\t"))
 	}
 	_ = tw.Flush()
-	return false, nil
+	return nil
 }
 
 func runTerm(cmd *cobra.Command, args []string) {
@@ -117,43 +105,26 @@ func runTerm(cmd *cobra.Command, args []string) {
 
 	db := makeSQLClient()
 
-	readWriter := struct {
-		io.Reader
-		io.Writer
-	}{
-		Reader: os.Stdin,
-		Writer: os.Stdout,
-	}
-
-	// We need to switch to raw mode. Unfortunately, this masks
-	// signals-from-keyboard, meaning that ctrl-C cannot be caught.
-	oldState, err := terminal.MakeRaw(0)
-	if err != nil {
-		panic(err)
-	}
+	liner := liner.NewLiner()
 	defer func() {
-		_ = terminal.Restore(0, oldState)
+		_ = liner.Close()
 	}()
 
-	term := terminal.NewTerminal(readWriter, "> ")
 	for {
-		line, err := term.ReadLine()
+		l, err := liner.Prompt("> ")
 		if err != nil {
 			if err != io.EOF {
 				fmt.Fprintf(os.Stderr, "Input error: %s\n", err)
 			}
 			break
 		}
-		if len(line) == 0 {
+		if len(l) == 0 {
 			continue
 		}
+		liner.AppendHistory(l)
 
-		shouldExit, err := processOneLine(db, line, term)
-		if err != nil {
-			fmt.Fprintf(term, "Error: %s\n", err)
-		}
-		if shouldExit {
-			break
+		if err := processOneLine(db, l); err != nil {
+			fmt.Printf("Error: %s\n", err)
 		}
 	}
 }
