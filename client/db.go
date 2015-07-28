@@ -237,6 +237,19 @@ func Open(addr string, opts ...Option) (*DB, error) {
 	return db, nil
 }
 
+// CopyWithNewUser constructs a new DB object from the current one.
+// It shares the sender and retry options, but allows a new user.
+// This changes the default "requested user", but does not change
+// the "authenticated user" in secure mode.
+// This is useful only when the authenticated user can act as multiple
+// users and needs to reuse clients (currently only true for the node user).
+func (db *DB) CopyWithNewUser(user string) *DB {
+	newDB := &DB{}
+	*newDB = *db
+	newDB.user = user
+	return newDB
+}
+
 // NewBatch creates and returns a new empty batch object for use with the DB.
 func (db *DB) NewBatch() *Batch {
 	return &Batch{DB: db}

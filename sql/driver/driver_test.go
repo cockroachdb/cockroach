@@ -559,16 +559,15 @@ func TestPermissions(t *testing.T) {
 	}
 
 	// Now try operations with "test-user". They should all fail.
-	// TODO: modify this test once permissions are applied properly.
-	if _, err := testUser.Exec(`CREATE DATABASE baz`); err != nil {
-		t.Fatal(err)
+	if _, err := testUser.Exec(`CREATE DATABASE baz`); err == nil {
+		t.Fatal("unexpected success")
 	}
-	if _, err := testUser.Exec(`CREATE TABLE baz.bar (k INT PRIMARY KEY, v INT)`); err != nil {
-		t.Fatal(err)
+	if _, err := testUser.Exec(`CREATE TABLE baz.bar (k INT PRIMARY KEY, v INT)`); err == nil {
+		t.Fatal("unexpected success")
 	}
 	// Insert into root's table.
-	if _, err := testUser.Exec(`INSERT INTO foo.bar VALUES (2, 3)`); err != nil {
-		t.Fatal(err)
+	if _, err := testUser.Exec(`INSERT INTO foo.bar VALUES (2, 3)`); err == nil {
+		t.Fatal("unexpected success")
 	}
 
 }
