@@ -443,7 +443,7 @@ func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _
 	}
 	if maxEntries < 1 {
 		http.Error(w,
-			fmt.Sprintf("max: %s should be set to a value greater than 0", maxEntries),
+			fmt.Sprintf("max: %d should be set to a value greater than 0", maxEntries),
 			http.StatusBadRequest)
 		return
 	}

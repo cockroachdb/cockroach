@@ -94,7 +94,7 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 		resp := rwResp.GetValue().(proto.Response)
 		header := resp.Header()
 		defer func() { header.Error = nil }()
-		return proto.ResponseWithError{resp, header.GoError()}, nil
+		return proto.ResponseWithError{Reply: resp, Err: header.GoError()}, nil
 	}
 	return proto.ResponseWithError{}, nil
 }

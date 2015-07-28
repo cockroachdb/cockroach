@@ -116,13 +116,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"), bDesc.RaftID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
 	// Merge the b range back into the a range.
@@ -157,13 +157,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("ccc"), rangeB.Desc().RaftID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 
 	// Put new values after the merge on both sides.
@@ -181,13 +181,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 	gArgs = getArgs([]byte("cccc"), rangeA.Desc().RaftID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
-		t.Fatal("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
+		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
 }
 
