@@ -90,7 +90,7 @@ const (
 	defaultNodeCount = 1000
 
 	// ttlNodeIDGossip is time-to-live for node ID -> address.
-	ttlNodeIDGossip = 0 * time.Second
+	ttlNodeIDGossip time.Duration = 0
 
 	// TestInterval is the default gossip interval used for running tests.
 	TestInterval = 10 * time.Millisecond

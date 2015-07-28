@@ -32,7 +32,7 @@ const (
 	// splitQueueMaxSize is the max size of the split queue.
 	splitQueueMaxSize = 100
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
-	splitQueueTimerDuration = 0 * time.Second // zero duration to process splits greedily.
+	splitQueueTimerDuration = 0 // zero duration to process splits greedily.
 )
 
 // splitQueue manages a queue of ranges slated to be split due to size

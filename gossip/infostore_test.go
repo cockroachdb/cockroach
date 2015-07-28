@@ -77,7 +77,7 @@ func TestRegisterGroup(t *testing.T) {
 func TestZeroDuration(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
-	info := is.newInfo("a", float64(1), 0*time.Second)
+	info := is.newInfo("a", float64(1), 0)
 	if info.TTLStamp != math.MaxInt64 {
 		t.Errorf("expected zero duration to get max TTLStamp: %d", info.TTLStamp)
 	}

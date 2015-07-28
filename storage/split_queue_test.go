@@ -20,7 +20,6 @@ package storage
 import (
 	"math"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -45,7 +44,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.gossip.AddInfo(gossip.KeyConfigAccounting, acctMap, 0*time.Second); err != nil {
+	if err := tc.gossip.AddInfo(gossip.KeyConfigAccounting, acctMap, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -56,7 +55,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.gossip.AddInfo(gossip.KeyConfigZone, zoneMap, 0*time.Second); err != nil {
+	if err := tc.gossip.AddInfo(gossip.KeyConfigZone, zoneMap, 0); err != nil {
 		t.Fatal(err)
 	}
 

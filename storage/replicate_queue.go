@@ -31,7 +31,7 @@ const (
 	replicateQueueMaxSize = 100
 
 	// replicateQueueTimerDuration is the duration between replication of queued ranges.
-	replicateQueueTimerDuration = 0 * time.Second // zero duration to process replication greedily
+	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
 )
 
 // replicateQueue manages a queue of ranges to have their replicas
