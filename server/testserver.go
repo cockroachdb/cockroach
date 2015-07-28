@@ -110,8 +110,6 @@ type TestServer struct {
 	// server is the embedded Cockroach server struct.
 	*Server
 	StoresPerNode int
-	// Engines underlying the test server.
-	Engines []engine.Engine
 }
 
 // Gossip returns the gossip instance used by the TestServer.
@@ -167,10 +165,9 @@ func (ts *TestServer) Start() error {
 	if ts.StoresPerNode < 1 {
 		ts.StoresPerNode = 1
 	}
-	for i := len(ts.Engines); i < ts.StoresPerNode; i++ {
-		ts.Engines = append(ts.Engines, engine.NewInMem(proto.Attributes{}, 100<<20))
+	for i := len(ts.Ctx.Engines); i < ts.StoresPerNode; i++ {
+		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(proto.Attributes{}, 100<<20))
 	}
-	ts.Ctx.Engines = ts.Engines
 
 	if !ts.SkipBootstrap {
 		stopper := stop.NewStopper()

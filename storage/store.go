@@ -568,7 +568,7 @@ func (s *Store) startGossip() {
 	ctx := s.Context(nil)
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
-	s.initComplete.Add(1)
+	s.initComplete.Add(2)
 	s.stopper.RunWorker(func() {
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
@@ -589,7 +589,6 @@ func (s *Store) startGossip() {
 		}
 	})
 
-	s.initComplete.Add(1)
 	s.stopper.RunWorker(func() {
 		if err := s.maybeGossipConfigs(); err != nil {
 			log.Warningc(ctx, "error gossiping configs: %s", err)

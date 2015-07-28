@@ -138,23 +138,16 @@ type NodeEventListener interface {
 	OnTrace(event *tracer.Trace)
 }
 
-// ProcessNodeEvents reads node events from the supplied channel and passes them
-// to the correct methods of the supplied NodeEventListener. This method will
-// run until the Subscription's events channel is closed.
-func ProcessNodeEvents(l NodeEventListener, sub *util.Subscription) {
-	for event := range sub.Events() {
-		// TODO(tamird): https://github.com/barakmich/go-nyet/issues/7
-		switch specificEvent := event.(type) {
-		case *StartNodeEvent:
-			l.OnStartNode(specificEvent)
-		case *tracer.Trace:
-			l.OnTrace(specificEvent)
-		case *CallSuccessEvent:
-			l.OnCallSuccess(specificEvent)
-		case *CallErrorEvent:
-			l.OnCallError(specificEvent)
-		case *TestSyncEvent:
-			specificEvent.consume()
-		}
+// ProcessNodeEvent dispatches an event on the NodeEventListener.
+func ProcessNodeEvent(l NodeEventListener, event interface{}) {
+	switch specificEvent := event.(type) {
+	case *StartNodeEvent:
+		l.OnStartNode(specificEvent)
+	case *tracer.Trace:
+		l.OnTrace(specificEvent)
+	case *CallSuccessEvent:
+		l.OnCallSuccess(specificEvent)
+	case *CallErrorEvent:
+		l.OnCallError(specificEvent)
 	}
 }
