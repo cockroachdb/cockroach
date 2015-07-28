@@ -44,7 +44,7 @@ if [ "${CIRCLECI:-}" = "true" ]; then
 else
     rm="--rm"
 fi
-	   
+
 tty=""
 if test -t 0; then
     tty="--tty"

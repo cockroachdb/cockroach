@@ -9,25 +9,25 @@ set -ex
 # the argument causing the commands in the if-branch to be executed
 # within the docker container.
 if [ "${1:-}" = "docker" ]; then
-    cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
+  cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
-    # Pretend we're already bootstrapped, so that `make` doesn't go
-    # through the bootstrap process which would glock sync and run
-    # build/devbase/deps.sh (unnecessarily).
-    touch .bootstrap
+  # Pretend we're already bootstrapped, so that `make` doesn't go
+  # through the bootstrap process which would glock sync and run
+  # build/devbase/deps.sh (unnecessarily).
+  touch .bootstrap
 
-    # Restore previously cached build artifacts.
-    time go install github.com/cockroachdb/build-cache
-    time build-cache restore . .:race,test ${cmds}
-    # Build everything needed by circle-test.sh.
-    time go test -race -v -i ./...
-    time go install -v ${cmds}
-    time make GITHOOKS= install
-    time (cd acceptance; go test -v -c -tags acceptance)
-    # Cache the current build artifacts for future builds.
-    time build-cache save . .:race,test ${cmds}
+  # Restore previously cached build artifacts.
+  time go install github.com/cockroachdb/build-cache
+  time build-cache restore . .:race,test ${cmds}
+  # Build everything needed by circle-test.sh.
+  time go test -race -v -i ./...
+  time go install -v ${cmds}
+  time make GITHOOKS= install
+  time (cd acceptance; go test -v -c -tags acceptance)
+  # Cache the current build artifacts for future builds.
+  time build-cache save . .:race,test ${cmds}
 
-    exit 0
+  exit 0
 fi
 
 gopath0="${GOPATH%%:*}"
@@ -43,18 +43,18 @@ du -sh "${cachedir}"
 ls -lh "${cachedir}"
 
 if ! docker images | grep -q "${tag}"; then
-    # If there's a base image cached, load it. A click on CircleCI's "Clear
-    # Cache" will make sure we start with a clean slate.
-    rm -f "$(ls ${cachedir}/builder*.tar 2>/dev/null | grep -v ${tag})"
-    builder="${cachedir}/builder.${tag}.tar"
-    if [[ ! -e "${builder}" ]]; then
-	time docker pull "cockroachdb/builder:${tag}"
-	docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"
-	time docker save "cockroachdb/builder:${tag}" > "${builder}"
-    else
-	time docker load -i "${builder}"
-	docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"
-    fi
+  # If there's a base image cached, load it. A click on CircleCI's "Clear
+  # Cache" will make sure we start with a clean slate.
+  rm -f "$(ls ${cachedir}/builder*.tar 2>/dev/null | grep -v ${tag})"
+  builder="${cachedir}/builder.${tag}.tar"
+  if [[ ! -e "${builder}" ]]; then
+    time docker pull "cockroachdb/builder:${tag}"
+    docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"
+    time docker save "cockroachdb/builder:${tag}" > "${builder}"
+  else
+    time docker load -i "${builder}"
+    docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"
+  fi
 fi
 
 # TODO(pmattis): This script differs from build/devbase/deps.sh. It
