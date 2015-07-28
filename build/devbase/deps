@@ -17,6 +17,7 @@ github.com/julienschmidt/httprouter
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/montanaflynn/stats
+github.com/peterh/liner
 github.com/samalba/dockerclient
 github.com/spf13/cobra
 github.com/spf13/pflag
