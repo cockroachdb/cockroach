@@ -317,3 +317,167 @@ suite("QueryCache", function () {
         assert.equal(activePromise.Epoch(), 2, "redundant refreshes should not have resulted in additional promises");
     });
 });
+// source: components/table.ts
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../util/property.ts" />
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Components;
+(function (Components) {
+    "use strict";
+    var Table;
+    (function (Table) {
+        var Controller = (function () {
+            function Controller(data) {
+                this._sortColumn = Utils.Prop(null);
+                this._sortAscend = Utils.Prop(false);
+                this.data = data;
+                this.sortedRows = Utils.Computed(data.rows, this._sortColumn, this._sortAscend, function (rows, sortCol, asc) {
+                    var result = _(rows);
+                    if (sortCol && sortCol.sortable) {
+                        if (sortCol.sortValue) {
+                            result = result.sortBy(sortCol.sortValue);
+                        }
+                        else {
+                            result = result.sortBy(sortCol.view);
+                        }
+                        if (asc) {
+                            result = result.reverse();
+                        }
+                    }
+                    return result.value();
+                });
+            }
+            ;
+            Controller.prototype.SetSortColumn = function (col) {
+                if (!col.sortable) {
+                    return;
+                }
+                if (this._sortColumn() !== col) {
+                    this._sortColumn(col);
+                    this._sortAscend(false);
+                }
+                else {
+                    this._sortAscend(!this._sortAscend());
+                }
+            };
+            Controller.prototype.IsSortColumn = function (col) {
+                return this._sortColumn() === col;
+            };
+            Controller.prototype.RenderHeaders = function () {
+                var _this = this;
+                var cols = this.data.columns();
+                var sortClass = "sorted" + (this._sortAscend() ? " ascending" : "");
+                var renderedCols = cols.map(function (col) {
+                    return m("th", {
+                        onclick: function (e) { return _this.SetSortColumn(col); },
+                        className: _this.IsSortColumn(col) ? sortClass : null
+                    }, col.title);
+                });
+                return m("tr", renderedCols);
+            };
+            Controller.prototype.RenderRows = function () {
+                var _this = this;
+                var cols = this.data.columns();
+                var rows = this.sortedRows();
+                var renderedRows = _.map(rows, function (row) {
+                    var renderedCols = cols.map(function (col) {
+                        return m("td", {
+                            className: _this.IsSortColumn(col) ? "sorted" : null
+                        }, col.view(row));
+                    });
+                    return m("tr", renderedCols);
+                });
+                return renderedRows;
+            };
+            return Controller;
+        })();
+        function controller(data) {
+            return new Controller(data);
+        }
+        Table.controller = controller;
+        function view(ctrl) {
+            return m("table", [
+                ctrl.RenderHeaders(),
+                ctrl.RenderRows(),
+            ]);
+        }
+        Table.view = view;
+        function create(data) {
+            return m.component(Table, data);
+        }
+        Table.create = create;
+    })(Table = Components.Table || (Components.Table = {}));
+})(Components || (Components = {}));
+/// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../typings/mocha/mocha.d.ts" />
+/// <reference path="../typings/chai/chai.d.ts" />
+/// <reference path="../components/table.ts" />
+/// <reference path="../util/property.ts" />
+var TestData;
+(function (TestData) {
+    "use strict";
+})(TestData || (TestData = {}));
+var TestTable;
+(function (TestTable) {
+    "use strict";
+    var Table = Components.Table;
+    suite("Table Component", function () {
+        var columns = [
+            {
+                title: "ID Column",
+                view: function (r) { return m("span.id", r.id); },
+                sortable: true,
+                sortValue: function (r) { return r.id; }
+            },
+            {
+                title: "Title",
+                view: function (r) { return r.title; },
+                sortable: false
+            },
+            {
+                title: "Value",
+                view: function (r) { return m("span.value", r.value); },
+                sortable: true,
+                sortValue: function (r) { return r.value; }
+            }
+        ];
+        var data = {
+            columns: Utils.Prop(columns),
+            rows: Utils.Prop([
+                {
+                    id: 2,
+                    title: "CCC",
+                    value: 60
+                },
+                {
+                    id: 1,
+                    title: "AAA",
+                    value: 40
+                },
+                {
+                    id: 3,
+                    title: "BBB",
+                    value: 10
+                },
+            ])
+        };
+        test("Sorts data correctly", function () {
+            var table = Table.controller(data);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+            table.SetSortColumn(columns[0]);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [1, 2, 3]);
+            table.SetSortColumn(columns[0]);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [3, 2, 1]);
+            table.SetSortColumn(columns[2]);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [3, 1, 2]);
+            table.SetSortColumn(columns[2]);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+            table.SetSortColumn(columns[1]);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+            table.SetSortColumn(columns[1]);
+            chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+        });
+    });
+})(TestTable || (TestTable = {}));

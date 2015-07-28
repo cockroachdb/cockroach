@@ -1,5 +1,7 @@
 // source: components/table.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 module Components {
@@ -22,11 +24,26 @@ module Components {
        */
       title: string;
       /**
-       * data is a function which accepts the data for the row of the table, and
-       * returns either a string or a mithril element to display in the table in
-       * this column for the given row.
+       * view is a function which accepts a row of data for the table, and
+       * returns either a string or a MithrilVirtualElement that should be
+       * displayed inside of the column for this row.
        */
-      data: (row: T) => string|MithrilElement;
+      view: (row: T) => string|MithrilElement;
+      /**
+       * Sortable determines if this column is sortable. Default is false.
+       */
+      sortable?: boolean;
+      /**
+       * sortValue is a function which accepts a row of data from the table, and
+       * returns a value for this column of that row. This value should be
+       * appropriate for sorting.
+       *
+       * This function should be specified when the view for a column is not
+       * appropriate for sorting (for example, a complex mithril element). If
+       * sortValue is not specified, but the column is sortable, then the value
+       * of view() will be used to sort the column.
+       */
+      sortValue?: (r: T) => any;
     }
 
     /**
@@ -41,41 +58,101 @@ module Components {
        * The columns in the table will be displayed in the same order as the
        * returned array.
        */
-      columns: () => TableColumn<T>[];
+      columns: Utils.ReadOnlyProperty<TableColumn<T>[]>;
       /* rows is a function that returns an array of row data for display in the
        * table. 
-       *
-       * Rows will be displayed in the same order as the returned array.
        */
-      rows: () => T[];
+      rows: Utils.ReadOnlyProperty<T[]>;
     }
 
     class Controller<T> {
       data: TableData<T>;
+      sortedRows: Utils.ReadOnlyProperty<T[]>;
+      private _sortColumn: Utils.Property<TableColumn<T>> = Utils.Prop(null);
+      private _sortAscend: Utils.Property<boolean> = Utils.Prop(false);
 
       constructor(data: TableData<T>) {
         this.data = data;
+
+        this.sortedRows = Utils.Computed(data.rows, this._sortColumn, this._sortAscend, (rows: T[], sortCol: TableColumn<T>, asc: boolean): T[] => {
+          let result = _(rows);
+          if (sortCol && sortCol.sortable) {
+            // Sort the rows using the currently selected column, if the column
+            // is sortable. Sort by the output of the column's sortValue()
+            // method if specified, using the output of view() otherwise.
+            if (sortCol.sortValue) {
+              result = result.sortBy(sortCol.sortValue);
+            } else {
+              result = result.sortBy(sortCol.view);
+            }
+
+            if (asc) {
+              result = result.reverse();
+            }
+          }
+          return result.value();
+        });
+      };
+
+      /**
+       * SetSortColumn sets the column which is currently used for sorting
+       * purposes. 
+       *
+       * When setting a new sort column, the sort direction is always ascending.
+       * If the same column is set again, the sort direction is reversed to
+       * ascending.
+       */
+      SetSortColumn(col: TableColumn<T>): void {
+        if (!col.sortable) {
+          return;
+        }
+        if (this._sortColumn() !== col) {
+          this._sortColumn(col);
+          this._sortAscend(false);
+        } else {
+          this._sortAscend(!this._sortAscend());
+        }
       }
 
       /**
-       * renderHeaders returns a mithril element which contains the header row
+       * IsSortColumn returns true if the provided column is the column
+       * currently used for sorting.
+       */
+      IsSortColumn(col: TableColumn<T>): boolean {
+        return this._sortColumn() === col;
+      }
+
+      /**
+       * RenderHeaders returns a mithril element which contains the header row
        * for the table.
        */
-      renderHeaders(): MithrilElement {
+      RenderHeaders(): MithrilElement {
         let cols = this.data.columns();
-        let renderedCols = cols.map((col: TableColumn<T>) => m("th", col.title));
+        let sortClass = "sorted" + (this._sortAscend() ? " ascending" : "");
+        let renderedCols = cols.map((col: TableColumn<T>) =>
+          m("th",
+            {
+              onclick: (e: any): void => this.SetSortColumn(col),
+              className: this.IsSortColumn(col) ? sortClass : null
+            },
+            col.title));
         return m("tr", renderedCols);
       }
 
       /**
-       * renderRows returns a mithril element which contains the various column
+       * RenderRows returns a mithril element which contains the various column
        * rows for the table.
        */
-      renderRows(): MithrilElement {
+      RenderRows(): MithrilElement {
         let cols = this.data.columns();
-        let rows = this.data.rows();
-        let renderedRows = rows.map((row: T) => {
-          let renderedCols = cols.map((col: TableColumn<T>) => m("td", col.data(row)));
+        let rows = this.sortedRows();
+        let renderedRows = _.map(rows, (row: T) => {
+          let renderedCols = cols.map((col: TableColumn<T>) =>
+            m("td",
+              {
+                className: this.IsSortColumn(col) ? "sorted" : null
+              },
+              col.view(row)));
           return m("tr", renderedCols);
         });
         return renderedRows;
@@ -88,8 +165,8 @@ module Components {
 
     export function view<T>(ctrl: Controller<T>): MithrilElement {
       return m("table", [
-        ctrl.renderHeaders(),
-        ctrl.renderRows(),
+        ctrl.RenderHeaders(),
+        ctrl.RenderRows(),
       ]);
     }
 

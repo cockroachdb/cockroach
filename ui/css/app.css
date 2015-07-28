@@ -71,14 +71,23 @@ body {
 .stats-table th {
   background-color: #fff;
 }
-.stats-table td {
-  background-color: #ddd;
+.stats-table th.sorted {
+  background-color: #f1f2f3;
 }
-.stats-table td:nth-child(even) {
+.stats-table th.sorted:after {
+  content: "▼";
+}
+.stats-table th.sorted.ascending:after {
+  content: "▲";
+}
+.stats-table td {
   background-color: #eee;
 }
-.stats-table td:first-child {
-  background-color: #f1f2f3;
+.stats-table td:nth-child(even) {
+  background-color: #ddd;
+}
+.stats-table td.sorted {
+  background-color: #fff;
 }
 .stats-table td,
 .stats-table th {

@@ -34,34 +34,43 @@ module AdminViews {
         private static comparisonColumns: Table.TableColumn<StoreStatus>[] = [
           {
             title: "Store ID",
-            data: (status: StoreStatus): _mithril.MithrilVirtualElement => {
+            view: (status: StoreStatus): _mithril.MithrilVirtualElement => {
               return m("a", {href: "/stores/" + status.desc.store_id, config: m.route}, status.desc.store_id.toString());
-            }
+            },
+            sortable: true,
+            sortValue: (status: StoreStatus): number => status.desc.store_id
           },
           {
             title: "Node ID",
-            data: (status: StoreStatus): _mithril.MithrilVirtualElement => {
+            view: (status: StoreStatus): _mithril.MithrilVirtualElement => {
               return m("a", {href: "/nodes/" + status.desc.node.node_id, config: m.route}, status.desc.node.node_id.toString());
-            }
+            },
+            sortable: true,
+            sortValue: (status: StoreStatus): number => status.desc.node.node_id
           },
           {
             title: "Address",
-            data: (status: StoreStatus): string => status.desc.node.address.address
+            view: (status: StoreStatus): string => status.desc.node.address.address,
+            sortable: true
           },
           {
             title: "Started At",
-            data: (status: StoreStatus): string => {
+            view: (status: StoreStatus): string => {
               let date = new Date(Utils.Convert.NanoToMilli(status.started_at));
               return Utils.Format.Date(date);
-            }
+            },
+            sortable: true
           },
           {
             title: "Live Bytes",
-            data: (status: StoreStatus): string => Utils.Format.Bytes(status.stats.live_bytes)
+            view: (status: StoreStatus): string => Utils.Format.Bytes(status.stats.live_bytes),
+            sortable: true,
+            sortValue: (status: StoreStatus): number => status.stats.live_bytes
           }
         ];
 
         private static _queryEveryMS: number = 10000;
+        public columns: Utils.Property<Table.TableColumn<StoreStatus>[]> = Utils.Prop(Controller.comparisonColumns);
         private _interval: number;
 
         public constructor(nodeId?: string) {
@@ -71,10 +80,6 @@ module AdminViews {
 
         public onunload(): void {
           clearInterval(this._interval);
-        }
-
-        public GetColumns(): Table.TableColumn<StoreStatus>[] {
-          return Controller.comparisonColumns;
         }
 
         private _refresh(): void {
@@ -88,8 +93,8 @@ module AdminViews {
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         let comparisonData: Table.TableData<StoreStatus> = {
-          columns: ctrl.GetColumns,
-          rows: (): StoreStatus[] => storeStatuses.GetAllStatuses()
+          columns: ctrl.columns,
+          rows: storeStatuses.allStatuses
         };
         return m("div", [
           m("h2", "Stores List"),

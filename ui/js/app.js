@@ -1011,14 +1011,13 @@ var Models;
                         return data;
                     });
                 });
+                this.allStatuses = Utils.Computed(this._data.result, function (map) {
+                    var keys = Object.keys(map).sort();
+                    return keys.map(function (key) { return map[key]; });
+                });
             }
             Stores.prototype.GetStoreIds = function () {
                 return Object.keys(this._data.result()).sort();
-            };
-            Stores.prototype.GetAllStatuses = function () {
-                var data = this._data.result();
-                var keys = Object.keys(data).sort();
-                return keys.map(function (key) { return data[key]; });
             };
             Stores.prototype.GetDesc = function (storeId) {
                 return this._data.result()[storeId].desc;
@@ -1097,14 +1096,13 @@ var Models;
                         return data;
                     });
                 });
+                this.allStatuses = Utils.Computed(this._data.result, function (map) {
+                    var keys = Object.keys(map).sort();
+                    return keys.map(function (key) { return map[key]; });
+                });
             }
             Nodes.prototype.GetNodeIds = function () {
                 return Object.keys(this._data.result()).sort();
-            };
-            Nodes.prototype.GetAllStatuses = function () {
-                var data = this._data.result();
-                var keys = Object.keys(data).sort();
-                return keys.map(function (key) { return data[key]; });
             };
             Nodes.prototype.GetDesc = function (nodeId) {
                 return this._data.result()[nodeId].desc;
@@ -1177,6 +1175,8 @@ var Models;
 })(Models || (Models = {}));
 // source: components/table.ts
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
+/// <reference path="../typings/lodash/lodash.d.ts" />
+/// <reference path="../util/property.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Components;
 (function (Components) {
@@ -1185,18 +1185,63 @@ var Components;
     (function (Table) {
         var Controller = (function () {
             function Controller(data) {
+                this._sortColumn = Utils.Prop(null);
+                this._sortAscend = Utils.Prop(false);
                 this.data = data;
+                this.sortedRows = Utils.Computed(data.rows, this._sortColumn, this._sortAscend, function (rows, sortCol, asc) {
+                    var result = _(rows);
+                    if (sortCol && sortCol.sortable) {
+                        if (sortCol.sortValue) {
+                            result = result.sortBy(sortCol.sortValue);
+                        }
+                        else {
+                            result = result.sortBy(sortCol.view);
+                        }
+                        if (asc) {
+                            result = result.reverse();
+                        }
+                    }
+                    return result.value();
+                });
             }
-            Controller.prototype.renderHeaders = function () {
+            ;
+            Controller.prototype.SetSortColumn = function (col) {
+                if (!col.sortable) {
+                    return;
+                }
+                if (this._sortColumn() !== col) {
+                    this._sortColumn(col);
+                    this._sortAscend(false);
+                }
+                else {
+                    this._sortAscend(!this._sortAscend());
+                }
+            };
+            Controller.prototype.IsSortColumn = function (col) {
+                return this._sortColumn() === col;
+            };
+            Controller.prototype.RenderHeaders = function () {
+                var _this = this;
                 var cols = this.data.columns();
-                var renderedCols = cols.map(function (col) { return m("th", col.title); });
+                var sortClass = "sorted" + (this._sortAscend() ? " ascending" : "");
+                var renderedCols = cols.map(function (col) {
+                    return m("th", {
+                        onclick: function (e) { return _this.SetSortColumn(col); },
+                        className: _this.IsSortColumn(col) ? sortClass : null
+                    }, col.title);
+                });
                 return m("tr", renderedCols);
             };
-            Controller.prototype.renderRows = function () {
+            Controller.prototype.RenderRows = function () {
+                var _this = this;
                 var cols = this.data.columns();
-                var rows = this.data.rows();
-                var renderedRows = rows.map(function (row) {
-                    var renderedCols = cols.map(function (col) { return m("td", col.data(row)); });
+                var rows = this.sortedRows();
+                var renderedRows = _.map(rows, function (row) {
+                    var renderedCols = cols.map(function (col) {
+                        return m("td", {
+                            className: _this.IsSortColumn(col) ? "sorted" : null
+                        }, col.view(row));
+                    });
                     return m("tr", renderedCols);
                 });
                 return renderedRows;
@@ -1209,8 +1254,8 @@ var Components;
         Table.controller = controller;
         function view(ctrl) {
             return m("table", [
-                ctrl.renderHeaders(),
-                ctrl.renderRows(),
+                ctrl.RenderHeaders(),
+                ctrl.RenderRows(),
             ]);
         }
         Table.view = view;
@@ -1241,14 +1286,12 @@ var AdminViews;
             var Controller = (function () {
                 function Controller(nodeId) {
                     var _this = this;
+                    this.columns = Utils.Prop(Controller.comparisonColumns);
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
-                };
-                Controller.prototype.GetColumns = function () {
-                    return Controller.comparisonColumns;
                 };
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
@@ -1256,28 +1299,34 @@ var AdminViews;
                 Controller.comparisonColumns = [
                     {
                         title: "Node ID",
-                        data: function (status) {
+                        view: function (status) {
                             return m("a", { href: "/nodes/" + status.desc.node_id, config: m.route }, status.desc.node_id.toString());
-                        }
+                        },
+                        sortable: true,
+                        sortValue: function (status) { return status.desc.node_id; }
                     },
                     {
                         title: "Address",
-                        data: function (status) { return status.desc.address.address; }
+                        view: function (status) { return status.desc.address.address; },
+                        sortable: true
                     },
                     {
                         title: "Started At",
-                        data: function (status) {
+                        view: function (status) {
                             var date = new Date(Utils.Convert.NanoToMilli(status.started_at));
                             return Utils.Format.Date(date);
-                        }
+                        },
+                        sortable: true
                     },
                     {
                         title: "Live Bytes",
-                        data: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); }
+                        view: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); },
+                        sortable: true,
+                        sortValue: function (status) { return status.stats.live_bytes; }
                     },
                     {
                         title: "Logs",
-                        data: function (status) {
+                        view: function (status) {
                             return m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log");
                         }
                     }
@@ -1291,8 +1340,8 @@ var AdminViews;
             NodesPage.controller = controller;
             function view(ctrl) {
                 var comparisonData = {
-                    columns: ctrl.GetColumns,
-                    rows: function () { return nodeStatuses.GetAllStatuses(); }
+                    columns: ctrl.columns,
+                    rows: nodeStatuses.allStatuses
                 };
                 return m("div", [
                     m("h2", "Nodes List"),
@@ -1380,14 +1429,12 @@ var AdminViews;
             var Controller = (function () {
                 function Controller(nodeId) {
                     var _this = this;
+                    this.columns = Utils.Prop(Controller.comparisonColumns);
                     this._refresh();
                     this._interval = setInterval(function () { return _this._refresh(); }, Controller._queryEveryMS);
                 }
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
-                };
-                Controller.prototype.GetColumns = function () {
-                    return Controller.comparisonColumns;
                 };
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
@@ -1395,30 +1442,38 @@ var AdminViews;
                 Controller.comparisonColumns = [
                     {
                         title: "Store ID",
-                        data: function (status) {
+                        view: function (status) {
                             return m("a", { href: "/stores/" + status.desc.store_id, config: m.route }, status.desc.store_id.toString());
-                        }
+                        },
+                        sortable: true,
+                        sortValue: function (status) { return status.desc.store_id; }
                     },
                     {
                         title: "Node ID",
-                        data: function (status) {
+                        view: function (status) {
                             return m("a", { href: "/nodes/" + status.desc.node.node_id, config: m.route }, status.desc.node.node_id.toString());
-                        }
+                        },
+                        sortable: true,
+                        sortValue: function (status) { return status.desc.node.node_id; }
                     },
                     {
                         title: "Address",
-                        data: function (status) { return status.desc.node.address.address; }
+                        view: function (status) { return status.desc.node.address.address; },
+                        sortable: true
                     },
                     {
                         title: "Started At",
-                        data: function (status) {
+                        view: function (status) {
                             var date = new Date(Utils.Convert.NanoToMilli(status.started_at));
                             return Utils.Format.Date(date);
-                        }
+                        },
+                        sortable: true
                     },
                     {
                         title: "Live Bytes",
-                        data: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); }
+                        view: function (status) { return Utils.Format.Bytes(status.stats.live_bytes); },
+                        sortable: true,
+                        sortValue: function (status) { return status.stats.live_bytes; }
                     }
                 ];
                 Controller._queryEveryMS = 10000;
@@ -1430,8 +1485,8 @@ var AdminViews;
             StoresPage.controller = controller;
             function view(ctrl) {
                 var comparisonData = {
-                    columns: ctrl.GetColumns,
-                    rows: function () { return storeStatuses.GetAllStatuses(); }
+                    columns: ctrl.columns,
+                    rows: storeStatuses.allStatuses
                 };
                 return m("div", [
                     m("h2", "Stores List"),

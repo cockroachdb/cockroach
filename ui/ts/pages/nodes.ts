@@ -36,34 +36,40 @@ module AdminViews {
         private static comparisonColumns: Table.TableColumn<NodeStatus>[] = [
           {
             title: "Node ID",
-            data: (status: NodeStatus): _mithril.MithrilVirtualElement => {
-              return m("a", {href: "/nodes/" + status.desc.node_id, config: m.route}, status.desc.node_id.toString());
-            }
+            view: (status: NodeStatus): _mithril.MithrilVirtualElement =>
+              m("a", {href: "/nodes/" + status.desc.node_id, config: m.route}, status.desc.node_id.toString()),
+            sortable: true,
+            sortValue: (status: NodeStatus): number => status.desc.node_id
           },
           {
             title: "Address",
-            data: (status: NodeStatus): string => status.desc.address.address
+            view: (status: NodeStatus): string => status.desc.address.address,
+            sortable: true
           },
           {
             title: "Started At",
-            data: (status: NodeStatus): string => {
+            view: (status: NodeStatus): string => {
               let date = new Date(Utils.Convert.NanoToMilli(status.started_at));
               return Utils.Format.Date(date);
-            }
+            },
+            sortable: true
           },
           {
             title: "Live Bytes",
-            data: (status: NodeStatus): string => Utils.Format.Bytes(status.stats.live_bytes)
+            view: (status: NodeStatus): string => Utils.Format.Bytes(status.stats.live_bytes),
+            sortable: true,
+            sortValue: (status: NodeStatus): number => status.stats.live_bytes
           },
           {
             title: "Logs",
-            data: (status: NodeStatus): _mithril.MithrilVirtualElement => {
-              return m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log");
-            }
+            view: (status: NodeStatus): _mithril.MithrilVirtualElement =>
+              m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log")
           }
         ];
 
         private static _queryEveryMS: number = 10000;
+
+        public columns: Utils.Property<Table.TableColumn<NodeStatus>[]> = Utils.Prop(Controller.comparisonColumns);
         private _interval: number;
 
         public constructor(nodeId?: string) {
@@ -73,10 +79,6 @@ module AdminViews {
 
         public onunload(): void {
           clearInterval(this._interval);
-        }
-
-        public GetColumns(): Table.TableColumn<NodeStatus>[] {
-          return Controller.comparisonColumns;
         }
 
         private _refresh(): void {
@@ -90,8 +92,8 @@ module AdminViews {
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         let comparisonData: Table.TableData<NodeStatus> = {
-          columns: ctrl.GetColumns,
-          rows: (): NodeStatus[] => nodeStatuses.GetAllStatuses()
+          columns: ctrl.columns,
+          rows: nodeStatuses.allStatuses
         };
         return m("div", [
           m("h2", "Nodes List"),
