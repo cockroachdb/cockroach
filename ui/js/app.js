@@ -1056,6 +1056,9 @@ var Models;
                 if (this.node() != null) {
                     url += this.node();
                 }
+                else {
+                    url += "local";
+                }
                 url += "?";
                 if (this.level() != null) {
                     url += "level=" + encodeURIComponent(this.level()) + "&";

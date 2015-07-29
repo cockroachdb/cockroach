@@ -57,6 +57,8 @@ module Models {
         let url: string = "/_status/logs/";
         if (this.node() != null) {
           url += this.node();
+        } else {
+          url += "local";
         }
         url += "?";
         if (this.level() != null) {
