@@ -61,8 +61,8 @@ func tlsDial(network, address string, config *tls.Config) (net.Conn, error) {
 	return tls.DialWithDialer(&defaultDialer, network, address, config)
 }
 
-// tlsDialHTTP connects to an HTTP RPC server at the specified address.
-func tlsDialHTTP(network, address string, config *tls.Config) (net.Conn, error) {
+// TLSDialHTTP connects to an HTTP RPC server at the specified address.
+func TLSDialHTTP(network, address string, config *tls.Config) (net.Conn, error) {
 	conn, err := tlsDial(network, address, config)
 	if err != nil {
 		return conn, err

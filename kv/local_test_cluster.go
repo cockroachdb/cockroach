@@ -127,7 +127,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	if ltc.DB, err = client.Open("//root@", client.SenderOpt(ltc.Sender)); err != nil {
 		t.Fatal(err)
 	}
-	transport := multiraft.NewLocalRPCTransport()
+	transport := multiraft.NewLocalRPCTransport(ltc.Stopper)
 	ltc.Stopper.AddCloser(transport)
 	ctx := storage.TestStoreContext
 	ctx.Clock = ltc.Clock

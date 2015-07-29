@@ -73,7 +73,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	if context.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
 		t.Fatal(err)
 	}
-	context.Transport = multiraft.NewLocalRPCTransport()
+	context.Transport = multiraft.NewLocalRPCTransport(stopper)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*context, eng, &proto.NodeDescriptor{NodeID: 1})
 	if bootstrap {
@@ -139,12 +139,11 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		rpcContext := rpc.NewContext(rootTestBaseContext, m.clock, nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
-	if m.transport == nil {
-		m.transport = multiraft.NewLocalRPCTransport()
-	}
-
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
+	}
+	if m.transport == nil {
+		m.transport = multiraft.NewLocalRPCTransport(m.clientStopper)
 	}
 
 	// Always create the first sender.

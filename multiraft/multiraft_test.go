@@ -55,7 +55,7 @@ type testCluster struct {
 
 func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *testing.T) *testCluster {
 	if transport == nil {
-		transport = NewLocalRPCTransport()
+		transport = NewLocalRPCTransport(stopper)
 	}
 	stopper.AddCloser(transport)
 	cluster := &testCluster{

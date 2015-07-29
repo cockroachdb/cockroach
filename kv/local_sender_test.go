@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func TestLocalSenderAddStore(t *testing.T) {
@@ -108,6 +109,8 @@ func TestLocalSenderGetStore(t *testing.T) {
 
 func TestLocalSenderLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	ctx := storage.TestStoreContext
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
@@ -125,7 +128,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
-		ctx.Transport = multiraft.NewLocalRPCTransport()
+		ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 		defer ctx.Transport.Close()
 		s[i] = storage.NewStore(ctx, e[i], &proto.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID

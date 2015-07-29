@@ -136,7 +136,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	}
 	if tc.transport == nil {
-		tc.transport = multiraft.NewLocalRPCTransport()
+		tc.transport = multiraft.NewLocalRPCTransport(tc.stopper)
 	}
 	tc.stopper.AddCloser(tc.transport)
 	if tc.feed != nil {
@@ -254,11 +254,12 @@ func TestRangeContains(t *testing.T) {
 
 	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	clock := hlc.NewClock(hlc.UnixNano)
-	transport := multiraft.NewLocalRPCTransport()
-	defer transport.Close()
 	ctx := TestStoreContext
 	ctx.Clock = clock
-	ctx.Transport = multiraft.NewLocalRPCTransport()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	defer ctx.Transport.Close()
 	store := NewStore(ctx, e, &proto.NodeDescriptor{NodeID: 1})
 	r, err := NewRange(desc, store)
 	if err != nil {
