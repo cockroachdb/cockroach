@@ -120,16 +120,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-type parameters struct {
-	params []driver.Datum
-}
+type parameters []driver.Datum
 
 // Arg implements the Args interface
 func (p parameters) Arg(i int) (parser.Datum, bool) {
-	if i < 1 || i > len(p.params) {
+	if i < 1 || i > len(p) {
 		return parser.DNull{}, false
 	}
-	d := p.params[i-1]
+	d := p[i-1]
 	if d.BoolVal != nil {
 		return parser.DBool(*d.BoolVal), true
 	} else if d.IntVal != nil {
@@ -143,40 +141,6 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 		return parser.DString(*d.StringVal), true
 	}
 	return parser.DNull{}, false
-}
-
-// bindValues binds the placeholder variables in stmt to the params.
-func (s *Server) bindValues(stmt parser.Statement, params parameters) error {
-	switch stmt := stmt.(type) {
-	case *parser.Select:
-		for _, expr := range stmt.Exprs {
-			switch expr := expr.(type) {
-			case *parser.NonStarExpr:
-				_, err := parser.FillArgs(expr.Expr, params)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		if stmt.Where != nil {
-			_, err := parser.FillArgs(stmt.Where.Expr, params)
-			if err != nil {
-				return err
-			}
-		}
-	case *parser.Insert:
-		switch rows := stmt.Rows.(type) {
-		case parser.Values:
-			for _, tuple := range rows {
-				_, err := parser.FillArgs(tuple, params)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-	// TODO(vivek): Implement variable substitution for the other stmts.
-	return nil
 }
 
 // exec executes the request. Any error encountered is returned; it is
@@ -199,7 +163,7 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 	}
 	for _, stmt := range stmts {
 		// Bind all the placeholder variables in the stmt to actual values.
-		if err = s.bindValues(stmt, parameters{params: req.Params}); err != nil {
+		if err = parser.FillArgs(stmt, parameters(req.Params)); err != nil {
 			return resp, err
 		}
 		var plan planNode

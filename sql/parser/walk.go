@@ -162,8 +162,34 @@ func (v *argVisitor) Visit(expr Expr) Expr {
 
 // FillArgs replaces any placeholder nodes in the expression with arguments
 // supplied with the query.
-func FillArgs(expr Expr, args Args) (Expr, error) {
+func FillArgs(stmt Statement, args Args) error {
 	v := argVisitor{args: args}
-	expr = WalkExpr(&v, expr)
-	return expr, v.err
+	WalkStmt(&v, stmt)
+	return v.err
+}
+
+// WalkStmt walks the entire parsed stmt calling WalkExpr on each
+// expression, and replacing each expression with the one returned
+// by WalkExpr.
+func WalkStmt(v Visitor, stmt Statement) {
+	switch stmt := stmt.(type) {
+	case *Select:
+		for _, expr := range stmt.Exprs {
+			switch expr := expr.(type) {
+			case *NonStarExpr:
+				expr.Expr = WalkExpr(v, expr.Expr)
+			}
+		}
+		if stmt.Where != nil {
+			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
+		}
+	case *Insert:
+		switch rows := stmt.Rows.(type) {
+		case Values:
+			for i, tuple := range rows {
+				rows[i] = WalkExpr(v, tuple).(Tuple)
+			}
+		}
+	}
+	// TODO(vivek): Implement Walk for the other stmts.
 }
