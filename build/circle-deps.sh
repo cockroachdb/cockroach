@@ -23,7 +23,7 @@ if [ "${1-}" = "docker" ]; then
   time go test -race -v -i ./...
   time go install -v ${cmds}
   time make GITHOOKS= install
-  time (cd acceptance; go test -v -c -tags acceptance)
+  time go test -v -c -tags acceptance ./acceptance
   # Cache the current build artifacts for future builds.
   time build-cache save . .:race,test ${cmds}
 
