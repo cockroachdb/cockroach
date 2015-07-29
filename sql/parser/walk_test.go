@@ -85,8 +85,7 @@ func TestFillArgs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		err = FillArgs(q[0], d.args)
-		if err != nil {
+		if err := FillArgs(q[0], d.args); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr.String(); d.expected != s {
@@ -109,7 +108,7 @@ func TestFillArgsError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if err = FillArgs(q[0], d.args); err == nil {
+		if err := FillArgs(q[0], d.args); err == nil {
 			t.Fatalf("%s: expected failure, but found success", d.expr)
 		} else if d.expected != err.Error() {
 			t.Fatalf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -136,8 +135,7 @@ func TestWalkStmt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
-		err = FillArgs(q[0], d.args)
-		if err != nil {
+		if err := FillArgs(q[0], d.args); err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
 		e, err := Parse(d.expected)

@@ -163,7 +163,7 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 	}
 	for _, stmt := range stmts {
 		// Bind all the placeholder variables in the stmt to actual values.
-		if err = parser.FillArgs(stmt, parameters(req.Params)); err != nil {
+		if err := parser.FillArgs(stmt, parameters(req.Params)); err != nil {
 			return resp, err
 		}
 		var plan planNode
