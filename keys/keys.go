@@ -21,6 +21,7 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -58,6 +59,7 @@ func NodeStatusKey(nodeID int32) proto.Key {
 
 // MakeNameMetadataKey returns the key for the namespace.
 func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
+	name = strings.ToLower(name)
 	k := make([]byte, 0, len(NameMetadataPrefix)+encoding.MaxUvarintSize+len(name))
 	k = append(k, NameMetadataPrefix...)
 	k = encoding.EncodeUvarint(k, uint64(parentID))

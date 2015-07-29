@@ -19,7 +19,6 @@ package sql
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -33,7 +32,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, strings.ToLower(string(n.Name)))
+	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
 	if gr, err := p.db.Get(nameKey); err != nil {
 		return nil, err
 	} else if gr.Exists() {
