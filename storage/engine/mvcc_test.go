@@ -1227,7 +1227,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 		}
 	}
 
-	// Move to a empty value. Will succeed.
+	// Move to an empty value. Will succeed.
 	err = MVCCConditionalPut(engine, nil, testKey1, clock.Now(), valueEmpty, &value1, nil)
 	if err != nil {
 		t.Fatal(err)

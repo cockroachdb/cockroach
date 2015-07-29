@@ -40,7 +40,7 @@ import (
 // Context is the CLI Context used for the server.
 var Context = server.NewContext()
 
-// An initCmd command initializes a new Cockroach cluster.
+// initCmd command initializes a new Cockroach cluster.
 var initCmd = &cobra.Command{
 	Use:   "init --stores=...",
 	Short: "init new Cockroach cluster and start server",
@@ -78,7 +78,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	log.Infof("cockroach cluster %s has been initialized", clusterID)
 }
 
-// A startCmd command starts nodes by joining the gossip network.
+// startCmd command starts nodes by joining the gossip network.
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start a node by joining the gossip network",
@@ -175,7 +175,8 @@ func runStart(cmd *cobra.Command, args []string) {
 	log.Flush()
 }
 
-// A exterminateCmd command shuts down the node server.
+// exterminateCmd command shuts down the node server and
+// destroys all data held by the node.
 var exterminateCmd = &cobra.Command{
 	Use:   "exterminate",
 	Short: "destroy all data held by the node",
@@ -217,7 +218,7 @@ func runExterminate(cmd *cobra.Command, args []string) {
 	log.Infof("exterminated all data from stores %s", Context.Engines)
 }
 
-// A quitCmd command shuts down the node server.
+// quitCmd command shuts down the node server.
 var quitCmd = &cobra.Command{
 	Use:   "quit",
 	Short: "drain and shutdown node\n",
