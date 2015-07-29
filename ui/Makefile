@@ -35,11 +35,13 @@ GO_BINDATA := $(GOPATH_BIN)/go-bindata
 TYPESCRIPT_TARGET      := js/app.js
 TEST_TARGET            := js/test.js
 CSS_TARGET             := css/app.css
+STYL_OPTIONS           :=
 GOBINDATA_SOURCES      := $(TYPESCRIPT_TARGET) index.html $(shell find css js/libs -type f)
 GOBINDATA_TARGET       := ./embedded.go
 GOBINDATA_DEBUG_TARGET := ./embedded_debug.go
 
 .PHONY:
+all: STYL_OPTIONS += --compress
 all: $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
@@ -59,7 +61,7 @@ $(TEST_TARGET): $(shell find $(TS_ROOT)) npm.installed
 	$(NODE_MODULES)/.bin/tsc -p $(TEST_ROOT)
 
 $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed
-	$(NODE_MODULES)/.bin/stylus $(STYL_ROOT)/app.styl --out css
+	$(NODE_MODULES)/.bin/stylus $(STYL_OPTIONS) $(STYL_ROOT)/app.styl --out css
 
 $(GOBINDATA_TARGET): $(GOBINDATA_SOURCES)
 	$(GO_BINDATA) -mode 0644 -modtime 1400000000 -pkg ui -o $@ $^
