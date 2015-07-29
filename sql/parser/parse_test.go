@@ -352,7 +352,7 @@ func TestParseSyntax(t *testing.T) {
 	}
 	for _, d := range testData {
 		if _, err := Parse(d.sql); err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
 }
