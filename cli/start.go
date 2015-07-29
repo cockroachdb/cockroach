@@ -209,7 +209,8 @@ func runExterminate(cmd *cobra.Command, args []string) {
 		if rocksdb, ok := e.(*engine.RocksDB); ok {
 			log.Infof("exterminating data from store %s", e)
 			if err := rocksdb.Destroy(); err != nil {
-				log.Fatalf("unable to destroy store %s: %s", e, err)
+				log.Errorf("unable to destroy store %s: %s", e, err)
+				osExit(1)
 			}
 		}
 	}

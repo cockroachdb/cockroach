@@ -205,7 +205,11 @@ func initFlags(ctx *server.Context) {
 		}
 	}
 
-	clientCmds := []*cobra.Command{sqlShellCmd, kvCmd, rangeCmd, acctCmd, permCmd, userCmd, zoneCmd, quitCmd}
+	clientCmds := []*cobra.Command{
+		sqlShellCmd, kvCmd, rangeCmd,
+		acctCmd, permCmd, userCmd, zoneCmd,
+		exterminateCmd, quitCmd, /* startCmd is covered above */
+	}
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
