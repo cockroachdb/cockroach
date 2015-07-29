@@ -75,7 +75,8 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		t.Fatal(err)
 	}
 	// TODO(bdarnell): arrange to have the transport closed.
-	ctx.Transport = multiraft.NewLocalRPCTransport()
+	// (or attach LocalRPCTransport.Close to the stopper)
+	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = &util.Feed{}
 	node := NewNode(ctx)
 	return rpcServer, ctx.Clock, node, stopper

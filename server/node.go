@@ -112,7 +112,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	if ctx.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
 		return nil, err
 	}
-	ctx.Transport = multiraft.NewLocalRPCTransport()
+	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	for i, eng := range engines {
 		sIdent := proto.StoreIdent{
 			ClusterID: clusterID,

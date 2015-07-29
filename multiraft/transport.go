@@ -19,14 +19,18 @@ package multiraft
 
 import (
 	"net"
-	"net/rpc"
-	"strings"
+	netrpc "net/rpc"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/proto"
+	crpc "github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft/raftpb"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // The Transport interface is supplied by the application to manage communication with
@@ -62,6 +66,10 @@ type RaftMessageResponse struct {
 }
 
 // ServerInterface is the methods we expose for use by net/rpc.
+// TODO(bdarnell): This interface is now out of step with cockroach/rpc's
+// async interface. Consider refactoring (and embracing a dependency on
+// cockroach/proto to avoid conversions duplicated here and in
+// the 'real' transport).
 type ServerInterface interface {
 	RaftMessage(req *RaftMessageRequest, resp *RaftMessageResponse) error
 }
@@ -71,11 +79,12 @@ var (
 )
 
 type localRPCTransport struct {
-	mu        sync.Mutex
-	listeners map[proto.RaftNodeID]net.Listener
-	clients   map[proto.RaftNodeID]*rpc.Client
-	conns     map[net.Conn]struct{}
-	closed    chan struct{}
+	mu      sync.Mutex
+	servers map[proto.RaftNodeID]*crpc.Server
+	clients map[proto.RaftNodeID]*netrpc.Client
+	conns   map[net.Conn]struct{}
+	closed  chan struct{}
+	stopper *stop.Stopper
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
@@ -83,74 +92,63 @@ type localRPCTransport struct {
 // can be an arbitrary string). Each instance binds to a different unused port on
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
-func NewLocalRPCTransport() Transport {
+func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
 	return &localRPCTransport{
-		listeners: make(map[proto.RaftNodeID]net.Listener),
-		clients:   make(map[proto.RaftNodeID]*rpc.Client),
-		conns:     make(map[net.Conn]struct{}),
-		closed:    make(chan struct{}),
+		servers: make(map[proto.RaftNodeID]*crpc.Server),
+		clients: make(map[proto.RaftNodeID]*netrpc.Client),
+		conns:   make(map[net.Conn]struct{}),
+		closed:  make(chan struct{}),
+		stopper: stopper,
 	}
 }
 
 func (lt *localRPCTransport) Listen(id proto.RaftNodeID, server ServerInterface) error {
-	rpcServer := rpc.NewServer()
-	err := rpcServer.RegisterName("MultiRaft", server)
-	if err != nil {
-		return err
-	}
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	addr := util.CreateTestAddr("tcp")
+	rpcServer := crpc.NewServer(addr, &crpc.Context{
+		Context: base.Context{
+			Insecure: true,
+		},
+		Stopper:      lt.stopper,
+		DisableCache: true,
+	})
+	err := rpcServer.RegisterAsync(raftMessageName,
+		func(argsI gogoproto.Message, callback func(gogoproto.Message, error)) {
+			protoArgs := argsI.(*proto.RaftMessageRequest)
+			args := RaftMessageRequest{
+				GroupID: protoArgs.GroupID,
+			}
+			if err := args.Message.Unmarshal(protoArgs.Msg); err != nil {
+				callback(nil, err)
+			}
+			err := server.RaftMessage(&args, &RaftMessageResponse{})
+			callback(&proto.RaftMessageResponse{}, err)
+		}, &proto.RaftMessageRequest{})
 	if err != nil {
 		return err
 	}
 
 	lt.mu.Lock()
-	if _, ok := lt.listeners[id]; ok {
+	if _, ok := lt.servers[id]; ok {
 		log.Fatalf("node %d already listening", id)
 	}
-	lt.listeners[id] = listener
+	lt.servers[id] = rpcServer
 	lt.mu.Unlock()
-	go lt.accept(rpcServer, listener)
-	return nil
-}
 
-func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				return
-			}
-			// TODO(bdarnell): are any transient errors possible here?
-			log.Fatalf("localRPCTransport.accept: %s", err)
-			continue
-		}
-		lt.mu.Lock()
-		lt.conns[conn] = struct{}{}
-		lt.mu.Unlock()
-		go func(conn net.Conn) {
-			defer func() {
-				lt.mu.Lock()
-				defer lt.mu.Unlock()
-				delete(lt.conns, conn)
-			}()
-			server.ServeConn(conn)
-		}(conn)
-	}
+	return rpcServer.Start()
 }
 
 func (lt *localRPCTransport) Stop(id proto.RaftNodeID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	lt.listeners[id].Close()
-	delete(lt.listeners, id)
+	lt.servers[id].Close()
+	delete(lt.servers, id)
 	if client, ok := lt.clients[id]; ok {
 		client.Close()
 		delete(lt.clients, id)
 	}
 }
 
-func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*rpc.Client, error) {
+func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*netrpc.Client, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 
@@ -165,27 +163,37 @@ func (lt *localRPCTransport) getClient(id proto.RaftNodeID) (*rpc.Client, error)
 		return client, nil
 	}
 
-	listener, ok := lt.listeners[id]
+	server, ok := lt.servers[id]
 	if !ok {
 		return nil, util.Errorf("unknown peer %v", id)
 	}
-	address := listener.Addr().String()
+	address := server.Addr().String()
 
 	// If this wasn't test code we wouldn't want to call Dial while holding the lock.
-	client, err := rpc.Dial("tcp", address)
+	conn, err := crpc.TLSDialHTTP("tcp", address, nil)
 	if err != nil {
 		return nil, err
 	}
+	client = netrpc.NewClientWithCodec(codec.NewClientCodec(conn))
 	lt.clients[id] = client
 	return client, err
 }
 
 func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
+	msg, err := req.Message.Marshal()
+	if err != nil {
+		return err
+	}
+	protoReq := &proto.RaftMessageRequest{
+		GroupID: req.GroupID,
+		Msg:     msg,
+	}
+
 	client, err := lt.getClient(proto.RaftNodeID(req.Message.To))
 	if err != nil {
 		return err
 	}
-	call := client.Go(raftMessageName, req, &RaftMessageResponse{}, nil)
+	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
 	select {
 	case <-call.Done:
 		// If the call failed synchronously, report an error.
@@ -218,5 +226,8 @@ func (lt *localRPCTransport) Close() {
 	}
 	for conn := range lt.conns {
 		conn.Close()
+	}
+	for _, s := range lt.servers {
+		s.Close()
 	}
 }
