@@ -533,3 +533,41 @@ func TestInsecure(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestPermissions is currently a negative test: permissions are not enforced.
+func TestPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	testUser, err := sql.Open("cockroach", "https://test-user@"+s.ServingAddr()+"?certs=test_certs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = testUser.Close()
+	}()
+
+	if _, err := db.Exec(`CREATE DATABASE foo`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE foo.bar (k INT PRIMARY KEY, v INT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO foo.bar VALUES (1, 2)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now try operations with "test-user". They should all fail.
+	if _, err := testUser.Exec(`CREATE DATABASE baz`); err == nil {
+		t.Fatal("unexpected success")
+	}
+	if _, err := testUser.Exec(`CREATE TABLE baz.bar (k INT PRIMARY KEY, v INT)`); err == nil {
+		t.Fatal("unexpected success")
+	}
+	// Insert into root's table.
+	if _, err := testUser.Exec(`INSERT INTO foo.bar VALUES (2, 3)`); err == nil {
+		t.Fatal("unexpected success")
+	}
+
+}

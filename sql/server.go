@@ -125,8 +125,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) exec(req driver.Request) (driver.Response, error) {
 	var resp driver.Response
 
-	// Pick up current session state.
-	planner := planner{db: s.db}
+	// Pick up current session state, but override the user.
+	// The authentication hook already verified that GetUser returns something,
+	// even in insecure mode.
+	planner := planner{db: client.CopyWithNewUser(s.db, req.GetUser())}
 	if req.Session != nil {
 		// TODO(tschottdorf) will have to validate the Session information (for
 		// instance, whether access to the stored database is permitted).
