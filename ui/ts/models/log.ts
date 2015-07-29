@@ -48,7 +48,15 @@ module Models {
         return "Local";
       };
 
-      private _data: Utils.QueryCache<Proto.LogEntry[]>;
+      private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache(
+        (): Promise<Proto.LogEntry[]> => {
+          return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
+            .then((results: LogResponseSet) => {
+              return results.d;
+            });
+        },
+        true
+      );
 
       private _url(): string {
         let url: string = "/_status/logs/";
@@ -83,14 +91,6 @@ module Models {
         this.endTime(null);
         this.pattern(null);
         this.node(nodeId);
-        // Add the QueryCache here as it is eagerly loaded and won't have a
-        // in order to not fetch without the node id.
-        this._data = new Utils.QueryCache((): Promise<Proto.LogEntry[]> => {
-          return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
-            .then((results: LogResponseSet) => {
-              return results.d;
-            });
-        });
         this.allEntries = this._data.result;
       }
     }

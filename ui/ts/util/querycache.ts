@@ -45,12 +45,15 @@ module Utils {
     /**
      * Construct a new QueryCache which caches the ultimate results of the
      * given query function. It is expected that the query function returns
-     * a promise for results.
+     * a promise for results. If dontRefresh is true, then the query cache will
+     * not refresh until refresh is called.
      */
-    constructor(private _query: () => promise<T>) {
+    constructor(private _query: () => promise<T>, dontRefresh?: boolean ) {
       this.result = this._result;
       this.error = this._error;
-      this.refresh();
+      if (!dontRefresh) {
+        this.refresh();
+      }
     }
 
     /**

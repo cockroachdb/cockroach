@@ -76,14 +76,16 @@ var Utils;
 (function (Utils) {
     "use strict";
     var QueryCache = (function () {
-        function QueryCache(_query) {
+        function QueryCache(_query, dontRefresh) {
             this._query = _query;
             this._result = Utils.Prop(null);
             this._error = Utils.Prop(null);
             this._inFlight = false;
             this.result = this._result;
             this.error = this._error;
-            this.refresh();
+            if (!dontRefresh) {
+                this.refresh();
+            }
         }
         QueryCache.prototype.refresh = function () {
             var _this = this;

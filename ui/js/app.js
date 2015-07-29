@@ -97,14 +97,16 @@ var Utils;
 (function (Utils) {
     "use strict";
     var QueryCache = (function () {
-        function QueryCache(_query) {
+        function QueryCache(_query, dontRefresh) {
             this._query = _query;
             this._result = Utils.Prop(null);
             this._error = Utils.Prop(null);
             this._inFlight = false;
             this.result = this._result;
             this.error = this._error;
-            this.refresh();
+            if (!dontRefresh) {
+                this.refresh();
+            }
         }
         QueryCache.prototype.refresh = function () {
             var _this = this;
@@ -1130,18 +1132,18 @@ var Models;
                     }
                     return "Local";
                 };
+                this._data = new Utils.QueryCache(function () {
+                    return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
+                        .then(function (results) {
+                        return results.d;
+                    });
+                }, true);
                 this.level(Utils.Format.Severity(2));
                 this.max(null);
                 this.startTime(null);
                 this.endTime(null);
                 this.pattern(null);
                 this.node(nodeId);
-                this._data = new Utils.QueryCache(function () {
-                    return m.request({ url: _this._url(), method: "GET", extract: nonJsonErrors })
-                        .then(function (results) {
-                        return results.d;
-                    });
-                });
                 this.allEntries = this._data.result;
             }
             Entries.prototype._url = function () {
