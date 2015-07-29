@@ -17,25 +17,24 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-// ---- Color Palette ----
+// -tone-range generates a set of tones based on a lightest and darkest color.
+// 'x-light' will be the lightest color, 'x-dark' the darkest, 
+// with 'base' a 50% mix.
+-tone-range($lightest, $darkest)
+  return {
+    'x-light': $lightest,
+    'light': mix($lightest, $darkest, 75%),
+    'base': mix($lightest, $darkest),
+    'dark': mix($lightest, $darkest, 25%), 
+    'x-dark': $darkest,
+  }
+
 $palette = {
-  // Light basic content color, shaded from lightest to darkest.
-  'light': {
-    '0': #ffffff,
-    '1': #f1f2f3,
-    '2': #EEE,
-    '3': #DDD,
-    '4': #CCC
-  },
-  // Dark basic content color, shaded from darkest to lightest.
-  'dark': {
-      '0': #292929,
-      '1': #333333,
-      '2': #414141,
-      '3': #555555,
-      '4': #666666,
-  },
+  'light': -tone-range(#ffffff, #E3E3E3),
+  'neutral': -tone-range(#CCCCCC, #A3A3A3),
+  'dark': -tone-range(#666666, #3D3D3D),
 }
 
--color(base, val)
-  return $palette[base][val]
+// color selects a color/tone pair from the palette.
+-color($color, val='base')
+  return $palette[$color][val]

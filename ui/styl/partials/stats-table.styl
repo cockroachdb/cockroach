@@ -19,19 +19,33 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 
 @require '../modules/*'
 
+$stats-table--border-top  = 1px solid -color('neutral', 'x-dark')
+$stats-table-tr--border   = 1px solid -color('neutral', 'x-light')
+
+$stats-table-th--fg  = -color('light', 'light')
+
+$stats-table-th--bg          = -color('neutral', 'light')
+$stats-table-th--bg-alt      = -color('neutral')
+$stats-table-th--bg-sorted   = -color('neutral', 'x-light')
+$stats-table-td--bg          = -color('light', 'light')
+$stats-table-td--bg-alt      = -color('light')
+$stats-table-td--bg-sorted   = -color('light', 'x-light')
+
 // ---- Data table ---- 
 .stats-table
+  color: -color('dark')
   table
     border-collapse: collapse;
+    border-top: $stats-table--border-top
   tr
     height: 2em
-    border-bottom: 1px solid -color('light', '4')
-    &:first-child
-      border-top: 1px solid -color('light', '4')
+    border-bottom: $stats-table-tr--border
   th
-    background-color: -color('light', '0')
+    color: $stats-table-th--fg
+    font-weight: normal
+    alternating-background: $stats-table-th--bg $stats-table-th--bg-alt
     &.sorted
-      background-color: -color('light', '1')
+      background-color: $stats-table-th--bg-sorted
       &:after
         content:"▼"
       &.ascending
@@ -39,11 +53,9 @@ Author: Matt Tracy (matt@cockroachlabs.com)
           content:"▲"
           
   td
-    background-color: -color('light', '2')
-    &:nth-child(even)
-      background-color: -color('light', '3')
+    alternating-background: $stats-table-td--bg $stats-table-td--bg-alt
     &.sorted
-      background-color: -color('light', '0')
+      background-color: $stats-table-td--bg-sorted 
 
   td
   th
