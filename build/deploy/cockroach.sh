@@ -2,7 +2,7 @@
 
 set -eu
 
-if [ "${1:-}" = "shell" ]; then
+if [ "${1-}" = "shell" ]; then
   shift
   /bin/sh "$@"
 else

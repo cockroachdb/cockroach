@@ -5,7 +5,7 @@ set -eu
 image="cockroachdb/builder"
 
 function init() {
-    docker build --tag="${image}" - <<EOF
+  docker build --tag="${image}" - <<EOF
 FROM golang:1.4.2
 
 RUN apt-get update -y && \
@@ -21,39 +21,38 @@ CMD ["/bin/bash"]
 EOF
 }
 
-if [ "${1:-}" = "init" ]; then
-    init
-    exit 0
+if [ "${1-}" = "init" ]; then
+  init
+  exit 0
 fi
 
-if [ "${1:-}" = "push" ]; then
-    init
-    tag="$(date +%Y%m%d-%H%M%S)"
-    docker tag "${image}" "${image}:${tag}"
-    docker push "${image}:${tag}"
-    exit 0
+if [ "${1-}" = "push" ]; then
+  init
+  tag="$(date +%Y%m%d-%H%M%S)"
+  docker tag "${image}" "${image}:${tag}"
+  docker push "${image}:${tag}"
+  exit 0
 fi
 
 gopath0="${GOPATH%%:*}"
 
-if [ "${CIRCLECI:-}" = "true" ]; then
-    # HACK: Removal of docker containers fails on circleci with the
-    # error: "Driver btrfs failed to remove root filesystem". So if
-    # we're running on circleci, just leave the containers around.
-    rm=""
+if [ "${CIRCLECI-}" = "true" ]; then
+  # HACK: Removal of docker containers fails on circleci with the
+  # error: "Driver btrfs failed to remove root filesystem". So if
+  # we're running on circleci, just leave the containers around.
+  rm=""
 else
-    rm="--rm"
+  rm="--rm"
 fi
 
-tty=""
-if test -t 0; then
-    tty="--tty"
+if [ -t 0 ]; then
+  tty="--tty"
 fi
 
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
-docker run -i ${tty} ${rm} \
+docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/src:/go/src" \
   --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
   --volume="${gopath0}/pkg:/go/pkg" \
