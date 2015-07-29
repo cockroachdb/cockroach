@@ -2,8 +2,8 @@
 
 set -eu
 
-cd $(dirname $0)/..
-source build/init-docker.sh
-build/builder.sh make install
+source $(dirname $0)/../build/init-docker.sh
+$(dirname $0)/../build/builder.sh make install
+
 set -x
-go test -v -tags acceptance ./acceptance ${GOFLAGS:-} -run "${TESTS:-.*}" -timeout ${TESTTIMEOUT:-5m} ${TESTFLAGS:-}
+go test -tags acceptance ./acceptance ${GOFLAGS-} -run "${TESTS-.*}" -timeout ${TESTTIMEOUT-5m} ${TESTFLAGS-}
