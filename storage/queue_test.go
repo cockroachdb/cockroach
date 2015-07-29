@@ -56,7 +56,7 @@ func (tq *testQueueImpl) timer() time.Duration {
 	if tq.duration != 0 {
 		return tq.duration
 	}
-	return time.Millisecond
+	return 0
 }
 
 // TestQueuePriorityQueue verifies priority queue implementation.
@@ -196,7 +196,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
-		blocker: make(chan struct{}),
+		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = float64(r.Desc().RaftID)
@@ -223,8 +223,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Error(err)
 	}
 
-	close(testQueue.blocker)
-
+	testQueue.blocker <- struct{}{}
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) >= 2
 	}, 250*time.Millisecond); err != nil {
@@ -232,7 +231,8 @@ func TestBaseQueueProcess(t *testing.T) {
 	}
 }
 
-// TestBaseQueueAddRemove adds then removes a range; ensure range is not processed.
+// TestBaseQueueAddRemove adds then removes a range; ensure range is
+// not processed.
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r := &Range{}
