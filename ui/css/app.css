@@ -25,37 +25,50 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 }
 html,
 body {
+  font-size: 14px;
   height: 100%;
 }
 body {
+  padding-top: 3.75em;
   background-color: #f1f1f1;
   color: #5b5b5b;
   font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif;
   font-weight: 400;
-  font-size: 14px;
 }
 .fullHeightContainer {
   height: calc(100% - 50px);
 /* Keep in line with height of .appNav */
 }
-.appNav {
-  height: 50px;
+#header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  font-size: 1.25em;
+  height: 3em;
   background-color: #3d3d3d;
-  padding: 10px 20px;
+  padding: 1em 1.25em;
 }
-.appNav-link:link,
-.appNav-link:visited {
-  text-decoration: none;
-  text-transform: uppercase;
+ul.navigation li {
+  float: left;
+  margin-right: 2.5em;
+  color: #c1c1c1;
+  list-style-type: none;
+}
+ul.navigation li.active {
   color: #f1f1f1;
-  display: inline-block;
-  margin-right: 20px;
 }
-.appNav-link.appNav-homeName {
-  font-weight: 800;
-  font-size: 22px;
-  text-transform: none;
-  vertical-align: -2px;
+ul.navigation li:hover {
+  color: #fff;
+}
+ul.navigation li a {
+  color: inherit;
+  text-decoration: none;
+}
+ul.navigation li a:hover,
+ul.navigation li a:visited,
+ul.navigation li a:active {
+  color: inherit;
 }
 .stats-table {
   color: #515151;

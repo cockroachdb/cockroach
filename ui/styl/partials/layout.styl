@@ -17,6 +17,8 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
+@require 'typography.styl'
+
 *
   margin: 0  
   padding: 0
@@ -26,14 +28,15 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 
 html,
 body
+  font-size: $font-size--base
   height: 100%
 
 body
+  padding-top: 3 * $font-size--title
   background-color: -color('light')
   color: -color('dark', 'light')
   font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
   font-weight: 400
-  font-size: 14px
 
 .fullHeightContainer
   height: calc(100% - 50px)

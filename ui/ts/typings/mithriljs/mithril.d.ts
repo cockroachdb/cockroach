@@ -100,14 +100,18 @@ declare module _mithril {
 		(ctrl: T): string|MithrilVirtualElement;
 	}
 
+	interface ParameterizedMithrilView<T extends MithrilController, Targ> {
+		(ctrl: T, arg: Targ): string|MithrilVirtualElement;
+	}
+
 	interface MithrilComponent<T extends MithrilController> {
 		controller: MithrilControllerFunction|{ new(): T };
 		view: MithrilView<T>;
 	}
 
 	interface ParameterizedMithrilComponent<T extends MithrilController, Targ> {
-        controller: (x?:Targ)=>T
-		view: MithrilView<T>;
+		controller: (x?:Targ)=>T;
+		view: ParameterizedMithrilView<T, Targ>;
 	}
 
 	interface MithrilProperty<T> {

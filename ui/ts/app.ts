@@ -1,6 +1,7 @@
 // source: app.ts
 /// <reference path="typings/mithriljs/mithril.d.ts" />
 
+/// <reference path="pages/navigation.ts" />
 /// <reference path="pages/graph.ts" />
 /// <reference path="pages/log.ts" />
 /// <reference path="pages/monitor.ts" />
@@ -8,6 +9,8 @@
 /// <reference path="pages/stores.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
+
+m.mount(document.getElementById("header"), AdminViews.SubModules.TitleBar);
 
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/nodes", {
