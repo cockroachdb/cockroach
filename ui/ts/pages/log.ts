@@ -1,5 +1,6 @@
 // source: pages/log.ts
 /// <reference path="../components/select.ts" />
+/// <reference path="../components/table.ts" />
 /// <reference path="../models/log.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
@@ -18,14 +19,71 @@ module AdminViews {
    * Log is the view for exploring the logs from nodes.
    */
   export module Log {
-    let entries: Models.Log.Entries = new Models.Log.Entries();
+    import Table = Components.Table;
+    import LogEntry = Models.Proto.LogEntry;
 
+    let entries: Models.Log.Entries;
     /**
      * Page displays log entries from the current node.
      */
     export module Page {
       class Controller {
+        private static comparisonColumns: Table.TableColumn<LogEntry>[] = [
+          {
+            title: "Time",
+            view: (entry: LogEntry): string => {
+              let date = new Date(Utils.Convert.NanoToMilli(entry.time));
+              return Utils.Format.Date(date);
+            },
+            sortable: true
+          },
+          {
+            title: "Severity",
+            view: (entry: LogEntry): string => Utils.Format.Severity(entry.severity)
+          },
+          {
+            title: "Message",
+            view: (entry: LogEntry): string => Utils.Format.LogEntryMessage(entry)
+          },
+          {
+            title: "Node",
+            view: (entry: LogEntry): string => entry.node_id ? entry.node_id.toString() : "",
+            sortable: true,
+            sortValue: (entry: LogEntry): number => entry.node_id
+          },
+          {
+            title: "Store",
+            view: (entry: LogEntry): string => entry.store_id ? entry.store_id.toString() : "",
+            sortable: true,
+            sortValue: (entry: LogEntry): number => entry.store_id
+          },
+          {
+            title: "Raft",
+            view: (entry: LogEntry): string => entry.raft_id ? entry.raft_id.toString() : "",
+            sortable: true,
+            sortValue: (entry: LogEntry): number => entry.raft_id
+          },
+          {
+            title: "Key",
+            view: (entry: LogEntry): string => entry.key,
+            sortable: true
+          },
+          {
+            title: "File:Line",
+            view: (entry: LogEntry): string => entry.file + ":" + entry.line,
+            sortable: true
+          },
+          {
+            title: "Method",
+            view: (entry: LogEntry): string => entry.method ? entry.method.toString() : "",
+            sortable: true,
+            sortValue: (entry: LogEntry): number => entry.method
+          }
+        ];
+
         private static _queryEveryMS: number = 10000;
+
+        public columns: Utils.Property<Table.TableColumn<LogEntry>[]> = Utils.Prop(Controller.comparisonColumns);
         private _interval: number;
 
         onunload(): void {
@@ -37,7 +95,7 @@ module AdminViews {
         }
 
         constructor(nodeId?: string) {
-          entries.node(nodeId);
+          entries = new Models.Log.Entries(nodeId);
           this._Refresh();
           this._interval = setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
@@ -46,49 +104,6 @@ module AdminViews {
       export function controller(): Controller {
         let nodeId: string = m.route.param("node_id");
         return new Controller(nodeId);
-      };
-
-      // TODO(bram): Move these into css classes.
-      const _tableStyle: string = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-      const _thStyle: string = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;" +
-        "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;" +
-        "background-color:#efefef;text-align:center";
-      const _tdStyleOddFirst: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-        "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;" +
-        "background-color:#efefef;text-align:center";
-      const _tdStyleOdd: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-        "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-        "color:#333;background-color:#f9f9f9;text-align:center";
-      const _tdStyleEvenFirst: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-        "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-        "color:#333;background-color:#efefef;text-align:center";
-      const _tdStyleEven: string = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-        "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-        "color:#333;background-color:#fff;text-align:center";
-
-      function _EntryRow(entry: Models.Proto.LogEntry, count: number): _mithril.MithrilVirtualElement {
-        let dstyle: string;
-        let countStyle: string;
-        if (count % 2 === 0) {
-          countStyle = _tdStyleEvenFirst;
-          dstyle = _tdStyleEven;
-        } else {
-          countStyle = _tdStyleOddFirst;
-          dstyle = _tdStyleOdd;
-        }
-        let date: Date = new Date(Utils.Convert.NanoToMilli(entry.time));
-        return m("tr", [
-          m("td", { style: countStyle }, (count + 1).toString()),
-          m("td", { style: dstyle }, Utils.Format.Date(date)),
-          m("td", { style: dstyle }, Utils.Format.Severity(entry.severity)),
-          m("td", { style: dstyle }, Utils.Format.LogEntryMessage(entry)),
-          m("td", { style: dstyle }, entry.node_id),
-          m("td", { style: dstyle }, entry.store_id),
-          m("td", { style: dstyle }, entry.raft_id),
-          m("td", { style: dstyle }, entry.key),
-          m("td", { style: dstyle }, entry.file + ":" + entry.line),
-          m("td", { style: dstyle }, entry.method)
-        ]);
       };
 
       const _severitySelectOptions: Components.Select.Item[] = [
@@ -119,11 +134,15 @@ module AdminViews {
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
-        let rows: _mithril.MithrilVirtualElement[] = [];
-        if (entries.result() != null) {
-          for (let i: number = 0; i < entries.result().length; i++) {
-            rows.push(_EntryRow(entries.result()[i], i));
-          }
+        let comparisonData: Table.TableData<LogEntry> = {
+          columns: ctrl.columns,
+          rows: entries.allEntries
+        };
+        let count: number;
+        if (entries.allEntries()) {
+          count = entries.allEntries().length;
+        } else {
+          count = 0;
         }
 
         return m("div", [
@@ -140,22 +159,8 @@ module AdminViews {
             m.trust("&nbsp;&nbsp;Regex Filter: "),
             m("input", { oninput: m.withAttr("value", onChangePattern), value: entries.pattern() })
           ]),
-          m("p", rows.length + " log entries retrieved"),
-          m("table", { style: _tableStyle }, [
-            m("tr", [
-              m("th", { style: _thStyle }, "#"),
-              m("th", { style: _thStyle }, "Time"),
-              m("th", { style: _thStyle }, "Severity"),
-              m("th", { style: _thStyle }, "Message"),
-              m("th", { style: _thStyle }, "Node"),
-              m("th", { style: _thStyle }, "Store"),
-              m("th", { style: _thStyle }, "Raft"),
-              m("th", { style: _thStyle }, "Key"),
-              m("th", { style: _thStyle }, "File:Line"),
-              m("th", { style: _thStyle }, "Method")
-            ]),
-            rows
-          ])
+          m("p", count + " log entries retrieved"),
+          m(".stats-table", Components.Table.create(comparisonData))
         ]);
       };
     }
