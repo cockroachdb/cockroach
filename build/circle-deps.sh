@@ -74,6 +74,6 @@ $(dirname $0)/builder.sh $0 docker
 # Clear the cache of any files that haven't been modified in more than
 # 12 hours. Note that the "build-cache restore" call above will
 # "touch" any cache files that are used by the current run.
-find "${cachedir}" -mmin +720 -ls -delete
+find "${cachedir}" -type f -mmin +720 -ls -delete
 du -sh "${cachedir}"
 ls -lh "${cachedir}"
