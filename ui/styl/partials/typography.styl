@@ -17,37 +17,5 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-@require '../modules/*'
-@require 'typography.styl'
-
-// ---- Navigation ----
-#header
-  position: fixed
-  top: 0
-  left: 0
-  width: 100%
-  font-size: $font-size--title
-  height: 3em
-  background-color: -color('dark', 'x-dark')
-  padding: 1em 1.25em
-
-ul.navigation
-  li 
-    float: left
-    margin-right: 2.5em
-    color: -color('neutral', 'light')
-    list-style-type: none
-
-    &.active 
-      color: -color('light')
-
-    &:hover
-      color: -color('light', 'x-light')
-    
-    a
-      color: inherit
-      text-decoration: none
-      &:hover
-      &:visited
-      &:active
-        color: @color
+$font-size--base = 14px
+$font-size--title = 1.25em
