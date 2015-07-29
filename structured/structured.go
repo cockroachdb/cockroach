@@ -36,6 +36,11 @@ func validateName(name, typ string) error {
 	return nil
 }
 
+// SetID is needed to implement descriptorProto in sql/create.go
+func (desc *TableDescriptor) SetID(id uint32) {
+	desc.ID = id
+}
+
 // AllocateIDs allocates column and index ids for any column or index which has
 // an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
@@ -225,4 +230,28 @@ func (c *ColumnType) SQLString() string {
 		}
 	}
 	return c.Kind.String()
+}
+
+// SetID is needed to implement descriptorProto in sql/create.go
+func (desc *DatabaseDescriptor) SetID(id uint32) {
+	desc.ID = id
+}
+
+// Validate validates that the database descriptor is well formed.
+// Checks include validate the database name, and verifying that there
+// is at least one read and write user.
+func (desc *DatabaseDescriptor) Validate() error {
+	if err := validateName(desc.Name, "descriptor"); err != nil {
+		return err
+	}
+	if desc.ID == 0 {
+		return fmt.Errorf("invalid database ID 0")
+	}
+	if len(desc.Read) == 0 {
+		return fmt.Errorf("empty Read permissions")
+	}
+	if len(desc.Write) == 0 {
+		return fmt.Errorf("empty Write permissions")
+	}
+	return nil
 }

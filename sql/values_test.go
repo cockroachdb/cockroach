@@ -23,9 +23,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestValues(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	p := planner{}
 
 	vInt := int64(5)

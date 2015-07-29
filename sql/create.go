@@ -18,9 +18,6 @@
 package sql
 
 import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
@@ -33,21 +30,9 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	}
 
 	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
-	if gr, err := p.db.Get(nameKey); err != nil {
-		return nil, err
-	} else if gr.Exists() {
-		if n.IfNotExists {
-			return &valuesNode{}, nil
-		}
-		return nil, fmt.Errorf("database \"%s\" already exists", n.Name)
-	}
-	ir, err := p.db.Inc(keys.DescIDGenerator, 1)
-	if err != nil {
-		return nil, err
-	}
-	nsID := uint32(ir.ValueInt() - 1)
-	// TODO(pmattis): Need to handle if-not-exists here as well.
-	if err := p.db.CPut(nameKey, nsID, nil); err != nil {
+	desc := makeDatabaseDesc(n)
+
+	if err := p.writeDescriptor(nameKey, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil
@@ -61,7 +46,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	dbID, err := p.lookupDatabase(n.Table.Database())
+	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -74,38 +59,8 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	nameKey := keys.MakeNameMetadataKey(dbID, n.Table.Table())
-
-	// This isn't strictly necessary as the conditional put below will fail if
-	// the key already exists, but it seems good to avoid the table ID allocation
-	// in most cases when the table already exists.
-	if gr, err := p.db.Get(nameKey); err != nil {
-		return nil, err
-	} else if gr.Exists() {
-		if n.IfNotExists {
-			return &valuesNode{}, nil
-		}
-		return nil, fmt.Errorf("table \"%s\" already exists", n.Table)
-	}
-
-	ir, err := p.db.Inc(keys.DescIDGenerator, 1)
-	if err != nil {
-		return nil, err
-	}
-	desc.ID = uint32(ir.ValueInt() - 1)
-
-	// TODO(pmattis): Be cognizant of error messages when this is ported to the
-	// server. The error currently returned below is likely going to be difficult
-	// to interpret.
-	// TODO(pmattis): Need to handle if-not-exists here as well.
-	err = p.db.Txn(func(txn *client.Txn) error {
-		descKey := keys.MakeDescMetadataKey(desc.ID)
-		b := &client.Batch{}
-		b.CPut(nameKey, descKey, nil)
-		b.Put(descKey, &desc)
-		return txn.Commit(b)
-	})
-	if err != nil {
+	nameKey := keys.MakeNameMetadataKey(dbDesc.ID, n.Table.Table())
+	if err := p.writeDescriptor(nameKey, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
 	return &valuesNode{}, nil

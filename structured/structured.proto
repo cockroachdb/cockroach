@@ -84,3 +84,16 @@ message TableDescriptor {
   optional uint32 next_index_id = 6 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID"];
 }
+
+// DatabaseDescriptor represents a namespace (aka database) and is stored
+// in a structured metadata key. The DatabaseDescriptor has a globally-unique
+// ID shared with the TableDescriptor ID.
+// Permissions are applied to all tables in the namespace.
+message DatabaseDescriptor {
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  // lists of users with read permissions.
+  repeated string read = 3 [(gogoproto.moretags) = "yaml:\"read,omitempty\""];
+  // lists of users with write permissions.
+  repeated string write = 4 [(gogoproto.moretags) = "yaml:\"write,omitempty\""];
+}

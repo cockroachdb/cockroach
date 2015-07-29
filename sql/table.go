@@ -97,6 +97,25 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 	return desc, nil
 }
 
+func (p *planner) getTableDesc(qname parser.QualifiedName) (
+	*structured.TableDescriptor, error) {
+	normalized, err := p.normalizeTableName(qname)
+	if err != nil {
+		return nil, err
+	}
+	dbDesc, err := p.getDatabaseDesc(normalized.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	nameKey := keys.MakeNameMetadataKey(dbDesc.ID, normalized.Table())
+	desc := structured.TableDescriptor{}
+	if err := p.getDescriptor(nameKey, &desc); err != nil {
+		return nil, err
+	}
+	return &desc, nil
+}
+
 func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 	var key []byte
 	key = append(key, keys.TableDataPrefix...)

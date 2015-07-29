@@ -89,11 +89,11 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		}
 		n.Name = append(n.Name, p.session.Database)
 	}
-	dbID, err := p.lookupDatabase(n.Name.String())
+	dbDesc, err := p.getDatabaseDesc(n.Name.String())
 	if err != nil {
 		return nil, err
 	}
-	prefix := keys.MakeNameMetadataKey(dbID, "")
+	prefix := keys.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
