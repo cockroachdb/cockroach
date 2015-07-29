@@ -88,6 +88,7 @@ func TestStatusJson(t *testing.T) {
 		{statusNodesPrefix, "\\\"d\\\":"},
 	}
 	expectedResult := fmt.Sprintf(`{
+  "nodeID": 1,
   "address": {
     "network": "%s",
     "string": "%s"
