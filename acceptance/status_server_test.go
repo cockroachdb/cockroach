@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -44,10 +45,10 @@ func get(t *testing.T, client *http.Client, node *localcluster.Container, path s
 	if err != nil {
 		t.Fatalf("could not GET %s - %s", url, err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("could not GET %s - statuscode: %d", url, resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("could not open body for %s - %s", url, err)
@@ -56,14 +57,17 @@ func get(t *testing.T, client *http.Client, node *localcluster.Container, path s
 	return body
 }
 
+// checkNode checks all the endpoints of the status server hosted by node and
+// requests info for the node with otherNodeID. That node could be the same
+// other node, the same node or "local".
 func checkNode(t *testing.T, client *http.Client, node *localcluster.Container, nodeID, otherNodeID, expectedNodeID string) {
 	body := get(t, client, node, "/_status/details/"+otherNodeID)
 	var detail details
 	if err := json.Unmarshal(body, &detail); err != nil {
-		t.Fatalf("unable to parse details - %s", err)
+		t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
 	}
 	if actualNodeID := detail.NodeID.String(); actualNodeID != expectedNodeID {
-		t.Fatalf("%s calling %s: node ids don't match - expected %s, actual %s", nodeID, otherNodeID, expectedNodeID, actualNodeID)
+		t.Fatal(util.ErrorfSkipFrames(1, "%s calling %s: node ids don't match - expected %s, actual %s", nodeID, otherNodeID, expectedNodeID, actualNodeID))
 	}
 
 	get(t, client, node, fmt.Sprintf("/_status/gossip/%s", otherNodeID))
@@ -91,7 +95,7 @@ func TestStatusServer(t *testing.T) {
 		},
 	}
 
-	// Get the ids for each node
+	// Get the ids for each node.
 	idMap := make(map[string]string)
 	for _, node := range l.Nodes {
 		body := get(t, client, node, "/_status/details/local")
