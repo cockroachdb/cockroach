@@ -213,8 +213,8 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			// no ranges in the queue.
 			case <-bq.incoming:
 				if nextTime == nil {
-					// When a is added, wake up immediately. This is mainly to
-					// facilitate testing without unnecessary sleeps.
+					// When a range is added, wake up immediately. This is mainly
+					// to facilitate testing without unnecessary sleeps.
 					nextTime = immediately
 
 					// In case we're in a test, still block on the impl.

@@ -257,15 +257,15 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	bq.MaybeAdd(r, proto.ZeroTimestamp)
 	bq.MaybeRemove(r)
 
-	if a, e := cap(bq.incoming), 1; a != e {
-		t.Errorf("expected %d got %d", e, a)
-	}
-
+	// Wake the queue
 	testQueue.blocker <- struct{}{}
 
-	for i := 0; i < 2; i++ {
+	// Make sure the queue has actually run through a few times
+	for i := 0; i < cap(bq.incoming)+1; i++ {
 		bq.incoming <- struct{}{}
+		testQueue.blocker <- struct{}{}
 	}
+
 	if pc := atomic.LoadInt32(&testQueue.processed); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
 	}
