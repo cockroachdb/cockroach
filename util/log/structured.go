@@ -116,7 +116,7 @@ func parseFormatWithArgs(format string, args []interface{}) (string, []LogEntry_
 
 		// TODO(spencer): should arg numbers dynamic precision be
 		// supported? They're so rare, better to just panic here for now.
-		if i < end && format[i] == '[' || format[i] == '*' {
+		if i < end && (format[i] == '[' || format[i] == '*') {
 			panic(fmt.Sprintf("arg numbers in format not supported by logger: %s", format))
 		}
 

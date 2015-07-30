@@ -100,6 +100,13 @@ func TestSetLogEntry(t *testing.T) {
 				{Type: "log.testArg", Str: "10-->foo", Json: []byte("{\"StrVal\":\"foo\",\"IntVal\":10}")},
 			},
 		}},
+		// Error format test.
+		{nil, "Error format s%", []interface{}{"foo"}, LogEntry{
+			Format: "Error format s",
+			Args: []LogEntry_Arg{
+				{Type: "string", Str: "foo"},
+			},
+		}},
 	}
 	for i, test := range testCases {
 		entry := &LogEntry{}
