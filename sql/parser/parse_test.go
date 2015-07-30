@@ -395,6 +395,16 @@ CREATE TABLE test (
   INDEX foo (bar)
         ^
 `},
+		{`CREATE DATABASE a b`,
+			`syntax error at or near "b"
+CREATE DATABASE a b
+                  ^
+`},
+		{`CREATE DATABASE a b c`,
+			`syntax error at or near "b"
+CREATE DATABASE a b c
+                  ^
+`},
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)
