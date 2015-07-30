@@ -24,6 +24,8 @@ module Models {
     }
 
     export class Entries {
+      public allEntries: Utils.ReadOnlyProperty<Proto.LogEntry[]>;
+
       startTime: Property<number> = m.prop(<number>null);
       endTime: Property<number> = m.prop(<number>null);
       max: Property<number> = m.prop(<number>null);
@@ -46,17 +48,22 @@ module Models {
         return "Local";
       };
 
-      private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache((): Promise<Proto.LogEntry[]> => {
-        return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
-          .then((results: LogResponseSet) => {
-            return results.d;
-          });
-      });
+      private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache(
+        (): Promise<Proto.LogEntry[]> => {
+          return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
+            .then((results: LogResponseSet) => {
+              return results.d;
+            });
+        },
+        true
+      );
 
       private _url(): string {
         let url: string = "/_status/logs/";
         if (this.node() != null) {
           url += this.node();
+        } else {
+          url += "local";
         }
         url += "?";
         if (this.level() != null) {
@@ -77,13 +84,14 @@ module Models {
         return url;
       }
 
-      constructor() {
+      constructor(nodeId?: string) {
         this.level(Utils.Format.Severity(2));
         this.max(null);
         this.startTime(null);
         this.endTime(null);
         this.pattern(null);
-        this.node(null);
+        this.node(nodeId);
+        this.allEntries = this._data.result;
       }
     }
 
