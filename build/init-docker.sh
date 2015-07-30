@@ -2,7 +2,7 @@
 
 set -eu
 
-if [ "${DOCKER_HOST:-}" = "" -a "$(uname)" = "Darwin" ]; then
+if [ "${DOCKER_HOST-}" = "" -a "$(uname)" = "Darwin" ]; then
   if ! type -P "boot2docker" >& /dev/null; then
     echo "boot2docker not found!"
     exit 1

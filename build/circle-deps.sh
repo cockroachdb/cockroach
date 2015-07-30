@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -eux
 
 # This is mildly tricky: This script runs itself recursively. The
 # first time it is run it does not take the if-branch below and
@@ -8,7 +8,7 @@ set -ex
 # builder.sh script to run itself inside of docker passing "docker" as
 # the argument causing the commands in the if-branch to be executed
 # within the docker container.
-if [ "${1:-}" = "docker" ]; then
+if [ "${1-}" = "docker" ]; then
   cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
   # Pretend we're already bootstrapped, so that `make` doesn't go
@@ -23,7 +23,7 @@ if [ "${1:-}" = "docker" ]; then
   time go test -race -v -i ./...
   time go install -v ${cmds}
   time make GITHOOKS= install
-  time (cd acceptance; go test -v -c -tags acceptance)
+  time go test -v -c -tags acceptance ./acceptance
   # Cache the current build artifacts for future builds.
   time build-cache save . .:race,test ${cmds}
 

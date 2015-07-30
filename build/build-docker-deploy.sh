@@ -11,7 +11,7 @@ set -euo pipefail
 # itself inside of docker passing "docker" as the argument causing the
 # commands in the if-branch to be executed within the docker
 # container.
-if [ "${1:-}" = "docker" ]; then
+if [ "${1-}" = "docker" ]; then
     time make STATIC=1 release
 
     # Make sure the created binary is statically linked.  Seems
