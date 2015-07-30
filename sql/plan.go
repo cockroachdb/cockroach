@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
@@ -80,35 +79,6 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDesc
 	return p.getTableDesc(table)
 }
 
-func (p *planner) getTableDesc(qname parser.QualifiedName) (
-	*structured.TableDescriptor, error) {
-	var err error
-	qname, err = p.normalizeTableName(qname)
-	if err != nil {
-		return nil, err
-	}
-	dbID, err := p.lookupDatabase(qname.Database())
-	if err != nil {
-		return nil, err
-	}
-	gr, err := p.db.Get(keys.MakeNameMetadataKey(dbID, qname.Table()))
-	if err != nil {
-		return nil, err
-	}
-	if !gr.Exists() {
-		return nil, fmt.Errorf("table \"%s\" does not exist", qname)
-	}
-	descKey := gr.ValueBytes()
-	desc := structured.TableDescriptor{}
-	if err := p.db.GetProto(descKey, &desc); err != nil {
-		return nil, err
-	}
-	if err := desc.Validate(); err != nil {
-		return nil, err
-	}
-	return &desc, nil
-}
-
 func (p *planner) normalizeTableName(qname parser.QualifiedName) (
 	parser.QualifiedName, error) {
 	if len(qname) == 0 {
@@ -121,16 +91,6 @@ func (p *planner) normalizeTableName(qname parser.QualifiedName) (
 		qname = append(parser.QualifiedName{p.session.Database}, qname[0])
 	}
 	return qname, nil
-}
-func (p *planner) lookupDatabase(name string) (uint32, error) {
-	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, name)
-	gr, err := p.db.Get(nameKey)
-	if err != nil {
-		return 0, err
-	} else if !gr.Exists() {
-		return 0, fmt.Errorf("database \"%s\" does not exist", name)
-	}
-	return uint32(gr.ValueInt()), nil
 }
 
 // planNode defines the interface for executing a query or portion of a query.

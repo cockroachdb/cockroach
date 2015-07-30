@@ -81,7 +81,7 @@ func TestCreateDatabase(t *testing.T) {
 	if _, err := db.Exec(`CREATE DATABASE foo`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE DATABASE foo`); !isError(err, "database .* already exists") {
+	if _, err := db.Exec(`CREATE DATABASE foo`); !isError(err, "\\*structured.DatabaseDescriptor .* already exists") {
 		t.Fatalf("expected failure, but found success")
 	}
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS foo`); err != nil {
@@ -139,14 +139,14 @@ func TestCreateTable(t *testing.T) {
 	if _, err := db.Exec("CREATE TABLE t.users " + cols); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("CREATE TABLE t.users " + cols); !isError(err, "table .* already exists") {
+	if _, err := db.Exec("CREATE TABLE t.users " + cols); !isError(err, "\\*structured.TableDescriptor .* already exists") {
 		t.Fatal(err)
 	}
 
 	if _, err := db.Exec("SET DATABASE = t"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("CREATE TABLE users " + cols); !isError(err, "table .* already exists") {
+	if _, err := db.Exec("CREATE TABLE users " + cols); !isError(err, "\\*structured.TableDescriptor .* already exists") {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("CREATE TABLE IF NOT EXISTS users " + cols); err != nil {
@@ -216,13 +216,13 @@ CREATE TABLE t.users (
   title VARCHAR
 )`
 
-	if _, err := db.Query("SHOW COLUMNS FROM t.users"); !isError(err, "database .* does not exist") {
+	if _, err := db.Query("SHOW COLUMNS FROM t.users"); !isError(err, "\\*structured.DatabaseDescriptor .* does not exist") {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query("SHOW COLUMNS FROM t.users"); !isError(err, "table .* does not exist") {
+	if _, err := db.Query("SHOW COLUMNS FROM t.users"); !isError(err, "\\*structured.TableDescriptor .* does not exist") {
 		t.Fatal(err)
 	}
 	if _, err := db.Query("SHOW COLUMNS FROM users"); !isError(err, "no database specified") {
@@ -262,13 +262,13 @@ CREATE TABLE t.users (
   CONSTRAINT bar UNIQUE (id, name)
 )`
 
-	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "database .* does not exist") {
+	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "\\*structured.DatabaseDescriptor .* does not exist") {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "table .* does not exist") {
+	if _, err := db.Query("SHOW INDEX FROM t.users"); !isError(err, "\\*structured.TableDescriptor .* does not exist") {
 		t.Fatal(err)
 	}
 	if _, err := db.Query("SHOW INDEX FROM users"); !isError(err, "no database specified") {
@@ -326,7 +326,7 @@ func TestInsertSelectDelete(t *testing.T) {
 		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('a', 'b')`, testcase.db)); !isError(err, "table .* does not exist") {
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('a', 'b')`, testcase.db)); !isError(err, "\\*structured.TableDescriptor .* does not exist") {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(fmt.Sprintf(testcase.schema, testcase.db)); err != nil {

@@ -13,6 +13,7 @@
 		ColumnDescriptor
 		IndexDescriptor
 		TableDescriptor
+		DatabaseDescriptor
 */
 package structured
 
@@ -274,6 +275,52 @@ func (m *TableDescriptor) GetNextIndexID() uint32 {
 		return m.NextIndexID
 	}
 	return 0
+}
+
+// DatabaseDescriptor represents a namespace (aka database) and is stored
+// in a structured metadata key. The DatabaseDescriptor has a globally-unique
+// ID shared with the TableDescriptor ID.
+// Permissions are applied to all tables in the namespace.
+type DatabaseDescriptor struct {
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	ID   uint32 `protobuf:"varint,2,opt,name=id" json:"id"`
+	// lists of users with read permissions.
+	Read []string `protobuf:"bytes,3,rep,name=read" json:"read,omitempty" yaml:"read,omitempty"`
+	// lists of users with write permissions.
+	Write            []string `protobuf:"bytes,4,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *DatabaseDescriptor) Reset()         { *m = DatabaseDescriptor{} }
+func (m *DatabaseDescriptor) String() string { return proto.CompactTextString(m) }
+func (*DatabaseDescriptor) ProtoMessage()    {}
+
+func (m *DatabaseDescriptor) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *DatabaseDescriptor) GetID() uint32 {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
+func (m *DatabaseDescriptor) GetRead() []string {
+	if m != nil {
+		return m.Read
+	}
+	return nil
+}
+
+func (m *DatabaseDescriptor) GetWrite() []string {
+	if m != nil {
+		return m.Write
+	}
+	return nil
 }
 
 func init() {
@@ -784,6 +831,130 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ID |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Read", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Read = append(m.Read, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Write", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Write = append(m.Write, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipStructured(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
 func skipStructured(data []byte) (n int, err error) {
 	l := len(data)
 	iNdEx := 0
@@ -939,6 +1110,30 @@ func (m *TableDescriptor) Size() (n int) {
 		}
 	}
 	n += 1 + sovStructured(uint64(m.NextIndexID))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DatabaseDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.ID))
+	if len(m.Read) > 0 {
+		for _, s := range m.Read {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if len(m.Write) > 0 {
+		for _, s := range m.Write {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1142,6 +1337,64 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x30
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DatabaseDescriptor) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ID))
+	if len(m.Read) > 0 {
+		for _, s := range m.Read {
+			data[i] = 0x1a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if len(m.Write) > 0 {
+		for _, s := range m.Write {
+			data[i] = 0x22
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
