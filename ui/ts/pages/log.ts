@@ -94,16 +94,21 @@ module AdminViews {
           entries.refresh();
         }
 
-        constructor(nodeId?: string) {
-          entries = new Models.Log.Entries(nodeId);
+        constructor() {
+          entries = new Models.Log.Entries();
+          entries.node(m.route.param("node_id") || null);
+          entries.level(m.route.param("level") || Utils.Format.Severity(2));
+          entries.max(parseInt(m.route.param("max"), 10) || null);
+          entries.startTime(parseInt(m.route.param("startTime"), 10) || null);
+          entries.endTime(parseInt(m.route.param("endTime"), 10) || null);
+          entries.pattern(m.route.param("pattern") || null);
           this._Refresh();
           this._interval = setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
       };
 
       export function controller(): Controller {
-        let nodeId: string = m.route.param("node_id");
-        return new Controller(nodeId);
+        return new Controller();
       };
 
       const _severitySelectOptions: Components.Select.Item[] = [
@@ -115,7 +120,7 @@ module AdminViews {
 
       function onChangeSeverity(val: string): void {
         entries.level(val);
-        entries.refresh();
+        m.route(entries.getURL(), entries.getParams());
       };
 
       function onChangeMax(val: string): void {
@@ -125,12 +130,12 @@ module AdminViews {
         } else {
           entries.max(null);
         }
-        entries.refresh();
+        m.route(entries.getURL(), entries.getParams());
       }
 
       function onChangePattern(val: string): void {
         entries.pattern(val);
-        entries.refresh();
+        m.route(entries.getURL(), entries.getParams());
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
@@ -155,9 +160,9 @@ module AdminViews {
               onChange: onChangeSeverity
             }),
             m.trust("&nbsp;&nbsp;Max Results: "),
-            m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() }),
+            m("input", { onchange: m.withAttr("value", onChangeMax), value: entries.max() }),
             m.trust("&nbsp;&nbsp;Regex Filter: "),
-            m("input", { oninput: m.withAttr("value", onChangePattern), value: entries.pattern() })
+            m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() })
           ]),
           m("p", count + " log entries retrieved"),
           m(".stats-table", Components.Table.create(comparisonData))

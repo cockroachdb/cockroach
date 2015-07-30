@@ -1112,7 +1112,7 @@ var Models;
     var Log;
     (function (Log) {
         var Entries = (function () {
-            function Entries(nodeId) {
+            function Entries() {
                 var _this = this;
                 this.startTime = m.prop(null);
                 this.endTime = m.prop(null);
@@ -1127,7 +1127,7 @@ var Models;
                     return _this._data.result();
                 };
                 this.nodeName = function () {
-                    if (_this.node() != null) {
+                    if ((_this.node() != null) && (_this.node() !== "local")) {
                         return _this.node();
                     }
                     return "Local";
@@ -1139,38 +1139,36 @@ var Models;
                     });
                 }, true);
                 this.level(Utils.Format.Severity(2));
-                this.max(null);
-                this.startTime(null);
-                this.endTime(null);
-                this.pattern(null);
-                this.node(nodeId);
                 this.allEntries = this._data.result;
             }
-            Entries.prototype._url = function () {
-                var url = "/_status/logs/";
+            Entries.prototype.getURL = function () {
+                var url = "/logs/";
                 if (this.node() != null) {
-                    url += this.node();
+                    url += encodeURIComponent(this.node());
                 }
                 else {
                     url += "local";
                 }
-                url += "?";
-                if (this.level() != null) {
-                    url += "level=" + encodeURIComponent(this.level()) + "&";
-                }
-                if (this.startTime() != null) {
-                    url += "startTime=" + encodeURIComponent(this.startTime().toString()) + "&";
-                }
-                if (this.endTime() != null) {
-                    url += "entTime=" + encodeURIComponent(this.endTime().toString()) + "&";
-                }
-                if (this.max() != null) {
-                    url += "max=" + encodeURIComponent(this.max().toString()) + "&";
-                }
-                if ((this.pattern() != null) && (this.pattern().length > 0)) {
-                    url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
-                }
                 return url;
+            };
+            Entries.prototype.getParams = function () {
+                var params = {
+                    level: this.level(),
+                    startTime: this.startTime(),
+                    endTime: this.endTime(),
+                    max: this.max(),
+                    pattern: this.pattern()
+                };
+                var keys = Object.keys(params);
+                for (var i = 0; i < keys.length; i++) {
+                    if (!params[keys[i]]) {
+                        delete params[keys[i]];
+                    }
+                }
+                return params;
+            };
+            Entries.prototype._url = function () {
+                return "/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
             };
             return Entries;
         })();
@@ -1196,10 +1194,16 @@ var AdminViews;
         var Page;
         (function (Page) {
             var Controller = (function () {
-                function Controller(nodeId) {
+                function Controller() {
                     var _this = this;
                     this.columns = Utils.Prop(Controller.comparisonColumns);
-                    entries = new Models.Log.Entries(nodeId);
+                    entries = new Models.Log.Entries();
+                    entries.node(m.route.param("node_id") || null);
+                    entries.level(m.route.param("level") || Utils.Format.Severity(2));
+                    entries.max(parseInt(m.route.param("max"), 10) || null);
+                    entries.startTime(parseInt(m.route.param("startTime"), 10) || null);
+                    entries.endTime(parseInt(m.route.param("endTime"), 10) || null);
+                    entries.pattern(m.route.param("pattern") || null);
                     this._Refresh();
                     this._interval = setInterval(function () { return _this._Refresh(); }, Controller._queryEveryMS);
                 }
@@ -1266,8 +1270,7 @@ var AdminViews;
             })();
             ;
             function controller() {
-                var nodeId = m.route.param("node_id");
-                return new Controller(nodeId);
+                return new Controller();
             }
             Page.controller = controller;
             ;
@@ -1279,7 +1282,7 @@ var AdminViews;
             ];
             function onChangeSeverity(val) {
                 entries.level(val);
-                entries.refresh();
+                m.route(entries.getURL(), entries.getParams());
             }
             ;
             function onChangeMax(val) {
@@ -1290,11 +1293,11 @@ var AdminViews;
                 else {
                     entries.max(null);
                 }
-                entries.refresh();
+                m.route(entries.getURL(), entries.getParams());
             }
             function onChangePattern(val) {
                 entries.pattern(val);
-                entries.refresh();
+                m.route(entries.getURL(), entries.getParams());
             }
             function view(ctrl) {
                 var comparisonData = {
@@ -1318,9 +1321,9 @@ var AdminViews;
                             onChange: onChangeSeverity
                         }),
                         m.trust("&nbsp;&nbsp;Max Results: "),
-                        m("input", { oninput: m.withAttr("value", onChangeMax), value: entries.max() }),
+                        m("input", { onchange: m.withAttr("value", onChangeMax), value: entries.max() }),
                         m.trust("&nbsp;&nbsp;Regex Filter: "),
-                        m("input", { oninput: m.withAttr("value", onChangePattern), value: entries.pattern() })
+                        m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() })
                     ]),
                     m("p", count + " log entries retrieved"),
                     m(".stats-table", Components.Table.create(comparisonData))
