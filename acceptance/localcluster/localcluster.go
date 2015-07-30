@@ -115,7 +115,7 @@ type Cluster struct {
 	CertsDir       string
 	monitorStopper chan struct{}
 	LogDir         string
-	ForceLogging   bool
+	ForceLogging   bool // Forces logging to disk on a per test basis
 }
 
 // Create creates a new local cockroach cluster. The stopper is used to
@@ -475,9 +475,9 @@ func (l *Cluster) Stop() {
 			l.Nodes[i] = nil
 		}
 	}
-	// Only delete the logging directory if forceLogging was set and there was
+	// Only delete the logging directory if ForceLogging was set and there was
 	// no passed in logDirectory flag. This must be after the killing of the
-	// nodes or there might be a panic when it tries to log that's it is killing
+	// nodes or there might be a panic when it tries to log that it is killing
 	// the node.
 	if l.ForceLogging && !(logDirectory != nil && len(*logDirectory) > 0) {
 		_ = os.RemoveAll(l.LogDir)
