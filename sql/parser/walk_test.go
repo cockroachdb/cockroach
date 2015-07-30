@@ -17,7 +17,10 @@
 
 package parser
 
-import "testing"
+import (
+	"log"
+	"testing"
+)
 
 type mapArgs map[int]Datum
 
@@ -82,12 +85,10 @@ func TestFillArgs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
-		expr, err = FillArgs(expr, d.args)
-		if err != nil {
+		if err := FillArgs(q[0], d.args); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if s := expr.String(); d.expected != s {
+		if s := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
@@ -107,11 +108,43 @@ func TestFillArgsError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].(*NonStarExpr).Expr
-		if _, err = FillArgs(expr, d.args); err == nil {
+		if err := FillArgs(q[0], d.args); err == nil {
 			t.Fatalf("%s: expected failure, but found success", d.expr)
 		} else if d.expected != err.Error() {
 			t.Fatalf("%s: expected %s, but found %v", d.expr, d.expected, err)
+		}
+	}
+}
+
+func TestWalkStmt(t *testing.T) {
+	testData := []struct {
+		sql      string
+		expected string
+		args     mapArgs
+	}{
+		{`SELECT $1`, `SELECT 'a'`, mapArgs{1: DString(`a`)}},
+		{`SELECT $1, $2 FROM db.table WHERE c in ($3, 2 * $4)`,
+			`SELECT 'a', 'b' FROM db.table WHERE c in (1.1, 2 * 6.5)`,
+			mapArgs{1: DString(`a`), 2: DString(`b`), 3: DFloat(1.1), 4: DFloat(6.5)}},
+		{`INSERT INTO db.table (k, v) VALUES (1, 2), ($1, $2)`,
+			`INSERT INTO db.table (k, v) VALUES (1, 2), (3, 4)`,
+			mapArgs{1: DInt(3), 2: DInt(4)}},
+	}
+	for _, d := range testData {
+		q, err := Parse(d.sql)
+		if err != nil {
+			t.Fatalf("%s: %v", d.sql, err)
+		}
+		if err := FillArgs(q[0], d.args); err != nil {
+			t.Fatalf("%s: %v", d.sql, err)
+		}
+		e, err := Parse(d.expected)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expected, err)
+		}
+		// Verify that all expressions match up
+		if q[0].String() != e[0].String() {
+			log.Fatalf("%s not eq expected: %s", q[0].String(), e[0].String())
 		}
 	}
 }

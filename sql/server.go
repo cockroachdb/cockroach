@@ -120,6 +120,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
+type parameters []driver.Datum
+
+// Arg implements the Args interface
+func (p parameters) Arg(i int) (parser.Datum, bool) {
+	if i < 1 || i > len(p) {
+		return parser.DNull{}, false
+	}
+	d := p[i-1]
+	if d.BoolVal != nil {
+		return parser.DBool(*d.BoolVal), true
+	} else if d.IntVal != nil {
+		return parser.DInt(*d.IntVal), true
+	} else if d.FloatVal != nil {
+		return parser.DFloat(*d.FloatVal), true
+	} else if d.BytesVal != nil {
+		// TODO(vivek): Add DBytes
+		return parser.DString(d.BytesVal), true
+	} else if d.StringVal != nil {
+		return parser.DString(*d.StringVal), true
+	}
+	return parser.DNull{}, false
+}
+
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
 func (s *Server) exec(req driver.Request) (driver.Response, error) {
@@ -139,7 +162,10 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 		return resp, err
 	}
 	for _, stmt := range stmts {
-		// TODO(pmattis): Fill placeholders.
+		// Bind all the placeholder variables in the stmt to actual values.
+		if err := parser.FillArgs(stmt, parameters(req.Params)); err != nil {
+			return resp, err
+		}
 		var plan planNode
 		if plan, err = planner.makePlan(stmt); err != nil {
 			return resp, err

@@ -19,7 +19,9 @@ package driver
 
 import (
 	"database/sql/driver"
+	"errors"
 	"fmt"
+	"time"
 )
 
 // TODO(pmattis):
@@ -62,8 +64,39 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 }
 
 func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
-	// TODO(vivek): Add the args to the Call.
-	return c.send(Request{RequestHeader: RequestHeader{Session: c.session}, Sql: stmt})
+	params := make([]Datum, 0, len(args))
+	for _, arg := range args {
+		if arg == nil {
+			return nil, errors.New("Passed in a nil parameter")
+		}
+		var param Datum
+		switch value := arg.(type) {
+		case int64:
+			param.IntVal = &value
+		case float64:
+			param.FloatVal = &value
+		case bool:
+			param.BoolVal = &value
+		case []byte:
+			param.BytesVal = value
+		case string:
+			param.StringVal = &value
+		case time.Time:
+			// TODO(vivek): pass in time as an input that can be interpreted
+			// by the server.
+			time, err := value.MarshalBinary()
+			if err != nil {
+				return nil, err
+			}
+			param.BytesVal = time
+		}
+		params = append(params, param)
+	}
+	return c.send(Request{
+		RequestHeader: RequestHeader{Session: c.session},
+		Sql:           stmt,
+		Params:        params,
+	})
 }
 
 // send sends the call to the server.

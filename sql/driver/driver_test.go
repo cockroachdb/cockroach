@@ -343,16 +343,16 @@ func TestInsertSelectDelete(t *testing.T) {
 		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (v) VALUES ('a')`, testcase.db)); !isError(err, "missing .* primary key column") {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ('c', 'd')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('e', 'f')`, testcase.db)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ($1, $2)`, testcase.db), "c", "d"); err != nil {
 			t.Fatal(err)
 		}
 
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('e', 'f')`, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
 		// TODO(pmattis): We need much more testing of WHERE clauses. Need to think
 		// through the whole testing story in general.
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k IN ('a', 'c')`, testcase.db)); err != nil {
+		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k IN ($1, $2)`, testcase.db), "a", "c"); err != nil {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
