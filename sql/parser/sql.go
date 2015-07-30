@@ -9751,7 +9751,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2940
 		{
-			sqlVAL.expr = &FuncExpr{Name: sqlDollar[1].qname, Exprs: Exprs{QualifiedName{"*"}}}
+			sqlVAL.expr = &FuncExpr{Name: sqlDollar[1].qname, Exprs: Exprs{&StarExpr{}}}
 		}
 	case 718:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
