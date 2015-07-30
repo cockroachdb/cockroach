@@ -117,7 +117,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapResolvers)
 
-	feed := &util.Feed{}
+	feed := util.NewFeed(stopper)
 	tracer := tracer.NewTracer(feed, addr)
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
@@ -157,7 +157,6 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.status = newStatusServer(s.db, s.gossip, ctx)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
-	s.stopper.AddCloser(nCtx.EventFeed)
 
 	return s, nil
 }

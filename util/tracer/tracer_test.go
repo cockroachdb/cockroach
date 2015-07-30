@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type traceID int
@@ -39,10 +40,65 @@ func (id traceID) TraceName() string {
 }
 
 func TestTracer(t *testing.T) {
-	f := &util.Feed{}
-	sub := f.Subscribe()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	feed := util.NewFeed(stopper)
 	const origin = ":8081"
-	tracer := NewTracer(f, origin)
+
+	expTraces := []Trace{
+		{ID: "10", Content: []TraceItem{
+			{
+				depth:    1,
+				Name:     "A1",
+				Duration: 30 * time.Millisecond,
+			},
+			{
+				depth:     2,
+				Timestamp: time.Time{}.Add(10 * time.Millisecond),
+				Name:      "A2",
+				Duration:  10 * time.Millisecond,
+			},
+			{
+				depth:     3,
+				Timestamp: time.Time{}.Add(15 * time.Millisecond),
+				Name:      "E3",
+			},
+			{
+				depth:     3,
+				Timestamp: time.Time{}.Add(17 * time.Millisecond),
+				Name:      "E4",
+			},
+		}},
+	}
+
+	feed.Subscribe(func(event interface{}) {
+		trace := event.(*Trace)
+
+		if len(expTraces) == 0 {
+			t.Fatalf("unexpected extra trace: %s", trace)
+		}
+		expTrace := expTraces[0]
+		expTraces = expTraces[1:]
+		if !reflect.DeepEqual(expTrace.ID, trace.ID) {
+			t.Errorf("expected ID %s, got %s", expTrace.ID, trace.ID)
+		}
+		tc := trace.Content
+		for i, v := range tc {
+			if !strings.Contains(v.Func, "TestTracer") || !strings.Contains(v.File, "tracer_test.go") {
+				t.Errorf("invalid callsite in trace: %s %s", v.Func, v.File)
+			}
+			if v.Origin != origin {
+				t.Fatalf("unexpected origin %s", v.Origin)
+			}
+			tc[i].Func, tc[i].File, tc[i].Line, tc[i].Origin = "", "", 0, ""
+		}
+		if !reflect.DeepEqual(expTrace.Content, trace.Content) {
+			t.Fatalf("unexpected content:\n%+v\nwanted:\n%+v", trace, expTrace)
+		}
+	})
+
+	tracer := NewTracer(feed, origin)
 
 	now := &time.Time{}
 
@@ -76,62 +132,8 @@ func TestTracer(t *testing.T) {
 		t.Fatalf("expected a panic when ending an epoch twice")
 	}
 
-	f.Close()
+	feed.Flush()
 
-	expTraces := []Trace{
-		{ID: "10", Content: []TraceItem{
-			{
-				depth:    1,
-				Name:     "A1",
-				Duration: 30 * time.Millisecond,
-			},
-			{
-				depth:     2,
-				Timestamp: time.Time{}.Add(10 * time.Millisecond),
-				Name:      "A2",
-				Duration:  10 * time.Millisecond,
-			},
-			{
-				depth:     3,
-				Timestamp: time.Time{}.Add(15 * time.Millisecond),
-				Name:      "E3",
-			},
-			{
-				depth:     3,
-				Timestamp: time.Time{}.Add(17 * time.Millisecond),
-				Name:      "E4",
-			},
-		}},
-	}
-	for {
-		event := <-sub.Events()
-		if event == nil {
-			break
-		}
-		trace := event.(*Trace)
-
-		if len(expTraces) == 0 {
-			t.Fatalf("unexpected extra trace: %s", trace)
-		}
-		expTrace := expTraces[0]
-		expTraces = expTraces[1:]
-		if !reflect.DeepEqual(expTrace.ID, trace.ID) {
-			t.Errorf("expected ID %s, got %s", expTrace.ID, trace.ID)
-		}
-		tc := trace.Content
-		for i, v := range tc {
-			if !strings.Contains(v.Func, "TestTracer") || !strings.Contains(v.File, "tracer_test.go") {
-				t.Errorf("invalid callsite in trace: %s %s", v.Func, v.File)
-			}
-			if v.Origin != origin {
-				t.Fatalf("unexpected origin %s", v.Origin)
-			}
-			tc[i].Func, tc[i].File, tc[i].Line, tc[i].Origin = "", "", 0, ""
-		}
-		if !reflect.DeepEqual(expTrace.Content, trace.Content) {
-			t.Fatalf("unexpected content:\n%+v\nwanted:\n%+v", trace, expTrace)
-		}
-	}
 	if len(expTraces) > 0 {
 		t.Fatalf("missing traces:\n%+v", expTraces)
 	}

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -32,48 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// simpleEventConsumer stores every event published to a feed.
-type simpleEventConsumer struct {
-	sub      *util.Subscription
-	received []interface{}
-}
-
-func newSimpleEventConsumer(feed *util.Feed) *simpleEventConsumer {
-	return &simpleEventConsumer{
-		sub: feed.Subscribe(),
-	}
-}
-
-func (sec *simpleEventConsumer) process() {
-	for e := range sec.sub.Events() {
-		sec.received = append(sec.received, e)
-	}
-}
-
-// startConsumerSet starts a NodeEventFeed and a number of associated
-// simple consumers.
-func startConsumerSet(count int) (*stop.Stopper, *util.Feed, []*simpleEventConsumer) {
-	stopper := stop.NewStopper()
-	feed := &util.Feed{}
-	consumers := make([]*simpleEventConsumer, count)
-	for i := range consumers {
-		consumers[i] = newSimpleEventConsumer(feed)
-		stopper.RunWorker(consumers[i].process)
-	}
-	return stopper, feed, consumers
-}
-
-// waitForStopper stops the supplied stop.Stopper and waits up to five seconds
-// for it to complete.
-func waitForStopper(t testing.TB, stopper *stop.Stopper) {
-	stopper.Stop()
-	select {
-	case <-stopper.IsStopped():
-	case <-time.After(5 * time.Second):
-		t.Fatalf("Stopper failed to stop after 5 seconds")
-	}
-}
 
 func TestNodeEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -143,31 +100,25 @@ func TestNodeEventFeed(t *testing.T) {
 		expectedEvents[i] = testCases[i].expected
 	}
 
-	// assertEventsEqual verifies that the given set of events is equal to the
-	// expectedEvents.
-	verifyEventSlice := func(source string, events []interface{}) {
-		if a, e := len(events), len(expectedEvents); a != e {
-			t.Errorf("%s had wrong number of events %d, expected %d", source, a, e)
-			return
-		}
-
-		for i := range events {
-			if a, e := events[i], expectedEvents[i]; !reflect.DeepEqual(a, e) {
-				t.Errorf("%s had wrong event for case %s: got %v, expected %v", source, testCases[i].name, a, e)
-			}
-		}
-	}
+	events := make([]interface{}, 0, len(expectedEvents))
 
 	// Run test cases directly through a feed.
-	stopper, feed, consumers := startConsumerSet(3)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	feed := util.NewFeed(stopper)
+	feed.Subscribe(func(event interface{}) {
+		events = append(events, event)
+	})
+
 	nodefeed := status.NewNodeEventFeed(proto.NodeID(1), feed)
 	for _, tc := range testCases {
 		tc.publishTo(nodefeed)
 	}
-	feed.Close()
-	waitForStopper(t, stopper)
-	for i, c := range consumers {
-		verifyEventSlice(fmt.Sprintf("feed direct consumer %d", i), c.received)
+
+	feed.Flush()
+
+	if a, e := events, expectedEvents; !reflect.DeepEqual(a, e) {
+		t.Errorf("received incorrect events.\nexpected: %v\nactual: %v", e, a)
 	}
 }
 
@@ -207,11 +158,9 @@ func (ner *nodeEventReader) recordEvent(event interface{}) {
 	}
 }
 
-func (ner *nodeEventReader) readEvents(sub *util.Subscription) {
+func (ner *nodeEventReader) readEvents(feed *util.Feed) {
 	ner.perNodeFeeds = make(map[proto.NodeID][]string)
-	for e := range sub.Events() {
-		ner.recordEvent(e)
-	}
+	feed.Subscribe(ner.recordEvent)
 }
 
 // eventFeedString describes the event information that was recorded by
@@ -234,17 +183,12 @@ func (ner *nodeEventReader) eventFeedString() string {
 func TestServerNodeEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(t)
-	defer s.Stop()
 
 	feed := s.EventFeed()
 
 	// Start reading events from the feed before starting the stores.
-	readStopper := stop.NewStopper()
-	ner := &nodeEventReader{}
-	sub := feed.Subscribe()
-	readStopper.RunWorker(func() {
-		ner.readEvents(sub)
-	})
+	ner := nodeEventReader{}
+	ner.readEvents(feed)
 
 	db, err := client.Open("https://root@" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir)
 	if err != nil {
@@ -273,8 +217,8 @@ func TestServerNodeEventFeed(t *testing.T) {
 	}
 
 	// Close feed and wait for reader to receive all events.
-	feed.Close()
-	readStopper.Stop()
+	feed.Flush()
+	s.Stop()
 
 	expectedNodeEvents := map[proto.NodeID][]string{
 		proto.NodeID(1): {
@@ -319,9 +263,9 @@ func TestServerNodeEventFeed(t *testing.T) {
 			break
 		}
 	}
+
 	if !passed {
-		t.Errorf("node feed did not contain expected subset. Actual values have been printed to compare with expectation.\n")
-		t.Logf("Event feed information:\n%s", ner.eventFeedString())
+		t.Fatalf("received unexpected events: %s", ner.eventFeedString())
 	}
 }
 
@@ -329,14 +273,13 @@ func TestServerNodeEventFeed(t *testing.T) {
 // transaction restart are counted as successful.
 func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, feed, consumers := startConsumerSet(1)
-	nodefeed := status.NewNodeEventFeed(proto.NodeID(1), feed)
-	ner := &nodeEventReader{}
-	sub := feed.Subscribe()
-	stopper.RunWorker(func() {
-		ner.readEvents(sub)
-	})
+
+	stopper := stop.NewStopper()
+	feed := util.NewFeed(stopper)
 	nodeID := proto.NodeID(1)
+	nodefeed := status.NewNodeEventFeed(nodeID, feed)
+	ner := nodeEventReader{}
+	ner.readEvents(feed)
 
 	nodefeed.CallComplete(&proto.GetRequest{}, &proto.GetResponse{
 		ResponseHeader: proto.ResponseHeader{
@@ -359,26 +302,17 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 			},
 		},
 	})
-	feed.Close()
+
+	feed.Flush()
 	stopper.Stop()
 
-	c := consumers[0]
-	exp := []interface{}{
-		&status.CallSuccessEvent{
-			NodeID: nodeID,
-			Method: proto.Get,
-		},
-		&status.CallSuccessEvent{
-			NodeID: nodeID,
-			Method: proto.Get,
-		},
-		&status.CallErrorEvent{
-			NodeID: nodeID,
-			Method: proto.Put,
-		},
+	exp := []string{
+		"Get",
+		"Get",
+		"failed Put",
 	}
 
-	if !reflect.DeepEqual(exp, c.received) {
+	if !reflect.DeepEqual(exp, ner.perNodeFeeds[nodeID]) {
 		t.Fatalf("received unexpected events: %s", ner.eventFeedString())
 	}
 }

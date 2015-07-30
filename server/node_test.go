@@ -77,7 +77,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
-	ctx.EventFeed = &util.Feed{}
+	ctx.EventFeed = util.NewFeed(stopper)
 	node := NewNode(ctx)
 	return rpcServer, ctx.Clock, node, stopper
 }
@@ -467,11 +467,7 @@ func TestStatusSummaries(t *testing.T) {
 		}
 
 		// Ensure that the event feed has been fully flushed.
-		syncEvent := status.NewTestSyncEvent(1)
-		ts.EventFeed().Publish(syncEvent)
-		if err := syncEvent.Sync(5 * time.Second); err != nil {
-			t.Fatal(err)
-		}
+		ts.EventFeed().Flush()
 
 		if err := ts.writeSummaries(); err != nil {
 			t.Fatalf("error writing summaries: %s", err)
