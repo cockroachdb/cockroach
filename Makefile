@@ -52,7 +52,7 @@ LDFLAGS += -extldflags "-static"
 endif
 
 .PHONY: all
-all: build test
+all: build test check
 
 # On a release build, rebuild everything (except stdlib)
 # to make sure that the 'release' build tag is taken
