@@ -332,7 +332,8 @@ func (txn *Txn) updateState(calls []proto.Call) {
 func (txn *Txn) updateStateForRequest(r proto.Request) {
 	if !txn.haveTxnWrite {
 		txn.haveTxnWrite = proto.IsTransactionWrite(r)
-	} else if _, ok := r.(*proto.EndTransactionRequest); ok {
+	}
+	if _, ok := r.(*proto.EndTransactionRequest); ok {
 		txn.haveEndTxn = true
 	}
 }

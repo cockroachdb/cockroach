@@ -196,12 +196,14 @@ func TestCommitTransactionOnce(t *testing.T) {
 		count++
 	}))
 	if err := db.Txn(func(txn *Txn) error {
-		return txn.Commit(&Batch{})
+		b := &Batch{}
+		b.Put("z", "adding a write exposed a bug in #1882")
+		return txn.Commit(b)
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
 	if count != 1 {
-		t.Errorf("expected single invocation of EndTransaction; got %d", count)
+		t.Errorf("expected single Batch, got %d sent calls", count)
 	}
 }
 
