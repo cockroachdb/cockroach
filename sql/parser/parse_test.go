@@ -352,7 +352,7 @@ func TestParseSyntax(t *testing.T) {
 	}
 	for _, d := range testData {
 		if _, err := Parse(d.sql); err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
 }
@@ -394,6 +394,16 @@ SELECT '1
 CREATE TABLE test (
   INDEX foo (bar)
         ^
+`},
+		{`CREATE DATABASE a b`,
+			`syntax error at or near "b"
+CREATE DATABASE a b
+                  ^
+`},
+		{`CREATE DATABASE a b c`,
+			`syntax error at or near "b"
+CREATE DATABASE a b c
+                  ^
 `},
 	}
 	for _, d := range testData {

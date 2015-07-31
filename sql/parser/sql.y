@@ -1575,8 +1575,7 @@ createdb_opt_item:
 // option will silently break. Best defense is to provide a regression test
 // exercising every such option, at least at the syntax level.
 createdb_opt_name:
-  IDENT {}
-| CONNECTION LIMIT {}
+  CONNECTION LIMIT {}
 | ENCODING {}
 | LOCATION {}
 | OWNER {}
