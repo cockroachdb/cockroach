@@ -175,6 +175,13 @@ func WalkStmt(v Visitor, stmt Statement) {
 	switch stmt := stmt.(type) {
 	case *ParenSelect:
 		WalkStmt(v, stmt.Select)
+	case *Delete:
+		walkTableExpr(v, stmt.Table)
+		if stmt.Where != nil {
+			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
+		}
+	case *Insert:
+		WalkStmt(v, stmt.Rows)
 	case *Select:
 		for _, expr := range stmt.Exprs {
 			switch expr := expr.(type) {
@@ -182,16 +189,63 @@ func WalkStmt(v Visitor, stmt Statement) {
 				expr.Expr = WalkExpr(v, expr.Expr)
 			}
 		}
+		for _, expr := range stmt.From {
+			walkTableExpr(v, expr)
+		}
 		if stmt.Where != nil {
 			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
 		}
-	case *Insert:
-		switch rows := stmt.Rows.(type) {
-		case Values:
-			for i, tuple := range rows {
-				rows[i] = WalkExpr(v, tuple).(Tuple)
+		for i, expr := range stmt.GroupBy {
+			stmt.GroupBy[i] = WalkExpr(v, expr)
+		}
+		if stmt.Having != nil {
+			stmt.Having.Expr = WalkExpr(v, stmt.Having.Expr)
+		}
+		for i, expr := range stmt.OrderBy {
+			stmt.OrderBy[i].Expr = WalkExpr(v, expr.Expr)
+		}
+		if stmt.Limit != nil {
+			if stmt.Limit.Offset != nil {
+				stmt.Limit.Offset = WalkExpr(v, stmt.Limit.Offset)
+			}
+			if stmt.Limit.Count != nil {
+				stmt.Limit.Count = WalkExpr(v, stmt.Limit.Count)
 			}
 		}
+	case *Set:
+		for i, expr := range stmt.Values {
+			stmt.Values[i] = WalkExpr(v, expr)
+		}
+	case *Update:
+		walkTableExpr(v, stmt.Table)
+		for i, expr := range stmt.Exprs {
+			stmt.Exprs[i].Expr = WalkExpr(v, expr.Expr)
+		}
+		if stmt.Where != nil {
+			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
+		}
+	case Values:
+		for i, tuple := range stmt {
+			stmt[i] = WalkExpr(v, tuple).(Tuple)
+		}
 	}
-	// TODO(vivek): Implement Walk for the other stmts.
+}
+
+func walkTableExpr(v Visitor, table TableExpr) {
+	switch table := table.(type) {
+	case *AliasedTableExpr:
+		switch expr := table.Expr.(type) {
+		case *Subquery:
+			WalkStmt(v, expr.Select)
+		}
+	case *ParenTableExpr:
+		walkTableExpr(v, table.Expr)
+	case *JoinTableExpr:
+		walkTableExpr(v, table.Left)
+		walkTableExpr(v, table.Right)
+		switch cond := table.Cond.(type) {
+		case *OnJoinCond:
+			cond.Expr = WalkExpr(v, cond.Expr)
+		}
+	}
 }
