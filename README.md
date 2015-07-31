@@ -64,7 +64,7 @@ Other operating systems will have a similar set of commands. Please check Docker
 Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up the node:
 
 ```bash
-DIR=$(mktemp -d /tmp/dbXXX)
+DIR=$(mktemp -d /tmp/dbXXXXXX)
 # Initialize CA, server, and client certificates. Default directory is --certs=certs
 ./cockroach cert create-ca
 ./cockroach cert create-node 127.0.0.1 localhost $(hostname)
