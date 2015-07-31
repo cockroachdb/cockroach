@@ -746,3 +746,41 @@ func TestTxnDrainingNode(t *testing.T) {
 	close(done)
 	<-s.Stopper.IsStopped()
 }
+
+// TestTxnCoordIdempotentCleanup verifies that cleanupTxn is idempotent.
+func TestTxnCoordIdempotentCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	txn := newTxn(s.Clock, proto.Key("a"))
+	pReply := &proto.PutResponse{}
+	key := proto.Key("a")
+	call := proto.Call{
+		Args:  createPutRequest(key, []byte("value"), txn),
+		Reply: pReply,
+	}
+	if err := sendCall(s.Sender, call); err != nil {
+		t.Fatal(err)
+	}
+
+	if pReply.Error != nil {
+		t.Fatal(pReply.GoError())
+	}
+	s.Sender.cleanupTxn(nil, *txn, nil) // first call
+	etReply := &proto.EndTransactionResponse{}
+	s.Sender.Send(context.Background(), proto.Call{
+		Args: &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:       txn.Key,
+				Timestamp: txn.Timestamp,
+				Txn:       txn,
+			},
+			Commit: true,
+		},
+		Reply: etReply,
+	}) // second call
+	if etReply.Error != nil {
+		t.Fatal(etReply.GoError())
+	}
+}

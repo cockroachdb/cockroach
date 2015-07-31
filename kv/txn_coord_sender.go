@@ -684,7 +684,8 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction,
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
-	if !ok {
+	// Only clean up once per transaction.
+	if !ok || txnMeta.txnEnd == nil {
 		return
 	}
 
@@ -693,8 +694,8 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction,
 	txnMeta.txn = txn
 	// Trigger intent resolution and heartbeat shutdown.
 	trace.Event("coordinator stops")
-	txnMeta.txnEnd <- resolved // buffered, so does not block
-	close(txnMeta.txnEnd)
+	txnMeta.txnEnd <- resolved // buffered and not nil, so does not block
+	txnMeta.txnEnd = nil       // checked above
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
@@ -741,9 +742,13 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 		trace = tc.tracer.NewTrace(&txnMeta.txn)
 		tc.Unlock()
 	}
+	if closer == nil {
+		// Avoid race in which a Txn is cleaned up before the heartbeat
+		// goroutine gets a chance to start.
+		return
+	}
 	ctx := tracer.ToCtx(context.Background(), trace)
 	defer trace.Finalize()
-
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
