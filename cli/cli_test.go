@@ -221,6 +221,7 @@ func Example_logging() {
 	c.Run("kv --logtostderr=true scan")
 	c.Run("kv --verbosity=0 scan")
 	c.Run("kv --vmodule=foo=1 scan")
+	c.Run("quit")
 
 	// Output:
 	// kv --alsologtostderr=false scan
@@ -229,6 +230,8 @@ func Example_logging() {
 	// kv --logtostderr=true scan
 	// kv --verbosity=0 scan
 	// kv --vmodule=foo=1 scan
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_max_results() {
