@@ -125,7 +125,7 @@ func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 }
 
 func encodeIndexKey(index structured.IndexDescriptor,
-	colMap map[uint32]int, row []parser.Datum, indexKey []byte) ([]byte, error) {
+	colMap map[uint32]int, values []parser.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
@@ -135,10 +135,10 @@ func encodeIndexKey(index structured.IndexDescriptor,
 			return nil, fmt.Errorf("missing \"%s\" primary key column",
 				index.ColumnNames[i])
 		}
-		// TOOD(pmattis): Need to convert the row[i] value to the type expected by
+		// TOOD(pmattis): Need to convert the values[i] value to the type expected by
 		// the column.
 		var err error
-		key, err = encodeTableKey(key, row[j])
+		key, err = encodeTableKey(key, values[j])
 		if err != nil {
 			return nil, err
 		}
@@ -213,4 +213,34 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 	}
 
 	return key, nil
+}
+
+type indexEntry struct {
+	key   []byte
+	value []byte
+}
+
+func encodeSecondaryIndexes(tableDesc *structured.TableDescriptor,
+	colMap map[uint32]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
+	var secondaryIndexEntries []indexEntry
+	for _, secondaryIndex := range tableDesc.Indexes[1:] {
+		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, secondaryIndex.ID)
+		secondaryIndexKey, err := encodeIndexKey(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		if err != nil {
+			return nil, err
+		}
+
+		if secondaryIndex.Unique {
+			secondaryIndexEntries = append(secondaryIndexEntries, indexEntry{
+				key:   secondaryIndexKey,
+				value: primaryIndexKeySuffix,
+			})
+		} else {
+			secondaryIndexEntries = append(secondaryIndexEntries, indexEntry{
+				key:   append(secondaryIndexKey, primaryIndexKeySuffix...),
+				value: nil,
+			})
+		}
+	}
+	return secondaryIndexEntries, nil
 }

@@ -150,15 +150,19 @@ changing the primary key.
 **Secondary key addressing**
 
 Secondary keys will be implemented as a layer of indirection to the primary
-keys. Unlike primary keys, secondary keys are not required to be unique. So we
-will employ the following key anatomy:
-`/TableID/SecondaryIndexID/SecondaryKey/PrimaryKey`. Thus, multiple PrimaryKeys
-can be enumerated under a single SecondaryKey. A lookup will involve looking up
-the secondary index using the secondary key to pick up all the primary keys, and
-further using the primary keys to get to all the data rows. A row insertion
-involves computing the primary and secondary keys for the row, adding the data
-under the primary key, and adding the primary key to all the secondary indexes
-under the secondary keys. A row deletion behaves analogously.
+keys. Unique secondary keys will map directly to the primary key via the
+following anatomy: `/TableID/SecondaryIndexID/SecondaryKey` -> `PrimaryKey`.
+Non-unique secondary keys must be able to address multiple primary keys, and
+so will use a prefix-based anatomy:
+`/TableID/SecondaryIndexID/SecondaryKey/PrimaryKey` -> `NULL`.
+
+A lookup will involve looking up the secondary index, using the secondary key
+to pick up all the primary keys, and further using the primary keys to get to
+all the data rows.
+
+A row insertion involves computing the primary and secondary keys for the row,
+writing the data under the primary key, and writing the primary key to all the
+secondary keys. A row deletion behaves analogously.
 
 **Interleaved table layout**
 

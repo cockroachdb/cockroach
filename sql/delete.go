@@ -18,9 +18,12 @@
 package sql
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Delete deletes rows from a table.
@@ -54,8 +57,8 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		colMap[c.ID] = i
 	}
 
-	index := tableDesc.Indexes[0]
-	indexKey := encodeIndexKeyPrefix(tableDesc.ID, index.ID)
+	primaryIndex := tableDesc.Indexes[0]
+	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
 
@@ -63,14 +66,34 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		if err := node.Err(); err != nil {
 			return nil, err
 		}
+		values := node.Values()
 
-		// TODO(tamird/pmattis): delete the secondary indexes too
-		primaryKey, err := encodeIndexKey(index, colMap, node.Values(), indexKey)
+		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colMap, values, nil)
 		if err != nil {
 			return nil, err
 		}
-		rowStartKey := proto.Key(primaryKey)
-		b.DelRange(rowStartKey, rowStartKey.PrefixEnd())
+		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
+
+		// Delete the secondary indexes.
+		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc, colMap, values, primaryIndexKeySuffix)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, secondaryIndexEntry := range secondaryIndexEntries {
+			if log.V(2) {
+				log.Infof("Del %q", secondaryIndexEntry.key)
+			}
+			b.Del(secondaryIndexEntry.key)
+		}
+
+		// Delete the row.
+		rowStartKey := proto.Key(primaryIndexKey)
+		rowEndKey := rowStartKey.PrefixEnd()
+		if log.V(2) {
+			log.Infof("DelRange %q - %q", rowStartKey, rowEndKey)
+		}
+		b.DelRange(rowStartKey, rowEndKey)
 	}
 
 	if err := p.db.Run(&b); err != nil {
