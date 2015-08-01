@@ -17,5 +17,47 @@ for names of contributors.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-$font-size--base = 14px
-$font-size--title = 1.25em
+$font-base-size = 14px
+$font-line-height = $font-base-size * 1.5
+$root-size = $font-line-height / 2
+
+// A really simple implementation of a Modular Scale.
+// For an example, see http://www.modularscale.com/
+$font-ratio = 1.2
+$font-size-table = {
+  '5': $font-base-size * ($font-ratio**5),
+  '4': $font-base-size * ($font-ratio**4),
+  '3': $font-base-size * ($font-ratio**3),
+  '2': $font-base-size * ($font-ratio**2),
+  '1': $font-base-size * ($font-ratio),
+  '0': $font-base-size,
+  '-1': $font-base-size * (1 / $font-ratio),
+  '-2': $font-base-size * (1 / $font-ratio**2),
+  '-3': $font-base-size * (1 / $font-ratio**3),
+}
+
+// Select a modular font size from the table.
+modular-font-size($font-size)
+  font-size: remove-unit($font-size-table[$font-size]/$root-size) rem
+
+// Using the same strategy as sassline: establish the root size (rems) as 1/2
+// of our chosen baseline heigth. This allows easy, integer math for baseline units
+// using rems.
+html
+  font-size: $root-size
+
+body
+  line-height: 2rem
+  font-size: $font-base-size 
+  font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
+  font-weight: 400
+
+h2
+  modular-font-size '3'
+  line-height: 4rem
+  font-weight: 600
+
+h3
+  modular-font-size '1'
+  line-height: 2rem
+  font-weight: 600
