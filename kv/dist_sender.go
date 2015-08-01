@@ -374,6 +374,11 @@ func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPo
 		// us and hence better candidates.
 		order = rpc.OrderStable
 	}
+	// If there is a replica in local node, move it to the front.
+	if i := replicas.FindReplicaByNodeID(nodeDesc.NodeID); i > 0 {
+		replicas.MoveToFront(i)
+		order = rpc.OrderStable
+	}
 	return order
 }
 

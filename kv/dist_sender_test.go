@@ -90,6 +90,62 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	return g, n.Stop
 }
 
+// TestMoveLocalReplicaToFront verifies that optimizeReplicaOrder correctly
+// move the local replica to the front.
+func TestMoveLocalReplicaToFront(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCase := []struct {
+		slice         replicaSlice
+		localNodeDesc proto.NodeDescriptor
+	}{
+		{
+			// No attribute prefix
+			slice: replicaSlice{
+				replicaInfo{
+					Replica:  proto.Replica{NodeID: 2, StoreID: 2},
+					NodeDesc: proto.NodeDescriptor{NodeID: 2},
+				},
+				replicaInfo{
+					Replica:  proto.Replica{NodeID: 3, StoreID: 3},
+					NodeDesc: proto.NodeDescriptor{NodeID: 3},
+				},
+				replicaInfo{
+					Replica:  proto.Replica{NodeID: 1, StoreID: 1},
+					NodeDesc: proto.NodeDescriptor{NodeID: 1},
+				},
+			},
+			localNodeDesc: proto.NodeDescriptor{NodeID: 1},
+		},
+		{
+			// Sort replicas by attribute
+			slice: replicaSlice{
+				replicaInfo{
+					Replica:  proto.Replica{NodeID: 2, StoreID: 2},
+					NodeDesc: proto.NodeDescriptor{NodeID: 2, Attrs: proto.Attributes{Attrs: []string{"ad"}}},
+				},
+				replicaInfo{
+					Replica:  proto.Replica{NodeID: 3, StoreID: 3},
+					NodeDesc: proto.NodeDescriptor{NodeID: 3, Attrs: proto.Attributes{Attrs: []string{"ab", "c"}}},
+				},
+				replicaInfo{
+					Replica:  proto.Replica{NodeID: 1, StoreID: 1},
+					NodeDesc: proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
+				},
+			},
+			localNodeDesc: proto.NodeDescriptor{NodeID: 1, Attrs: proto.Attributes{Attrs: []string{"ab"}}},
+		},
+	}
+	for _, test := range testCase {
+		ctx := &DistSenderContext{nodeDescriptor: &test.localNodeDesc}
+		ds := NewDistSender(ctx, nil)
+		ds.optimizeReplicaOrder(test.slice)
+		if s := test.slice[0]; s.NodeID != ctx.nodeDescriptor.NodeID {
+			t.Errorf("unexpected header, wanted nodeid = %d, got %d", ctx.nodeDescriptor.NodeID, s.NodeID)
+		}
+	}
+
+}
+
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
 // leader, attributes and required consistency to determine where to send
 // remote requests.

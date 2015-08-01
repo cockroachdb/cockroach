@@ -75,6 +75,17 @@ func (rs replicaSlice) FindReplica(storeID proto.StoreID) int {
 	return -1
 }
 
+// FindReplicaByNodeID returns the index of the replica which matches the specified node
+// ID. If no replica matches, -1 is returned.
+func (rs replicaSlice) FindReplicaByNodeID(nodeID proto.NodeID) int {
+	for i := range rs {
+		if rs[i].NodeID == nodeID {
+			return i
+		}
+	}
+	return -1
+}
+
 // SortByCommonAttributePrefix rearranges the replicaSlice by comparing the
 // attributes to the given reference attributes. The basis for the comparison
 // is that of the common prefix of replica attributes (i.e. the number of equal
