@@ -396,6 +396,8 @@ type group struct {
 	// re-added at any time, and we don't want a writeTask started by
 	// an earlier incarnation to be fed into a later one.
 	writing bool
+	// nodeIDs track the remote nodes associated with this group.
+	nodeIDs []proto.RaftNodeID
 }
 
 type createGroupOp struct {
@@ -649,6 +651,8 @@ func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RaftID) error
 	}
 	for _, groupID := range groupIDs {
 		newNode.registerGroup(groupID)
+		g := s.groups[groupID]
+		g.nodeIDs = append(g.nodeIDs, nodeID)
 	}
 	return nil
 }
@@ -739,14 +743,11 @@ func (s *state) removeGroup(op *removeGroupOp, readyGroups map[uint64]raft.Ready
 		op.ch <- err
 		return
 	}
-	gs := s.Storage.GroupStorage(op.groupID)
-	_, cs, err := gs.InitialState()
-	if err != nil {
-		op.ch <- err
+
+	for _, nodeID := range g.nodeIDs {
+		s.nodes[nodeID].unregisterGroup(op.groupID)
 	}
-	for _, nodeID := range cs.Nodes {
-		s.nodes[proto.RaftNodeID(nodeID)].unregisterGroup(op.groupID)
-	}
+
 	// Delete any entries for this group in readyGroups.
 	if readyGroups != nil {
 		delete(readyGroups, uint64(op.groupID))

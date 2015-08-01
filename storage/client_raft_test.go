@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // mustGetInteger decodes an int64 value from the bytes field of the receiver
@@ -812,4 +814,54 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// TestRaftAfterRemoveRange verifies that the MultiRaft state removes
+// a remote node correctly after the Replica was removed from the Store.
+func TestRaftAfterRemoveRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	// Make the split.
+	splitArgs := adminSplitArgs(proto.KeyMin, []byte("b"), proto.RaftID(1), mtc.stores[0].StoreID())
+	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	raftID := proto.RaftID(2)
+	mtc.replicateRange(raftID, 0, 1, 2)
+
+	mtc.unreplicateRange(raftID, 0, 2)
+	mtc.unreplicateRange(raftID, 0, 1)
+
+	rng, err := mtc.stores[1].GetRange(raftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// If the range removal happens before the range applies the replica config change, the group
+	// will be re-created when MultiRaft receives a MsgApp.
+	if err := util.IsTrueWithin(func() bool {
+		return len(rng.Desc().Replicas) == 1
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove the range from the second Store.
+	if err := mtc.stores[1].RemoveRange(rng); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
+		GroupID: proto.RaftID(0),
+		Message: raftpb.Message{
+			From: uint64(mtc.stores[2].RaftNodeID()),
+			To:   uint64(mtc.stores[1].RaftNodeID()),
+			Type: raftpb.MsgHeartbeat,
+		}}); err != nil {
+		t.Fatal(err)
+	}
+	// Execute another replica change to ensure that MultiRaft has processed the heartbeat just sent.
+	mtc.replicateRange(proto.RaftID(1), 0, 1)
 }
