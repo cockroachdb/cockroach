@@ -29,6 +29,11 @@ prepare_artifacts() {
       ${builder} go2xunit < "${outdir}/testrace.log" \
         > "${CIRCLE_TEST_REPORTS}/race/testrace.xml"
     fi
+    if [ -f "${outdir}/acceptance.log" ]; then
+      mkdir -p "${CIRCLE_TEST_REPORTS}/acceptance"
+      ${builder} go2xunit < "${outdir}/acceptance.log" \
+        > "${CIRCLE_TEST_REPORTS}/acceptance/acceptance.xml"
+    fi
   fi
 
   # Generate the slow test output.
@@ -95,7 +100,17 @@ time ${builder} make GITHOOKS= testrace \
 # acceptance tests on the Mac's, but circle-deps.sh only built the
 # acceptance tests for Linux.
 if [ "$(uname)" = "Linux" ]; then
-  time $(dirname $0)/../acceptance.test -test.v -test.timeout 5m
+  time $(dirname $0)/../acceptance.test -test.v -test.timeout 5m --verbosity=1 --vmodule=monitor=2 | \
+    tr -d '\r' | tee "${outdir}/acceptance.log" | \
+    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+    awk '{print "acceptance:", $0}'
+
+  # Because we are not running go test above, we don't get the package-
+  # level summary line, which breaks go2xunit. The `echo` below fakes
+  # that. It turns out go2xunit doesn't actually care about the content
+  # of this line, so long as it matches the correct format.
+  echo 'FAIL github.com/cockroachdb/cockroach/acceptance 1337s' \
+    >> "${outdir}/acceptance.log"
 else
   echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
 fi
