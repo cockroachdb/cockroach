@@ -301,8 +301,6 @@ func TestParse2(t *testing.T) {
 			`SELECT *, - - 5`},
 		{"SELECT -\n-5",
 			`SELECT - - 5`},
-		{"SELECT 1e-\n-1",
-			`SELECT 1e- - 1`},
 		{`SELECT -0.-/*test*/-1`,
 			`SELECT - 0. - - 1`,
 		},
@@ -404,6 +402,11 @@ CREATE DATABASE a b
 			`syntax error at or near "b"
 CREATE DATABASE a b c
                   ^
+`},
+		{"SELECT 1e-\n-1",
+			`invalid floating point constant
+SELECT 1e-
+       ^
 `},
 	}
 	for _, d := range testData {
