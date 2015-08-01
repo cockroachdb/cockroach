@@ -146,8 +146,13 @@ func TestStatusGossipJson(t *testing.T) {
 	defer s.Stop()
 
 	type prefixedInfo struct {
-		Key string                 `json:"Key"`
-		Val []storage.PrefixConfig `json:"Val"`
+		Key string `json:"Key"`
+		Val []struct {
+			storage.PrefixConfig
+			// Dirty hacks here because `json` doesn't know how to magically
+			// synthesize the correct type of `proto.Message`.
+			Config interface{}
+		} `json:"Val"`
 	}
 
 	type rangeDescriptorInfo struct {
@@ -155,14 +160,14 @@ func TestStatusGossipJson(t *testing.T) {
 		Val proto.RangeDescriptor `json:"Val"`
 	}
 
+	type nodeDescriptorInfo struct {
+		Key string               `json:"Key"`
+		Val proto.NodeDescriptor `json:"Val"`
+	}
+
 	type keyValueStringPair struct {
 		Key string `json:"Key"`
 		Val string `json:"Val"`
-	}
-
-	type keyValuePair struct {
-		Key string                 `json:"Key"`
-		Val map[string]interface{} `json:"Val"`
 	}
 
 	type infos struct {
@@ -172,7 +177,7 @@ func TestStatusGossipJson(t *testing.T) {
 			Permissions *prefixedInfo        `json:"permissions"`
 			Zones       *prefixedInfo        `json:"zones"`
 			ClusterID   *keyValueStringPair  `json:"cluster-id"`
-			Node1       *keyValuePair        `json:"node:1"`
+			Node1       *nodeDescriptorInfo  `json:"node:1"`
 		} `json:"infos"`
 	}
 
@@ -204,7 +209,7 @@ func TestStatusGossipJson(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data := &infos{}
+		data := infos{}
 		if err = json.Unmarshal(body, &data); err != nil {
 			t.Fatal(err)
 		}
@@ -491,7 +496,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
-		nodeStatus := &status.NodeStatus{}
+		nodeStatus := status.NodeStatus{}
 		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusNodesPrefix, oldNodeStatus.Desc.NodeID))
 		if err := json.Unmarshal(requestBody, &nodeStatus); err != nil {
 			t.Fatal(err)
@@ -541,7 +546,7 @@ func TestStoreStatusResponse(t *testing.T) {
 		}
 
 		// Also fetch the each status individually.
-		fetchedStoreStatus := &storage.StoreStatus{}
+		fetchedStoreStatus := storage.StoreStatus{}
 		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoresPrefix, storeStatus.Desc.StoreID))
 		if err := json.Unmarshal(requestBody, &fetchedStoreStatus); err != nil {
 			t.Fatal(err)
@@ -557,7 +562,7 @@ func TestStoreStatusResponse(t *testing.T) {
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	tsrv := &TestServer{}
+	tsrv := TestServer{}
 	tsrv.Ctx = NewTestContext()
 	tsrv.Ctx.MetricsFrequency = 5 * time.Millisecond
 	if err := tsrv.Start(); err != nil {
@@ -567,8 +572,8 @@ func TestMetricsRecording(t *testing.T) {
 
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
-		data := &proto.InternalTimeSeriesData{}
-		return tsrv.db.GetProto(key, data)
+		data := proto.InternalTimeSeriesData{}
+		return tsrv.db.GetProto(key, &data)
 	}
 
 	// Verify that metrics for the current timestamp are recorded. This should

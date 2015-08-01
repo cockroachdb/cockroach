@@ -102,13 +102,16 @@ var (
 )
 
 func init() {
-	gob.Register(&proto.NodeDescriptor{})
+	// Used in storage.PrefixConfig.
+	gob.Register(&proto.AcctConfig{})
+	gob.Register(&proto.PermConfig{})
+	gob.Register(&proto.UserConfig{})
 	gob.Register(&proto.ZoneConfig{})
-	gob.Register(proto.AcctConfig{})
-	gob.Register(proto.PermConfig{})
+	gob.Register(&proto.NodeDescriptor{})
+
+	// Used...elsewhere?
 	gob.Register(proto.RangeDescriptor{})
 	gob.Register(proto.StoreDescriptor{})
-	gob.Register(proto.UserConfig{})
 	gob.Register(util.UnresolvedAddr{})
 }
 
