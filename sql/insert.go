@@ -18,9 +18,11 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -28,13 +30,13 @@ import (
 
 // Insert inserts rows into the database.
 func (p *planner) Insert(n *parser.Insert) (planNode, error) {
-	desc, err := p.getTableDesc(n.Table)
+	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
 		return nil, err
 	}
 
 	// Determine which columns we're inserting into.
-	cols, err := p.processColumns(desc, n.Columns)
+	cols, err := p.processColumns(tableDesc, n.Columns)
 	if err != nil {
 		return nil, err
 	}
@@ -47,9 +49,9 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
-	for i, id := range desc.Indexes[0].ColumnIDs {
+	for i, id := range tableDesc.Indexes[0].ColumnIDs {
 		if _, ok := colMap[id]; !ok {
-			return nil, fmt.Errorf("missing \"%s\" primary key column", desc.Indexes[0].ColumnNames[i])
+			return nil, fmt.Errorf("missing \"%s\" primary key column", tableDesc.Indexes[0].ColumnNames[i])
 		}
 	}
 
@@ -60,32 +62,52 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
+	primaryIndex := tableDesc.Indexes[0]
+	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+
 	b := client.Batch{}
+
 	for rows.Next() {
 		values := rows.Values()
 		if len(values) != len(cols) {
 			return nil, fmt.Errorf("invalid values for columns: %d != %d", len(values), len(cols))
 		}
-		indexKey := encodeIndexKeyPrefix(desc.ID, desc.Indexes[0].ID)
-		primaryKey, err := encodeIndexKey(desc.Indexes[0], colMap, values, indexKey)
+
+		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colMap, values, nil)
 		if err != nil {
 			return nil, err
 		}
-		for i, val := range values {
-			key := encodeColumnKey(cols[i], primaryKey)
+		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
+
+		// Write the secondary indexes.
+		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc, colMap, values, primaryIndexKeySuffix)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
-				log.Infof("Put %q -> %v", key, val)
+				log.Infof("CPut %q -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
+			}
+			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+		}
+
+		// Write the row.
+		for i, val := range values {
+			key := encodeColumnKey(cols[i], primaryIndexKey)
+			if log.V(2) {
+				log.Infof("CPut %q -> %v", key, val)
 			}
 			// TODO(pmattis): Need to convert the value type to the column type.
 			switch t := val.(type) {
 			case parser.DBool:
-				b.Put(key, bool(t))
+				b.CPut(key, bool(t), nil)
 			case parser.DInt:
-				b.Put(key, int64(t))
+				b.CPut(key, int64(t), nil)
 			case parser.DFloat:
-				b.Put(key, float64(t))
+				b.CPut(key, float64(t), nil)
 			case parser.DString:
-				b.Put(key, string(t))
+				b.CPut(key, string(t), nil)
 			}
 		}
 	}
@@ -93,24 +115,27 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 	if err := p.db.Run(&b); err != nil {
+		if tErr, ok := err.(*proto.ConditionFailedError); ok {
+			return nil, fmt.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
+		}
 		return nil, err
 	}
 	// TODO(tamird/pmattis): return the number of affected rows
 	return &valuesNode{}, nil
 }
 
-func (p *planner) processColumns(desc *structured.TableDescriptor,
+func (p *planner) processColumns(tableDesc *structured.TableDescriptor,
 	node parser.QualifiedNames) ([]structured.ColumnDescriptor, error) {
 	if node == nil {
-		return desc.Columns, nil
+		return tableDesc.Columns, nil
 	}
 
 	cols := make([]structured.ColumnDescriptor, len(node))
 	for i, n := range node {
 		// TODO(pmattis): If the name is qualified, verify the table name matches
-		// desc.Name.
+		// tableDesc.Name.
 		var err error
-		col, err := desc.FindColumnByName(n.Column())
+		col, err := tableDesc.FindColumnByName(n.Column())
 		if err != nil {
 			return nil, err
 		}
