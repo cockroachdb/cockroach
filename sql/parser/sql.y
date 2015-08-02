@@ -207,7 +207,7 @@ import "strings"
 %type <empty> opt_ordinality
 %type <empty> exclusion_constraint_list exclusion_constraint_elem
 %type <empty> type_list array_expr_list
-%type <exprs> row explicit_row implicit_row
+%type <expr>  row explicit_row implicit_row
 %type <expr>  case_expr case_arg case_default
 %type <when>  when_clause
 %type <whens> when_clause_list
@@ -1716,11 +1716,11 @@ select_stmt:
 select_with_parens:
   '(' select_no_parens ')'
   {
-    $$ = $2
+    $$ = &ParenSelect{Select: $2.(SelectStatement)}
   }
 | '(' select_with_parens ')'
   {
-    $$ = $2
+    $$ = &ParenSelect{Select: $2.(SelectStatement)}
   }
 
 // This rule parses the equivalent of the standard's <query expression>. The
@@ -1827,7 +1827,14 @@ simple_select:
     }
   }
 | values_clause
-| TABLE relation_expr {}
+| TABLE relation_expr
+  {
+    $$ = &Select{
+      Exprs:       SelectExprs{&StarExpr{}},
+      From:        TableExprs{&AliasedTableExpr{Expr: $2}},
+      tableSelect: true,
+    }
+  }
 | select_clause UNION all_or_distinct select_clause
   {
     // TODO(pmattis): Support all/distinct
@@ -2900,11 +2907,11 @@ c_expr:
 | ARRAY array_expr {}
 | explicit_row
   {
-    $$ = Tuple($1)
+    $$ = $1
   }
 | implicit_row
   {
-    $$ = Tuple($1)
+    $$ = $1
   }
 | GROUPING '(' expr_list ')' {}
 
@@ -3083,31 +3090,31 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$ = $3
+    $$ = Row($3)
   }
 | ROW '(' ')'
   {
-    $$ = nil
+    $$ = Row(nil)
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$ = append($2, $4)
+    $$ = Tuple(append($2, $4))
   }
 
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$ = $3
+    $$ = Row($3)
   }
 | ROW '(' ')'
   {
-    $$ = nil
+    $$ = Row(nil)
   }
 
 implicit_row:
   '(' expr_list ',' a_expr ')'
   {
-    $$ = append($2, $4)
+    $$ = Tuple(append($2, $4))
   }
 
 sub_type:

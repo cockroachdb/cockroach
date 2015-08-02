@@ -34,21 +34,32 @@ type SelectStatement interface {
 	selectStatement()
 }
 
-func (*Select) selectStatement() {}
-func (*Union) selectStatement()  {}
-func (Values) selectStatement()  {}
+func (*ParenSelect) selectStatement() {}
+func (*Select) selectStatement()      {}
+func (*Union) selectStatement()       {}
+func (Values) selectStatement()       {}
+
+// ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.
+type ParenSelect struct {
+	Select SelectStatement
+}
+
+func (node *ParenSelect) String() string {
+	return fmt.Sprintf("(%s)", node.Select)
+}
 
 // Select represents a SELECT statement.
 type Select struct {
-	Distinct string
-	Exprs    SelectExprs
-	From     TableExprs
-	Where    *Where
-	GroupBy  GroupBy
-	Having   *Where
-	OrderBy  OrderBy
-	Limit    *Limit
-	Lock     string
+	Distinct    string
+	Exprs       SelectExprs
+	From        TableExprs
+	Where       *Where
+	GroupBy     GroupBy
+	Having      *Where
+	OrderBy     OrderBy
+	Limit       *Limit
+	Lock        string
+	tableSelect bool
 }
 
 // Select.Distinct
@@ -63,6 +74,9 @@ const (
 )
 
 func (node *Select) String() string {
+	if node.tableSelect && len(node.From) == 1 {
+		return fmt.Sprintf("TABLE %s", node.From[0])
+	}
 	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s%s%s",
 		node.Distinct, node.Exprs,
 		node.From, node.Where,

@@ -46,6 +46,7 @@ func (ValArg) expr()          {}
 func (NullVal) expr()         {}
 func (QualifiedName) expr()   {}
 func (Tuple) expr()           {}
+func (Row) expr()             {}
 func (*Subquery) expr()       {}
 func (*BinaryExpr) expr()     {}
 func (*UnaryExpr) expr()      {}
@@ -301,11 +302,19 @@ func (n QualifiedNames) String() string {
 	return buf.String()
 }
 
-// Tuple represents a tuple of actual values.
+// Tuple represents a parenthesized list of expressions.
 type Tuple Exprs
 
 func (node Tuple) String() string {
 	return fmt.Sprintf("(%s)", Exprs(node))
+}
+
+// Row represents a parenthesized list of expressions. Similar to Tuple except
+// in how it is textually represented.
+type Row Exprs
+
+func (node Row) String() string {
+	return fmt.Sprintf("ROW(%s)", Exprs(node))
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
@@ -328,7 +337,7 @@ type Subquery struct {
 }
 
 func (node *Subquery) String() string {
-	return fmt.Sprintf("(%s)", node.Select)
+	return node.Select.String()
 }
 
 // BinaryOp represents a binary operator.
