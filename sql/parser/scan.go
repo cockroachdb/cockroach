@@ -428,6 +428,12 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 			if ch == '-' || ch == '+' {
 				s.pos++
 			}
+			ch = s.peek()
+			if !isDigit(ch) {
+				lval.id = ERROR
+				lval.str = "invalid floating point constant"
+				return
+			}
 			continue
 		}
 		break

@@ -18,9 +18,12 @@
 package parser
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/testutils"
 )
 
 func TestScanner(t *testing.T) {
@@ -85,6 +88,11 @@ func TestScanner(t *testing.T) {
 		{`WITH`, []int{WITH}},
 		{`WITH TIME`, []int{WITH_LA, TIME}},
 		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
+		{`1`, []int{ICONST}},
+		{`1.0`, []int{FCONST}},
+		{`1.0e1`, []int{FCONST}},
+		{`1e+1`, []int{FCONST}},
+		{`1e-1`, []int{FCONST}},
 	}
 	for i, d := range testData {
 		s := newScanner(d.sql)
@@ -250,6 +258,30 @@ func TestScanString(t *testing.T) {
 		_ = s.Lex(&lval)
 		if d.expected != lval.str {
 			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.str)
+		}
+	}
+}
+
+func TestScanError(t *testing.T) {
+	testData := []struct {
+		sql string
+		err string
+	}{
+		{`1e`, "invalid floating point constant"},
+		{`1e-`, "invalid floating point constant"},
+		{`1e+`, "invalid floating point constant"},
+		{`9223372036854775808`, "value out of range"},
+		{`$9223372036854775808`, "value out of range"},
+	}
+	for _, d := range testData {
+		s := newScanner(d.sql)
+		var lval sqlSymType
+		id := s.Lex(&lval)
+		if id != ERROR {
+			t.Errorf("%s: expected ERROR, but found %d", d.sql, id)
+		}
+		if !testutils.IsError(errors.New(lval.str), d.err) {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.err, lval.str)
 		}
 	}
 }
