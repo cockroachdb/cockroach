@@ -361,11 +361,7 @@ type InternalCommitTrigger struct {
 	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
 	MergeTrigger          *MergeTrigger          `protobuf:"bytes,2,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
 	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,3,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
-	// List of intents to resolve on commit or abort. Note that keys
-	// listed here will only be resolved if they fall on the same range
-	// that the transaction was started on.
-	Intents          []Key  `protobuf:"bytes,4,rep,name=intents,casttype=Key" json:"intents,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	XXX_unrecognized      []byte                 `json:"-"`
 }
 
 func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
@@ -592,10 +588,11 @@ func (m *Lease) GetExpiration() Timestamp {
 	return Timestamp{}
 }
 
-// Intent groups a key and a transaction.
+// Intent is used to communicate the location of an intent.
 type Intent struct {
 	Key              Key         `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Txn              Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn"`
+	EndKey           Key         `protobuf:"bytes,2,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
+	Txn              Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn"`
 	XXX_unrecognized []byte      `json:"-"`
 }
 
@@ -1503,29 +1500,6 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Intents", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Intents = append(m.Intents, make([]byte, postIndex-iNdEx))
-			copy(m.Intents[len(m.Intents)-1], data[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -2101,6 +2075,28 @@ func (m *Intent) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
 			}
 			var msglen int
@@ -2444,12 +2440,6 @@ func (m *InternalCommitTrigger) Size() (n int) {
 		l = m.ChangeReplicasTrigger.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
-	if len(m.Intents) > 0 {
-		for _, b := range m.Intents {
-			l = len(b)
-			n += 1 + l + sovData(uint64(l))
-		}
-	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2527,6 +2517,10 @@ func (m *Intent) Size() (n int) {
 	_ = l
 	if m.Key != nil {
 		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
 		n += 1 + l + sovData(uint64(l))
 	}
 	l = m.Txn.Size()
@@ -2893,14 +2887,6 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n8
 	}
-	if len(m.Intents) > 0 {
-		for _, b := range m.Intents {
-			data[i] = 0x22
-			i++
-			i = encodeVarintData(data, i, uint64(len(b)))
-			i += copy(data[i:], b)
-		}
-	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -3106,7 +3092,13 @@ func (m *Intent) MarshalTo(data []byte) (n int, err error) {
 		i = encodeVarintData(data, i, uint64(len(m.Key)))
 		i += copy(data[i:], m.Key)
 	}
-	data[i] = 0x12
+	if m.EndKey != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.EndKey)))
+		i += copy(data[i:], m.EndKey)
+	}
+	data[i] = 0x1a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
 	n18, err := m.Txn.MarshalTo(data[i:])

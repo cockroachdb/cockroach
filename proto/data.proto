@@ -130,11 +130,6 @@ message InternalCommitTrigger {
   optional SplitTrigger split_trigger = 1;
   optional MergeTrigger merge_trigger = 2;
   optional ChangeReplicasTrigger change_replicas_trigger = 3;
-
-  // List of intents to resolve on commit or abort. Note that keys
-  // listed here will only be resolved if they fall on the same range
-  // that the transaction was started on.
-  repeated bytes intents = 4 [(gogoproto.casttype) = "Key"];
 }
 
 // IsolationType TODO(jiajia) Needs documentation.
@@ -252,10 +247,11 @@ message Lease {
       (gogoproto.customname) = "RaftNodeID", (gogoproto.casttype) = "RaftNodeID"];
 }
 
-// Intent groups a key and a transaction.
+// Intent is used to communicate the location of an intent.
 message Intent {
   optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-  optional Transaction txn = 2 [(gogoproto.nullable) = false];
+  optional bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+  optional Transaction txn = 3 [(gogoproto.nullable) = false];
 }
 
 // GCMetadata holds information about the last complete key/value

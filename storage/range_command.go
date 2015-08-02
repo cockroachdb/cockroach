@@ -306,19 +306,20 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args p
 		return reply, err
 	}
 
+	// Resolve any explicit intents.
+	for _, intent := range args.Intents {
+		if log.V(1) {
+			log.Infof("resolving intent at %s on end transaction [%s]", intent.Key, reply.Txn.Status)
+		}
+		if err := engine.MVCCResolveWriteIntent(batch, ms, intent.Key, reply.Txn.Timestamp, reply.Txn); err != nil {
+			return reply, err
+		}
+		reply.Resolved = append(reply.Resolved, intent.Key)
+	}
+
 	// Run triggers if successfully committed. Any failures running
 	// triggers will set an error and prevent the batch from committing.
 	if ct := args.InternalCommitTrigger; ct != nil {
-		// Resolve any explicit intents.
-		for _, key := range ct.Intents {
-			if log.V(1) {
-				log.Infof("resolving intent at %s on end transaction [%s]", key, reply.Txn.Status)
-			}
-			if err := engine.MVCCResolveWriteIntent(batch, ms, key, reply.Txn.Timestamp, reply.Txn); err != nil {
-				return reply, err
-			}
-			reply.Resolved = append(reply.Resolved, key)
-		}
 		// Run appropriate trigger.
 		if reply.Txn.Status == proto.COMMITTED {
 			if ct.SplitTrigger != nil {
@@ -452,8 +453,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args proto.InternalRang
 	// which does not have the same metadata prefix as the queried key.
 	rds := make([]proto.RangeDescriptor, len(kvs))
 	for i := range kvs {
-		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError, once we
-		// introduce that.
+		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
 		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
 			return reply, nil, err
 		}
@@ -921,7 +921,11 @@ func (r *Range) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitRespon
 						UpdatedDesc: updatedDesc,
 						NewDesc:     *newDesc,
 					},
-					Intents: []proto.Key{desc1Key, desc2Key},
+				},
+				// TODO(tschottdorf): obsolete soon (#1873).
+				Intents: []proto.Intent{
+					{Key: desc1Key},
+					{Key: desc2Key},
 				},
 			},
 			Reply: &proto.EndTransactionResponse{},
@@ -1089,7 +1093,11 @@ func (r *Range) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeRespon
 						UpdatedDesc:    updatedDesc,
 						SubsumedRaftID: subsumedDesc.RaftID,
 					},
-					Intents: []proto.Key{desc1Key, desc2Key},
+				},
+				// TODO(tschottdorf): obsolete soon (#1873).
+				Intents: []proto.Intent{
+					{Key: desc1Key},
+					{Key: desc2Key},
 				},
 			},
 			Reply: &proto.EndTransactionResponse{},
@@ -1228,8 +1236,9 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 						ChangeType:      changeType,
 						UpdatedReplicas: updatedDesc.Replicas,
 					},
-					Intents: []proto.Key{descKey},
 				},
+				// TODO(tschottdorf): obsolete soon (#1873).
+				Intents: []proto.Intent{{Key: descKey}},
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})

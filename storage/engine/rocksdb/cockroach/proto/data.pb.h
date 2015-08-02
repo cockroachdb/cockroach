@@ -1091,22 +1091,6 @@ class InternalCommitTrigger : public ::google::protobuf::Message {
   ::cockroach::proto::ChangeReplicasTrigger* release_change_replicas_trigger();
   void set_allocated_change_replicas_trigger(::cockroach::proto::ChangeReplicasTrigger* change_replicas_trigger);
 
-  // repeated bytes intents = 4;
-  int intents_size() const;
-  void clear_intents();
-  static const int kIntentsFieldNumber = 4;
-  const ::std::string& intents(int index) const;
-  ::std::string* mutable_intents(int index);
-  void set_intents(int index, const ::std::string& value);
-  void set_intents(int index, const char* value);
-  void set_intents(int index, const void* value, size_t size);
-  ::std::string* add_intents();
-  void add_intents(const ::std::string& value);
-  void add_intents(const char* value);
-  void add_intents(const void* value, size_t size);
-  const ::google::protobuf::RepeatedPtrField< ::std::string>& intents() const;
-  ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_intents();
-
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalCommitTrigger)
  private:
   inline void set_has_split_trigger();
@@ -1122,7 +1106,6 @@ class InternalCommitTrigger : public ::google::protobuf::Message {
   ::cockroach::proto::SplitTrigger* split_trigger_;
   ::cockroach::proto::MergeTrigger* merge_trigger_;
   ::cockroach::proto::ChangeReplicasTrigger* change_replicas_trigger_;
-  ::google::protobuf::RepeatedPtrField< ::std::string> intents_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -1648,10 +1631,22 @@ class Intent : public ::google::protobuf::Message {
   ::std::string* release_key();
   void set_allocated_key(::std::string* key);
 
-  // optional .cockroach.proto.Transaction txn = 2;
+  // optional bytes end_key = 2;
+  bool has_end_key() const;
+  void clear_end_key();
+  static const int kEndKeyFieldNumber = 2;
+  const ::std::string& end_key() const;
+  void set_end_key(const ::std::string& value);
+  void set_end_key(const char* value);
+  void set_end_key(const void* value, size_t size);
+  ::std::string* mutable_end_key();
+  ::std::string* release_end_key();
+  void set_allocated_end_key(::std::string* end_key);
+
+  // optional .cockroach.proto.Transaction txn = 3;
   bool has_txn() const;
   void clear_txn();
-  static const int kTxnFieldNumber = 2;
+  static const int kTxnFieldNumber = 3;
   const ::cockroach::proto::Transaction& txn() const;
   ::cockroach::proto::Transaction* mutable_txn();
   ::cockroach::proto::Transaction* release_txn();
@@ -1661,6 +1656,8 @@ class Intent : public ::google::protobuf::Message {
  private:
   inline void set_has_key();
   inline void clear_has_key();
+  inline void set_has_end_key();
+  inline void clear_has_end_key();
   inline void set_has_txn();
   inline void clear_has_txn();
 
@@ -1668,6 +1665,7 @@ class Intent : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::cockroach::proto::Transaction* txn_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
@@ -2724,60 +2722,6 @@ inline void InternalCommitTrigger::set_allocated_change_replicas_trigger(::cockr
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalCommitTrigger.change_replicas_trigger)
 }
 
-// repeated bytes intents = 4;
-inline int InternalCommitTrigger::intents_size() const {
-  return intents_.size();
-}
-inline void InternalCommitTrigger::clear_intents() {
-  intents_.Clear();
-}
-inline const ::std::string& InternalCommitTrigger::intents(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalCommitTrigger.intents)
-  return intents_.Get(index);
-}
-inline ::std::string* InternalCommitTrigger::mutable_intents(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalCommitTrigger.intents)
-  return intents_.Mutable(index);
-}
-inline void InternalCommitTrigger::set_intents(int index, const ::std::string& value) {
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalCommitTrigger.intents)
-  intents_.Mutable(index)->assign(value);
-}
-inline void InternalCommitTrigger::set_intents(int index, const char* value) {
-  intents_.Mutable(index)->assign(value);
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.InternalCommitTrigger.intents)
-}
-inline void InternalCommitTrigger::set_intents(int index, const void* value, size_t size) {
-  intents_.Mutable(index)->assign(
-    reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.InternalCommitTrigger.intents)
-}
-inline ::std::string* InternalCommitTrigger::add_intents() {
-  return intents_.Add();
-}
-inline void InternalCommitTrigger::add_intents(const ::std::string& value) {
-  intents_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add:cockroach.proto.InternalCommitTrigger.intents)
-}
-inline void InternalCommitTrigger::add_intents(const char* value) {
-  intents_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add_char:cockroach.proto.InternalCommitTrigger.intents)
-}
-inline void InternalCommitTrigger::add_intents(const void* value, size_t size) {
-  intents_.Add()->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_add_pointer:cockroach.proto.InternalCommitTrigger.intents)
-}
-inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
-InternalCommitTrigger::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.proto.InternalCommitTrigger.intents)
-  return intents_;
-}
-inline ::google::protobuf::RepeatedPtrField< ::std::string>*
-InternalCommitTrigger::mutable_intents() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.InternalCommitTrigger.intents)
-  return &intents_;
-}
-
 // -------------------------------------------------------------------
 
 // NodeList
@@ -3483,15 +3427,68 @@ inline void Intent::set_allocated_key(::std::string* key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Intent.key)
 }
 
-// optional .cockroach.proto.Transaction txn = 2;
-inline bool Intent::has_txn() const {
+// optional bytes end_key = 2;
+inline bool Intent::has_end_key() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Intent::set_has_txn() {
+inline void Intent::set_has_end_key() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Intent::clear_has_txn() {
+inline void Intent::clear_has_end_key() {
   _has_bits_[0] &= ~0x00000002u;
+}
+inline void Intent::clear_end_key() {
+  end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_end_key();
+}
+inline const ::std::string& Intent::end_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Intent.end_key)
+  return end_key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Intent::set_end_key(const ::std::string& value) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.Intent.end_key)
+}
+inline void Intent::set_end_key(const char* value) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.Intent.end_key)
+}
+inline void Intent::set_end_key(const void* value, size_t size) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.Intent.end_key)
+}
+inline ::std::string* Intent::mutable_end_key() {
+  set_has_end_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Intent.end_key)
+  return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* Intent::release_end_key() {
+  clear_has_end_key();
+  return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Intent::set_allocated_end_key(::std::string* end_key) {
+  if (end_key != NULL) {
+    set_has_end_key();
+  } else {
+    clear_has_end_key();
+  }
+  end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Intent.end_key)
+}
+
+// optional .cockroach.proto.Transaction txn = 3;
+inline bool Intent::has_txn() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void Intent::set_has_txn() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void Intent::clear_has_txn() {
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void Intent::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
