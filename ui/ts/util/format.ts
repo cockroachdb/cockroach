@@ -1,4 +1,5 @@
 // source: util/format.ts
+/// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -75,6 +76,16 @@ module Utils {
         ++u;
       } while (Math.abs(bytes) >= kibi && u < units.length - 1);
       return bytes.toFixed(1) + " " + units[u];
+    }
+
+    /**
+     * Percentage creates a string representation of a fraction as a percentage.
+     */
+    export function Percentage(numerator: number, denominator: number): string {
+      if (denominator === 0) {
+        return "100%";
+      }
+      return Math.floor(numerator / denominator * 100).toString() + "%";
     }
   }
 }

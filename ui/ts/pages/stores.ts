@@ -3,6 +3,7 @@
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
+/// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -82,6 +83,35 @@ module AdminViews {
           clearInterval(this._interval);
         }
 
+        public PrimaryStats(): _mithril.MithrilVirtualElement {
+          let allStats: Models.Proto.Status = storeStatuses.totalStatus();
+          if (allStats) {
+            return m(".primary-stats", [
+              m(".stat", [
+                m("span.title", "Total Ranges"),
+                m("span.value", allStats.range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Total Live Bytes"),
+                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes))
+              ]),
+              m(".stat", [
+                m("span.title", "Leader Ranges"),
+                m("span.value", allStats.leader_range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Available"),
+                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count))
+              ]),
+              m(".stat", [
+                m("span.title", "Fully Replicated"),
+                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count))
+              ])
+            ]);
+          }
+          return m(".primary-stats");
+        }
+
         private _refresh(): void {
           storeStatuses.refresh();
         }
@@ -98,8 +128,8 @@ module AdminViews {
         };
         return m("div", [
           m("h2", "Stores List"),
-          m(".stats-table", Components.Table.create(comparisonData)),
-          storeStatuses.AllDetails()
+          m(".section", ctrl.PrimaryStats()),
+          m(".stats-table", Components.Table.create(comparisonData))
         ]);
       }
     }
@@ -172,6 +202,43 @@ module AdminViews {
           this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
         }
 
+        public PrimaryStats(): _mithril.MithrilVirtualElement {
+          let storeStats: Models.Proto.StoreStatus = storeStatuses.GetStatus(this._storeId);
+          if (storeStats) {
+            return m(".primary-stats", [
+              m(".stat", [
+                m("span.title", "Started At"),
+                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStats.started_at))))
+              ]),
+              m(".stat", [
+                m("span.title", "Last Updated At"),
+                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStats.updated_at))))
+              ]),
+              m(".stat", [
+                m("span.title", "Total Ranges"),
+                m("span.value", storeStats.range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Total Live Bytes"),
+                m("span.value", Utils.Format.Bytes(storeStats.stats.live_bytes))
+              ]),
+              m(".stat", [
+                m("span.title", "Leader Ranges"),
+                m("span.value", storeStats.leader_range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Available"),
+                m("span.value", Utils.Format.Percentage(storeStats.available_range_count, storeStats.leader_range_count))
+              ]),
+              m(".stat", [
+                m("span.title", "Fully Replicated"),
+                m("span.value", Utils.Format.Percentage(storeStats.replicated_range_count, storeStats.leader_range_count))
+              ])
+            ]);
+          }
+          return m(".primary-stats");
+        }
+
         private _refresh(): void {
           storeStatuses.refresh();
           this.exec.refresh();
@@ -192,9 +259,9 @@ module AdminViews {
         let storeId: string = m.route.param("store_id");
         return m("div", [
           m("h2", "Store Status"),
-          m("div", [
+          m(".section", [
             m("h3", "Store: " + storeId),
-            storeStatuses.Details(storeId)
+            ctrl.PrimaryStats()
           ]),
           m(".charts", ctrl.axes.map((axis: Metrics.Axis) => {
             return m("", { style: "float:left" }, [
