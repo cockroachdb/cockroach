@@ -1398,6 +1398,13 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::proto::NodeList* release_certain_nodes();
   void set_allocated_certain_nodes(::cockroach::proto::NodeList* certain_nodes);
 
+  // optional bool Writing = 13;
+  bool has_writing() const;
+  void clear_writing();
+  static const int kWritingFieldNumber = 13;
+  bool writing() const;
+  void set_writing(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.Transaction)
  private:
   inline void set_has_name();
@@ -1424,6 +1431,8 @@ class Transaction : public ::google::protobuf::Message {
   inline void clear_has_max_timestamp();
   inline void set_has_certain_nodes();
   inline void clear_has_certain_nodes();
+  inline void set_has_writing();
+  inline void clear_has_writing();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1440,6 +1449,7 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::proto::Timestamp* orig_timestamp_;
   ::cockroach::proto::Timestamp* max_timestamp_;
   ::cockroach::proto::NodeList* certain_nodes_;
+  bool writing_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -3276,6 +3286,30 @@ inline void Transaction::set_allocated_certain_nodes(::cockroach::proto::NodeLis
     clear_has_certain_nodes();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Transaction.certain_nodes)
+}
+
+// optional bool Writing = 13;
+inline bool Transaction::has_writing() const {
+  return (_has_bits_[0] & 0x00001000u) != 0;
+}
+inline void Transaction::set_has_writing() {
+  _has_bits_[0] |= 0x00001000u;
+}
+inline void Transaction::clear_has_writing() {
+  _has_bits_[0] &= ~0x00001000u;
+}
+inline void Transaction::clear_writing() {
+  writing_ = false;
+  clear_has_writing();
+}
+inline bool Transaction::writing() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Transaction.Writing)
+  return writing_;
+}
+inline void Transaction::set_writing(bool value) {
+  set_has_writing();
+  writing_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Transaction.Writing)
 }
 
 // -------------------------------------------------------------------

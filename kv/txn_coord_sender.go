@@ -264,8 +264,8 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 }
 
 // startStats blocks and periodically logs transaction statistics (throughput,
-// success rates, durations, ...).
-// TODO(tschottdorf): Use a proper metrics subsystem for this (+the store-level
+// success rates, durations, ...). Note that this only captures write txns,
+// since read-only txns are stateless as far as TxnCoordSender is concerned.
 // stats).
 // TODO(mrtracy): Add this to TimeSeries.
 func (tc *TxnCoordSender) startStats() {
@@ -428,8 +428,24 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	var startNS int64
 	header := call.Args.Header()
 	trace := tracer.FromCtx(ctx)
-	// If this call is part of a transaction...
+	var id string // optional transaction ID
 	if header.Txn != nil {
+		// If this call is part of a transaction...
+		id = string(header.Txn.ID)
+		// Verify that if this Transaction is not read-only, we have it on
+		// file. If not, refuse writes - the client must have issued a write on
+		// another coordinator previously.
+		if header.Txn.Writing && proto.IsTransactionWrite(call.Args) {
+			tc.Lock()
+			_, ok := tc.txns[id]
+			tc.Unlock()
+			if !ok {
+				call.Reply.Header().SetGoError(util.Errorf(
+					"transaction must not write on multiple coordinators"))
+				return
+			}
+		}
+
 		// Set the timestamp to the original timestamp for read-only
 		// commands and to the transaction timestamp for read/write
 		// commands.
@@ -459,14 +475,18 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	}
 
 	if txn := call.Reply.Header().Txn; txn != nil {
+		if !header.Txn.Equal(txn) {
+			panic("transaction ID changed")
+		}
 		tc.Lock()
-		txnMeta := tc.txns[string(txn.ID)]
+		txnMeta := tc.txns[id]
 		// If this transactional command leaves transactional intents, add the key
 		// or key range to the intents map. If the transaction metadata doesn't yet
 		// exist, create it.
 		if call.Reply.Header().GoError() == nil {
 			if proto.IsTransactionWrite(call.Args) {
 				if txnMeta == nil {
+					txn.Writing = true
 					trace.Event("coordinator spawns")
 					txnMeta = &txnMetadata{
 						txn:              *txn,
@@ -476,7 +496,6 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						timeoutDuration:  tc.clientTimeout,
 						txnEnd:           make(chan []proto.Key, 1),
 					}
-					id := string(txn.ID)
 					tc.txns[id] = txnMeta
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeat(id)

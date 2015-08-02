@@ -468,8 +468,10 @@ type Transaction struct {
 	// Bits of this mechanism are found in the local sender, the range and the
 	// txn_coord_sender, with brief comments referring here.
 	// See https://github.com/cockroachdb/cockroach/pull/221.
-	CertainNodes     NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
-	XXX_unrecognized []byte   `json:"-"`
+	CertainNodes NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
+	// Writing is true when the Transaction is not read-only.
+	Writing          bool   `protobuf:"varint,13,opt" json:"Writing"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -550,6 +552,13 @@ func (m *Transaction) GetCertainNodes() NodeList {
 		return m.CertainNodes
 	}
 	return NodeList{}
+}
+
+func (m *Transaction) GetWriting() bool {
+	if m != nil {
+		return m.Writing
+	}
+	return false
 }
 
 // Lease contains information about leader leases including the
@@ -1902,6 +1911,23 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 13:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Writing", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Writing = bool(v != 0)
 		default:
 			var sizeOfWire int
 			for {
@@ -2475,6 +2501,7 @@ func (m *Transaction) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.CertainNodes.Size()
 	n += 1 + l + sovData(uint64(l))
+	n += 2
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3004,6 +3031,14 @@ func (m *Transaction) MarshalTo(data []byte) (n int, err error) {
 		return 0, err
 	}
 	i += n15
+	data[i] = 0x68
+	i++
+	if m.Writing {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

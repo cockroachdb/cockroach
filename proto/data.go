@@ -525,14 +525,15 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
+	var buf bytes.Buffer
 	// Compute priority as a floating point number from 0-100 for readability.
 	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
 	if len(t.Name) > 0 {
-		return fmt.Sprintf("%q id=%s key=%s pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-			t.Name, uuid.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	return fmt.Sprintf("id=%s key=%s pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		uuid.UUID(t.ID).Short(), t.Key, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
+		uuid.UUID(t.ID).Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+	return buf.String()
 }
 
 // Short returns the short form of the Transaction's UUID.

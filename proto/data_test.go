@@ -340,7 +340,7 @@ func TestTransactionString(t *testing.T) {
 		OrigTimestamp: makeTS(30, 31),
 		MaxTimestamp:  makeTS(40, 41),
 	}
-	expStr := `"name" id=d7aa0f5e key="foo" pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
+	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
 		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41`
 
 	if str := txn.String(); str != expStr {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -73,9 +74,14 @@ func sendCall(coord *TxnCoordSender, call proto.Call) error {
 	return call.Reply.Header().GoError()
 }
 
-// newTxn begins a transaction.
+// newTxn begins a transaction. For testing purposes, this comes with a ID
+// pre-initialized, but with the Writing flag set to false.
 func newTxn(clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
-	return proto.NewTransaction("test", baseKey, 1, proto.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
+	f, l, fun := caller.Lookup(1)
+	name := fmt.Sprintf("%s:%d %s", f, l, fun)
+	txn := proto.NewTransaction("test", baseKey, 1, proto.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
+	txn.Name = name
+	return txn
 }
 
 // createPutRequest returns a ready-made request using the
@@ -782,5 +788,60 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	}) // second call
 	if etReply.Error != nil {
 		t.Fatal(etReply.GoError())
+	}
+}
+
+// TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
+// enforce that only one coordinator can be used for transactional writes.
+func TestTxnMultipleCoord(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	for i, tc := range []struct {
+		call    proto.Call
+		writing bool
+		ok      bool
+	}{
+		{proto.GetCall(proto.Key("a")), true, true},
+		{proto.GetCall(proto.Key("a")), false, true},
+		{proto.PutCall(proto.Key("a"), proto.Value{}), false, true},
+		{proto.PutCall(proto.Key("a"), proto.Value{}), true, false},
+	} {
+		{
+			txn := newTxn(s.Clock, proto.Key("a"))
+			txn.Writing = tc.writing
+			tc.call.Args.Header().Txn = txn
+		}
+		err := sendCall(s.Sender, tc.call)
+		if err == nil != tc.ok {
+			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
+				i, tc.call.Args, tc.writing, tc.ok, err)
+		}
+		if err != nil {
+			continue
+		}
+
+		txn := tc.call.Reply.Header().Txn
+		// The transaction should come back rw if it started rw or if we just
+		// wrote.
+		if (tc.writing || proto.IsTransactionWrite(tc.call.Args)) != txn.Writing {
+			t.Errorf("%d: unexpected writing state: %s", i, txn)
+		}
+		// Abort for clean shutdown.
+		etReply := &proto.EndTransactionResponse{}
+		if err := sendCall(s.Sender, proto.Call{
+			Args: &proto.EndTransactionRequest{
+				RequestHeader: proto.RequestHeader{
+					Key:       txn.Key,
+					Timestamp: txn.Timestamp,
+					Txn:       txn,
+				},
+				Commit: false,
+			},
+			Reply: etReply,
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
