@@ -26,18 +26,19 @@ Author: Matt Tracy (matt@cockroachlabs.com)
   -webkit-box-sizing: border-box
   box-sizing: border-box
 
-html,
+html
 body
-  font-size: $font-size--base
   height: 100%
 
-body
-  padding-top: 3 * $font-size--title
+#root
+  position: relative
+  top: 4rem 
+  min-height: calc(100% - 4rem)
   background-color: -color('light')
   color: -color('dark', 'light')
-  font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, sans-serif
-  font-weight: 400
+  padding: 0rem 1rem
 
-.fullHeightContainer
-  height: calc(100% - 50px)
-  /* Keep in line with height of .appNav */
+  &:after
+    content: ""
+    display: table
+    clear: both
