@@ -386,6 +386,8 @@ func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 			reply.Add(internalReply.Responses[i].GetValue().(proto.Response))
 		}
 	default:
+		// TODO(tschottdorf): should treat all calls as Batch. After all, that
+		// will be almost all calls.
 		tc.sendOne(ctx, call)
 	}
 }
@@ -571,6 +573,30 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	}
 }
 
+// updateForBatch updates the first argument (the header of a request contained
+// in a batch) from the second one (the batch header), returning an error when
+// inconsistencies are found.
+// It is checked that the individual call does not have a User, UserPriority
+// or Txn set that differs from the batch's.
+func updateForBatch(aHeader *proto.RequestHeader, bHeader proto.RequestHeader) error {
+	// Disallow transaction, user and priority on individual calls, unless
+	// equal.
+	if aHeader.User != "" && aHeader.User != bHeader.User {
+		return util.Error("conflicting user on call in batch")
+	}
+	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
+		return util.Error("conflicting user priority on call in batch")
+	}
+	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
+		return util.Error("conflicting transaction in transactional batch")
+	}
+
+	aHeader.User = bHeader.User
+	aHeader.UserPriority = bHeader.UserPriority
+	aHeader.Txn = bHeader.Txn
+	return nil
+}
+
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
 // TODO(tschottdorf): modify sendBatch so that it sends truly parallel requests
@@ -584,26 +610,11 @@ func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.Intern
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
+		if err := updateForBatch(args.Header(), batchArgs.RequestHeader); err != nil {
+			batchReply.Header().SetGoError(err)
+			return
+		}
 		call := proto.Call{Args: args}
-		// Disallow transaction, user and priority on individual calls, unless
-		// equal.
-		if args.Header().User != "" && args.Header().User != batchArgs.User {
-			batchReply.Header().SetGoError(util.Error("cannot have individual user on call in batch"))
-			return
-		}
-		args.Header().User = batchArgs.User
-		if args.Header().UserPriority != nil && args.Header().GetUserPriority() != batchArgs.GetUserPriority() {
-			batchReply.Header().SetGoError(util.Error("cannot have individual user priority on call in batch"))
-			return
-		}
-		args.Header().UserPriority = batchArgs.UserPriority
-		if txn := args.Header().Txn; txn != nil && !txn.Equal(batchArgs.Txn) {
-			batchReply.Header().SetGoError(util.Error("cannot have individual transactional call in batch"))
-			return
-		}
-		// Propagate batch Txn to each call.
-		args.Header().Txn = batchArgs.Txn
-
 		// Create a reply from the method type and add to batch response.
 		if i >= len(batchReply.Responses) {
 			call.Reply = args.CreateReply()

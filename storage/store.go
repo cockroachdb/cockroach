@@ -1352,8 +1352,15 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				// go through TxnCoordSender rely on them being specified on
 				// the individual calls (and TxnCoordSender is in charge of
 				// filling them in here later).
-				Txn:          header.Txn,
-				User:         header.User,
+				Txn: header.Txn,
+				// This is here only for legacy reasons: testSender in the
+				// storage tests duplicates batch processing and isn't as
+				// smart as TxnCoordSender. A test that relies on this is
+				// TestStoreResolveWriteIntentNoTxn.
+				// This should disappear naturally when batches which address
+				// the same Range get sent to that Range wholesale:
+				// testSender then simply sends batches as any other call,
+				// which should be enough for the few tests that need them.
 				UserPriority: header.UserPriority,
 			},
 			PusheeTxn: intent.Txn,
