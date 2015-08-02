@@ -359,7 +359,7 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 
 	switch t := expr.(type) {
 	case Row:
-		// Row and Tuple are synonmous: convert Row to Tuple to simplify logic
+		// Row and Tuple are synonymous: convert Row to Tuple to simplify logic
 		// below.
 		expr = Tuple(t)
 	}
@@ -415,7 +415,7 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 	case NullVal:
 		return null, nil
 
-	case QualifiedName:
+	case *QualifiedName:
 		if d, ok := env.Get(t.String()); ok {
 			return d, nil
 		}

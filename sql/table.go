@@ -97,18 +97,17 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 	return desc, nil
 }
 
-func (p *planner) getTableDesc(qname parser.QualifiedName) (
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 	*structured.TableDescriptor, error) {
-	normalized, err := p.normalizeTableName(qname)
-	if err != nil {
+	if err := p.normalizeTableName(qname); err != nil {
 		return nil, err
 	}
-	dbDesc, err := p.getDatabaseDesc(normalized.Database())
+	dbDesc, err := p.getDatabaseDesc(qname.Database())
 	if err != nil {
 		return nil, err
 	}
 
-	nameKey := keys.MakeNameMetadataKey(dbDesc.ID, normalized.Table())
+	nameKey := keys.MakeNameMetadataKey(dbDesc.ID, qname.Table())
 	desc := structured.TableDescriptor{}
 	if err := p.getDescriptor(nameKey, &desc); err != nil {
 		return nil, err

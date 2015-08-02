@@ -87,7 +87,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		if p.session.Database == "" {
 			return nil, errNoDatabase
 		}
-		n.Name = append(n.Name, p.session.Database)
+		n.Name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
 	}
 	dbDesc, err := p.getDatabaseDesc(n.Name.String())
 	if err != nil {

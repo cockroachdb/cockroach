@@ -30,7 +30,7 @@ import (
 
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
-	Table QualifiedName
+	Table *QualifiedName
 }
 
 func (node *ShowColumns) String() string {
@@ -50,7 +50,7 @@ func (node *ShowDatabases) String() string {
 
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
-	Table QualifiedName
+	Table *QualifiedName
 }
 
 func (node *ShowIndex) String() string {
@@ -59,7 +59,7 @@ func (node *ShowIndex) String() string {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	Name QualifiedName
+	Name *QualifiedName
 }
 
 func (node *ShowTables) String() string {

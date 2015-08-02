@@ -27,7 +27,7 @@ import "fmt"
 
 // Set represents a SET statement.
 type Set struct {
-	Name   QualifiedName
+	Name   *QualifiedName
 	Values Exprs
 }
 
