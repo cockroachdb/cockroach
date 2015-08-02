@@ -173,6 +173,8 @@ func FillArgs(stmt Statement, args Args) error {
 // by WalkExpr.
 func WalkStmt(v Visitor, stmt Statement) {
 	switch stmt := stmt.(type) {
+	case *ParenSelect:
+		WalkStmt(v, stmt.Select)
 	case *Select:
 		for _, expr := range stmt.Exprs {
 			switch expr := expr.(type) {

@@ -99,8 +99,14 @@ func TestParse(t *testing.T) {
 		{`SELECT true = false`},
 		{`SELECT (true = false)`},
 		{`SELECT (SELECT 1)`},
+		{`SELECT ((SELECT 1))`},
+		{`SELECT ((((VALUES (1)))))`},
 		{`SELECT EXISTS (SELECT 1)`},
 		{`SELECT (VALUES (1))`},
+		{`SELECT (1, 2, 3)`},
+		{`SELECT (ROW(1, 2, 3))`},
+		{`SELECT (ROW())`},
+		{`SELECT (TABLE a)`},
 
 		{`SELECT FROM t`},
 		{`SELECT 1 FROM t`},
@@ -217,6 +223,9 @@ func TestParse(t *testing.T) {
 		{`SET a = 3, 4`},
 		{`SET a = '3'`},
 		{`SET a = 3.0`},
+
+		// TODO(pmattis): Is this a postgres extension?
+		{`TABLE a`}, // Shorthand for: SELECT * FROM a
 
 		{`TRUNCATE TABLE a`},
 		{`TRUNCATE TABLE a, b.c`},

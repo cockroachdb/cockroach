@@ -356,6 +356,14 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 		// anywhere else.
 		env = emptyEnv
 	}
+
+	switch t := expr.(type) {
+	case Row:
+		// Row and Tuple are synonmous: convert Row to Tuple to simplify logic
+		// below.
+		expr = Tuple(t)
+	}
+
 	switch t := expr.(type) {
 	case *AndExpr:
 		return evalAndExpr(t, env)

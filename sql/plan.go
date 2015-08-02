@@ -46,6 +46,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.Delete(n)
 	case *parser.Insert:
 		return p.Insert(n)
+	case *parser.ParenSelect:
+		return p.makePlan(n.Select)
 	case *parser.Select:
 		return p.Select(n)
 	case *parser.Set:
