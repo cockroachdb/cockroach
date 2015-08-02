@@ -466,12 +466,16 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	// Send the command through wrapped sender.
 	tc.wrapped.Send(ctx, call)
 
+	// For transactional calls, need to track & update the transaction.
 	if header.Txn != nil {
-		// If not already set, copy the request txn.
-		if call.Reply.Header().Txn == nil {
-			call.Reply.Header().Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
+		respHeader := call.Reply.Header()
+		if respHeader.Txn == nil {
+			// When empty, simply use the request's transaction.
+			// This is expected: the Range doesn't bother copying unless the
+			// object changes.
+			respHeader.Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
 		}
-		tc.updateResponseTxn(header, call.Reply.Header())
+		tc.updateResponseTxn(header, respHeader)
 	}
 
 	if txn := call.Reply.Header().Txn; txn != nil {
