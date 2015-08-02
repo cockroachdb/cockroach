@@ -233,6 +233,8 @@ message Transaction {
   // txn_coord_sender, with brief comments referring here.
   // See https://github.com/cockroachdb/cockroach/pull/221.
   optional NodeList certain_nodes = 12 [(gogoproto.nullable) = false];
+  // Writing is true when the Transaction is not read-only.
+  optional bool Writing = 13 [(gogoproto.nullable) = false];
 }
 
 // Lease contains information about leader leases including the

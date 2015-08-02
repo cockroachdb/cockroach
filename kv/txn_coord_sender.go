@@ -264,8 +264,8 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 }
 
 // startStats blocks and periodically logs transaction statistics (throughput,
-// success rates, durations, ...).
-// TODO(tschottdorf): Use a proper metrics subsystem for this (+the store-level
+// success rates, durations, ...). Note that this only captures write txns,
+// since read-only txns are stateless as far as TxnCoordSender is concerned.
 // stats).
 // TODO(mrtracy): Add this to TimeSeries.
 func (tc *TxnCoordSender) startStats() {
@@ -386,6 +386,8 @@ func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 			reply.Add(internalReply.Responses[i].GetValue().(proto.Response))
 		}
 	default:
+		// TODO(tschottdorf): should treat all calls as Batch. After all, that
+		// will be almost all calls.
 		tc.sendOne(ctx, call)
 	}
 }
@@ -426,8 +428,24 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	var startNS int64
 	header := call.Args.Header()
 	trace := tracer.FromCtx(ctx)
-	// If this call is part of a transaction...
+	var id string // optional transaction ID
 	if header.Txn != nil {
+		// If this call is part of a transaction...
+		id = string(header.Txn.ID)
+		// Verify that if this Transaction is not read-only, we have it on
+		// file. If not, refuse writes - the client must have issued a write on
+		// another coordinator previously.
+		if header.Txn.Writing && proto.IsTransactionWrite(call.Args) {
+			tc.Lock()
+			_, ok := tc.txns[id]
+			tc.Unlock()
+			if !ok {
+				call.Reply.Header().SetGoError(util.Errorf(
+					"transaction must not write on multiple coordinators"))
+				return
+			}
+		}
+
 		// Set the timestamp to the original timestamp for read-only
 		// commands and to the transaction timestamp for read/write
 		// commands.
@@ -448,23 +466,31 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	// Send the command through wrapped sender.
 	tc.wrapped.Send(ctx, call)
 
+	// For transactional calls, need to track & update the transaction.
 	if header.Txn != nil {
-		// If not already set, copy the request txn.
-		if call.Reply.Header().Txn == nil {
-			call.Reply.Header().Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
+		respHeader := call.Reply.Header()
+		if respHeader.Txn == nil {
+			// When empty, simply use the request's transaction.
+			// This is expected: the Range doesn't bother copying unless the
+			// object changes.
+			respHeader.Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
 		}
-		tc.updateResponseTxn(header, call.Reply.Header())
+		tc.updateResponseTxn(header, respHeader)
 	}
 
 	if txn := call.Reply.Header().Txn; txn != nil {
+		if !header.Txn.Equal(txn) {
+			panic("transaction ID changed")
+		}
 		tc.Lock()
-		txnMeta := tc.txns[string(txn.ID)]
+		txnMeta := tc.txns[id]
 		// If this transactional command leaves transactional intents, add the key
 		// or key range to the intents map. If the transaction metadata doesn't yet
 		// exist, create it.
 		if call.Reply.Header().GoError() == nil {
 			if proto.IsTransactionWrite(call.Args) {
 				if txnMeta == nil {
+					txn.Writing = true
 					trace.Event("coordinator spawns")
 					txnMeta = &txnMetadata{
 						txn:              *txn,
@@ -474,7 +500,6 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						timeoutDuration:  tc.clientTimeout,
 						txnEnd:           make(chan []proto.Key, 1),
 					}
-					id := string(txn.ID)
 					tc.txns[id] = txnMeta
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeat(id)
@@ -571,6 +596,30 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	}
 }
 
+// updateForBatch updates the first argument (the header of a request contained
+// in a batch) from the second one (the batch header), returning an error when
+// inconsistencies are found.
+// It is checked that the individual call does not have a User, UserPriority
+// or Txn set that differs from the batch's.
+func updateForBatch(aHeader *proto.RequestHeader, bHeader proto.RequestHeader) error {
+	// Disallow transaction, user and priority on individual calls, unless
+	// equal.
+	if aHeader.User != "" && aHeader.User != bHeader.User {
+		return util.Error("conflicting user on call in batch")
+	}
+	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
+		return util.Error("conflicting user priority on call in batch")
+	}
+	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
+		return util.Error("conflicting transaction in transactional batch")
+	}
+
+	aHeader.User = bHeader.User
+	aHeader.UserPriority = bHeader.UserPriority
+	aHeader.Txn = bHeader.Txn
+	return nil
+}
+
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
 // TODO(tschottdorf): modify sendBatch so that it sends truly parallel requests
@@ -584,26 +633,11 @@ func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.Intern
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
+		if err := updateForBatch(args.Header(), batchArgs.RequestHeader); err != nil {
+			batchReply.Header().SetGoError(err)
+			return
+		}
 		call := proto.Call{Args: args}
-		// Disallow transaction, user and priority on individual calls, unless
-		// equal.
-		if args.Header().User != "" && args.Header().User != batchArgs.User {
-			batchReply.Header().SetGoError(util.Error("cannot have individual user on call in batch"))
-			return
-		}
-		args.Header().User = batchArgs.User
-		if args.Header().UserPriority != nil && args.Header().GetUserPriority() != batchArgs.GetUserPriority() {
-			batchReply.Header().SetGoError(util.Error("cannot have individual user priority on call in batch"))
-			return
-		}
-		args.Header().UserPriority = batchArgs.UserPriority
-		if txn := args.Header().Txn; txn != nil && !txn.Equal(batchArgs.Txn) {
-			batchReply.Header().SetGoError(util.Error("cannot have individual transactional call in batch"))
-			return
-		}
-		// Propagate batch Txn to each call.
-		args.Header().Txn = batchArgs.Txn
-
 		// Create a reply from the method type and add to batch response.
 		if i >= len(batchReply.Responses) {
 			call.Reply = args.CreateReply()
