@@ -42,7 +42,7 @@ module Models {
       };
 
       nodeName: () => string = () => {
-        if (this.node() != null) {
+        if ((this.node() != null) && (this.node() !== "local")) {
           return this.node();
         }
         return "Local";
@@ -58,39 +58,53 @@ module Models {
         true
       );
 
-      private _url(): string {
-        let url: string = "/_status/logs/";
+      /**
+       * getURL creates the URL based on the node id. It is designed to be
+       * combined getParams to define the full route.
+       */
+      getURL(): string {
+        let url: string = "/logs/";
         if (this.node() != null) {
-          url += this.node();
+          url += encodeURIComponent(this.node());
         } else {
           url += "local";
-        }
-        url += "?";
-        if (this.level() != null) {
-          url += "level=" + encodeURIComponent(this.level()) + "&";
-        }
-        if (this.startTime() != null) {
-          url += "startTime=" + encodeURIComponent(this.startTime().toString()) + "&";
-        }
-        if (this.endTime() != null) {
-          url += "entTime=" + encodeURIComponent(this.endTime().toString()) + "&";
-        }
-        if (this.max() != null) {
-          url += "max=" + encodeURIComponent(this.max().toString()) + "&";
-        }
-        if ((this.pattern() != null) && (this.pattern().length > 0)) {
-          url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
         }
         return url;
       }
 
-      constructor(nodeId?: string) {
+      /**
+       * getParams creates the query parameter object based on the current
+       * state of all the properties on entries. This object can be passed to
+       * m.route.buildQueryString or to m.route(url, parms).
+       */
+      getParams(): Object {
+        let params = {
+          level: this.level(),
+          startTime: this.startTime(),
+          endTime: this.endTime(),
+          max: this.max(),
+          pattern: this.pattern()
+        };
+        // buildQueryString includes empty query strings when they have a null
+        // value and we need to remove them.
+        let keys: string[] = Object.keys(params);
+        for (let i: number = 0; i < keys.length; i++) {
+          if (!params[keys[i]]) {
+            delete params[keys[i]];
+          }
+        }
+        return params;
+      }
+
+      /**
+       * _url return the url used for queries to the status server.
+       */
+      private _url(): string {
+        return "/_status" + this.getURL() + "?" + m.route.buildQueryString(this.getParams());
+      }
+
+      constructor() {
         this.level(Utils.Format.Severity(2));
-        this.max(null);
-        this.startTime(null);
-        this.endTime(null);
-        this.pattern(null);
-        this.node(nodeId);
         this.allEntries = this._data.result;
       }
     }
