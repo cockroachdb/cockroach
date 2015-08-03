@@ -38,6 +38,7 @@ func (*RangeCond) expr()      {}
 func (*NullCheck) expr()      {}
 func (*ExistsExpr) expr()     {}
 func (StrVal) expr()          {}
+func (BytesVal) expr()        {}
 func (IntVal) expr()          {}
 func (NumVal) expr()          {}
 func (BoolVal) expr()         {}
@@ -195,8 +196,6 @@ func (node StrVal) String() string {
 
 // BytesVal represents a string of unprintable value.
 type BytesVal string
-
-func (BytesVal) expr() {}
 
 func (node BytesVal) String() string {
 	var scratch [64]byte

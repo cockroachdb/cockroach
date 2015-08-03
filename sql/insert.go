@@ -98,7 +98,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			if log.V(2) {
 				log.Infof("CPut %q -> %v", key, val)
 			}
-			v, err := prepareVal(val)
+			v, err := prepareVal(cols[i], val)
 			if err != nil {
 				return nil, err
 			}
@@ -137,19 +137,4 @@ func (p *planner) processColumns(tableDesc *structured.TableDescriptor,
 	}
 
 	return cols, nil
-}
-
-func prepareVal(val parser.Expr) (interface{}, error) {
-	// TODO(pmattis): Need to convert the value type to the column type.
-	switch t := val.(type) {
-	case parser.DBool:
-		return bool(t), nil
-	case parser.DInt:
-		return int64(t), nil
-	case parser.DFloat:
-		return float64(t), nil
-	case parser.DString:
-		return string(t), nil
-	}
-	return nil, fmt.Errorf("Unsupported type: %T", val)
 }

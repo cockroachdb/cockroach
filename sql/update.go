@@ -107,7 +107,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
-			v, err := prepareVal(val)
+			v, err := prepareVal(cols[i], val)
 			if err != nil {
 				return nil, err
 			}

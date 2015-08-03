@@ -135,7 +135,6 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 	case *float64:
 		return parser.DFloat(*t), true
 	case []byte:
-		// TODO(vivek): Add DBytes
 		return parser.DString(t), true
 	case *string:
 		return parser.DString(*t), true

@@ -243,3 +243,24 @@ func encodeSecondaryIndexes(tableDesc *structured.TableDescriptor,
 	}
 	return secondaryIndexEntries, nil
 }
+
+// TODO(tamird): make this not panic. Not critical, since a panic here
+// will just tank a single goroutine on the server and be silently
+// swallowed.
+func prepareVal(col structured.ColumnDescriptor, val parser.Expr) (interface{}, error) {
+	switch col.Type.Kind {
+	case structured.ColumnType_BIT:
+		return bool(val.(parser.DBool)), nil
+	case structured.ColumnType_INT:
+		return int64(val.(parser.DInt)), nil
+	case structured.ColumnType_FLOAT:
+		return float64(val.(parser.DFloat)), nil
+	// case structured.ColumnType_DECIMAL:
+	// case structured.ColumnType_DATE:
+	// case structured.ColumnType_TIME:
+	// case structured.ColumnType_TIMESTAMP:
+	case structured.ColumnType_CHAR, structured.ColumnType_TEXT, structured.ColumnType_BLOB:
+		return string(val.(parser.DString)), nil
+	}
+	return nil, fmt.Errorf("Unsupported type: %T", val)
+}
