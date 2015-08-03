@@ -45,24 +45,15 @@ func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 		return nil, err
 	}
 
-	permissions, err := PermissionsFromDescriptor(dbDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := permissions.Revoke(n); err != nil {
-		return nil, err
-	}
-
-	// Copy the object. Permissions.ToDescriptor will overwrite the permission fields.
-	newDesc := *dbDesc
-	if err := permissions.FillDescriptor(&newDesc); err != nil {
+	if err := dbDesc.Revoke(n); err != nil {
 		return nil, err
 	}
 
 	// Now update the descriptor.
-	descKey := keys.MakeDescMetadataKey(newDesc.ID)
-	if err := p.db.CPut(descKey, &newDesc, dbDesc); err != nil {
+	// TODO(marc): do this inside a transaction. This will be needed
+	// when modifying multiple descriptors in the same op.
+	descKey := keys.MakeDescMetadataKey(dbDesc.ID)
+	if err := p.db.Put(descKey, dbDesc); err != nil {
 		return nil, err
 	}
 

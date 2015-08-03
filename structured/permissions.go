@@ -15,7 +15,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package sql
+package structured
 
 import (
 	"fmt"
@@ -23,19 +23,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/structured"
 )
 
-// Permissions describes the full set of permissions for a descriptor.
-// This allows quick lookup for a given privilege and user.
-type Permissions struct {
+// permissions describes the full set of permissions for a descriptor.
+// This is used for easier manipulation of permisssions.
+type permissions struct {
 	read  map[string]struct{}
 	write map[string]struct{}
 }
 
-// PermissionsFromDescriptor builds a Permissions object from a descriptor.
-func PermissionsFromDescriptor(descriptor *structured.DatabaseDescriptor) (*Permissions, error) {
-	p := &Permissions{
+// permissionsFromDescriptor builds a permissions object from a descriptor.
+func permissionsFromDescriptor(descriptor *DatabaseDescriptor) (*permissions, error) {
+	p := &permissions{
 		read:  map[string]struct{}{},
 		write: map[string]struct{}{},
 	}
@@ -53,10 +52,10 @@ func PermissionsFromDescriptor(descriptor *structured.DatabaseDescriptor) (*Perm
 	return p, nil
 }
 
-// Validate verifies the validity of the Permissions object.
+// Validate verifies the validity of the permissions object.
 // For now, this only involves making sure that the root user
 // still has all permissions.
-func (p *Permissions) Validate() error {
+func (p *permissions) Validate() error {
 	if _, ok := p.read[security.RootUser]; !ok {
 		return fmt.Errorf("%s user does not have read privileges", security.RootUser)
 	}
@@ -67,7 +66,7 @@ func (p *Permissions) Validate() error {
 }
 
 // FillDescriptor writes the permissions from this object into a descriptor.
-func (p *Permissions) FillDescriptor(descriptor *structured.DatabaseDescriptor) error {
+func (p *permissions) FillDescriptor(descriptor *DatabaseDescriptor) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
@@ -101,7 +100,7 @@ func removeFromMap(users map[string]struct{}, newUsers []string) {
 }
 
 // Grant takes a parser.Grant node and grants the specified privileges to users.
-func (p *Permissions) Grant(n *parser.Grant) error {
+func (p *permissions) Grant(n *parser.Grant) error {
 	for _, priv := range n.Privileges {
 		switch priv {
 		case parser.PrivilegeAll:
@@ -119,7 +118,7 @@ func (p *Permissions) Grant(n *parser.Grant) error {
 }
 
 // Revoke takes a parser.Revoke node and removes the specified privileges from users.
-func (p *Permissions) Revoke(n *parser.Revoke) error {
+func (p *permissions) Revoke(n *parser.Revoke) error {
 	for _, priv := range n.Privileges {
 		switch priv {
 		case parser.PrivilegeAll:
