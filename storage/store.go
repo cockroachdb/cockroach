@@ -259,7 +259,7 @@ type Store struct {
 	_splitQueue    *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
 	replicateQueue *replicateQueue // Replication queue
-	rangeGCQueue   *rangeGCQueue   // Range GC queue
+	_rangeGCQueue  *rangeGCQueue   // Range GC queue
 	scanner        *rangeScanner   // Range scanner
 	feed           StoreEventFeed  // Event Feed
 	multiraft      *multiraft.MultiRaft
@@ -371,8 +371,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.RangeCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
-	s.rangeGCQueue = newRangeGCQueue(s.db)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue(), s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
+	s._rangeGCQueue = newRangeGCQueue(s.db)
+	s.scanner.AddQueues(s.gcQueue, s._splitQueue, s.verifyQueue, s.replicateQueue, s._rangeGCQueue)
 
 	return s
 }
@@ -710,6 +710,12 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 	}
 }
 
+// DisableRangeGCQueue disables or enables the range GC queue.
+// Exposed only for testing.
+func (s *Store) DisableRangeGCQueue(disabled bool) {
+	s.rangeGCQueue().SetDisabled(disabled)
+}
+
 // ForceReplicationScan iterates over all ranges and enqueues any that
 // need to be replicated. Exposed only for testing.
 func (s *Store) ForceReplicationScan(t util.Tester) {
@@ -728,7 +734,7 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 	defer s.mu.Unlock()
 
 	for _, r := range s.ranges {
-		s.rangeGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s._rangeGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
 }
 
@@ -962,8 +968,11 @@ func (s *Store) allocator() *allocator { return s._allocator }
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 
-// SplitQueue accessor.
+// splitQueue accessor.
 func (s *Store) splitQueue() *splitQueue { return s._splitQueue }
+
+// rangeGCQueue accessor.
+func (s *Store) rangeGCQueue() *rangeGCQueue { return s._rangeGCQueue }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }

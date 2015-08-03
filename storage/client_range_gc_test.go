@@ -23,45 +23,69 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// TestRangeGCQueueDropReplica verifies that the range GC queue
-// removes a range from a store that no longer should have a replica.
+// TestRangeGCQueueDropReplica verifies that a removed replica is
+// immediately cleaned up.
 func TestRangeGCQueueDropReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
+
 	raftID := proto.RaftID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
-
 	mtc.unreplicateRange(raftID, 0, 1)
 
-	// Increment the clock's timestamp to expire the leader lease.
-	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
-
-	// Make sure the range is not yet removed from the store.
-	numTrials := 3
-	for i := 0; i < numTrials; i++ {
-		store := mtc.stores[1]
-		store.ForceRangeGCScan(t)
-		if _, err := store.GetRange(raftID); err != nil {
-			t.Error("unexpected range removal")
+	// Make sure the range is removed from the store.
+	util.SucceedsWithin(t, time.Second, func() error {
+		if _, err := mtc.stores[1].GetRange(raftID); testutils.IsError(err, "range .* was not found") {
+			return util.Error("expected range removal")
 		}
-		time.Sleep(10 * time.Millisecond)
+		return nil
+	})
+
+	// Restart the store to tear down the test cleanly.
+	mtc.stopStore(1)
+	mtc.restartStore(1)
+}
+
+// TestRangeGCQueueDropReplicaOnScan verifies that the range GC queue
+// removes a range from a store that no longer should have a replica.
+func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+	// Disable the range gc queue to prevent direct removal of range.
+	mtc.stores[1].DisableRangeGCQueue(true)
+
+	raftID := proto.RaftID(1)
+	mtc.replicateRange(raftID, 0, 1, 2)
+	mtc.unreplicateRange(raftID, 0, 1)
+
+	// Wait long enough for the direct range GC to have had a chance and been
+	// discarded because the queue is disabled.
+	time.Sleep(10 * time.Millisecond)
+	if _, err := mtc.stores[1].GetRange(raftID); err != nil {
+		t.Error("unexpected range removal")
 	}
 
+	// Enable the queue.
+	mtc.stores[1].DisableRangeGCQueue(false)
+
 	// Increment the clock's timestamp to make the range GC queue process the range.
-	mtc.manualClock.Increment(int64(storage.RangeGCQueueUnleasedDuration))
+	mtc.manualClock.Increment(int64(storage.RangeGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
 
 	// Make sure the range is removed from the store.
 	util.SucceedsWithin(t, time.Second, func() error {
 		store := mtc.stores[1]
 		store.ForceRangeGCScan(t)
-		if _, err := store.GetRange(raftID); err == nil {
-			return util.Error("expected range removal")
+		if _, err := store.GetRange(raftID); testutils.IsError(err, "range .* was not found") {
+			return util.Errorf("expected range removal: %s", err)
 		}
 		return nil
 	})

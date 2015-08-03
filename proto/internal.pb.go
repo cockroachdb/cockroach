@@ -708,7 +708,8 @@ func (m *InternalBatchResponse) GetResponses() []InternalResponseUnion {
 
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
-// in storage/engine/db.cc in GetResponseHeader().
+// in storage/engine/db.cc in GetResponseHeader(). This message is used
+// for storing responses to mutating commands in the response cache.
 type ReadWriteCmdResponse struct {
 	Put                        *PutResponse                        `protobuf:"bytes,1,opt,name=put" json:"put,omitempty"`
 	ConditionalPut             *ConditionalPutResponse             `protobuf:"bytes,2,opt,name=conditional_put" json:"conditional_put,omitempty"`

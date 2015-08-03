@@ -619,7 +619,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 					values = append(values, mustGetInteger(val))
 				}
 				if !reflect.DeepEqual(expected, values) {
-					return util.Errorf("expected %v, got %v", expected, values)
+					return util.Errorf("addFirst: %t, expected %v, got %v", addFirst, expected, values)
 				}
 				return nil
 			})
@@ -657,13 +657,8 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		}
 		verify([]int64{39, 5, 39, 39})
 
-		// TODO(bdarnell): when we have GC of removed ranges, verify that
-		// the downed node removes the data from this range after coming
-		// back up.
-
 		// Wait out the leader lease and the unleased duration to make the range GC'able.
-		mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) +
-			int64(storage.RangeGCQueueUnleasedDuration) + 1)
+		mtc.manualClock.Increment(int64(storage.RangeGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
 		mtc.stores[1].ForceRangeGCScan(t)
 
 		// The removed store no longer has any of the data from the range.

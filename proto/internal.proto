@@ -282,7 +282,8 @@ message InternalBatchResponse {
 
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
-// in storage/engine/db.cc in GetResponseHeader().
+// in storage/engine/db.cc in GetResponseHeader(). This message is used
+// for storing responses to mutating commands in the response cache.
 message ReadWriteCmdResponse {
   option (gogoproto.onlyone) = true;
   oneof value {

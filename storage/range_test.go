@@ -165,7 +165,7 @@ func (tc *testContext) Start(t testing.TB) {
 		// Now that we have our actual store, monkey patch the sender used in ctx.DB.
 		sender.store = tc.store
 		// We created the store without a real KV client, so it can't perform splits.
-		tc.store._splitQueue.disabled = true
+		tc.store.splitQueue().SetDisabled(true)
 
 		if tc.rng == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := tc.store.BootstrapRange(); err != nil {

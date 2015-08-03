@@ -963,10 +963,19 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   ::cockroach::proto::ReplicaChangeType change_type() const;
   void set_change_type(::cockroach::proto::ReplicaChangeType value);
 
-  // repeated .cockroach.proto.Replica updated_replicas = 4;
+  // optional .cockroach.proto.Replica replica = 4;
+  bool has_replica() const;
+  void clear_replica();
+  static const int kReplicaFieldNumber = 4;
+  const ::cockroach::proto::Replica& replica() const;
+  ::cockroach::proto::Replica* mutable_replica();
+  ::cockroach::proto::Replica* release_replica();
+  void set_allocated_replica(::cockroach::proto::Replica* replica);
+
+  // repeated .cockroach.proto.Replica updated_replicas = 5;
   int updated_replicas_size() const;
   void clear_updated_replicas();
-  static const int kUpdatedReplicasFieldNumber = 4;
+  static const int kUpdatedReplicasFieldNumber = 5;
   const ::cockroach::proto::Replica& updated_replicas(int index) const;
   ::cockroach::proto::Replica* mutable_updated_replicas(int index);
   ::cockroach::proto::Replica* add_updated_replicas();
@@ -983,12 +992,15 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   inline void clear_has_store_id();
   inline void set_has_change_type();
   inline void clear_has_change_type();
+  inline void set_has_replica();
+  inline void clear_has_replica();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
+  ::cockroach::proto::Replica* replica_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > updated_replicas_;
   int change_type_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
@@ -2559,7 +2571,50 @@ inline void ChangeReplicasTrigger::set_change_type(::cockroach::proto::ReplicaCh
   // @@protoc_insertion_point(field_set:cockroach.proto.ChangeReplicasTrigger.change_type)
 }
 
-// repeated .cockroach.proto.Replica updated_replicas = 4;
+// optional .cockroach.proto.Replica replica = 4;
+inline bool ChangeReplicasTrigger::has_replica() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ChangeReplicasTrigger::set_has_replica() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ChangeReplicasTrigger::clear_has_replica() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void ChangeReplicasTrigger::clear_replica() {
+  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  clear_has_replica();
+}
+inline const ::cockroach::proto::Replica& ChangeReplicasTrigger::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ChangeReplicasTrigger.replica)
+  return replica_ != NULL ? *replica_ : *default_instance_->replica_;
+}
+inline ::cockroach::proto::Replica* ChangeReplicasTrigger::mutable_replica() {
+  set_has_replica();
+  if (replica_ == NULL) {
+    replica_ = new ::cockroach::proto::Replica;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ChangeReplicasTrigger.replica)
+  return replica_;
+}
+inline ::cockroach::proto::Replica* ChangeReplicasTrigger::release_replica() {
+  clear_has_replica();
+  ::cockroach::proto::Replica* temp = replica_;
+  replica_ = NULL;
+  return temp;
+}
+inline void ChangeReplicasTrigger::set_allocated_replica(::cockroach::proto::Replica* replica) {
+  delete replica_;
+  replica_ = replica;
+  if (replica) {
+    set_has_replica();
+  } else {
+    clear_has_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ChangeReplicasTrigger.replica)
+}
+
+// repeated .cockroach.proto.Replica updated_replicas = 5;
 inline int ChangeReplicasTrigger::updated_replicas_size() const {
   return updated_replicas_.size();
 }

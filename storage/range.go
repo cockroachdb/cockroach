@@ -163,6 +163,7 @@ type rangeManager interface {
 	allocator() *allocator
 	Gossip() *gossip.Gossip
 	splitQueue() *splitQueue
+	rangeGCQueue() *rangeGCQueue
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
@@ -253,7 +254,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 
 // String returns a string representation of the range.
 func (r *Range) String() string {
-	return fmt.Sprintf("range=%d [%s - %s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
+	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
