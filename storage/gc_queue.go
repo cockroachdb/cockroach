@@ -78,7 +78,7 @@ func (gcq *gcQueue) needsLeaderLease() bool {
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
+func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
 	// Lookup GC policy for this range.
 	policy, err := gcq.lookupGCPolicy(rng)
 	if err != nil {
@@ -108,7 +108,7 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, 
 // collector for each key and associated set of values. GC'd keys are
 // batched into InternalGC calls. Extant intents are resolved if
 // intents are older than intentAgeThreshold.
-func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
+func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng.Desc(), snap)
 	defer iter.Close()
@@ -252,7 +252,7 @@ func (gcq *gcQueue) timer() time.Duration {
 // aborted or intent cannot be resolved, the oldestIntentNanos value
 // is atomically updated to the min of oldestIntentNanos and the
 // intent's timestamp. The wait group is signaled on completion.
-func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *engine.MVCCMetadata,
+func (gcq *gcQueue) resolveIntent(rng *Replica, key proto.Key, meta *engine.MVCCMetadata,
 	updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 
@@ -300,7 +300,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *engine.MVCCMe
 // supplied range's start key. It queries all matching config prefixes
 // and then iterates from most specific to least, returning the first
 // non-nil GC policy.
-func (gcq *gcQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
+func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (proto.GCPolicy, error) {
 	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil {
 		return proto.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)

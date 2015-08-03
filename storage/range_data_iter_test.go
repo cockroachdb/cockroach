@@ -53,7 +53,7 @@ func prevKey(k proto.Key) proto.Key {
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
 // data.
-func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
+func createRangeData(r *Replica, t *testing.T) []proto.EncodedKey {
 	ts0 := proto.ZeroTimestamp
 	ts := proto.Timestamp{WallTime: 1}
 	keyTSs := []struct {
@@ -199,7 +199,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 
 	// Verify the keys in pre & post ranges.
 	for _, test := range []struct {
-		r    *Range
+		r    *Replica
 		keys []proto.EncodedKey
 	}{
 		{preRng, preKeys},

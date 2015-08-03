@@ -105,7 +105,7 @@ const (
 type testContext struct {
 	transport     multiraft.Transport
 	store         *Store
-	rng           *Range
+	rng           *Replica
 	rangeID       proto.RaftID
 	gossip        *gossip.Gossip
 	engine        engine.Engine
@@ -277,7 +277,7 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
-func setLeaderLease(t *testing.T, r *Range, l *proto.Lease) {
+func setLeaderLease(t *testing.T, r *Replica, l *proto.Lease) {
 	args := &proto.InternalLeaderLeaseRequest{Lease: *l}
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
@@ -399,7 +399,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 
 // hasLease returns whether the most recent leader lease was held by the given
 // range replica and whether it's expired for the given timestamp.
-func hasLease(rng *Range, timestamp proto.Timestamp) (bool, bool) {
+func hasLease(rng *Replica, timestamp proto.Timestamp) (bool, bool) {
 	l := rng.getLease()
 	return l.OwnedBy(rng.rm.RaftNodeID()), !l.Covers(timestamp)
 }
@@ -2729,7 +2729,7 @@ func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd proto.Intern
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{
-		rng: &Range{},
+		rng: &Replica{},
 	}
 	tc.Start(t)
 	defer tc.Stop()

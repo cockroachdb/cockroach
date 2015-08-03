@@ -32,7 +32,7 @@ import (
 
 // A rangeItem holds a range and its priority for use with a priority queue.
 type rangeItem struct {
-	value    *Range
+	value    *Replica
 	priority float64
 	// The index is needed by update and is maintained by the heap.Interface methods.
 	index int // The index of the item in the heap.
@@ -87,11 +87,11 @@ type queueImpl interface {
 
 	// shouldQueue accepts current time and a Range and returns whether
 	// it should be queued and if so, at what priority.
-	shouldQueue(proto.Timestamp, *Range) (shouldQueue bool, priority float64)
+	shouldQueue(proto.Timestamp, *Replica) (shouldQueue bool, priority float64)
 
 	// process accepts current time and a range and executes
 	// queue-specific work on it.
-	process(proto.Timestamp, *Range) error
+	process(proto.Timestamp, *Replica) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -157,7 +157,7 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 // value of bq.shouldQueue. The range is added with specified
 // priority. If the queue is too full, the range may not be
 // added. Returns an error if the range was not added.
-func (bq *baseQueue) Add(rng *Range, priority float64) error {
+func (bq *baseQueue) Add(rng *Replica, priority float64) error {
 	bq.Lock()
 	defer bq.Unlock()
 	return bq.addInternal(rng, true, priority)
@@ -167,7 +167,7 @@ func (bq *baseQueue) Add(rng *Range, priority float64) error {
 // be queued. Ranges are added to the queue using the priority
 // returned by bq.shouldQueue. If the queue is too full, an already-queued
 // range with the lowest priority may be dropped.
-func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
+func (bq *baseQueue) MaybeAdd(rng *Replica, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
 	should, priority := bq.impl.shouldQueue(now, rng)
@@ -180,7 +180,7 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 // range is already queued, updates the existing priority. Expects the
 // queue lock is held by caller. Returns an error if the range was not
 // added.
-func (bq *baseQueue) addInternal(rng *Range, should bool, priority float64) error {
+func (bq *baseQueue) addInternal(rng *Replica, should bool, priority float64) error {
 	if atomic.LoadInt32(&bq.disabled) == 1 {
 		return errQueueDisabled
 	}
@@ -218,7 +218,7 @@ func (bq *baseQueue) addInternal(rng *Range, should bool, priority float64) erro
 }
 
 // MaybeRemove removes the specified range from the queue if enqueued.
-func (bq *baseQueue) MaybeRemove(rng *Range) {
+func (bq *baseQueue) MaybeRemove(rng *Replica) {
 	bq.Lock()
 	defer bq.Unlock()
 	if item, ok := bq.ranges[rng.Desc().RaftID]; ok {
@@ -313,7 +313,7 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 // pop dequeues the highest priority range in the queue. Returns the
 // range if not empty; otherwise, returns nil. Expects mutex to be
 // locked.
-func (bq *baseQueue) pop() *Range {
+func (bq *baseQueue) pop() *Replica {
 	if bq.priorityQ.Len() == 0 {
 		return nil
 	}

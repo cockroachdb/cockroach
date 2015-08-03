@@ -277,7 +277,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, raftID proto.RaftID, start, end proto.Key) *Range {
+func createRange(s *Store, raftID proto.RaftID, start, end proto.Key) *Replica {
 	desc := &proto.RangeDescriptor{
 		RaftID:   raftID,
 		StartKey: start,
@@ -336,7 +336,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 
 	testCases := []struct {
 		start, end proto.Key
-		expRng     *Range
+		expRng     *Replica
 	}{
 		{proto.Key("a"), proto.Key("a\x00"), rng2},
 		{proto.Key("a"), proto.Key("b"), rng2},
@@ -388,7 +388,7 @@ func TestStoreRangeSet(t *testing.T) {
 			t.Errorf("expected 10 remaining; got %d", ec)
 		}
 		i := 1
-		ranges.Visit(func(rng *Range) bool {
+		ranges.Visit(func(rng *Replica) bool {
 			if rng.Desc().RaftID != proto.RaftID(i) {
 				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
@@ -409,7 +409,7 @@ func TestStoreRangeSet(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		i := 1
-		ranges.Visit(func(rng *Range) bool {
+		ranges.Visit(func(rng *Replica) bool {
 			if i == 1 {
 				if rng.Desc().RaftID != proto.RaftID(i) {
 					t.Errorf("expected range with Raft ID %d; got %v", i, rng)
@@ -626,7 +626,7 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 // client_split_test.go and use AdminSplit instead of this function.
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
-func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range {
+func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Replica {
 	rng := store.LookupRange(key, nil)
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
@@ -741,7 +741,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	defer stopper.Stop()
 
 	testData := []struct {
-		rng         *Range
+		rng         *Replica
 		expMaxBytes int64
 	}{
 		{store.LookupRange(proto.KeyMin, nil), 64 << 20},
@@ -1398,18 +1398,18 @@ func TestRaftNodeID(t *testing.T) {
 // fakeRangeQueue implements the rangeQueue interface and
 // records which range is passed to MaybeRemove.
 type fakeRangeQueue struct {
-	maybeRemovedRngs chan *Range
+	maybeRemovedRngs chan *Replica
 }
 
 func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAdd(rng *Range, t proto.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAdd(rng *Replica, t proto.Timestamp) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeRemove(rng *Range) {
+func (fq *fakeRangeQueue) MaybeRemove(rng *Replica) {
 	fq.maybeRemovedRngs <- rng
 }
 
@@ -1422,7 +1422,7 @@ func TestMaybeRemove(t *testing.T) {
 	// Add a queue to the scanner before starting the store and running the scanner.
 	// This is necessary to avoid data race.
 	fq := &fakeRangeQueue{
-		maybeRemovedRngs: make(chan *Range),
+		maybeRemovedRngs: make(chan *Replica),
 	}
 	store.scanner.AddQueues(fq)
 

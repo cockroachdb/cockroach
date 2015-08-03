@@ -43,7 +43,7 @@ func TestStoreEventFeed(t *testing.T) {
 		StartKey: proto.Key("b"),
 		EndKey:   proto.Key("c"),
 	}
-	rng1 := &Range{
+	rng1 := &Replica{
 		stats: &rangeStats{
 			raftID: desc1.RaftID,
 			MVCCStats: engine.MVCCStats{
@@ -57,7 +57,7 @@ func TestStoreEventFeed(t *testing.T) {
 	if err := rng1.setDesc(desc1); err != nil {
 		t.Fatal(err)
 	}
-	rng2 := &Range{
+	rng2 := &Replica{
 		stats: &rangeStats{
 			raftID: desc2.RaftID,
 			MVCCStats: engine.MVCCStats{

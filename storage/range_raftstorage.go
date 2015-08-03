@@ -32,10 +32,10 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var _ multiraft.WriteableGroupStorage = &Range{}
+var _ multiraft.WriteableGroupStorage = &Replica{}
 
 // InitialState implements the raft.Storage interface.
-func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftHardStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil, &hs)
@@ -73,7 +73,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // maxBytes. Passing maxBytes equal to zero disables size checking.
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
-func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
 	var ents []raftpb.Entry
@@ -108,7 +108,7 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 }
 
 // Term implements the raft.Storage interface.
-func (r *Range) Term(i uint64) (uint64, error) {
+func (r *Replica) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
 	if err == raft.ErrUnavailable {
 		ts, err := r.raftTruncatedState()
@@ -129,14 +129,14 @@ func (r *Range) Term(i uint64) (uint64, error) {
 }
 
 // LastIndex implements the raft.Storage interface.
-func (r *Range) LastIndex() (uint64, error) {
+func (r *Replica) LastIndex() (uint64, error) {
 	return atomic.LoadUint64(&r.lastIndex), nil
 }
 
 // raftTruncatedState returns metadata about the log that preceded the first
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
-func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
+func (r *Replica) raftTruncatedState() (proto.RaftTruncatedState, error) {
 	ts := proto.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(r.rm.Engine(), keys.RaftTruncatedStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, true, nil, &ts)
@@ -159,7 +159,7 @@ func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
 }
 
 // FirstIndex implements the raft.Storage interface.
-func (r *Range) FirstIndex() (uint64, error) {
+func (r *Replica) FirstIndex() (uint64, error) {
 	ts, err := r.raftTruncatedState()
 	if err != nil {
 		return 0, err
@@ -168,7 +168,7 @@ func (r *Range) FirstIndex() (uint64, error) {
 }
 
 // loadAppliedIndex retrieves the applied index from the supplied engine.
-func (r *Range) loadAppliedIndex(eng engine.Engine) (uint64, error) {
+func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 	var appliedIndex uint64
 	if r.isInitialized() {
 		appliedIndex = raftInitialLogIndex
@@ -196,7 +196,7 @@ func setAppliedIndex(eng engine.Engine, raftID proto.RaftID, appliedIndex uint64
 }
 
 // loadLastIndex retrieves the last index from storage.
-func (r *Range) loadLastIndex() (uint64, error) {
+func (r *Replica) loadLastIndex() (uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(r.rm.Engine(),
 		keys.RaftLastIndexKey(r.Desc().RaftID),
@@ -228,7 +228,7 @@ func setLastIndex(eng engine.Engine, raftID proto.RaftID, lastIndex uint64) erro
 }
 
 // Snapshot implements the raft.Storage interface.
-func (r *Range) Snapshot() (raftpb.Snapshot, error) {
+func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.rm.NewSnapshot()
 	defer snap.Close()
@@ -294,7 +294,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 }
 
 // Append implements the multiraft.WriteableGroupStorage interface.
-func (r *Range) Append(entries []raftpb.Entry) error {
+func (r *Replica) Append(entries []raftpb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -334,7 +334,7 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
 // or is created by range splitting to setup the fields which are
 // uninitialized or need updating.
-func (r *Range) updateRangeInfo() error {
+func (r *Replica) updateRangeInfo() error {
 	// RangeMaxBytes should be updated by looking up Zone Config in two cases:
 	// 1. After snapshot applying, if no updating of zone config
 	// for this key range, then maxBytes of this range will not
@@ -356,7 +356,7 @@ func (r *Range) updateRangeInfo() error {
 }
 
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
-func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
+func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	snapData := proto.RaftSnapshotData{}
 	err := gogoproto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
@@ -453,7 +453,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 }
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
-func (r *Range) SetHardState(st raftpb.HardState) error {
+func (r *Replica) SetHardState(st raftpb.HardState) error {
 	return engine.MVCCPutProto(r.rm.Engine(), nil, keys.RaftHardStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &st)
 }

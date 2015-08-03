@@ -167,27 +167,27 @@ type rangeManager interface {
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Range, proto.Request, proto.PushTxnType) error
+	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Replica, proto.Request, proto.PushTxnType) error
 
 	// Range manipulation methods.
-	LookupRange(start, end proto.Key) *Range
-	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID proto.RaftID) error
+	LookupRange(start, end proto.Key) *Replica
+	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRaftID proto.RaftID) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
-	RemoveRange(rng *Range) error
+	RemoveRange(rng *Replica) error
 	Tracer() *tracer.Tracer
-	SplitRange(origRng, newRng *Range) error
-	processRangeDescriptorUpdate(rng *Range) error
+	SplitRange(origRng, newRng *Replica) error
+	processRangeDescriptorUpdate(rng *Replica) error
 }
 
-// A Range is a contiguous keyspace with writes managed via an
+// A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
 // independent units and are responsible for maintaining their own
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
-type Range struct {
+type Replica struct {
 	desc     unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
 	rm       rangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
@@ -211,8 +211,8 @@ type Range struct {
 }
 
 // NewRange initializes the range using the given metadata.
-func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
-	r := &Range{
+func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
+	r := &Replica{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
@@ -253,12 +253,12 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 }
 
 // String returns a string representation of the range.
-func (r *Range) String() string {
+func (r *Replica) String() string {
 	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
-func (r *Range) Destroy() error {
+func (r *Replica) Destroy() error {
 	iter := newRangeDataIterator(r.Desc(), r.rm.Engine())
 	defer iter.Close()
 	batch := r.rm.Engine().NewBatch()
@@ -273,23 +273,23 @@ func (r *Range) Destroy() error {
 // this range. It is only relevant when commands need to be executed
 // on this range in the absence of a pre-existing context, such as
 // during range scanner operations.
-func (r *Range) context() context.Context {
+func (r *Replica) context() context.Context {
 	return context.WithValue(r.rm.Context(nil), log.RaftID, r.Desc().RaftID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
-func (r *Range) GetMaxBytes() int64 {
+func (r *Replica) GetMaxBytes() int64 {
 	return atomic.LoadInt64(&r.maxBytes)
 }
 
 // SetMaxBytes atomically sets the maximum byte limit before
 // split. This value is cached by the range for efficiency.
-func (r *Range) SetMaxBytes(maxBytes int64) {
+func (r *Replica) SetMaxBytes(maxBytes int64) {
 	atomic.StoreInt64(&r.maxBytes, maxBytes)
 }
 
 // IsFirstRange returns true if this is the first range.
-func (r *Range) IsFirstRange() bool {
+func (r *Replica) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, proto.KeyMin)
 }
 
@@ -302,13 +302,13 @@ func loadLeaderLease(eng engine.Engine, raftID proto.RaftID) (*proto.Lease, erro
 }
 
 // getLease returns the current leader lease.
-func (r *Range) getLease() *proto.Lease {
+func (r *Replica) getLease() *proto.Lease {
 	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
 }
 
 // newNotLeaderError returns a NotLeaderError intialized with the
 // replica for the holder (if any) of the given lease.
-func (r *Range) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) error {
+func (r *Replica) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) error {
 	err := &proto.NotLeaderError{}
 	if l != nil && l.RaftNodeID != 0 {
 		_, originStoreID := proto.DecodeRaftNodeID(originNode)
@@ -322,7 +322,7 @@ func (r *Range) newNotLeaderError(l *proto.Lease, originNode proto.RaftNodeID) e
 // requestLeaderLease sends a request to obtain or extend a leader lease for
 // this replica. Unless an error is returned, the obtained lease will be valid
 // for a time interval containing the requested timestamp.
-func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
+func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
 	duration := int64(DefaultLeaderLeaseDuration)
@@ -371,7 +371,7 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Range) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp proto.Timestamp) error {
+func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp proto.Timestamp) error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
@@ -403,7 +403,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp pr
 
 // WaitForLeaderLease is used from unittests to wait until this range
 // has the leader lease.
-func (r *Range) WaitForLeaderLease(t util.Tester) {
+func (r *Replica) WaitForLeaderLease(t util.Tester) {
 	util.SucceedsWithin(t, 1*time.Second, func() error {
 		return r.requestLeaderLease(r.rm.Clock().Now())
 	})
@@ -413,19 +413,19 @@ func (r *Range) WaitForLeaderLease(t util.Tester) {
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
-func (r *Range) isInitialized() bool {
+func (r *Replica) isInitialized() bool {
 	return len(r.Desc().EndKey) > 0
 }
 
 // Desc atomically returns the range's descriptor.
-func (r *Range) Desc() *proto.RangeDescriptor {
+func (r *Replica) Desc() *proto.RangeDescriptor {
 	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the range manager handle the
 // descriptor update.
-func (r *Range) setDesc(desc *proto.RangeDescriptor) error {
+func (r *Replica) setDesc(desc *proto.RangeDescriptor) error {
 	r.setDescWithoutProcessUpdate(desc)
 	if r.rm == nil {
 		// r.rm is null in some tests.
@@ -436,35 +436,35 @@ func (r *Range) setDesc(desc *proto.RangeDescriptor) error {
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate.
-func (r *Range) setDescWithoutProcessUpdate(desc *proto.RangeDescriptor) {
+func (r *Replica) setDescWithoutProcessUpdate(desc *proto.RangeDescriptor) {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 }
 
 // GetReplica returns the replica for this range from the range descriptor.
 // Returns nil if the replica is not found.
-func (r *Range) GetReplica() *proto.Replica {
+func (r *Replica) GetReplica() *proto.Replica {
 	_, replica := r.Desc().FindReplica(r.rm.StoreID())
 	return replica
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
-func (r *Range) GetMVCCStats() engine.MVCCStats {
+func (r *Replica) GetMVCCStats() engine.MVCCStats {
 	return r.stats.GetMVCC()
 }
 
 // ContainsKey returns whether this range contains the specified key.
-func (r *Range) ContainsKey(key proto.Key) bool {
+func (r *Replica) ContainsKey(key proto.Key) bool {
 	return r.Desc().ContainsKey(keys.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
-func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
+func (r *Replica) ContainsKeyRange(start, end proto.Key) bool {
 	return r.Desc().ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
-func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
+func (r *Replica) GetGCMetadata() (*proto.GCMetadata, error) {
 	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
 	gcMeta := &proto.GCMetadata{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, gcMeta)
@@ -476,7 +476,7 @@ func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
 
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
-func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
+func (r *Replica) GetLastVerificationTimestamp() (proto.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	timestamp := proto.Timestamp{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, &timestamp)
@@ -488,7 +488,7 @@ func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
 
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
-func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
+func (r *Replica) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
 }
@@ -498,7 +498,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // range's leadership is confirmed. The command is then dispatched
 // either along the read-only execution path or the read-write Raft
 // command queue.
-func (r *Range) AddCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (r *Replica) AddCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	// TODO(tschottdorf) Some (internal) requests go here directly, so they
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
@@ -521,7 +521,7 @@ func (r *Range) AddCmd(ctx context.Context, args proto.Request) (proto.Response,
 	return reply, err
 }
 
-func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
+func (r *Replica) checkCmdHeader(header *proto.RequestHeader) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
@@ -534,7 +534,7 @@ func (r *Range) checkCmdHeader(header *proto.RequestHeader) error {
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
 // invocation of endCmd().
-func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{} {
+func (r *Replica) beginCmd(header *proto.RequestHeader, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
 	r.cmdQ.GetWait(header.Key, header.EndKey, readOnly, &wg)
@@ -552,7 +552,7 @@ func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{}
 }
 
 // endCmd removes a pending command from the command queue.
-func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOnly bool) {
+func (r *Replica) endCmd(cmdKey interface{}, args proto.Request, err error, readOnly bool) {
 	r.Lock()
 	if err == nil && usesTimestampCache(args) {
 		header := args.Header()
@@ -566,7 +566,7 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica.
-func (r *Range) addAdminCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (r *Replica) addAdminCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
@@ -593,7 +593,7 @@ func (r *Range) addAdminCmd(ctx context.Context, args proto.Request) (proto.Resp
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
 	header := args.Header()
 
 	if err := r.checkCmdHeader(header); err != nil {
@@ -648,7 +648,7 @@ func (r *Range) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto.R
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.WaitGroup) (proto.Response, error) {
+func (r *Replica) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.WaitGroup) (proto.Response, error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -740,7 +740,7 @@ func (r *Range) addWriteCmd(ctx context.Context, args proto.Request, wg *sync.Wa
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request) (<-chan error, *pendingCmd) {
+func (r *Replica) proposeRaftCommand(ctx context.Context, args proto.Request) (<-chan error, *pendingCmd) {
 	pendingCmd := &pendingCmd{
 		ctx:  ctx,
 		done: make(chan proto.ResponseWithError, 1),
@@ -767,7 +767,7 @@ func (r *Range) proposeRaftCommand(ctx context.Context, args proto.Request) (<-c
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
-func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.InternalRaftCommand) error {
+func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.InternalRaftCommand) error {
 	if index == 0 {
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
@@ -809,7 +809,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.I
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request) (proto.Response, error) {
+func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode proto.RaftNodeID, args proto.Request) (proto.Response, error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
@@ -861,7 +861,7 @@ func (r *Range) applyRaftCommand(ctx context.Context, index uint64, originNode p
 // applyRaftCommandInBatch executes the command in a batch engine and
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
-func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
+func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originNode proto.RaftNodeID,
 	args proto.Request, ms *engine.MVCCStats) (engine.Engine, proto.Response, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
@@ -944,7 +944,7 @@ func (r *Range) applyRaftCommandInBatch(ctx context.Context, index uint64, origi
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
+func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
@@ -976,7 +976,7 @@ func (r *Range) getLeaseForGossip(ctx context.Context) (bool, error) {
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
 // if this is the first range and a leader lease can be obtained. The Store
 // calls this periodically on first range replicas.
-func (r *Range) maybeGossipFirstRange() error {
+func (r *Replica) maybeGossipFirstRange() error {
 	if !r.IsFirstRange() {
 		return nil
 	}
@@ -1015,13 +1015,13 @@ func (r *Range) maybeGossipFirstRange() error {
 // here since InternalLeaderLease and applyRaftCommand call the
 // method and we need to avoid deadlocking in redirectOnOrObtainLeaderLease.
 // TODO(tschottdorf): Can possibly simplify.
-func (r *Range) maybeGossipConfigs(match func(proto.Key) bool) {
+func (r *Replica) maybeGossipConfigs(match func(proto.Key) bool) {
 	r.Lock()
 	defer r.Unlock()
 	r.maybeGossipConfigsLocked(match)
 }
 
-func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool) {
+func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool) {
 	if r.rm.Gossip() == nil || !r.isInitialized() {
 		return
 	}
@@ -1061,7 +1061,7 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 	}
 }
 
-func (r *Range) handleSkippedIntents(args proto.Request, intents []proto.Intent) {
+func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Intent) {
 	if len(intents) == 0 {
 		return
 	}
@@ -1142,7 +1142,7 @@ func newReplicaCorruptionError(err ...error) *replicaCorruptionError {
 // range from participating in progress, trigger a rebalance operation and
 // decide on an error-by-error basis whether the corruption is limited to the
 // range, store, node or cluster with corresponding actions taken.
-func (r *Range) maybeSetCorrupt(err error) error {
+func (r *Replica) maybeSetCorrupt(err error) error {
 	if cErr, ok := err.(*replicaCorruptionError); ok && cErr != nil {
 		log.Errorc(r.context(), "stalling replica due to: %s", cErr.error)
 		cErr.processed = true
@@ -1179,7 +1179,7 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) 
 // maybeAddToSplitQueue checks whether the current size of the range
 // exceeds the max size specified in the zone config. If yes, the
 // range is added to the split queue.
-func (r *Range) maybeAddToSplitQueue() {
+func (r *Replica) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.rm.splitQueue().MaybeAdd(r, r.rm.Clock().Now())

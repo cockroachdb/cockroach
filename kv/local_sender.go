@@ -181,7 +181,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RaftID, replica *proto.Replica, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	var rng *storage.Range
+	var rng *storage.Replica
 	for _, store := range ls.storeMap {
 		rng = store.LookupRange(start, end)
 		if rng == nil {
