@@ -391,7 +391,7 @@ func TestInsertSelectDelete(t *testing.T) {
 				{"f", "g"},
 			}
 			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected %s, but got %s", expectedResults, results)
+				t.Fatalf("expected:\n%s\nbut got:\n%s", expectedResults, results)
 			}
 		}
 
