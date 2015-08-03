@@ -2733,12 +2733,13 @@ func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd proto.Intern
 	return mrm.mockProposeRaftCommand(idKey, cmd)
 }
 
-// TestRaftGroupDeletedError verifies that a request leader proposal which fails with
+// TestRequestLeaderEncounterGroupDeleteError verifies that a request leader proposal which fails with
 // multiraft.ErrGroupDeleted is converted to a RangeNotFoundError in the Store.
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)
-
-	tc := testContext{}
+	tc := testContext{
+		rng: &Range{},
+	}
 	tc.Start(t)
 	defer tc.Stop()
 
@@ -2752,13 +2753,19 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		Store: tc.store,
 		mockProposeRaftCommand: proposeRaftCommandFn,
 	}
-	tc.rng.rm = testRangeManager
+	rng, err := NewRange(testRangeDescriptor(), testRangeManager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tc.store.AddRangeTest(rng); err != nil {
+		t.Fatal(err)
+	}
 
 	gArgs := getArgs(proto.Key("a"), 1, tc.store.StoreID())
 	// Force the read command request a new lease.
 	clock := tc.clock
 	gArgs.Header().Timestamp = clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
-	_, err := tc.store.ExecuteCmd(context.Background(), &gArgs)
+	_, err = tc.store.ExecuteCmd(context.Background(), &gArgs)
 	if _, ok := err.(*proto.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}
