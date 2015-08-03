@@ -31,7 +31,6 @@ import (
 func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 	desc := structured.TableDescriptor{}
 	desc.Name = p.Table.String()
-
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -77,8 +76,10 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				}
 				if d.PrimaryKey {
 					index.Name = structured.PrimaryKeyIndexName
+					desc.PrimaryIndex = index
+				} else {
+					desc.Indexes = append(desc.Indexes, index)
 				}
-				desc.Indexes = append(desc.Indexes, index)
 			}
 		case *parser.IndexTableDef:
 			index := structured.IndexDescriptor{
@@ -87,9 +88,14 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				ColumnNames: d.Columns,
 			}
 			if d.PrimaryKey {
-				index.Name = structured.PrimaryKeyIndexName
+				// Only override the index name if it hasn't been set by the user.
+				if index.Name == "" {
+					index.Name = structured.PrimaryKeyIndexName
+				}
+				desc.PrimaryIndex = index
+			} else {
+				desc.Indexes = append(desc.Indexes, index)
 			}
-			desc.Indexes = append(desc.Indexes, index)
 		default:
 			return desc, fmt.Errorf("unsupported table def: %T", def)
 		}
@@ -232,7 +238,7 @@ type indexEntry struct {
 func encodeSecondaryIndexes(tableDesc *structured.TableDescriptor,
 	colMap map[uint32]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
-	for _, secondaryIndex := range tableDesc.Indexes[1:] {
+	for _, secondaryIndex := range tableDesc.Indexes {
 		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, secondaryIndex.ID)
 		secondaryIndexKey, err := encodeIndexKey(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {

@@ -57,7 +57,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		colMap[c.ID] = i
 	}
 
-	primaryIndex := tableDesc.Indexes[0]
+	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}

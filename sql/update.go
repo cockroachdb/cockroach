@@ -48,9 +48,9 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	for _, c := range cols {
 		updateColMap[c.ID] = struct{}{}
 	}
-	for i, id := range tableDesc.Indexes[0].ColumnIDs {
+	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := updateColMap[id]; ok {
-			return nil, fmt.Errorf("primary key column \"%s\" cannot be updated", tableDesc.Indexes[0].ColumnNames[i])
+			return nil, fmt.Errorf("primary key column \"%s\" cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 
@@ -77,7 +77,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		colMap[c.ID] = i
 	}
 
-	index := tableDesc.Indexes[0]
+	index := tableDesc.PrimaryIndex
 	indexKey := encodeIndexKeyPrefix(tableDesc.ID, index.ID)
 
 	// Evaluate all the column value expressions.
