@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestGrant(t *testing.T) {
+func TestRevoke(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
@@ -50,38 +50,56 @@ func TestGrant(t *testing.T) {
 		t.Fatalf("wrong Write list: %+v", desc.Write)
 	}
 
-	// Grant WRITE permissions.
-	if _, err := sqlDB.Exec(`GRANT WRITE ON DATABASE TEST TO foo`); err != nil {
+	// Add some permissions.
+	if _, err := sqlDB.Exec(`GRANT ALL ON DATABASE TEST TO rw`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`GRANT READ ON DATABASE TEST TO reader`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`GRANT WRITE ON DATABASE TEST TO writer`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
 	}
-	if len(desc.Read) != 1 || desc.Read[0] != security.RootUser {
-		t.Fatalf("wrong Read list: %+v", desc.Read)
-	}
-	if len(desc.Write) != 2 || desc.Write[0] != "foo" || desc.Write[1] != security.RootUser {
-		t.Fatalf("wrong Write list: %+v", desc.Write)
+	if len(desc.Read) != 3 || len(desc.Write) != 3 {
+		t.Fatalf("wrong read/write length: %d, %d", len(desc.Read), len(desc.Write))
 	}
 
-	// Grant ALL Permissions.
-	if _, err := sqlDB.Exec(`GRANT ALL ON DATABASE TEST TO bar`); err != nil {
+	// Test some revokes.
+	if _, err := sqlDB.Exec(`REVOKE WRITE ON DATABASE TEST FROM writer,reader`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
 	}
-	if len(desc.Read) != 2 || desc.Read[0] != "bar" || desc.Read[1] != security.RootUser {
+	if len(desc.Read) != 3 {
 		t.Fatalf("wrong Read list: %+v", desc.Read)
 	}
-	if len(desc.Write) != 3 || desc.Write[0] != "bar" || desc.Write[1] != "foo" || desc.Write[2] != security.RootUser {
+	if len(desc.Write) != 2 || desc.Write[0] != security.RootUser || desc.Write[1] != "rw" {
 		t.Fatalf("wrong Write list: %+v", desc.Write)
 	}
 
-	// Adding permissions to root is a noop.
-	if _, err := sqlDB.Exec(`GRANT ALL ON DATABASE TEST TO root`); err != nil {
+	// Remove ALL Permissions.
+	if _, err := sqlDB.Exec(`REVOKE ALL ON DATABASE TEST FROM rw`); err != nil {
 		t.Fatal(err)
+	}
+
+	if err := kvDB.GetProto(descKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+	if len(desc.Read) != 2 || desc.Read[0] != "reader" || desc.Read[1] != security.RootUser {
+		t.Fatalf("wrong Read list: %+v", desc.Read)
+	}
+	if len(desc.Write) != 1 || desc.Write[0] != security.RootUser {
+		t.Fatalf("wrong Write list: %+v", desc.Write)
+	}
+
+	// Removing permissions for "root" fails.
+	if _, err := sqlDB.Exec(`REVOKE READ ON DATABASE TEST FROM root`); err == nil {
+		t.Fatal("unexpected success")
 	}
 }

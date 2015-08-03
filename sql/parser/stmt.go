@@ -48,6 +48,7 @@ func (*DropTable) statement()      {}
 func (*Grant) statement()          {}
 func (*Insert) statement()         {}
 func (*ParenSelect) statement()    {}
+func (*Revoke) statement()         {}
 func (*Select) statement()         {}
 func (*Set) statement()            {}
 func (*ShowColumns) statement()    {}
