@@ -57,7 +57,7 @@ func mustGetInteger(v *proto.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	splitKey := proto.Key("m")
 	key1 := proto.Key("a")
 	key2 := proto.Key("z")
@@ -65,9 +65,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	var raftID2 proto.RaftID
+	var raftID2 proto.RangeID
 
-	get := func(store *storage.Store, raftID proto.RaftID, key proto.Key) int64 {
+	get := func(store *storage.Store, raftID proto.RangeID, key proto.Key) int64 {
 		args := getArgs(key, raftID, store.StoreID())
 		resp, err := store.ExecuteCmd(context.Background(), &args)
 		if err != nil {
@@ -90,7 +90,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
 		defer stopper.Stop()
 
-		increment := func(raftID proto.RaftID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
+		increment := func(raftID proto.RangeID, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args := incrementArgs(key, value, raftID, store.StoreID())
 			resp, err := store.ExecuteCmd(context.Background(), &args)
 			return resp.(*proto.IncrementResponse), err
@@ -106,7 +106,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := store.ExecuteCmd(context.Background(), &splitArgs); err != nil {
 			t.Fatal(err)
 		}
-		raftID2 = store.LookupRange(key2, nil).Desc().RaftID
+		raftID2 = store.LookupRange(key2, nil).Desc().RangeID
 		if raftID2 == raftID {
 			t.Errorf("got same raft id after split")
 		}
@@ -548,7 +548,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	incArgs := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
@@ -600,7 +600,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		defer mtc.Stop()
 
 		// Replicate the initial range to three of the four nodes.
-		raftID := proto.RaftID(1)
+		raftID := proto.RangeID(1)
 		mtc.replicateRange(raftID, 0, 3, 1)
 
 		incArgs := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
@@ -700,7 +700,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	splitKey := proto.Key("m")
 	key := proto.Key("z")
 
@@ -711,7 +711,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	raftID2 := store0.LookupRange(key, nil).Desc().RaftID
+	raftID2 := store0.LookupRange(key, nil).Desc().RangeID
 	if raftID2 == raftID {
 		t.Errorf("got same raft id after split")
 	}
@@ -791,7 +791,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		if rng == nil {
 			t.Fatal("failed to look up min range")
 		}
-		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RaftID,
+		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("A%03d", i)), rng.Desc().RangeID,
 			mtc.stores[0].StoreID())
 		if _, err := rng.AdminSplit(args); err != nil {
 			t.Fatal(err)
@@ -804,7 +804,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		if rng == nil {
 			t.Fatal("failed to look up max range")
 		}
-		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RaftID, mtc.stores[0].StoreID())
+		args := adminSplitArgs(proto.KeyMin, []byte(fmt.Sprintf("B%03d", i)), rng.Desc().RangeID, mtc.stores[0].StoreID())
 		if _, err := rng.AdminSplit(args); err != nil {
 			t.Fatal(err)
 		}
@@ -819,12 +819,12 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	defer mtc.Stop()
 
 	// Make the split.
-	splitArgs := adminSplitArgs(proto.KeyMin, []byte("b"), proto.RaftID(1), mtc.stores[0].StoreID())
+	splitArgs := adminSplitArgs(proto.KeyMin, []byte("b"), proto.RangeID(1), mtc.stores[0].StoreID())
 	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
-	raftID := proto.RaftID(2)
+	raftID := proto.RangeID(2)
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	mtc.unreplicateRange(raftID, 0, 2)
@@ -842,7 +842,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	})
 
 	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
-		GroupID: proto.RaftID(0),
+		GroupID: proto.RangeID(0),
 		Message: raftpb.Message{
 			From: uint64(mtc.stores[2].RaftNodeID()),
 			To:   uint64(mtc.stores[1].RaftNodeID()),
@@ -851,5 +851,5 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Execute another replica change to ensure that MultiRaft has processed the heartbeat just sent.
-	mtc.replicateRange(proto.RaftID(1), 0, 1)
+	mtc.replicateRange(proto.RangeID(1), 0, 1)
 }

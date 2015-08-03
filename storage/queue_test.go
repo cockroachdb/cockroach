@@ -102,11 +102,11 @@ func TestQueuePriorityQueue(t *testing.T) {
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r1 := &Replica{}
-	if err := r1.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r1.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	r2 := &Replica{}
-	if err := r2.setDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+	if err := r2.setDesc(&proto.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
 	shouldAddMap := map[*Replica]bool{
@@ -188,7 +188,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 func TestBaseQueueAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r := &Replica{}
-	if err := r.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
@@ -214,18 +214,18 @@ func TestBaseQueueAdd(t *testing.T) {
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r1 := &Replica{}
-	if err := r1.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r1.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	r2 := &Replica{}
-	if err := r2.setDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+	if err := r2.setDesc(&proto.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now proto.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.Desc().RaftID)
+			priority = float64(r.Desc().RangeID)
 			return
 		},
 	}
@@ -262,7 +262,7 @@ func TestBaseQueueProcess(t *testing.T) {
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	r := &Replica{}
-	if err := r.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	if err := r.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{

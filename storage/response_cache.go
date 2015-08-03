@@ -50,14 +50,14 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 // A ResponseCache is not thread safe. Access to it is serialized
 // through Raft.
 type ResponseCache struct {
-	raftID proto.RaftID
+	raftID proto.RangeID
 }
 
 // NewResponseCache returns a new response cache. Every range replica
 // maintains a response cache, not just the leader. However, when a
 // replica loses or gains leadership of the Raft consensus group, the
 // inflight map should be cleared.
-func NewResponseCache(raftID proto.RaftID) *ResponseCache {
+func NewResponseCache(raftID proto.RangeID) *ResponseCache {
 	return &ResponseCache{
 		raftID: raftID,
 	}
@@ -102,7 +102,7 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 // CopyInto copies all the cached results from this response cache
 // into the destRaftID response cache. Failures decoding individual
 // cache entries return an error.
-func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) error {
+func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RangeID) error {
 	prefix := keys.ResponseCacheKey(rc.raftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
@@ -135,7 +135,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RaftID) erro
 // locked while copying is in progress. Failures decoding individual
 // cache entries return an error. The copy is done directly using the
 // engine instead of interpreting values through MVCC for efficiency.
-func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RaftID) error {
+func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RangeID) error {
 	prefix := keys.ResponseCacheKey(originRaftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())

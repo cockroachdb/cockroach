@@ -40,7 +40,7 @@ import (
 )
 
 var testRangeDescriptor = proto.RangeDescriptor{
-	RaftID:   1,
+	RangeID:  1,
 	StartKey: proto.Key("a"),
 	EndKey:   proto.Key("z"),
 	Replicas: []proto.Replica{
@@ -153,7 +153,7 @@ func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, s := makeTestGossip(t)
 	defer s()
-	raftID := proto.RaftID(99)
+	raftID := proto.RangeID(99)
 
 	nodeAttrs := map[int32][]string{
 		1: {}, // The local node, set in each test case.
@@ -272,7 +272,7 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	descriptor := proto.RangeDescriptor{
-		RaftID:   raftID,
+		RangeID:  raftID,
 		Replicas: nil,
 	}
 
@@ -335,9 +335,9 @@ func TestSendRPCOrder(t *testing.T) {
 			}
 		}
 
-		ds.leaderCache.Update(proto.RaftID(raftID), proto.Replica{})
+		ds.leaderCache.Update(proto.RangeID(raftID), proto.Replica{})
 		if tc.leader > 0 {
-			ds.leaderCache.Update(proto.RaftID(raftID), descriptor.Replicas[tc.leader-1])
+			ds.leaderCache.Update(proto.RangeID(raftID), descriptor.Replicas[tc.leader-1])
 		}
 
 		args := tc.args
@@ -788,7 +788,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	// Fill RangeDescriptor with 2 replicas
 	var descriptor = proto.RangeDescriptor{
-		RaftID:   1,
+		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.Key("z"),
 	}
@@ -872,7 +872,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	merged := false
 	// The stale first range descriptor which is unaware of the merge.
 	var firstRange = proto.RangeDescriptor{
-		RaftID:   1,
+		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.Key("b"),
 		Replicas: []proto.Replica{
@@ -885,7 +885,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// The merged descriptor, which will be looked up after having processed
 	// the stale range [a,b).
 	var mergedRange = proto.RangeDescriptor{
-		RaftID:   1,
+		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.KeyMax,
 		Replicas: []proto.Replica{

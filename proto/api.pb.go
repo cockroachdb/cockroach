@@ -171,7 +171,7 @@ type RequestHeader struct {
 	// RaftID specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
-	RaftID RaftID `protobuf:"varint,7,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RaftID RangeID `protobuf:"varint,7,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 	// UserPriority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
@@ -1117,7 +1117,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				m.RaftID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

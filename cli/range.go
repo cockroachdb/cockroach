@@ -68,7 +68,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", row.Key)
 			continue
 		}
-		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RaftID)
+		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RangeID)
 		for i, replica := range desc.Replicas {
 			fmt.Printf("\t%d: node-id=%d store-id=%d\n",
 				i, replica.NodeID, replica.StoreID)

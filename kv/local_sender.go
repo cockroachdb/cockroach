@@ -132,7 +132,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	header := call.Args.Header()
 	if header.RaftID == 0 || header.Replica.StoreID == 0 {
 		var repl *proto.Replica
-		var raftID proto.RaftID
+		var raftID proto.RangeID
 		raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
 		if err == nil {
 			header.RaftID = raftID
@@ -178,7 +178,7 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 // if not found.
 // TODO(tschottdorf) with a very large number of stores, the LocalSender
 // may want to avoid scanning the whole map of stores on each invocation.
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RaftID, replica *proto.Replica, err error) {
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RangeID, replica *proto.Replica, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *storage.Replica
@@ -188,7 +188,7 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RaftID,
 			continue
 		}
 		if replica == nil {
-			raftID = rng.Desc().RaftID
+			raftID = rng.Desc().RangeID
 			replica = rng.GetReplica()
 			continue
 		}

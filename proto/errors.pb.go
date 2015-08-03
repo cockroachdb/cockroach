@@ -98,8 +98,8 @@ func (*NodeUnavailableError) ProtoMessage() {}
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 type RangeNotFoundError struct {
-	RaftID           RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
-	XXX_unrecognized []byte `json:"-"`
+	RaftID           RangeID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
@@ -694,7 +694,7 @@ func (m *RangeNotFoundError) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				m.RaftID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

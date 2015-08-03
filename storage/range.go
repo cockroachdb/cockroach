@@ -171,7 +171,7 @@ type rangeManager interface {
 
 	// Range manipulation methods.
 	LookupRange(start, end proto.Key) *Replica
-	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRaftID proto.RaftID) error
+	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRaftID proto.RangeID) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
@@ -216,7 +216,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
-		respCache:   NewResponseCache(desc.RaftID),
+		respCache:   NewResponseCache(desc.RangeID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 	r.setDescWithoutProcessUpdate(desc)
@@ -233,7 +233,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
 	}
 	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
-	lease, err := loadLeaderLease(r.rm.Engine(), desc.RaftID)
+	lease, err := loadLeaderLease(r.rm.Engine(), desc.RangeID)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
 		return r.ContainsKey(configPrefix)
 	})
 
-	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
+	if r.stats, err = newRangeStats(desc.RangeID, rm.Engine()); err != nil {
 		return nil, err
 	}
 
@@ -254,7 +254,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
+	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RangeID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
@@ -274,7 +274,7 @@ func (r *Replica) Destroy() error {
 // on this range in the absence of a pre-existing context, such as
 // during range scanner operations.
 func (r *Replica) context() context.Context {
-	return context.WithValue(r.rm.Context(nil), log.RaftID, r.Desc().RaftID)
+	return context.WithValue(r.rm.Context(nil), log.RaftID, r.Desc().RangeID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -293,7 +293,7 @@ func (r *Replica) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, proto.KeyMin)
 }
 
-func loadLeaderLease(eng engine.Engine, raftID proto.RaftID) (*proto.Lease, error) {
+func loadLeaderLease(eng engine.Engine, raftID proto.RangeID) (*proto.Lease, error) {
 	lease := &proto.Lease{}
 	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(raftID), proto.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
@@ -465,7 +465,7 @@ func (r *Replica) ContainsKeyRange(start, end proto.Key) bool {
 
 // GetGCMetadata reads the latest GC metadata for this range.
 func (r *Replica) GetGCMetadata() (*proto.GCMetadata, error) {
-	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
 	gcMeta := &proto.GCMetadata{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, gcMeta)
 	if err != nil {
@@ -477,7 +477,7 @@ func (r *Replica) GetGCMetadata() (*proto.GCMetadata, error) {
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
 func (r *Replica) GetLastVerificationTimestamp() (proto.Timestamp, error) {
-	key := keys.RangeLastVerificationTimestampKey(r.Desc().RaftID)
+	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
 	timestamp := proto.Timestamp{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
@@ -489,7 +489,7 @@ func (r *Replica) GetLastVerificationTimestamp() (proto.Timestamp, error) {
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
 func (r *Replica) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
-	key := keys.RangeLastVerificationTimestampKey(r.Desc().RaftID)
+	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
 }
 
@@ -746,7 +746,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, args proto.Request) (<
 		done: make(chan proto.ResponseWithError, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
-		RaftID:       r.Desc().RaftID,
+		RaftID:       r.Desc().RangeID,
 		OriginNodeID: r.rm.RaftNodeID(),
 	}
 	cmdID := args.Header().GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
@@ -827,7 +827,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originNode
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
-	if err := setAppliedIndex(batch, r.Desc().RaftID, index); err != nil {
+	if err := setAppliedIndex(batch, r.Desc().RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 	if err := batch.Commit(); err != nil {
@@ -985,7 +985,7 @@ func (r *Replica) maybeGossipFirstRange() error {
 
 	// Gossip the cluster ID from all replicas of the first range.
 	log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
-		r.rm.StoreID(), r.Desc().RaftID)
+		r.rm.StoreID(), r.Desc().RangeID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
@@ -993,11 +993,11 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
 		return err
 	}
-	log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, r.rm.ClusterID(), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
-	log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RaftID)
+	log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
 	if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
@@ -1052,7 +1052,7 @@ func (r *Replica) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bo
 			}
 			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
 				r.configHashes[i] = hash
-				log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
+				log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RangeID)
 				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0); err != nil {
 					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
 				}

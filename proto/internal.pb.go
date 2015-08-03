@@ -998,7 +998,7 @@ func (m *InternalRaftCommandUnion) GetInternalBatch() *InternalBatchRequest {
 // An InternalRaftCommand is a command which can be serialized and
 // sent via raft.
 type InternalRaftCommand struct {
-	RaftID           RaftID                   `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RaftID           RangeID                  `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
 	OriginNodeID     RaftNodeID               `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
 	Cmd              InternalRaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 	XXX_unrecognized []byte                   `json:"-"`
@@ -1022,7 +1022,7 @@ func (m *InternalRaftCommand) GetCmd() InternalRaftCommandUnion {
 //
 // This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
 type RaftMessageRequest struct {
-	GroupID RaftID `protobuf:"varint,1,opt,name=group_id,casttype=RaftID" json:"group_id"`
+	GroupID RangeID `protobuf:"varint,1,opt,name=group_id,casttype=RaftID" json:"group_id"`
 	// The raft payload, an encoded raftpb.Message. We transmit the message as
 	// an opaque blob to avoid the complexity of importing proto files across
 	// packages.
@@ -4704,7 +4704,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				m.RaftID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4801,7 +4801,7 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.GroupID |= (RaftID(b) & 0x7F) << shift
+				m.GroupID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

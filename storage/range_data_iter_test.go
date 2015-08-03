@@ -60,14 +60,14 @@ func createRangeData(r *Replica, t *testing.T) []proto.EncodedKey {
 		key proto.Key
 		ts  proto.Timestamp
 	}{
-		{keys.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{keys.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
-		{keys.RaftHardStateKey(r.Desc().RaftID), ts0},
-		{keys.RaftLogKey(r.Desc().RaftID, 2), ts0},
-		{keys.RaftLogKey(r.Desc().RaftID, 1), ts0},
-		{keys.RangeGCMetadataKey(r.Desc().RaftID), ts0},
-		{keys.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
-		{keys.RangeStatsKey(r.Desc().RaftID), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
+		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
+		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
+		{keys.RangeGCMetadataKey(r.Desc().RangeID), ts0},
+		{keys.RangeLastVerificationTimestampKey(r.Desc().RangeID), ts0},
+		{keys.RangeStatsKey(r.Desc().RangeID), ts0},
 		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
 		{keys.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
 		{keys.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},

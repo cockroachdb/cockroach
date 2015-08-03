@@ -59,7 +59,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 	case *storage.RegisterRangeEvent:
 		sid = event.StoreID
 		eventStr = fmt.Sprintf("RegisterRange scan=%t, rid=%d, live=%d",
-			event.Scan, event.Desc.RaftID, event.Stats.LiveBytes)
+			event.Scan, event.Desc.RangeID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
 		if event.Method == proto.InternalResolveIntent ||
 			event.Method == proto.InternalResolveIntentRange {
@@ -70,7 +70,7 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		if ser.recordUpdateDetail {
 			sid = event.StoreID
 			eventStr = fmt.Sprintf("UpdateRange rid=%d, method=%s, livediff=%d",
-				event.Desc.RaftID, event.Method.String(), event.Delta.LiveBytes)
+				event.Desc.RangeID, event.Method.String(), event.Delta.LiveBytes)
 		} else {
 			m := ser.perStoreUpdateCount[event.StoreID]
 			if m == nil {
@@ -82,16 +82,16 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 	case *storage.RemoveRangeEvent:
 		sid = event.StoreID
 		eventStr = fmt.Sprintf("RemoveRange rid=%d, live=%d",
-			event.Desc.RaftID, event.Stats.LiveBytes)
+			event.Desc.RangeID, event.Stats.LiveBytes)
 	case *storage.SplitRangeEvent:
 		sid = event.StoreID
 		eventStr = fmt.Sprintf("SplitRange origId=%d, newId=%d, origKey=%d, newKey=%d",
-			event.Original.Desc.RaftID, event.New.Desc.RaftID,
+			event.Original.Desc.RangeID, event.New.Desc.RangeID,
 			event.Original.Stats.KeyBytes, event.New.Stats.KeyBytes)
 	case *storage.MergeRangeEvent:
 		sid = event.StoreID
 		eventStr = fmt.Sprintf("MergeRange rid=%d, subId=%d, key=%d, subKey=%d",
-			event.Merged.Desc.RaftID, event.Removed.Desc.RaftID,
+			event.Merged.Desc.RangeID, event.Removed.Desc.RangeID,
 			event.Merged.Stats.KeyBytes, event.Removed.Stats.KeyBytes)
 	case *storage.BeginScanRangesEvent:
 		sid = event.StoreID
@@ -224,7 +224,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	defer mtc.Stop()
 
 	// Replicate the default range.
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	// Add some data in a transaction

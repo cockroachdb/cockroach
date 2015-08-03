@@ -510,7 +510,7 @@ func (r *Replica) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args pro
 	}
 
 	// Store the GC metadata for this range.
-	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
 	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta); err != nil {
 		return reply, err
 	}
@@ -729,8 +729,8 @@ func (r *Replica) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats,
 	if err != nil {
 		return reply, err
 	}
-	start := keys.RaftLogKey(r.Desc().RaftID, 0)
-	end := keys.RaftLogKey(r.Desc().RaftID, args.Index)
+	start := keys.RaftLogKey(r.Desc().RangeID, 0)
+	end := keys.RaftLogKey(r.Desc().RangeID, args.Index)
 	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
 		return false, batch.Clear(kv.Key)
 	}); err != nil {
@@ -740,7 +740,7 @@ func (r *Replica) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats,
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &ts)
+	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &ts)
 }
 
 // InternalLeaderLease sets the leader lease for this range. The command fails
@@ -806,7 +806,7 @@ func (r *Replica) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats,
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
@@ -818,7 +818,7 @@ func (r *Replica) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats,
 	// node.
 	if r.getLease().RaftNodeID == r.rm.RaftNodeID() && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", r.Desc().RaftID, args.Lease)
+		log.Infof("range %d: new leader lease %s", r.Desc().RangeID, args.Lease)
 	}
 
 	// Gossip configs in the event this range contains config info.
@@ -850,7 +850,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResp
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
 		defer snap.Close()
-		foundSplitKey, err := engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey)
+		foundSplitKey, err := engine.MVCCFindSplitKey(snap, desc.RangeID, desc.StartKey, desc.EndKey)
 		if err != nil {
 			return reply, util.Errorf("unable to determine split key: %s", err)
 		}
@@ -953,7 +953,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 	if err != nil {
 		return util.Errorf("unable to fetch GC metadata: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RangeID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
 		return util.Errorf("unable to copy GC metadata: %s", err)
 	}
 
@@ -962,7 +962,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
@@ -979,7 +979,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 	}
 
 	// Initialize the new range's response cache by copying the original's.
-	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
+	if err = r.respCache.CopyInto(batch, split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
@@ -1089,7 +1089,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					MergeTrigger: &proto.MergeTrigger{
 						UpdatedDesc:    updatedDesc,
-						SubsumedRaftID: subsumedDesc.RaftID,
+						SubsumedRaftID: subsumedDesc.RangeID,
 					},
 				},
 				// TODO(tschottdorf): obsolete soon (#1873).
@@ -1102,7 +1102,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 		})
 		return txn.Run(b)
 	}); err != nil {
-		return reply, util.Errorf("merge of range %d into %d failed: %s", subsumedDesc.RaftID, desc.RaftID, err)
+		return reply, util.Errorf("merge of range %d into %d failed: %s", subsumedDesc.RangeID, desc.RangeID, err)
 	}
 
 	return reply, nil
@@ -1203,7 +1203,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		// abort the replica add.
 		if nodeUsed {
 			return util.Errorf("adding replica %v which is already present in range %d",
-				replica, desc.RaftID)
+				replica, desc.RangeID)
 		}
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 	} else if changeType == proto.REMOVE_REPLICA {
@@ -1211,7 +1211,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		// abort the removal.
 		if found == -1 {
 			return util.Errorf("removing replica %v which is not present in range %d",
-				replica, desc.RaftID)
+				replica, desc.RangeID)
 		}
 		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -1255,7 +1255,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 		return txn.Run(b)
 	})
 	if err != nil {
-		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
+		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
 	}
 	return nil
 }

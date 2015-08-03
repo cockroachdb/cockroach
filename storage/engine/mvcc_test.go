@@ -1735,7 +1735,7 @@ func TestValidSplitKeys(t *testing.T) {
 
 func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	engine := NewInMem(proto.Attributes{}, 1<<20)
 	defer engine.Close()
 
@@ -1775,7 +1775,7 @@ func TestFindSplitKey(t *testing.T) {
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	testCases := []struct {
 		keys     []proto.Key
 		expSplit proto.Key
@@ -1889,7 +1889,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	testCases := []struct {
 		keySizes []int
 		valSizes []int

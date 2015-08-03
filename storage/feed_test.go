@@ -34,18 +34,18 @@ func TestStoreEventFeed(t *testing.T) {
 	// Construct a set of fake ranges to synthesize events correctly. They do
 	// not need to be added to a Store.
 	desc1 := &proto.RangeDescriptor{
-		RaftID:   1,
+		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.Key("b"),
 	}
 	desc2 := &proto.RangeDescriptor{
-		RaftID:   2,
+		RangeID:  2,
 		StartKey: proto.Key("b"),
 		EndKey:   proto.Key("c"),
 	}
 	rng1 := &Replica{
 		stats: &rangeStats{
-			raftID: desc1.RaftID,
+			raftID: desc1.RangeID,
 			MVCCStats: engine.MVCCStats{
 				LiveBytes:       400,
 				KeyBytes:        40,
@@ -59,7 +59,7 @@ func TestStoreEventFeed(t *testing.T) {
 	}
 	rng2 := &Replica{
 		stats: &rangeStats{
-			raftID: desc2.RaftID,
+			raftID: desc2.RangeID,
 			MVCCStats: engine.MVCCStats{
 				LiveBytes:       200,
 				KeyBytes:        30,
@@ -104,7 +104,7 @@ func TestStoreEventFeed(t *testing.T) {
 			&RegisterRangeEvent{
 				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
-					RaftID:   1,
+					RangeID:  1,
 					StartKey: proto.Key("a"),
 					EndKey:   proto.Key("b"),
 				},
@@ -124,7 +124,7 @@ func TestStoreEventFeed(t *testing.T) {
 			&UpdateRangeEvent{
 				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
-					RaftID:   1,
+					RangeID:  1,
 					StartKey: proto.Key("a"),
 					EndKey:   proto.Key("b"),
 				},
@@ -149,7 +149,7 @@ func TestStoreEventFeed(t *testing.T) {
 			&RemoveRangeEvent{
 				StoreID: proto.StoreID(1),
 				Desc: &proto.RangeDescriptor{
-					RaftID:   2,
+					RangeID:  2,
 					StartKey: proto.Key("b"),
 					EndKey:   proto.Key("c"),
 				},
@@ -170,7 +170,7 @@ func TestStoreEventFeed(t *testing.T) {
 				StoreID: proto.StoreID(1),
 				Original: UpdateRangeEvent{
 					Desc: &proto.RangeDescriptor{
-						RaftID:   1,
+						RangeID:  1,
 						StartKey: proto.Key("a"),
 						EndKey:   proto.Key("b"),
 					},
@@ -189,7 +189,7 @@ func TestStoreEventFeed(t *testing.T) {
 				},
 				New: RegisterRangeEvent{
 					Desc: &proto.RangeDescriptor{
-						RaftID:   2,
+						RangeID:  2,
 						StartKey: proto.Key("b"),
 						EndKey:   proto.Key("c"),
 					},
@@ -211,7 +211,7 @@ func TestStoreEventFeed(t *testing.T) {
 				StoreID: proto.StoreID(1),
 				Merged: UpdateRangeEvent{
 					Desc: &proto.RangeDescriptor{
-						RaftID:   1,
+						RangeID:  1,
 						StartKey: proto.Key("a"),
 						EndKey:   proto.Key("b"),
 					},
@@ -230,7 +230,7 @@ func TestStoreEventFeed(t *testing.T) {
 				},
 				Removed: RemoveRangeEvent{
 					Desc: &proto.RangeDescriptor{
-						RaftID:   2,
+						RangeID:  2,
 						StartKey: proto.Key("b"),
 						EndKey:   proto.Key("c"),
 					},

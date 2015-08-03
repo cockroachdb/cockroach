@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminMergeArgs(key []byte, raftID proto.RaftID, storeID proto.StoreID) proto.AdminMergeRequest {
+func adminMergeArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.AdminMergeRequest {
 	return proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -102,23 +102,23 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Write some values left and right of the proposed split key.
-	pArgs := putArgs([]byte("aaa"), content, aDesc.RaftID, store.StoreID())
+	pArgs := putArgs([]byte("aaa"), content, aDesc.RangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	pArgs = putArgs([]byte("ccc"), content, bDesc.RaftID, store.StoreID())
+	pArgs = putArgs([]byte("ccc"), content, bDesc.RangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Confirm the values are there.
-	gArgs := getArgs([]byte("aaa"), aDesc.RaftID, store.StoreID())
+	gArgs := getArgs([]byte("aaa"), aDesc.RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs = getArgs([]byte("ccc"), bDesc.RaftID, store.StoreID())
+	gArgs = getArgs([]byte("ccc"), bDesc.RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
@@ -153,13 +153,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Try to get values from after the merge.
-	gArgs = getArgs([]byte("aaa"), rangeA.Desc().RaftID, store.StoreID())
+	gArgs = getArgs([]byte("aaa"), rangeA.Desc().RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs = getArgs([]byte("ccc"), rangeB.Desc().RaftID, store.StoreID())
+	gArgs = getArgs([]byte("ccc"), rangeB.Desc().RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
@@ -167,23 +167,23 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Put new values after the merge on both sides.
-	pArgs = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
+	pArgs = putArgs([]byte("aaaa"), content, rangeA.Desc().RangeID, store.StoreID())
 	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	pArgs = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
+	pArgs = putArgs([]byte("cccc"), content, rangeB.Desc().RangeID, store.StoreID())
 	if _, err = store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to get the newly placed values.
-	gArgs = getArgs([]byte("aaaa"), rangeA.Desc().RaftID, store.StoreID())
+	gArgs = getArgs([]byte("aaaa"), rangeA.Desc().RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs = getArgs([]byte("cccc"), rangeA.Desc().RaftID, store.StoreID())
+	gArgs = getArgs([]byte("cccc"), rangeA.Desc().RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {

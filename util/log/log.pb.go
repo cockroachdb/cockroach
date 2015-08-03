@@ -45,7 +45,7 @@ type LogEntry struct {
 	// Optional parameters which may be set with log entry.
 	NodeID  *github_com_cockroachdb_cockroach_proto.NodeID  `protobuf:"varint,8,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
 	StoreID *github_com_cockroachdb_cockroach_proto.StoreID `protobuf:"varint,9,opt,name=store_id,casttype=github.com/cockroachdb/cockroach/proto.StoreID" json:"store_id,omitempty"`
-	RaftID  *github_com_cockroachdb_cockroach_proto.RaftID  `protobuf:"varint,10,opt,name=raft_id,casttype=github.com/cockroachdb/cockroach/proto.RaftID" json:"raft_id,omitempty"`
+	RaftID  *github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,10,opt,name=raft_id,casttype=github.com/cockroachdb/cockroach/proto.RaftID" json:"raft_id,omitempty"`
 	Method  *github_com_cockroachdb_cockroach_proto.Method  `protobuf:"varint,11,opt,name=method,casttype=github.com/cockroachdb/cockroach/proto.Method" json:"method,omitempty"`
 	Key     github_com_cockroachdb_cockroach_proto.Key      `protobuf:"bytes,12,opt,name=key,casttype=github.com/cockroachdb/cockroach/proto.Key" json:"key,omitempty"`
 	// Stack traces if requested.
@@ -335,14 +335,14 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.RaftID
+			var v github_com_cockroachdb_cockroach_proto.RangeID
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.RaftID(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_proto.RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

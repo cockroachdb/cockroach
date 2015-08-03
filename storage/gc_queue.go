@@ -130,7 +130,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	gcArgs := &proto.InternalGCRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
-			RaftID:    rng.Desc().RaftID,
+			RaftID:    rng.Desc().RangeID,
 		},
 	}
 	var mu sync.Mutex

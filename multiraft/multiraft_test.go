@@ -50,7 +50,7 @@ type testCluster struct {
 	transport Transport
 	// groups maps group IDs to a list of members; members are
 	// specified in terms of node index, not node ID.
-	groups map[proto.RaftID][]int
+	groups map[proto.RangeID][]int
 }
 
 func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *testing.T) *testCluster {
@@ -61,7 +61,7 @@ func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *tes
 	cluster := &testCluster{
 		t:         t,
 		transport: transport,
-		groups:    map[proto.RaftID][]int{},
+		groups:    map[proto.RangeID][]int{},
 	}
 
 	for i := 0; i < size; i++ {
@@ -100,7 +100,7 @@ func (c *testCluster) start() {
 
 // createGroup replicates a group consisting of numReplicas members,
 // the first being the node at index firstNode.
-func (c *testCluster) createGroup(groupID proto.RaftID, firstNode, numReplicas int) {
+func (c *testCluster) createGroup(groupID proto.RangeID, firstNode, numReplicas int) {
 	var replicaIDs []uint64
 	for i := 0; i < numReplicas; i++ {
 		nodeIndex := firstNode + i
@@ -139,7 +139,7 @@ func (c *testCluster) createGroup(groupID proto.RaftID, firstNode, numReplicas i
 // triggerElection starts an election in the specified group. In most situations
 // the given node will win the election. Unlike elect(), triggerElection() does not
 // wait for the election to resolve.
-func (c *testCluster) triggerElection(nodeIndex int, groupID proto.RaftID) {
+func (c *testCluster) triggerElection(nodeIndex int, groupID proto.RangeID) {
 	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
 		c.t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 // elect is a simplified wrapper around triggerElection and waitForElection which
 // waits for the election to complete on all members of a group.
 // TODO(bdarnell): make this work when membership has been changed after creation.
-func (c *testCluster) elect(leaderIndex int, groupID proto.RaftID) {
+func (c *testCluster) elect(leaderIndex int, groupID proto.RangeID) {
 	c.triggerElection(leaderIndex, groupID)
 	for _, i := range c.groups[groupID] {
 		el := c.waitForElection(i)
@@ -184,7 +184,7 @@ func TestInitialLeaderElection(t *testing.T) {
 		log.Infof("testing leader election for node %v", leaderIndex)
 		stopper := stop.NewStopper()
 		cluster := newTestCluster(nil, 3, stopper, t)
-		groupID := proto.RaftID(1)
+		groupID := proto.RangeID(1)
 		cluster.createGroup(groupID, 0, 3)
 
 		cluster.elect(leaderIndex, groupID)
@@ -211,7 +211,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := proto.RaftID(1)
+	groupID := proto.RangeID(1)
 	cluster.createGroup(groupID, 0, 3)
 
 	// Process a Ready with a new leader but no new commits.
@@ -262,7 +262,7 @@ func TestCommand(t *testing.T) {
 	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := proto.RaftID(1)
+	groupID := proto.RangeID(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
 
@@ -284,7 +284,7 @@ func TestSlowStorage(t *testing.T) {
 	stopper := stop.NewStopper()
 	cluster := newTestCluster(nil, 3, stopper, t)
 	defer stopper.Stop()
-	groupID := proto.RaftID(1)
+	groupID := proto.RangeID(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
 
@@ -343,7 +343,7 @@ func TestMembershipChange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Create a group with a single member, cluster.nodes[0].
-	groupID := proto.RaftID(1)
+	groupID := proto.RangeID(1)
 	cluster.createGroup(groupID, 0, 1)
 	// An automatic election is triggered since this is a single-node Raft group,
 	// so we don't need to call triggerElection.
@@ -403,7 +403,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	numCommit := int32(200)
 
 	cluster := newTestCluster(nil, 1, stopper, t)
-	groupID := proto.RaftID(1)
+	groupID := proto.RangeID(1)
 
 	cluster.createGroup(groupID, 0, 1 /* replicas */)
 	startSeq := int32(0) // updated atomically from now on

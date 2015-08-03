@@ -314,7 +314,7 @@ func (m *SplitTrigger) GetNewDesc() RangeDescriptor {
 // for the merge to be completed and put into operation.
 type MergeTrigger struct {
 	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	SubsumedRaftID   RaftID          `protobuf:"varint,2,opt,name=subsumed_raft_id,casttype=RaftID" json:"subsumed_raft_id"`
+	SubsumedRaftID   RangeID         `protobuf:"varint,2,opt,name=subsumed_raft_id,casttype=RaftID" json:"subsumed_raft_id"`
 	XXX_unrecognized []byte          `json:"-"`
 }
 
@@ -1267,7 +1267,7 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.SubsumedRaftID |= (RaftID(b) & 0x7F) << shift
+				m.SubsumedRaftID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

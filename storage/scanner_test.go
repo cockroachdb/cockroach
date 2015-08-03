@@ -45,14 +45,14 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	rs := &testRangeSet{rangesByKey: btree.New(64 /* degree */)}
 	for i := 0; i < count; i++ {
 		desc := &proto.RangeDescriptor{
-			RaftID:   proto.RaftID(i),
+			RangeID:  proto.RangeID(i),
 			StartKey: proto.Key(fmt.Sprintf("%03d", i)),
 			EndKey:   proto.Key(fmt.Sprintf("%03d", i+1)),
 		}
 		// Initialize the range stat so the scanner can use it.
 		rng := &Replica{
 			stats: &rangeStats{
-				raftID: desc.RaftID,
+				raftID: desc.RangeID,
 				MVCCStats: engine.MVCCStats{
 					KeyBytes:  1,
 					ValBytes:  2,

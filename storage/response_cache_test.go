@@ -32,7 +32,7 @@ var incR = proto.IncrementResponse{
 
 // createTestResponseCache creates an in-memory engine and
 // returns a response cache using the supplied Raft ID.
-func createTestResponseCache(t *testing.T, raftID proto.RaftID) (*ResponseCache, engine.Engine) {
+func createTestResponseCache(t *testing.T, raftID proto.RangeID) (*ResponseCache, engine.Engine) {
 	return NewResponseCache(raftID), engine.NewInMem(proto.Attributes{}, 1<<20)
 }
 

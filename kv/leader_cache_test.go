@@ -48,7 +48,7 @@ func TestLeaderCache(t *testing.T) {
 	}
 
 	for i := 10; i < 20; i++ {
-		lc.Update(proto.RaftID(i), replica)
+		lc.Update(proto.RangeID(i), replica)
 	}
 	if lc.Lookup(16).StoreID != 0 || lc.Lookup(17).StoreID == 0 {
 		t.Errorf("unexpected policy used in cache")

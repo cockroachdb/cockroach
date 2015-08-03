@@ -67,7 +67,7 @@ func setLogEntry(ctx context.Context, format string, args []interface{}, entry *
 					entry.NodeID = &vTyp
 				case proto.StoreID:
 					entry.StoreID = &vTyp
-				case proto.RaftID:
+				case proto.RangeID:
 					entry.RaftID = &vTyp
 				case proto.Method:
 					entry.Method = &vTyp

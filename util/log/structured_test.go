@@ -38,7 +38,7 @@ func (t testArg) String() string {
 
 func testContext() context.Context {
 	ctx := context.Background()
-	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RaftID, proto.RaftID(3), Method, proto.Get, Key, proto.Key("key"))
+	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RaftID, proto.RangeID(3), Method, proto.Get, Key, proto.Key("key"))
 }
 
 func TestSetLogEntry(t *testing.T) {
@@ -46,7 +46,7 @@ func TestSetLogEntry(t *testing.T) {
 
 	nodeID := ctx.Value(NodeID).(proto.NodeID)
 	storeID := ctx.Value(StoreID).(proto.StoreID)
-	raftID := ctx.Value(RaftID).(proto.RaftID)
+	raftID := ctx.Value(RaftID).(proto.RangeID)
 	method := ctx.Value(Method).(proto.Method)
 	key := ctx.Value(Key).(proto.Key)
 

@@ -106,11 +106,11 @@ type queueImpl interface {
 type baseQueue struct {
 	name       string
 	impl       queueImpl
-	maxSize    int                         // Maximum number of ranges to queue
-	incoming   chan struct{}               // Channel signalled when a new range is added to the queue.
-	sync.Mutex                             // Mutex protects priorityQ and ranges
-	priorityQ  priorityQueue               // The priority queue
-	ranges     map[proto.RaftID]*rangeItem // Map from RaftID to rangeItem (for updating priority)
+	maxSize    int                          // Maximum number of ranges to queue
+	incoming   chan struct{}                // Channel signalled when a new range is added to the queue.
+	sync.Mutex                              // Mutex protects priorityQ and ranges
+	priorityQ  priorityQueue                // The priority queue
+	ranges     map[proto.RangeID]*rangeItem // Map from RaftID to rangeItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 }
@@ -127,7 +127,7 @@ func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
 		impl:     impl,
 		maxSize:  maxSize,
 		incoming: make(chan struct{}, 1),
-		ranges:   map[proto.RaftID]*rangeItem{},
+		ranges:   map[proto.RangeID]*rangeItem{},
 	}
 }
 
@@ -184,7 +184,7 @@ func (bq *baseQueue) addInternal(rng *Replica, should bool, priority float64) er
 	if atomic.LoadInt32(&bq.disabled) == 1 {
 		return errQueueDisabled
 	}
-	item, ok := bq.ranges[rng.Desc().RaftID]
+	item, ok := bq.ranges[rng.Desc().RangeID]
 	if !should {
 		if ok {
 			bq.remove(item.index)
@@ -201,7 +201,7 @@ func (bq *baseQueue) addInternal(rng *Replica, should bool, priority float64) er
 	}
 	item = &rangeItem{value: rng, priority: priority}
 	heap.Push(&bq.priorityQ, item)
-	bq.ranges[rng.Desc().RaftID] = item
+	bq.ranges[rng.Desc().RangeID] = item
 
 	// If adding this range has pushed the queue past its maximum size,
 	// remove the lowest priority element.
@@ -221,7 +221,7 @@ func (bq *baseQueue) addInternal(rng *Replica, should bool, priority float64) er
 func (bq *baseQueue) MaybeRemove(rng *Replica) {
 	bq.Lock()
 	defer bq.Unlock()
-	if item, ok := bq.ranges[rng.Desc().RaftID]; ok {
+	if item, ok := bq.ranges[rng.Desc().RangeID]; ok {
 		if log.V(1) {
 			log.Infof("removing range %s from %s queue", item.value, bq.name)
 		}
@@ -270,7 +270,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			// Exit on stopper.
 			case <-stopper.ShouldStop():
 				bq.Lock()
-				bq.ranges = map[proto.RaftID]*rangeItem{}
+				bq.ranges = map[proto.RangeID]*rangeItem{}
 				bq.priorityQ = nil
 				bq.Unlock()
 				return
@@ -318,7 +318,7 @@ func (bq *baseQueue) pop() *Replica {
 		return nil
 	}
 	item := heap.Pop(&bq.priorityQ).(*rangeItem)
-	delete(bq.ranges, item.value.Desc().RaftID)
+	delete(bq.ranges, item.value.Desc().RangeID)
 	return item.value
 }
 
@@ -326,5 +326,5 @@ func (bq *baseQueue) pop() *Replica {
 // mutex to be locked.
 func (bq *baseQueue) remove(index int) {
 	item := heap.Remove(&bq.priorityQ, index).(*rangeItem)
-	delete(bq.ranges, item.value.Desc().RaftID)
+	delete(bq.ranges, item.value.Desc().RangeID)
 }
