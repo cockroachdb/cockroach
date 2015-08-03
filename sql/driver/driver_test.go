@@ -429,6 +429,82 @@ func TestInsertSelectDelete(t *testing.T) {
 	}
 }
 
+func TestUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	testcases := []struct {
+		db     string
+		schema string
+	}{
+		{
+			"t1",
+			`CREATE TABLE %s.kv (
+  k CHAR PRIMARY KEY,
+  v CHAR
+)`,
+		},
+	}
+
+	for _, testcase := range testcases {
+		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(testcase.schema, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ('c', 'd')`, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('e', 'f')`, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+
+		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
+			t.Fatal(err)
+		} else {
+			results := readAll(t, rows)
+			expectedResults := [][]string{
+				{"k", "v"},
+				{"a", "b"},
+				{"c", "d"},
+				{"e", "f"},
+			}
+			if !reflect.DeepEqual(expectedResults, results) {
+				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			}
+		}
+
+		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET v = 'g' WHERE k IN ('a', 'c')`, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+
+		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
+			t.Fatal(err)
+		} else {
+			results := readAll(t, rows)
+			expectedResults := [][]string{
+				{"k", "v"},
+				{"a", "g"},
+				{"c", "g"},
+				{"e", "f"},
+			}
+			if !reflect.DeepEqual(expectedResults, results) {
+				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			}
+		}
+
+		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET m = 'g' WHERE k IN ('a', 'c')`, testcase.db)); !isError(err, "column \"m\" does not exist") {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET k = 'g' WHERE k IN ('a', 'c')`, testcase.db)); !isError(err, "primary key column \"k\" cannot be updated") {
+			t.Fatal(err)
+		}
+
+	}
+}
+
 func TestSelectExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setup(t)
