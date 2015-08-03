@@ -17,7 +17,11 @@
 
 package structured
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/sql/parser"
+)
 
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
@@ -252,6 +256,40 @@ func (desc *DatabaseDescriptor) Validate() error {
 	}
 	if len(desc.Write) == 0 {
 		return fmt.Errorf("empty Write permissions")
+	}
+	return nil
+}
+
+// Grant adds new privileges to this descriptor for a given list of users.
+func (desc *DatabaseDescriptor) Grant(n *parser.Grant) error {
+	permissions, err := permissionsFromDescriptor(desc)
+	if err != nil {
+		return err
+	}
+
+	if err := permissions.Grant(n); err != nil {
+		return err
+	}
+
+	if err := permissions.FillDescriptor(desc); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Revoke removes privileges from this descriptor for a given list of users.
+func (desc *DatabaseDescriptor) Revoke(n *parser.Revoke) error {
+	permissions, err := permissionsFromDescriptor(desc)
+	if err != nil {
+		return err
+	}
+
+	if err := permissions.Revoke(n); err != nil {
+		return err
+	}
+
+	if err := permissions.FillDescriptor(desc); err != nil {
+		return err
 	}
 	return nil
 }

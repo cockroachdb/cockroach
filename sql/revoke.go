@@ -23,14 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// Grant adds privileges to users.
+// Revoke removes privileges from users.
 // Current status:
 // - Target: DATABASE X only
 // - Privileges: ALL, or one or more of READ, WRITE.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // - should we make users case-insensitive?
-func (p *planner) Grant(n *parser.Grant) (planNode, error) {
+func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 	if len(n.Targets.Targets) == 0 {
 		return nil, errEmptyDatabaseName
 	}
@@ -45,7 +45,7 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	if err := dbDesc.Grant(n); err != nil {
+	if err := dbDesc.Revoke(n); err != nil {
 		return nil, err
 	}
 

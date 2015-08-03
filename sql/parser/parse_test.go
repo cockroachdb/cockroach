@@ -81,6 +81,11 @@ func TestParse(t *testing.T) {
 		{`GRANT READ, WRITE ON DATABASE bar TO foo, bar, baz`},
 		{`GRANT READ, WRITE ON DATABASE db1, db2 TO foo, bar, baz`},
 
+		{`REVOKE READ ON DATABASE foo FROM root`},
+		{`REVOKE ALL ON DATABASE foo FROM root, test`},
+		{`REVOKE READ, WRITE ON DATABASE bar FROM foo, bar, baz`},
+		{`REVOKE READ, WRITE ON DATABASE db1, db2 FROM foo, bar, baz`},
+
 		{`INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},
 		{`INSERT INTO a VALUES (1, 2)`},

@@ -83,6 +83,7 @@ import "strings"
 %type <stmt> insert_stmt
 %type <stmt> preparable_stmt
 %type <stmt> rename_stmt
+%type <stmt> revoke_stmt
 %type <stmt> select_stmt
 %type <stmt> set_stmt
 %type <stmt> show_stmt
@@ -495,6 +496,7 @@ stmt:
 | grant_stmt
 | insert_stmt
 | rename_stmt
+| revoke_stmt
 | select_stmt
 | set_stmt
 | show_stmt
@@ -825,6 +827,14 @@ grant_stmt:
   {
     $$ = &Grant{Privileges: $2, Targets: $4, Grantees: NameList($6)}
   }
+
+// REVOKE privileges ON privilege_target FROM grantee_list
+revoke_stmt:
+  REVOKE privileges ON privilege_target FROM grantee_list
+  {
+    $$ = &Revoke{Privileges: $2, Targets: $4, Grantees: NameList($6)}
+  }
+
 
 // TODO(marc): permissions are currently at the database level.
 // Adjust this to allow tables (including db.* expressions).
