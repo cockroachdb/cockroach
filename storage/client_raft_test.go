@@ -830,23 +830,16 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	mtc.unreplicateRange(raftID, 0, 2)
 	mtc.unreplicateRange(raftID, 0, 1)
 
-	rng, err := mtc.stores[1].GetRange(raftID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// If the range removal happens before the range applies the replica config change, the group
-	// will be re-created when MultiRaft receives a MsgApp.
-	if err := util.IsTrueWithin(func() bool {
-		return len(rng.Desc().Replicas) == 1
-	}, 1*time.Second); err != nil {
-		t.Fatal(err)
-	}
-
-	// Remove the range from the second Store.
-	if err := mtc.stores[1].RemoveRange(rng); err != nil {
-		t.Fatal(err)
-	}
+	// Wait for the removal to be processed.
+	util.SucceedsWithin(t, time.Second, func() error {
+		_, err := mtc.stores[1].GetRange(raftID)
+		if _, ok := err.(*proto.RangeNotFoundError); ok {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		return util.Errorf("range still exists")
+	})
 
 	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
 		GroupID: proto.RaftID(0),
