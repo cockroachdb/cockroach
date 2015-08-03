@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"strings"
 )
 
 // Expr represents an expression.
@@ -44,7 +43,7 @@ func (NumVal) expr()          {}
 func (BoolVal) expr()         {}
 func (ValArg) expr()          {}
 func (NullVal) expr()         {}
-func (QualifiedName) expr()   {}
+func (*QualifiedName) expr()  {}
 func (Tuple) expr()           {}
 func (Row) expr()             {}
 func (*Subquery) expr()       {}
@@ -53,6 +52,7 @@ func (*UnaryExpr) expr()      {}
 func (*FuncExpr) expr()       {}
 func (*CaseExpr) expr()       {}
 func (*CastExpr) expr()       {}
+func (*StarExpr) expr()       {}
 func (DBool) expr()           {}
 func (DInt) expr()            {}
 func (DFloat) expr()          {}
@@ -241,20 +241,38 @@ func (NullVal) String() string {
 	return fmt.Sprintf("NULL")
 }
 
-// QualifiedName is a dot separated list of names.
-type QualifiedName []string
+// QualifiedName is a base name and an optional indirection expression.
+type QualifiedName struct {
+	Base     Name
+	Indirect Indirection
+}
 
 // Database returns the database portion of the name.
-func (n QualifiedName) Database() string {
-	if len(n) > 1 {
-		return n[0]
+func (n *QualifiedName) Database() string {
+	// The database portion of the name is n.Base, but only as long as an
+	// indirection is present. In a qualified name like "foo" (without an
+	// indirection), "foo" represents a table or column name.
+	if len(n.Indirect) > 0 {
+		return n.Base.String()
 	}
 	return ""
 }
 
 // Table returns the table portion of the name.
-func (n QualifiedName) Table() string {
-	return n[len(n)-1]
+//
+// TOOD(pmattis): See the comment for Column() regarding how QualifiedNames are
+// used in context sensitive locations. Sometimes they are referring to tables
+// sometimes to columns.
+func (n *QualifiedName) Table() string {
+	if l := len(n.Indirect); l > 0 {
+		last := n.Indirect[l-1]
+		switch t := last.(type) {
+		case NameIndirection:
+			return Name(t).String()
+		}
+		return ""
+	}
+	return n.Base.String()
 }
 
 // Column returns the column portion of the name.
@@ -266,30 +284,17 @@ func (n QualifiedName) Table() string {
 // determining whether it is a table or column name. Perhaps we can have
 // different types for use in the different contexts (e.g. ColumnName,
 // TableName, IndexName, etc).
-func (n QualifiedName) Column() string {
+func (n *QualifiedName) Column() string {
 	return n.Table()
 }
 
-func (n QualifiedName) String() string {
-	var buf bytes.Buffer
-	for i, s := range n {
-		if i > 0 {
-			_, _ = buf.WriteString(".")
-		}
-		if s == "*" {
-			_, _ = buf.WriteString(s)
-		} else if _, ok := keywords[strings.ToUpper(s)]; ok {
-			fmt.Fprintf(&buf, "\"%s\"", s)
-		} else {
-			encodeSQLIdent(&buf, s)
-		}
-	}
-	return buf.String()
+func (n *QualifiedName) String() string {
+	return fmt.Sprintf("%s%s", n.Base, n.Indirect)
 }
 
 // QualifiedNames represents a command separated list (see the String method)
 // of qualified names.
-type QualifiedNames []QualifiedName
+type QualifiedNames []*QualifiedName
 
 func (n QualifiedNames) String() string {
 	var buf bytes.Buffer
@@ -422,7 +427,7 @@ func (node *UnaryExpr) String() string {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name     QualifiedName
+	Name     *QualifiedName
 	Distinct bool
 	Exprs    Exprs
 }

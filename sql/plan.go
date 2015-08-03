@@ -74,25 +74,25 @@ func (p *planner) getAliasedTableDesc(n parser.TableExpr) (*structured.TableDesc
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	table, ok := ate.Expr.(parser.QualifiedName)
+	table, ok := ate.Expr.(*parser.QualifiedName)
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	return p.getTableDesc(table)
 }
 
-func (p *planner) normalizeTableName(qname parser.QualifiedName) (
-	parser.QualifiedName, error) {
-	if len(qname) == 0 {
-		return nil, fmt.Errorf("empty table name: %s", qname)
+func (p *planner) normalizeTableName(qname *parser.QualifiedName) error {
+	if qname == nil || qname.Base == "" {
+		return fmt.Errorf("empty table name: %s", qname)
 	}
-	if len(qname) == 1 {
+	if len(qname.Indirect) == 0 {
 		if p.session.Database == "" {
-			return nil, fmt.Errorf("no database specified")
+			return fmt.Errorf("no database specified")
 		}
-		qname = append(parser.QualifiedName{p.session.Database}, qname[0])
+		qname.Indirect = append(qname.Indirect, parser.NameIndirection(qname.Base))
+		qname.Base = parser.Name(p.session.Database)
 	}
-	return qname, nil
+	return nil
 }
 
 // planNode defines the interface for executing a query or portion of a query.

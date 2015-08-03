@@ -178,7 +178,7 @@ func (node *IndexTableDef) String() string {
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists bool
-	Table       QualifiedName
+	Table       *QualifiedName
 	Defs        TableDefs
 }
 

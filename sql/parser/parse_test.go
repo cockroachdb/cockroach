@@ -112,6 +112,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
 		{`SELECT * FROM t`},
+		{`SELECT "*" FROM t`},
 		{`SELECT a, b FROM t`},
 		{`SELECT a AS b FROM t`},
 		{`SELECT a.* FROM t`},
@@ -122,6 +123,9 @@ func TestParse(t *testing.T) {
 		{`SELECT 0.1 FROM t`},
 		{`SELECT a FROM t`},
 		{`SELECT a.b FROM t`},
+		{`SELECT a.b.* FROM t`},
+		{`SELECT a.b[1] FROM t`},
+		{`SELECT a.b[1 + 1:4][3] FROM t`},
 		{`SELECT 'a' FROM t`},
 
 		{`SELECT 'a' AS "12345"`},

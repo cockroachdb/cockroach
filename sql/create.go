@@ -40,9 +40,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 
 // CreateTable creates a table.
 func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
-	var err error
-	n.Table, err = p.normalizeTableName(n.Table)
-	if err != nil {
+	if err := p.normalizeTableName(n.Table); err != nil {
 		return nil, err
 	}
 

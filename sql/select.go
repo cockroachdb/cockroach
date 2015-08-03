@@ -57,7 +57,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 			}
 			for _, col := range desc.Columns {
 				columns = append(columns, col.Name)
-				exprs = append(exprs, parser.QualifiedName{col.Name})
+				exprs = append(exprs, &parser.QualifiedName{Base: parser.Name(col.Name)})
 			}
 		case *parser.NonStarExpr:
 			exprs = append(exprs, t.Expr)

@@ -31,8 +31,10 @@ import "strings"
   ival           int
   str            string
   strs           []string
-  qname          QualifiedName
+  qname          *QualifiedName
   qnames         QualifiedNames
+  indirectElem   IndirectionElem
+  indirect       Indirection
   stmt           Statement
   stmts          []Statement
   tblDef         TableDef
@@ -135,11 +137,11 @@ import "strings"
 %type <qnames> any_name_list
 %type <empty> any_operator
 %type <exprs> expr_list
-%type <qname> attrs
+%type <indirect> attrs
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
 %type <updateExpr> set_clause multiple_set_clause
-%type <strs>  indirection opt_indirection
+%type <indirect> indirection opt_indirection
 %type <exprs> ctext_expr_list ctext_row
 %type <empty> reloption_list group_clause
 %type <limit> select_limit opt_select_limit
@@ -197,7 +199,7 @@ import "strings"
 %type <empty> reloption_elem
 %type <empty> def_arg
 %type <expr>  where_clause
-%type <str>   indirection_elem
+%type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
 %type <expr>  in_expr
 %type <expr>  having_clause
@@ -245,7 +247,7 @@ import "strings"
 %type <ival>  signed_iconst
 %type <expr>  opt_boolean_or_string
 %type <exprs> var_list
-%type <strs>  var_name
+%type <qname> var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
 %type <expr>  non_reserved_word_or_sconst
@@ -718,21 +720,21 @@ any_name_list:
 any_name:
   name
   {
-    $$ = QualifiedName{$1}
+    $$ = &QualifiedName{Base: Name($1)}
   }
 | name attrs
   {
-    $$ = append(QualifiedName{$1}, $2...)
+    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
   }
 
 attrs:
   '.' col_label
   {
-    $$ = QualifiedName{$2}
+    $$ = Indirection{NameIndirection($2)}
   }
 | attrs '.' col_label
   {
-    $$ = append($1, $3)
+    $$ = append($1, NameIndirection($3))
   }
 
 // EXPLAIN [VERBOSE] query
@@ -857,14 +859,7 @@ set_rest_more:
 | NAMES opt_encoding {}
 
 var_name:
-  name
-  {
-    $$ = []string{$1}
-  }
-| var_name '.' name
-  {
-    $$ = append($1, $3)
-  }
+  any_name
 
 var_list:
   var_value
@@ -945,9 +940,9 @@ show_stmt:
     // TABLES" rules, but unfortunately DATABASES and TABLES are
     // unreserved keywords and thus valid variable names and such
     // rules would cause reduce/reduce conflicts.
-    if len($2) == 1 && strings.EqualFold($2[0], "DATABASES") {
+    if strings.EqualFold($2.String(), `"DATABASES"`) {
       $$ = &ShowDatabases{}
-    } else if len($2) == 1 && strings.EqualFold($2[0], "TABLES") {
+    } else if strings.EqualFold($2.String(), `"TABLES"`) {
       $$ = &ShowTables{}
     } else {
       $$ = nil
@@ -2241,7 +2236,8 @@ relation_expr:
   }
 | qualified_name '*'
   {
-    $$ = append(QualifiedName($1), "*")
+    // TODO(pmattis): Handle the "*".
+    $$ = $1
   }
 | ONLY qualified_name
   {
@@ -3296,25 +3292,25 @@ case_arg:
 indirection_elem:
   '.' col_label
   {
-    $$ = $2
+    $$ = NameIndirection($2)
   }
 | '.' '*'
   {
-    $$ = "*"
+    $$ = StarIndirection{}
   }
 | '[' a_expr ']'
   {
-    $$ = ""
+    $$ = &ArrayIndirection{Begin: $2}
   }
 | '[' a_expr ':' a_expr ']'
   {
-    $$ = ""
+    $$ = &ArrayIndirection{Begin: $2, End: $4}
   }
 
 indirection:
   indirection_elem
   {
-    $$ = []string{$1}
+    $$ = Indirection{$1}
   }
 | indirection indirection_elem
   {
@@ -3426,11 +3422,11 @@ qualified_name_list:
 qualified_name:
   name
   {
-    $$ = []string{$1}
+    $$ = &QualifiedName{Base: Name($1)}
   }
 | name indirection
   {
-    $$ = append([]string{$1}, $2...)
+    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
   }
 
 name_list:
@@ -3459,11 +3455,11 @@ opt_name_list:
 func_name:
   type_function_name
   {
-    $$ = QualifiedName{$1}
+    $$ = &QualifiedName{Base: Name($1)}
   }
 | name indirection
   {
-    $$ = QualifiedName(append([]string{$1}, $2...))
+    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
   }
 
 // Constants

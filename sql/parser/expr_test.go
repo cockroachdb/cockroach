@@ -24,7 +24,7 @@ func TestQualifiedNameString(t *testing.T) {
 	testCases := []struct {
 		in, out string
 	}{
-		{"*", "*"},
+		{"*", `"*"`},
 		// Keyword.
 		{"DATABASE", `"DATABASE"`},
 		{"dAtAbAse", `"dAtAbAse"`},
@@ -39,7 +39,7 @@ func TestQualifiedNameString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		q := QualifiedName{tc.in}
+		q := &QualifiedName{Base: Name(tc.in)}
 		if q.String() != tc.out {
 			t.Errorf("expected q.String() == %q, got %q", tc.out, q.String())
 		}

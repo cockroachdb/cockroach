@@ -83,7 +83,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case NullVal:
 		// Terminal node: nothing to do.
 
-	case QualifiedName:
+	case *QualifiedName:
 		// Terminal node: nothing to do.
 
 	case Tuple:

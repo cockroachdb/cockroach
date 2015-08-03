@@ -26,6 +26,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -60,6 +61,10 @@ func encodeSQLString(buf []byte, in []byte) []byte {
 
 // TODO(pmattis): This method needs testing.
 func encodeSQLIdent(buf *bytes.Buffer, s string) {
+	if _, ok := keywords[strings.ToUpper(s)]; ok {
+		fmt.Fprintf(buf, "\"%s\"", s)
+		return
+	}
 	// The string needs quoting if it does not match the ident format.
 	if isIdent(s) {
 		_, _ = buf.WriteString(s)

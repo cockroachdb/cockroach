@@ -55,7 +55,7 @@ func (node UpdateExprs) String() string {
 
 // UpdateExpr represents an update expression.
 type UpdateExpr struct {
-	Name QualifiedName
+	Name *QualifiedName
 	Expr Expr
 }
 

@@ -109,17 +109,14 @@ func (*NonStarExpr) selectExpr() {}
 // TODO(tschottdorf): needs work, see #1810. TableName is never even referenced
 // in the grammar so far.
 type StarExpr struct {
-	Expr
-	TableName QualifiedName
+	TableName *QualifiedName
 }
 
 func (node *StarExpr) String() string {
-	var buf bytes.Buffer
-	if len(node.TableName) != 0 {
-		fmt.Fprintf(&buf, "%s.", node.TableName)
+	if node.TableName != nil {
+		return fmt.Sprintf("%s.*", node.TableName)
 	}
-	fmt.Fprintf(&buf, "*")
-	return buf.String()
+	return "*"
 }
 
 // NonStarExpr defines a non-'*' select expr.
