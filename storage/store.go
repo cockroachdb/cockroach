@@ -1250,7 +1250,7 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
-		rng, err = s.GetRange(header.RaftID)
+		rng, err = s.GetRange(header.RangeID)
 		if err != nil {
 			return nil, err
 		}
@@ -1453,7 +1453,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		panic("proposed a nil command")
 	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
-	err := s.multiraft.CreateGroup(cmd.RaftID)
+	err := s.multiraft.CreateGroup(cmd.RangeID)
 	if err != nil {
 		ch := make(chan error, 1)
 		ch <- err
@@ -1470,12 +1470,12 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 		// needs to understand it; it cannot simply be an opaque command.
 		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
-		return s.multiraft.ChangeGroupMembership(cmd.RaftID, string(idKey),
+		return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
 			proto.MakeRaftNodeID(crt.NodeID, crt.StoreID),
 			data)
 	}
-	return s.multiraft.SubmitCommand(cmd.RaftID, string(idKey), data)
+	return s.multiraft.SubmitCommand(cmd.RangeID, string(idKey), data)
 }
 
 // processRaft processes read/write commands that have been committed
@@ -1521,8 +1521,8 @@ func (s *Store) processRaft() {
 					continue
 				}
 
-				if groupID != cmd.RaftID {
-					log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RaftID)
+				if groupID != cmd.RangeID {
+					log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RangeID)
 				}
 
 				s.mu.RLock()

@@ -50,7 +50,7 @@ func (*Replica) ProtoMessage() {}
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 type RangeDescriptor struct {
-	RangeID RangeID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// StartKey is the first key which may be contained by this range.
 	StartKey Key `protobuf:"bytes,2,opt,name=start_key,casttype=Key" json:"start_key,omitempty"`
 	// EndKey marks the end of the range's possible keys.  EndKey itself is not
@@ -523,7 +523,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {

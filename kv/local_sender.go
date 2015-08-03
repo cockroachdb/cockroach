@@ -130,19 +130,19 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	header := call.Args.Header()
-	if header.RaftID == 0 || header.Replica.StoreID == 0 {
+	if header.RangeID == 0 || header.Replica.StoreID == 0 {
 		var repl *proto.Replica
 		var raftID proto.RangeID
 		raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
 		if err == nil {
-			header.RaftID = raftID
+			header.RangeID = raftID
 			header.Replica = *repl
 		}
 	}
 	ctx = log.Add(ctx,
 		log.Method, call.Method(),
 		log.Key, header.Key,
-		log.RaftID, header.RaftID)
+		log.RaftID, header.RangeID)
 
 	if err == nil {
 		store, err = ls.GetStore(header.Replica.StoreID)

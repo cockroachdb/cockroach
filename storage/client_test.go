@@ -348,7 +348,7 @@ func getArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.GetR
 	return proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -360,7 +360,7 @@ func putArgs(key, value []byte, raftID proto.RangeID, storeID proto.StoreID) pro
 	return proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: proto.Value{
@@ -375,7 +375,7 @@ func incrementArgs(key []byte, inc int64, raftID proto.RangeID, storeID proto.St
 	return proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Increment: inc,
@@ -385,7 +385,7 @@ func incrementArgs(key []byte, inc int64, raftID proto.RangeID, storeID proto.St
 func internalTruncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.InternalTruncateLogRequest {
 	return proto.InternalTruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Index: index,

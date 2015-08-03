@@ -746,7 +746,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, args proto.Request) (<
 		done: make(chan proto.ResponseWithError, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
-		RaftID:       r.Desc().RangeID,
+		RangeID:      r.Desc().RangeID,
 		OriginNodeID: r.rm.RaftNodeID(),
 	}
 	cmdID := args.Header().GetOrCreateCmdID(r.rm.Clock().PhysicalNow())

@@ -287,7 +287,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	priority := int32(math.MaxInt32)
 	requestHeader := proto.RequestHeader{
 		Key:          proto.Key(key),
-		RaftID:       1,
+		RangeID:      1,
 		Replica:      proto.Replica{StoreID: store.StoreID()},
 		UserPriority: &priority,
 		Timestamp:    clock.Now(),

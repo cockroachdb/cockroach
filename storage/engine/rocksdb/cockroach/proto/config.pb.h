@@ -314,12 +314,12 @@ class RangeDescriptor : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int64 raft_id = 1;
-  bool has_raft_id() const;
-  void clear_raft_id();
-  static const int kRaftIdFieldNumber = 1;
-  ::google::protobuf::int64 raft_id() const;
-  void set_raft_id(::google::protobuf::int64 value);
+  // optional int64 range_id = 1;
+  bool has_range_id() const;
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 1;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
 
   // optional bytes start_key = 2;
   bool has_start_key() const;
@@ -359,8 +359,8 @@ class RangeDescriptor : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.RangeDescriptor)
  private:
-  inline void set_has_raft_id();
-  inline void clear_has_raft_id();
+  inline void set_has_range_id();
+  inline void clear_has_range_id();
   inline void set_has_start_key();
   inline void clear_has_start_key();
   inline void set_has_end_key();
@@ -369,7 +369,7 @@ class RangeDescriptor : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::int64 raft_id_;
+  ::google::protobuf::int64 range_id_;
   ::google::protobuf::internal::ArenaStringPtr start_key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Replica > replicas_;
@@ -1711,28 +1711,28 @@ inline void Replica::set_store_id(::google::protobuf::int32 value) {
 
 // RangeDescriptor
 
-// optional int64 raft_id = 1;
-inline bool RangeDescriptor::has_raft_id() const {
+// optional int64 range_id = 1;
+inline bool RangeDescriptor::has_range_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void RangeDescriptor::set_has_raft_id() {
+inline void RangeDescriptor::set_has_range_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void RangeDescriptor::clear_has_raft_id() {
+inline void RangeDescriptor::clear_has_range_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void RangeDescriptor::clear_raft_id() {
-  raft_id_ = GOOGLE_LONGLONG(0);
-  clear_has_raft_id();
+inline void RangeDescriptor::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
 }
-inline ::google::protobuf::int64 RangeDescriptor::raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RangeDescriptor.raft_id)
-  return raft_id_;
+inline ::google::protobuf::int64 RangeDescriptor::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeDescriptor.range_id)
+  return range_id_;
 }
-inline void RangeDescriptor::set_raft_id(::google::protobuf::int64 value) {
-  set_has_raft_id();
-  raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RangeDescriptor.raft_id)
+inline void RangeDescriptor::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeDescriptor.range_id)
 }
 
 // optional bytes start_key = 2;

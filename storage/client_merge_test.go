@@ -37,7 +37,7 @@ func adminMergeArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) pro
 	return proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}

@@ -1088,8 +1088,8 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 				Commit:        true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					MergeTrigger: &proto.MergeTrigger{
-						UpdatedDesc:    updatedDesc,
-						SubsumedRaftID: subsumedDesc.RangeID,
+						UpdatedDesc:     updatedDesc,
+						SubsumedRangeID: subsumedDesc.RangeID,
 					},
 				},
 				// TODO(tschottdorf): obsolete soon (#1873).
@@ -1121,12 +1121,12 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 			r.Desc().EndKey, merge.UpdatedDesc.EndKey)
 	}
 
-	if merge.SubsumedRaftID <= 0 {
-		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRaftID)
+	if merge.SubsumedRangeID <= 0 {
+		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRangeID)
 	}
 
 	// Copy the subsumed range's response cache to the subsuming one.
-	if err := r.respCache.CopyFrom(batch, merge.SubsumedRaftID); err != nil {
+	if err := r.respCache.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
@@ -1151,7 +1151,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 	r.Unlock()
 
 	batch.Defer(func() {
-		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID); err != nil {
+		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRangeID); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update store after merging range: %s", err)
 		}

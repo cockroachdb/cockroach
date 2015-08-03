@@ -314,7 +314,7 @@ func (m *SplitTrigger) GetNewDesc() RangeDescriptor {
 // for the merge to be completed and put into operation.
 type MergeTrigger struct {
 	UpdatedDesc      RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	SubsumedRaftID   RangeID         `protobuf:"varint,2,opt,name=subsumed_raft_id,casttype=RaftID" json:"subsumed_raft_id"`
+	SubsumedRangeID  RangeID         `protobuf:"varint,2,opt,name=subsumed_range_id,casttype=RangeID" json:"subsumed_range_id"`
 	XXX_unrecognized []byte          `json:"-"`
 }
 
@@ -1259,7 +1259,7 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SubsumedRaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SubsumedRangeID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
@@ -1267,7 +1267,7 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.SubsumedRaftID |= (RangeID(b) & 0x7F) << shift
+				m.SubsumedRangeID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2433,7 +2433,7 @@ func (m *MergeTrigger) Size() (n int) {
 	_ = l
 	l = m.UpdatedDesc.Size()
 	n += 1 + l + sovData(uint64(l))
-	n += 1 + sovData(uint64(m.SubsumedRaftID))
+	n += 1 + sovData(uint64(m.SubsumedRangeID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2828,7 +2828,7 @@ func (m *MergeTrigger) MarshalTo(data []byte) (n int, err error) {
 	i += n5
 	data[i] = 0x10
 	i++
-	i = encodeVarintData(data, i, uint64(m.SubsumedRaftID))
+	i = encodeVarintData(data, i, uint64(m.SubsumedRangeID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

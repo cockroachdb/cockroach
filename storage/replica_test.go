@@ -454,7 +454,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 
 	header := proto.RequestHeader{
 		Key:       proto.Key("a"),
-		RaftID:    tc.rng.Desc().RangeID,
+		RangeID:   tc.rng.Desc().RangeID,
 		Replica:   proto.Replica{StoreID: tc.store.StoreID()},
 		Timestamp: now,
 	}
@@ -852,7 +852,7 @@ func getArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.GetR
 	return proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -865,7 +865,7 @@ func putArgs(key, value []byte, raftID proto.RangeID, storeID proto.StoreID) pro
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			Timestamp: proto.MinTimestamp,
-			RaftID:    raftID,
+			RangeID:   raftID,
 			Replica:   proto.Replica{StoreID: storeID},
 		},
 		Value: proto.Value{
@@ -879,7 +879,7 @@ func deleteArgs(key proto.Key, raftID proto.RangeID, storeID proto.StoreID) prot
 	return proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -903,7 +903,7 @@ func incrementArgs(key []byte, inc int64, raftID proto.RangeID, storeID proto.St
 	return proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Increment: inc,
@@ -915,7 +915,7 @@ func scanArgs(start, end []byte, raftID proto.RangeID, storeID proto.StoreID) pr
 		RequestHeader: proto.RequestHeader{
 			Key:     start,
 			EndKey:  end,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -927,7 +927,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RangeID, store
 	return proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
 		},
@@ -942,7 +942,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 		RequestHeader: proto.RequestHeader{
 			Key:       pushee.Key,
 			Timestamp: pusher.Timestamp,
-			RaftID:    raftID,
+			RangeID:   raftID,
 			Replica:   proto.Replica{StoreID: storeID},
 			Txn:       pusher,
 		},
@@ -957,7 +957,7 @@ func heartbeatArgs(txn *proto.Transaction, raftID proto.RangeID, storeID proto.S
 	return proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
 		},
@@ -971,7 +971,7 @@ func internalMergeArgs(key []byte, value proto.Value, raftID proto.RangeID, stor
 	return proto.InternalMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: value,
@@ -981,7 +981,7 @@ func internalMergeArgs(key []byte, value proto.Value, raftID proto.RangeID, stor
 func internalTruncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.InternalTruncateLogRequest {
 	return proto.InternalTruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Index: index,
@@ -2132,7 +2132,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 			Timestamp: txn.Timestamp,
 			Key:       proto.Key("a"),
 			EndKey:    proto.Key("c"),
-			RaftID:    tc.rng.Desc().RangeID,
+			RangeID:   tc.rng.Desc().RangeID,
 			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
 			Txn:       txn,
 		},
@@ -2203,7 +2203,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		RequestHeader: proto.RequestHeader{
 			Timestamp: pArgs.Txn.Timestamp,
 			Key:       pArgs.Key,
-			RaftID:    tc.rng.Desc().RangeID,
+			RangeID:   tc.rng.Desc().RangeID,
 			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
 			Txn:       pArgs.Txn,
 		},
@@ -2382,7 +2382,7 @@ func TestConditionFailedError(t *testing.T) {
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			Timestamp: proto.MinTimestamp,
-			RaftID:    1,
+			RangeID:   1,
 			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
 		},
 		Value: proto.Value{
@@ -2528,7 +2528,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	rlArgs := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             keys.RangeMetaKey(key),
-			RaftID:          tc.rng.Desc().RangeID,
+			RangeID:         tc.rng.Desc().RangeID,
 			Replica:         proto.Replica{StoreID: tc.store.StoreID()},
 			ReadConsistency: proto.INCONSISTENT,
 		},
@@ -2633,8 +2633,8 @@ func TestInternalRangeLookup(t *testing.T) {
 	} {
 		resp, err := tc.store.ExecuteCmd(context.Background(), &proto.InternalRangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
-				RaftID: 1,
-				Key:    key,
+				RangeID: 1,
+				Key:     key,
 			},
 			MaxRanges: 1,
 		})

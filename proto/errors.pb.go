@@ -98,7 +98,7 @@ func (*NodeUnavailableError) ProtoMessage() {}
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 type RangeNotFoundError struct {
-	RaftID           RangeID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RangeID          RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -686,7 +686,7 @@ func (m *RangeNotFoundError) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
@@ -694,7 +694,7 @@ func (m *RangeNotFoundError) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RangeID(b) & 0x7F) << shift
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2363,7 +2363,7 @@ func (m *NodeUnavailableError) Size() (n int) {
 func (m *RangeNotFoundError) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovErrors(uint64(m.RaftID))
+	n += 1 + sovErrors(uint64(m.RangeID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2692,7 +2692,7 @@ func (m *RangeNotFoundError) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintErrors(data, i, uint64(m.RaftID))
+	i = encodeVarintErrors(data, i, uint64(m.RangeID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

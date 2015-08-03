@@ -58,14 +58,14 @@ func TestSetLogEntry(t *testing.T) {
 	}{
 		{nil, "", []interface{}{}, LogEntry{}},
 		{ctx, "", []interface{}{}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &raftID, Method: &method, Key: key,
 		}},
 		{ctx, "no args", []interface{}{}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &raftID, Method: &method, Key: key,
 			Format: "no args",
 		}},
 		{ctx, "1 arg %s", []interface{}{"foo"}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &raftID, Method: &method, Key: key,
 			Format: "1 arg %s",
 			Args: []LogEntry_Arg{
 				{Type: "string", Str: "foo"},

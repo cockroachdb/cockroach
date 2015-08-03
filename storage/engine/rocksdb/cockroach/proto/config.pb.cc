@@ -106,7 +106,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       -1);
   RangeDescriptor_descriptor_ = file->message_type(2);
   static const int RangeDescriptor_offsets_[4] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeDescriptor, raft_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeDescriptor, range_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeDescriptor, start_key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeDescriptor, end_key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeDescriptor, replicas_),
@@ -391,45 +391,45 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "tes\022$\n\005attrs\030\001 \003(\tB\025\362\336\037\021yaml:\"attrs,flow"
     "\":\004\230\240\037\000\"h\n\007Replica\022)\n\007node_id\030\001 \001(\005B\030\310\336\037"
     "\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010store_id\030\002 \001(\005B"
-    "\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID:\004\230\240\037\000\"\244\001\n\017Ra"
-    "ngeDescriptor\022)\n\007raft_id\030\001 \001(\003B\030\310\336\037\000\342\336\037\006"
-    "RaftID\372\336\037\006RaftID\022\032\n\tstart_key\030\002 \001(\014B\007\372\336\037"
-    "\003Key\022\030\n\007end_key\030\003 \001(\014B\007\372\336\037\003Key\0220\n\010replic"
-    "as\030\004 \003(\0132\030.cockroach.proto.ReplicaB\004\310\336\037\000"
-    "\"3\n\010GCPolicy\022\'\n\013ttl_seconds\030\001 \001(\005B\022\310\336\037\000\342"
-    "\336\037\nTTLSeconds\"E\n\nAcctConfig\0227\n\ncluster_i"
-    "d\030\001 \001(\tB#\310\336\037\000\362\336\037\033yaml:\"cluster_id,omitem"
-    "pty\"\"`\n\nPermConfig\022\'\n\004read\030\001 \003(\tB\031\362\336\037\025ya"
-    "ml:\"read,omitempty\"\022)\n\005write\030\002 \003(\tB\032\362\336\037\026"
-    "yaml:\"write,omitempty\"\"K\n\nUserConfig\022=\n\017"
-    "hashed_password\030\001 \001(\014B$\362\336\037 yaml:\"hashed_"
-    "password,omitempty\"\"\257\002\n\nZoneConfig\022U\n\rre"
-    "plica_attrs\030\001 \003(\0132\033.cockroach.proto.Attr"
-    "ibutesB!\310\336\037\000\362\336\037\031yaml:\"replicas,omitempty"
-    "\"\022A\n\017range_min_bytes\030\002 \001(\003B(\310\336\037\000\362\336\037 yaml"
-    ":\"range_min_bytes,omitempty\"\022A\n\017range_ma"
-    "x_bytes\030\003 \001(\003B(\310\336\037\000\362\336\037 yaml:\"range_max_b"
-    "ytes,omitempty\"\022D\n\002gc\030\004 \001(\0132\031.cockroach."
-    "proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023yaml:\"gc,omite"
-    "mpty\"\"&\n\tRangeTree\022\031\n\010root_key\030\001 \001(\014B\007\372\336"
-    "\037\003Key\"\216\001\n\rRangeTreeNode\022\024\n\003key\030\001 \001(\014B\007\372\336"
-    "\037\003Key\022\023\n\005black\030\002 \001(\010B\004\310\336\037\000\022\033\n\nparent_key"
-    "\030\003 \001(\014B\007\372\336\037\003Key\022\031\n\010left_key\030\004 \001(\014B\007\332\336\037\003K"
-    "ey\022\032\n\tright_key\030\005 \001(\014B\007\332\336\037\003Key\"4\n\004Addr\022\025"
-    "\n\007network\030\001 \001(\tB\004\310\336\037\000\022\025\n\007address\030\002 \001(\tB\004"
-    "\310\336\037\000\"Z\n\rStoreCapacity\022\026\n\010Capacity\030\001 \001(\003B"
-    "\004\310\336\037\000\022\027\n\tAvailable\030\002 \001(\003B\004\310\336\037\000\022\030\n\nRangeC"
-    "ount\030\003 \001(\005B\004\310\336\037\000\"\233\001\n\016NodeDescriptor\022)\n\007n"
-    "ode_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,"
-    "\n\007address\030\002 \001(\0132\025.cockroach.proto.AddrB\004"
-    "\310\336\037\000\0220\n\005attrs\030\003 \001(\0132\033.cockroach.proto.At"
-    "tributesB\004\310\336\037\000\"\336\001\n\017StoreDescriptor\022,\n\010st"
-    "ore_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID"
-    "\0220\n\005attrs\030\002 \001(\0132\033.cockroach.proto.Attrib"
-    "utesB\004\310\336\037\000\0223\n\004node\030\003 \001(\0132\037.cockroach.pro"
-    "to.NodeDescriptorB\004\310\336\037\000\0226\n\010capacity\030\004 \001("
-    "\0132\036.cockroach.proto.StoreCapacityB\004\310\336\037\000B"
-    "\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 1740);
+    "\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID:\004\230\240\037\000\"\247\001\n\017Ra"
+    "ngeDescriptor\022,\n\010range_id\030\001 \001(\003B\032\310\336\037\000\342\336\037"
+    "\007RangeID\372\336\037\007RangeID\022\032\n\tstart_key\030\002 \001(\014B\007"
+    "\372\336\037\003Key\022\030\n\007end_key\030\003 \001(\014B\007\372\336\037\003Key\0220\n\010rep"
+    "licas\030\004 \003(\0132\030.cockroach.proto.ReplicaB\004\310"
+    "\336\037\000\"3\n\010GCPolicy\022\'\n\013ttl_seconds\030\001 \001(\005B\022\310\336"
+    "\037\000\342\336\037\nTTLSeconds\"E\n\nAcctConfig\0227\n\ncluste"
+    "r_id\030\001 \001(\tB#\310\336\037\000\362\336\037\033yaml:\"cluster_id,omi"
+    "tempty\"\"`\n\nPermConfig\022\'\n\004read\030\001 \003(\tB\031\362\336\037"
+    "\025yaml:\"read,omitempty\"\022)\n\005write\030\002 \003(\tB\032\362"
+    "\336\037\026yaml:\"write,omitempty\"\"K\n\nUserConfig\022"
+    "=\n\017hashed_password\030\001 \001(\014B$\362\336\037 yaml:\"hash"
+    "ed_password,omitempty\"\"\257\002\n\nZoneConfig\022U\n"
+    "\rreplica_attrs\030\001 \003(\0132\033.cockroach.proto.A"
+    "ttributesB!\310\336\037\000\362\336\037\031yaml:\"replicas,omitem"
+    "pty\"\022A\n\017range_min_bytes\030\002 \001(\003B(\310\336\037\000\362\336\037 y"
+    "aml:\"range_min_bytes,omitempty\"\022A\n\017range"
+    "_max_bytes\030\003 \001(\003B(\310\336\037\000\362\336\037 yaml:\"range_ma"
+    "x_bytes,omitempty\"\022D\n\002gc\030\004 \001(\0132\031.cockroa"
+    "ch.proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023yaml:\"gc,om"
+    "itempty\"\"&\n\tRangeTree\022\031\n\010root_key\030\001 \001(\014B"
+    "\007\372\336\037\003Key\"\216\001\n\rRangeTreeNode\022\024\n\003key\030\001 \001(\014B"
+    "\007\372\336\037\003Key\022\023\n\005black\030\002 \001(\010B\004\310\336\037\000\022\033\n\nparent_"
+    "key\030\003 \001(\014B\007\372\336\037\003Key\022\031\n\010left_key\030\004 \001(\014B\007\332\336"
+    "\037\003Key\022\032\n\tright_key\030\005 \001(\014B\007\332\336\037\003Key\"4\n\004Add"
+    "r\022\025\n\007network\030\001 \001(\tB\004\310\336\037\000\022\025\n\007address\030\002 \001("
+    "\tB\004\310\336\037\000\"Z\n\rStoreCapacity\022\026\n\010Capacity\030\001 \001"
+    "(\003B\004\310\336\037\000\022\027\n\tAvailable\030\002 \001(\003B\004\310\336\037\000\022\030\n\nRan"
+    "geCount\030\003 \001(\005B\004\310\336\037\000\"\233\001\n\016NodeDescriptor\022)"
+    "\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeI"
+    "D\022,\n\007address\030\002 \001(\0132\025.cockroach.proto.Add"
+    "rB\004\310\336\037\000\0220\n\005attrs\030\003 \001(\0132\033.cockroach.proto"
+    ".AttributesB\004\310\336\037\000\"\336\001\n\017StoreDescriptor\022,\n"
+    "\010store_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007Stor"
+    "eID\0220\n\005attrs\030\002 \001(\0132\033.cockroach.proto.Att"
+    "ributesB\004\310\336\037\000\0223\n\004node\030\003 \001(\0132\037.cockroach."
+    "proto.NodeDescriptorB\004\310\336\037\000\0226\n\010capacity\030\004"
+    " \001(\0132\036.cockroach.proto.StoreCapacityB\004\310\336"
+    "\037\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 1743);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -1118,7 +1118,7 @@ void Replica::clear_store_id() {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int RangeDescriptor::kRaftIdFieldNumber;
+const int RangeDescriptor::kRangeIdFieldNumber;
 const int RangeDescriptor::kStartKeyFieldNumber;
 const int RangeDescriptor::kEndKeyFieldNumber;
 const int RangeDescriptor::kReplicasFieldNumber;
@@ -1144,7 +1144,7 @@ RangeDescriptor::RangeDescriptor(const RangeDescriptor& from)
 void RangeDescriptor::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
-  raft_id_ = GOOGLE_LONGLONG(0);
+  range_id_ = GOOGLE_LONGLONG(0);
   start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -1189,7 +1189,7 @@ RangeDescriptor* RangeDescriptor::New(::google::protobuf::Arena* arena) const {
 
 void RangeDescriptor::Clear() {
   if (_has_bits_[0 / 32] & 7u) {
-    raft_id_ = GOOGLE_LONGLONG(0);
+    range_id_ = GOOGLE_LONGLONG(0);
     if (has_start_key()) {
       start_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
@@ -1214,13 +1214,13 @@ bool RangeDescriptor::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 raft_id = 1;
+      // optional int64 range_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &raft_id_)));
-          set_has_raft_id();
+                 input, &range_id_)));
+          set_has_range_id();
         } else {
           goto handle_unusual;
         }
@@ -1296,9 +1296,9 @@ failure:
 void RangeDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.RangeDescriptor)
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->raft_id(), output);
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->range_id(), output);
   }
 
   // optional bytes start_key = 2;
@@ -1329,9 +1329,9 @@ void RangeDescriptor::SerializeWithCachedSizes(
 ::google::protobuf::uint8* RangeDescriptor::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RangeDescriptor)
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->raft_id(), target);
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->range_id(), target);
   }
 
   // optional bytes start_key = 2;
@@ -1367,11 +1367,11 @@ int RangeDescriptor::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7) {
-    // optional int64 raft_id = 1;
-    if (has_raft_id()) {
+    // optional int64 range_id = 1;
+    if (has_range_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->raft_id());
+          this->range_id());
     }
 
     // optional bytes start_key = 2;
@@ -1424,8 +1424,8 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   replicas_.MergeFrom(from.replicas_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_raft_id()) {
-      set_raft_id(from.raft_id());
+    if (from.has_range_id()) {
+      set_range_id(from.range_id());
     }
     if (from.has_start_key()) {
       set_has_start_key();
@@ -1463,7 +1463,7 @@ void RangeDescriptor::Swap(RangeDescriptor* other) {
   InternalSwap(other);
 }
 void RangeDescriptor::InternalSwap(RangeDescriptor* other) {
-  std::swap(raft_id_, other->raft_id_);
+  std::swap(range_id_, other->range_id_);
   start_key_.Swap(&other->start_key_);
   end_key_.Swap(&other->end_key_);
   replicas_.UnsafeArenaSwap(&other->replicas_);
@@ -1483,28 +1483,28 @@ void RangeDescriptor::InternalSwap(RangeDescriptor* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // RangeDescriptor
 
-// optional int64 raft_id = 1;
-bool RangeDescriptor::has_raft_id() const {
+// optional int64 range_id = 1;
+bool RangeDescriptor::has_range_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void RangeDescriptor::set_has_raft_id() {
+void RangeDescriptor::set_has_range_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-void RangeDescriptor::clear_has_raft_id() {
+void RangeDescriptor::clear_has_range_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void RangeDescriptor::clear_raft_id() {
-  raft_id_ = GOOGLE_LONGLONG(0);
-  clear_has_raft_id();
+void RangeDescriptor::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
 }
- ::google::protobuf::int64 RangeDescriptor::raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RangeDescriptor.raft_id)
-  return raft_id_;
+ ::google::protobuf::int64 RangeDescriptor::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeDescriptor.range_id)
+  return range_id_;
 }
- void RangeDescriptor::set_raft_id(::google::protobuf::int64 value) {
-  set_has_raft_id();
-  raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RangeDescriptor.raft_id)
+ void RangeDescriptor::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeDescriptor.range_id)
 }
 
 // optional bytes start_key = 2;

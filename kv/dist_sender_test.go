@@ -341,7 +341,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		args := tc.args
-		args.Header().RaftID = raftID // Not used in this test, but why not.
+		args.Header().RangeID = raftID // Not used in this test, but why not.
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}

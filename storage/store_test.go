@@ -139,7 +139,7 @@ func (db *testSender) sendOne(call proto.Call) {
 	// Lookup range and direct request.
 	header := call.Args.Header()
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
-		header.RaftID = rng.Desc().RangeID
+		header.RangeID = rng.Desc().RangeID
 		replica := rng.GetReplica()
 		if replica == nil {
 			safeSetGoError(call.Reply, util.Errorf("own replica missing in range"))

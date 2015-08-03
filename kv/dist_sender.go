@@ -435,7 +435,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replica
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.Header().RaftID = raftID
+	args.Header().RangeID = raftID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
