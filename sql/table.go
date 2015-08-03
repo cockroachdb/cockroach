@@ -164,6 +164,9 @@ func encodeTableKey(b []byte, v parser.Datum) ([]byte, error) {
 		return encoding.EncodeNumericFloat(b, float64(t)), nil
 	case parser.DString:
 		return encoding.EncodeBytes(b, []byte(t)), nil
+	case parser.DNull:
+		// TODO(tamird,pmattis): This is a hack; we should have proper nil encoding.
+		return encoding.EncodeBytes(b, nil), nil
 	}
 	return nil, fmt.Errorf("unable to encode table key: %T", v)
 }
@@ -248,6 +251,10 @@ func encodeSecondaryIndexes(tableDesc *structured.TableDescriptor,
 // will just tank a single goroutine on the server and be silently
 // swallowed.
 func prepareVal(col structured.ColumnDescriptor, val parser.Expr) (interface{}, error) {
+	if _, ok := val.(parser.DNull); ok {
+		return nil, nil
+	}
+
 	switch col.Type.Kind {
 	case structured.ColumnType_BIT:
 		return bool(val.(parser.DBool)), nil

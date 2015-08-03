@@ -139,7 +139,7 @@ func (p parameters) Arg(i int) (parser.Datum, bool) {
 	case *string:
 		return parser.DString(*t), true
 	}
-	return nil, false
+	return parser.DNull{}, true
 }
 
 // exec executes the request. Any error encountered is returned; it is

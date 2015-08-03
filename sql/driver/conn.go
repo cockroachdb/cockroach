@@ -19,7 +19,6 @@ package driver
 
 import (
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -66,9 +65,6 @@ func (c *conn) Exec(stmt string, args []driver.Value) (driver.Result, error) {
 func (c *conn) Query(stmt string, args []driver.Value) (*rows, error) {
 	params := make([]Datum, 0, len(args))
 	for _, arg := range args {
-		if arg == nil {
-			return nil, errors.New("Passed in a nil parameter")
-		}
 		var param Datum
 		switch value := arg.(type) {
 		case int64:

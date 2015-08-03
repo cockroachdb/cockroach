@@ -44,18 +44,53 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 	s.Stop()
 }
 
-func readAll(t *testing.T, rows *sql.Rows) [][]string {
+type resultSlice [][]*string
+
+func (r resultSlice) String() string {
+	results := make([][]string, len(r))
+
+	for i, subSlice := range r {
+		results[i] = make([]string, len(subSlice))
+		for j, str := range subSlice {
+			if str == nil {
+				results[i][j] = "<NULL>"
+			} else {
+				results[i][j] = *str
+			}
+		}
+	}
+
+	return fmt.Sprintf("%s", results)
+}
+
+func asResultSlice(src [][]string) resultSlice {
+	result := make(resultSlice, len(src))
+	for i, subSlice := range src {
+		result[i] = make([]*string, len(subSlice))
+		for j := range subSlice {
+			result[i][j] = &subSlice[j]
+		}
+	}
+	return result
+}
+
+func readAll(t *testing.T, rows *sql.Rows) resultSlice {
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var results [][]string
-	results = append(results, cols)
+
+	colStrs := make([]*string, len(cols))
+	for i := range cols {
+		colStrs[i] = &cols[i]
+	}
+
+	results := resultSlice{colStrs}
 
 	for rows.Next() {
-		strs := make([]string, len(cols))
+		strs := make([]*string, len(cols))
 		vals := make([]interface{}, len(cols))
 		for i := range vals {
 			vals[i] = &strs[i]
@@ -71,6 +106,34 @@ func readAll(t *testing.T, rows *sql.Rows) [][]string {
 	}
 
 	return results
+}
+
+func verifyResults(expectedResults resultSlice, actualResults resultSlice) error {
+	errMismatch := fmt.Errorf("expected: %s\nactual: %s\n", expectedResults, actualResults)
+
+	if len(expectedResults) != len(actualResults) {
+		return errMismatch
+	}
+
+	for i := 0; i < len(expectedResults); i++ {
+		if len(expectedResults[i]) != len(actualResults[i]) {
+			return errMismatch
+		}
+
+		for j := 0; j < len(expectedResults[i]); j++ {
+			if expectedResults[i][j] == nil && actualResults[i][j] == nil {
+				continue
+			}
+			if !(expectedResults[i][j] != nil && actualResults[i][j] != nil) {
+				return errMismatch
+			}
+			if *expectedResults[i][j] != *actualResults[i][j] {
+				return errMismatch
+			}
+		}
+	}
+
+	return nil
 }
 
 func TestCreateDatabase(t *testing.T) {
@@ -238,14 +301,14 @@ CREATE TABLE t.users (
 		t.Fatal(err)
 	}
 	results := readAll(t, rows)
-	expectedResults := [][]string{
+	expected := [][]string{
 		{"Field", "Type", "Null"},
 		{"id", "INT", "true"},
 		{"name", "CHAR", "false"},
 		{"title", "CHAR", "true"},
 	}
-	if !reflect.DeepEqual(expectedResults, results) {
-		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	if err := verifyResults(asResultSlice(expected), results); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -284,15 +347,15 @@ CREATE TABLE t.users (
 		t.Fatal(err)
 	}
 	results := readAll(t, rows)
-	expectedResults := [][]string{
+	expected := [][]string{
 		{"Table", "Name", "Unique", "Seq", "Column"},
 		{"users", "primary", "true", "1", "id"},
 		{"users", "foo", "false", "1", "name"},
 		{"users", "bar", "true", "1", "id"},
 		{"users", "bar", "true", "2", "name"},
 	}
-	if !reflect.DeepEqual(expectedResults, results) {
-		t.Fatalf("expected %s, but got %s", expectedResults, results)
+	if err := verifyResults(asResultSlice(expected), results); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -324,7 +387,7 @@ func TestInsertSelectDelete(t *testing.T) {
 		},
 	}
 
-	for _, testcase := range testcases {
+	for i, testcase := range testcases {
 		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
 			t.Fatal(err)
 		}
@@ -343,6 +406,9 @@ func TestInsertSelectDelete(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (v) VALUES ('a')`, testcase.db)); !isError(err, "missing .* primary key column") {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ($1, $2)`, testcase.db), "nil", nil); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ($1, $2)`, testcase.db), "c", "d"); err != nil {
@@ -369,13 +435,13 @@ func TestInsertSelectDelete(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
-			expectedResults := [][]string{
+			expected := [][]string{
 				{"k", "v"},
 				{"a", "b"},
 				{"c", "d"},
 			}
-			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			if err := verifyResults(asResultSlice(expected), results); err != nil {
+				t.Fatal(err)
 			}
 		}
 
@@ -383,15 +449,29 @@ func TestInsertSelectDelete(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
-			expectedResults := [][]string{
+			expected := [][]string{
 				{"k", "v"},
 				{"a", "b"},
 				{"c", "d"},
 				{"e", "f"},
 				{"f", "g"},
 			}
-			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected:\n%s\nbut got:\n%s", expectedResults, results)
+			expectedResultSlice := asResultSlice(expected)
+
+			nilStr := "nil"
+			rowWithNil := []*string{&nilStr, nil}
+
+			// Because of the primary keys used here, the natural ordering of
+			// the results varies in the two schemas.
+			switch i {
+			case 0:
+				expectedResultSlice = append(expectedResultSlice, rowWithNil)
+			case 1:
+				expectedResultSlice = append(expectedResultSlice[:1], append(resultSlice{rowWithNil}, expectedResultSlice[1:]...)...)
+			}
+
+			if err := verifyResults(expectedResultSlice, results); err != nil {
+				t.Fatal(err)
 			}
 		}
 
@@ -403,11 +483,11 @@ func TestInsertSelectDelete(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
-			expectedResults := [][]string{
+			expected := [][]string{
 				{"k", "v"},
 			}
-			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			if err := verifyResults(asResultSlice(expected), results); err != nil {
+				t.Fatal(err)
 			}
 		}
 
@@ -419,11 +499,11 @@ func TestInsertSelectDelete(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
-			expectedResults := [][]string{
+			expected := [][]string{
 				{"k", "v"},
 			}
-			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			if err := verifyResults(asResultSlice(expected), results); err != nil {
+				t.Fatal(err)
 			}
 		}
 	}
@@ -465,14 +545,14 @@ func TestUpdate(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
-			expectedResults := [][]string{
+			expected := [][]string{
 				{"k", "v"},
 				{"a", "b"},
 				{"c", "d"},
 				{"e", "f"},
 			}
-			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			if err := verifyResults(asResultSlice(expected), results); err != nil {
+				t.Fatal(err)
 			}
 		}
 
@@ -484,14 +564,14 @@ func TestUpdate(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			results := readAll(t, rows)
-			expectedResults := [][]string{
+			expected := [][]string{
 				{"k", "v"},
 				{"a", "g"},
 				{"c", "g"},
 				{"e", "f"},
 			}
-			if !reflect.DeepEqual(expectedResults, results) {
-				t.Fatalf("expected %s, but got %s", expectedResults, results)
+			if err := verifyResults(asResultSlice(expected), results); err != nil {
+				t.Fatal(err)
 			}
 		}
 
@@ -562,8 +642,8 @@ CREATE TABLE t.kv (
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		results := readAll(t, rows)
-		if !reflect.DeepEqual(d.expected, results) {
-			t.Fatalf("%s: expected %s, but got %s", d.expr, d.expected, results)
+		if err := verifyResults(asResultSlice(d.expected), results); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -592,8 +672,8 @@ func TestSelectNoTable(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		results := readAll(t, rows)
-		if !reflect.DeepEqual(d.expected, results) {
-			t.Fatalf("%s: expected %s, but got %s", d.expr, d.expected, results)
+		if err := verifyResults(asResultSlice(d.expected), results); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
