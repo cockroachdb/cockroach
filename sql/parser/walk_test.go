@@ -122,13 +122,21 @@ func TestWalkStmt(t *testing.T) {
 		expected string
 		args     mapArgs
 	}{
-		{`SELECT $1`, `SELECT 'a'`, mapArgs{1: DString(`a`)}},
-		{`SELECT $1, $2 FROM db.table WHERE c in ($3, 2 * $4)`,
-			`SELECT 'a', 'b' FROM db.table WHERE c in (1.1, 2 * 6.5)`,
-			mapArgs{1: DString(`a`), 2: DString(`b`), 3: DFloat(1.1), 4: DFloat(6.5)}},
+		{`DELETE FROM db.table WHERE k IN ($1, $2)`,
+			`DELETE FROM db.table WHERE k IN ('a', 'c')`,
+			mapArgs{1: DString(`a`), 2: DString(`c`)}},
 		{`INSERT INTO db.table (k, v) VALUES (1, 2), ($1, $2)`,
 			`INSERT INTO db.table (k, v) VALUES (1, 2), (3, 4)`,
 			mapArgs{1: DInt(3), 2: DInt(4)}},
+		{`SELECT $1, $2 FROM db.table ORDER BY $1 DESC LIMIT $3 OFFSET $4`,
+			`SELECT 'a', 'b' FROM db.table ORDER BY 'a' DESC LIMIT 5 OFFSET 2`,
+			mapArgs{1: DString(`a`), 2: DString(`b`), 3: DInt(5), 4: DInt(2)}},
+		{`SELECT $1, $2 FROM db.table WHERE c in ($3, 2 * $4) GROUP BY $1 HAVING COUNT($5) > $6`,
+			`SELECT 'a', 'b' FROM db.table WHERE c in (1.1, 2 * 6.5) GROUP BY 'a' HAVING COUNT('d') > 6`,
+			mapArgs{1: DString(`a`), 2: DString(`b`), 3: DFloat(1.1), 4: DFloat(6.5), 5: DString('d'), 6: DInt(6)}},
+		{`UPDATE db.table SET v = $3 WHERE k IN ($1, $2)`,
+			`UPDATE db.table SET v = 2 WHERE k IN ('a', 'b')`,
+			mapArgs{1: DString(`a`), 2: DString(`b`), 3: DInt(2)}},
 	}
 	for _, d := range testData {
 		q, err := Parse(d.sql)
