@@ -251,6 +251,8 @@ message EndTransactionRequest {
   // internal use only and will be ignored if requested through the
   // public-facing KV API.
   optional InternalCommitTrigger internal_commit_trigger = 3;
+  // List of intents written by the transaction.
+  repeated Intent intents = 4 [(gogoproto.nullable) = false];
 }
 
 // An EndTransactionResponse is the return value from the

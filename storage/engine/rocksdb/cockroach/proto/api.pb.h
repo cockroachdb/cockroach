@@ -1982,6 +1982,18 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::cockroach::proto::InternalCommitTrigger* release_internal_commit_trigger();
   void set_allocated_internal_commit_trigger(::cockroach::proto::InternalCommitTrigger* internal_commit_trigger);
 
+  // repeated .cockroach.proto.Intent intents = 4;
+  int intents_size() const;
+  void clear_intents();
+  static const int kIntentsFieldNumber = 4;
+  const ::cockroach::proto::Intent& intents(int index) const;
+  ::cockroach::proto::Intent* mutable_intents(int index);
+  ::cockroach::proto::Intent* add_intents();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Intent >&
+      intents() const;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Intent >*
+      mutable_intents();
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.EndTransactionRequest)
  private:
   inline void set_has_header();
@@ -1996,6 +2008,7 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
   ::cockroach::proto::InternalCommitTrigger* internal_commit_trigger_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Intent > intents_;
   bool commit_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
@@ -4776,6 +4789,36 @@ inline void EndTransactionRequest::set_allocated_internal_commit_trigger(::cockr
     clear_has_internal_commit_trigger();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.EndTransactionRequest.internal_commit_trigger)
+}
+
+// repeated .cockroach.proto.Intent intents = 4;
+inline int EndTransactionRequest::intents_size() const {
+  return intents_.size();
+}
+inline void EndTransactionRequest::clear_intents() {
+  intents_.Clear();
+}
+inline const ::cockroach::proto::Intent& EndTransactionRequest::intents(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.EndTransactionRequest.intents)
+  return intents_.Get(index);
+}
+inline ::cockroach::proto::Intent* EndTransactionRequest::mutable_intents(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.EndTransactionRequest.intents)
+  return intents_.Mutable(index);
+}
+inline ::cockroach::proto::Intent* EndTransactionRequest::add_intents() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.EndTransactionRequest.intents)
+  return intents_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Intent >&
+EndTransactionRequest::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.EndTransactionRequest.intents)
+  return intents_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::Intent >*
+EndTransactionRequest::mutable_intents() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.EndTransactionRequest.intents)
+  return &intents_;
 }
 
 // -------------------------------------------------------------------

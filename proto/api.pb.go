@@ -550,7 +550,9 @@ type EndTransactionRequest struct {
 	// internal use only and will be ignored if requested through the
 	// public-facing KV API.
 	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,3,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
-	XXX_unrecognized      []byte                 `json:"-"`
+	// List of intents written by the transaction.
+	Intents          []Intent `protobuf:"bytes,4,rep,name=intents" json:"intents"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
@@ -567,6 +569,13 @@ func (m *EndTransactionRequest) GetCommit() bool {
 func (m *EndTransactionRequest) GetInternalCommitTrigger() *InternalCommitTrigger {
 	if m != nil {
 		return m.InternalCommitTrigger
+	}
+	return nil
+}
+
+func (m *EndTransactionRequest) GetIntents() []Intent {
+	if m != nil {
+		return m.Intents
 	}
 	return nil
 }
@@ -2544,6 +2553,31 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Intents", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Intents = append(m.Intents, Intent{})
+			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -4102,6 +4136,12 @@ func (m *EndTransactionRequest) Size() (n int) {
 		l = m.InternalCommitTrigger.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
+	if len(m.Intents) > 0 {
+		for _, e := range m.Intents {
+			l = e.Size()
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -4970,6 +5010,18 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (n int, err error) {
 			return 0, err
 		}
 		i += n27
+	}
+	if len(m.Intents) > 0 {
+		for _, msg := range m.Intents {
+			data[i] = 0x22
+			i++
+			i = encodeVarintApi(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
