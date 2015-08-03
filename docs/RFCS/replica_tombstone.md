@@ -57,11 +57,26 @@ raft log position or database timestamp of the `EndTransaction` call
 that commits the membership change, but this information is less
 accessible at the point where it would be needed).
 
-The raft transport will send the replica ID with every
-`RaftMessageRequest`. This is how the `Store` will learn of the replica
-ID for new ranges. The `Store` will drop incoming messages with a
-replica ID that is less than the last known one for the range (in
-order to minimize disruption from out-of-date servers).
+The `ReplicaID` replaces the current `RaftNodeID` (which is
+constructed from the `NodeID` and `StoreID`). Raft only knows about
+replica IDs, which are never reused, so we don't have to worry about
+certain problems that can aries when node IDs are reused (such as vote
+changes or log regression. `MultiRaft` is responsible for mapping
+`ReplicaIDs` to node and store IDs (which it must do to coalesce
+heartbeats). This is done with a new method on the
+`WriteableGroupStorage` interface, along with an in-memory cache. Note
+the node and store IDs for a given replica never change once that
+replica is created, so we don't need to worry about synchronizing or
+invalidating entries in this cache.
+
+The raft transport will send the node, store, and replica ID of both
+the sender and receiver with every `RaftMessageRequest`. This is how
+the `Store` will learn of the replica ID for new ranges (the sender's
+IDs must be inserted in the replica ID cache, so we can route
+responses that do not yet appear in any range descriptor we have
+stored). The `Store` will drop incoming messages with a replica ID
+that is less than the last known one for the range (in order to
+minimize disruption from out-of-date servers).
 
 The `DistSender` will also send the replica ID in the header of every
 request, and the receiver will reject requests with incorrect replica
@@ -96,6 +111,3 @@ the problem discussed here.
 
 * How long must we wait before garbage-collecting tombstones? Can we
   do it at all?
-* How will the raft transport get the correct replica ID? Will
-  `MultiRaft` itself have to be aware of replica IDs for proper
-  synchronization?
