@@ -217,6 +217,55 @@ func TestCreateTable(t *testing.T) {
 	}
 }
 
+func TestTruncateTable(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec("CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'),('b', 'd')`); err != nil {
+		t.Fatal(err)
+	}
+
+	if rows, err := db.Query("SELECT * FROM t.kv"); err != nil {
+		t.Fatal(err)
+	} else {
+		results := readAll(t, rows)
+		expectedResults := asResultSlice([][]string{
+			{"k", "v"},
+			{"a", "c"},
+			{"b", "d"},
+			{"c", "e"},
+		})
+		if err := verifyResults(expectedResults, results); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := db.Exec("Truncate TABLE t.kv"); err != nil {
+		t.Fatal(err)
+	}
+
+	if rows, err := db.Query("SELECT * FROM t.kv"); err != nil {
+		t.Fatal(err)
+	} else {
+		results := readAll(t, rows)
+		expectedResults := asResultSlice([][]string{
+			{"k", "v"},
+		})
+		if err := verifyResults(expectedResults, results); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestShowTables(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setup(t)
