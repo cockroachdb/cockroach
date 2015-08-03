@@ -60,6 +60,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
 		return p.ShowDatabases(n)
+	case *parser.ShowGrants:
+		return p.ShowGrants(n)
 	case *parser.ShowIndex:
 		return p.ShowIndex(n)
 	case *parser.ShowTables:

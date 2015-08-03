@@ -20,8 +20,6 @@
 
 %{
 package parser
-
-import "strings"
 %}
 
 %union {
@@ -55,6 +53,7 @@ import "strings"
   updateExprs    []*UpdateExpr
   limit          *Limit
   targetList     TargetList
+  targetListPtr  *TargetList
   privilegeType  PrivilegeType
   privilegeList  PrivilegeList
 }
@@ -252,7 +251,7 @@ import "strings"
 %type <ival>  signed_iconst
 %type <expr>  opt_boolean_or_string
 %type <exprs> var_list
-%type <qname> var_name
+%type <qname> opt_from_var_name_clause var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
 %type <expr>  non_reserved_word_or_sconst
@@ -286,7 +285,8 @@ import "strings"
 %type <empty> opt_existing_window_name
 
 %type <targetList>    privilege_target
-%type <strs>          grantee_list 
+%type <targetListPtr> on_privilege_target_clause
+%type <strs>          grantee_list for_grantee_clause
 %type <privilegeList> privileges privilege_list
 %type <privilegeType> privilege
 
@@ -335,7 +335,7 @@ import "strings"
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FOLLOWING FOR
 %token <str>   FORCE FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
-%token <str>   GLOBAL GRANT GRANTED GREATEST GROUP GROUPING
+%token <str>   GLOBAL GRANT GRANTED GRANTS GREATEST GROUP GROUPING
 
 %token <str>   HANDLER HAVING HEADER HOLD HOUR
 
@@ -1003,19 +1003,25 @@ set_reset_clause:
   SET set_rest {}
 
 show_stmt:
-  SHOW var_name
+  SHOW COLUMNS FROM var_name
   {
-    // It would be cleaner if we could have "SHOW DATABASES" and "SHOW
-    // TABLES" rules, but unfortunately DATABASES and TABLES are
-    // unreserved keywords and thus valid variable names and such
-    // rules would cause reduce/reduce conflicts.
-    if strings.EqualFold($2.String(), `"DATABASES"`) {
-      $$ = &ShowDatabases{}
-    } else if strings.EqualFold($2.String(), `"TABLES"`) {
-      $$ = &ShowTables{}
-    } else {
-      $$ = nil
-    }
+    $$ = &ShowColumns{Table: $4}
+  }
+| SHOW DATABASES
+  {
+    $$ = &ShowDatabases{}
+  }
+| SHOW GRANTS on_privilege_target_clause for_grantee_clause
+  {
+    $$ = &ShowGrants{Targets: $3, Grantees: $4}
+  }
+| SHOW INDEX FROM var_name
+  {
+    $$ = &ShowIndex{Table: $4}
+  }
+| SHOW TABLES opt_from_var_name_clause
+  {
+    $$ = &ShowTables{Name: $3}
   }
 | SHOW TIME ZONE
   {
@@ -1025,17 +1031,36 @@ show_stmt:
   {
     $$ = nil
   }
-| SHOW TABLES FROM var_name
+
+opt_from_var_name_clause:
+  FROM var_name
   {
-    $$ = &ShowTables{Name: $4}
+    $$ = $2
   }
-| SHOW COLUMNS FROM var_name
+| /* EMPTY */
   {
-    $$ = &ShowColumns{Table: $4}
+    $$ = nil
   }
-| SHOW INDEX FROM var_name
+
+on_privilege_target_clause:
+  ON privilege_target
   {
-    $$ = &ShowIndex{Table: $4}
+    tmp := $2
+    $$ = &tmp
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
+
+for_grantee_clause:
+  FOR grantee_list
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
   }
 
 // CREATE TABLE relname
@@ -1888,7 +1913,7 @@ simple_select:
 // SQL standard WITH clause looks like:
 // 
 // WITH [ RECURSIVE ] <query name> [ (<column>,...) ]
-//      	AS (query) [ SEARCH or CYCLE clause ]
+//        AS (query) [ SEARCH or CYCLE clause ]
 // 
 // We don't currently support the SEARCH or CYCLE clause.
 // 
@@ -2109,8 +2134,8 @@ values_clause:
   }
 
 // clauses common to all optimizable statements:
-// 	from_clause   - allow list of both JOIN expressions and table names
-// 	where_clause  - qualifications for joins or restrictions
+//  from_clause   - allow list of both JOIN expressions and table names
+//  where_clause  - qualifications for joins or restrictions
 
 from_clause:
   FROM from_list
@@ -3696,6 +3721,7 @@ unreserved_keyword:
 | FUNCTIONS
 | GLOBAL
 | GRANTED
+| GRANTS
 | HANDLER
 | HEADER
 | HOLD

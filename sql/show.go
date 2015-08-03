@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // ShowColumns of a table.
@@ -53,6 +54,48 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	for _, row := range sr {
 		name := string(bytes.TrimPrefix(row.Key, prefix))
 		v.rows = append(v.rows, []parser.Datum{parser.DString(name)})
+	}
+	return v, nil
+}
+
+// ShowGrants returns grant details for the specified objects and users.
+// TODO(marc): implement multiple targets, or no targets (meaning full scan).
+func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
+	if n.Targets == nil || len(n.Targets.Targets) != 1 {
+		return nil, util.Errorf("TODO(marc): multiple targets not implemented")
+	}
+
+	// Lookup the database descriptor.
+	// TODO(marc): implement other types of objects once they support permissions.
+	dbDesc, err := p.getDatabaseDesc(n.Targets.Targets[0])
+	if err != nil {
+		return nil, err
+	}
+
+	v := &valuesNode{columns: []string{"Database", "User", "Privileges"}}
+	var wantedUsers map[string]struct{}
+	if len(n.Grantees) != 0 {
+		wantedUsers = make(map[string]struct{})
+	}
+	for _, u := range n.Grantees {
+		wantedUsers[u] = struct{}{}
+	}
+
+	userPrivileges, err := dbDesc.Show()
+	if err != nil {
+		return nil, err
+	}
+	for _, userPriv := range userPrivileges {
+		if wantedUsers != nil {
+			if _, ok := wantedUsers[userPriv.User]; !ok {
+				continue
+			}
+		}
+		v.rows = append(v.rows, []parser.Datum{
+			parser.DString(dbDesc.Name),
+			parser.DString(userPriv.User),
+			parser.DString(userPriv.Privileges.String()),
+		})
 	}
 	return v, nil
 }

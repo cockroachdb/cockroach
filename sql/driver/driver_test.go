@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -743,5 +744,89 @@ func TestInsecure(t *testing.T) {
 	}()
 	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup(t)
+	defer cleanup(s, db)
+
+	testCases := []struct {
+		query      string
+		errPattern string     /* empty for success */
+		results    [][]string /* nil for responses that do not return rows */
+	}{
+		{`CREATE DATABASE foo`, "", nil},
+		{`SHOW GRANTS ON DATABASE foo`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", security.RootUser, "READ, WRITE"}}},
+
+		// Only "ON DATABASE x" is supported for now.
+		{`SHOW GRANTS`, ".*TODO\\(marc\\): multiple targets not implemented", nil},
+		{`SHOW GRANTS ON DATABASE foo,bar`, ".*TODO\\(marc\\): multiple targets not implemented", nil},
+		{`SHOW GRANTS ON foo.tbl`, "syntax error .*", nil},
+		{`SHOW GRANTS ON tbl`, "syntax error .*", nil},
+
+		// Can't revoke permissions for root.
+		{`REVOKE READ ON DATABASE foo FROM root`, "root user does not have read privilege", nil},
+
+		{`GRANT ALL ON DATABASE foo TO readwrite, "test-user"`, "", nil},
+		{`SHOW GRANTS ON DATABASE foo`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", "readwrite", "READ, WRITE"},
+				{"foo", security.RootUser, "READ, WRITE"},
+				{"foo", "test-user", "READ, WRITE"}}},
+		{`SHOW GRANTS ON DATABASE foo FOR readwrite, "test-user"`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", "readwrite", "READ, WRITE"},
+				{"foo", "test-user", "READ, WRITE"}}},
+
+		{`REVOKE WRITE ON DATABASE foo FROM "test-user",readwrite`, "", nil},
+		{`SHOW GRANTS ON DATABASE foo`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", "readwrite", "READ"},
+				{"foo", security.RootUser, "READ, WRITE"},
+				{"foo", "test-user", "READ"}}},
+		{`SHOW GRANTS ON DATABASE foo FOR readwrite, "test-user"`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", "readwrite", "READ"},
+				{"foo", "test-user", "READ"}}},
+
+		{`REVOKE READ ON DATABASE foo FROM "test-user"`, "", nil},
+		{`SHOW GRANTS ON DATABASE foo`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", "readwrite", "READ"},
+				{"foo", security.RootUser, "READ, WRITE"}}},
+		{`SHOW GRANTS ON DATABASE foo FOR readwrite, "test-user"`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", "readwrite", "READ"}}},
+
+		{`REVOKE ALL ON DATABASE foo FROM readwrite,"test-user"`, "", nil},
+		{`SHOW GRANTS ON DATABASE foo`, "",
+			[][]string{{"Database", "User", "Privileges"},
+				{"foo", security.RootUser, "READ, WRITE"}}},
+		{`SHOW GRANTS ON DATABASE foo FOR readwrite, "test-user"`, "",
+			[][]string{{"Database", "User", "Privileges"}}},
+	}
+
+	for _, tc := range testCases {
+		rows, err := db.Query(tc.query)
+		if tc.errPattern == "" {
+			if err != nil {
+				t.Fatalf("query %q failed: %s", tc.query, err)
+			}
+		} else if err == nil {
+			t.Fatalf("query %q: unexpected success", tc.query)
+		} else if !isError(err, tc.errPattern) {
+			t.Fatalf("query %q: wrong error, expected %s, got %s", tc.query, tc.errPattern, err)
+		}
+		if tc.results != nil {
+			results := readAll(t, rows)
+			if err := verifyResults(asResultSlice(tc.results), results); err != nil {
+				t.Fatalf("query %q: expected results %q, got %q", tc.query, asResultSlice(tc.results), results)
+			}
+		}
+
 	}
 }

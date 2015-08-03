@@ -27,6 +27,8 @@ import (
 
 // permissions describes the full set of permissions for a descriptor.
 // This is used for easier manipulation of permisssions.
+// TODO(marc): we should eventually store ALL as a specific permission,
+// so that newly-added permissions will automatically be picked up.
 type permissions struct {
 	read  map[string]struct{}
 	write map[string]struct{}
@@ -133,4 +135,51 @@ func (p *permissions) Revoke(n *parser.Revoke) error {
 		}
 	}
 	return nil
+}
+
+// UserPrivileges contains a user and list of associated privileges.
+type UserPrivileges struct {
+	User       string
+	Privileges parser.PrivilegeList
+}
+
+// UserPrivilegeList is a list of UserPrivileges.
+type UserPrivilegeList []*UserPrivileges
+
+func (upl UserPrivilegeList) Len() int {
+	return len(upl)
+}
+
+func (upl UserPrivilegeList) Swap(i, j int) {
+	upl[i], upl[j] = upl[j], upl[i]
+}
+
+func (upl UserPrivilegeList) Less(i, j int) bool {
+	return upl[i].User < upl[j].User
+}
+
+// Show returns a slice of { user, list of privileges } sorted by user.
+func (p *permissions) Show() UserPrivilegeList {
+	// Combine all privileges by user.
+	tmp := map[string]*UserPrivileges{}
+	for u := range p.read {
+		tmp[u] = &UserPrivileges{User: u, Privileges: []parser.PrivilegeType{parser.PrivilegeRead}}
+	}
+	for u := range p.write {
+		if _, ok := tmp[u]; !ok {
+			tmp[u] = &UserPrivileges{User: u, Privileges: []parser.PrivilegeType{parser.PrivilegeWrite}}
+		} else {
+			tmp[u].Privileges = append(tmp[u].Privileges, parser.PrivilegeWrite)
+		}
+	}
+
+	// Put them all into a slice and sort.
+	ret := make(UserPrivilegeList, len(tmp), len(tmp))
+	i := 0
+	for _, up := range tmp {
+		ret[i] = up
+		i++
+	}
+	sort.Sort(ret)
+	return ret
 }

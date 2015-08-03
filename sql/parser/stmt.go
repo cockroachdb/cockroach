@@ -53,6 +53,7 @@ func (*Select) statement()         {}
 func (*Set) statement()            {}
 func (*ShowColumns) statement()    {}
 func (*ShowDatabases) statement()  {}
+func (*ShowGrants) statement()     {}
 func (*ShowIndex) statement()      {}
 func (*ShowTables) statement()     {}
 func (*Truncate) statement()       {}

@@ -70,3 +70,22 @@ func (node *ShowTables) String() string {
 	}
 	return buf.String()
 }
+
+// ShowGrants represents a SHOW GRANTS statement.
+// TargetList is defined in grant.go.
+type ShowGrants struct {
+	Targets  *TargetList
+	Grantees NameList
+}
+
+func (node *ShowGrants) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("SHOW GRANTS")
+	if node.Targets != nil {
+		fmt.Fprintf(&buf, " ON %s", *node.Targets)
+	}
+	if node.Grantees != nil {
+		fmt.Fprintf(&buf, " FOR %s", node.Grantees)
+	}
+	return buf.String()
+}
