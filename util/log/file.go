@@ -118,15 +118,18 @@ type FileDetails struct {
 	PID      uint
 }
 
+var errMalformedName = errors.New("malformed log filename")
+var errMalformedSev = errors.New("malformed severity")
+
 func parseLogFilename(filename string) (FileDetails, error) {
 	matches := logFileRE.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 7 {
-		return FileDetails{}, errors.New("malformed log filename")
+		return FileDetails{}, errMalformedName
 	}
 
 	sev, sevFound := SeverityByName(matches[4])
 	if !sevFound {
-		return FileDetails{}, errors.New("malformed severity")
+		return FileDetails{}, errMalformedSev
 	}
 
 	// Replace the '_'s with ':'s to restore the correct time format.
@@ -151,13 +154,15 @@ func parseLogFilename(filename string) (FileDetails, error) {
 	}, nil
 }
 
+var errDirectoryNotSet = errors.New("log: log directory not set")
+
 // create creates a new log file and returns the file and its filename, which
 // contains severity ("INFO", "FATAL", etc.) and t. If the file is created
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
 func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
 	if len(*logDir) == 0 {
-		return nil, "", errors.New("log: log directory not set")
+		return nil, "", errDirectoryNotSet
 	}
 	name, link := logName(severity, t)
 	var lastErr error
@@ -176,12 +181,14 @@ func create(severity Severity, t time.Time) (f *os.File, filename string, err er
 	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
 }
 
+var errNotAFile = errors.New("not a regular file")
+
 // getFileDetails verifies that the file specified by filename is a
 // regular file and filename matches the expected filename pattern.
 // Returns the log file details success; otherwise error.
 func getFileDetails(info os.FileInfo) (FileDetails, error) {
 	if info.Mode()&os.ModeType != 0 {
-		return FileDetails{}, errors.New("not a regular file")
+		return FileDetails{}, errNotAFile
 	}
 
 	details, err := parseLogFilename(info.Name())
