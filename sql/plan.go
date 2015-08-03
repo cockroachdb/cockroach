@@ -44,6 +44,8 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 		return p.CreateTable(n)
 	case *parser.Delete:
 		return p.Delete(n)
+	case *parser.Grant:
+		return p.Grant(n)
 	case *parser.Insert:
 		return p.Insert(n)
 	case *parser.ParenSelect:

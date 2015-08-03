@@ -76,6 +76,11 @@ func TestParse(t *testing.T) {
 		{`SHOW INDEX FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
 
+		{`GRANT READ ON DATABASE foo TO root`},
+		{`GRANT ALL ON DATABASE foo TO root, test`},
+		{`GRANT READ, WRITE ON DATABASE bar TO foo, bar, baz`},
+		{`GRANT READ, WRITE ON DATABASE db1, db2 TO foo, bar, baz`},
+
 		{`INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},
 		{`INSERT INTO a VALUES (1, 2)`},

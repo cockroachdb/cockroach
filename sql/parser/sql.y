@@ -54,6 +54,9 @@ import "strings"
   updateExpr     *UpdateExpr
   updateExprs    []*UpdateExpr
   limit          *Limit
+  targetList     TargetList
+  privilegeType  PrivilegeType
+  privilegeList  PrivilegeList
 }
 
 %type <stmts> stmt_block
@@ -76,6 +79,7 @@ import "strings"
 %type <stmt> drop_stmt
 %type <stmt> explain_stmt
 %type <stmt> explainable_stmt
+%type <stmt> grant_stmt
 %type <stmt> insert_stmt
 %type <stmt> preparable_stmt
 %type <stmt> rename_stmt
@@ -281,6 +285,11 @@ import "strings"
 %type <empty> opt_frame_clause frame_extent frame_bound
 %type <empty> opt_existing_window_name
 
+%type <targetList>    privilege_target
+%type <strs>          grantee_list 
+%type <privilegeList> privileges privilege_list
+%type <privilegeType> privilege
+
 // Non-keyword token types. These are hard-wired into the "flex" lexer. They
 // must be listed first so that their numeric codes do not depend on the set of
 // keywords. PL/pgsql depends on this so that it can share the same lexer. If
@@ -483,6 +492,7 @@ stmt:
 | delete_stmt
 | drop_stmt
 | explain_stmt
+| grant_stmt
 | insert_stmt
 | rename_stmt
 | select_stmt
@@ -808,6 +818,60 @@ explain_option_arg:
 //   create_table_stmt {}
 // | create_index_stmt {}
 // | create_view_stmt {}
+
+// GRANT privileges ON privilege_target TO grantee_list
+grant_stmt:
+  GRANT privileges ON privilege_target TO grantee_list
+  {
+    $$ = &Grant{Privileges: $2, Targets: $4, Grantees: NameList($6)}
+  }
+
+// TODO(marc): permissions are currently at the database level.
+// Adjust this to allow tables (including db.* expressions).
+privilege_target:
+  DATABASE name_list
+  {
+    $$ = TargetList{Type: TargetDatabase, Targets: NameList($2)}
+  }
+
+privileges:
+  ALL
+  {
+    $$ = []PrivilegeType{PrivilegeAll}
+  }
+  | privilege_list { }
+
+privilege_list:
+  privilege
+  {
+    $$ = []PrivilegeType{$1}
+  }
+  | privilege_list ',' privilege
+  {
+    $$ = append($1, $3)
+  }
+
+privilege:
+  READ
+  {
+    $$ = PrivilegeRead
+  }
+  | WRITE
+  {
+    $$ = PrivilegeWrite
+  }
+
+// TODO(marc): this should not be 'name', but should instead be a
+// type just for usernames.
+grantee_list:
+  name
+  {
+    $$ = []string{$1}
+  }
+  | grantee_list ',' name
+  {
+    $$ = append($1, $3)
+  }
 
 // SET name TO 'var_value'
 // SET TIME ZONE 'var_value'
