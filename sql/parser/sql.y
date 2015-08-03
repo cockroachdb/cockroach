@@ -102,8 +102,8 @@ import "strings"
 
 %type <empty> opt_drop_behavior
 
-%type <empty> createdb_opt_list createdb_opt_items transaction_mode_list
-%type <empty> createdb_opt_item transaction_mode_item
+%type <empty> transaction_mode_list
+%type <empty> transaction_mode_item
 
 %type <empty> opt_with_data
 %type <empty> opt_nowait_or_skip
@@ -256,7 +256,6 @@ import "strings"
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
 %type <expr>  non_reserved_word_or_sconst
-%type <empty> createdb_opt_name
 %type <expr>  var_value
 %type <empty> zone_value
 // %type <empty> role_spec
@@ -516,11 +515,7 @@ alter_stmt:
   // | alter_view_stmt
 
 alter_database_stmt:
-  ALTER DATABASE name WITH createdb_opt_list
-  {
-    $$ = nil
-  }
-| ALTER DATABASE name createdb_opt_list
+  ALTER DATABASE name
   {
     $$ = nil
   }
@@ -1605,56 +1600,14 @@ transaction_mode_list_or_empty:
 // | /* EMPTY */ {}
 
 create_database_stmt:
-  CREATE DATABASE name createdb_opt_with createdb_opt_list
+  CREATE DATABASE name
   {
-    // TODO(pmattis): Handle options.
     $$ = &CreateDatabase{Name: Name($3)}
   }
-| CREATE DATABASE IF NOT EXISTS name createdb_opt_with createdb_opt_list
+| CREATE DATABASE IF NOT EXISTS name
   {
-    // TODO(pmattis): Handle options.
     $$ = &CreateDatabase{IfNotExists: true, Name: Name($6)}
   }
-
-createdb_opt_with:
-  WITH {}
-| WITH_LA {}
-| /* EMPTY */ {}
-
-createdb_opt_list:
-  createdb_opt_items {}
-| /* EMPTY */ {}
-
-createdb_opt_items:
-  createdb_opt_item {}
-| createdb_opt_items createdb_opt_item {}
-
-createdb_opt_item:
-  createdb_opt_name opt_equal signed_iconst {}
-| createdb_opt_name opt_equal opt_boolean_or_string {}
-| createdb_opt_name opt_equal DEFAULT {}
-
-// Ideally we'd use name here, but that causes shift/reduce conflicts against
-// the ALTER DATABASE SET/RESET syntaxes. Instead call out specific keywords
-// we need, and allow IDENT so that database option names don't have to be
-// parser keywords unless they are already keywords for other reasons.
-// 
-// XXX this coding technique is fragile since if someone makes a formerly
-// non-keyword option name into a keyword and forgets to add it here, the
-// option will silently break. Best defense is to provide a regression test
-// exercising every such option, at least at the syntax level.
-createdb_opt_name:
-  CONNECTION LIMIT {}
-| ENCODING {}
-| LOCATION {}
-| OWNER {}
-| TEMPLATE {}
-
-// Though the equals sign doesn't match other WITH options, pg_dump uses equals
-// for backward compatibility, and it doesn't seem worth removing it.
-opt_equal:
-  '=' {}
-| /* EMPTY */ {}
 
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest
