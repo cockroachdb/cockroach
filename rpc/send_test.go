@@ -397,7 +397,7 @@ func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
 		return args
 	}
 	getReply := func() gogoproto.Message {
-		return reply
+		return gogoproto.Clone(reply)
 	}
 	return Send(opts, name, addrs, getArgs, getReply, rpcContext)
 }

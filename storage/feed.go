@@ -144,53 +144,35 @@ func NewStoreEventFeed(id proto.StoreID, feed *util.Feed) StoreEventFeed {
 // registerRange publishes a RegisterRangeEvent to this feed which describes a
 // range on the store. See RegisterRangeEvent for details.
 func (sef StoreEventFeed) registerRange(rng *Range, scan bool) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(makeRegisterRangeEvent(sef.id, rng, scan))
 }
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
 func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, delta *engine.MVCCStats) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, method, delta))
 }
 
 // removeRange publishes a RemoveRangeEvent to this feed which describes the
 // removal of the supplied Range.
 func (sef StoreEventFeed) removeRange(rng *Range) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(makeRemoveRangeEvent(sef.id, rng))
 }
 
 // splitRange publishes a SplitRangeEvent to this feed which describes a split
 // involving the supplied Ranges.
 func (sef StoreEventFeed) splitRange(rngOrig, rngNew *Range) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(makeSplitRangeEvent(sef.id, rngOrig, rngNew))
 }
 
 // mergeRange publishes a MergeRangeEvent to this feed which describes a merger
 // of the supplied Ranges.
 func (sef StoreEventFeed) mergeRange(rngMerged, rngRemoved *Range) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(makeMergeRangeEvent(sef.id, rngMerged, rngRemoved))
 }
 
 // startStore publishes a StartStoreEvent to this feed.
 func (sef StoreEventFeed) startStore(startedAt int64) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(&StartStoreEvent{
 		StoreID:   sef.id,
 		StartedAt: startedAt,
@@ -199,9 +181,6 @@ func (sef StoreEventFeed) startStore(startedAt int64) {
 
 // storeStatus publishes a StoreStatusEvent to this feed.
 func (sef StoreEventFeed) storeStatus(desc *proto.StoreDescriptor) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(&StoreStatusEvent{
 		Desc: desc,
 	})
@@ -209,9 +188,6 @@ func (sef StoreEventFeed) storeStatus(desc *proto.StoreDescriptor) {
 
 // replicationStatus publishes a ReplicationStatusEvent to this feed.
 func (sef StoreEventFeed) replicationStatus(leaders, replicated, available int32) {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(&ReplicationStatusEvent{
 		StoreID:              sef.id,
 		LeaderRangeCount:     leaders,
@@ -222,17 +198,11 @@ func (sef StoreEventFeed) replicationStatus(leaders, replicated, available int32
 
 // beginScanRanges publishes a BeginScanRangesEvent to this feed.
 func (sef StoreEventFeed) beginScanRanges() {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(&BeginScanRangesEvent{sef.id})
 }
 
 // endScanRanges publishes an EndScanRangesEvent to this feed.
 func (sef StoreEventFeed) endScanRanges() {
-	if sef.f == nil {
-		return
-	}
 	sef.f.Publish(&EndScanRangesEvent{sef.id})
 }
 

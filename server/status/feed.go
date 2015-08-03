@@ -18,9 +18,6 @@
 package status
 
 import (
-	"sync/atomic"
-	"time"
-
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracer"
@@ -44,43 +41,6 @@ type CallErrorEvent struct {
 	Method proto.Method
 }
 
-// TestSyncEvent is intended for testing only; it can be used by tests to
-// synchronize with feed consumers.
-type TestSyncEvent struct {
-	count  int32
-	closer chan struct{}
-}
-
-// NewTestSyncEvent creates a new TestSyncEvent which expects to be consumed by
-// the given number of consumers.
-func NewTestSyncEvent(expectedConsumers int32) *TestSyncEvent {
-	return &TestSyncEvent{
-		count:  expectedConsumers,
-		closer: make(chan struct{}),
-	}
-}
-
-// Sync will wait for the TestSyncEvent to be consumed by the expected number of
-// consumers, returning an error if the event is not consumed within the
-// specified timeout. If the TestSyncEvent has already been sufficiently
-// consumed, Sync will return immediately.
-func (tse *TestSyncEvent) Sync(timeout time.Duration) error {
-	select {
-	case <-tse.closer:
-		return nil
-	case <-time.After(timeout):
-		return util.Errorf("failed to synchronize with feed after specified timeout (%s)", timeout)
-	}
-}
-
-// consume is called by NodeEventListener when it receives a TestSyncEvent.
-func (tse *TestSyncEvent) consume() {
-	val := atomic.AddInt32(&tse.count, -1)
-	if val == 0 {
-		close(tse.closer)
-	}
-}
-
 // NodeEventFeed is a helper structure which publishes node-specific events to a
 // util.Feed. If the target feed is nil, event methods become no-ops.
 type NodeEventFeed struct {
@@ -99,9 +59,6 @@ func NewNodeEventFeed(id proto.NodeID, feed *util.Feed) NodeEventFeed {
 
 // StartNode is called by a node when it has started.
 func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
-	if nef.f == nil {
-		return
-	}
 	nef.f.Publish(&StartNodeEvent{
 		Desc:      desc,
 		StartedAt: startedAt,
@@ -111,9 +68,6 @@ func (nef NodeEventFeed) StartNode(desc proto.NodeDescriptor, startedAt int64) {
 // CallComplete is called by a node whenever it completes a request. This will
 // publish an appropriate event to the feed based on the results of the call.
 func (nef NodeEventFeed) CallComplete(args proto.Request, reply proto.Response) {
-	if nef.f == nil {
-		return
-	}
 	if err := reply.Header().Error; err != nil &&
 		err.CanRestartTransaction() == proto.TransactionRestart_ABORT {
 		nef.f.Publish(&CallErrorEvent{

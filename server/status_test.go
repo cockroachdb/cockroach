@@ -285,11 +285,9 @@ func startServer(t *testing.T, keyPrefix string) TestServer {
 	if err := ts.node.publishStoreStatuses(); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
-	syncEvent := status.NewTestSyncEvent(1)
-	ts.EventFeed().Publish(syncEvent)
-	if err := syncEvent.Sync(5 * time.Second); err != nil {
-		t.Fatal(err)
-	}
+
+	ts.EventFeed().Flush()
+
 	if err := ts.writeSummaries(); err != nil {
 		t.Fatalf("error writing summaries: %s", err)
 	}

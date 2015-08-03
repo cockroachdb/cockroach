@@ -18,10 +18,8 @@
 package storage
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -29,47 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-type storeEventConsumer struct {
-	sub      *util.Subscription
-	received []interface{}
-}
-
-func newConsumer(feed *util.Feed) *storeEventConsumer {
-	return &storeEventConsumer{
-		sub: feed.Subscribe(),
-	}
-}
-
-func (sec *storeEventConsumer) process() {
-	for e := range sec.sub.Events() {
-		sec.received = append(sec.received, e)
-	}
-}
-
-// startConsumerSet starts a StoreEventFeed and a number of associated
-// consumers.
-func startConsumerSet(count int) (*stop.Stopper, *util.Feed, []*storeEventConsumer) {
-	stopper := stop.NewStopper()
-	feed := &util.Feed{}
-	consumers := make([]*storeEventConsumer, count)
-	for i := range consumers {
-		consumers[i] = newConsumer(feed)
-		stopper.RunWorker(consumers[i].process)
-	}
-	return stopper, feed, consumers
-}
-
-// waitForStopper stops the supplied stop.Stopper and waits up to five seconds
-// for it to complete.
-func waitForStopper(t testing.TB, stopper *stop.Stopper) {
-	stopper.Stop()
-	select {
-	case <-stopper.IsStopped():
-	case <-time.After(5 * time.Second):
-		t.Fatalf("Stopper failed to stop after 5 seconds")
-	}
-}
 
 func TestStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -343,30 +300,24 @@ func TestStoreEventFeed(t *testing.T) {
 		expectedEvents[i] = testCases[i].expected
 	}
 
-	// assertEventsEqual verifies that the given set of events is equal to the
-	// expectedEvents.
-	verifyEventSlice := func(source string, events []interface{}) {
-		if a, e := len(events), len(expectedEvents); a != e {
-			t.Errorf("%s had wrong number of events %d, expected %d", source, a, e)
-			return
-		}
-
-		for i := range events {
-			if a, e := events[i], expectedEvents[i]; !reflect.DeepEqual(a, e) {
-				t.Errorf("%s had wrong event for case %s: got %v, expected %v", source, testCases[i].name, a, e)
-			}
-		}
-	}
+	events := make([]interface{}, 0, len(expectedEvents))
 
 	// Run test cases directly through a feed.
-	stopper, feed, consumers := startConsumerSet(3)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	feed := util.NewFeed(stopper)
+	feed.Subscribe(func(event interface{}) {
+		events = append(events, event)
+	})
+
 	storefeed := NewStoreEventFeed(proto.StoreID(1), feed)
 	for _, tc := range testCases {
 		tc.publishTo(storefeed)
 	}
-	feed.Close()
-	waitForStopper(t, stopper)
-	for i, c := range consumers {
-		verifyEventSlice(fmt.Sprintf("feed direct consumer %d", i), c.received)
+
+	feed.Flush()
+
+	if a, e := events, expectedEvents; !reflect.DeepEqual(a, e) {
+		t.Errorf("received incorrect events.\nexpected: %v\nactual: %v", e, a)
 	}
 }

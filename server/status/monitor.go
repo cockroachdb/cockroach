@@ -105,17 +105,10 @@ func (nsm *NodeStatusMonitor) visitStoreMonitors(visitor func(*StoreStatusMonito
 // supplied Subscription. The goroutine will continue running until the
 // Subscription's Events feed is closed.
 func (nsm *NodeStatusMonitor) StartMonitorFeed(feed *util.Feed) {
-	sub := feed.Subscribe()
-	go func() {
-		for event := range sub.Events() {
-			if syncEvent, ok := event.(*TestSyncEvent); ok {
-				syncEvent.consume()
-			}
-
-			ProcessNodeEvent(nsm, event)
-			storage.ProcessStoreEvent(nsm, event)
-		}
-	}()
+	feed.Subscribe(func(event interface{}) {
+		ProcessNodeEvent(nsm, event)
+		storage.ProcessStoreEvent(nsm, event)
+	})
 }
 
 // OnRegisterRange receives RegisterRangeEvents retrieved from a storage event

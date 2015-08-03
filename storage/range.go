@@ -52,7 +52,7 @@ func init() {
 	gob.Register(PrefixConfigMap{})
 }
 
-var (
+const (
 	// DefaultHeartbeatInterval is how often heartbeats are sent from the
 	// transaction coordinator to a live transaction. These keep it from
 	// being preempted by other transactions writing the same keys. If a
@@ -72,7 +72,7 @@ var (
 	clusterIDGossipInterval = clusterIDGossipTTL / 2
 
 	// configGossipTTL is the time-to-live for configuration maps.
-	configGossipTTL = 0 * time.Second // does not expire
+	configGossipTTL = 0 // does not expire
 	// configGossipInterval is the interval at which range leaders gossip
 	// their config maps. Even if config maps do not expire, we still
 	// need a periodic gossip to safeguard against failure of a leader
@@ -1052,7 +1052,7 @@ func (r *Range) maybeGossipConfigsLocked(match func(configPrefix proto.Key) bool
 			if prevHash, ok := r.configHashes[i]; !ok || !bytes.Equal(prevHash, hash) {
 				r.configHashes[i] = hash
 				log.Infoc(ctx, "gossiping %s config from store %d, range %d", cd.gossipKey, r.rm.StoreID(), r.Desc().RaftID)
-				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
+				if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0); err != nil {
 					log.Errorc(ctx, "failed to gossip %s configMap: %s", cd.gossipKey, err)
 				}
 			}

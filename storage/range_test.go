@@ -139,9 +139,6 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.transport = multiraft.NewLocalRPCTransport(tc.stopper)
 	}
 	tc.stopper.AddCloser(tc.transport)
-	if tc.feed != nil {
-		tc.stopper.AddCloser(tc.feed)
-	}
 
 	if tc.store == nil {
 		ctx := TestStoreContext
@@ -2659,17 +2656,14 @@ func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
 	defer leaktest.AfterTest(b)
 	tc := testContext{}
 
+	stopper := stop.NewStopper()
 	if sendEvents {
-		tc.feed = &util.Feed{}
+		tc.feed = util.NewFeed(stopper)
 	}
 	eventC := 0
-	consumeStopper := stop.NewStopper()
 	if consumeEvents {
-		sub := tc.feed.Subscribe()
-		consumeStopper.RunWorker(func() {
-			for range sub.Events() {
-				eventC++
-			}
+		tc.feed.Subscribe(func(_ interface{}) {
+			eventC++
 		})
 	}
 
@@ -2687,12 +2681,9 @@ func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
 	}
 	b.StopTimer()
 
-	if consumeEvents {
-		// Close feed and wait for consumer to finish.
-		tc.feed.Close()
-		consumeStopper.Stop()
-		<-consumeStopper.IsStopped()
+	stopper.Stop()
 
+	if consumeEvents {
 		// The test expects exactly b.N update events to be sent on the feed.
 		// The '+5' is a constant number of non-update events sent when the
 		// store is first started.

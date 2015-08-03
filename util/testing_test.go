@@ -81,13 +81,14 @@ func TestSucceedsWithin(t *testing.T) {
 	// Try a method which always succeeds.
 	SucceedsWithin(t, 1*time.Millisecond, func() error { return nil })
 
-	// Try a method which suceeds on 5th invocation.
-	count := 0
-	SucceedsWithin(t, 10*time.Millisecond, func() error {
-		count++
-		if count >= 5 {
+	// Try a method which succeeds after a known duration.
+	start := time.Now()
+	duration := time.Millisecond
+	SucceedsWithin(t, 10*duration, func() error {
+		elapsed := time.Since(start)
+		if elapsed > duration {
 			return nil
 		}
-		return Errorf("not yet")
+		return Errorf("%s elapsed, waiting until %s elapses", elapsed, duration)
 	})
 }

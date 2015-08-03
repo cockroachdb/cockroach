@@ -55,17 +55,10 @@ func TestNodeStatusMonitor(t *testing.T) {
 		LastUpdateNanos: 1 * 1E9,
 	}
 
-	monitorStopper := stop.NewStopper()
-	storeStopper := stop.NewStopper()
-	feed := &util.Feed{}
+	stopper := stop.NewStopper()
+	feed := util.NewFeed(stopper)
 	monitor := NewNodeStatusMonitor()
-	sub := feed.Subscribe()
-	monitorStopper.RunWorker(func() {
-		for event := range sub.Events() {
-			storage.ProcessStoreEvent(monitor, event)
-			ProcessNodeEvent(monitor, event)
-		}
-	})
+	monitor.StartMonitorFeed(feed)
 
 	for i := 0; i < 3; i++ {
 		id := proto.StoreID(i + 1)
@@ -161,16 +154,13 @@ func TestNodeStatusMonitor(t *testing.T) {
 				Method: proto.Scan,
 			},
 		}
-		storeStopper.RunWorker(func() {
-			for _, event := range eventList {
-				feed.Publish(event)
-			}
-		})
+		for _, event := range eventList {
+			feed.Publish(event)
+		}
 	}
 
-	storeStopper.Stop()
-	feed.Close()
-	monitorStopper.Stop()
+	feed.Flush()
+	stopper.Stop()
 
 	expectedStats := engine.MVCCStats{
 		LiveBytes:       6,

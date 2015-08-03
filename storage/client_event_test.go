@@ -105,12 +105,10 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 	}
 }
 
-func (ser *storeEventReader) readEvents(sub *util.Subscription) {
+func (ser *storeEventReader) readEvents(feed *util.Feed) {
 	ser.perStoreFeeds = make(map[proto.StoreID][]string)
 	ser.perStoreUpdateCount = make(map[proto.StoreID]map[proto.Method]int)
-	for e := range sub.Events() {
-		ser.recordEvent(e)
-	}
+	feed.Subscribe(ser.recordEvent)
 }
 
 // eventFeedString describes the event information that was recorded by
@@ -207,9 +205,11 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	t.Skip("disabled until #1531 is fixed")
 
+	stopper := stop.NewStopper()
+
 	// Create a multiTestContext which publishes all store events to the given
 	// feed.
-	feed := &util.Feed{}
+	feed := util.NewFeed(stopper)
 	mtc := &multiTestContext{
 		feed: feed,
 	}
@@ -218,11 +218,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	ser := &storeEventReader{
 		recordUpdateDetail: false,
 	}
-	readStopper := stop.NewStopper()
-	sub := feed.Subscribe()
-	readStopper.RunWorker(func() {
-		ser.readEvents(sub)
-	})
+	ser.readEvents(feed)
 
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -276,8 +272,8 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	})
 
 	// Close feed and wait for reader to receive all events.
-	feed.Close()
-	readStopper.Stop()
+	feed.Flush()
+	stopper.Stop()
 
 	// Compare events to expected values.
 	expected := map[proto.StoreID][]string{

@@ -136,7 +136,7 @@ func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *in
 	is.seqGen++
 	now := monotonicUnixNano()
 	ttlStamp := now + int64(ttl)
-	if ttl == 0*time.Second {
+	if ttl == 0 {
 		ttlStamp = math.MaxInt64
 	}
 	return &info{
