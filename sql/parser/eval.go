@@ -27,6 +27,8 @@ import (
 	"strings"
 )
 
+var errZeroModulus = errors.New("zero modulus")
+
 // TODO(pmattis):
 //
 // - Support decimal arithmetic.
@@ -231,7 +233,7 @@ var binOps = map[binArgs]func(Datum, Datum) (Datum, error){
 	binArgs{Mod, intType, intType}: func(left Datum, right Datum) (Datum, error) {
 		r := right.(DInt)
 		if r == 0 {
-			return nil, errors.New("zero modulus")
+			return nil, errZeroModulus
 		}
 		return left.(DInt) % r, nil
 	},

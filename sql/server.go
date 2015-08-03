@@ -125,22 +125,21 @@ type parameters []driver.Datum
 // Arg implements the Args interface
 func (p parameters) Arg(i int) (parser.Datum, bool) {
 	if i < 1 || i > len(p) {
-		return parser.DNull{}, false
+		return nil, false
 	}
-	d := p[i-1]
-	if d.BoolVal != nil {
-		return parser.DBool(*d.BoolVal), true
-	} else if d.IntVal != nil {
-		return parser.DInt(*d.IntVal), true
-	} else if d.FloatVal != nil {
-		return parser.DFloat(*d.FloatVal), true
-	} else if d.BytesVal != nil {
-		// TODO(vivek): Add DBytes
-		return parser.DString(d.BytesVal), true
-	} else if d.StringVal != nil {
-		return parser.DString(*d.StringVal), true
+	switch t := p[i-1].GetValue().(type) {
+	case *bool:
+		return parser.DBool(*t), true
+	case *int:
+		return parser.DInt(*t), true
+	case *float64:
+		return parser.DFloat(*t), true
+	case []byte:
+		return parser.DString(t), true
+	case *string:
+		return parser.DString(*t), true
 	}
-	return parser.DNull{}, false
+	return parser.DNull{}, true
 }
 
 // exec executes the request. Any error encountered is returned; it is
