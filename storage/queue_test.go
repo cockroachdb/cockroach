@@ -183,6 +183,32 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 }
 
+// TestBaseQueueAdd verifies that calling Add() directly overrides the
+// ShouldQueue method.
+func TestBaseQueueAdd(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	r := &Range{}
+	if err := r.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+			return false, 0.0
+		},
+	}
+	bq := newBaseQueue("test", testQueue, 1)
+	bq.MaybeAdd(r, proto.ZeroTimestamp)
+	if bq.Length() != 0 {
+		t.Fatalf("expected length 0; got %d", bq.Length())
+	}
+	if err := bq.Add(r, 1.0); err != nil {
+		t.Fatalf("expected Add to succeed: %s", err)
+	}
+	if bq.Length() != 1 {
+		t.Fatalf("expected length 1; got %d", bq.Length())
+	}
+}
+
 // TestBaseQueueProcess verifies that items from the queue are
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {

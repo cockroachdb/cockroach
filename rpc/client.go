@@ -94,9 +94,8 @@ type Client struct {
 // nil to use defaults (i.e. indefinite retries with exponential
 // backoff).
 //
-// The Client.Ready channel is closed after the client has connected
-// and completed one successful heartbeat. The Closed channel is
-// closed if the client's Close() method is invoked.
+// The Closed channel is closed if the client's Close() method is
+// invoked.
 func NewClient(addr net.Addr, context *Context) *Client {
 	clientMu.Lock()
 	defer clientMu.Unlock()

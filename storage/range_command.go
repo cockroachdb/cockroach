@@ -746,9 +746,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 // InternalLeaderLease sets the leader lease for this range. The command fails
 // only if the desired start timestamp collides with a previous lease.
 // Otherwise, the start timestamp is wound back to right after the expiration
-// of the previous lease (or zero). After a lease has been set, calls to
-// HasLeaderLease() will return true if this replica is the lease holder and
-// the lease has not yet expired. If this range replica is already the lease
+// of the previous lease (or zero). If this range replica is already the lease
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
@@ -1164,7 +1162,18 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
 	copy := *r.Desc()
 	copy.Replicas = change.UpdatedReplicas
-	return r.setDesc(&copy)
+	if err := r.setDesc(&copy); err != nil {
+		return err
+	}
+	// If we're removing the current replica, add it to the range GC queue.
+	if change.ChangeType == proto.REMOVE_REPLICA && r.rm.StoreID() == change.Replica.StoreID {
+		if err := r.rm.rangeGCQueue().Add(r, 1.0); err != nil {
+			// Log the error; this shouldn't prevent the commit; the range
+			// will be GC'd eventually.
+			log.Errorf("unable to add range %s to GC queue: %s", r, err)
+		}
+	}
+	return nil
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
@@ -1234,6 +1243,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 						NodeID:          replica.NodeID,
 						StoreID:         replica.StoreID,
 						ChangeType:      changeType,
+						Replica:         replica,
 						UpdatedReplicas: updatedDesc.Replicas,
 					},
 				},

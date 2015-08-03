@@ -46,11 +46,11 @@ func (ccid ClientCmdID) TraceName() string {
 }
 
 const (
-	isAdmin = 1 << iota
-	isRead
-	isWrite
-	isTxnWrite
-	isRange
+	isAdmin    = 1 << iota // admin cmds don't go through raft, but run on leader
+	isRead                 // read-only cmds don't go through raft, but may run on leader
+	isWrite                // write cmds go through raft and must be proposed on leader
+	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
+	isRange                // range commands may span multiple keys
 )
 
 // IsAdmin returns true if the request requires admin permissions.

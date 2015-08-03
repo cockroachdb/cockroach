@@ -34,10 +34,9 @@ const (
 	// rangeGCQueueTimerDuration is the duration between GCs of queued ranges.
 	rangeGCQueueTimerDuration = 10 * time.Second
 
-	// RangeGCQueueUnleasedDuration is the default unlease duration threshold
-	// used for queuing decision. A range whose lease has been expired for
-	// longer than this duration will be queued. Exposed for testing.
-	RangeGCQueueUnleasedDuration = 1 * time.Hour
+	// RangeGCQueueInactivityThreshold is the inactivity duration after which
+	// a range will be considered for garbage collection. Exported for testing.
+	RangeGCQueueInactivityThreshold = 10 * 24 * time.Hour // 10 days
 )
 
 // rangeGCQueue manages a queue of ranges to be considered for garbage
@@ -61,23 +60,15 @@ func (q *rangeGCQueue) needsLeaderLease() bool {
 	return false
 }
 
-// shouldQueue determins whether a range should be queued for GC,
-// and if so at what priority. Currently all inactive ranges are
-// considered for possible GC at equal priority.
+// shouldQueue determines whether a range should be queued for GC, and
+// if so at what priority. Ranges which have been inactive for longer
+// than rangeGCQueueInactivityThreshold are considered for possible GC
+// at equal priority.
 func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Range) (bool, float64) {
-	lease := rng.getLease()
-	if lease.Covers(now) {
-		// If anyone holds a non-expired lease and we know about it, we
-		// have recently been an active member of the range.  This is not
-		// a guarantee that the range is not garbage (we could have just
-		// been removed), but leader leases are short enough that it
-		// doesn't hurt to wait for them to expire, and this gives us a
-		// cheap heuristic to avoid unnecessary queries.
-		return false, 0
+	if l := rng.getLease(); l.Expiration.Add(RangeGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
+		return true, 0
 	}
-
-	// Otherwise, check if long enough time has passed after the lease was expired.
-	return lease.Expiration.Add(int64(RangeGCQueueUnleasedDuration), 0).Less(now), 0
+	return false, 0
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are
@@ -145,6 +136,16 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 
 		// TODO(bdarnell): remove raft logs and other metadata (while leaving a
 		// tombstone). Add tests for GC of merged ranges.
+	} else {
+		// This range is a current member of the raft group. Acquire the lease
+		// to avoid processing this range again before the next inactivity threshold.
+		if err := rng.requestLeaderLease(now); err != nil {
+			if _, ok := err.(*proto.LeaseRejectedError); !ok {
+				if log.V(1) {
+					log.Infof("unable to acquire lease from valid range %s: %s", rng, err)
+				}
+			}
+		}
 	}
 
 	return nil
