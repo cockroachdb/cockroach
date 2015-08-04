@@ -182,7 +182,7 @@ func (tc *testContext) Start(t testing.TB) {
 
 	if tc.rng == nil {
 		if tc.bootstrapMode == bootstrapRangeOnly {
-			rng, err := NewRange(testRangeDescriptor(), tc.store)
+			rng, err := NewReplica(testRangeDescriptor(), tc.store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -258,7 +258,7 @@ func TestRangeContains(t *testing.T) {
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	defer ctx.Transport.Close()
 	store := NewStore(ctx, e, &proto.NodeDescriptor{NodeID: 1})
-	r, err := NewRange(desc, store)
+	r, err := NewReplica(desc, store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2348,7 +2348,7 @@ func TestRaftStorage(t *testing.T) {
 				},
 				engine: eng,
 			}
-			rng, err := NewRange(&proto.RangeDescriptor{
+			rng, err := NewReplica(&proto.RangeDescriptor{
 				RangeID:  1,
 				StartKey: proto.KeyMin,
 				EndKey:   proto.KeyMax,
@@ -2744,7 +2744,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		Store: tc.store,
 		mockProposeRaftCommand: proposeRaftCommandFn,
 	}
-	rng, err := NewRange(testRangeDescriptor(), testRangeManager)
+	rng, err := NewReplica(testRangeDescriptor(), testRangeManager)
 	if err != nil {
 		t.Fatal(err)
 	}

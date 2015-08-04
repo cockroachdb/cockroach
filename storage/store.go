@@ -488,7 +488,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
 			return false, err
 		}
-		rng, err := NewRange(&desc, s)
+		rng, err := NewReplica(&desc, s)
 		if err != nil {
 			return false, err
 		}
@@ -1554,7 +1554,7 @@ func (s *Store) GroupStorage(groupID proto.RangeID) multiraft.WriteableGroupStor
 	r, ok := s.ranges[groupID]
 	if !ok {
 		var err error
-		r, err = NewRange(&proto.RangeDescriptor{
+		r, err = NewReplica(&proto.RangeDescriptor{
 			RangeID: groupID,
 			// TODO(bdarnell): other fields are unknown; need to populate them from
 			// snapshot.
