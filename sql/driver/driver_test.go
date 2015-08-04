@@ -421,23 +421,23 @@ func TestInsertSelectDelete(t *testing.T) {
 		{
 			"t1",
 			`CREATE TABLE %s.kv (
-	k CHAR PRIMARY KEY,
-	v CHAR,
-	CONSTRAINT a UNIQUE (v)
-)`,
+			k CHAR PRIMARY KEY,
+			v CHAR,
+			CONSTRAINT a UNIQUE (v)
+		)`,
 		},
 		{
 			"t2",
 			`CREATE TABLE %s.kv (
 	k CHAR,
 	v CHAR,
-	CONSTRAINT a UNIQUE (v),
-	PRIMARY KEY (k, v)
+	PRIMARY KEY (k, v),
+	CONSTRAINT a UNIQUE (v)
 )`,
 		},
 	}
 
-	for i, testcase := range testcases {
+	for _, testcase := range testcases {
 		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
 			t.Fatal(err)
 		}
@@ -511,17 +511,7 @@ func TestInsertSelectDelete(t *testing.T) {
 			nilStr := "nil"
 			rowWithNil := []*string{&nilStr, nil}
 
-			// Because of the primary keys used here, the natural ordering of
-			// the results varies in the two schemas.
-			switch i {
-			case 0:
-				expectedResultSlice = append(expectedResultSlice, rowWithNil)
-			case 1:
-				expectedResultSlice = append(expectedResultSlice[:1], append(resultSlice{rowWithNil}, expectedResultSlice[1:]...)...)
-			default:
-				t.Fatalf("unexpected value %d", i)
-			}
-
+			expectedResultSlice = append(expectedResultSlice, rowWithNil)
 			if err := verifyResults(expectedResultSlice, results); err != nil {
 				t.Fatal(err)
 			}
