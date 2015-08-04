@@ -84,7 +84,14 @@ func TestValues(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		plan, err := p.Values(tc.stmt)
+		plan, err := func() (_ planNode, err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("%v", r)
+				}
+			}()
+			return p.Values(tc.stmt)
+		}()
 		if err == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}
