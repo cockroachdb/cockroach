@@ -36,7 +36,7 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 	mtc.unreplicateRange(raftID, 0, 1)
 
@@ -63,7 +63,7 @@ func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	// Disable the range gc queue to prevent direct removal of range.
 	mtc.stores[1].DisableRangeGCQueue(true)
 
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	mtc.replicateRange(raftID, 0, 1, 2)
 	mtc.unreplicateRange(raftID, 0, 1)
 

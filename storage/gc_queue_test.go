@@ -48,7 +48,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Put an empty GC metadata; all that's read from it is last scan nanos.
-	key := keys.RangeGCMetadataKey(tc.rng.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(tc.rng.Desc().RangeID)
 	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &proto.GCMetadata{}); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	for i, datum := range data {
 		if datum.del {
-			dArgs := deleteArgs(datum.key, tc.rng.Desc().RaftID, tc.store.StoreID())
+			dArgs := deleteArgs(datum.key, tc.rng.Desc().RangeID, tc.store.StoreID())
 			dArgs.Timestamp = datum.ts
 			if datum.txn {
 				dArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
@@ -190,7 +190,7 @@ func TestGCQueueProcess(t *testing.T) {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
-			pArgs := putArgs(datum.key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
+			pArgs := putArgs(datum.key, []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
 			pArgs.Timestamp = datum.ts
 			if datum.txn {
 				pArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)

@@ -134,7 +134,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		s[i].Ident.StoreID = rng.storeID
 
 		desc := &proto.RangeDescriptor{
-			RaftID:   proto.RaftID(i),
+			RangeID:  proto.RangeID(i),
 			StartKey: rng.start,
 			EndKey:   rng.end,
 			Replicas: []proto.Replica{{StoreID: rng.storeID}},

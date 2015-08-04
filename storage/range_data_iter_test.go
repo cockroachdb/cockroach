@@ -53,21 +53,21 @@ func prevKey(k proto.Key) proto.Key {
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
 // data.
-func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
+func createRangeData(r *Replica, t *testing.T) []proto.EncodedKey {
 	ts0 := proto.ZeroTimestamp
 	ts := proto.Timestamp{WallTime: 1}
 	keyTSs := []struct {
 		key proto.Key
 		ts  proto.Timestamp
 	}{
-		{keys.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{keys.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
-		{keys.RaftHardStateKey(r.Desc().RaftID), ts0},
-		{keys.RaftLogKey(r.Desc().RaftID, 2), ts0},
-		{keys.RaftLogKey(r.Desc().RaftID, 1), ts0},
-		{keys.RangeGCMetadataKey(r.Desc().RaftID), ts0},
-		{keys.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
-		{keys.RangeStatsKey(r.Desc().RaftID), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
+		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
+		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
+		{keys.RangeGCMetadataKey(r.Desc().RangeID), ts0},
+		{keys.RangeLastVerificationTimestampKey(r.Desc().RangeID), ts0},
+		{keys.RangeStatsKey(r.Desc().RangeID), ts0},
 		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
 		{keys.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
 		{keys.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
@@ -199,7 +199,7 @@ func disabledTestRangeDataIterator(t *testing.T) {
 
 	// Verify the keys in pre & post ranges.
 	for _, test := range []struct {
-		r    *Range
+		r    *Replica
 		keys []proto.EncodedKey
 	}{
 		{preRng, preKeys},

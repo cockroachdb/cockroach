@@ -59,7 +59,7 @@ func (rq *replicateQueue) needsLeaderLease() bool {
 	return true
 }
 
-func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Range) (
+func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Replica) (
 	shouldQ bool, priority float64) {
 	// If the range spans multiple zones, ignore it until the split queue has processed it.
 	if len(computeSplitKeys(rq.gossip, rng)) > 0 {
@@ -76,7 +76,7 @@ func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Range) (
 	return rq.needsReplication(zone, rng)
 }
 
-func (rq *replicateQueue) needsReplication(zone proto.ZoneConfig, rng *Range) (bool, float64) {
+func (rq *replicateQueue) needsReplication(zone proto.ZoneConfig, rng *Replica) (bool, float64) {
 	// TODO(bdarnell): handle non-empty ReplicaAttrs.
 	need := len(zone.ReplicaAttrs)
 	have := len(rng.Desc().Replicas)
@@ -90,7 +90,7 @@ func (rq *replicateQueue) needsReplication(zone proto.ZoneConfig, rng *Range) (b
 	return false, 0
 }
 
-func (rq *replicateQueue) process(now proto.Timestamp, rng *Range) error {
+func (rq *replicateQueue) process(now proto.Timestamp, rng *Replica) error {
 	zone, err := lookupZoneConfig(rq.gossip, rng)
 	if err != nil {
 		return err

@@ -139,7 +139,7 @@ func (db *testSender) sendOne(call proto.Call) {
 	// Lookup range and direct request.
 	header := call.Args.Header()
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
-		header.RaftID = rng.Desc().RaftID
+		header.RangeID = rng.Desc().RangeID
 		replica := rng.GetReplica()
 		if replica == nil {
 			safeSetGoError(call.Reply, util.Errorf("own replica missing in range"))
@@ -277,9 +277,9 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, raftID proto.RaftID, start, end proto.Key) *Range {
+func createRange(s *Store, raftID proto.RangeID, start, end proto.Key) *Replica {
 	desc := &proto.RangeDescriptor{
-		RaftID:   raftID,
+		RangeID:  raftID,
 		StartKey: start,
 		EndKey:   end,
 	}
@@ -336,7 +336,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 
 	testCases := []struct {
 		start, end proto.Key
-		expRng     *Range
+		expRng     *Replica
 	}{
 		{proto.Key("a"), proto.Key("a\x00"), rng2},
 		{proto.Key("a"), proto.Key("b"), rng2},
@@ -375,7 +375,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
-		rng := createRange(store, proto.RaftID(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
+		rng := createRange(store, proto.RangeID(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddRangeTest(rng); err != nil {
 			t.Fatal(err)
 		}
@@ -388,8 +388,8 @@ func TestStoreRangeSet(t *testing.T) {
 			t.Errorf("expected 10 remaining; got %d", ec)
 		}
 		i := 1
-		ranges.Visit(func(rng *Range) bool {
-			if rng.Desc().RaftID != proto.RaftID(i) {
+		ranges.Visit(func(rng *Replica) bool {
+			if rng.Desc().RangeID != proto.RangeID(i) {
 				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
@@ -409,16 +409,16 @@ func TestStoreRangeSet(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		i := 1
-		ranges.Visit(func(rng *Range) bool {
+		ranges.Visit(func(rng *Replica) bool {
 			if i == 1 {
-				if rng.Desc().RaftID != proto.RaftID(i) {
+				if rng.Desc().RangeID != proto.RangeID(i) {
 					t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 				}
 				close(visited)
 				<-updated
 			} else {
 				// The second range will be removed and skipped.
-				if rng.Desc().RaftID != proto.RaftID(i+1) {
+				if rng.Desc().RangeID != proto.RangeID(i+1) {
 					t.Errorf("expected range with Raft ID %d; got %v", i+1, rng)
 				}
 			}
@@ -449,8 +449,8 @@ func TestStoreRangeSet(t *testing.T) {
 
 	// Now, remove the next range in the iteration and verify we skip the removed range.
 	rng = store.LookupRange(proto.Key("a01"), nil)
-	if rng.Desc().RaftID != 2 {
-		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc().RaftID)
+	if rng.Desc().RangeID != 2 {
+		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc().RangeID)
 	}
 	if err := store.RemoveRange(rng); err != nil {
 		t.Error(err)
@@ -626,7 +626,7 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 // client_split_test.go and use AdminSplit instead of this function.
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
-func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range {
+func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Replica {
 	rng := store.LookupRange(key, nil)
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
@@ -663,7 +663,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 
 	// Range 2 is from "b" to KeyMax, so reading "a" from range 2 should
 	// fail because it's before the start of the range.
-	args = getArgs([]byte("a"), rng2.Desc().RaftID, store.StoreID())
+	args = getArgs([]byte("a"), rng2.Desc().RangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &args); err == nil {
 		t.Error("expected key to be out of range")
 	}
@@ -684,8 +684,8 @@ func TestStoreRaftIDAllocation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if desc.RaftID != proto.RaftID(2+i) {
-			t.Errorf("expected Raft id %d; got %d", 2+i, desc.RaftID)
+		if desc.RangeID != proto.RangeID(2+i) {
+			t.Errorf("expected Raft id %d; got %d", 2+i, desc.RangeID)
 		}
 	}
 }
@@ -741,7 +741,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	defer stopper.Stop()
 
 	testData := []struct {
-		rng         *Range
+		rng         *Replica
 		expMaxBytes int64
 	}{
 		{store.LookupRange(proto.KeyMin, nil), 64 << 20},
@@ -1398,18 +1398,18 @@ func TestRaftNodeID(t *testing.T) {
 // fakeRangeQueue implements the rangeQueue interface and
 // records which range is passed to MaybeRemove.
 type fakeRangeQueue struct {
-	maybeRemovedRngs chan *Range
+	maybeRemovedRngs chan *Replica
 }
 
 func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAdd(rng *Range, t proto.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAdd(rng *Replica, t proto.Timestamp) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeRemove(rng *Range) {
+func (fq *fakeRangeQueue) MaybeRemove(rng *Replica) {
 	fq.maybeRemovedRngs <- rng
 }
 
@@ -1422,7 +1422,7 @@ func TestMaybeRemove(t *testing.T) {
 	// Add a queue to the scanner before starting the store and running the scanner.
 	// This is necessary to avoid data race.
 	fq := &fakeRangeQueue{
-		maybeRemovedRngs: make(chan *Range),
+		maybeRemovedRngs: make(chan *Replica),
 	}
 	store.scanner.AddQueues(fq)
 

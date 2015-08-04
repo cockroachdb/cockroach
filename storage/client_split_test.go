@@ -41,18 +41,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
-func adminSplitArgs(key, splitKey []byte, raftID proto.RaftID, storeID proto.StoreID) proto.AdminSplitRequest {
+func adminSplitArgs(key, splitKey []byte, raftID proto.RangeID, storeID proto.StoreID) proto.AdminSplitRequest {
 	return proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RaftID:  raftID,
+			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		SplitKey: splitKey,
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, raftID proto.RaftID, expMS engine.MVCCStats) error {
+func verifyRangeStats(eng engine.Engine, raftID proto.RangeID, expMS engine.MVCCStats) error {
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		return err
@@ -181,7 +181,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	raftID := proto.RaftID(1)
+	raftID := proto.RangeID(1)
 	splitKey := proto.Key("m")
 	content := proto.Key("asdvb")
 
@@ -245,7 +245,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatalf("actual value %q did not match expected value %q", gReply.Value.Bytes, content)
 	}
-	gArgs = getArgs([]byte("x"), newRng.Desc().RaftID, store.StoreID())
+	gArgs = getArgs([]byte("x"), newRng.Desc().RangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
@@ -262,7 +262,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out the same increment copied from above (same ClientCmdID), but
 	// now to the newly created range (which should hold that key).
-	rIncArgs.RequestHeader.RaftID = newRng.Desc().RaftID
+	rIncArgs.RequestHeader.RangeID = newRng.Desc().RangeID
 	if reply, err := store.ExecuteCmd(context.Background(), &rIncArgs); err != nil {
 		t.Fatal(err)
 	} else if rIncReply := reply.(*proto.IncrementResponse); rIncReply.NewValue != 10 {
@@ -276,7 +276,7 @@ func TestStoreRangeSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	if err := engine.MVCCGetRangeStats(store.Engine(), newRng.Desc().RaftID, &right); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), newRng.Desc().RangeID, &right); err != nil {
 		t.Fatal(err)
 	}
 	rKeyBytes, rValBytes := right.KeyBytes, right.ValBytes
@@ -314,7 +314,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	rng := store.LookupRange(proto.Key("\x01"), nil)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
-	if err := verifyRangeStats(store.Engine(), rng.Desc().RaftID, engine.MVCCStats{}); err != nil {
+	if err := verifyRangeStats(store.Engine(), rng.Desc().RangeID, engine.MVCCStats{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -323,7 +323,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		key := randutil.RandBytes(src, int(src.Int31n(1<<7)))
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val, rng.Desc().RaftID, store.StoreID())
+		pArgs := putArgs(key, val, rng.Desc().RangeID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 			t.Fatal(err)
@@ -331,22 +331,22 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 	// Get the range stats now that we have data.
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	args = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc().RaftID, store.StoreID())
+	args = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc().RangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &args); err != nil {
 		t.Fatal(err)
 	}
 
 	var msLeft, msRight engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &msLeft); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupRange(proto.Key("Z"), nil)
-	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc().RaftID, &msRight); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc().RangeID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -369,7 +369,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written.
-func fillRange(store *storage.Store, raftID proto.RaftID, prefix proto.Key, bytes int64, t *testing.T) {
+func fillRange(store *storage.Store, raftID proto.RangeID, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
 		var ms engine.MVCCStats
@@ -402,7 +402,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 	maxBytes := int64(1 << 16)
 	rng := store.LookupRange(proto.KeyMin, nil)
-	fillRange(store, rng.Desc().RaftID, proto.Key("test"), maxBytes, t)
+	fillRange(store, rng.Desc().RangeID, proto.Key("test"), maxBytes, t)
 
 	// Rewrite zone config with range max bytes set to 64K.
 	// This will cause the split queue to split the range in the background.
@@ -467,7 +467,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Verify that the range is split and the new range has the correct max bytes.
 	util.SucceedsWithin(t, time.Second, func() error {
 		newRng := store.LookupRange(proto.Key("db1"), nil)
-		if newRng.Desc().RaftID == origRng.Desc().RaftID {
+		if newRng.Desc().RangeID == origRng.Desc().RangeID {
 			return util.Error("expected new range created by split")
 		}
 		if newRng.GetMaxBytes() != maxBytes {

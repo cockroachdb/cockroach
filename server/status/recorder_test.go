@@ -91,12 +91,12 @@ func TestNodeStatusRecorder(t *testing.T) {
 		},
 	}
 	desc1 := &proto.RangeDescriptor{
-		RaftID:   1,
+		RangeID:  1,
 		StartKey: proto.Key("a"),
 		EndKey:   proto.Key("b"),
 	}
 	desc2 := &proto.RangeDescriptor{
-		RaftID:   2,
+		RangeID:  2,
 		StartKey: proto.Key("b"),
 		EndKey:   proto.Key("c"),
 	}

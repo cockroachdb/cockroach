@@ -128,7 +128,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       -1);
   RangeNotFoundError_descriptor_ = file->message_type(2);
   static const int RangeNotFoundError_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeNotFoundError, raft_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeNotFoundError, range_id_),
   };
   RangeNotFoundError_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -463,67 +463,67 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "o.proto\"e\n\016NotLeaderError\022)\n\007replica\030\001 \001"
     "(\0132\030.cockroach.proto.Replica\022(\n\006leader\030\002"
     " \001(\0132\030.cockroach.proto.Replica\"\026\n\024NodeUn"
-    "availableError\"\?\n\022RangeNotFoundError\022)\n\007"
-    "raft_id\030\001 \001(\003B\030\310\336\037\000\342\336\037\006RaftID\372\336\037\006RaftID\""
-    "\216\001\n\025RangeKeyMismatchError\022\"\n\021request_sta"
-    "rt_key\030\001 \001(\014B\007\372\336\037\003Key\022 \n\017request_end_key"
-    "\030\002 \001(\014B\007\372\336\037\003Key\022/\n\005range\030\003 \001(\0132 .cockroa"
-    "ch.proto.RangeDescriptor\"\227\001\n\"ReadWithinU"
-    "ncertaintyIntervalError\0223\n\ttimestamp\030\001 \001"
-    "(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\022<\n\022"
-    "existing_timestamp\030\002 \001(\0132\032.cockroach.pro"
-    "to.TimestampB\004\310\336\037\000\"J\n\027TransactionAborted"
+    "availableError\"B\n\022RangeNotFoundError\022,\n\010"
+    "range_id\030\001 \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007Range"
+    "ID\"\216\001\n\025RangeKeyMismatchError\022\"\n\021request_"
+    "start_key\030\001 \001(\014B\007\372\336\037\003Key\022 \n\017request_end_"
+    "key\030\002 \001(\014B\007\372\336\037\003Key\022/\n\005range\030\003 \001(\0132 .cock"
+    "roach.proto.RangeDescriptor\"\227\001\n\"ReadWith"
+    "inUncertaintyIntervalError\0223\n\ttimestamp\030"
+    "\001 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\022"
+    "<\n\022existing_timestamp\030\002 \001(\0132\032.cockroach."
+    "proto.TimestampB\004\310\336\037\000\"J\n\027TransactionAbor"
+    "tedError\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto."
+    "TransactionB\004\310\336\037\000\"y\n\024TransactionPushErro"
+    "r\022)\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transac"
+    "tion\0226\n\npushee_txn\030\002 \001(\0132\034.cockroach.pro"
+    "to.TransactionB\004\310\336\037\000\"H\n\025TransactionRetry"
     "Error\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.Tra"
-    "nsactionB\004\310\336\037\000\"y\n\024TransactionPushError\022)"
-    "\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transactio"
-    "n\0226\n\npushee_txn\030\002 \001(\0132\034.cockroach.proto."
-    "TransactionB\004\310\336\037\000\"H\n\025TransactionRetryErr"
-    "or\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transa"
-    "ctionB\004\310\336\037\000\"\\\n\026TransactionStatusError\022/\n"
-    "\003txn\030\001 \001(\0132\034.cockroach.proto.Transaction"
-    "B\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"Z\n\020WriteIntent"
-    "Error\022.\n\007intents\030\001 \003(\0132\027.cockroach.proto"
-    ".IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000\"\205\001"
-    "\n\020WriteTooOldError\0223\n\ttimestamp\030\001 \001(\0132\032."
-    "cockroach.proto.TimestampB\004\310\336\037\000\022<\n\022exist"
-    "ing_timestamp\030\002 \001(\0132\032.cockroach.proto.Ti"
-    "mestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError\"D\n\024C"
-    "onditionFailedError\022,\n\014actual_value\030\001 \001("
-    "\0132\026.cockroach.proto.Value\"u\n\022LeaseReject"
-    "edError\022/\n\tRequested\030\001 \001(\0132\026.cockroach.p"
-    "roto.LeaseB\004\310\336\037\000\022.\n\010Existing\030\002 \001(\0132\026.coc"
-    "kroach.proto.LeaseB\004\310\336\037\000\"\316\007\n\013ErrorDetail"
-    "\0225\n\nnot_leader\030\001 \001(\0132\037.cockroach.proto.N"
-    "otLeaderErrorH\000\022>\n\017range_not_found\030\002 \001(\013"
-    "2#.cockroach.proto.RangeNotFoundErrorH\000\022"
-    "D\n\022range_key_mismatch\030\003 \001(\0132&.cockroach."
-    "proto.RangeKeyMismatchErrorH\000\022_\n read_wi"
-    "thin_uncertainty_interval\030\004 \001(\01323.cockro"
-    "ach.proto.ReadWithinUncertaintyIntervalE"
-    "rrorH\000\022G\n\023transaction_aborted\030\005 \001(\0132(.co"
-    "ckroach.proto.TransactionAbortedErrorH\000\022"
-    "A\n\020transaction_push\030\006 \001(\0132%.cockroach.pr"
-    "oto.TransactionPushErrorH\000\022C\n\021transactio"
-    "n_retry\030\007 \001(\0132&.cockroach.proto.Transact"
-    "ionRetryErrorH\000\022E\n\022transaction_status\030\010 "
-    "\001(\0132\'.cockroach.proto.TransactionStatusE"
-    "rrorH\000\0229\n\014write_intent\030\t \001(\0132!.cockroach"
-    ".proto.WriteIntentErrorH\000\022:\n\rwrite_too_o"
-    "ld\030\n \001(\0132!.cockroach.proto.WriteTooOldEr"
-    "rorH\000\022>\n\017op_requires_txn\030\013 \001(\0132#.cockroa"
-    "ch.proto.OpRequiresTxnErrorH\000\022A\n\020conditi"
-    "on_failed\030\014 \001(\0132%.cockroach.proto.Condit"
-    "ionFailedErrorH\000\022=\n\016lease_rejected\030\r \001(\013"
-    "2#.cockroach.proto.LeaseRejectedErrorH\000\022"
-    "A\n\020node_unavailable\030\016 \001(\0132%.cockroach.pr"
-    "oto.NodeUnavailableErrorH\000:\004\310\240\037\001B\007\n\005valu"
-    "e\"\255\001\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tre"
-    "tryable\030\002 \001(\010B\004\310\336\037\000\022F\n\023transaction_resta"
-    "rt\030\004 \001(\0162#.cockroach.proto.TransactionRe"
-    "startB\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034.cockroach."
-    "proto.ErrorDetail*;\n\022TransactionRestart\022"
-    "\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\027"
-    "Z\005proto\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001", 2663);
+    "nsactionB\004\310\336\037\000\"\\\n\026TransactionStatusError"
+    "\022/\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transact"
+    "ionB\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"Z\n\020WriteInt"
+    "entError\022.\n\007intents\030\001 \003(\0132\027.cockroach.pr"
+    "oto.IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000"
+    "\"\205\001\n\020WriteTooOldError\0223\n\ttimestamp\030\001 \001(\013"
+    "2\032.cockroach.proto.TimestampB\004\310\336\037\000\022<\n\022ex"
+    "isting_timestamp\030\002 \001(\0132\032.cockroach.proto"
+    ".TimestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError\"D"
+    "\n\024ConditionFailedError\022,\n\014actual_value\030\001"
+    " \001(\0132\026.cockroach.proto.Value\"u\n\022LeaseRej"
+    "ectedError\022/\n\tRequested\030\001 \001(\0132\026.cockroac"
+    "h.proto.LeaseB\004\310\336\037\000\022.\n\010Existing\030\002 \001(\0132\026."
+    "cockroach.proto.LeaseB\004\310\336\037\000\"\316\007\n\013ErrorDet"
+    "ail\0225\n\nnot_leader\030\001 \001(\0132\037.cockroach.prot"
+    "o.NotLeaderErrorH\000\022>\n\017range_not_found\030\002 "
+    "\001(\0132#.cockroach.proto.RangeNotFoundError"
+    "H\000\022D\n\022range_key_mismatch\030\003 \001(\0132&.cockroa"
+    "ch.proto.RangeKeyMismatchErrorH\000\022_\n read"
+    "_within_uncertainty_interval\030\004 \001(\01323.coc"
+    "kroach.proto.ReadWithinUncertaintyInterv"
+    "alErrorH\000\022G\n\023transaction_aborted\030\005 \001(\0132("
+    ".cockroach.proto.TransactionAbortedError"
+    "H\000\022A\n\020transaction_push\030\006 \001(\0132%.cockroach"
+    ".proto.TransactionPushErrorH\000\022C\n\021transac"
+    "tion_retry\030\007 \001(\0132&.cockroach.proto.Trans"
+    "actionRetryErrorH\000\022E\n\022transaction_status"
+    "\030\010 \001(\0132\'.cockroach.proto.TransactionStat"
+    "usErrorH\000\0229\n\014write_intent\030\t \001(\0132!.cockro"
+    "ach.proto.WriteIntentErrorH\000\022:\n\rwrite_to"
+    "o_old\030\n \001(\0132!.cockroach.proto.WriteTooOl"
+    "dErrorH\000\022>\n\017op_requires_txn\030\013 \001(\0132#.cock"
+    "roach.proto.OpRequiresTxnErrorH\000\022A\n\020cond"
+    "ition_failed\030\014 \001(\0132%.cockroach.proto.Con"
+    "ditionFailedErrorH\000\022=\n\016lease_rejected\030\r "
+    "\001(\0132#.cockroach.proto.LeaseRejectedError"
+    "H\000\022A\n\020node_unavailable\030\016 \001(\0132%.cockroach"
+    ".proto.NodeUnavailableErrorH\000:\004\310\240\037\001B\007\n\005v"
+    "alue\"\255\001\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n"
+    "\tretryable\030\002 \001(\010B\004\310\336\037\000\022F\n\023transaction_re"
+    "start\030\004 \001(\0162#.cockroach.proto.Transactio"
+    "nRestartB\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034.cockroa"
+    "ch.proto.ErrorDetail*;\n\022TransactionResta"
+    "rt\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020"
+    "\002B\027Z\005proto\330\341\036\000\340\342\036\001\310\342\036\001\320\342\036\001", 2666);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -1160,7 +1160,7 @@ void NodeUnavailableError::InternalSwap(NodeUnavailableError* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int RangeNotFoundError::kRaftIdFieldNumber;
+const int RangeNotFoundError::kRangeIdFieldNumber;
 #endif  // !_MSC_VER
 
 RangeNotFoundError::RangeNotFoundError()
@@ -1182,7 +1182,7 @@ RangeNotFoundError::RangeNotFoundError(const RangeNotFoundError& from)
 
 void RangeNotFoundError::SharedCtor() {
   _cached_size_ = 0;
-  raft_id_ = GOOGLE_LONGLONG(0);
+  range_id_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -1222,7 +1222,7 @@ RangeNotFoundError* RangeNotFoundError::New(::google::protobuf::Arena* arena) co
 }
 
 void RangeNotFoundError::Clear() {
-  raft_id_ = GOOGLE_LONGLONG(0);
+  range_id_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -1239,13 +1239,13 @@ bool RangeNotFoundError::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 raft_id = 1;
+      // optional int64 range_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &raft_id_)));
-          set_has_raft_id();
+                 input, &range_id_)));
+          set_has_range_id();
         } else {
           goto handle_unusual;
         }
@@ -1278,9 +1278,9 @@ failure:
 void RangeNotFoundError::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.RangeNotFoundError)
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->raft_id(), output);
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->range_id(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1293,9 +1293,9 @@ void RangeNotFoundError::SerializeWithCachedSizes(
 ::google::protobuf::uint8* RangeNotFoundError::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RangeNotFoundError)
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->raft_id(), target);
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->range_id(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1309,11 +1309,11 @@ void RangeNotFoundError::SerializeWithCachedSizes(
 int RangeNotFoundError::ByteSize() const {
   int total_size = 0;
 
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int64Size(
-        this->raft_id());
+        this->range_id());
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1342,8 +1342,8 @@ void RangeNotFoundError::MergeFrom(const ::google::protobuf::Message& from) {
 void RangeNotFoundError::MergeFrom(const RangeNotFoundError& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_raft_id()) {
-      set_raft_id(from.raft_id());
+    if (from.has_range_id()) {
+      set_range_id(from.range_id());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -1373,7 +1373,7 @@ void RangeNotFoundError::Swap(RangeNotFoundError* other) {
   InternalSwap(other);
 }
 void RangeNotFoundError::InternalSwap(RangeNotFoundError* other) {
-  std::swap(raft_id_, other->raft_id_);
+  std::swap(range_id_, other->range_id_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -1390,28 +1390,28 @@ void RangeNotFoundError::InternalSwap(RangeNotFoundError* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // RangeNotFoundError
 
-// optional int64 raft_id = 1;
-bool RangeNotFoundError::has_raft_id() const {
+// optional int64 range_id = 1;
+bool RangeNotFoundError::has_range_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void RangeNotFoundError::set_has_raft_id() {
+void RangeNotFoundError::set_has_range_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-void RangeNotFoundError::clear_has_raft_id() {
+void RangeNotFoundError::clear_has_range_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void RangeNotFoundError::clear_raft_id() {
-  raft_id_ = GOOGLE_LONGLONG(0);
-  clear_has_raft_id();
+void RangeNotFoundError::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
 }
- ::google::protobuf::int64 RangeNotFoundError::raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RangeNotFoundError.raft_id)
-  return raft_id_;
+ ::google::protobuf::int64 RangeNotFoundError::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeNotFoundError.range_id)
+  return range_id_;
 }
- void RangeNotFoundError::set_raft_id(::google::protobuf::int64 value) {
-  set_has_raft_id();
-  raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RangeNotFoundError.raft_id)
+ void RangeNotFoundError::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeNotFoundError.range_id)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -59,7 +59,7 @@ func (vq *verifyQueue) needsLeaderLease() bool {
 // verification scanning, and if so, at what priority. Returns true
 // for shouldQ in the event that it's been longer since the last scan
 // than the verification interval.
-func (vq *verifyQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
+func (vq *verifyQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
 	// Get last verification timestamp.
 	lastVerify, err := rng.GetLastVerificationTimestamp()
 	if err != nil {
@@ -77,7 +77,7 @@ func (vq *verifyQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ boo
 // process iterates through all keys and values in a range. The very
 // act of scanning keys verifies on-disk checksums, as each block
 // checksum is checked on load.
-func (vq *verifyQueue) process(now proto.Timestamp, rng *Range) error {
+func (vq *verifyQueue) process(now proto.Timestamp, rng *Replica) error {
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng.Desc(), snap)
 	defer iter.Close()

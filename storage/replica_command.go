@@ -39,7 +39,7 @@ import (
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command. It returns the response, an error,
 // and a slice of intents that were skipped during execution.
-func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request) (proto.Response, []proto.Intent, error) {
+func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request) (proto.Response, []proto.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
@@ -164,7 +164,7 @@ func (r *Range) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto
 }
 
 // Get returns the value for a specified key.
-func (r *Range) Get(batch engine.Engine, args proto.GetRequest) (proto.GetResponse, []proto.Intent, error) {
+func (r *Replica) Get(batch engine.Engine, args proto.GetRequest) (proto.GetResponse, []proto.Intent, error) {
 	var reply proto.GetResponse
 
 	val, intents, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
@@ -173,7 +173,7 @@ func (r *Range) Get(batch engine.Engine, args proto.GetRequest) (proto.GetRespon
 }
 
 // Put sets the value for a specified key.
-func (r *Range) Put(batch engine.Engine, ms *engine.MVCCStats, args proto.PutRequest) (proto.PutResponse, error) {
+func (r *Replica) Put(batch engine.Engine, ms *engine.MVCCStats, args proto.PutRequest) (proto.PutResponse, error) {
 	var reply proto.PutResponse
 
 	return reply, engine.MVCCPut(batch, ms, args.Key, args.Timestamp, args.Value, args.Txn)
@@ -182,7 +182,7 @@ func (r *Range) Put(batch engine.Engine, ms *engine.MVCCStats, args proto.PutReq
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (r *Range) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args proto.ConditionalPutRequest) (proto.ConditionalPutResponse, error) {
+func (r *Replica) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args proto.ConditionalPutRequest) (proto.ConditionalPutResponse, error) {
 	var reply proto.ConditionalPutResponse
 
 	return reply, engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
@@ -191,7 +191,7 @@ func (r *Range) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args p
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
-func (r *Range) Increment(batch engine.Engine, ms *engine.MVCCStats, args proto.IncrementRequest) (proto.IncrementResponse, error) {
+func (r *Replica) Increment(batch engine.Engine, ms *engine.MVCCStats, args proto.IncrementRequest) (proto.IncrementResponse, error) {
 	var reply proto.IncrementResponse
 
 	newVal, err := engine.MVCCIncrement(batch, ms, args.Key, args.Timestamp, args.Txn, args.Increment)
@@ -200,7 +200,7 @@ func (r *Range) Increment(batch engine.Engine, ms *engine.MVCCStats, args proto.
 }
 
 // Delete deletes the key and value specified by key.
-func (r *Range) Delete(batch engine.Engine, ms *engine.MVCCStats, args proto.DeleteRequest) (proto.DeleteResponse, error) {
+func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, args proto.DeleteRequest) (proto.DeleteResponse, error) {
 	var reply proto.DeleteResponse
 
 	return reply, engine.MVCCDelete(batch, ms, args.Key, args.Timestamp, args.Txn)
@@ -208,7 +208,7 @@ func (r *Range) Delete(batch engine.Engine, ms *engine.MVCCStats, args proto.Del
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
-func (r *Range) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args proto.DeleteRangeRequest) (proto.DeleteRangeResponse, error) {
+func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args proto.DeleteRangeRequest) (proto.DeleteRangeResponse, error) {
 	var reply proto.DeleteRangeResponse
 
 	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
@@ -219,7 +219,7 @@ func (r *Range) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args prot
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
-func (r *Range) Scan(batch engine.Engine, args proto.ScanRequest) (proto.ScanResponse, []proto.Intent, error) {
+func (r *Replica) Scan(batch engine.Engine, args proto.ScanRequest) (proto.ScanResponse, []proto.Intent, error) {
 	var reply proto.ScanResponse
 
 	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
@@ -229,7 +229,7 @@ func (r *Range) Scan(batch engine.Engine, args proto.ScanRequest) (proto.ScanRes
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, error) {
+func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, error) {
 	var reply proto.EndTransactionResponse
 
 	if args.Txn == nil {
@@ -377,7 +377,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args p
 // RangeDescriptor. This is intended to serve as a sort of caching pre-fetch,
 // so that the requesting nodes can aggressively cache RangeDescriptors which
 // are likely to be desired by their current workload.
-func (r *Range) InternalRangeLookup(batch engine.Engine, args proto.InternalRangeLookupRequest) (proto.InternalRangeLookupResponse, []proto.Intent, error) {
+func (r *Replica) InternalRangeLookup(batch engine.Engine, args proto.InternalRangeLookupRequest) (proto.InternalRangeLookupResponse, []proto.Intent, error) {
 	var reply proto.InternalRangeLookupResponse
 
 	if err := keys.ValidateRangeMetaKey(args.Key); err != nil {
@@ -466,7 +466,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args proto.InternalRang
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalHeartbeatTxnRequest) (proto.InternalHeartbeatTxnResponse, error) {
+func (r *Replica) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalHeartbeatTxnRequest) (proto.InternalHeartbeatTxnResponse, error) {
 	var reply proto.InternalHeartbeatTxnResponse
 
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
@@ -501,7 +501,7 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, 
 // specified in the arguments. MVCCGarbageCollect is invoked on each
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
-func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalGCRequest) (proto.InternalGCResponse, error) {
+func (r *Replica) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalGCRequest) (proto.InternalGCResponse, error) {
 	var reply proto.InternalGCResponse
 
 	// Garbage collect the specified keys by expiration timestamps.
@@ -510,7 +510,7 @@ func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args proto
 	}
 
 	// Store the GC metadata for this range.
-	key := keys.RangeGCMetadataKey(r.Desc().RaftID)
+	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
 	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta); err != nil {
 		return reply, err
 	}
@@ -551,7 +551,7 @@ func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args proto
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalPushTxnRequest) (proto.InternalPushTxnResponse, error) {
+func (r *Replica) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalPushTxnRequest) (proto.InternalPushTxnResponse, error) {
 	var reply proto.InternalPushTxnResponse
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
@@ -684,7 +684,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args 
 
 // InternalResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
-func (r *Range) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalResolveIntentRequest) (proto.InternalResolveIntentResponse, error) {
+func (r *Replica) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalResolveIntentRequest) (proto.InternalResolveIntentResponse, error) {
 	var reply proto.InternalResolveIntentResponse
 
 	if args.Txn == nil {
@@ -698,7 +698,7 @@ func (r *Range) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats,
 
 // InternalResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
-func (r *Range) InternalResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
+func (r *Replica) InternalResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	args proto.InternalResolveIntentRangeRequest) (proto.InternalResolveIntentRangeResponse, error) {
 	var reply proto.InternalResolveIntentRangeResponse
 
@@ -714,14 +714,14 @@ func (r *Range) InternalResolveIntentRange(batch engine.Engine, ms *engine.MVCCS
 // Cockroach for the efficient accumulation of certain values. Due to the
 // difficulty of making these operations transactional, merges are not currently
 // exposed directly to clients. Merged values are explicitly not MVCC data.
-func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalMergeRequest) (proto.InternalMergeResponse, error) {
+func (r *Replica) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalMergeRequest) (proto.InternalMergeResponse, error) {
 	var reply proto.InternalMergeResponse
 
 	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
 }
 
 // InternalTruncateLog discards a prefix of the raft log.
-func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalTruncateLogRequest) (proto.InternalTruncateLogResponse, error) {
+func (r *Replica) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalTruncateLogRequest) (proto.InternalTruncateLogResponse, error) {
 	var reply proto.InternalTruncateLogResponse
 
 	// args.Index is the first index to keep.
@@ -729,8 +729,8 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 	if err != nil {
 		return reply, err
 	}
-	start := keys.RaftLogKey(r.Desc().RaftID, 0)
-	end := keys.RaftLogKey(r.Desc().RaftID, args.Index)
+	start := keys.RaftLogKey(r.Desc().RangeID, 0)
+	end := keys.RaftLogKey(r.Desc().RangeID, args.Index)
 	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv proto.RawKeyValue) (bool, error) {
 		return false, batch.Clear(kv.Key)
 	}); err != nil {
@@ -740,7 +740,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &ts)
+	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &ts)
 }
 
 // InternalLeaderLease sets the leader lease for this range. The command fails
@@ -750,7 +750,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
-func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalLeaderLeaseRequest) (proto.InternalLeaderLeaseResponse, error) {
+func (r *Replica) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalLeaderLeaseRequest) (proto.InternalLeaderLeaseResponse, error) {
 	var reply proto.InternalLeaderLeaseResponse
 
 	r.Lock()
@@ -806,7 +806,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
@@ -818,7 +818,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 	// node.
 	if r.getLease().RaftNodeID == r.rm.RaftNodeID() && prevLease.RaftNodeID != r.getLease().RaftNodeID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", r.Desc().RaftID, args.Lease)
+		log.Infof("range %d: new leader lease %s", r.Desc().RangeID, args.Lease)
 	}
 
 	// Gossip configs in the event this range contains config info.
@@ -835,7 +835,7 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 // updates the range addressing metadata. The handover of responsibility for
 // the reassigned key range is carried out seamlessly through a split trigger
 // carried out as part of the commit of that transaction.
-func (r *Range) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResponse, error) {
+func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResponse, error) {
 	var reply proto.AdminSplitResponse
 
 	// Only allow a single split per range at a time.
@@ -850,7 +850,7 @@ func (r *Range) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitRespon
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
 		defer snap.Close()
-		foundSplitKey, err := engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey)
+		foundSplitKey, err := engine.MVCCFindSplitKey(snap, desc.RangeID, desc.StartKey, desc.EndKey)
 		if err != nil {
 			return reply, util.Errorf("unable to determine split key: %s", err)
 		}
@@ -940,7 +940,7 @@ func (r *Range) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitRespon
 // transaction. It copies the response cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
-func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
+func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
 	if !bytes.Equal(r.Desc().StartKey, split.UpdatedDesc.StartKey) ||
 		!bytes.Equal(r.Desc().EndKey, split.NewDesc.EndKey) {
 		return util.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
@@ -953,7 +953,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to fetch GC metadata: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RangeID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
 		return util.Errorf("unable to copy GC metadata: %s", err)
 	}
 
@@ -962,7 +962,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
@@ -979,7 +979,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	}
 
 	// Initialize the new range's response cache by copying the original's.
-	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
+	if err = r.respCache.CopyInto(batch, split.NewDesc.RangeID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
@@ -1027,7 +1027,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 // the reassigned key range is carried out seamlessly through a merge trigger
 // carried out as part of the commit of that transaction.
 // A merge requires that the two ranges are collocate on the same set of replicas.
-func (r *Range) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResponse, error) {
+func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResponse, error) {
 	var reply proto.AdminMergeResponse
 
 	// Only allow a single split/merge per range at a time.
@@ -1088,8 +1088,8 @@ func (r *Range) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeRespon
 				Commit:        true,
 				InternalCommitTrigger: &proto.InternalCommitTrigger{
 					MergeTrigger: &proto.MergeTrigger{
-						UpdatedDesc:    updatedDesc,
-						SubsumedRaftID: subsumedDesc.RaftID,
+						UpdatedDesc:     updatedDesc,
+						SubsumedRangeID: subsumedDesc.RangeID,
 					},
 				},
 				// TODO(tschottdorf): obsolete soon (#1873).
@@ -1102,7 +1102,7 @@ func (r *Range) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeRespon
 		})
 		return txn.Run(b)
 	}); err != nil {
-		return reply, util.Errorf("merge of range %d into %d failed: %s", subsumedDesc.RaftID, desc.RaftID, err)
+		return reply, util.Errorf("merge of range %d into %d failed: %s", subsumedDesc.RangeID, desc.RangeID, err)
 	}
 
 	return reply, nil
@@ -1110,7 +1110,7 @@ func (r *Range) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeRespon
 
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
-func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
+func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
 	if !bytes.Equal(r.Desc().StartKey, merge.UpdatedDesc.StartKey) {
 		return util.Errorf("range and updated range start keys do not match: %s != %s",
 			r.Desc().StartKey, merge.UpdatedDesc.StartKey)
@@ -1121,12 +1121,12 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 			r.Desc().EndKey, merge.UpdatedDesc.EndKey)
 	}
 
-	if merge.SubsumedRaftID <= 0 {
-		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRaftID)
+	if merge.SubsumedRangeID <= 0 {
+		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRangeID)
 	}
 
 	// Copy the subsumed range's response cache to the subsuming one.
-	if err := r.respCache.CopyFrom(batch, merge.SubsumedRaftID); err != nil {
+	if err := r.respCache.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
@@ -1151,7 +1151,7 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	r.Unlock()
 
 	batch.Defer(func() {
-		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID); err != nil {
+		if err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRangeID); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update store after merging range: %s", err)
 		}
@@ -1159,7 +1159,7 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	return nil
 }
 
-func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
+func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
 	copy := *r.Desc()
 	copy.Replicas = change.UpdatedReplicas
 	if err := r.setDesc(&copy); err != nil {
@@ -1179,7 +1179,7 @@ func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error
 // ChangeReplicas adds or removes a replica of a range. The change is performed
 // in a distributed transaction and takes effect when that transaction is committed.
 // When removing a replica, only the NodeID and StoreID fields of the Replica are used.
-func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
+func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
 	// Only allow a single change per range at a time.
 	r.metaLock.Lock()
 	defer r.metaLock.Unlock()
@@ -1203,7 +1203,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		// abort the replica add.
 		if nodeUsed {
 			return util.Errorf("adding replica %v which is already present in range %d",
-				replica, desc.RaftID)
+				replica, desc.RangeID)
 		}
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 	} else if changeType == proto.REMOVE_REPLICA {
@@ -1211,7 +1211,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		// abort the removal.
 		if found == -1 {
 			return util.Errorf("removing replica %v which is not present in range %d",
-				replica, desc.RaftID)
+				replica, desc.RangeID)
 		}
 		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -1255,7 +1255,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		return txn.Run(b)
 	})
 	if err != nil {
-		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
+		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
 	}
 	return nil
 }

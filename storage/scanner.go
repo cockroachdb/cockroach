@@ -40,9 +40,9 @@ type rangeQueue interface {
 	// MaybeAdd adds the range to the queue if the range meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	MaybeAdd(*Range, proto.Timestamp)
+	MaybeAdd(*Replica, proto.Timestamp)
 	// MaybeRemove removes the range from the queue if it is present.
-	MaybeRemove(*Range)
+	MaybeRemove(*Replica)
 }
 
 // A rangeSet provides access to a sequence of ranges to consider
@@ -51,7 +51,7 @@ type rangeQueue interface {
 type rangeSet interface {
 	// Visit calls the given function for every range in the set btree
 	// until the function returns false.
-	Visit(func(*Range) bool)
+	Visit(func(*Replica) bool)
 	// EstimatedCount returns the number of ranges estimated to remain
 	// in the iteration. This value does not need to be exact.
 	EstimatedCount() int
@@ -74,7 +74,7 @@ type rangeScanner struct {
 	maxIdleTime    time.Duration // Max idle time for scan loop
 	ranges         rangeSet      // Ranges to be scanned
 	queues         []rangeQueue  // Range queues managed by this scanner
-	removed        chan *Range   // Ranges to remove from queues
+	removed        chan *Replica // Ranges to remove from queues
 	// Count of times and total duration through the scanning loop but locked by the completedScan
 	// mutex.
 	completedScan *sync.Cond
@@ -90,7 +90,7 @@ func newRangeScanner(targetInterval, maxIdleTime time.Duration, ranges rangeSet)
 		targetInterval: targetInterval,
 		maxIdleTime:    maxIdleTime,
 		ranges:         ranges,
-		removed:        make(chan *Range, 10),
+		removed:        make(chan *Replica, 10),
 		completedScan:  sync.NewCond(&sync.Mutex{}),
 	}
 }
@@ -127,7 +127,7 @@ func (rs *rangeScanner) avgScan() time.Duration {
 // RemoveRange removes a range from any range queues the scanner may
 // have placed it in. This method should be called by the Store
 // when a range is removed (e.g. rebalanced or merged).
-func (rs *rangeScanner) RemoveRange(rng *Range) {
+func (rs *rangeScanner) RemoveRange(rng *Replica) {
 	rs.removed <- rng
 }
 
@@ -167,7 +167,7 @@ func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
 // to be stopped. The method also removes a range from queues when it
 // is signaled via the removed channel.
 func (rs *rangeScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *stop.Stopper,
-	rng *Range) bool {
+	rng *Replica) bool {
 	waitInterval := rs.paceInterval(start, time.Now())
 	nextTime := time.After(waitInterval)
 	if log.V(6) {
@@ -214,7 +214,7 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				shouldStop = rs.waitAndProcess(start, clock, stopper, nil)
 			} else {
 				shouldStop = true
-				rs.ranges.Visit(func(rng *Range) bool {
+				rs.ranges.Visit(func(rng *Replica) bool {
 					shouldStop = rs.waitAndProcess(start, clock, stopper, rng)
 					return !shouldStop
 				})

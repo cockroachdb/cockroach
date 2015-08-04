@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	noGroup = proto.RaftID(0)
+	noGroup = proto.RangeID(0)
 
 	reqBufferSize = 100
 )
@@ -292,7 +292,7 @@ func (s *state) fanoutHeartbeatResponse(fromID proto.RaftNodeID) {
 
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
 // group is determined by the InitialState method of the group's Storage object.
-func (m *MultiRaft) CreateGroup(groupID proto.RaftID) error {
+func (m *MultiRaft) CreateGroup(groupID proto.RangeID) error {
 	op := &createGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
@@ -304,7 +304,7 @@ func (m *MultiRaft) CreateGroup(groupID proto.RaftID) error {
 // RemoveGroup destroys the consensus group with the given ID.
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
-func (m *MultiRaft) RemoveGroup(groupID proto.RaftID) error {
+func (m *MultiRaft) RemoveGroup(groupID proto.RangeID) error {
 	op := &removeGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
@@ -317,7 +317,7 @@ func (m *MultiRaft) RemoveGroup(groupID proto.RaftID) error {
 // when the command has been successfully sent, not when it has been committed.
 // An error or nil will be written to the returned channel when the command has
 // been committed or aborted.
-func (m *MultiRaft) SubmitCommand(groupID proto.RaftID, commandID string, command []byte) <-chan error {
+func (m *MultiRaft) SubmitCommand(groupID proto.RangeID, commandID string, command []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	}
@@ -338,7 +338,7 @@ func (m *MultiRaft) SubmitCommand(groupID proto.RaftID, commandID string, comman
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
-func (m *MultiRaft) ChangeGroupMembership(groupID proto.RaftID, commandID string,
+func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID string,
 	changeType raftpb.ConfChangeType, nodeID proto.RaftNodeID, payload []byte) <-chan error {
 	if log.V(6) {
 		log.Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
@@ -366,12 +366,12 @@ func (m *MultiRaft) ChangeGroupMembership(groupID proto.RaftID, commandID string
 }
 
 // Status returns the current status of the given group.
-func (m *MultiRaft) Status(groupID proto.RaftID) *raft.Status {
+func (m *MultiRaft) Status(groupID proto.RangeID) *raft.Status {
 	return m.multiNode.Status(uint64(groupID))
 }
 
 type proposal struct {
-	groupID   proto.RaftID
+	groupID   proto.RangeID
 	commandID string
 	fn        func()
 	ch        chan<- error
@@ -401,12 +401,12 @@ type group struct {
 }
 
 type createGroupOp struct {
-	groupID proto.RaftID
+	groupID proto.RangeID
 	ch      chan error
 }
 
 type removeGroupOp struct {
-	groupID proto.RaftID
+	groupID proto.RangeID
 	ch      chan error
 }
 
@@ -414,17 +414,17 @@ type removeGroupOp struct {
 type node struct {
 	nodeID   proto.RaftNodeID
 	refCount int
-	groupIDs map[proto.RaftID]struct{}
+	groupIDs map[proto.RangeID]struct{}
 }
 
-func (n *node) registerGroup(groupID proto.RaftID) {
+func (n *node) registerGroup(groupID proto.RangeID) {
 	if groupID == noGroup {
 		panic("must not call registerGroup with noGroup")
 	}
 	n.groupIDs[groupID] = struct{}{}
 }
 
-func (n *node) unregisterGroup(groupID proto.RaftID) {
+func (n *node) unregisterGroup(groupID proto.RangeID) {
 	delete(n.groupIDs, groupID)
 }
 
@@ -433,7 +433,7 @@ func (n *node) unregisterGroup(groupID proto.RaftID) {
 // synchronization.
 type state struct {
 	*MultiRaft
-	groups    map[proto.RaftID]*group
+	groups    map[proto.RangeID]*group
 	nodes     map[proto.RaftNodeID]*node
 	writeTask *writeTask
 }
@@ -441,7 +441,7 @@ type state struct {
 func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft: m,
-		groups:    make(map[proto.RaftID]*group),
+		groups:    make(map[proto.RangeID]*group),
 		nodes:     make(map[proto.RaftNodeID]*node),
 		writeTask: newWriteTask(m.Storage),
 	}
@@ -630,7 +630,7 @@ func (s *state) stop() {
 // addNode creates a node and registers the given groupIDs for that
 // node. If the node already exists and possible some of the groups
 // are already registered, only the missing groups will be added in.
-func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RaftID) error {
+func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RangeID) error {
 	for _, groupID := range groupIDs {
 		if groupID == noGroup {
 			panic(fmt.Sprintf("attempt to add dummy group to node %d", nodeID))
@@ -645,7 +645,7 @@ func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RaftID) error
 		s.nodes[nodeID] = &node{
 			nodeID:   nodeID,
 			refCount: 1,
-			groupIDs: make(map[proto.RaftID]struct{}),
+			groupIDs: make(map[proto.RangeID]struct{}),
 		}
 		newNode = s.nodes[nodeID]
 	}
@@ -657,7 +657,7 @@ func (s *state) addNode(nodeID proto.RaftNodeID, groupIDs ...proto.RaftID) error
 	return nil
 }
 
-func (s *state) createGroup(groupID proto.RaftID) error {
+func (s *state) createGroup(groupID proto.RangeID) error {
 	if _, ok := s.groups[groupID]; ok {
 		return nil
 	}
@@ -804,7 +804,7 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	}
 	writeRequest := newWriteRequest()
 	for groupID, ready := range readyGroups {
-		raftGroupID := proto.RaftID(groupID)
+		raftGroupID := proto.RangeID(groupID)
 		g, ok := s.groups[raftGroupID]
 		if !ok {
 			if log.V(6) {
@@ -831,7 +831,7 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 
 // processCommittedEntry tells the application that a command was committed.
 // Returns the commandID, or an empty string if the given entry was not a command.
-func (s *state) processCommittedEntry(groupID proto.RaftID, g *group, entry raftpb.Entry) string {
+func (s *state) processCommittedEntry(groupID proto.RangeID, g *group, entry raftpb.Entry) string {
 	var commandID string
 	switch entry.Type {
 	case raftpb.EntryNormal:
@@ -873,7 +873,7 @@ func (s *state) processCommittedEntry(groupID proto.RaftID, g *group, entry raft
 						// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 						switch cc.Type {
 						case raftpb.ConfChangeAddNode:
-							err = s.addNode(proto.RaftNodeID(cc.NodeID), proto.RaftID(groupID))
+							err = s.addNode(proto.RaftNodeID(cc.NodeID), proto.RangeID(groupID))
 						case raftpb.ConfChangeRemoveNode:
 							// TODO(bdarnell): support removing nodes; fix double-application of initial entries
 						case raftpb.ConfChangeUpdateNode:
@@ -908,7 +908,7 @@ func (s *state) processCommittedEntry(groupID proto.RaftID, g *group, entry raft
 
 // sendMessage sends a raft message on the given group. Coalesced heartbeats
 // address nodes, not groups; they will use the noGroup constant as groupID.
-func (s *state) sendMessage(groupID proto.RaftID, msg raftpb.Message) {
+func (s *state) sendMessage(groupID proto.RangeID, msg raftpb.Message) {
 	if log.V(6) {
 		log.Infof("node %v sending message %.200s to %v", s.nodeID,
 			raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
@@ -950,7 +950,7 @@ func (s *state) sendMessage(groupID proto.RaftID, msg raftpb.Message) {
 // maybeSendLeaderEvent processes a raft.Ready to send events in response to leadership
 // changes (this includes both sending an event to the app and retrying any pending
 // proposals).
-func (s *state) maybeSendLeaderEvent(groupID proto.RaftID, g *group, ready *raft.Ready) {
+func (s *state) maybeSendLeaderEvent(groupID proto.RangeID, g *group, ready *raft.Ready) {
 	term := g.committedTerm
 	if ready.SoftState != nil {
 		// Always save the leader whenever we get a SoftState.
@@ -984,7 +984,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
-		raftGroupID := proto.RaftID(groupID)
+		raftGroupID := proto.RangeID(groupID)
 		g, ok := s.groups[raftGroupID]
 		if !ok {
 			if log.V(4) {

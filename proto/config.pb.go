@@ -50,7 +50,7 @@ func (*Replica) ProtoMessage() {}
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 type RangeDescriptor struct {
-	RaftID RaftID `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// StartKey is the first key which may be contained by this range.
 	StartKey Key `protobuf:"bytes,2,opt,name=start_key,casttype=Key" json:"start_key,omitempty"`
 	// EndKey marks the end of the range's possible keys.  EndKey itself is not
@@ -523,7 +523,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
@@ -531,7 +531,7 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1774,7 +1774,7 @@ func (m *Replica) Size() (n int) {
 func (m *RangeDescriptor) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovConfig(uint64(m.RaftID))
+	n += 1 + sovConfig(uint64(m.RangeID))
 	if m.StartKey != nil {
 		l = len(m.StartKey)
 		n += 1 + l + sovConfig(uint64(l))
@@ -2058,7 +2058,7 @@ func (m *RangeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintConfig(data, i, uint64(m.RaftID))
+	i = encodeVarintConfig(data, i, uint64(m.RangeID))
 	if m.StartKey != nil {
 		data[i] = 0x12
 		i++

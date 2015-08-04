@@ -61,7 +61,7 @@ func (sq *splitQueue) needsLeaderLease() bool {
 // splitting. This is true if the range is intersected by any
 // accounting or zone config prefix or if the range's size in
 // bytes exceeds the limit for the zone.
-func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
+func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool, priority float64) {
 	// Set priority to 1 in the event the range is split by acct or zone configs.
 	if len(computeSplitKeys(sq.gossip, rng)) > 0 {
 		priority = 1
@@ -83,7 +83,7 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool
 }
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
+func (sq *splitQueue) process(now proto.Timestamp, rng *Replica) error {
 	// First handle case of splitting due to accounting and zone config maps.
 	splitKeys := computeSplitKeys(sq.gossip, rng)
 	if len(splitKeys) > 0 {
@@ -120,7 +120,7 @@ func (sq *splitQueue) timer() time.Duration {
 // computeSplitKeys returns an array of keys at which the supplied
 // range should be split, as computed by intersecting the range with
 // accounting and zone config map boundaries.
-func computeSplitKeys(g *gossip.Gossip, rng *Range) []proto.Key {
+func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
 	// Now split the range into pieces by intersecting it with the
 	// boundaries of the config map.
 	splitKeys := proto.KeySlice{}
@@ -157,7 +157,7 @@ func computeSplitKeys(g *gossip.Gossip, rng *Range) []proto.Key {
 }
 
 // lookupZoneConfig returns the zone config matching the range.
-func lookupZoneConfig(g *gossip.Gossip, rng *Range) (proto.ZoneConfig, error) {
+func lookupZoneConfig(g *gossip.Gossip, rng *Replica) (proto.ZoneConfig, error) {
 	zoneMap, err := g.GetInfo(gossip.KeyConfigZone)
 	if err != nil || zoneMap == nil {
 		return proto.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)

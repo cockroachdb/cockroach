@@ -54,8 +54,8 @@ func newRangeDataIterator(d *proto.RangeDescriptor, e engine.Engine) *rangeDataI
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
-				start: engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID)))),
-				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RaftID+1)))),
+				start: engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RangeID)))),
+				end:   engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(d.RangeID+1)))),
 			},
 			{
 				start: engine.MVCCEncodeKey(keys.MakeKey(keys.LocalRangePrefix, encoding.EncodeBytes(nil, d.StartKey))),

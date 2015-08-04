@@ -850,25 +850,25 @@ class MergeTrigger : public ::google::protobuf::Message {
   ::cockroach::proto::RangeDescriptor* release_updated_desc();
   void set_allocated_updated_desc(::cockroach::proto::RangeDescriptor* updated_desc);
 
-  // optional int64 subsumed_raft_id = 2;
-  bool has_subsumed_raft_id() const;
-  void clear_subsumed_raft_id();
-  static const int kSubsumedRaftIdFieldNumber = 2;
-  ::google::protobuf::int64 subsumed_raft_id() const;
-  void set_subsumed_raft_id(::google::protobuf::int64 value);
+  // optional int64 subsumed_range_id = 2;
+  bool has_subsumed_range_id() const;
+  void clear_subsumed_range_id();
+  static const int kSubsumedRangeIdFieldNumber = 2;
+  ::google::protobuf::int64 subsumed_range_id() const;
+  void set_subsumed_range_id(::google::protobuf::int64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.MergeTrigger)
  private:
   inline void set_has_updated_desc();
   inline void clear_has_updated_desc();
-  inline void set_has_subsumed_raft_id();
-  inline void clear_has_subsumed_raft_id();
+  inline void set_has_subsumed_range_id();
+  inline void clear_has_subsumed_range_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::RangeDescriptor* updated_desc_;
-  ::google::protobuf::int64 subsumed_raft_id_;
+  ::google::protobuf::int64 subsumed_range_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -2470,28 +2470,28 @@ inline void MergeTrigger::set_allocated_updated_desc(::cockroach::proto::RangeDe
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.MergeTrigger.updated_desc)
 }
 
-// optional int64 subsumed_raft_id = 2;
-inline bool MergeTrigger::has_subsumed_raft_id() const {
+// optional int64 subsumed_range_id = 2;
+inline bool MergeTrigger::has_subsumed_range_id() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void MergeTrigger::set_has_subsumed_raft_id() {
+inline void MergeTrigger::set_has_subsumed_range_id() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void MergeTrigger::clear_has_subsumed_raft_id() {
+inline void MergeTrigger::clear_has_subsumed_range_id() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void MergeTrigger::clear_subsumed_raft_id() {
-  subsumed_raft_id_ = GOOGLE_LONGLONG(0);
-  clear_has_subsumed_raft_id();
+inline void MergeTrigger::clear_subsumed_range_id() {
+  subsumed_range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_subsumed_range_id();
 }
-inline ::google::protobuf::int64 MergeTrigger::subsumed_raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.MergeTrigger.subsumed_raft_id)
-  return subsumed_raft_id_;
+inline ::google::protobuf::int64 MergeTrigger::subsumed_range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.MergeTrigger.subsumed_range_id)
+  return subsumed_range_id_;
 }
-inline void MergeTrigger::set_subsumed_raft_id(::google::protobuf::int64 value) {
-  set_has_subsumed_raft_id();
-  subsumed_raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.MergeTrigger.subsumed_raft_id)
+inline void MergeTrigger::set_subsumed_range_id(::google::protobuf::int64 value) {
+  set_has_subsumed_range_id();
+  subsumed_range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.MergeTrigger.subsumed_range_id)
 }
 
 // -------------------------------------------------------------------

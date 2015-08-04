@@ -64,7 +64,7 @@ func (q *rangeGCQueue) needsLeaderLease() bool {
 // if so at what priority. Ranges which have been inactive for longer
 // than rangeGCQueueInactivityThreshold are considered for possible GC
 // at equal priority.
-func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Range) (bool, float64) {
+func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica) (bool, float64) {
 	if l := rng.getLease(); l.Expiration.Add(RangeGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
 		return true, 0
 	}
@@ -73,7 +73,7 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Range) (bool, float
 
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
-func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
+func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 	// Calls to InternalRangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an inconsistent
@@ -111,7 +111,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 	if !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		if log.V(1) {
-			log.Infof("destroying local data from range %d", rng.Desc().RaftID)
+			log.Infof("destroying local data from range %d", rng.Desc().RangeID)
 		}
 		if err := rng.rm.RemoveRange(rng); err != nil {
 			return err
@@ -122,13 +122,13 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Range) error {
 		if err := rng.Destroy(); err != nil {
 			return err
 		}
-	} else if desc.RaftID != rng.Desc().RaftID {
+	} else if desc.RangeID != rng.Desc().RangeID {
 		// If we get a different raft ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
 		if log.V(1) {
-			log.Infof("removing merged range %d", rng.Desc().RaftID)
+			log.Infof("removing merged range %d", rng.Desc().RangeID)
 		}
 		if err := rng.rm.RemoveRange(rng); err != nil {
 			return err

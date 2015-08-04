@@ -51,8 +51,8 @@ message Replica {
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 message RangeDescriptor {
-  optional int64 raft_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // StartKey is the first key which may be contained by this range.
   optional bytes start_key = 2 [(gogoproto.casttype) = "Key"];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not

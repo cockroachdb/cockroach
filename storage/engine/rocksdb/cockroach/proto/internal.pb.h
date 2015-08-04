@@ -3314,12 +3314,12 @@ class InternalRaftCommand : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int64 raft_id = 1;
-  bool has_raft_id() const;
-  void clear_raft_id();
-  static const int kRaftIdFieldNumber = 1;
-  ::google::protobuf::int64 raft_id() const;
-  void set_raft_id(::google::protobuf::int64 value);
+  // optional int64 range_id = 1;
+  bool has_range_id() const;
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 1;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
 
   // optional uint64 origin_node_id = 2;
   bool has_origin_node_id() const;
@@ -3339,8 +3339,8 @@ class InternalRaftCommand : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRaftCommand)
  private:
-  inline void set_has_raft_id();
-  inline void clear_has_raft_id();
+  inline void set_has_range_id();
+  inline void clear_has_range_id();
   inline void set_has_origin_node_id();
   inline void clear_has_origin_node_id();
   inline void set_has_cmd();
@@ -3349,7 +3349,7 @@ class InternalRaftCommand : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::int64 raft_id_;
+  ::google::protobuf::int64 range_id_;
   ::google::protobuf::uint64 origin_node_id_;
   ::cockroach::proto::InternalRaftCommandUnion* cmd_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
@@ -8226,28 +8226,28 @@ inline InternalRaftCommandUnion::ValueCase InternalRaftCommandUnion::value_case(
 
 // InternalRaftCommand
 
-// optional int64 raft_id = 1;
-inline bool InternalRaftCommand::has_raft_id() const {
+// optional int64 range_id = 1;
+inline bool InternalRaftCommand::has_range_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void InternalRaftCommand::set_has_raft_id() {
+inline void InternalRaftCommand::set_has_range_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void InternalRaftCommand::clear_has_raft_id() {
+inline void InternalRaftCommand::clear_has_range_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void InternalRaftCommand::clear_raft_id() {
-  raft_id_ = GOOGLE_LONGLONG(0);
-  clear_has_raft_id();
+inline void InternalRaftCommand::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
 }
-inline ::google::protobuf::int64 InternalRaftCommand::raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRaftCommand.raft_id)
-  return raft_id_;
+inline ::google::protobuf::int64 InternalRaftCommand::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRaftCommand.range_id)
+  return range_id_;
 }
-inline void InternalRaftCommand::set_raft_id(::google::protobuf::int64 value) {
-  set_has_raft_id();
-  raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.InternalRaftCommand.raft_id)
+inline void InternalRaftCommand::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalRaftCommand.range_id)
 }
 
 // optional uint64 origin_node_id = 2;

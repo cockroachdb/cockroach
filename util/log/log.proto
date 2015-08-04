@@ -50,7 +50,7 @@ message LogEntry {
   // Optional parameters which may be set with log entry.
   optional int32 node_id = 8 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.NodeID"];
   optional int32 store_id = 9 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.StoreID"];
-  optional int64 raft_id = 10 [(gogoproto.customname) = "RaftID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.RaftID"];
+  optional int64 range_id = 10 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.RangeID"];
   optional int32 method = 11 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.Method"];
   optional bytes key = 12 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/proto.Key"];
   // Stack traces if requested.

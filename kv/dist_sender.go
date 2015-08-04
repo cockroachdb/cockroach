@@ -293,7 +293,7 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	reply, err := ds.sendRPC(nil /* Trace */, desc.RaftID, replicas, rpc.OrderRandom, args)
+	reply, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, args)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +413,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas replicaSlice, order rpc.OrderingPolicy,
+func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
 		return nil, util.Errorf("%s: replicas set is empty", args.Method())
@@ -435,7 +435,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RaftID, replicas
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.Header().RaftID = raftID
+	args.Header().RangeID = raftID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
@@ -537,7 +537,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 		defer func(k proto.Key) { args.Header().EndKey = k }(endKey)
 		args.Header().EndKey = desc.EndKey
 	}
-	leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
+	leader := ds.leaderCache.Lookup(proto.RangeID(desc.RangeID))
 
 	// Try to send the call.
 	replicas := newReplicaSlice(ds.gossip, desc)
@@ -557,7 +557,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, args proto.Request, desc 
 		}
 	}
 
-	return ds.sendRPC(trace, desc.RaftID, replicas, order, args)
+	return ds.sendRPC(trace, desc.RangeID, replicas, order, args)
 }
 
 // Send implements the client.Sender interface. It verifies
@@ -688,7 +688,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 				} else {
 					newLeader = &proto.Replica{}
 				}
-				ds.updateLeaderCache(proto.RaftID(desc.RaftID), *newLeader)
+				ds.updateLeaderCache(proto.RangeID(desc.RangeID), *newLeader)
 				if log.V(1) {
 					log.Warning(err)
 				}
@@ -768,7 +768,7 @@ func (ds *DistSender) Send(ctx context.Context, call proto.Call) {
 
 // updateLeaderCache updates the cached leader for the given Raft group,
 // evicting any previous value in the process.
-func (ds *DistSender) updateLeaderCache(rid proto.RaftID, leader proto.Replica) {
+func (ds *DistSender) updateLeaderCache(rid proto.RangeID, leader proto.Replica) {
 	oldLeader := ds.leaderCache.Lookup(rid)
 	if leader.StoreID != oldLeader.StoreID {
 		if log.V(1) {

@@ -998,7 +998,7 @@ func (m *InternalRaftCommandUnion) GetInternalBatch() *InternalBatchRequest {
 // An InternalRaftCommand is a command which can be serialized and
 // sent via raft.
 type InternalRaftCommand struct {
-	RaftID           RaftID                   `protobuf:"varint,1,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RangeID          RangeID                  `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	OriginNodeID     RaftNodeID               `protobuf:"varint,2,opt,name=origin_node_id,casttype=RaftNodeID" json:"origin_node_id"`
 	Cmd              InternalRaftCommandUnion `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
 	XXX_unrecognized []byte                   `json:"-"`
@@ -1022,7 +1022,7 @@ func (m *InternalRaftCommand) GetCmd() InternalRaftCommandUnion {
 //
 // This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
 type RaftMessageRequest struct {
-	GroupID RaftID `protobuf:"varint,1,opt,name=group_id,casttype=RaftID" json:"group_id"`
+	GroupID RangeID `protobuf:"varint,1,opt,name=group_id,casttype=RangeID" json:"group_id"`
 	// The raft payload, an encoded raftpb.Message. We transmit the message as
 	// an opaque blob to avoid the complexity of importing proto files across
 	// packages.
@@ -4696,7 +4696,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
@@ -4704,7 +4704,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4801,7 +4801,7 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.GroupID |= (RaftID(b) & 0x7F) << shift
+				m.GroupID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -6313,7 +6313,7 @@ func (m *InternalRaftCommandUnion) Size() (n int) {
 func (m *InternalRaftCommand) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovInternal(uint64(m.RaftID))
+	n += 1 + sovInternal(uint64(m.RangeID))
 	n += 1 + sovInternal(uint64(m.OriginNodeID))
 	l = m.Cmd.Size()
 	n += 1 + l + sovInternal(uint64(l))
@@ -7866,7 +7866,7 @@ func (m *InternalRaftCommand) MarshalTo(data []byte) (n int, err error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.RaftID))
+	i = encodeVarintInternal(data, i, uint64(m.RangeID))
 	data[i] = 0x10
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.OriginNodeID))

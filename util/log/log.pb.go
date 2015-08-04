@@ -45,7 +45,7 @@ type LogEntry struct {
 	// Optional parameters which may be set with log entry.
 	NodeID  *github_com_cockroachdb_cockroach_proto.NodeID  `protobuf:"varint,8,opt,name=node_id,casttype=github.com/cockroachdb/cockroach/proto.NodeID" json:"node_id,omitempty"`
 	StoreID *github_com_cockroachdb_cockroach_proto.StoreID `protobuf:"varint,9,opt,name=store_id,casttype=github.com/cockroachdb/cockroach/proto.StoreID" json:"store_id,omitempty"`
-	RaftID  *github_com_cockroachdb_cockroach_proto.RaftID  `protobuf:"varint,10,opt,name=raft_id,casttype=github.com/cockroachdb/cockroach/proto.RaftID" json:"raft_id,omitempty"`
+	RangeID *github_com_cockroachdb_cockroach_proto.RangeID `protobuf:"varint,10,opt,name=range_id,casttype=github.com/cockroachdb/cockroach/proto.RangeID" json:"range_id,omitempty"`
 	Method  *github_com_cockroachdb_cockroach_proto.Method  `protobuf:"varint,11,opt,name=method,casttype=github.com/cockroachdb/cockroach/proto.Method" json:"method,omitempty"`
 	Key     github_com_cockroachdb_cockroach_proto.Key      `protobuf:"bytes,12,opt,name=key,casttype=github.com/cockroachdb/cockroach/proto.Key" json:"key,omitempty"`
 	// Stack traces if requested.
@@ -333,21 +333,21 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			m.StoreID = &v
 		case 10:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
-			var v github_com_cockroachdb_cockroach_proto.RaftID
+			var v github_com_cockroachdb_cockroach_proto.RangeID
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (github_com_cockroachdb_cockroach_proto.RaftID(b) & 0x7F) << shift
+				v |= (github_com_cockroachdb_cockroach_proto.RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.RaftID = &v
+			m.RangeID = &v
 		case 11:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Method", wireType)
@@ -649,8 +649,8 @@ func (m *LogEntry) Size() (n int) {
 	if m.StoreID != nil {
 		n += 1 + sovLog(uint64(*m.StoreID))
 	}
-	if m.RaftID != nil {
-		n += 1 + sovLog(uint64(*m.RaftID))
+	if m.RangeID != nil {
+		n += 1 + sovLog(uint64(*m.RangeID))
 	}
 	if m.Method != nil {
 		n += 1 + sovLog(uint64(*m.Method))
@@ -756,10 +756,10 @@ func (m *LogEntry) MarshalTo(data []byte) (n int, err error) {
 		i++
 		i = encodeVarintLog(data, i, uint64(*m.StoreID))
 	}
-	if m.RaftID != nil {
+	if m.RangeID != nil {
 		data[i] = 0x50
 		i++
-		i = encodeVarintLog(data, i, uint64(*m.RaftID))
+		i = encodeVarintLog(data, i, uint64(*m.RangeID))
 	}
 	if m.Method != nil {
 		data[i] = 0x58

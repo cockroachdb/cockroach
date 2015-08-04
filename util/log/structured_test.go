@@ -38,7 +38,7 @@ func (t testArg) String() string {
 
 func testContext() context.Context {
 	ctx := context.Background()
-	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RaftID, proto.RaftID(3), Method, proto.Get, Key, proto.Key("key"))
+	return Add(ctx, NodeID, proto.NodeID(1), StoreID, proto.StoreID(2), RaftID, proto.RangeID(3), Method, proto.Get, Key, proto.Key("key"))
 }
 
 func TestSetLogEntry(t *testing.T) {
@@ -46,7 +46,7 @@ func TestSetLogEntry(t *testing.T) {
 
 	nodeID := ctx.Value(NodeID).(proto.NodeID)
 	storeID := ctx.Value(StoreID).(proto.StoreID)
-	raftID := ctx.Value(RaftID).(proto.RaftID)
+	raftID := ctx.Value(RaftID).(proto.RangeID)
 	method := ctx.Value(Method).(proto.Method)
 	key := ctx.Value(Key).(proto.Key)
 
@@ -58,14 +58,14 @@ func TestSetLogEntry(t *testing.T) {
 	}{
 		{nil, "", []interface{}{}, LogEntry{}},
 		{ctx, "", []interface{}{}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &raftID, Method: &method, Key: key,
 		}},
 		{ctx, "no args", []interface{}{}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &raftID, Method: &method, Key: key,
 			Format: "no args",
 		}},
 		{ctx, "1 arg %s", []interface{}{"foo"}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RaftID: &raftID, Method: &method, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &raftID, Method: &method, Key: key,
 			Format: "1 arg %s",
 			Args: []LogEntry_Arg{
 				{Type: "string", Str: "foo"},

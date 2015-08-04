@@ -45,14 +45,14 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	rs := &testRangeSet{rangesByKey: btree.New(64 /* degree */)}
 	for i := 0; i < count; i++ {
 		desc := &proto.RangeDescriptor{
-			RaftID:   proto.RaftID(i),
+			RangeID:  proto.RangeID(i),
 			StartKey: proto.Key(fmt.Sprintf("%03d", i)),
 			EndKey:   proto.Key(fmt.Sprintf("%03d", i+1)),
 		}
 		// Initialize the range stat so the scanner can use it.
-		rng := &Range{
+		rng := &Replica{
 			stats: &rangeStats{
-				raftID: desc.RaftID,
+				raftID: desc.RangeID,
 				MVCCStats: engine.MVCCStats{
 					KeyBytes:  1,
 					ValBytes:  2,
@@ -71,7 +71,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	return rs
 }
 
-func (rs *testRangeSet) Visit(visitor func(*Range) bool) {
+func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.visited = 0
@@ -79,7 +79,7 @@ func (rs *testRangeSet) Visit(visitor func(*Range) bool) {
 		rs.visited++
 		rs.Unlock()
 		defer rs.Lock()
-		return visitor(i.(*Range))
+		return visitor(i.(*Replica))
 	})
 }
 
@@ -94,7 +94,7 @@ func (rs *testRangeSet) EstimatedCount() int {
 }
 
 // removeRange removes the i-th range from the range set.
-func (rs *testRangeSet) remove(index int, t *testing.T) *Range {
+func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 	endKey := proto.Key(fmt.Sprintf("%03d", index+1))
 	rs.Lock()
 	defer rs.Unlock()
@@ -102,14 +102,14 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Range {
 	if rng == nil {
 		t.Fatalf("failed to delete range of end key %s", endKey)
 	}
-	return rng.(*Range)
+	return rng.(*Replica)
 }
 
 // Test implementation of a range queue which adds range to an
 // internal slice.
 type testQueue struct {
 	sync.Mutex // Protects ranges, done & processed count
-	ranges     []*Range
+	ranges     []*Replica
 	done       bool
 	processed  int
 	disabled   bool
@@ -143,7 +143,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
+func (tq *testQueue) MaybeAdd(rng *Replica, now proto.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index == -1 {
@@ -151,7 +151,7 @@ func (tq *testQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 	}
 }
 
-func (tq *testQueue) MaybeRemove(rng *Range) {
+func (tq *testQueue) MaybeRemove(rng *Replica) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index != -1 {
@@ -165,7 +165,7 @@ func (tq *testQueue) count() int {
 	return len(tq.ranges)
 }
 
-func (tq *testQueue) indexOf(rng *Range) int {
+func (tq *testQueue) indexOf(rng *Replica) int {
 	for i, r := range tq.ranges {
 		if r == rng {
 			return i

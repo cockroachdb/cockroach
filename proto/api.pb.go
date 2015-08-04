@@ -168,10 +168,10 @@ type RequestHeader struct {
 	// Replica specifies the destination for the request. This is a specific
 	// instance of the available replicas belonging to RangeID.
 	Replica Replica `protobuf:"bytes,6,opt,name=replica" json:"replica"`
-	// RaftID specifies the ID of the Raft consensus group which the key
+	// RangeID specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
-	RaftID RaftID `protobuf:"varint,7,opt,name=raft_id,casttype=RaftID" json:"raft_id"`
+	RangeID RangeID `protobuf:"varint,7,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// UserPriority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
@@ -1109,7 +1109,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 7:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
@@ -1117,7 +1117,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RaftID |= (RaftID(b) & 0x7F) << shift
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3915,7 +3915,7 @@ func (m *RequestHeader) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.Replica.Size()
 	n += 1 + l + sovApi(uint64(l))
-	n += 1 + sovApi(uint64(m.RaftID))
+	n += 1 + sovApi(uint64(m.RangeID))
 	if m.UserPriority != nil {
 		n += 1 + sovApi(uint64(*m.UserPriority))
 	}
@@ -4427,7 +4427,7 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 	i += n3
 	data[i] = 0x38
 	i++
-	i = encodeVarintApi(data, i, uint64(m.RaftID))
+	i = encodeVarintApi(data, i, uint64(m.RangeID))
 	if m.UserPriority != nil {
 		data[i] = 0x40
 		i++

@@ -36,7 +36,7 @@ func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
 }
 
-func (b *BlockableStorage) GroupStorage(g proto.RaftID) WriteableGroupStorage {
+func (b *BlockableStorage) GroupStorage(g proto.RangeID) WriteableGroupStorage {
 	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}
 }
 

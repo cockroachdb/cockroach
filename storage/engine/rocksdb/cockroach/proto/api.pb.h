@@ -318,12 +318,12 @@ class RequestHeader : public ::google::protobuf::Message {
   ::cockroach::proto::Replica* release_replica();
   void set_allocated_replica(::cockroach::proto::Replica* replica);
 
-  // optional int64 raft_id = 7;
-  bool has_raft_id() const;
-  void clear_raft_id();
-  static const int kRaftIdFieldNumber = 7;
-  ::google::protobuf::int64 raft_id() const;
-  void set_raft_id(::google::protobuf::int64 value);
+  // optional int64 range_id = 7;
+  bool has_range_id() const;
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 7;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
 
   // optional int32 user_priority = 8 [default = 1];
   bool has_user_priority() const;
@@ -362,8 +362,8 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_user();
   inline void set_has_replica();
   inline void clear_has_replica();
-  inline void set_has_raft_id();
-  inline void clear_has_raft_id();
+  inline void set_has_range_id();
+  inline void clear_has_range_id();
   inline void set_has_user_priority();
   inline void clear_has_user_priority();
   inline void set_has_txn();
@@ -380,7 +380,7 @@ class RequestHeader : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::google::protobuf::internal::ArenaStringPtr user_;
   ::cockroach::proto::Replica* replica_;
-  ::google::protobuf::int64 raft_id_;
+  ::google::protobuf::int64 range_id_;
   ::cockroach::proto::Transaction* txn_;
   ::google::protobuf::int32 user_priority_;
   int read_consistency_;
@@ -3448,28 +3448,28 @@ inline void RequestHeader::set_allocated_replica(::cockroach::proto::Replica* re
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.replica)
 }
 
-// optional int64 raft_id = 7;
-inline bool RequestHeader::has_raft_id() const {
+// optional int64 range_id = 7;
+inline bool RequestHeader::has_range_id() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
-inline void RequestHeader::set_has_raft_id() {
+inline void RequestHeader::set_has_range_id() {
   _has_bits_[0] |= 0x00000040u;
 }
-inline void RequestHeader::clear_has_raft_id() {
+inline void RequestHeader::clear_has_range_id() {
   _has_bits_[0] &= ~0x00000040u;
 }
-inline void RequestHeader::clear_raft_id() {
-  raft_id_ = GOOGLE_LONGLONG(0);
-  clear_has_raft_id();
+inline void RequestHeader::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
 }
-inline ::google::protobuf::int64 RequestHeader::raft_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.raft_id)
-  return raft_id_;
+inline ::google::protobuf::int64 RequestHeader::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.range_id)
+  return range_id_;
 }
-inline void RequestHeader::set_raft_id(::google::protobuf::int64 value) {
-  set_has_raft_id();
-  raft_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.raft_id)
+inline void RequestHeader::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.range_id)
 }
 
 // optional int32 user_priority = 8 [default = 1];

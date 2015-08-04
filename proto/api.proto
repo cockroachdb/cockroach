@@ -90,11 +90,11 @@ message RequestHeader {
   // Replica specifies the destination for the request. This is a specific
   // instance of the available replicas belonging to RangeID.
   optional Replica replica = 6 [(gogoproto.nullable) = false];
-  // RaftID specifies the ID of the Raft consensus group which the key
+  // RangeID specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.
-  optional int64 raft_id = 7 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RaftID", (gogoproto.casttype) = "RaftID"];
+  optional int64 range_id = 7 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // UserPriority specifies priority multiple for non-transactional
   // commands. This value should be a positive integer [1, 2^31-1).
   // It's properly viewed as a multiple for how likely this

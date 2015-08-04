@@ -103,8 +103,8 @@ message SplitTrigger {
 // for the merge to be completed and put into operation.
 message MergeTrigger {
   optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
-  optional int64 subsumed_raft_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "SubsumedRaftID", (gogoproto.casttype) = "RaftID"];
+  optional int64 subsumed_range_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "SubsumedRangeID", (gogoproto.casttype) = "RangeID"];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

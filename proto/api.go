@@ -25,8 +25,8 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// A RaftID is a unique ID associated to a Raft consensus group.
-type RaftID int64
+// A RangeID is a unique ID associated to a Raft consensus group.
+type RangeID int64
 
 // IsEmpty returns true if the client command ID has zero values.
 func (ccid ClientCmdID) IsEmpty() bool {

@@ -32,7 +32,7 @@ import (
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
 type testQueueImpl struct {
-	shouldQueueFn func(proto.Timestamp, *Range) (bool, float64)
+	shouldQueueFn func(proto.Timestamp, *Replica) (bool, float64)
 	processed     int32
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
@@ -40,11 +40,11 @@ type testQueueImpl struct {
 
 func (tq *testQueueImpl) needsLeaderLease() bool { return false }
 
-func (tq *testQueueImpl) shouldQueue(now proto.Timestamp, r *Range) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(now proto.Timestamp, r *Replica) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now proto.Timestamp, r *Range) error {
+func (tq *testQueueImpl) process(now proto.Timestamp, r *Replica) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return nil
 }
@@ -65,11 +65,11 @@ func TestQueuePriorityQueue(t *testing.T) {
 	// Create a priority queue, put the items in it, and
 	// establish the priority queue (heap) invariants.
 	const count = 3
-	expRanges := make([]*Range, count+1)
+	expRanges := make([]*Replica, count+1)
 	pq := make(priorityQueue, count)
 	for i := 0; i < count; {
 		pq[i] = &rangeItem{
-			value:    &Range{},
+			value:    &Replica{},
 			priority: float64(i),
 			index:    i,
 		}
@@ -80,7 +80,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 
 	// Insert a new item and then modify its priority.
 	priorityItem := &rangeItem{
-		value:    &Range{},
+		value:    &Replica{},
 		priority: 1.0,
 	}
 	heap.Push(&pq, priorityItem)
@@ -101,24 +101,24 @@ func TestQueuePriorityQueue(t *testing.T) {
 // queued, updating an existing range, and removing a range.
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	r1 := &Range{}
-	if err := r1.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	r1 := &Replica{}
+	if err := r1.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	r2 := &Range{}
-	if err := r2.setDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+	r2 := &Replica{}
+	if err := r2.setDesc(&proto.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
-	shouldAddMap := map[*Range]bool{
+	shouldAddMap := map[*Replica]bool{
 		r1: true,
 		r2: true,
 	}
-	priorityMap := map[*Range]float64{
+	priorityMap := map[*Replica]float64{
 		r1: 1.0,
 		r2: 2.0,
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now proto.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
@@ -187,12 +187,12 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 // ShouldQueue method.
 func TestBaseQueueAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	r := &Range{}
-	if err := r.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	r := &Replica{}
+	if err := r.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now proto.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return false, 0.0
 		},
 	}
@@ -213,19 +213,19 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	r1 := &Range{}
-	if err := r1.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	r1 := &Replica{}
+	if err := r1.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	r2 := &Range{}
-	if err := r2.setDesc(&proto.RangeDescriptor{RaftID: 2}); err != nil {
+	r2 := &Replica{}
+	if err := r2.setDesc(&proto.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now proto.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.Desc().RaftID)
+			priority = float64(r.Desc().RangeID)
 			return
 		},
 	}
@@ -261,13 +261,13 @@ func TestBaseQueueProcess(t *testing.T) {
 // not processed.
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	r := &Range{}
-	if err := r.setDesc(&proto.RangeDescriptor{RaftID: 1}); err != nil {
+	r := &Replica{}
+	if err := r.setDesc(&proto.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now proto.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = 1.0
 			return

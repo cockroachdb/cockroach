@@ -130,19 +130,19 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	header := call.Args.Header()
-	if header.RaftID == 0 || header.Replica.StoreID == 0 {
+	if header.RangeID == 0 || header.Replica.StoreID == 0 {
 		var repl *proto.Replica
-		var raftID proto.RaftID
+		var raftID proto.RangeID
 		raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
 		if err == nil {
-			header.RaftID = raftID
+			header.RangeID = raftID
 			header.Replica = *repl
 		}
 	}
 	ctx = log.Add(ctx,
 		log.Method, call.Method(),
 		log.Key, header.Key,
-		log.RaftID, header.RaftID)
+		log.RaftID, header.RangeID)
 
 	if err == nil {
 		store, err = ls.GetStore(header.Replica.StoreID)
@@ -178,17 +178,17 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 // if not found.
 // TODO(tschottdorf) with a very large number of stores, the LocalSender
 // may want to avoid scanning the whole map of stores on each invocation.
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RaftID, replica *proto.Replica, err error) {
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RangeID, replica *proto.Replica, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	var rng *storage.Range
+	var rng *storage.Replica
 	for _, store := range ls.storeMap {
 		rng = store.LookupRange(start, end)
 		if rng == nil {
 			continue
 		}
 		if replica == nil {
-			raftID = rng.Desc().RaftID
+			raftID = rng.Desc().RangeID
 			replica = rng.GetReplica()
 			continue
 		}

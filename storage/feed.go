@@ -143,31 +143,31 @@ func NewStoreEventFeed(id proto.StoreID, feed *util.Feed) StoreEventFeed {
 
 // registerRange publishes a RegisterRangeEvent to this feed which describes a
 // range on the store. See RegisterRangeEvent for details.
-func (sef StoreEventFeed) registerRange(rng *Range, scan bool) {
+func (sef StoreEventFeed) registerRange(rng *Replica, scan bool) {
 	sef.f.Publish(makeRegisterRangeEvent(sef.id, rng, scan))
 }
 
 // updateRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
-func (sef StoreEventFeed) updateRange(rng *Range, method proto.Method, delta *engine.MVCCStats) {
+func (sef StoreEventFeed) updateRange(rng *Replica, method proto.Method, delta *engine.MVCCStats) {
 	sef.f.Publish(makeUpdateRangeEvent(sef.id, rng, method, delta))
 }
 
 // removeRange publishes a RemoveRangeEvent to this feed which describes the
 // removal of the supplied Range.
-func (sef StoreEventFeed) removeRange(rng *Range) {
+func (sef StoreEventFeed) removeRange(rng *Replica) {
 	sef.f.Publish(makeRemoveRangeEvent(sef.id, rng))
 }
 
 // splitRange publishes a SplitRangeEvent to this feed which describes a split
 // involving the supplied Ranges.
-func (sef StoreEventFeed) splitRange(rngOrig, rngNew *Range) {
+func (sef StoreEventFeed) splitRange(rngOrig, rngNew *Replica) {
 	sef.f.Publish(makeSplitRangeEvent(sef.id, rngOrig, rngNew))
 }
 
 // mergeRange publishes a MergeRangeEvent to this feed which describes a merger
 // of the supplied Ranges.
-func (sef StoreEventFeed) mergeRange(rngMerged, rngRemoved *Range) {
+func (sef StoreEventFeed) mergeRange(rngMerged, rngRemoved *Replica) {
 	sef.f.Publish(makeMergeRangeEvent(sef.id, rngMerged, rngRemoved))
 }
 
@@ -247,7 +247,7 @@ func ProcessStoreEvent(l StoreEventListener, event interface{}) {
 	}
 }
 
-func makeRegisterRangeEvent(id proto.StoreID, rng *Range, scan bool) *RegisterRangeEvent {
+func makeRegisterRangeEvent(id proto.StoreID, rng *Replica, scan bool) *RegisterRangeEvent {
 	return &RegisterRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
@@ -256,7 +256,7 @@ func makeRegisterRangeEvent(id proto.StoreID, rng *Range, scan bool) *RegisterRa
 	}
 }
 
-func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, delta *engine.MVCCStats) *UpdateRangeEvent {
+func makeUpdateRangeEvent(id proto.StoreID, rng *Replica, method proto.Method, delta *engine.MVCCStats) *UpdateRangeEvent {
 	return &UpdateRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
@@ -266,7 +266,7 @@ func makeUpdateRangeEvent(id proto.StoreID, rng *Range, method proto.Method, del
 	}
 }
 
-func makeRemoveRangeEvent(id proto.StoreID, rng *Range) *RemoveRangeEvent {
+func makeRemoveRangeEvent(id proto.StoreID, rng *Replica) *RemoveRangeEvent {
 	return &RemoveRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
@@ -274,7 +274,7 @@ func makeRemoveRangeEvent(id proto.StoreID, rng *Range) *RemoveRangeEvent {
 	}
 }
 
-func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Range) *SplitRangeEvent {
+func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Replica) *SplitRangeEvent {
 	sre := &SplitRangeEvent{
 		StoreID: id,
 		Original: UpdateRangeEvent{
@@ -292,7 +292,7 @@ func makeSplitRangeEvent(id proto.StoreID, rngOrig, rngNew *Range) *SplitRangeEv
 	return sre
 }
 
-func makeMergeRangeEvent(id proto.StoreID, rngMerged, rngRemoved *Range) *MergeRangeEvent {
+func makeMergeRangeEvent(id proto.StoreID, rngMerged, rngRemoved *Replica) *MergeRangeEvent {
 	mre := &MergeRangeEvent{
 		StoreID: id,
 		Merged: UpdateRangeEvent{
