@@ -31,6 +31,7 @@ import (
 type planner struct {
 	db      *client.DB
 	session Session
+	user    string
 }
 
 // makePlan creates the query plan for a single SQL statement. The returned

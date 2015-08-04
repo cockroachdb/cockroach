@@ -53,10 +53,17 @@ func (pt PrivilegeType) String() string {
 type PrivilegeList []PrivilegeType
 
 func (pl PrivilegeList) String() string {
+	return pl.Join(", ")
+}
+
+// Join returns the list of privilege names joined using `sep`.
+// The default stringer uses `, `, but we want to be able to
+// get a tight representation of the string.
+func (pl PrivilegeList) Join(sep string) string {
 	var buf bytes.Buffer
 	for i, n := range pl {
 		if i > 0 {
-			_, _ = buf.WriteString(", ")
+			_, _ = buf.WriteString(sep)
 		}
 		buf.WriteString(n.String())
 	}

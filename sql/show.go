@@ -27,6 +27,9 @@ import (
 )
 
 // ShowColumns of a table.
+// Privileges: None.
+//   Notes: postgres does not have a SHOW COLUMNS statement.
+//          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 	desc, err := p.getTableDesc(n.Table)
 	if err != nil {
@@ -44,6 +47,9 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 }
 
 // ShowDatabases returns all the databases.
+// Privileges: None.
+//   Notes: postgres does not have a "show databases"
+//          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
@@ -60,6 +66,9 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 
 // ShowGrants returns grant details for the specified objects and users.
 // TODO(marc): implement multiple targets, or no targets (meaning full scan).
+// Privileges: None.
+//   Notes: postgres does not have a SHOW GRANTS statement.
+//          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil || len(n.Targets.Targets) != 1 {
 		return nil, util.Errorf("TODO(marc): multiple targets not implemented")
@@ -94,13 +103,18 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		v.rows = append(v.rows, []parser.Datum{
 			parser.DString(dbDesc.Name),
 			parser.DString(userPriv.User),
-			parser.DString(userPriv.Privileges.String()),
+			// The default stringer uses ", " separators. Strip whitespace
+			// to make things easier.
+			parser.DString(userPriv.Privileges.Join(",")),
 		})
 	}
 	return v, nil
 }
 
 // ShowIndex returns all the indexes for a table.
+// Privileges: None.
+//   Notes: postgres does not have a SHOW INDEX statement.
+//          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	desc, err := p.getTableDesc(n.Table)
 	if err != nil {
@@ -125,6 +139,9 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 }
 
 // ShowTables returns all the tables.
+// Privileges: None.
+//   Notes: postgres does not have a SHOW TABLES statement.
+//          mysql only returns tables you have privileges on.
 func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	if n.Name == nil {
 		if p.session.Database == "" {
@@ -136,6 +153,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	prefix := keys.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
