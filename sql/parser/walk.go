@@ -133,7 +133,7 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 		t.Expr = WalkExpr(v, t.Expr)
 
 	default:
-		panic(fmt.Sprintf("unsupported expression type: %T", expr))
+		panic(fmt.Sprintf("walk: unsupported expression type: %T", expr))
 	}
 
 	return expr

@@ -455,9 +455,12 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 
 	case *CastExpr:
 		return evalCastExpr(t, env)
+
+	default:
+		panic(fmt.Sprintf("eval: unsupported expression type: %T", expr))
 	}
 
-	return null, fmt.Errorf("unsupported expression type: %T", expr)
+	return null, fmt.Errorf("eval: unexpected expression: %T", expr)
 }
 
 func evalAndExpr(expr *AndExpr, env Env) (Datum, error) {
