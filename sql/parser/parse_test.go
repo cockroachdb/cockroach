@@ -30,7 +30,6 @@ func TestParse(t *testing.T) {
 	testData := []struct {
 		sql string
 	}{
-		// TODO(tschottdorf): shouldn't these below error?
 		{``},
 		{`VALUES ("")`},
 
@@ -430,6 +429,11 @@ CREATE DATABASE a b c
 			`invalid floating point constant
 SELECT 1e-
        ^
+`},
+		{"SELECT foo''",
+			`syntax error at or near ""
+SELECT foo''
+          ^
 `},
 	}
 	for _, d := range testData {

@@ -3514,7 +3514,6 @@ a_expr_const:
     // TODO(pmattis): hex literal.
     $$ = StrVal($1)
   }
-| func_name SCONST {}
 | func_name '(' expr_list opt_sort_clause ')' SCONST {}
 | const_typename SCONST {}
 | const_interval SCONST opt_interval {}
