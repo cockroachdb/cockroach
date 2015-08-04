@@ -453,13 +453,9 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						tc.heartbeat(id)
 					}) {
 						// The system is already draining and we can't start the
-						// heartbeat. Since the heartbeat also resolves intents,
-						// and since intent resolution may be critical for
-						// another running task (which may need to see an intent
-						// on the meta adressing records in order to hit the
-						// correct range), we fail here.
-						// TODO(tschottdorf): revisit this now that intents aren't
-						// here any more.
+						// heartbeat. We refuse new transactions for now because
+						// they're likely not going to have all intents committed.
+						// In principle, we can relax this as needed though.
 						call.Reply.Header().SetGoError(&proto.NodeUnavailableError{})
 						tc.Unlock()
 						tc.unregisterTxn(id)
@@ -566,7 +562,7 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// - the individual transaction does not write intents, and
 	// - the individual transaction is initialized.
 	// The main usage of this is to allow mass-resolution of intents, which
-	// means sending a non-txn batch of transactional InternalResolveIntent.
+	// entails sending a non-txn batch of transactional InternalResolveIntent.
 	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
 		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
 			return util.Error("conflicting transaction in transactional batch")

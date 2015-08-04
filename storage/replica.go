@@ -1062,6 +1062,11 @@ func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Inten
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
+	// TODO(tschottdorf): There's a chance that #1684 will make a comeback
+	// since intent resolution on commit has since moved to EndTransaction,
+	// which returns (some of) them as skipped intents. If so, need to resolve
+	// synchronously if we're not allowed to do async (or just launch
+	// goroutines).
 	stopper.RunAsyncTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,
@@ -1151,12 +1156,15 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // TODO(tschottdorf): once Txn records have a list of possibly open intents,
 // resolveIntents should send an RPC to update the transaction(s) as well (for
 // those intents with non-pending Txns).
+// TODO(tschottdorf): need tests for this with range intents.
 func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	trace := tracer.FromCtx(ctx)
+	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
+	trace.Event("resolving intents [async]")
 	var wg sync.WaitGroup
 
-	// We pushed the transaction(s) successfully, so resolve the intent(s).
-	trace.Event("resolving intents [async]")
+	bArgs := &proto.BatchRequest{}
+	bArgs.User = security.RootUser
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs proto.Request
@@ -1182,67 +1190,54 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 			}
 		}
 
-		// If the intent isn't (completely) local, we send a full-blown command
-		// through our client.
-		//
-		// TODO(tschottdorf): Lots to do here. This runs a batch for each
-		// individual external intent as preliminary code. Really we want a
-		// single batch (non-transactional) which contains the resolve requests
-		// for the individual intents. Those don't necessarily have the same
-		// transaction, so currently our batches don't support that - it's
-		// either a Txn on the batch and all requests share it, or nothing on
-		// the batch and nothing on any individual request. That can be
-		// changed, but there are some implications on tracing and on the
-		// transaction coordinator, so best left as a separate endeavor.
-		// TODO(tschottdorf): Also no support for key-range intents yet. We
-		// need to support those because the EndTransaction path will throw
-		// them our way. And we need a test that does exactly that.
-		// TODO(tschottdorf): currently synchronous. See if we still have that
-		// need-to-resolve-some-intents-or-a-split-may-never-finish thing
-		// going on on during node shutdown.
+		// If the intent isn't (completely) local, we'll need to send an external request.
+		// We'll batch them all up and send at the end.
 		if !local {
-			b := &client.Batch{}
-			bArgs := &proto.BatchRequest{
-				RequestHeader: proto.RequestHeader{
-					Txn:  &intent.Txn,
-					User: security.RootUser,
-				},
-			}
 			bArgs.Add(resolveArgs)
-
-			// Resolve all of the intents which aren't local to the Range. This is
-			// a no-op if all are local.
-			bReply := &proto.BatchResponse{}
-			b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
-			if err := r.rm.DB().Run(b); err != nil {
-				if log.V(1) {
-					log.Infoc(ctx, "%s", err)
-				}
-			}
+			continue
 		}
 
 		// If it is local, it goes directly into Raft.
 		wg.Add(1)
-		ctx := tracer.ToCtx(ctx, trace.Fork())
-		if !r.rm.Stopper().RunAsyncTask(func() {
+		action := func() {
+			// Trace this under the ID of the intent owner.
+			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(resolveArgs.Header().Txn))
 			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil && log.V(0) {
 				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, err)
 			}
-		}) {
-			// Couldn't run the task. We need to notify the WaitGroup.
-			wg.Done()
+		}
+		if !r.rm.Stopper().RunAsyncTask(action) {
+			// Still run the task. Our caller already has a task and going async
+			// here again is merely for performance, but some intents need to
+			// be resolved because they might block other tasks. See #1684.
+			// Note that handleSkippedIntents has a TODO in case #1684 comes
+			// back.
+			action()
 		}
 	}
-	// Submit all external resolve commands.
-	// r.rm.Stopper().RunAsyncTask(func() {
-	// 	if err := r.rm.DB().Run(b); err != nil {
-	// 		if log.V(1) {
-	// 			log.Infoc(ctx, "%s", err)
-	// 		}
-	// 	}
-	// })
+	// Resolve all of the intents which aren't local to the Range. This is a
+	// no-op if all are local.
+	b := &client.Batch{}
+	b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+	action := func() {
+		// TODO(tschottdorf): no tracing here yet. Probably useful at some point,
+		// but needs a) the corresponding interface and b) facilities for tracing
+		// multiple tracees at the same time (batch full of possibly individual
+		// txns).
+		if err := r.rm.DB().Run(b); err != nil {
+			if log.V(1) {
+				log.Infoc(ctx, "%s", err)
+			}
+		}
+	}
+	if !r.rm.Stopper().RunAsyncTask(action) {
+		// As with local intents, try async to not keep the caller waiting, but
+		// when draining just go ahead and do it synchronously. See #1684.
+		action()
+	}
 
 	// Wait until all the local `ResolveIntent`s have been submitted to raft.
+	// No-op if all were external.
 	wg.Wait()
 }
 

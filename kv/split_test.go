@@ -87,6 +87,9 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 	}
 }
 
+// TestRangeSplit executes various splits and checks that all created intents
+// are resolved. This includes both intents which are resolved synchronously
+// with EndTransaction and via RPC.
 func TestRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
