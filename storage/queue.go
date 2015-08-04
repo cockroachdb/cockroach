@@ -155,18 +155,20 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 
 // Add adds the specified range to the queue, regardless of the return
 // value of bq.shouldQueue. The range is added with specified
-// priority. If the queue is too full, the range may not be
-// added. Returns an error if the range was not added.
+// priority. If the queue is too full, the range may not be added, as
+// the range with the lowest priority will be dropped. Returns an
+// error if the range was not added.
 func (bq *baseQueue) Add(rng *Replica, priority float64) error {
 	bq.Lock()
 	defer bq.Unlock()
 	return bq.addInternal(rng, true, priority)
 }
 
-// MaybeAdd adds the specified range if bq.shouldQueue specifies it should
-// be queued. Ranges are added to the queue using the priority
-// returned by bq.shouldQueue. If the queue is too full, an already-queued
-// range with the lowest priority may be dropped.
+// MaybeAdd adds the specified range if bq.shouldQueue specifies it
+// should be queued. Ranges are added to the queue using the priority
+// returned by bq.shouldQueue. If the queue is too full, the range may
+// not be added, as the range with the lowest priority will be
+// dropped.
 func (bq *baseQueue) MaybeAdd(rng *Replica, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
