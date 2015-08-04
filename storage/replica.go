@@ -210,8 +210,8 @@ type Replica struct {
 	pendingCmds  map[cmdIDKey]*pendingCmd
 }
 
-// NewRange initializes the range using the given metadata.
-func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
+// NewReplica initializes the replica using the given metadata.
+func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) {
 	r := &Replica{
 		rm:          rm,
 		cmdQ:        NewCommandQueue(),

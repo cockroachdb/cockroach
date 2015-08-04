@@ -139,7 +139,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 			EndKey:   rng.end,
 			Replicas: []proto.Replica{{StoreID: rng.storeID}},
 		}
-		newRng, err := storage.NewRange(desc, s[i])
+		newRng, err := storage.NewReplica(desc, s[i])
 		if err != nil {
 			t.Fatal(err)
 		}

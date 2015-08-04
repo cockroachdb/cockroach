@@ -283,7 +283,7 @@ func createRange(s *Store, raftID proto.RangeID, start, end proto.Key) *Replica 
 		StartKey: start,
 		EndKey:   end,
 	}
-	r, err := NewRange(desc, s)
+	r, err := NewReplica(desc, s)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -635,7 +635,7 @@ func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Replic
 	if err != nil {
 		t.Fatal(err)
 	}
-	newRng, err := NewRange(desc, store)
+	newRng, err := NewReplica(desc, store)
 	if err != nil {
 		t.Fatal(err)
 	}
