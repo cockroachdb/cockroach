@@ -983,9 +983,9 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) e
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
-	// Add the new split range to the store. This step atomically
-	// updates the EndKey of the updated range and also adds the
-	// new range to the store's range map.
+	// Add the new split replica to the store. This step atomically
+	// updates the EndKey of the updated replica and also adds the
+	// new replica to the store's replica map.
 	newRng, err := NewReplica(&split.NewDesc, r.rm)
 	if err != nil {
 		return err
