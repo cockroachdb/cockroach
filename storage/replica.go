@@ -254,7 +254,7 @@ func NewReplica(desc *proto.RangeDescriptor, rm rangeManager) (*Replica, error) 
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RangeID, r.Desc().StartKey, r.Desc().EndKey)
+	return fmt.Sprintf("range=%d [%s-%s)", r.Desc().RangeID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
