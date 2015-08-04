@@ -1,8 +1,18 @@
 - Feature Name: segmented_storage
-- Status: draft
+- Status: rejected
 - Start Date: 2015-07-29
 - RFC PR:
 - Cockroach Issue: #1644
+
+# Rejection notes
+
+This proposal was deemed too complex and expensive for the problem it
+solves. Instead, we will drop snapshots whose application would create
+a conflict in the `rangesByKey` map. This avoids the race conditions
+in issue #1644, but leaves the range in an uninitialized and unusable
+state. In the common case, this state will resolve quickly, and in the
+uncommon case when it persists, we simply rely on the usual repair and
+recovery process to move the replica to a new node.
 
 # Summary
 
