@@ -79,7 +79,7 @@ const (
 	SilentNull
 )
 
-// ColumnTableDef represents a column dlefinition within a CREATE TABLE
+// ColumnTableDef represents a column definition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
 	Name       Name

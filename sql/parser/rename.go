@@ -28,7 +28,7 @@ import "fmt"
 // TODO(tschottdorf): This isn't even referenced from the grammar yet.
 func (*RenameTable) statement() {}
 
-// RenameTable represents a TRUNCATE TABLE statement.
+// RenameTable represents a RENAME TABLE statement.
 type RenameTable struct {
 	Name    Name
 	NewName Name
