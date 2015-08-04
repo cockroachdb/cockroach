@@ -1,8 +1,12 @@
 - Feature Name: bounds_generation
-- Status: draft
+- Status: rejected
 - Start Date: 2015-07-29
 - RFC PR:
 - Cockroach Issue: #1644
+
+# Rejection notes
+
+This RFC supplements  #1866, which was rejected.
 
 # Summary
 
