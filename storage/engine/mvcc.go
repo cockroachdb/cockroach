@@ -1232,7 +1232,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto
 		}
 
 		// In order to efficiently skip the possibly long list of
-		// old versions for this key; refer to Scan for details.
+		// old versions for this key, we make a non-version MVCC key.
 		nextKey = MVCCEncodeKey(currentKey.Next())
 	}
 
