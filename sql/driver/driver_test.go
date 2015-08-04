@@ -634,6 +634,25 @@ func TestUpdate(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k) VALUES ('h')`, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET v = 'h' WHERE k = 'h'`, testcase.db)); err != nil {
+			t.Fatal(err)
+		}
+		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k = 'h'`, testcase.db)); err != nil {
+			t.Fatal(err)
+		} else {
+			results := readAll(t, rows)
+			expected := [][]string{
+				{"k", "v"},
+				{"h", "h"},
+			}
+			if err := verifyResults(asResultSlice(expected), results); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 	}
 }
 
