@@ -78,6 +78,7 @@ func TestFillArgs(t *testing.T) {
 		{`length($1)`, `length('a')`, mapArgs{1: DString("a")}},
 		{`length($1, $2)`, `length('a', 'b')`, mapArgs{1: DString("a"), 2: DString("b")}},
 		{`CAST($1 AS INT)`, `CAST(1.1 AS INT)`, mapArgs{1: DFloat(1.1)}},
+		{`ROW($1, $2, $3)`, `ROW(1, 2, '3')`, mapArgs{1: DInt(1), 2: DInt(2), 3: DString("3")}},
 	}
 
 	for _, d := range testData {

@@ -86,6 +86,11 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 	case *QualifiedName:
 		// Terminal node: nothing to do.
 
+	case Row:
+		for i := range t {
+			t[i] = WalkExpr(v, t[i])
+		}
+
 	case Tuple:
 		for i := range t {
 			t[i] = WalkExpr(v, t[i])
@@ -93,6 +98,9 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 
 	case Datum:
 		// Terminal node: nothing to do.
+
+	case *StarExpr:
+		// Contains only a terminal node.
 
 	case *Subquery:
 		// TODO(pmattis): Should we recurse into the Subquery?
