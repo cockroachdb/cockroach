@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -349,7 +350,7 @@ CREATE TABLE t.users (
 	results := readAll(t, rows)
 	expected := [][]string{
 		{"Table", "Name", "Unique", "Seq", "Column"},
-		{"users", "primary", "true", "1", "id"},
+		{"users", structured.PrimaryKeyIndexName, "true", "1", "id"},
 		{"users", "foo", "false", "1", "name"},
 		{"users", "bar", "true", "1", "id"},
 		{"users", "bar", "true", "2", "name"},
@@ -468,6 +469,8 @@ func TestInsertSelectDelete(t *testing.T) {
 				expectedResultSlice = append(expectedResultSlice, rowWithNil)
 			case 1:
 				expectedResultSlice = append(expectedResultSlice[:1], append(resultSlice{rowWithNil}, expectedResultSlice[1:]...)...)
+			default:
+				t.Fatalf("unexpected value %d", i)
 			}
 
 			if err := verifyResults(expectedResultSlice, results); err != nil {

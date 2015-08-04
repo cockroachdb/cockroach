@@ -123,7 +123,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		{
 			"a INT PRIMARY KEY",
 			structured.IndexDescriptor{
-				Name:        "primary",
+				Name:        structured.PrimaryKeyIndexName,
 				Unique:      true,
 				ColumnNames: []string{"a"},
 			},
@@ -155,7 +155,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
 			structured.IndexDescriptor{
-				Name:        "primary",
+				Name:        structured.PrimaryKeyIndexName,
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
