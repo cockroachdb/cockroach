@@ -10,8 +10,8 @@ Contains the following files:
 * node.server.key: node server private key
 * root.client.crt: admin client certificate
 * root.client.key: admin client private key
-* test-user.client.crt: testing user certificate
-* test-user.client.key: testing user private key
+* testuser.client.crt: testing user certificate
+* testuser.client.key: testing user private key
 *
 
 For a human-readable version of the certificate, run:
@@ -25,6 +25,6 @@ rm -f resource/test_certs/*.{crt,key}
 cockroach cert --certs=resource/test_certs create-ca --key-size=512
 cockroach cert --certs=resource/test_certs create-node --key-size=512 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
 cockroach cert --certs=resource/test_certs create-client --key-size=512 root
-cockroach cert --certs=resource/test_certs create-client --key-size=512 test-user
+cockroach cert --certs=resource/test_certs create-client --key-size=512 testuser
 go generate security/securitytest/securitytest.go
 ```

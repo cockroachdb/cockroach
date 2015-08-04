@@ -38,7 +38,7 @@ const (
 	// TestUser is a fixed user used in unittests.
 	// It has a permissions config with read/write permissions
 	// on the 'TestUser' prefix.
-	TestUser = "test-user"
+	TestUser = "testuser"
 )
 
 // StartTestServer starts a in-memory test server.
