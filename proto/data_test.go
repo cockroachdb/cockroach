@@ -373,3 +373,21 @@ func TestNodeList(t *testing.T) {
 		}
 	}
 }
+
+func TestIsPrev(t *testing.T) {
+	for i, tc := range []struct {
+		k, m Key
+		ok   bool
+	}{
+		{k: Key(""), m: Key{0}, ok: true},
+		{k: nil, m: nil, ok: false},
+		{k: Key("a"), m: Key{'a', 0, 0}, ok: false},
+		{k: Key{'z', 'a', 0}, m: Key{'z', 'a'}, ok: false},
+		{k: Key("bro"), m: Key{'b', 'r', 'o', 0}, ok: true},
+		{k: Key("foo"), m: Key{'b', 'a', 'r', 0}, ok: false},
+	} {
+		if tc.ok != tc.k.IsPrev(tc.m) {
+			t.Errorf("%d: wanted %t", i, tc.ok)
+		}
+	}
+}

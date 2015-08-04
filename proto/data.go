@@ -96,7 +96,14 @@ func (k Key) Next() Key {
 	return Key(bytesNext(k))
 }
 
+// IsPrev is a more efficient version of k.Next().Equal(m).
+func (k Key) IsPrev(m Key) bool {
+	l := len(m) - 1
+	return l == len(k) && m[l] == 0 && k.Equal(m[:l])
+}
+
 // Next returns the next key in lexicographic sort order.
+// TODO(tschottdorf): duplicate code with (Key).Next().
 func (k EncodedKey) Next() EncodedKey {
 	return EncodedKey(bytes.Join([][]byte{k, Key{0}}, nil))
 }

@@ -2763,3 +2763,68 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		t.Fatalf("expected a RangeNotFoundError, get %s", err)
 	}
 }
+
+func TestIntentIntersect(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	iPt := proto.Intent{
+		Key:    proto.Key("asd"),
+		EndKey: nil,
+	}
+	iRn := proto.Intent{
+		Key:    proto.Key("c"),
+		EndKey: proto.Key("x"),
+	}
+
+	suffix := proto.Key("abcd")
+	iLc := proto.Intent{
+		Key:    keys.MakeRangeKey(proto.Key("c"), suffix, nil),
+		EndKey: keys.MakeRangeKey(proto.Key("x"), suffix, nil),
+	}
+	kl1 := string(iLc.Key)
+	kl2 := string(iLc.EndKey)
+
+	for i, tc := range []struct {
+		intent   proto.Intent
+		from, to string
+		exp      []string
+	}{
+		{intent: iPt, from: "", to: "z", exp: []string{"", ""}},
+
+		{intent: iRn, from: "", to: "a", exp: []string{"", "", "c", "x"}},
+		{intent: iRn, from: "", to: "c", exp: []string{"", "", "c", "x"}},
+		{intent: iRn, from: "a", to: "z", exp: []string{"c", "x"}},
+		{intent: iRn, from: "c", to: "d", exp: []string{"c", "d", "d", "x"}},
+		{intent: iRn, from: "c", to: "x", exp: []string{"c", "x"}},
+		{intent: iRn, from: "d", to: "x", exp: []string{"d", "x", "c", "d"}},
+		{intent: iRn, from: "d", to: "w", exp: []string{"d", "w", "c", "d", "w", "x"}},
+		{intent: iRn, from: "c", to: "w", exp: []string{"c", "w", "w", "x"}},
+		{intent: iRn, from: "w", to: "x", exp: []string{"w", "x", "c", "w"}},
+		{intent: iRn, from: "x", to: "z", exp: []string{"", "", "c", "x"}},
+		{intent: iRn, from: "y", to: "z", exp: []string{"", "", "c", "x"}},
+
+		// A local intent range always comes back in one piece, either inside
+		// or outside of the Range.
+		{intent: iLc, from: "a", to: "b", exp: []string{"", "", kl1, kl2}},
+		{intent: iLc, from: "d", to: "z", exp: []string{"", "", kl1, kl2}},
+		{intent: iLc, from: "f", to: "g", exp: []string{"", "", kl1, kl2}},
+		{intent: iLc, from: "c", to: "x", exp: []string{kl1, kl2}},
+		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
+	} {
+		var all []string
+		in, out := intersectIntent(tc.intent, proto.RangeDescriptor{
+			StartKey: proto.Key(tc.from),
+			EndKey:   proto.Key(tc.to),
+		})
+		if in != nil {
+			all = append(all, string(in.Key), string(in.EndKey))
+		} else {
+			all = append(all, "", "")
+		}
+		for _, o := range out {
+			all = append(all, string(o.Key), string(o.EndKey))
+		}
+		if !reflect.DeepEqual(all, tc.exp) {
+			t.Errorf("%d: wanted %v, got %v", i, tc.exp, all)
+		}
+	}
+}

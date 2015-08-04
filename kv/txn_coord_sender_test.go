@@ -474,8 +474,6 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	}
 	err := sendCall(s.Sender, call)
 	switch err.(type) {
-	case nil:
-		t.Fatal("expected txn aborted error")
 	case *proto.TransactionAbortedError:
 		// Expected
 	default:
@@ -773,7 +771,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	if pReply.Error != nil {
 		t.Fatal(pReply.GoError())
 	}
-	s.Sender.cleanupTxn(nil, *txn, nil) // first call
+	s.Sender.cleanupTxn(nil, *txn) // first call
 	etReply := &proto.EndTransactionResponse{}
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.EndTransactionRequest{
@@ -825,8 +823,12 @@ func TestTxnMultipleCoord(t *testing.T) {
 		txn := tc.call.Reply.Header().Txn
 		// The transaction should come back rw if it started rw or if we just
 		// wrote.
-		if (tc.writing || proto.IsTransactionWrite(tc.call.Args)) != txn.Writing {
+		isWrite := proto.IsTransactionWrite(tc.call.Args)
+		if (tc.writing || isWrite) != txn.Writing {
 			t.Errorf("%d: unexpected writing state: %s", i, txn)
+		}
+		if !isWrite {
+			continue
 		}
 		// Abort for clean shutdown.
 		etReply := &proto.EndTransactionResponse{}

@@ -1326,19 +1326,43 @@ func (s *Store) ExecuteCmd(ctx context.Context, args proto.Request) (proto.Respo
 	return nil, err
 }
 
-// resolveWriteIntentError tries to push the conflicting transaction:
-// either move its timestamp forward on a read/write conflict, or
-// abort it on a write/write conflict. If the push succeeds, we
-// immediately issue a resolve intent command and set the error's
-// Resolved flag to true so the client retries the command
-// immediately. If the push fails, we set the error's Resolved flag to
-// false so that the client backs off before reissuing the command.
+// resolveWriteIntentError tries to push the conflicting transaction (if
+// necessary, i.e. if the transaction is pending): either move its timestamp
+// forward on a read/write conflict, or abort it on a write/write conflict. If
+// the push succeeds (or if it wasn't necessary), we immediately issue a
+// resolve intent command and set the error's Resolved flag to true so the
+// client retries the command immediately. If the push fails, we set the
+// error's Resolved flag to false so that the client backs off before reissuing
+// the command.
+// On write/write conflicts, a potential push error is returned; otherwise
+// the updated WriteIntentError.
+//
+// Callers are involved with
+// a) conflict resolution for commands being executed at the Store with the
+//    client waiting,
+// b) resolving intents encountered during inconsistent operations, and
+// c) resolving intents upon EndTransaction which are not local to the given
+//    range. This is the only path in which the transaction is going to be
+//    in non-pending state and doesn't require a push.
 func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteIntentError, rng *Replica, args proto.Request, pushType proto.PushTxnType) error {
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
 	trace := tracer.FromCtx(ctx)
 	defer trace.Epoch("intent resolution")()
+
+	// Split intents into those we need to push and those which are good to
+	// resolve.
+	// TODO(tschottdorf): can optimize this and use same underlying slice.
+	var pushIntents, resolveIntents []proto.Intent
+	for _, intent := range wiErr.Intents {
+		// The current intent does not need conflict resolution.
+		if intent.Txn.Status != proto.PENDING {
+			resolveIntents = append(resolveIntents, intent)
+		} else {
+			pushIntents = append(pushIntents, intent)
+		}
+	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
@@ -1351,7 +1375,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 		},
 	}
 	bReply := &proto.BatchResponse{}
-	for _, intent := range wiErr.Intents {
+	for _, intent := range pushIntents {
 		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Timestamp: header.Timestamp,
@@ -1408,38 +1432,12 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	}
 	wiErr.Resolved = true // success!
 
-	var wg sync.WaitGroup
-
-	// We pushed the transaction(s) successfully, so resolve the intent(s).
-	trace.Event("resolving intents [async]")
-	for i, intent := range wiErr.Intents {
-		pushReply := bReply.Responses[i].PushTxn
-		intentKey := intent.Key
-		resolveArgs := &proto.ResolveIntentRequest{
-			RequestHeader: proto.RequestHeader{
-				// Use the pushee's timestamp, which might be lower than the
-				// pusher's request timestamp. No need to push the intent higher
-				// than the pushee's txn!
-				Timestamp: pushReply.PusheeTxn.Timestamp,
-				Key:       intentKey,
-				User:      security.RootUser,
-				Txn:       pushReply.PusheeTxn,
-			},
-		}
-
-		wg.Add(1)
-		ctx := tracer.ToCtx(ctx, trace.Fork())
-		if !s.stopper.RunAsyncTask(func() {
-			if _, resolveErr := rng.addWriteCmd(ctx, resolveArgs, &wg); resolveErr != nil && log.V(1) {
-				log.Warningc(ctx, "resolve for key %s failed: %s", intentKey, resolveErr)
-			}
-		}) {
-			// Couldn't run the task. We need to notify the WorkGroup.
-			wg.Done()
-		}
+	for i, intent := range pushIntents {
+		intent.Txn = *(bReply.Responses[i].PushTxn.PusheeTxn)
+		resolveIntents = append(resolveIntents, intent)
 	}
 
-	wg.Wait() // wait until all the `ResolveIntent`s have been submitted to raft.
+	rng.resolveIntents(ctx, resolveIntents)
 
 	return wiErr
 }

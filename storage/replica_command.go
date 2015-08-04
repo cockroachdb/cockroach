@@ -39,6 +39,7 @@ import (
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command. It returns the response, an error,
 // and a slice of intents that were skipped during execution.
+// If an error is returned, any returned intents should still be resolved.
 func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args proto.Request) (proto.Response, []proto.Intent, error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
@@ -89,7 +90,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 		reply = &resp
 	case *proto.EndTransactionRequest:
 		var resp proto.EndTransactionResponse
-		resp, err = r.EndTransaction(batch, ms, *tArgs)
+		resp, intents, err = r.EndTransaction(batch, ms, *tArgs)
 		reply = &resp
 	case *proto.RangeLookupRequest:
 		var resp proto.RangeLookupResponse
@@ -229,42 +230,62 @@ func (r *Replica) Scan(batch engine.Engine, args proto.ScanRequest) (proto.ScanR
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, error) {
+func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args proto.EndTransactionRequest) (proto.EndTransactionResponse, []proto.Intent, error) {
 	var reply proto.EndTransactionResponse
 
 	if args.Txn == nil {
-		return reply, util.Errorf("no transaction specified to EndTransaction")
+		return reply, nil, util.Errorf("no transaction specified to EndTransaction")
 	}
 	// Make a copy of the transaction in case it's mutated below.
 	txn := *args.Txn
 	key := keys.TransactionKey(txn.Key, txn.ID)
 
 	// Fetch existing transaction if possible.
-	existTxn := &proto.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, existTxn)
+	reply.Txn = &proto.Transaction{}
+	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, reply.Txn)
 	if err != nil {
-		return reply, err
+		return reply, nil, err
+	}
+	if !ok {
+		// The transaction doesn't exist yet on disk; use the supplied version.
+		reply.Txn = &txn
+	}
+
+	for i := range args.Intents {
+		// Set the transaction into the intents (TxnCoordSender avoids sending
+		// all of that redundant info over the wire).
+		// This needs to be done before the commit status check because
+		// the TransactionAbortedError branch below returns these intents.
+		args.Intents[i].Txn = *(reply.Txn)
 	}
 
 	// If the transaction record already exists, verify that we can either
 	// commit it or abort it (according to args.Commit), and also that the
 	// Timestamp and Epoch have not suffered regression.
 	if ok {
-		if existTxn.Status == proto.COMMITTED {
-			return reply, proto.NewTransactionStatusError(existTxn, "already committed")
-		} else if existTxn.Status == proto.ABORTED {
-			return reply, proto.NewTransactionAbortedError(existTxn)
-		} else if txn.Epoch < existTxn.Epoch {
-			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", txn.Epoch))
-		} else if txn.Epoch == existTxn.Epoch && existTxn.Timestamp.Less(txn.OrigTimestamp) {
+		if reply.Txn.Status == proto.COMMITTED {
+			return reply, nil, proto.NewTransactionStatusError(reply.Txn, "already committed")
+		} else if reply.Txn.Status == proto.ABORTED {
+			// This case is special: If a transaction is aborted by a
+			// concurrent writer's push, the intents are not known on abort.
+			// When the owning coordinator comes along and tries to commit
+			// (with a list of intents), this error results, and we want to
+			// abort the intents, not leave them dangling. That's why we return
+			// them and make sure that skipped intents are always resolved.
+			//
+			// TODO(tschottdorf): In fact, we would want to do the local
+			// resolution as before - but that means we would need to commit a
+			// batch. This is going to be a significant refactor, so leaving it
+			// for now.
+			return reply, args.Intents, proto.NewTransactionAbortedError(reply.Txn)
+		} else if txn.Epoch < reply.Txn.Epoch {
+			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("epoch regression: %d", txn.Epoch))
+		} else if txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
-			return reply, proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", txn.OrigTimestamp))
+			return reply, nil, proto.NewTransactionStatusError(reply.Txn, fmt.Sprintf("timestamp regression: %s", txn.OrigTimestamp))
 		}
-
-		// Use the persisted transaction record as final transaction.
-		reply.Txn = existTxn
 
 		// Take max of requested epoch and existing epoch. The requester
 		// may have incremented the epoch on retries.
@@ -276,9 +297,6 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		if reply.Txn.Priority < txn.Priority {
 			reply.Txn.Priority = txn.Priority
 		}
-	} else {
-		// The transaction doesn't exist yet on disk; use the supplied version.
-		reply.Txn = &txn
 	}
 
 	// Take max of requested timestamp and possibly "pushed" txn
@@ -294,27 +312,67 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
 		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.OrigTimestamp) {
-			return reply, proto.NewTransactionRetryError(reply.Txn)
+			return reply, nil, proto.NewTransactionRetryError(reply.Txn)
 		}
 		reply.Txn.Status = proto.COMMITTED
 	} else {
 		reply.Txn.Status = proto.ABORTED
 	}
 
-	// Persist the transaction record with updated status (& possibly timestamp).
-	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
-		return reply, err
+	// Resolve any explicit intents. All that are local to this range get
+	// resolved synchronously in the same batch. The remainder is collected
+	// and handed off to asynchronous processing.
+	var externalIntents []proto.Intent
+	desc := *(r.Desc())
+	if wideDesc := args.GetInternalCommitTrigger().GetMergeTrigger().GetUpdatedDesc(); wideDesc.RangeID != 0 {
+		// If this is a merge, then use the post-merge descriptor to determine
+		// which intents are local (note that for a split, we want to use the
+		// pre-split one instead because it's larger).
+		desc = wideDesc
+	}
+	for _, intent := range args.Intents {
+		if err := func() error {
+			if len(intent.EndKey) == 0 {
+				// For single-key intents, do a KeyAddress-aware check of
+				// whether it's contained in our Range.
+				if !containsKey(desc, intent.Key) {
+					externalIntents = append(externalIntents, intent)
+					return nil
+				}
+				return engine.MVCCResolveWriteIntent(batch, ms,
+					intent.Key, reply.Txn.Timestamp, reply.Txn)
+			}
+			// For intent ranges, cut into parts inside and outside our key
+			// range. Resolve locally inside, delegate the rest. In particular,
+			// an intent range for range-local data is correctly considered local.
+			// TODO(tschottdorf): This will panic for ranges which contain both
+			// local and non-local keys. Write a test to see if we can create
+			// those and if so, prohibit it.
+			insideIntent, outsideIntents := intersectIntent(intent, desc)
+			externalIntents = append(externalIntents, outsideIntents...)
+			if insideIntent != nil {
+				_, err := engine.MVCCResolveWriteIntentRange(batch, ms,
+					intent.Key, intent.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
+				return err
+			}
+			return nil
+		}(); err != nil {
+			// TODO(tschottdorf): any legitimate reason for this to happen?
+			// Figure that out and if not, should still be ReplicaCorruption
+			// and not a panic.
+			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", intent, reply.Txn.Status, err))
+		}
 	}
 
-	// Resolve any explicit intents.
-	for _, intent := range args.Intents {
-		if log.V(1) {
-			log.Infof("resolving intent at %s on end transaction [%s]", intent.Key, reply.Txn.Status)
-		}
-		if err := engine.MVCCResolveWriteIntent(batch, ms, intent.Key, reply.Txn.Timestamp, reply.Txn); err != nil {
-			return reply, err
-		}
-		reply.Resolved = append(reply.Resolved, intent.Key)
+	// Persist the transaction record with updated status (& possibly timestamp).
+	// TODO(tschottdorf): if all intents resolved, can kill transaction record.
+	// Otherwise, we'll need to store all external intents along with the record,
+	// and any resolve command should also update the record, gc'ing it when the
+	// last intent goes. With that, we shouldn't even need a GC queue for Txn
+	// records. But we'll probably need another command to mark an intent as
+	// resolved since special-casing EndTransaction more seems unwise.
+	if err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
+		return reply, nil, err
 	}
 
 	// Run triggers if successfully committed. Any failures running
@@ -325,21 +383,73 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			if ct.SplitTrigger != nil {
 				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
 				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
-					return reply, err
+					return reply, nil, err
 				}
 			} else if ct.MergeTrigger != nil {
 				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
 				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
-					return reply, err
+					return reply, nil, err
 				}
 			} else if ct.ChangeReplicasTrigger != nil {
 				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
-					return reply, err
+					return reply, nil, err
 				}
 			}
 		}
 	}
-	return reply, nil
+
+	return reply, externalIntents, nil
+}
+
+// intersectIntent takes an intent and a descriptor. It then splits the
+// intent's range into up to three pieces: A first piece which is contained in
+// the Range, and a slice of up to two further intents which are outside of the
+// key range. An intent for which [Key, EndKey) is empty does not result in any
+// intents; thus intersectIntent only applies to intent ranges.
+// A range-local intent range is never split: It's returned as either
+// belonging to or outside of the descriptor's key range, and passing an intent
+// which begins range-local but ends non-local results in a panic.
+func intersectIntent(intent proto.Intent, desc proto.RangeDescriptor) (middle *proto.Intent, outside []proto.Intent) {
+	start, end := desc.StartKey, desc.EndKey
+	if !intent.Key.Less(intent.EndKey) {
+		return
+	}
+	if !start.Less(end) {
+		panic("can not intersect with empty key range")
+	}
+	if intent.Key.Less(keys.LocalRangeMax) {
+		if !intent.EndKey.Less(keys.LocalRangeMax) {
+			panic("a local intent range may not have a non-local portion")
+		}
+		if containsKeyRange(desc, intent.Key, intent.EndKey) {
+			return &intent, nil
+		}
+		return nil, append(outside, intent)
+	}
+	// From now on, we're dealing with plain old key ranges - no more local
+	// addressing.
+	if intent.Key.Less(start) {
+		// Intent spans a part to the left of [start, end).
+		iCopy := intent
+		if start.Less(intent.EndKey) {
+			iCopy.EndKey = start
+		}
+		intent.Key = iCopy.EndKey
+		outside = append(outside, iCopy)
+	}
+	if intent.Key.Less(intent.EndKey) && end.Less(intent.EndKey) {
+		// Intent spans a part to the right of [start, end).
+		iCopy := intent
+		if iCopy.Key.Less(end) {
+			iCopy.Key = end
+		}
+		intent.EndKey = iCopy.Key
+		outside = append(outside, iCopy)
+	}
+	if intent.Key.Less(intent.EndKey) && !intent.Key.Less(start) && !end.Less(intent.EndKey) {
+		middle = &intent
+	}
+	return
 }
 
 // RangeLookup is used to look up RangeDescriptors - a RangeDescriptor
@@ -920,11 +1030,6 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResp
 						NewDesc:     *newDesc,
 					},
 				},
-				// TODO(tschottdorf): obsolete soon (#1873).
-				Intents: []proto.Intent{
-					{Key: desc1Key},
-					{Key: desc2Key},
-				},
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
@@ -1092,11 +1197,6 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 						SubsumedRangeID: subsumedDesc.RangeID,
 					},
 				},
-				// TODO(tschottdorf): obsolete soon (#1873).
-				Intents: []proto.Intent{
-					{Key: desc1Key},
-					{Key: desc2Key},
-				},
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})
@@ -1160,9 +1260,9 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 }
 
 func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
-	copy := *r.Desc()
-	copy.Replicas = change.UpdatedReplicas
-	if err := r.setDesc(&copy); err != nil {
+	cpy := *r.Desc()
+	cpy.Replicas = change.UpdatedReplicas
+	if err := r.setDesc(&cpy); err != nil {
 		return err
 	}
 	// If we're removing the current replica, add it to the range GC queue.
@@ -1247,8 +1347,6 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 						UpdatedReplicas: updatedDesc.Replicas,
 					},
 				},
-				// TODO(tschottdorf): obsolete soon (#1873).
-				Intents: []proto.Intent{{Key: descKey}},
 			},
 			Reply: &proto.EndTransactionResponse{},
 		})

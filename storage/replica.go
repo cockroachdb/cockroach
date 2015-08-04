@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -448,13 +449,21 @@ func (r *Replica) GetMVCCStats() engine.MVCCStats {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Replica) ContainsKey(key proto.Key) bool {
-	return r.Desc().ContainsKey(keys.KeyAddress(key))
+	return containsKey(*r.Desc(), key)
+}
+
+func containsKey(desc proto.RangeDescriptor, key proto.Key) bool {
+	return desc.ContainsKey(keys.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end proto.Key) bool {
-	return r.Desc().ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
+	return containsKeyRange(*r.Desc(), start, end)
+}
+
+func containsKeyRange(desc proto.RangeDescriptor, start, end proto.Key) bool {
+	return desc.ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
@@ -604,9 +613,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto
 			header.Timestamp = r.rm.Clock().Now()
 		}
 		reply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
-		if err == nil {
-			r.handleSkippedIntents(args, intents)
-		}
+		r.handleSkippedIntents(args, intents) // even on error
 		return reply, err
 	} else if header.ReadConsistency == proto.CONSENSUS {
 		return nil, util.Error("consensus reads not implemented")
@@ -628,9 +635,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto
 	// Only update the timestamp cache if the command succeeded.
 	r.endCmd(cmdKey, args, err, true /* readOnly */)
 
-	if err == nil {
-		r.handleSkippedIntents(args, intents)
-	}
+	r.handleSkippedIntents(args, intents) // even on error
 	return reply, err
 }
 
@@ -922,18 +927,13 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 	}
 
-	// If the execution of the command wasn't successful, stop here.
-	if rErr != nil {
-		return batch, reply, rErr
-	}
-
-	// On success and only on the replica on which this command originated,
-	// resolve skipped intents asynchronously.
+	// On the replica on which this command originated, resolve skipped intents
+	// asynchronously - even on failure.
 	if originNode == r.rm.RaftNodeID() {
 		r.handleSkippedIntents(args, intents)
 	}
 
-	return batch, reply, nil
+	return batch, reply, rErr
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
@@ -1143,6 +1143,107 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 		return cErr
 	}
 	return err
+}
+
+// resolveIntents resolves the given intents. Those which are local to the range
+// use a fast-path by submitting directly to the range-local Raft instance; all
+// others are dispatched in a batch.
+// TODO(tschottdorf): once Txn records have a list of possibly open intents,
+// resolveIntents should send an RPC to update the transaction(s) as well (for
+// those intents with non-pending Txns).
+func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
+	trace := tracer.FromCtx(ctx)
+	var wg sync.WaitGroup
+
+	// We pushed the transaction(s) successfully, so resolve the intent(s).
+	trace.Event("resolving intents [async]")
+	for i := range intents {
+		intent := intents[i] // avoids a race in `i, intent := range ...`
+		var resolveArgs proto.Request
+		var local bool // whether this intent lives on this Range
+		{
+			header := proto.RequestHeader{
+				// Use the pushee's timestamp, which might be lower than the
+				// pusher's request timestamp. No need to push the intent higher
+				// than the pushee's txn!
+				Timestamp: intent.Txn.Timestamp,
+				Key:       intent.Key,
+				EndKey:    intent.EndKey,
+				User:      security.RootUser,
+				Txn:       &intent.Txn,
+			}
+
+			if len(intent.EndKey) == 0 {
+				resolveArgs = &proto.ResolveIntentRequest{RequestHeader: header}
+				local = r.ContainsKey(intent.Key)
+			} else {
+				resolveArgs = &proto.ResolveIntentRangeRequest{RequestHeader: header}
+				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
+			}
+		}
+
+		// If the intent isn't (completely) local, we send a full-blown command
+		// through our client.
+		//
+		// TODO(tschottdorf): Lots to do here. This runs a batch for each
+		// individual external intent as preliminary code. Really we want a
+		// single batch (non-transactional) which contains the resolve requests
+		// for the individual intents. Those don't necessarily have the same
+		// transaction, so currently our batches don't support that - it's
+		// either a Txn on the batch and all requests share it, or nothing on
+		// the batch and nothing on any individual request. That can be
+		// changed, but there are some implications on tracing and on the
+		// transaction coordinator, so best left as a separate endeavor.
+		// TODO(tschottdorf): Also no support for key-range intents yet. We
+		// need to support those because the EndTransaction path will throw
+		// them our way. And we need a test that does exactly that.
+		// TODO(tschottdorf): currently synchronous. See if we still have that
+		// need-to-resolve-some-intents-or-a-split-may-never-finish thing
+		// going on on during node shutdown.
+		if !local {
+			b := &client.Batch{}
+			bArgs := &proto.BatchRequest{
+				RequestHeader: proto.RequestHeader{
+					Txn:  &intent.Txn,
+					User: security.RootUser,
+				},
+			}
+			bArgs.Add(resolveArgs)
+
+			// Resolve all of the intents which aren't local to the Range. This is
+			// a no-op if all are local.
+			bReply := &proto.BatchResponse{}
+			b.InternalAddCall(proto.Call{Args: bArgs, Reply: bReply})
+			if err := r.rm.DB().Run(b); err != nil {
+				if log.V(1) {
+					log.Infoc(ctx, "%s", err)
+				}
+			}
+		}
+
+		// If it is local, it goes directly into Raft.
+		wg.Add(1)
+		ctx := tracer.ToCtx(ctx, trace.Fork())
+		if !r.rm.Stopper().RunAsyncTask(func() {
+			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil && log.V(0) {
+				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, err)
+			}
+		}) {
+			// Couldn't run the task. We need to notify the WaitGroup.
+			wg.Done()
+		}
+	}
+	// Submit all external resolve commands.
+	// r.rm.Stopper().RunAsyncTask(func() {
+	// 	if err := r.rm.DB().Run(b); err != nil {
+	// 		if log.V(1) {
+	// 			log.Infoc(ctx, "%s", err)
+	// 		}
+	// 	}
+	// })
+
+	// Wait until all the local `ResolveIntent`s have been submitted to raft.
+	wg.Wait()
 }
 
 // loadConfigMap scans the config entries under keyPrefix and
