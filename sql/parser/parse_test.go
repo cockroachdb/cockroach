@@ -74,11 +74,16 @@ func TestParse(t *testing.T) {
 		{`SHOW INDEX FROM a`},
 		{`SHOW INDEX FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
+		{`SHOW GRANTS`},
+		{`SHOW GRANTS ON DATABASE foo, bar`},
+		{`SHOW GRANTS ON DATABASE foo FOR bar`},
+		{`SHOW GRANTS FOR bar, baz`},
 
 		{`GRANT READ ON DATABASE foo TO root`},
 		{`GRANT ALL ON DATABASE foo TO root, test`},
 		{`GRANT READ, WRITE ON DATABASE bar TO foo, bar, baz`},
 		{`GRANT READ, WRITE ON DATABASE db1, db2 TO foo, bar, baz`},
+		{`GRANT READ, WRITE ON DATABASE db1, db2 TO "test-user"`},
 
 		{`REVOKE READ ON DATABASE foo FROM root`},
 		{`REVOKE ALL ON DATABASE foo FROM root, test`},

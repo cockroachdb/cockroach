@@ -169,6 +169,7 @@ var keywords = map[string]int{
 	"FUNCTIONS":         FUNCTIONS,
 	"GLOBAL":            GLOBAL,
 	"GRANT":             GRANT,
+	"GRANTS":            GRANTS,
 	"GRANTED":           GRANTED,
 	"GREATEST":          GREATEST,
 	"GROUP":             GROUP,

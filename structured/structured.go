@@ -293,3 +293,13 @@ func (desc *DatabaseDescriptor) Revoke(n *parser.Revoke) error {
 	}
 	return nil
 }
+
+// Show returns the list of users and associated privileges for this descriptor.
+func (desc *DatabaseDescriptor) Show() (UserPrivilegeList, error) {
+	permissions, err := permissionsFromDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
+
+	return permissions.Show(), nil
+}
