@@ -189,153 +189,12 @@ var Models;
         var QueryAggregator = Proto.QueryAggregator;
     })(Proto = Models.Proto || (Models.Proto = {}));
 })(Models || (Models = {}));
-// source: util/convert.ts
-// Author: Matt Tracy (matt@cockroachlabs.com)
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
-var Utils;
-(function (Utils) {
-    "use strict";
-    var Convert;
-    (function (Convert) {
-        function MilliToNano(millis) {
-            return millis * 1.0e6;
-        }
-        Convert.MilliToNano = MilliToNano;
-        function NanoToMilli(nano) {
-            return nano / 1.0e6;
-        }
-        Convert.NanoToMilli = NanoToMilli;
-    })(Convert = Utils.Convert || (Utils.Convert = {}));
-})(Utils || (Utils = {}));
-// source: util/format.ts
-/// <reference path="../models/proto.ts" />
-/// <reference path="../util/convert.ts" />
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
-// Author: Matt Tracy (matt@cockroachlabs.com)
-var Utils;
-(function (Utils) {
-    "use strict";
-    var Format;
-    (function (Format) {
-        var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
-        function Date(datetime) {
-            return _datetimeFormatter(datetime);
-        }
-        Format.Date = Date;
-        ;
-        var Severities;
-        (function (Severities) {
-            Severities[Severities["INFO"] = 0] = "INFO";
-            Severities[Severities["WARNING"] = 1] = "WARNING";
-            Severities[Severities["ERROR"] = 2] = "ERROR";
-            Severities[Severities["FATAL"] = 3] = "FATAL";
-        })(Severities || (Severities = {}));
-        ;
-        function Severity(severity) {
-            return Severities[severity];
-        }
-        Format.Severity = Severity;
-        ;
-        var _messageTags = new RegExp("%s|%d|%v|%+v", "gi");
-        function LogEntryMessage(entry) {
-            var i = -1;
-            if ((entry.format.length === 0) && (entry.args.length === 1)) {
-                entry.format = "%s";
-            }
-            return entry.format.replace(_messageTags, function () {
-                i++;
-                if (entry.args.length > i) {
-                    return entry.args[i].str;
-                }
-                else {
-                    return "";
-                }
-            });
-        }
-        Format.LogEntryMessage = LogEntryMessage;
-        ;
-        var kibi = 1024;
-        var units = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
-        function Bytes(bytes) {
-            if (Math.abs(bytes) < kibi) {
-                return bytes + " B";
-            }
-            var u = -1;
-            do {
-                bytes /= kibi;
-                ++u;
-            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
-            return bytes.toFixed(1) + " " + units[u];
-        }
-        Format.Bytes = Bytes;
-    })(Format = Utils.Format || (Utils.Format = {}));
-})(Utils || (Utils = {}));
-// source: models/stats.ts
-/// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="proto.ts" />
-/// <reference path="../util/format.ts" />
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
-var Models;
-(function (Models) {
-    "use strict";
-    var Stats;
-    (function (Stats) {
-        var tableStyle = "border-collapse:collapse; border - spacing:0; border - color:#ccc";
-        var thStyle = "font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;" +
-            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-            "color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOddFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-            "color:#333;background-color:#efefef;text-align:center";
-        var tdStyleOdd = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-            "color:#333;background-color:#f9f9f9;text-align:center";
-        var tdStyleEvenFirst = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;" +
-            "color:#333;background-color:#efefef;text-align:center";
-        var tdStyleEven = "font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;" +
-            "border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:" +
-            "#ccc;color:#333;background-color:#fff;text-align:center";
-        function CreateStatsTable(stats) {
-            return m("div", [
-                m("h3", "Statistics"),
-                m("table", { style: tableStyle }, [
-                    m("tr", [
-                        m("th", { style: thStyle }, ""),
-                        m("th", { style: thStyle }, "Key"),
-                        m("th", { style: thStyle }, "Value"),
-                        m("th", { style: thStyle }, "Live"),
-                        m("th", { style: thStyle }, "Intent"),
-                        m("th", { style: thStyle }, "System")
-                    ]),
-                    m("tr", [
-                        m("td", { style: tdStyleOddFirst }, "Count"),
-                        m("td", { style: tdStyleOdd }, stats.key_count),
-                        m("td", { style: tdStyleOdd }, stats.val_count),
-                        m("td", { style: tdStyleOdd }, stats.live_count),
-                        m("td", { style: tdStyleOdd }, stats.intent_count),
-                        m("td", { style: tdStyleOdd }, stats.sys_count)
-                    ]),
-                    m("tr", [
-                        m("td", { style: tdStyleEvenFirst }, "Size"),
-                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.key_bytes)),
-                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.val_bytes)),
-                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.live_bytes)),
-                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.intent_bytes)),
-                        m("td", { style: tdStyleEven }, Utils.Format.Bytes(stats.sys_bytes))
-                    ])
-                ])
-            ]);
-        }
-        Stats.CreateStatsTable = CreateStatsTable;
-    })(Stats = Models.Stats || (Models.Stats = {}));
-})(Models || (Models = {}));
 // source: models/status.ts
+/// <reference path="../typings/lodash/lodash.d.ts" />
 /// <reference path="../typings/mithriljs/mithril.d.ts" />
-/// <reference path="../typings/d3/d3.d.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
-/// <reference path="stats.ts" />
+/// <reference path="proto.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 // Author: Matt Tracy (matt@cockroachlabs.com)
 var Models;
@@ -343,104 +202,40 @@ var Models;
     "use strict";
     var Status;
     (function (Status) {
-        function _availability(status) {
-            if (status.leader_range_count === 0) {
-                return "100%";
-            }
-            return Math.floor(status.available_range_count / status.leader_range_count * 100).toString() + "%";
-        }
-        function _replicated(status) {
-            if (status.leader_range_count === 0) {
-                return "100%";
-            }
-            return Math.floor(status.replicated_range_count / status.leader_range_count * 100).toString() + "%";
-        }
-        var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
-        function _formatDate(nanos) {
-            var datetime = new Date(nanos / 1.0e6);
-            return _datetimeFormatter(datetime);
-        }
         var Stores = (function () {
             function Stores() {
                 this._data = new Utils.QueryCache(function () {
                     return Utils.Http.Get("/_status/stores/")
                         .then(function (results) {
-                        var data = {};
-                        results.d.forEach(function (status) {
-                            var storeId = status.desc.store_id;
-                            data[storeId] = status;
-                        });
-                        return data;
+                        return results.d;
                     });
                 });
-                this.allStatuses = Utils.Computed(this._data.result, function (map) {
-                    var keys = Object.keys(map).sort();
-                    return keys.map(function (key) { return map[key]; });
+                this._dataMap = Utils.Computed(this._data.result, function (list) {
+                    return _.indexBy(list, function (status) { return status.desc.node.node_id; });
                 });
+                this._totalStatus = Utils.Computed(this._data.result, function (list) {
+                    var status = {
+                        range_count: 0,
+                        updated_at: 0,
+                        started_at: 0,
+                        leader_range_count: 0,
+                        replicated_range_count: 0,
+                        available_range_count: 0,
+                        stats: Models.Proto.NewMVCCStats()
+                    };
+                    list.forEach(function (storeStatus) {
+                        Models.Proto.AccumulateStatus(status, storeStatus);
+                    });
+                    return status;
+                });
+                this.allStatuses = this._data.result;
+                this.totalStatus = this._totalStatus;
             }
-            Stores.prototype.GetStoreIds = function () {
-                return Object.keys(this._data.result()).sort();
-            };
-            Stores.prototype.GetDesc = function (storeId) {
-                return this._data.result()[storeId].desc;
+            Stores.prototype.GetStatus = function (storeId) {
+                return this._dataMap()[storeId];
             };
             Stores.prototype.refresh = function () {
                 this._data.refresh();
-            };
-            Stores.prototype.Details = function (storeId) {
-                var store = this._data.result()[storeId];
-                if (store == null) {
-                    return m("div", "No data present yet.");
-                }
-                return m("div", [
-                    m("table", [
-                        m("tr", [
-                            m("td", "Node Id:"),
-                            m("td", m("a[href=/nodes/" + store.desc.node.node_id + "]", { config: m.route }, store.desc.node.node_id))
-                        ]),
-                        m("tr", [m("td", "Node Network:"), m("td", store.desc.node.address.network)]),
-                        m("tr", [m("td", "Node Address:"), m("td", store.desc.node.address.address)]),
-                        m("tr", [m("td", "Started at:"), m("td", _formatDate(store.started_at))]),
-                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(store.updated_at))]),
-                        m("tr", [m("td", "Ranges:"), m("td", store.range_count)]),
-                        m("tr", [m("td", "Leader Ranges:"), m("td", store.leader_range_count)]),
-                        m("tr", [m("td", "Available Ranges:"), m("td", store.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", _availability(store))]),
-                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", store.leader_range_count - store.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(store))])
-                    ]),
-                    Models.Stats.CreateStatsTable(store.stats)
-                ]);
-            };
-            Stores.prototype.AllDetails = function () {
-                var status = {
-                    range_count: 0,
-                    updated_at: 0,
-                    started_at: 0,
-                    leader_range_count: 0,
-                    replicated_range_count: 0,
-                    available_range_count: 0,
-                    stats: Models.Proto.NewMVCCStats()
-                };
-                var data = this._data.result();
-                var keys = Object.keys(data);
-                for (var i = 0; i < keys.length; i++) {
-                    var storeStatus = data[keys[i]];
-                    Models.Proto.AccumulateStatus(status, storeStatus);
-                }
-                return m("div", [
-                    m("h2", "Details"),
-                    m("table", [
-                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(status.updated_at))]),
-                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
-                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
-                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", _availability(status))]),
-                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(status))])
-                    ]),
-                    Models.Stats.CreateStatsTable(status.stats)
-                ]);
             };
             return Stores;
         })();
@@ -450,85 +245,35 @@ var Models;
                 this._data = new Utils.QueryCache(function () {
                     return Utils.Http.Get("/_status/nodes/")
                         .then(function (results) {
-                        var data = {};
-                        results.d.forEach(function (status) {
-                            var nodeId = status.desc.node_id;
-                            data[nodeId] = status;
-                        });
-                        return data;
+                        return results.d;
                     });
                 });
-                this.allStatuses = Utils.Computed(this._data.result, function (map) {
-                    var keys = Object.keys(map).sort();
-                    return keys.map(function (key) { return map[key]; });
+                this._dataMap = Utils.Computed(this._data.result, function (list) {
+                    return _.indexBy(list, function (status) { return status.desc.node_id; });
                 });
+                this._totalStatus = Utils.Computed(this._data.result, function (list) {
+                    var status = {
+                        range_count: 0,
+                        updated_at: 0,
+                        started_at: 0,
+                        leader_range_count: 0,
+                        replicated_range_count: 0,
+                        available_range_count: 0,
+                        stats: Models.Proto.NewMVCCStats()
+                    };
+                    list.forEach(function (nodeStatus) {
+                        Models.Proto.AccumulateStatus(status, nodeStatus);
+                    });
+                    return status;
+                });
+                this.allStatuses = this._data.result;
+                this.totalStatus = this._totalStatus;
             }
-            Nodes.prototype.GetNodeIds = function () {
-                return Object.keys(this._data.result()).sort();
-            };
-            Nodes.prototype.GetDesc = function (nodeId) {
-                return this._data.result()[nodeId].desc;
+            Nodes.prototype.GetStatus = function (nodeId) {
+                return this._dataMap()[nodeId];
             };
             Nodes.prototype.refresh = function () {
                 this._data.refresh();
-            };
-            Nodes.prototype.Details = function (nodeId) {
-                var node = this._data.result()[nodeId];
-                if (node == null) {
-                    return m("div", "No data present yet.");
-                }
-                return m("div", [
-                    m("h4", m("a[href=/logs/" + nodeId + "]", { config: m.route }, "Logs")),
-                    m("table", [
-                        m("tr", [m("td", "Stores (" + node.store_ids.length + "):"),
-                            m("td", [node.store_ids.map(function (storeId) {
-                                    return m("div", [
-                                        m("a[href=/stores/" + storeId + "]", { config: m.route }, storeId),
-                                        " "]);
-                                })])
-                        ]),
-                        m("tr", [m("td", "Network:"), m("td", node.desc.address.network)]),
-                        m("tr", [m("td", "Address:"), m("td", node.desc.address.address)]),
-                        m("tr", [m("td", "Started at:"), m("td", _formatDate(node.started_at))]),
-                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(node.updated_at))]),
-                        m("tr", [m("td", "Ranges:"), m("td", node.range_count)]),
-                        m("tr", [m("td", "Leader Ranges:"), m("td", node.leader_range_count)]),
-                        m("tr", [m("td", "Available Ranges:"), m("td", node.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", _availability(node))]),
-                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", node.leader_range_count - node.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(node))])
-                    ]),
-                    Models.Stats.CreateStatsTable(node.stats)
-                ]);
-            };
-            Nodes.prototype.AllDetails = function () {
-                var status = {
-                    range_count: 0,
-                    updated_at: 0,
-                    leader_range_count: 0,
-                    replicated_range_count: 0,
-                    available_range_count: 0,
-                    stats: Models.Proto.NewMVCCStats()
-                };
-                var data = this._data.result();
-                var keys = Object.keys(data);
-                for (var i = 0; i < keys.length; i++) {
-                    var nodeStatus = data[keys[i]];
-                    Models.Proto.AccumulateStatus(status, nodeStatus);
-                }
-                return m("div", [
-                    m("h2", "Details"),
-                    m("table", [
-                        m("tr", [m("td", "Updated at:"), m("td", _formatDate(status.updated_at))]),
-                        m("tr", [m("td", "Ranges:"), m("td", status.range_count)]),
-                        m("tr", [m("td", "Leader Ranges:"), m("td", status.leader_range_count)]),
-                        m("tr", [m("td", "Available Ranges:"), m("td", status.available_range_count)]),
-                        m("tr", [m("td", "Availablility:"), m("td", _availability(status))]),
-                        m("tr", [m("td", "Under-Replicated Ranges:"), m("td", status.leader_range_count - status.replicated_range_count)]),
-                        m("tr", [m("td", "Fully Replicated:"), m("td", _replicated(status))])
-                    ]),
-                    Models.Stats.CreateStatsTable(status.stats)
-                ]);
             };
             return Nodes;
         })();
@@ -551,6 +296,24 @@ var Utils;
         };
     }
     Utils.ChainProp = ChainProp;
+})(Utils || (Utils = {}));
+// source: util/convert.ts
+// Author: Matt Tracy (matt@cockroachlabs.com)
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
+var Utils;
+(function (Utils) {
+    "use strict";
+    var Convert;
+    (function (Convert) {
+        function MilliToNano(millis) {
+            return millis * 1.0e6;
+        }
+        Convert.MilliToNano = MilliToNano;
+        function NanoToMilli(nano) {
+            return nano / 1.0e6;
+        }
+        Convert.NanoToMilli = NanoToMilli;
+    })(Convert = Utils.Convert || (Utils.Convert = {}));
 })(Utils || (Utils = {}));
 // source: models/metrics.ts
 /// <reference path="proto.ts" />
@@ -1098,6 +861,77 @@ var Components;
         Table.create = create;
     })(Table = Components.Table || (Components.Table = {}));
 })(Components || (Components = {}));
+// source: util/format.ts
+/// <reference path="../typings/d3/d3.d.ts" />
+/// <reference path="../models/proto.ts" />
+/// <reference path="../util/convert.ts" />
+// Author: Bram Gruneir (bram+code@cockroachlabs.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
+var Utils;
+(function (Utils) {
+    "use strict";
+    var Format;
+    (function (Format) {
+        var _datetimeFormatter = d3.time.format("%Y-%m-%d %H:%M:%S");
+        function Date(datetime) {
+            return _datetimeFormatter(datetime);
+        }
+        Format.Date = Date;
+        ;
+        var Severities;
+        (function (Severities) {
+            Severities[Severities["INFO"] = 0] = "INFO";
+            Severities[Severities["WARNING"] = 1] = "WARNING";
+            Severities[Severities["ERROR"] = 2] = "ERROR";
+            Severities[Severities["FATAL"] = 3] = "FATAL";
+        })(Severities || (Severities = {}));
+        ;
+        function Severity(severity) {
+            return Severities[severity];
+        }
+        Format.Severity = Severity;
+        ;
+        var _messageTags = new RegExp("%s|%d|%v|%+v", "gi");
+        function LogEntryMessage(entry) {
+            var i = -1;
+            if ((entry.format.length === 0) && (entry.args.length === 1)) {
+                entry.format = "%s";
+            }
+            return entry.format.replace(_messageTags, function () {
+                i++;
+                if (entry.args.length > i) {
+                    return entry.args[i].str;
+                }
+                else {
+                    return "";
+                }
+            });
+        }
+        Format.LogEntryMessage = LogEntryMessage;
+        ;
+        var kibi = 1024;
+        var units = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+        function Bytes(bytes) {
+            if (Math.abs(bytes) < kibi) {
+                return bytes + " B";
+            }
+            var u = -1;
+            do {
+                bytes /= kibi;
+                ++u;
+            } while (Math.abs(bytes) >= kibi && u < units.length - 1);
+            return bytes.toFixed(1) + " " + units[u];
+        }
+        Format.Bytes = Bytes;
+        function Percentage(numerator, denominator) {
+            if (denominator === 0) {
+                return "100%";
+            }
+            return Math.floor(numerator / denominator * 100).toString() + "%";
+        }
+        Format.Percentage = Percentage;
+    })(Format = Utils.Format || (Utils.Format = {}));
+})(Utils || (Utils = {}));
 // source: models/log.ts
 /// <reference path="../models/proto.ts" />
 /// <reference path="../typings/d3/d3.d.ts" />
@@ -1380,6 +1214,34 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
+                Controller.prototype.PrimaryStats = function () {
+                    var allStats = nodeStatuses.totalStatus();
+                    if (allStats) {
+                        return m(".primary-stats", [
+                            m(".stat", [
+                                m("span.title", "Total Ranges"),
+                                m("span.value", allStats.range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Total Live Bytes"),
+                                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Leader Ranges"),
+                                m("span.value", allStats.leader_range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Available"),
+                                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Fully Replicated"),
+                                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count))
+                            ])
+                        ]);
+                    }
+                    return m(".primary-stats");
+                };
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
                 };
@@ -1432,8 +1294,8 @@ var AdminViews;
                 };
                 return m("div", [
                     m("h2", "Nodes List"),
-                    m(".stats-table", Components.Table.create(comparisonData)),
-                    nodeStatuses.AllDetails()
+                    m(".section", ctrl.PrimaryStats()),
+                    m(".stats-table", Components.Table.create(comparisonData))
                 ]);
             }
             NodesPage.view = view;
@@ -1459,6 +1321,42 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
+                Controller.prototype.PrimaryStats = function () {
+                    var nodeStats = nodeStatuses.GetStatus(this._nodeId);
+                    if (nodeStats) {
+                        return m(".primary-stats", [
+                            m(".stat", [
+                                m("span.title", "Started At"),
+                                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at))))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Last Updated At"),
+                                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at))))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Total Ranges"),
+                                m("span.value", nodeStats.range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Total Live Bytes"),
+                                m("span.value", Utils.Format.Bytes(nodeStats.stats.live_bytes))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Leader Ranges"),
+                                m("span.value", nodeStats.leader_range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Available"),
+                                m("span.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Fully Replicated"),
+                                m("span.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count))
+                            ])
+                        ]);
+                    }
+                    return m(".primary-stats");
+                };
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
                     this.exec.refresh();
@@ -1480,9 +1378,9 @@ var AdminViews;
                 var nodeId = m.route.param("node_id");
                 return m("div", [
                     m("h2", "Node Status"),
-                    m("div", [
+                    m(".section", [
                         m("h3", "Node: " + nodeId),
-                        nodeStatuses.Details(nodeId)
+                        ctrl.PrimaryStats()
                     ]),
                     m(".charts", ctrl.axes.map(function (axis) {
                         return m("", { style: "float:left" }, [
@@ -1501,6 +1399,7 @@ var AdminViews;
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
+/// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
     "use strict";
@@ -1522,6 +1421,34 @@ var AdminViews;
                 }
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
+                };
+                Controller.prototype.PrimaryStats = function () {
+                    var allStats = storeStatuses.totalStatus();
+                    if (allStats) {
+                        return m(".primary-stats", [
+                            m(".stat", [
+                                m("span.title", "Total Ranges"),
+                                m("span.value", allStats.range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Total Live Bytes"),
+                                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Leader Ranges"),
+                                m("span.value", allStats.leader_range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Available"),
+                                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Fully Replicated"),
+                                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count))
+                            ])
+                        ]);
+                    }
+                    return m(".primary-stats");
                 };
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
@@ -1577,8 +1504,8 @@ var AdminViews;
                 };
                 return m("div", [
                     m("h2", "Stores List"),
-                    m(".stats-table", Components.Table.create(comparisonData)),
-                    storeStatuses.AllDetails()
+                    m(".section", ctrl.PrimaryStats()),
+                    m(".stats-table", Components.Table.create(comparisonData))
                 ]);
             }
             StoresPage.view = view;
@@ -1617,6 +1544,42 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
+                Controller.prototype.PrimaryStats = function () {
+                    var storeStats = storeStatuses.GetStatus(this._storeId);
+                    if (storeStats) {
+                        return m(".primary-stats", [
+                            m(".stat", [
+                                m("span.title", "Started At"),
+                                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStats.started_at))))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Last Updated At"),
+                                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStats.updated_at))))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Total Ranges"),
+                                m("span.value", storeStats.range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Total Live Bytes"),
+                                m("span.value", Utils.Format.Bytes(storeStats.stats.live_bytes))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Leader Ranges"),
+                                m("span.value", storeStats.leader_range_count)
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Available"),
+                                m("span.value", Utils.Format.Percentage(storeStats.available_range_count, storeStats.leader_range_count))
+                            ]),
+                            m(".stat", [
+                                m("span.title", "Fully Replicated"),
+                                m("span.value", Utils.Format.Percentage(storeStats.replicated_range_count, storeStats.leader_range_count))
+                            ])
+                        ]);
+                    }
+                    return m(".primary-stats");
+                };
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
                     this.exec.refresh();
@@ -1638,9 +1601,9 @@ var AdminViews;
                 var storeId = m.route.param("store_id");
                 return m("div", [
                     m("h2", "Store Status"),
-                    m("div", [
+                    m(".section", [
                         m("h3", "Store: " + storeId),
-                        storeStatuses.Details(storeId)
+                        ctrl.PrimaryStats()
                     ]),
                     m(".charts", ctrl.axes.map(function (axis) {
                         return m("", { style: "float:left" }, [

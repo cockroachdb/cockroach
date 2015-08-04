@@ -6,6 +6,7 @@
 /// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 
 /**
  * AdminViews is the primary module for Cockroaches administrative web
@@ -81,6 +82,35 @@ module AdminViews {
           clearInterval(this._interval);
         }
 
+        public PrimaryStats(): _mithril.MithrilVirtualElement {
+          let allStats: Models.Proto.Status = nodeStatuses.totalStatus();
+          if (allStats) {
+            return m(".primary-stats", [
+              m(".stat", [
+                m("span.title", "Total Ranges"),
+                m("span.value", allStats.range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Total Live Bytes"),
+                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes))
+              ]),
+              m(".stat", [
+                m("span.title", "Leader Ranges"),
+                m("span.value", allStats.leader_range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Available"),
+                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count))
+              ]),
+              m(".stat", [
+                m("span.title", "Fully Replicated"),
+                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count))
+              ])
+            ]);
+          }
+          return m(".primary-stats");
+        }
+
         private _refresh(): void {
           nodeStatuses.refresh();
         }
@@ -97,8 +127,8 @@ module AdminViews {
         };
         return m("div", [
           m("h2", "Nodes List"),
-          m(".stats-table", Components.Table.create(comparisonData)),
-          nodeStatuses.AllDetails()
+          m(".section", ctrl.PrimaryStats()),
+          m(".stats-table", Components.Table.create(comparisonData))
         ]);
       }
     }
@@ -117,16 +147,6 @@ module AdminViews {
 
         public onunload(): void {
           clearInterval(this._interval);
-        }
-
-        private _refresh(): void {
-          nodeStatuses.refresh();
-          this.exec.refresh();
-        }
-
-        private _addChart(axis: Metrics.Axis): void {
-          axis.selectors().forEach((s: Metrics.Select.Selector) => this._query.selectors().push(s));
-          this.axes.push(axis);
         }
 
         public constructor(nodeId: string) {
@@ -149,6 +169,53 @@ module AdminViews {
           this._refresh();
           this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
         }
+
+        public PrimaryStats(): _mithril.MithrilVirtualElement {
+          let nodeStats: Models.Proto.NodeStatus = nodeStatuses.GetStatus(this._nodeId);
+          if (nodeStats) {
+            return m(".primary-stats", [
+              m(".stat", [
+                m("span.title", "Started At"),
+                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at))))
+              ]),
+              m(".stat", [
+                m("span.title", "Last Updated At"),
+                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at))))
+              ]),
+              m(".stat", [
+                m("span.title", "Total Ranges"),
+                m("span.value", nodeStats.range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Total Live Bytes"),
+                m("span.value", Utils.Format.Bytes(nodeStats.stats.live_bytes))
+              ]),
+              m(".stat", [
+                m("span.title", "Leader Ranges"),
+                m("span.value", nodeStats.leader_range_count)
+              ]),
+              m(".stat", [
+                m("span.title", "Available"),
+                m("span.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count))
+              ]),
+              m(".stat", [
+                m("span.title", "Fully Replicated"),
+                m("span.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count))
+              ])
+            ]);
+          }
+          return m(".primary-stats");
+        }
+
+        private _refresh(): void {
+          nodeStatuses.refresh();
+          this.exec.refresh();
+        }
+
+        private _addChart(axis: Metrics.Axis): void {
+          axis.selectors().forEach((s: Metrics.Select.Selector) => this._query.selectors().push(s));
+          this.axes.push(axis);
+        }
       }
 
       export function controller(): Controller {
@@ -160,9 +227,9 @@ module AdminViews {
         let nodeId: string = m.route.param("node_id");
         return m("div", [
           m("h2", "Node Status"),
-          m("div", [
+          m(".section", [
             m("h3", "Node: " + nodeId),
-            nodeStatuses.Details(nodeId)
+            ctrl.PrimaryStats()
           ]),
           m(".charts", ctrl.axes.map((axis: Metrics.Axis) => {
             return m("", { style: "float:left" }, [
