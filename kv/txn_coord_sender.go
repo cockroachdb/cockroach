@@ -549,22 +549,31 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 // inconsistencies are found.
 // It is checked that the individual call does not have a User, UserPriority
 // or Txn set that differs from the batch's.
-func updateForBatch(aHeader *proto.RequestHeader, bHeader proto.RequestHeader) error {
+func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
+	aHeader := args.Header()
 	if aHeader.User != "" && aHeader.User != bHeader.User {
 		return util.Error("conflicting user on call in batch")
 	}
 	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
 		return util.Error("conflicting user priority on call in batch")
 	}
-	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
-		return util.Error("conflicting transaction in transactional batch")
-	}
-
 	aHeader.User = bHeader.User
 	aHeader.UserPriority = bHeader.UserPriority
-	aHeader.Txn = bHeader.Txn
+	// Only allow individual transactions in a batch if
+	// - the batch is non-transactional,
+	// - the individual transaction does not write intents, and
+	// - the individual transaction is initialized.
+	// The main usage of this is to allow mass-resolution of intents, which
+	// means sending a non-txn batch of transactional InternalResolveIntent.
+	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
+		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
+			return util.Error("conflicting transaction in transactional batch")
+		}
+	} else {
+		aHeader.Txn = bHeader.Txn
+	}
 	return nil
 }
 
@@ -581,7 +590,7 @@ func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchR
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		if err := updateForBatch(args.Header(), batchArgs.RequestHeader); err != nil {
+		if err := updateForBatch(args, batchArgs.RequestHeader); err != nil {
 			batchReply.Header().SetGoError(err)
 			return
 		}
