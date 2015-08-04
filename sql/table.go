@@ -76,7 +76,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 					ColumnNames: []string{string(d.Name)},
 				}
 				if d.PrimaryKey {
-					index.Name = "primary"
+					index.Name = structured.PrimaryKeyIndexName
 				}
 				desc.Indexes = append(desc.Indexes, index)
 			}
@@ -87,7 +87,7 @@ func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 				ColumnNames: d.Columns,
 			}
 			if d.PrimaryKey {
-				index.Name = "primary"
+				index.Name = structured.PrimaryKeyIndexName
 			}
 			desc.Indexes = append(desc.Indexes, index)
 		default:
