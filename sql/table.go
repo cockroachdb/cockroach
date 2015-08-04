@@ -115,6 +115,13 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 	return &desc, nil
 }
 
+func encodeTablePrefix(tableID uint32) []byte {
+	var key []byte
+	key = append(key, keys.TableDataPrefix...)
+	key = encoding.EncodeUvarint(key, uint64(tableID))
+	return key
+}
+
 func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 	var key []byte
 	key = append(key, keys.TableDataPrefix...)
