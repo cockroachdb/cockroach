@@ -52,7 +52,7 @@ func (q *qvalue) Datum() parser.Datum {
 }
 
 func (q *qvalue) String() string {
-	return q.datum.String()
+	return q.col.Name
 }
 
 type qvalMap map[ColumnID]*qvalue
@@ -64,9 +64,12 @@ type scanNode struct {
 	txn              *client.Txn
 	desc             *TableDescriptor
 	index            *IndexDescriptor
+	startKey         proto.Key
+	endKey           proto.Key
 	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
 	columns          []string
+	columnIDs        []ColumnID
 	err              error
 	indexKey         []byte            // the index key of the current row
 	kvs              []client.KeyValue // the raw key/value pairs
@@ -204,15 +207,24 @@ func (n *scanNode) initScan() bool {
 	}
 
 	// Retrieve all of the keys that start with our index key prefix.
-	startKey := proto.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
-	endKey := startKey.PrefixEnd()
-	n.kvs, n.err = n.txn.Scan(startKey, endKey, 0)
+	if len(n.startKey) == 0 {
+		n.startKey = proto.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
+	}
+	if len(n.endKey) == 0 {
+		n.endKey = n.startKey.PrefixEnd()
+	}
+	n.kvs, n.err = n.txn.Scan(n.startKey, n.endKey, 0)
 	if n.err != nil {
 		return false
 	}
 
 	// Prepare our index key vals slice.
-	n.vals, n.err = makeIndexKeyVals(n.desc, *n.index)
+	n.columnIDs = n.index.ColumnIDs
+	if !n.index.Unique {
+		// Non-unique indexes have the primary key columns appended to their key.
+		n.columnIDs = append(n.columnIDs, n.desc.PrimaryIndex.ColumnIDs...)
+	}
+	n.vals, n.err = makeKeyVals(n.desc, n.columnIDs)
 	if n.err != nil {
 		return false
 	}
@@ -336,7 +348,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 		// This is the first key for the row, initialize the column values that are
 		// part of the index key.
-		for i, id := range n.index.ColumnIDs {
+		for i, id := range n.columnIDs {
 			if qval := n.qvals[id]; qval != nil {
 				qval.datum = n.vals[i]
 			}

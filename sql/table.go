@@ -214,10 +214,9 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
 
-func makeIndexKeyVals(desc *TableDescriptor,
-	index IndexDescriptor) ([]parser.Datum, error) {
-	vals := make([]parser.Datum, len(index.ColumnIDs))
-	for i, id := range index.ColumnIDs {
+func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, error) {
+	vals := make([]parser.Datum, len(columnIDs))
+	for i, id := range columnIDs {
 		col, err := desc.FindColumnByID(id)
 		if err != nil {
 			return nil, err
@@ -234,20 +233,12 @@ func makeIndexKeyVals(desc *TableDescriptor,
 			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}
 	}
-	if !index.Unique {
-		// Non-unique columns are suffixed by the primary index key.
-		pkVals, err := makeIndexKeyVals(desc, desc.PrimaryIndex)
-		if err != nil {
-			return nil, err
-		}
-		vals = append(vals, pkVals...)
-	}
 	return vals, nil
 }
 
 // decodeIndexKey decodes the values that are a part of the specified index
-// key. Vals is a slice returned from makeIndexKeyVals. The remaining bytes in
-// the index key are returned which will either be an encoded column ID for the
+// key. Vals is a slice returned from makeKeyVals. The remaining bytes in the
+// index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
 func decodeIndexKey(desc *TableDescriptor,
