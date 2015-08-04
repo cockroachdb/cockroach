@@ -19,6 +19,7 @@ package stop
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -170,6 +171,10 @@ func (tm TaskMap) String() string {
 func (s *Stopper) RunningTasks() TaskMap {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.runningTasksLocked()
+}
+
+func (s *Stopper) runningTasksLocked() TaskMap {
 	m := map[string]int{}
 	for k := range s.tasks {
 		if s.tasks[k] == 0 {
@@ -221,6 +226,7 @@ func (s *Stopper) Quiesce() {
 	defer s.mu.Unlock()
 	s.draining = true
 	for s.numTasks > 0 {
+		log.Print("draining; tasks left:\n", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.drain.Wait()
 	}
