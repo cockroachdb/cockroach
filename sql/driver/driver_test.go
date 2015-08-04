@@ -469,6 +469,8 @@ func TestInsertSelectDelete(t *testing.T) {
 				expectedResultSlice = append(expectedResultSlice, rowWithNil)
 			case 1:
 				expectedResultSlice = append(expectedResultSlice[:1], append(resultSlice{rowWithNil}, expectedResultSlice[1:]...)...)
+			default:
+				t.Fatalf("unexpected value %d", i)
 			}
 
 			if err := verifyResults(expectedResultSlice, results); err != nil {
