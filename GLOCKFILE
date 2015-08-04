@@ -12,7 +12,7 @@ github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store e1f74b3c58befe661feed7fa4cf52436de753128
 github.com/cockroachdb/c-lz4 6e71f140a365017bbe0904710007f8725fd3f809
 github.com/cockroachdb/c-protobuf 0f9ab7b988ca7474cf76b9a961ab03c0552abcb3
-github.com/cockroachdb/c-rocksdb e120ce0fb32f86b94188928743270ea11ff016b3
+github.com/cockroachdb/c-rocksdb 64f60d5d4e6a8efd44ca3dc77e54836b78b3214d
 github.com/cockroachdb/c-snappy 618733f9e5bab8463b9049117a335a7a1bfc9fd5
 github.com/cockroachdb/yacc 572e006f8e6b0061ebda949d13744f5108389514
 github.com/coreos/etcd 3e455ed1049ab4a6152d8df32e58f014abafbc7f
