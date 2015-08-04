@@ -1300,6 +1300,7 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.InternalGCReq
 //   - \x00\x00meta1 < SplitKey < \x00\x00meta2
 //   - \x00acct < SplitKey < \x00accu
 //   - \x00perm < SplitKey < \x00pern
+//   - \x00user < SplitKey < \x00user
 //   - \x00zone < SplitKey < \x00zonf
 // And split key equal to Meta2KeyMax (\x00\x00meta2\xff\xff) is
 // considered invalid.
