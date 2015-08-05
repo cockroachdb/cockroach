@@ -31,6 +31,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -105,12 +106,12 @@ func TestStoreRangeSplitBetweenConfigPrefix(t *testing.T) {
 	}
 
 	// Update configs to trigger gossip in both of the ranges.
-	acctConfig := &proto.AcctConfig{}
+	acctConfig := &config.AcctConfig{}
 	key = keys.MakeKey(keys.ConfigAccountingPrefix, proto.KeyMin)
 	if err = store.DB().Put(key, acctConfig); err != nil {
 		t.Fatal(err)
 	}
-	zoneConfig := &proto.ZoneConfig{}
+	zoneConfig := &config.ZoneConfig{}
 	key = keys.MakeKey(keys.ConfigZonePrefix, proto.KeyMin)
 	if err = store.DB().Put(key, zoneConfig); err != nil {
 		t.Fatal(err)
@@ -408,7 +409,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// This will cause the split queue to split the range in the background.
 	// This must happen after fillRange() because that function is not using
 	// a full-fledged client and cannot handle running concurrently with splits.
-	zoneConfig := &proto.ZoneConfig{
+	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{},
 			{},
@@ -451,7 +452,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Set the maxBytes and trigger a range split.
 	key := keys.MakeKey(keys.ConfigZonePrefix, proto.Key("db1"))
 	maxBytes := int64(1 << 16)
-	zoneConfig := &proto.ZoneConfig{
+	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{},
 			{},
@@ -486,8 +487,8 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	acctConfig := &proto.AcctConfig{}
-	zoneConfig := &proto.ZoneConfig{}
+	acctConfig := &config.AcctConfig{}
+	zoneConfig := &config.ZoneConfig{}
 
 	// Write zone configs for db3 & db4.
 	b := &client.Batch{}
@@ -535,7 +536,7 @@ func TestStoreRangeManySplits(t *testing.T) {
 
 	// Write zone configs to trigger the first round of splits.
 	numDbs := 20
-	zoneConfig := &proto.ZoneConfig{}
+	zoneConfig := &config.ZoneConfig{}
 	b := &client.Batch{}
 	for i := 0; i < numDbs; i++ {
 		key := proto.Key(fmt.Sprintf("db%02d", 20-i))
@@ -571,7 +572,7 @@ func TestStoreRangeManySplits(t *testing.T) {
 	}
 
 	// Then start the second round of splits.
-	acctConfig := &proto.AcctConfig{}
+	acctConfig := &config.AcctConfig{}
 	b = &client.Batch{}
 	for i := 0; i < numDbs; i++ {
 		key := proto.Key(fmt.Sprintf("db%02d/table", 20-i))

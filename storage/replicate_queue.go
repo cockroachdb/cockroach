@@ -20,6 +20,7 @@ package storage
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -76,7 +77,7 @@ func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Replica) (
 	return rq.needsReplication(zone, rng)
 }
 
-func (rq *replicateQueue) needsReplication(zone proto.ZoneConfig, rng *Replica) (bool, float64) {
+func (rq *replicateQueue) needsReplication(zone config.ZoneConfig, rng *Replica) (bool, float64) {
 	// TODO(bdarnell): handle non-empty ReplicaAttrs.
 	need := len(zone.ReplicaAttrs)
 	have := len(rng.Desc().Replicas)

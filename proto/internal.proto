@@ -20,7 +20,7 @@ package cockroach.proto;
 option go_package = "proto";
 
 import "cockroach/proto/api.proto";
-import "cockroach/proto/config.proto";
+import "cockroach/proto/metadata.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;

@@ -126,26 +126,3 @@ func TestRangeDescriptorContains(t *testing.T) {
 		}
 	}
 }
-
-func TestPermConfig(t *testing.T) {
-	p := &PermConfig{
-		Read:  []string{"foo", "bar", "baz"},
-		Write: []string{"foo", "baz"},
-	}
-	for _, u := range p.Read {
-		if !p.CanRead(u) {
-			t.Errorf("expected read permission for %q", u)
-		}
-	}
-	if p.CanRead("bad") {
-		t.Errorf("unexpected read access for user \"bad\"")
-	}
-	for _, u := range p.Write {
-		if !p.CanWrite(u) {
-			t.Errorf("expected read permission for %q", u)
-		}
-	}
-	if p.CanWrite("bar") {
-		t.Errorf("unexpected read access for user \"bar\"")
-	}
-}

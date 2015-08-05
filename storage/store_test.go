@@ -31,6 +31,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -744,7 +745,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}
 
 	// Now set a new zone config for the prefix "a" with a different max bytes.
-	zoneConfig := &proto.ZoneConfig{
+	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs:  []proto.Attributes{{}, {}, {}},
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 20,

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -157,11 +158,11 @@ func computeSplitKeys(g *gossip.Gossip, rng *Replica) []proto.Key {
 }
 
 // lookupZoneConfig returns the zone config matching the range.
-func lookupZoneConfig(g *gossip.Gossip, rng *Replica) (proto.ZoneConfig, error) {
+func lookupZoneConfig(g *gossip.Gossip, rng *Replica) (config.ZoneConfig, error) {
 	zoneMap, err := g.GetInfo(gossip.KeyConfigZone)
 	if err != nil || zoneMap == nil {
-		return proto.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)
+		return config.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)
 	}
 	prefixConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey)
-	return *prefixConfig.Config.(*proto.ZoneConfig), nil
+	return *prefixConfig.Config.(*config.ZoneConfig), nil
 }

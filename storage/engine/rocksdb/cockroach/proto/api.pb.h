@@ -28,7 +28,7 @@
 #include <google/protobuf/extension_set.h>
 #include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
-#include "cockroach/proto/config.pb.h"
+#include "cockroach/proto/metadata.pb.h"
 #include "cockroach/proto/data.pb.h"
 #include "cockroach/proto/errors.pb.h"
 #include "gogoproto/gogo.pb.h"

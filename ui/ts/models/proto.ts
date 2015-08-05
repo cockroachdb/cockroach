@@ -82,7 +82,7 @@ module Models {
     }
 
     /*****************************
-     * /proto/config.proto
+     * /proto/metadata.proto
      ****************************/
 
     /**

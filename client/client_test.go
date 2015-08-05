@@ -33,6 +33,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -294,7 +295,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	defer s.Stop()
 	db := createTestClient(s.ServingAddr())
 
-	zoneConfig := &proto.ZoneConfig{
+	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{Attrs: []string{"dc1", "mem"}},
 			{Attrs: []string{"dc2", "mem"}},
@@ -308,7 +309,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
-	readZoneConfig := &proto.ZoneConfig{}
+	readZoneConfig := &config.ZoneConfig{}
 	if err := db.GetProto(key, readZoneConfig); err != nil {
 		t.Fatalf("unable to get proto: %v", err)
 	}

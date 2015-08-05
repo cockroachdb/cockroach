@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.server.status;
 option go_package = "status";
 
-import "cockroach/proto/config.proto";
+import "cockroach/proto/metadata.proto";
 import "cockroach/storage/engine/mvcc.proto";
 import "gogoproto/gogo.proto";
 

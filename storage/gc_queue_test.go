@@ -21,6 +21,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -293,15 +294,15 @@ func TestGCQueueProcess(t *testing.T) {
 // have a zone configured.
 func TestGCQueueLookupGCPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	zoneConfig1 := proto.ZoneConfig{
+	zoneConfig1 := config.ZoneConfig{
 		ReplicaAttrs:  []proto.Attributes{},
 		RangeMinBytes: 1 << 10,
 		RangeMaxBytes: 1 << 18,
-		GC: &proto.GCPolicy{
+		GC: &config.GCPolicy{
 			TTLSeconds: 60 * 60, // 1 hour only
 		},
 	}
-	zoneConfig2 := proto.ZoneConfig{
+	zoneConfig2 := config.ZoneConfig{
 		ReplicaAttrs:  []proto.Attributes{},
 		RangeMinBytes: 1 << 10,
 		RangeMaxBytes: 1 << 18,

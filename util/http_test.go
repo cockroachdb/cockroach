@@ -23,13 +23,14 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-var testConfig = proto.ZoneConfig{
+var testConfig = config.ZoneConfig{
 	ReplicaAttrs: []proto.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"a", "hdd"}},
@@ -131,7 +132,7 @@ func TestUnmarshalRequest(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Add(util.ContentTypeHeader, test.cType)
-		config := &proto.ZoneConfig{}
+		config := &config.ZoneConfig{}
 		err = util.UnmarshalRequest(req, test.body, config, util.AllEncodings)
 		if test.expError {
 			if err == nil {

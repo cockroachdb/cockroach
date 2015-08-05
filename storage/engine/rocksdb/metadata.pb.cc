@@ -1,0 +1,1 @@
+./cockroach/proto/metadata.pb.cc

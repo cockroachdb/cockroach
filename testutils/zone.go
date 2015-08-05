@@ -22,8 +22,8 @@ import (
 
 	gogoproto "github.com/gogo/protobuf/proto"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
 )
 
 // DB provides the functionality needed to read and write zone configs.
@@ -32,8 +32,8 @@ type DB interface {
 	Put(interface{}, interface{}) error
 }
 
-func modifyDefaultZoneConfig(db DB, fn func(proto.ZoneConfig) proto.ZoneConfig) error {
-	zone := proto.ZoneConfig{}
+func modifyDefaultZoneConfig(db DB, fn func(config.ZoneConfig) config.ZoneConfig) error {
+	zone := config.ZoneConfig{}
 	if err := db.GetProto(keys.ConfigZonePrefix, &zone); err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func modifyDefaultZoneConfig(db DB, fn func(proto.ZoneConfig) proto.ZoneConfig) 
 
 // SetDefaultRangeMaxBytes sets the range-max-bytes value for the default zone.
 func SetDefaultRangeMaxBytes(db DB, maxBytes int64) error {
-	return modifyDefaultZoneConfig(db, func(zone proto.ZoneConfig) proto.ZoneConfig {
+	return modifyDefaultZoneConfig(db, func(zone config.ZoneConfig) config.ZoneConfig {
 		zone.RangeMaxBytes = maxBytes
 		return zone
 	})
@@ -54,7 +54,7 @@ func SetDefaultRangeMaxBytes(db DB, maxBytes int64) error {
 
 // SetDefaultRangeReplicaNum sets the replication factor for the default zone.
 func SetDefaultRangeReplicaNum(db DB, numReplicas int) error {
-	return modifyDefaultZoneConfig(db, func(zone proto.ZoneConfig) proto.ZoneConfig {
+	return modifyDefaultZoneConfig(db, func(zone config.ZoneConfig) config.ZoneConfig {
 		if len(zone.ReplicaAttrs) > numReplicas {
 			zone.ReplicaAttrs = zone.ReplicaAttrs[:numReplicas]
 		}

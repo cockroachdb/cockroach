@@ -21,6 +21,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -49,8 +50,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	zoneMap, err := NewPrefixConfigMap([]*PrefixConfig{
-		{proto.KeyMin, nil, &proto.ZoneConfig{RangeMaxBytes: 64 << 20}},
-		{proto.Key("/dbB"), nil, &proto.ZoneConfig{RangeMaxBytes: 64 << 20}},
+		{proto.KeyMin, nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}},
+		{proto.Key("/dbB"), nil, &config.ZoneConfig{RangeMaxBytes: 64 << 20}},
 	})
 	if err != nil {
 		t.Fatal(err)

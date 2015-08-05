@@ -7,12 +7,12 @@
 
 	It is generated from these files:
 		cockroach/proto/api.proto
-		cockroach/proto/config.proto
 		cockroach/proto/data.proto
 		cockroach/proto/errors.proto
 		cockroach/proto/gossip.proto
 		cockroach/proto/heartbeat.proto
 		cockroach/proto/internal.proto
+		cockroach/proto/metadata.proto
 		cockroach/proto/timeseries.proto
 
 	It has these top-level messages:

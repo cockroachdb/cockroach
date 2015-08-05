@@ -18,6 +18,7 @@
 package engine
 
 import (
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -28,12 +29,12 @@ import (
 // versions and maximum age.
 type GarbageCollector struct {
 	expiration proto.Timestamp
-	policy     proto.GCPolicy
+	policy     config.GCPolicy
 }
 
 // NewGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
-func NewGarbageCollector(now proto.Timestamp, policy proto.GCPolicy) *GarbageCollector {
+func NewGarbageCollector(now proto.Timestamp, policy config.GCPolicy) *GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1E9
 	return &GarbageCollector{
 		expiration: proto.Timestamp{WallTime: now.WallTime - ttlNanos},

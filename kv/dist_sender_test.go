@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
@@ -56,7 +57,7 @@ var testAddress = util.MakeUnresolvedAddr("tcp", "node1:8080")
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	g := n.Nodes[0].Gossip
-	permConfig := &proto.PermConfig{
+	permConfig := &config.PermConfig{
 		Read:  []string{""},
 		Write: []string{""},
 	}
@@ -651,10 +652,10 @@ func TestVerifyPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
-	config1 := &proto.PermConfig{
+	config1 := &config.PermConfig{
 		Read:  []string{"read1", "readAll", "rw1", "rwAll"},
 		Write: []string{"write1", "writeAll", "rw1", "rwAll"}}
-	config2 := &proto.PermConfig{
+	config2 := &config.PermConfig{
 		Read:  []string{"read2", "readAll", "rw2", "rwAll"},
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
 	configs := []*storage.PrefixConfig{

@@ -33,15 +33,15 @@ import (
 const (
 	// Types of admin config to manipulate.
 
-	// Accounting expects proto.AcctConfig
+	// Accounting expects config.AcctConfig
 	Accounting = "acct"
-	// Permission expects proto.PermConfig
+	// Permission expects config.PermConfig
 	Permission = "perms"
 	// Quit only handles Get requests.
 	Quit = "quit"
-	// User expects proto.UserConfig
+	// User expects config.UserConfig
 	User = "users"
-	// Zone expects proto.ZoneConfig.
+	// Zone expects config.ZoneConfig.
 	Zone = "zones"
 )
 

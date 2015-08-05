@@ -63,6 +63,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -103,10 +104,10 @@ var (
 
 func init() {
 	// Used in storage.PrefixConfig.
-	gob.Register(&proto.AcctConfig{})
-	gob.Register(&proto.PermConfig{})
-	gob.Register(&proto.UserConfig{})
-	gob.Register(&proto.ZoneConfig{})
+	gob.Register(&config.AcctConfig{})
+	gob.Register(&config.PermConfig{})
+	gob.Register(&config.UserConfig{})
+	gob.Register(&config.ZoneConfig{})
 	gob.Register(&proto.NodeDescriptor{})
 
 	// Used...elsewhere?

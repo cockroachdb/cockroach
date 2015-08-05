@@ -20,6 +20,7 @@ package engine
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -51,8 +52,8 @@ func serializedMVCCValue(deleted bool, t *testing.T) []byte {
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	gcA := NewGarbageCollector(makeTS(0, 0), proto.GCPolicy{TTLSeconds: 1})
-	gcB := NewGarbageCollector(makeTS(0, 0), proto.GCPolicy{TTLSeconds: 2})
+	gcA := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 1})
+	gcB := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 2})
 	n := serializedMVCCValue(false, t)
 	d := serializedMVCCValue(true, t)
 	testData := []struct {

@@ -33,6 +33,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -112,10 +113,10 @@ type configDescriptor struct {
 // configDescriptors is an array containing the accounting, permissions,
 // user, and zone configuration descriptors.
 var configDescriptors = [...]*configDescriptor{
-	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
-	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
-	{keys.ConfigUserPrefix, gossip.KeyConfigUser, proto.UserConfig{}},
-	{keys.ConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
+	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, config.AcctConfig{}},
+	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, config.PermConfig{}},
+	{keys.ConfigUserPrefix, gossip.KeyConfigUser, config.UserConfig{}},
+	{keys.ConfigZonePrefix, gossip.KeyConfigZone, config.ZoneConfig{}},
 }
 
 // tsCacheMethods specifies the set of methods which affect the
