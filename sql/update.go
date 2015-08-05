@@ -18,15 +18,17 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Update updates columns for a selection of rows from a table.
-// TODO(vivek): Update columns that are a part of an index.
 func (p *planner) Update(n *parser.Update) (planNode, error) {
 	tableDesc, err := p.getAliasedTableDesc(n.Table)
 	if err != nil {
@@ -43,13 +45,14 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, err
 	}
 
-	// Don't allow updating any column that is part of the primary key.
-	updateColMap := map[uint32]struct{}{}
+	// Set of columns being updated
+	colIDSet := map[uint32]struct{}{}
 	for _, c := range cols {
-		updateColMap[c.ID] = struct{}{}
+		colIDSet[c.ID] = struct{}{}
 	}
+	// Don't allow updating any column that is part of the primary key.
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := updateColMap[id]; ok {
+		if _, ok := colIDSet[id]; ok {
 			return nil, fmt.Errorf("primary key column \"%s\" cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
@@ -67,21 +70,21 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, err
 	}
 
-	// Create a map of all the columns.
-	colMap := map[uint32]int{}
+	// Create a map from column ID to its position in the row.
+	colIDtoRowIndex := map[uint32]int{}
 	for i, name := range row.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
 			return nil, err
 		}
-		colMap[c.ID] = i
+		colIDtoRowIndex[c.ID] = i
 	}
 
-	index := tableDesc.PrimaryIndex
-	indexKey := encodeIndexKeyPrefix(tableDesc.ID, index.ID)
+	primaryIndex := tableDesc.PrimaryIndex
+	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	// Evaluate all the column value expressions.
-	vals := make([]parser.Expr, 0, 10)
+	vals := make([]parser.Datum, 0, 10)
 	for _, expr := range n.Exprs {
 		val, err := parser.EvalExpr(expr.Expr, nil)
 		if err != nil {
@@ -90,20 +93,62 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		vals = append(vals, val)
 	}
 
+	// Secondary indexes needing updating.
+	var indexes []structured.IndexDescriptor
+	for _, index := range tableDesc.Indexes {
+		for _, id := range index.ColumnIDs {
+			if _, ok := colIDSet[id]; ok {
+				indexes = append(indexes, index)
+				break
+			}
+		}
+	}
+
 	// Update all the rows.
 	b := client.Batch{}
 	for row.Next() {
 		if err := row.Err(); err != nil {
 			return nil, err
 		}
-		// TODO(vivek): update the secondary indexes too.
-		primaryKey, err := encodeIndexKey(index, colMap, row.Values(), indexKey)
+		rowVals := row.Values()
+		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colIDtoRowIndex, rowVals, nil)
 		if err != nil {
 			return nil, err
 		}
-		// Update the columns.
+		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
+		// Compute the current secondary index key:value pairs for this row.
+		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, indexes, colIDtoRowIndex, rowVals, primaryIndexKeySuffix)
+		if err != nil {
+			return nil, err
+		}
+		// Compute the new secondary index key:value pairs for this row.
+		//
+		// Update the row values.
+		for i, col := range cols {
+			rowVals[colIDtoRowIndex[col.ID]] = vals[i]
+		}
+		newSecondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, indexes, colIDtoRowIndex, rowVals, primaryIndexKeySuffix)
+		if err != nil {
+			return nil, err
+		}
+		// Update secondary indexes
+		for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
+			secondaryIndexEntry := secondaryIndexEntries[i]
+			if !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key) {
+				if log.V(2) {
+					log.Infof("CPut %q -> %v", newSecondaryIndexEntry.key, newSecondaryIndexEntry.value)
+				}
+				b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
+				if log.V(2) {
+					log.Infof("Del %q", secondaryIndexEntry.key)
+				}
+				b.Del(secondaryIndexEntry.key)
+			}
+		}
+
+		// add the new values
 		for i, val := range vals {
-			key := encodeColumnKey(cols[i], primaryKey)
+			key := encodeColumnKey(cols[i], primaryIndexKey)
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
@@ -116,6 +161,9 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	if err := p.db.Run(&b); err != nil {
+		if tErr, ok := err.(*proto.ConditionFailedError); ok {
+			return nil, fmt.Errorf("duplicate key value %q violates unique constraint %s", tErr.ActualValue.Bytes, "TODO(tamird)")
+		}
 		return nil, err
 	}
 
