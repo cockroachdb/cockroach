@@ -23,14 +23,24 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// descriptorProto is the interface needed by writeDescriptor and getDescriptor.
+// descriptorProto is the interface implemented by both DatabaseDescriptor
+// and TableDescriptor.
+// TODO(marc): this is getting rather large.
 type descriptorProto interface {
 	gogoproto.Message
+	Grant(*parser.Grant) error
+	Revoke(*parser.Revoke) error
+	Show() (structured.UserPrivilegeList, error)
+	HasPrivilege(string, parser.PrivilegeType) bool
 	GetID() uint32
 	SetID(uint32)
+	GetName() string
 	Validate() error
 }
 
@@ -90,4 +100,37 @@ func (p *planner) getDescriptor(key proto.Key, descriptor descriptorProto) error
 	}
 
 	return descriptor.Validate()
+}
+
+// getDescriptorFromTargetList examines a TargetList and fetches the
+// appropriate descriptor.
+// TODO(marc): support multiple targets.
+func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descriptorProto, error) {
+	if targets.Databases != nil {
+		if len(targets.Databases) == 0 {
+			return nil, errNoDatabase
+		} else if len(targets.Databases) != 1 {
+			return nil, util.Errorf("TODO(marc): multiple targets not implemented")
+		}
+		descriptor, err := p.getDatabaseDesc(targets.Databases[0])
+		if err != nil {
+			return nil, err
+		}
+		return descriptor, nil
+	}
+
+	if targets.Tables == nil {
+		return nil, util.Errorf("no targets speciied")
+	}
+
+	if len(targets.Tables) == 0 {
+		return nil, errNoTable
+	} else if len(targets.Tables) != 1 {
+		return nil, util.Errorf("TODO(marc): multiple targets not implemented")
+	}
+	descriptor, err := p.getTableDesc(targets.Tables[0])
+	if err != nil {
+		return nil, err
+	}
+	return descriptor, nil
 }

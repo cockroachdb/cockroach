@@ -69,6 +69,14 @@ message IndexDescriptor {
   repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs"];
 }
 
+// PrivilegeDescriptor represents the sets of privileges on a descriptor.
+message PrivilegeDescriptor {
+  // lists of users with read permissions.
+  repeated string read = 1;
+  // lists of users with write permissions.
+  repeated string write = 2;
+}
+
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
@@ -85,6 +93,7 @@ message TableDescriptor {
   // next_index_id is used to ensure that deleted index ids are not reused.
   optional uint32 next_index_id = 7 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID"];
+  optional PrivilegeDescriptor privileges = 8 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
@@ -94,8 +103,5 @@ message TableDescriptor {
 message DatabaseDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
-  // lists of users with read permissions.
-  repeated string read = 3 [(gogoproto.moretags) = "yaml:\"read,omitempty\""];
-  // lists of users with write permissions.
-  repeated string write = 4 [(gogoproto.moretags) = "yaml:\"write,omitempty\""];
+  optional PrivilegeDescriptor privileges = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

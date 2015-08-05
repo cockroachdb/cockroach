@@ -7,14 +7,8 @@ SHOW GRANTS ON DATABASE a
 Database User Privileges
 a        root READ,WRITE
 
-statement error .* TODO\(marc\): multiple targets not implemented
+statement error TODO\(marc\): implement SHOW GRANT with no targets
 SHOW GRANTS
-
-statement error syntax error
-SHOW GRANTS ON a.tbl
-
-statement error syntax error
-SHOW GRANTS ON tbl
 
 statement error root user does not have read privilege
 REVOKE READ ON DATABASE a FROM root
@@ -28,6 +22,18 @@ SHOW GRANTS ON DATABASE a
 a        readwrite READ,WRITE
 a        root      READ,WRITE
 a        test-user READ,WRITE
+
+# Create table to inherit DB permissions.
+statement ok
+CREATE TABLE a.t (id INT PRIMARY KEY)
+
+query TTT colnames
+SHOW GRANTS ON a.t
+----
+Table    User      Privileges
+a.t      readwrite READ,WRITE
+a.t      root      READ,WRITE
+a.t      test-user READ,WRITE
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -76,3 +82,12 @@ a        root      READ,WRITE
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+
+# Verify that the table privileges have not changed.
+query TTT colnames
+SHOW GRANTS ON a.t
+----
+Table    User      Privileges
+a.t      readwrite READ,WRITE
+a.t      root      READ,WRITE
+a.t      test-user READ,WRITE

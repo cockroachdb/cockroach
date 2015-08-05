@@ -820,23 +820,31 @@ explain_option_arg:
 grant_stmt:
   GRANT privileges ON privilege_target TO grantee_list
   {
-    $$ = &Grant{Privileges: $2, Targets: $4, Grantees: NameList($6)}
+    $$ = &Grant{Privileges: $2, Grantees: NameList($6), Targets: $4}
   }
 
 // REVOKE privileges ON privilege_target FROM grantee_list
 revoke_stmt:
   REVOKE privileges ON privilege_target FROM grantee_list
   {
-    $$ = &Revoke{Privileges: $2, Targets: $4, Grantees: NameList($6)}
+    $$ = &Revoke{Privileges: $2, Grantees: NameList($6), Targets: $4}
   }
 
 
-// TODO(marc): permissions are currently at the database level.
-// Adjust this to allow tables (including db.* expressions).
 privilege_target:
-  DATABASE name_list
+  qualified_name_list
   {
-    $$ = TargetList{Type: TargetDatabase, Targets: NameList($2)}
+    $$ = TargetList{Tables: QualifiedNames($1)}
+  }
+| TABLE qualified_name_list
+  {
+    // TODO(marc): this is postgres' grammar, but do we really need
+    // both "x" and "TABLE X"?
+    $$ = TargetList{Tables: QualifiedNames($2)}
+  }
+|  DATABASE name_list
+  {
+    $$ = TargetList{Databases: NameList($2)}
   }
 
 privileges:

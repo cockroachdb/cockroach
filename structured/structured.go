@@ -268,8 +268,8 @@ func (desc *DatabaseDescriptor) Validate() error {
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
-func (desc *DatabaseDescriptor) Grant(n *parser.Grant) error {
-	permissions, err := permissionsFromDescriptor(desc)
+func (p *PrivilegeDescriptor) Grant(n *parser.Grant) error {
+	permissions, err := permissionsFromDescriptor(p)
 	if err != nil {
 		return err
 	}
@@ -278,15 +278,15 @@ func (desc *DatabaseDescriptor) Grant(n *parser.Grant) error {
 		return err
 	}
 
-	if err := permissions.FillDescriptor(desc); err != nil {
+	if err := permissions.FillDescriptor(p); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
-func (desc *DatabaseDescriptor) Revoke(n *parser.Revoke) error {
-	permissions, err := permissionsFromDescriptor(desc)
+func (p *PrivilegeDescriptor) Revoke(n *parser.Revoke) error {
+	permissions, err := permissionsFromDescriptor(p)
 	if err != nil {
 		return err
 	}
@@ -295,15 +295,15 @@ func (desc *DatabaseDescriptor) Revoke(n *parser.Revoke) error {
 		return err
 	}
 
-	if err := permissions.FillDescriptor(desc); err != nil {
+	if err := permissions.FillDescriptor(p); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Show returns the list of users and associated privileges for this descriptor.
-func (desc *DatabaseDescriptor) Show() (UserPrivilegeList, error) {
-	permissions, err := permissionsFromDescriptor(desc)
+func (p *PrivilegeDescriptor) Show() (UserPrivilegeList, error) {
+	permissions, err := permissionsFromDescriptor(p)
 	if err != nil {
 		return nil, err
 	}
@@ -312,13 +312,13 @@ func (desc *DatabaseDescriptor) Show() (UserPrivilegeList, error) {
 }
 
 // HasPrivilege returns true if `user` has `privilege` on this descriptor.
-func (desc *DatabaseDescriptor) HasPrivilege(user string, privilege parser.PrivilegeType) bool {
+func (p *PrivilegeDescriptor) HasPrivilege(user string, privilege parser.PrivilegeType) bool {
 	var privUsers []string
 	switch privilege {
 	case parser.PrivilegeRead:
-		privUsers = desc.Read
+		privUsers = p.Read
 	case parser.PrivilegeWrite:
-		privUsers = desc.Write
+		privUsers = p.Write
 	}
 	result := sort.SearchStrings(privUsers, user)
 	return result < len(privUsers) && privUsers[result] == user

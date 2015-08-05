@@ -38,6 +38,7 @@ import (
 var (
 	allowedEncodings     = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 	errNoDatabase        = errors.New("no database specified")
+	errNoTable           = errors.New("no table specified")
 	errEmptyDatabaseName = errors.New("empty database name")
 )
 

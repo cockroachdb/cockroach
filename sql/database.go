@@ -26,9 +26,11 @@ import (
 
 func makeDatabaseDesc(p *parser.CreateDatabase) structured.DatabaseDescriptor {
 	return structured.DatabaseDescriptor{
-		Name:  p.Name.String(),
-		Read:  []string{security.RootUser},
-		Write: []string{security.RootUser},
+		Name: p.Name.String(),
+		PrivilegeDescriptor: structured.PrivilegeDescriptor{
+			Read:  []string{security.RootUser},
+			Write: []string{security.RootUser},
+		},
 	}
 }
 
