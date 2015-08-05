@@ -90,11 +90,8 @@ func NewNetwork(nodeCount int, networkType string,
 		gossipNode := gossip.New(rpcContext, gossipInterval, resolvers)
 		addr := leftNode.Server.Addr()
 		if err := gossipNode.SetNodeDescriptor(&proto.NodeDescriptor{
-			NodeID: proto.NodeID(i + 1),
-			Address: proto.Addr{
-				Network: addr.Network(),
-				Address: addr.String(),
-			},
+			NodeID:  proto.NodeID(i + 1),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		}); err != nil {
 			log.Fatal(err)
 		}

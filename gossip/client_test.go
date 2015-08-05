@@ -49,11 +49,9 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}
 	local = New(lRPCContext, gossipInterval, TestBootstrap)
 	if err := local.SetNodeDescriptor(&proto.NodeDescriptor{
-		NodeID: 1,
-		Address: proto.Addr{
-			Network: laddr.Network(),
-			Address: laddr.String(),
-		}}); err != nil {
+		NodeID:  1,
+		Address: util.MakeUnresolvedAddr(laddr.Network(), laddr.String()),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
@@ -65,11 +63,8 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}
 	remote = New(rRPCContext, gossipInterval, TestBootstrap)
 	if err := local.SetNodeDescriptor(&proto.NodeDescriptor{
-		NodeID: 2,
-		Address: proto.Addr{
-			Network: raddr.Network(),
-			Address: raddr.String(),
-		},
+		NodeID:  2,
+		Address: util.MakeUnresolvedAddr(raddr.Network(), raddr.String()),
 	}); err != nil {
 		t.Fatal(err)
 	}

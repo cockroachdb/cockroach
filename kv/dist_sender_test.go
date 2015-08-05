@@ -78,12 +78,9 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	}
 	nodeIDKey := gossip.MakeNodeIDKey(1)
 	if err := g.AddInfo(nodeIDKey, &proto.NodeDescriptor{
-		NodeID: 1,
-		Address: proto.Addr{
-			Network: testAddress.Network(),
-			Address: testAddress.String(),
-		},
-		Attrs: proto.Attributes{Attrs: []string{"attr1", "attr2"}},
+		NodeID:  1,
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+		Attrs:   proto.Attributes{Attrs: []string{"attr1", "attr2"}},
 	}, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -304,11 +301,8 @@ func TestSendRPCOrder(t *testing.T) {
 			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 			addrToNode[addr.String()] = i
 			nd := &proto.NodeDescriptor{
-				NodeID: proto.NodeID(i),
-				Address: proto.Addr{
-					Network: addr.Network(),
-					Address: addr.String(),
-				},
+				NodeID:  proto.NodeID(i),
+				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 				Attrs: proto.Attributes{
 					Attrs: nodeAttrs[i],
 				},
@@ -794,11 +788,8 @@ func TestSendRPCRetry(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 		nd := &proto.NodeDescriptor{
-			NodeID: proto.NodeID(i),
-			Address: proto.Addr{
-				Network: addr.Network(),
-				Address: addr.String(),
-			},
+			NodeID:  proto.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		}
 		if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)

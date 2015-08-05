@@ -102,14 +102,18 @@ var (
 	TestBootstrap = []resolver.Resolver{}
 )
 
+// init registers all the types that are sent over the wire as
+// implementations of info.Val.
 func init() {
+	// The last thing that isn't a proto.
+	gob.Register(config.PrefixConfigMap{})
+
 	// Used in config.PrefixConfig.
 	gob.Register(&config.AcctConfig{})
 	gob.Register(&config.PermConfig{})
 	gob.Register(&config.UserConfig{})
 	gob.Register(&config.ZoneConfig{})
 	gob.Register(&proto.NodeDescriptor{})
-	gob.Register(config.PrefixConfigMap{})
 
 	// Used...elsewhere?
 	gob.Register(proto.RangeDescriptor{})
@@ -236,7 +240,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address), nil
+	return nd.Address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info

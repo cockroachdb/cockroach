@@ -8,6 +8,7 @@ import proto1 "github.com/gogo/protobuf/proto"
 import math "math"
 
 // discarding unused import gogoproto "gogoproto"
+import cockroach_util "github.com/cockroachdb/cockroach/util"
 
 import io "io"
 import fmt "fmt"
@@ -109,32 +110,6 @@ func (m *RangeTreeNode) GetBlack() bool {
 	return false
 }
 
-// Addr holds any network address. It is structurally similar to net.Addr
-// however String is replaced with Address so the proto will compile.
-type Addr struct {
-	Network          string `protobuf:"bytes,1,opt,name=network" json:"network"`
-	Address          string `protobuf:"bytes,2,opt,name=address" json:"address"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *Addr) Reset()         { *m = Addr{} }
-func (m *Addr) String() string { return proto1.CompactTextString(m) }
-func (*Addr) ProtoMessage()    {}
-
-func (m *Addr) GetNetwork() string {
-	if m != nil {
-		return m.Network
-	}
-	return ""
-}
-
-func (m *Addr) GetAddress() string {
-	if m != nil {
-		return m.Address
-	}
-	return ""
-}
-
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
 	Capacity         int64  `protobuf:"varint,1,opt" json:"Capacity"`
@@ -170,21 +145,21 @@ func (m *StoreCapacity) GetRangeCount() int32 {
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID           NodeID     `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	Address          Addr       `protobuf:"bytes,2,opt,name=address" json:"address"`
-	Attrs            Attributes `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
-	XXX_unrecognized []byte     `json:"-"`
+	NodeID           NodeID                        `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	Address          cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=address" json:"address"`
+	Attrs            Attributes                    `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
+	XXX_unrecognized []byte                        `json:"-"`
 }
 
 func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto1.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
 
-func (m *NodeDescriptor) GetAddress() Addr {
+func (m *NodeDescriptor) GetAddress() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.Address
 	}
-	return Addr{}
+	return cockroach_util.UnresolvedAddr{}
 }
 
 func (m *NodeDescriptor) GetAttrs() Attributes {
@@ -757,96 +732,6 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 
 	return nil
 }
-func (m *Addr) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Network", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Network = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Address = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipMetadata(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
 func (m *StoreCapacity) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -1381,19 +1266,6 @@ func (m *RangeTreeNode) Size() (n int) {
 	return n
 }
 
-func (m *Addr) Size() (n int) {
-	var l int
-	_ = l
-	l = len(m.Network)
-	n += 1 + l + sovMetadata(uint64(l))
-	l = len(m.Address)
-	n += 1 + l + sovMetadata(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *StoreCapacity) Size() (n int) {
 	var l int
 	_ = l
@@ -1642,35 +1514,6 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n2
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *Addr) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Addr) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintMetadata(data, i, uint64(len(m.Network)))
-	i += copy(data[i:], m.Network)
-	data[i] = 0x12
-	i++
-	i = encodeVarintMetadata(data, i, uint64(len(m.Address)))
-	i += copy(data[i:], m.Address)
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

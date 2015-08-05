@@ -425,7 +425,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replica
 	replicaMap := map[string]*proto.Replica{}
 	for i := range replicas {
 		nd := &replicas[i].NodeDesc
-		addr := util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address)
+		addr := nd.Address
 		addrs = append(addrs, addr)
 		replicaMap[addr.String()] = &replicas[i].Replica
 	}

@@ -40,7 +40,7 @@ GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
 GO_PROTOS  := $(sort $(shell find $(REPO_ROOT) -not -path '*/.*' -name *.proto -type f))
 GO_SOURCES  := $(GO_PROTOS:%.proto=%.pb.go)
 
-CPP_PROTOS := $(filter %/api.proto %/metadata.proto %/data.proto %/errors.proto %/internal.proto %/mvcc.proto,$(GO_PROTOS))
+CPP_PROTOS := $(filter %/api.proto %/metadata.proto %/data.proto %/errors.proto %/internal.proto %/mvcc.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
 

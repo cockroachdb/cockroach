@@ -179,10 +179,7 @@ func (n *Node) context() context.Context {
 // initDescriptor initializes the node descriptor with the server
 // address and the node attributes.
 func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
-	n.Descriptor.Address = proto.Addr{
-		Network: addr.Network(),
-		Address: addr.String(),
-	}
+	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	n.Descriptor.Attrs = attrs
 }
 

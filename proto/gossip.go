@@ -17,32 +17,6 @@
 
 package proto
 
-import (
-	"fmt"
-	"net"
-)
-
-// FromNetAddr returns an Addr object based on the supplied net.Addr.
-func FromNetAddr(addr net.Addr) *Addr {
-	return &Addr{
-		Network: addr.Network(),
-		Address: addr.String(),
-	}
-}
-
-// NetAddr returns a net.Addr object.
-func (a Addr) NetAddr() (net.Addr, error) {
-	switch a.Network {
-	case "tcp", "tcp4", "tcp6":
-		return net.ResolveTCPAddr(a.Network, a.Address)
-	case "udp", "udp4", "udp6":
-		return net.ResolveUDPAddr(a.Network, a.Address)
-	case "unix", "unixgram", "unixpacket":
-		return net.ResolveUnixAddr(a.Network, a.Address)
-	}
-	return nil, fmt.Errorf("network %s not supported", a.Network)
-}
-
 // GetUser implements UserRequest.
 // Gossip messages are always sent by the node user.
 func (m *GossipRequest) GetUser() string {
