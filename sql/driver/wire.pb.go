@@ -23,7 +23,7 @@ import math "math"
 import cockroach_proto3 "github.com/cockroachdb/cockroach/proto"
 import cockroach_proto2 "github.com/cockroachdb/cockroach/proto"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import io "io"
 
@@ -263,8 +263,6 @@ func (m *Response) GetResults() []Result {
 	return nil
 }
 
-func init() {
-}
 func (m *RequestHeader) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -322,6 +320,9 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -343,6 +344,9 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				if b < 0x80 {
 					break
 				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWire
 			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
@@ -367,6 +371,9 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -387,6 +394,9 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -434,6 +444,9 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -460,6 +473,9 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -482,6 +498,9 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -501,6 +520,9 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -601,6 +623,9 @@ func (m *Datum) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWire
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -643,6 +668,9 @@ func (m *Datum) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -712,6 +740,9 @@ func (m *Result) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -733,6 +764,9 @@ func (m *Result) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -780,6 +814,9 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -801,6 +838,9 @@ func (m *Result_Row) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -848,6 +888,9 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -894,6 +937,9 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -915,6 +961,9 @@ func (m *Request) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -962,6 +1011,9 @@ func (m *Response) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -986,6 +1038,9 @@ func (m *Response) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1007,6 +1062,9 @@ func (m *Response) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1064,6 +1122,9 @@ func skipWire(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthWire
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -1102,6 +1163,11 @@ func skipWire(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthWire = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (this *Datum) GetValue() interface{} {
 	if this.BoolVal != nil {
 		return this.BoolVal

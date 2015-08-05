@@ -18,7 +18,7 @@ package message
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -62,7 +62,4 @@ func (m *ArithResponse) GetC() int32 {
 		return m.C
 	}
 	return 0
-}
-
-func init() {
 }

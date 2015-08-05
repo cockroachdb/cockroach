@@ -7,7 +7,7 @@ package message
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import io "io"
 import fmt "fmt"
@@ -48,8 +48,6 @@ func (m *EchoResponse) GetMsg() string {
 	return ""
 }
 
-func init() {
-}
 func (m *EchoRequest) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -104,6 +102,9 @@ func (m *EchoRequest) Unmarshal(data []byte) error {
 			skippy, err := skipEcho(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthEcho
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -170,6 +171,9 @@ func (m *EchoResponse) Unmarshal(data []byte) error {
 			if err != nil {
 				return err
 			}
+			if skippy < 0 {
+				return ErrInvalidLengthEcho
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -226,6 +230,9 @@ func skipEcho(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthEcho
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -264,6 +271,11 @@ func skipEcho(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthEcho = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (m *EchoRequest) Size() (n int) {
 	var l int
 	_ = l

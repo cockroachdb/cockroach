@@ -19,7 +19,7 @@ import proto "github.com/gogo/protobuf/proto"
 import math "math"
 import cockroach_proto1 "github.com/cockroachdb/cockroach/proto"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import io "io"
 import fmt "fmt"
@@ -245,8 +245,6 @@ func (m *MVCCStats) GetLastUpdateNanos() int64 {
 	return 0
 }
 
-func init() {
-}
 func (m *MVCCValue) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -300,6 +298,9 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -323,6 +324,9 @@ func (m *MVCCValue) Unmarshal(data []byte) error {
 			skippy, err := skipMvcc(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -370,6 +374,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -397,6 +404,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -425,6 +435,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
 			}
+			m.KeyBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -440,6 +451,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
 			}
+			m.ValBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -468,6 +480,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -491,6 +506,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			skippy, err := skipMvcc(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -525,6 +543,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LiveBytes", wireType)
 			}
+			m.LiveBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -540,6 +559,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
 			}
+			m.KeyBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -555,6 +575,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
 			}
+			m.ValBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -570,6 +591,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
 			}
+			m.IntentBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -585,6 +607,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LiveCount", wireType)
 			}
+			m.LiveCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -600,6 +623,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyCount", wireType)
 			}
+			m.KeyCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -615,6 +639,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ValCount", wireType)
 			}
+			m.ValCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -630,6 +655,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentCount", wireType)
 			}
+			m.IntentCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -645,6 +671,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
 			}
+			m.IntentAge = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -660,6 +687,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
 			}
+			m.GCBytesAge = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -675,6 +703,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SysBytes", wireType)
 			}
+			m.SysBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -690,6 +719,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SysCount", wireType)
 			}
+			m.SysCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -705,6 +735,7 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
 			}
+			m.LastUpdateNanos = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -729,6 +760,9 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			skippy, err := skipMvcc(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -786,6 +820,9 @@ func skipMvcc(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthMvcc
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -824,6 +861,11 @@ func skipMvcc(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthMvcc = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (m *MVCCValue) Size() (n int) {
 	var l int
 	_ = l

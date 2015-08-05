@@ -16,7 +16,7 @@ package sql
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import io "io"
 import fmt "fmt"
@@ -41,8 +41,6 @@ func (m *Session) GetDatabase() string {
 	return ""
 }
 
-func init() {
-}
 func (m *Session) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -97,6 +95,9 @@ func (m *Session) Unmarshal(data []byte) error {
 			skippy, err := skipServer(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthServer
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -154,6 +155,9 @@ func skipServer(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthServer
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -192,6 +196,11 @@ func skipServer(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthServer = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (m *Session) Size() (n int) {
 	var l int
 	_ = l

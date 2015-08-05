@@ -16,7 +16,7 @@ package log
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
 
@@ -147,8 +147,6 @@ func (m *LogEntry_Arg) GetJson() []byte {
 	return nil
 }
 
-func init() {
-}
 func (m *LogEntry) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -172,6 +170,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Severity", wireType)
 			}
+			m.Severity = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -187,6 +186,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Time", wireType)
 			}
+			m.Time = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -202,6 +202,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ThreadID", wireType)
 			}
+			m.ThreadID = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -239,6 +240,7 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Line", wireType)
 			}
+			m.Line = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -289,6 +291,9 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -381,6 +386,9 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -403,6 +411,9 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -422,6 +433,9 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			skippy, err := skipLog(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthLog
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -512,6 +526,9 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLog
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -531,6 +548,9 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 			skippy, err := skipLog(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthLog
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -588,6 +608,9 @@ func skipLog(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthLog
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -626,6 +649,11 @@ func skipLog(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthLog = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (m *LogEntry) Size() (n int) {
 	var l int
 	_ = l
