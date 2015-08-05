@@ -98,18 +98,18 @@ const (
 // configDescriptor describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 type configDescriptor struct {
-	keyPrefix proto.Key   // Range key prefix
-	gossipKey string      // Gossip key
-	configI   interface{} // Config struct interface
+	keyPrefix proto.Key         // Range key prefix
+	gossipKey string            // Gossip key
+	configI   gogoproto.Message // Config struct interface
 }
 
 // configDescriptors is an array containing the accounting, permissions,
 // user, and zone configuration descriptors.
 var configDescriptors = [...]*configDescriptor{
-	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, config.AcctConfig{}},
-	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, config.PermConfig{}},
-	{keys.ConfigUserPrefix, gossip.KeyConfigUser, config.UserConfig{}},
-	{keys.ConfigZonePrefix, gossip.KeyConfigZone, config.ZoneConfig{}},
+	{keys.ConfigAccountingPrefix, gossip.KeyConfigAccounting, &config.AcctConfig{}},
+	{keys.ConfigPermissionPrefix, gossip.KeyConfigPermission, &config.PermConfig{}},
+	{keys.ConfigUserPrefix, gossip.KeyConfigUser, &config.UserConfig{}},
+	{keys.ConfigZonePrefix, gossip.KeyConfigZone, &config.ZoneConfig{}},
 }
 
 // tsCacheMethods specifies the set of methods which affect the
@@ -1148,7 +1148,7 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
 // configuration maps include accounting, permissions, users, and zones.
-func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) (config.PrefixConfigMap, []byte, error) {
+func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI gogoproto.Message) (config.PrefixConfigMap, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
@@ -1159,7 +1159,7 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) 
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
 		// proto encoded config from the Value into a new instance of configI.
-		cfg := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
+		cfg := reflect.New(reflect.TypeOf(configI).Elem()).Interface().(gogoproto.Message)
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, cfg); err != nil {
 			return nil, nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
