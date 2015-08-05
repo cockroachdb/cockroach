@@ -382,8 +382,8 @@ func incrementArgs(key []byte, inc int64, raftID proto.RangeID, storeID proto.St
 	}
 }
 
-func internalTruncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.InternalTruncateLogRequest {
-	return proto.InternalTruncateLogRequest{
+func truncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
+	return proto.TruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
 			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},

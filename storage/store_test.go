@@ -104,13 +104,6 @@ func (db *testSender) Send(_ context.Context, call proto.Call) {
 		if err := db.sendBatch(reqs, call.Reply.(*proto.BatchResponse)); err != nil {
 			safeSetGoError(call.Reply, err)
 		}
-	case *proto.InternalBatchRequest:
-		for i := range t.Requests {
-			reqs = append(reqs, &t.Requests[i])
-		}
-		if err := db.sendBatch(reqs, call.Reply.(*proto.InternalBatchResponse)); err != nil {
-			safeSetGoError(call.Reply, err)
-		}
 	default:
 		db.sendOne(call)
 	}

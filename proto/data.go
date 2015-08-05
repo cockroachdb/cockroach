@@ -378,7 +378,7 @@ func (kv RawKeyValue) Compare(b llrb.Comparable) int {
 // uniqueness. The specified user-level priority is combined with a
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
-// transactions (see Range.InternalPushTxn).
+// transactions (see Replica.PushTxn).
 func NewTransaction(name string, baseKey Key, userPriority int32,
 	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.

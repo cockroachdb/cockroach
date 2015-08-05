@@ -159,7 +159,7 @@ func (tm *txnMetadata) resolve(trace *tracer.Trace, resolved []proto.Key, sender
 		key := o.Key.Start().(proto.Key)
 		endKey := o.Key.End().(proto.Key)
 		if !key.Next().Equal(endKey) {
-			call.Args = &proto.InternalResolveIntentRangeRequest{
+			call.Args = &proto.ResolveIntentRangeRequest{
 				RequestHeader: proto.RequestHeader{
 					Timestamp: txn.Timestamp,
 					Key:       key,
@@ -168,7 +168,7 @@ func (tm *txnMetadata) resolve(trace *tracer.Trace, resolved []proto.Key, sender
 					Txn:       txn,
 				},
 			}
-			call.Reply = &proto.InternalResolveIntentRangeResponse{}
+			call.Reply = &proto.ResolveIntentRangeResponse{}
 		} else {
 			// Check if the key has already been resolved; skip if yes.
 			found := false
@@ -183,7 +183,7 @@ func (tm *txnMetadata) resolve(trace *tracer.Trace, resolved []proto.Key, sender
 			if found {
 				continue
 			}
-			call.Args = &proto.InternalResolveIntentRequest{
+			call.Args = &proto.ResolveIntentRequest{
 				RequestHeader: proto.RequestHeader{
 					Timestamp: txn.Timestamp,
 					Key:       key,
@@ -191,7 +191,7 @@ func (tm *txnMetadata) resolve(trace *tracer.Trace, resolved []proto.Key, sender
 					Txn:       txn,
 				},
 			}
-			call.Reply = &proto.InternalResolveIntentResponse{}
+			call.Reply = &proto.ResolveIntentResponse{}
 		}
 		ctx := tracer.ToCtx(context.Background(), trace.Fork())
 		if log.V(2) {
@@ -368,23 +368,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, call proto.Call) {
 
 	// Process batch specially; otherwise, send via wrapped sender.
 	switch args := call.Args.(type) {
-	case *proto.InternalBatchRequest:
-		trace.Event("batch processing")
-		tc.sendBatch(ctx, args, call.Reply.(*proto.InternalBatchResponse))
 	case *proto.BatchRequest:
-		// Convert the batch request to internal-batch request.
-		internalArgs := &proto.InternalBatchRequest{RequestHeader: args.RequestHeader}
-		internalReply := &proto.InternalBatchResponse{}
-		for i := range args.Requests {
-			internalArgs.Add(args.Requests[i].GetValue().(proto.Request))
-		}
-		tc.sendBatch(ctx, internalArgs, internalReply)
-		reply := call.Reply.(*proto.BatchResponse)
-		reply.ResponseHeader = internalReply.ResponseHeader
-		// Convert from internal-batch response to batch response.
-		for i := range internalReply.Responses {
-			reply.Add(internalReply.Responses[i].GetValue().(proto.Response))
-		}
+		trace.Event("batch processing")
+		tc.sendBatch(ctx, args, call.Reply.(*proto.BatchResponse))
 	default:
 		// TODO(tschottdorf): should treat all calls as Batch. After all, that
 		// will be almost all calls.
@@ -625,7 +611,7 @@ func updateForBatch(aHeader *proto.RequestHeader, bHeader proto.RequestHeader) e
 // TODO(tschottdorf): modify sendBatch so that it sends truly parallel requests
 // when outside of a Transaction. This can then be used to address the TODO in
 // (*TxnCoordSender).resolve().
-func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.InternalBatchRequest, batchReply *proto.InternalBatchResponse) {
+func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies
 	// as needed.
@@ -754,10 +740,11 @@ func (tc *TxnCoordSender) unregisterTxn(id string) {
 	delete(tc.txns, id)
 }
 
-// heartbeat periodically sends an InternalHeartbeatTxn RPC to an extant
-// transaction, stopping in the event the transaction is aborted or committed
-// after attempting to resolve the intents. When done, unregisters the
-// transaction.
+// heartbeat periodically sends a HeartbeatTxn RPC to an extant
+// transaction, stopping in the event the transaction is aborted or
+// committed after attempting to resolve the intents. When the
+// heartbeat stops, the transaction is unregistered from the
+// coordinator,
 func (tc *TxnCoordSender) heartbeat(id string) {
 	var tickChan <-chan time.Time
 	{
@@ -812,7 +799,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 				return
 			}
 
-			request := &proto.InternalHeartbeatTxnRequest{
+			request := &proto.HeartbeatTxnRequest{
 				RequestHeader: proto.RequestHeader{
 					Key:  txn.Key,
 					User: security.RootUser,
@@ -821,7 +808,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 			}
 
 			request.Header().Timestamp = tc.clock.Now()
-			reply := &proto.InternalHeartbeatTxnResponse{}
+			reply := &proto.HeartbeatTxnResponse{}
 			call := proto.Call{
 				Args:  request,
 				Reply: reply,

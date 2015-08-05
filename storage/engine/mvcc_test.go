@@ -2323,7 +2323,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		}
 	}
 
-	keys := []proto.InternalGCRequest_GCKey{
+	keys := []proto.GCRequest_GCKey{
 		{Key: proto.Key("a"), Timestamp: ts1},
 		{Key: proto.Key("a-del"), Timestamp: ts2},
 		{Key: proto.Key("b"), Timestamp: ts1},
@@ -2387,7 +2387,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	keys := []proto.InternalGCRequest_GCKey{
+	keys := []proto.GCRequest_GCKey{
 		{Key: proto.Key("a"), Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
@@ -2413,7 +2413,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	if err := MVCCDelete(engine, nil, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
-	keys := []proto.InternalGCRequest_GCKey{
+	keys := []proto.GCRequest_GCKey{
 		{Key: proto.Key("a"), Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {

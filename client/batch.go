@@ -132,20 +132,22 @@ func (b *Batch) fillResults() error {
 				row := &result.Rows[k]
 				row.Key = []byte(call.Args.(*proto.DeleteRequest).Key)
 
-			case *proto.AdminMergeResponse:
-			case *proto.AdminSplitResponse:
 			case *proto.DeleteRangeResponse:
 			case *proto.EndTransactionResponse:
-			case *proto.InternalBatchResponse:
-			case *proto.InternalGCResponse:
-			case *proto.InternalMergeResponse:
-			case *proto.InternalPushTxnResponse:
-			case *proto.InternalRangeLookupResponse:
-			case *proto.InternalResolveIntentResponse:
-			case *proto.InternalResolveIntentRangeResponse:
+			case *proto.AdminMergeResponse:
+			case *proto.AdminSplitResponse:
+			case *proto.HeartbeatTxnResponse:
+			case *proto.GCResponse:
+			case *proto.PushTxnResponse:
+			case *proto.RangeLookupResponse:
+			case *proto.ResolveIntentResponse:
+			case *proto.ResolveIntentRangeResponse:
+			case *proto.MergeResponse:
+			case *proto.TruncateLogResponse:
+			case *proto.LeaderLeaseResponse:
+			case *proto.BatchResponse:
 				// Nothing to do for these methods as they do not generate any
-				// rows. For the proto.Internal* responses the caller will have hold of
-				// the response object itself.
+				// rows.
 
 			default:
 				if result.Err == nil {

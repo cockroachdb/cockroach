@@ -52,8 +52,8 @@ const (
 	retryBackoff           = 250 * time.Millisecond
 	maxRetryBackoff        = 30 * time.Second
 
-	// The default maximum number of ranges to return
-	// from an internal range lookup.
+	// The default maximum number of ranges to return from a range
+	// lookup.
 	defaultRangeLookupMaxRanges = 8
 	// The default size of the leader cache.
 	defaultLeaderCacheSize = 1 << 16
@@ -266,22 +266,23 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 		})
 }
 
-// lookupOptions capture additional options to pass to InternalRangeLookup.
+// lookupOptions capture additional options to pass to RangeLookup.
 type lookupOptions struct {
 	ignoreIntents bool
 }
 
-// internalRangeLookup dispatches an InternalRangeLookup request for the given
+// rangeLookup dispatches an RangeLookup request for the given
 // metadata key to the replicas of the given range. Note that we allow
-// inconsistent reads when doing range lookups for efficiency. Getting stale
-// data is not a correctness problem but instead may infrequently result in
-// additional latency as additional range lookups may be required. Note also
-// that internalRangeLookup bypasses the DistSender's Send() method, so there
-// is no error inspection and retry logic here; this is not an issue since the
-// lookup performs a single inconsistent read only.
-func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
+// inconsistent reads when doing range lookups for efficiency. Getting
+// stale data is not a correctness problem but instead may
+// infrequently result in additional latency as additional range
+// lookups may be required. Note also that rangeLookup bypasses the
+// DistSender's Send() method, so there is no error inspection and
+// retry logic here; this is not an issue since the lookup performs a
+// single inconsistent read only.
+func (ds *DistSender) rangeLookup(key proto.Key, options lookupOptions,
 	desc *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
-	args := &proto.InternalRangeLookupRequest{
+	args := &proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             key,
 			User:            security.RootUser,
@@ -297,7 +298,7 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, options lookupOptions,
 	if err != nil {
 		return nil, err
 	}
-	rlReply := reply.(*proto.InternalRangeLookupResponse)
+	rlReply := reply.(*proto.RangeLookupResponse)
 	if rlReply.Error != nil {
 		return nil, rlReply.GoError()
 	}
@@ -323,7 +324,7 @@ func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) 
 // workload.
 func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) ([]proto.RangeDescriptor, error) {
 	var (
-		// metadataKey is sent to internalRangeLookup to find the
+		// metadataKey is sent to rangeLookup to find the
 		// RangeDescriptor which contains key.
 		metadataKey = keys.RangeMetaKey(key)
 		// desc is the RangeDescriptor for the range which contains
@@ -355,7 +356,7 @@ func (ds *DistSender) getRangeDescriptors(key proto.Key, options lookupOptions) 
 		}
 	}
 
-	return ds.internalRangeLookup(metadataKey, options, desc)
+	return ds.rangeLookup(metadataKey, options, desc)
 }
 
 func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPolicy {
@@ -484,11 +485,11 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replica
 // call.Args.Key is looked up. If call.Args.EndKey exceeds that of the
 // returned descriptor, the next descriptor is obtained as well.
 func (ds *DistSender) getDescriptors(call proto.Call) (*proto.RangeDescriptor, *proto.RangeDescriptor, error) {
-	// If this is an InternalPushTxn, set ignoreIntents option as
+	// If this is a PushTxn, set ignoreIntents option as
 	// necessary. This prevents a potential infinite loop; see the
-	// comments in proto.InternalRangeLookupRequest.
+	// comments in proto.RangeLookupRequest.
 	options := lookupOptions{}
-	if pushArgs, ok := call.Args.(*proto.InternalPushTxnRequest); ok {
+	if pushArgs, ok := call.Args.(*proto.PushTxnRequest); ok {
 		options.ignoreIntents = pushArgs.RangeLookup
 	}
 

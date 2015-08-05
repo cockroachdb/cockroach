@@ -1342,16 +1342,16 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	now := s.Clock().Now()
 	header := args.Header()
-	bArgs := &proto.InternalBatchRequest{
+	bArgs := &proto.BatchRequest{
 		RequestHeader: proto.RequestHeader{
 			Txn:          header.Txn,
 			User:         header.User,
 			UserPriority: header.UserPriority,
 		},
 	}
-	bReply := &proto.InternalBatchResponse{}
+	bReply := &proto.BatchResponse{}
 	for _, intent := range wiErr.Intents {
-		pushArgs := &proto.InternalPushTxnRequest{
+		pushArgs := &proto.PushTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Timestamp: header.Timestamp,
 				Key:       intent.Txn.Key,
@@ -1373,14 +1373,14 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 				UserPriority: header.UserPriority,
 			},
 			PusheeTxn: intent.Txn,
-			// The timestamp is used by InternalPushTxn for figuring out
-			// whether the transaction is abandoned. If we used the argument's
-			// timestamp here, we would run into busy loops because that
-			// timestamp usually stays fixed among retries, so it will never
-			// realize that a transaction has timed out. See #877.
+			// The timestamp is used by PushTxn for figuring out whether the
+			// transaction is abandoned. If we used the argument's timestamp
+			// here, we would run into busy loops because that timestamp
+			// usually stays fixed among retries, so it will never realize
+			// that a transaction has timed out. See #877.
 			Now:         now,
 			PushType:    pushType,
-			RangeLookup: args.Method() == proto.InternalRangeLookup,
+			RangeLookup: args.Method() == proto.RangeLookup,
 		}
 		bArgs.Add(pushArgs)
 	}
@@ -1412,9 +1412,9 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 	// We pushed the transaction(s) successfully, so resolve the intent(s).
 	trace.Event("resolving intents [async]")
 	for i, intent := range wiErr.Intents {
-		pushReply := bReply.Responses[i].InternalPushTxn
+		pushReply := bReply.Responses[i].PushTxn
 		intentKey := intent.Key
-		resolveArgs := &proto.InternalResolveIntentRequest{
+		resolveArgs := &proto.ResolveIntentRequest{
 			RequestHeader: proto.RequestHeader{
 				// Use the pushee's timestamp, which might be lower than the
 				// pusher's request timestamp. No need to push the intent higher
@@ -1447,7 +1447,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *proto.WriteI
 // asynchronously and an error or nil will be written to the returned
 // channel when it is committed or aborted (but note that committed does
 // mean that it has been applied to the range yet).
-func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) <-chan error {
+func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.RaftCommand) <-chan error {
 	value := cmd.Cmd.GetValue()
 	if value == nil {
 		panic("proposed a nil command")
@@ -1487,7 +1487,7 @@ func (s *Store) processRaft() {
 		for {
 			select {
 			case e := <-s.multiraft.Events:
-				var cmd proto.InternalRaftCommand
+				var cmd proto.RaftCommand
 				var groupID proto.RangeID
 				var commandID string
 				var index uint64
@@ -1588,7 +1588,7 @@ func raftEntryFormatter(data []byte) string {
 	if len(data) == 0 {
 		return "[empty]"
 	}
-	var cmd proto.InternalRaftCommand
+	var cmd proto.RaftCommand
 	if err := gogoproto.Unmarshal(data, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
 	}

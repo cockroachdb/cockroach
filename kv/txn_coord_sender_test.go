@@ -343,9 +343,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(coord *TxnCoordSender, txn *proto.Transaction) (bool, *proto.Transaction, error) {
-	hr := &proto.InternalHeartbeatTxnResponse{}
+	hr := &proto.HeartbeatTxnResponse{}
 	call := proto.Call{
-		Args: &proto.InternalHeartbeatTxnRequest{
+		Args: &proto.HeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: txn.Key,
 				Txn: txn,
@@ -441,7 +441,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Push the transaction to abort it.
 	txn2 := newTxn(s.Clock, key)
 	txn2.Priority = 2
-	pushArgs := &proto.InternalPushTxnRequest{
+	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: txn.Key,
 			Txn: txn2,
@@ -452,7 +452,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	}
 	call = proto.Call{
 		Args:  pushArgs,
-		Reply: &proto.InternalPushTxnResponse{},
+		Reply: &proto.PushTxnResponse{},
 	}
 	if err := sendCall(s.Sender, call); err != nil {
 		t.Fatal(err)
@@ -645,10 +645,10 @@ func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	txn2 := &proto.Transaction{ID: []byte("txn2")}
 
 	for i, tc := range testCases {
-		bArgs := &proto.InternalBatchRequest{}
-		bReply := &proto.InternalBatchResponse{}
+		bArgs := &proto.BatchRequest{}
+		bReply := &proto.BatchResponse{}
 
-		pushArgs := &proto.InternalPushTxnRequest{}
+		pushArgs := &proto.PushTxnRequest{}
 		if tc.arg {
 			pushArgs.RequestHeader = proto.RequestHeader{
 				Txn: txn1,

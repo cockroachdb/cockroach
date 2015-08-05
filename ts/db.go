@@ -126,21 +126,21 @@ func (db *DB) StoreData(r Resolution, data []proto.TimeSeriesData) error {
 	// Send the individual internal merge requests.
 	// TODO(mrtracy): In the likely event that there are multiple values to
 	// merge, they should be batched together instead of being called
-	// individually. However, InternalBatchRequest currently does not support
-	// InternalMergeRequest, probably because it cannot be part of a
+	// individually. However, BatchRequest currently does not support
+	// MergeRequest, probably because it cannot be part of a
 	// transaction. Look into batching this.
 	for _, kv := range kvs {
 		// Note, this looks like a batch, but isn't a batch because we only add a
 		// single request to it.
 		b := &client.Batch{}
 		b.InternalAddCall(proto.Call{
-			Args: &proto.InternalMergeRequest{
+			Args: &proto.MergeRequest{
 				RequestHeader: proto.RequestHeader{
 					Key: kv.Key,
 				},
 				Value: kv.Value,
 			},
-			Reply: &proto.InternalMergeResponse{},
+			Reply: &proto.MergeResponse{},
 		})
 		if err := db.db.Run(b); err != nil {
 			return err

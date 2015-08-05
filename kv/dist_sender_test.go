@@ -543,11 +543,11 @@ func TestRangeLookupOnPushTxnIgnoresIntents(t *testing.T) {
 		}
 		ds := NewDistSender(ctx, g)
 		call := proto.Call{
-			Args: &proto.InternalPushTxnRequest{
+			Args: &proto.PushTxnRequest{
 				RequestHeader: proto.RequestHeader{Key: proto.Key("a")},
 				RangeLookup:   rangeLookup,
 			},
-			Reply: &proto.InternalPushTxnResponse{},
+			Reply: &proto.PushTxnResponse{},
 		}
 		ds.Send(context.Background(), call)
 	}
@@ -567,7 +567,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) gogoproto.Message, getReply func() gogoproto.Message, _ *rpc.Context) ([]gogoproto.Message, error) {
 		header := getArgs(testAddress).(proto.Request).Header()
-		if method == "Node.InternalRangeLookup" {
+		if method == "Node.RangeLookup" {
 			// If the non-broken descriptor has already been returned, that's
 			// an error.
 			if !descStale && bytes.HasPrefix(header.Key, keys.Meta2Prefix) {
@@ -575,7 +575,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 					header.Key)
 			}
 
-			r := getReply().(*proto.InternalRangeLookupResponse)
+			r := getReply().(*proto.RangeLookupResponse)
 			// The fresh descriptor is about to be returned.
 			if bytes.HasPrefix(header.Key, keys.Meta2Prefix) &&
 				newRangeDescriptor.StartKey.Equal(newEndKey) {
@@ -678,19 +678,18 @@ func TestVerifyPermissions(t *testing.T) {
 		&proto.DeleteRangeRequest{},
 		&proto.ScanRequest{},
 		&proto.EndTransactionRequest{},
-		&proto.BatchRequest{},
 		&proto.AdminSplitRequest{},
 		&proto.AdminMergeRequest{},
-		&proto.InternalHeartbeatTxnRequest{},
-		&proto.InternalGCRequest{},
-		&proto.InternalPushTxnRequest{},
-		&proto.InternalRangeLookupRequest{},
-		&proto.InternalResolveIntentRequest{},
-		&proto.InternalResolveIntentRangeRequest{},
-		&proto.InternalMergeRequest{},
-		&proto.InternalTruncateLogRequest{},
-		&proto.InternalLeaderLeaseRequest{},
-		&proto.InternalBatchRequest{},
+		&proto.HeartbeatTxnRequest{},
+		&proto.GCRequest{},
+		&proto.PushTxnRequest{},
+		&proto.RangeLookupRequest{},
+		&proto.ResolveIntentRequest{},
+		&proto.ResolveIntentRangeRequest{},
+		&proto.MergeRequest{},
+		&proto.TruncateLogRequest{},
+		&proto.LeaderLeaseRequest{},
+		&proto.BatchRequest{},
 	}
 
 	var readOnlyRequests []proto.Request

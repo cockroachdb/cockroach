@@ -91,41 +91,41 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, args pro
 		var resp proto.EndTransactionResponse
 		resp, err = r.EndTransaction(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalRangeLookupRequest:
-		var resp proto.InternalRangeLookupResponse
-		resp, intents, err = r.InternalRangeLookup(batch, *tArgs)
+	case *proto.RangeLookupRequest:
+		var resp proto.RangeLookupResponse
+		resp, intents, err = r.RangeLookup(batch, *tArgs)
 		reply = &resp
-	case *proto.InternalHeartbeatTxnRequest:
-		var resp proto.InternalHeartbeatTxnResponse
-		resp, err = r.InternalHeartbeatTxn(batch, ms, *tArgs)
+	case *proto.HeartbeatTxnRequest:
+		var resp proto.HeartbeatTxnResponse
+		resp, err = r.HeartbeatTxn(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalGCRequest:
-		var resp proto.InternalGCResponse
-		resp, err = r.InternalGC(batch, ms, *tArgs)
+	case *proto.GCRequest:
+		var resp proto.GCResponse
+		resp, err = r.GC(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalPushTxnRequest:
-		var resp proto.InternalPushTxnResponse
-		resp, err = r.InternalPushTxn(batch, ms, *tArgs)
+	case *proto.PushTxnRequest:
+		var resp proto.PushTxnResponse
+		resp, err = r.PushTxn(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalResolveIntentRequest:
-		var resp proto.InternalResolveIntentResponse
-		resp, err = r.InternalResolveIntent(batch, ms, *tArgs)
+	case *proto.ResolveIntentRequest:
+		var resp proto.ResolveIntentResponse
+		resp, err = r.ResolveIntent(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalResolveIntentRangeRequest:
-		var resp proto.InternalResolveIntentRangeResponse
-		resp, err = r.InternalResolveIntentRange(batch, ms, *tArgs)
+	case *proto.ResolveIntentRangeRequest:
+		var resp proto.ResolveIntentRangeResponse
+		resp, err = r.ResolveIntentRange(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalMergeRequest:
-		var resp proto.InternalMergeResponse
-		resp, err = r.InternalMerge(batch, ms, *tArgs)
+	case *proto.MergeRequest:
+		var resp proto.MergeResponse
+		resp, err = r.Merge(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalTruncateLogRequest:
-		var resp proto.InternalTruncateLogResponse
-		resp, err = r.InternalTruncateLog(batch, ms, *tArgs)
+	case *proto.TruncateLogRequest:
+		var resp proto.TruncateLogResponse
+		resp, err = r.TruncateLog(batch, ms, *tArgs)
 		reply = &resp
-	case *proto.InternalLeaderLeaseRequest:
-		var resp proto.InternalLeaderLeaseResponse
-		resp, err = r.InternalLeaderLease(batch, ms, *tArgs)
+	case *proto.LeaderLeaseRequest:
+		var resp proto.LeaderLeaseResponse
+		resp, err = r.LeaderLease(batch, ms, *tArgs)
 		reply = &resp
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
@@ -342,7 +342,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	return reply, nil
 }
 
-// InternalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
+// RangeLookup is used to look up RangeDescriptors - a RangeDescriptor
 // is a metadata structure which describes the key range and replica locations
 // of a distinct range in the cluster.
 //
@@ -352,14 +352,14 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 // Key for an ordinary key can be generated with the `keys.RangeMetaKey(key)`
 // function. The RangeDescriptor for the range which contains a given key can be
 // retrieved by generating its Range Metadata Key and dispatching it to
-// InternalRangeLookup.
+// RangeLookup.
 //
-// Note that the Range Metadata Key sent to InternalRangeLookup is NOT the key
+// Note that the Range Metadata Key sent to RangeLookup is NOT the key
 // at which the desired RangeDescriptor is stored. Instead, this method returns
 // the RangeDescriptor stored at the _lowest_ existing key which is _greater_
 // than the given key. The returned RangeDescriptor will thus contain the
 // ordinary key which was originally used to generate the Range Metadata Key
-// sent to InternalRangeLookup.
+// sent to RangeLookup.
 //
 // The "Range Metadata Key" for a range is built by appending the end key of
 // the range to the meta[12] prefix because the RocksDB iterator only supports
@@ -377,8 +377,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 // RangeDescriptor. This is intended to serve as a sort of caching pre-fetch,
 // so that the requesting nodes can aggressively cache RangeDescriptors which
 // are likely to be desired by their current workload.
-func (r *Replica) InternalRangeLookup(batch engine.Engine, args proto.InternalRangeLookupRequest) (proto.InternalRangeLookupResponse, []proto.Intent, error) {
-	var reply proto.InternalRangeLookupResponse
+func (r *Replica) RangeLookup(batch engine.Engine, args proto.RangeLookupRequest) (proto.RangeLookupResponse, []proto.Intent, error) {
+	var reply proto.RangeLookupResponse
 
 	if err := keys.ValidateRangeMetaKey(args.Key); err != nil {
 		return reply, nil, err
@@ -445,7 +445,7 @@ func (r *Replica) InternalRangeLookup(batch engine.Engine, args proto.InternalRa
 		// indicate a very bad system error, but for now we will just
 		// treat it as a retryable Key Mismatch error.
 		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc())
-		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
+		log.Errorf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
 		return reply, nil, err
 	}
 
@@ -463,11 +463,11 @@ func (r *Replica) InternalRangeLookup(batch engine.Engine, args proto.InternalRa
 	return reply, intents, nil
 }
 
-// InternalHeartbeatTxn updates the transaction status and heartbeat
+// HeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Replica) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalHeartbeatTxnRequest) (proto.InternalHeartbeatTxnResponse, error) {
-	var reply proto.InternalHeartbeatTxnResponse
+func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.HeartbeatTxnRequest) (proto.HeartbeatTxnResponse, error) {
+	var reply proto.HeartbeatTxnResponse
 
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
@@ -497,12 +497,12 @@ func (r *Replica) InternalHeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats
 	return reply, nil
 }
 
-// InternalGC iterates through the list of keys to garbage collect
+// GC iterates through the list of keys to garbage collect
 // specified in the arguments. MVCCGarbageCollect is invoked on each
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
-func (r *Replica) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalGCRequest) (proto.InternalGCResponse, error) {
-	var reply proto.InternalGCResponse
+func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, args proto.GCRequest) (proto.GCResponse, error) {
+	var reply proto.GCResponse
 
 	// Garbage collect the specified keys by expiration timestamps.
 	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, args.Timestamp); err != nil {
@@ -517,10 +517,10 @@ func (r *Replica) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args pro
 	return reply, nil
 }
 
-// InternalPushTxn resolves conflicts between concurrent txns (or
+// PushTxn resolves conflicts between concurrent txns (or
 // between a non-transactional reader or writer and a txn) in several
 // ways depending on the statuses and priorities of the conflicting
-// transactions. The InternalPushTxn operation is invoked by a
+// transactions. The PushTxn operation is invoked by a
 // "pusher" (the writer trying to abort a conflicting txn or the
 // reader trying to push a conflicting txn's commit timestamp
 // forward), who attempts to resolve a conflict with a "pushee"
@@ -551,8 +551,8 @@ func (r *Replica) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args pro
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Replica) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalPushTxnRequest) (proto.InternalPushTxnResponse, error) {
-	var reply proto.InternalPushTxnResponse
+func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, args proto.PushTxnRequest) (proto.PushTxnResponse, error) {
+	var reply proto.PushTxnResponse
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
@@ -682,13 +682,13 @@ func (r *Replica) InternalPushTxn(batch engine.Engine, ms *engine.MVCCStats, arg
 	return reply, nil
 }
 
-// InternalResolveIntent resolves a write intent from the specified key
+// ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
-func (r *Replica) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalResolveIntentRequest) (proto.InternalResolveIntentResponse, error) {
-	var reply proto.InternalResolveIntentResponse
+func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, args proto.ResolveIntentRequest) (proto.ResolveIntentResponse, error) {
+	var reply proto.ResolveIntentResponse
 
 	if args.Txn == nil {
-		return reply, util.Errorf("no transaction specified to InternalResolveIntent")
+		return reply, util.Errorf("no transaction specified to ResolveIntent")
 	}
 	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn); err != nil {
 		return reply, err
@@ -696,33 +696,33 @@ func (r *Replica) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStat
 	return reply, nil
 }
 
-// InternalResolveIntentRange resolves write intents in the specified
+// ResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
-func (r *Replica) InternalResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
-	args proto.InternalResolveIntentRangeRequest) (proto.InternalResolveIntentRangeResponse, error) {
-	var reply proto.InternalResolveIntentRangeResponse
+func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
+	args proto.ResolveIntentRangeRequest) (proto.ResolveIntentRangeResponse, error) {
+	var reply proto.ResolveIntentRangeResponse
 
 	if args.Txn == nil {
-		return reply, util.Errorf("no transaction specified to InternalResolveIntentRange")
+		return reply, util.Errorf("no transaction specified to ResolveIntentRange")
 	}
 	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, args.Txn)
 	return reply, err
 }
 
-// InternalMerge is used to merge a value into an existing key. Merge is an
+// Merge is used to merge a value into an existing key. Merge is an
 // efficient accumulation operation which is exposed by RocksDB, used by
 // Cockroach for the efficient accumulation of certain values. Due to the
 // difficulty of making these operations transactional, merges are not currently
 // exposed directly to clients. Merged values are explicitly not MVCC data.
-func (r *Replica) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalMergeRequest) (proto.InternalMergeResponse, error) {
-	var reply proto.InternalMergeResponse
+func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, args proto.MergeRequest) (proto.MergeResponse, error) {
+	var reply proto.MergeResponse
 
 	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
 }
 
-// InternalTruncateLog discards a prefix of the raft log.
-func (r *Replica) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalTruncateLogRequest) (proto.InternalTruncateLogResponse, error) {
-	var reply proto.InternalTruncateLogResponse
+// TruncateLog discards a prefix of the raft log.
+func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, args proto.TruncateLogRequest) (proto.TruncateLogResponse, error) {
+	var reply proto.TruncateLogResponse
 
 	// args.Index is the first index to keep.
 	term, err := r.Term(args.Index - 1)
@@ -743,15 +743,15 @@ func (r *Replica) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats,
 	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.Desc().RangeID), proto.ZeroTimestamp, nil, &ts)
 }
 
-// InternalLeaderLease sets the leader lease for this range. The command fails
+// LeaderLease sets the leader lease for this range. The command fails
 // only if the desired start timestamp collides with a previous lease.
 // Otherwise, the start timestamp is wound back to right after the expiration
 // of the previous lease (or zero). If this range replica is already the lease
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
-func (r *Replica) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, args proto.InternalLeaderLeaseRequest) (proto.InternalLeaderLeaseResponse, error) {
-	var reply proto.InternalLeaderLeaseResponse
+func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, args proto.LeaderLeaseRequest) (proto.LeaderLeaseResponse, error) {
+	var reply proto.LeaderLeaseResponse
 
 	r.Lock()
 	defer r.Unlock()

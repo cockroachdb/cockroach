@@ -273,60 +273,6 @@ message EndTransactionResponse {
   repeated bytes resolved = 3 [(gogoproto.casttype) = "Key"];
 }
 
-// A RequestUnion contains exactly one of the optional requests.
-// Values added here must be added to InternalRequestUnion as well.
-message RequestUnion {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    GetRequest get = 2;
-    PutRequest put = 3;
-    ConditionalPutRequest conditional_put = 4;
-    IncrementRequest increment = 5;
-    DeleteRequest delete = 6;
-    DeleteRangeRequest delete_range = 7;
-    ScanRequest scan = 8;
-    EndTransactionRequest end_transaction = 9;
-  }
-}
-
-// A ResponseUnion contains exactly one of the optional responses.
-// Values added here must be added to InternalResponseUnion as well.
-message ResponseUnion {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    GetResponse get = 2;
-    PutResponse put = 3;
-    ConditionalPutResponse conditional_put = 4;
-    IncrementResponse increment = 5;
-    DeleteResponse delete = 6;
-    DeleteRangeResponse delete_range = 7;
-    ScanResponse scan = 8;
-    EndTransactionResponse end_transaction = 9;
-  }
-}
-
-// A BatchRequest contains one or more requests to be executed in
-// parallel, or if applicable (based on write-only commands and
-// range-locality), as a single update.
-//
-// The RequestHeader should contain the Key of the first request
-// in the batch. It also contains the transaction itself; individual
-// calls must not have transactions specified. The same applies to
-// the User and UserPriority fields.
-message BatchRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
-}
-
-// A BatchResponse contains one or more responses, one per request
-// corresponding to the requests in the matching BatchRequest. The
-// error in the response header is set to the first error from the
-// slice of responses, if applicable.
-message BatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
-}
-
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
 // existing range which contains RequestHeader.Key is split by
 // split_key. If split_key is not specified, then this method will
@@ -375,4 +321,271 @@ message AdminMergeRequest {
 // method.
 message AdminMergeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A RangeLookupRequest is arguments to the RangeLookup() method. It
+// specifies the key for which the containing range is being
+// requested, and the maximum number of range descriptors that should
+// be returned, if there are additional consecutive addressable
+// ranges. Specify max_ranges > 1 to pre-fill the range descriptor
+// cache.
+message RangeLookupRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
+  // Ignore intents indicates whether or not intents encountered
+  // while looking up the range info should be resolved. This should
+  // be false in general, except for the case where the lookup is
+  // already in service of pushing intents on meta records. Attempting
+  // to resolve intents in this case would lead to infinite recursion.
+  optional bool ignore_intents = 3 [(gogoproto.nullable) = false];
+}
+
+// A RangeLookupResponse is the return value from the RangeLookup()
+// method. It returns metadata for the range containing the requested
+// key, optionally returning the metadata for additional consecutive
+// ranges beyond the requested range to pre-fill the range descriptor
+// cache.
+message RangeLookupResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
+}
+
+// A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
+// method. It's sent by transaction coordinators to let the system
+// know that the transaction is still ongoing. Note that this
+// heartbeat message is different from the heartbeat message in the
+// gossip protocol.
+message HeartbeatTxnRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A HeartbeatTxnResponse is the return value from the HeartbeatTxn()
+// method. It returns the transaction info in the response header. The
+// returned transaction lets the coordinator know the disposition of
+// the transaction (i.e. aborted, committed, or pending).
+message HeartbeatTxnResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A GCRequest is arguments to the GC() method. It's sent by range
+// leaders after scanning range data to find expired MVCC values.
+message GCRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional GCMetadata gc_meta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCMeta"];
+
+  message GCKey {
+    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+    optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  repeated GCKey keys = 3 [(gogoproto.nullable) = false];
+}
+
+// A GCResponse is the return value from the GC() method.
+message GCResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// TxnPushType determines what action to take when pushing a
+// transaction.
+enum PushTxnType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Push the timestamp forward if possible to accommodate a concurrent reader.
+  PUSH_TIMESTAMP = 0;
+  // Abort the transaction if possible to accommodate a concurrent writer.
+  ABORT_TXN = 1;
+  // Cleanup the transaction if already committed/aborted, or if too old.
+  CLEANUP_TXN = 2;
+}
+
+// A PushTxnRequest is arguments to the PushTxn() method. It's sent by
+// readers or writers which have encountered an "intent" laid down by
+// another transaction. The goal is to resolve the conflict. Note that
+// args.Key should be set to the txn ID of args.PusheeTxn, not
+// args.Txn, as is usual. This RPC is addressed to the range which
+// owns the pushee's txn record.
+//
+// Resolution is trivial if the txn which owns the intent has either
+// been committed or aborted already. Otherwise, the existing txn can
+// either be aborted (for write/write conflicts), or its commit
+// timestamp can be moved forward (for read/write conflicts). The
+// course of action is determined by the specified push type, and by
+// the owning txn's status and priority.
+message PushTxnRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // Now holds the timestamp used to compare the last heartbeat of the pushee
+  // against. This is necessary since the request header's timestamp does not
+  // necessarily advance with the node clock across retries and hence cannot
+  // detect abandoned transactions.
+  optional Timestamp now = 3 [(gogoproto.nullable) = false];
+  // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
+  // timestamp forward. Writers set this to ABORT_TXN to request that
+  // the PushTxn be aborted if possible. This is done in the event of
+  // a writer conflicting with PusheeTxn. Inconsistent readers set
+  // this to CLEANUP_TXN to determine whether dangling intents
+  // may be resolved.
+  optional PushTxnType push_type = 4 [(gogoproto.nullable) = false];
+  // Range lookup indicates whether we're pushing a txn because of an
+  // intent encountered while servicing an internal range lookup
+  // request. See notes in RangeLookupRequest.
+  optional bool range_lookup = 5 [(gogoproto.nullable) = false];
+}
+
+// A PushTxnResponse is the return value from the PushTxn() method. It
+// returns success and the resulting state of PusheeTxn if the
+// conflict was resolved in favor of the caller; the caller should
+// subsequently invoke ResolveIntent() on the conflicted key. It
+// returns an error otherwise.
+message PushTxnResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // pushee_txn is non-nil if the transaction was pushed and contains
+  // the current value of the transaction.
+  optional Transaction pushee_txn = 2;
+}
+
+// A ResolveIntentRequest is arguments to the ResolveIntent()
+// method. It is sent by transaction coordinators and after success
+// calling PushTxn to clean up write intents: either to remove them or
+// commit them.
+message ResolveIntentRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ResolveIntentResponse is the return value from the
+// ResolveIntent() method.
+message ResolveIntentResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ResolveIntentRangeRequest is arguments to the
+// ResolveIntentRange() method. This clear write intents for a range
+// of keys to resolve intents created by range ops.
+message ResolveIntentRangeRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ResolveIntentRangeResponse is the return value from the
+// ResolveIntent() method.
+message ResolveIntentRangeResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A MergeRequest contains arguments to the Merge() method. It
+// specifies a key and a value which should be merged into the
+// existing value at that key.
+message MergeRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// MergeResponse is the response to a Merge() operation.
+message MergeResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// TruncateLogRequest is used to remove a prefix of the raft log. While there
+// is no requirement for correctness that the raft log truncation be synchronized across
+// replicas, it is nice to preserve the property that all replicas of a range are as close
+// to identical as possible. The raft leader can also inform decisions about the cutoff point
+// with its knowledge of the replicas' acknowledgement status.
+message TruncateLogRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Log entries < this index are to be discarded.
+  optional uint64 index = 2 [(gogoproto.nullable) = false];
+}
+
+// TruncateLogResponse is the response to a TruncateLog() operation.
+message TruncateLogResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A LeaderLeaseRequest is arguments to the LeaderLease()
+// method. It is sent by the store on behalf of one of its ranges upon receipt
+// of a leader election event for that range.
+message LeaderLeaseRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Lease lease = 2[(gogoproto.nullable) = false];
+}
+
+// A LeaderLeaseResponse is the response to a LeaderLease()
+// operation.
+message LeaderLeaseResponse{
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A RequestUnion contains exactly one of the optional requests.
+// The values added here must match those in ResponseUnion.
+message RequestUnion {
+  option (gogoproto.onlyone) = true;
+  oneof value {
+    GetRequest get = 1;
+    PutRequest put = 2;
+    ConditionalPutRequest conditional_put = 3;
+    IncrementRequest increment = 4;
+    DeleteRequest delete = 5;
+    DeleteRangeRequest delete_range = 6;
+    ScanRequest scan = 7;
+    EndTransactionRequest end_transaction = 8;
+    AdminSplitRequest admin_split = 9;
+    AdminMergeRequest admin_merge = 10;
+    HeartbeatTxnRequest heartbeat_txn = 11;
+    GCRequest gc = 12;
+    PushTxnRequest push_txn = 13;
+    RangeLookupRequest range_lookup = 14;
+    ResolveIntentRequest resolve_intent = 15;
+    ResolveIntentRangeRequest resolve_intent_range = 16;
+    MergeRequest merge = 17;
+    TruncateLogRequest truncate = 18;
+    LeaderLeaseRequest leader_lease = 19;
+  }
+}
+
+// A ResponseUnion contains exactly one of the optional responses.
+// The values added here must match those in RequestUnion.
+message ResponseUnion {
+  option (gogoproto.onlyone) = true;
+  oneof value {
+    GetResponse get = 1;
+    PutResponse put = 2;
+    ConditionalPutResponse conditional_put = 3;
+    IncrementResponse increment = 4;
+    DeleteResponse delete = 5;
+    DeleteRangeResponse delete_range = 6;
+    ScanResponse scan = 7;
+    EndTransactionResponse end_transaction = 8;
+    AdminSplitResponse admin_split = 9;
+    AdminMergeResponse admin_merge = 10;
+    HeartbeatTxnResponse heartbeat_txn = 11;
+    GCResponse gc = 12;
+    PushTxnResponse push_txn = 13;
+    RangeLookupResponse range_lookup = 14;
+    ResolveIntentResponse resolve_intent = 15;
+    ResolveIntentRangeResponse resolve_intent_range = 16;
+    MergeResponse merge = 17;
+    TruncateLogResponse truncate = 18;
+    LeaderLeaseResponse leader_lease = 19;
+  }
+}
+
+// A BatchRequest contains one or more requests to be executed in
+// parallel, or if applicable (based on write-only commands and
+// range-locality), as a single update.
+//
+// The RequestHeader should contain the Key of the first request
+// in the batch. It also contains the transaction itself; individual
+// calls must not have transactions specified. The same applies to
+// the User and UserPriority fields.
+message BatchRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
+}
+
+// A BatchResponse contains one or more responses, one per request
+// corresponding to the requests in the matching BatchRequest. The
+// error in the response header is set to the first error from the
+// slice of responses, if applicable.
+message BatchResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }

@@ -439,7 +439,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
-	truncArgs := internalTruncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
+	truncArgs := truncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
 	if _, err := mtc.stores[0].ExecuteCmd(context.Background(), &truncArgs); err != nil {
 		t.Fatal(err)
 	}

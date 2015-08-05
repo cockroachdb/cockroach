@@ -106,8 +106,8 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Replica) (shouldQ bool
 
 // process iterates through all keys in a range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are
-// batched into InternalGC calls. Extant intents are resolved if
-// intents are older than intentAgeThreshold.
+// batched into GC calls. Extant intents are resolved if intents are
+// older than intentAgeThreshold.
 func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng.Desc(), snap)
@@ -127,7 +127,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	intentExp := now
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 
-	gcArgs := &proto.InternalGCRequest{
+	gcArgs := &proto.GCRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
 			RangeID:   rng.Desc().RangeID,
@@ -180,7 +180,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 					// TODO(spencer): need to split the requests up into
 					// multiple requests in the event that more than X keys
 					// are added to the request.
-					gcArgs.Keys = append(gcArgs.Keys, proto.InternalGCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
+					gcArgs.Keys = append(gcArgs.Keys, proto.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 				}
 			}
 		}
@@ -260,7 +260,7 @@ func (gcq *gcQueue) resolveIntent(rng *Replica, key proto.Key, meta *engine.MVCC
 
 	// Attempt to push the transaction which created the intent.
 	now := rng.rm.Clock().Now()
-	pushArgs := &proto.InternalPushTxnRequest{
+	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    now,
 			Key:          meta.Txn.Key,
@@ -272,7 +272,7 @@ func (gcq *gcQueue) resolveIntent(rng *Replica, key proto.Key, meta *engine.MVCC
 		PusheeTxn: *meta.Txn,
 		PushType:  proto.ABORT_TXN,
 	}
-	pushReply := &proto.InternalPushTxnResponse{}
+	pushReply := &proto.PushTxnResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: pushArgs, Reply: pushReply})
 	if err := rng.rm.DB().Run(b); err != nil {
@@ -282,7 +282,7 @@ func (gcq *gcQueue) resolveIntent(rng *Replica, key proto.Key, meta *engine.MVCC
 	}
 
 	// We pushed the transaction successfully, so resolve the intent.
-	resolveArgs := &proto.InternalResolveIntentRequest{
+	resolveArgs := &proto.ResolveIntentRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: now,
 			Key:       key,
