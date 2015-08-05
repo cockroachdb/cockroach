@@ -198,53 +198,45 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
 	fromID := proto.RaftNodeID(req.Message.From)
-	originNode, ok := s.nodes[fromID]
-	if !ok {
-		// When a leader considers a follower to be down, it doesn't begin recovery
-		// until the follower has successfully responded to a heartbeat. If we get a
-		// heartbeat from a node we don't know, it must think we are a follower of
-		// some group, so we need to respond so it can activate the recovery process.
-		log.Warningf("node %v: not fanning out heartbeat from unknown node %v (but responding anyway)",
-			s.nodeID, fromID)
-		s.sendMessage(noGroup,
-			raftpb.Message{
-				From: uint64(s.nodeID),
-				To:   req.Message.From,
-				Type: raftpb.MsgHeartbeatResp,
-			})
-		return
-	}
-	cnt := 0
-	for groupID := range originNode.groupIDs {
-		// If we don't think that the sending node is leading that group, don't
-		// propagate.
-		if s.groups[groupID].leader != fromID || fromID == s.nodeID {
-			if log.V(8) {
-				log.Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
-					s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+	groupCount := 0
+	followerCount := 0
+	if originNode, ok := s.nodes[fromID]; ok {
+		for groupID := range originNode.groupIDs {
+			groupCount++
+			// If we don't think that the sending node is leading that group, don't
+			// propagate.
+			if s.groups[groupID].leader != fromID || fromID == s.nodeID {
+				if log.V(8) {
+					log.Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
+						s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
+				}
+				continue
 			}
-			continue
-		}
-		if err := s.multiNode.Step(context.Background(), uint64(groupID), req.Message); err != nil {
-			if log.V(4) {
-				log.Infof("node %v: coalesced heartbeat step to group %v failed for message %s", s.nodeID, groupID,
-					raft.DescribeMessage(req.Message, s.EntryFormatter))
+			followerCount++
+			if err := s.multiNode.Step(context.Background(), uint64(groupID), req.Message); err != nil {
+				if log.V(4) {
+					log.Infof("node %v: coalesced heartbeat step to group %v failed for message %s", s.nodeID, groupID,
+						raft.DescribeMessage(req.Message, s.EntryFormatter))
+				}
 			}
 		}
-		cnt++
 	}
-	if cnt > 0 {
-		s.sendMessage(noGroup,
-			raftpb.Message{
-				From: uint64(s.nodeID),
-				To:   req.Message.From,
-				Type: raftpb.MsgHeartbeatResp,
-			})
-	}
+	// We must respond whether we forwarded the heartbeat to any groups
+	// or not. When a leader considers a follower to be down, it doesn't
+	// begin recovery until the follower has successfully responded to a
+	// heartbeat. If we get a heartbeat from a node we don't know, it
+	// must think we are a follower of some group, so we need to respond
+	// so it can activate the recovery process.
+	s.sendMessage(noGroup,
+		raftpb.Message{
+			From: uint64(s.nodeID),
+			To:   req.Message.From,
+			Type: raftpb.MsgHeartbeatResp,
+		})
 	if log.V(7) {
 		log.Infof("node %v: received coalesced heartbeat from node %v; "+
 			"fanned out to %d followers in %d overlapping groups",
-			s.nodeID, fromID, cnt, len(originNode.groupIDs))
+			s.nodeID, fromID, followerCount, groupCount)
 	}
 }
 
