@@ -42,7 +42,7 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 
 	// Make sure the range is removed from the store.
 	util.SucceedsWithin(t, time.Second, func() error {
-		if _, err := mtc.stores[1].GetRange(raftID); testutils.IsError(err, "range .* was not found") {
+		if _, err := mtc.stores[1].GetRange(raftID); !testutils.IsError(err, "range .* was not found") {
 			return util.Error("expected range removal")
 		}
 		return nil
@@ -84,7 +84,7 @@ func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		store := mtc.stores[1]
 		store.ForceRangeGCScan(t)
-		if _, err := store.GetRange(raftID); testutils.IsError(err, "range .* was not found") {
+		if _, err := store.GetRange(raftID); !testutils.IsError(err, "range .* was not found") {
 			return util.Errorf("expected range removal: %s", err)
 		}
 		return nil
