@@ -18,15 +18,25 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 )
 
 // CreateDatabase creates a database.
+// Privileges: "root" user.
+//   Notes: postgres requires superuser or "CREATEDB".
+//          mysql uses the mysqladmin command.
 func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
+	}
+
+	if p.user != security.RootUser {
+		return nil, fmt.Errorf("only %s is allowed to create databases", security.RootUser)
 	}
 
 	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
@@ -39,6 +49,8 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 }
 
 // CreateTable creates a table.
+// Privileges: WRITE on database.
+//   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	if err := p.normalizeTableName(n.Table); err != nil {
 		return nil, err
@@ -47,6 +59,11 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
 	if err != nil {
 		return nil, err
+	}
+
+	if !dbDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
+			p.user, parser.PrivilegeWrite, dbDesc.Name)
 	}
 
 	desc, err := makeTableDesc(n)

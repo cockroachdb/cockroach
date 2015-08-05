@@ -18,6 +18,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -30,6 +32,9 @@ import (
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // - should we make users case-insensitive?
+// Privileges: WRITE on database.
+//   Notes: postgres requires the object owner.
+//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 	if len(n.Targets.Targets) == 0 {
 		return nil, errEmptyDatabaseName
@@ -43,6 +48,11 @@ func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 	dbDesc, err := p.getDatabaseDesc(n.Targets.Targets[0])
 	if err != nil {
 		return nil, err
+	}
+
+	if !dbDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
+			p.user, parser.PrivilegeWrite, dbDesc.Name)
 	}
 
 	if err := dbDesc.Revoke(n); err != nil {

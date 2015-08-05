@@ -20,6 +20,7 @@ package structured
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
@@ -308,4 +309,17 @@ func (desc *DatabaseDescriptor) Show() (UserPrivilegeList, error) {
 	}
 
 	return permissions.Show(), nil
+}
+
+// HasPrivilege returns true if `user` has `privilege` on this descriptor.
+func (desc *DatabaseDescriptor) HasPrivilege(user string, privilege parser.PrivilegeType) bool {
+	var privUsers []string
+	switch privilege {
+	case parser.PrivilegeRead:
+		privUsers = desc.Read
+	case parser.PrivilegeWrite:
+		privUsers = desc.Write
+	}
+	result := sort.SearchStrings(privUsers, user)
+	return result < len(privUsers) && privUsers[result] == user
 }

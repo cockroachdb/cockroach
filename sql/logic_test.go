@@ -227,7 +227,10 @@ func (t logicTest) run(path string) {
 
 			t.execQuery(db, query)
 
-		case "halt", "skipif", "onlyif":
+		case "halt":
+			break
+
+		case "skipif", "onlyif":
 			t.Fatalf("unimplemented test statement: %s", s.Text())
 		}
 	}
@@ -246,7 +249,7 @@ func (t logicTest) execStatement(db *sql.DB, stmt logicStatement) {
 			t.Fatalf("%s: expected success, but found %v", stmt.pos, err)
 		}
 	case !testutils.IsError(err, stmt.expectErr):
-		t.Fatalf("%s: expected %s, but found %v", stmt.pos, stmt.expectErr, err)
+		t.Fatalf("%s: expected %q, but found %q", stmt.pos, stmt.expectErr, err)
 	}
 }
 
@@ -307,7 +310,7 @@ func (t logicTest) execQuery(db *sql.DB, query logicQuery) {
 			t.Fatalf("%s: expected %s, but found %s\n", query.pos, query.expectedHash, hash)
 		}
 	} else if !reflect.DeepEqual(query.expectedResults, results) {
-		t.Fatalf("%s: expected %v, but found %v\n", query.pos, query.expectedResults, results)
+		t.Fatalf("%s: expected %q, but found %q\n", query.pos, query.expectedResults, results)
 	}
 }
 

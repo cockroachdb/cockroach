@@ -26,6 +26,8 @@ import (
 )
 
 // Set sets session variables.
+// Privileges: None.
+//   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
 func (p *planner) Set(n *parser.Set) (planNode, error) {
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
