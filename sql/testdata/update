@@ -1,29 +1,25 @@
 statement ok
-CREATE DATABASE t
-
-statement ok
-CREATE TABLE t.kv (
+CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT
 )
 
 statement ok
-INSERT INTO t.kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 statement ok
-UPDATE t.kv SET v = 9 WHERE k IN (1, 3)
+UPDATE kv SET v = 9 WHERE k IN (1, 3)
 
 query II
-SELECT * FROM t.kv
+SELECT * FROM kv
 ----
-k v
 1 9
 3 9
 5 6
 7 8
 
 statement error column "m" does not exist
-UPDATE t.kv SET m = 9 WHERE k IN (1, 3)
+UPDATE kv SET m = 9 WHERE k IN (1, 3)
 
 statement error primary key column "k" cannot be updated
-UPDATE t.kv SET k = 9 WHERE k IN (1, 3)
+UPDATE kv SET k = 9 WHERE k IN (1, 3)

@@ -10,11 +10,12 @@ CREATE DATABASE IF NOT EXISTS a
 statement error empty database name
 CREATE DATABASE ""
 
-query T
+query T colnames
 SHOW DATABASES
 ----
 Database
 a
+test
 
 statement ok
 CREATE DATABASE b
@@ -25,8 +26,7 @@ CREATE DATABASE c
 query T
 SHOW DATABASES
 ----
-Database
 a
 b
 c
-
+test
