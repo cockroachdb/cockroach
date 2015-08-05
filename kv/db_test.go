@@ -130,14 +130,15 @@ func TestKVDBInternalMethods(t *testing.T) {
 		args  proto.Request
 		reply proto.Response
 	}{
-		{&proto.InternalRangeLookupRequest{}, &proto.InternalRangeLookupResponse{}},
-		{&proto.InternalGCRequest{}, &proto.InternalGCResponse{}},
-		{&proto.InternalHeartbeatTxnRequest{}, &proto.InternalHeartbeatTxnResponse{}},
-		{&proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}},
-		{&proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}},
-		{&proto.InternalResolveIntentRangeRequest{}, &proto.InternalResolveIntentRangeResponse{}},
-		{&proto.InternalMergeRequest{}, &proto.InternalMergeResponse{}},
-		{&proto.InternalTruncateLogRequest{}, &proto.InternalTruncateLogResponse{}},
+		{&proto.HeartbeatTxnRequest{}, &proto.HeartbeatTxnResponse{}},
+		{&proto.GCRequest{}, &proto.GCResponse{}},
+		{&proto.PushTxnRequest{}, &proto.PushTxnResponse{}},
+		{&proto.RangeLookupRequest{}, &proto.RangeLookupResponse{}},
+		{&proto.ResolveIntentRequest{}, &proto.ResolveIntentResponse{}},
+		{&proto.ResolveIntentRangeRequest{}, &proto.ResolveIntentRangeResponse{}},
+		{&proto.MergeRequest{}, &proto.MergeResponse{}},
+		{&proto.TruncateLogRequest{}, &proto.TruncateLogResponse{}},
+		{&proto.LeaderLeaseRequest{}, &proto.LeaderLeaseResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
 	db := createTestClient(t, s.ServingAddr())

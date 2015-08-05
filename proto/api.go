@@ -163,7 +163,7 @@ func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) {
 	}
 }
 
-// Combine implements the Combinable interface for ScanResponse.
+// Combine implements the Combinable interface.
 func (sr *ScanResponse) Combine(c Response) {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
@@ -172,7 +172,7 @@ func (sr *ScanResponse) Combine(c Response) {
 	}
 }
 
-// Combine implements the Combinable interface for DeleteRangeResponse.
+// Combine implements the Combinable interface.
 func (dr *DeleteRangeResponse) Combine(c Response) {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
@@ -181,10 +181,9 @@ func (dr *DeleteRangeResponse) Combine(c Response) {
 	}
 }
 
-// Combine implements the Combinable interface for
-// InternalResolveIntentRangeResponse.
-func (rr *InternalResolveIntentRangeResponse) Combine(c Response) {
-	otherRR := c.(*InternalResolveIntentRangeResponse)
+// Combine implements the Combinable interface.
+func (rr *ResolveIntentRangeResponse) Combine(c Response) {
+	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
 		rr.Header().Combine(otherRR.Header())
 	}
@@ -352,43 +351,40 @@ func (*ScanRequest) Method() Method { return Scan }
 func (*EndTransactionRequest) Method() Method { return EndTransaction }
 
 // Method implements the Request interface.
-func (*BatchRequest) Method() Method { return Batch }
-
-// Method implements the Request interface.
 func (*AdminSplitRequest) Method() Method { return AdminSplit }
 
 // Method implements the Request interface.
 func (*AdminMergeRequest) Method() Method { return AdminMerge }
 
 // Method implements the Request interface.
-func (*InternalHeartbeatTxnRequest) Method() Method { return InternalHeartbeatTxn }
+func (*HeartbeatTxnRequest) Method() Method { return HeartbeatTxn }
 
 // Method implements the Request interface.
-func (*InternalGCRequest) Method() Method { return InternalGC }
+func (*GCRequest) Method() Method { return GC }
 
 // Method implements the Request interface.
-func (*InternalPushTxnRequest) Method() Method { return InternalPushTxn }
+func (*PushTxnRequest) Method() Method { return PushTxn }
 
 // Method implements the Request interface.
-func (*InternalRangeLookupRequest) Method() Method { return InternalRangeLookup }
+func (*RangeLookupRequest) Method() Method { return RangeLookup }
 
 // Method implements the Request interface.
-func (*InternalResolveIntentRequest) Method() Method { return InternalResolveIntent }
+func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
 
 // Method implements the Request interface.
-func (*InternalResolveIntentRangeRequest) Method() Method { return InternalResolveIntentRange }
+func (*ResolveIntentRangeRequest) Method() Method { return ResolveIntentRange }
 
 // Method implements the Request interface.
-func (*InternalMergeRequest) Method() Method { return InternalMerge }
+func (*MergeRequest) Method() Method { return Merge }
 
 // Method implements the Request interface.
-func (*InternalLeaderLeaseRequest) Method() Method { return InternalLeaderLease }
+func (*TruncateLogRequest) Method() Method { return TruncateLog }
 
 // Method implements the Request interface.
-func (*InternalTruncateLogRequest) Method() Method { return InternalTruncateLog }
+func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 
 // Method implements the Request interface.
-func (*InternalBatchRequest) Method() Method { return InternalBatch }
+func (*BatchRequest) Method() Method { return Batch }
 
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
@@ -415,64 +411,60 @@ func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
 func (*EndTransactionRequest) CreateReply() Response { return &EndTransactionResponse{} }
 
 // CreateReply implements the Request interface.
-func (*BatchRequest) CreateReply() Response { return &BatchResponse{} }
-
-// CreateReply implements the Request interface.
 func (*AdminSplitRequest) CreateReply() Response { return &AdminSplitResponse{} }
 
 // CreateReply implements the Request interface.
 func (*AdminMergeRequest) CreateReply() Response { return &AdminMergeResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalHeartbeatTxnRequest) CreateReply() Response { return &InternalHeartbeatTxnResponse{} }
+func (*HeartbeatTxnRequest) CreateReply() Response { return &HeartbeatTxnResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalGCRequest) CreateReply() Response { return &InternalGCResponse{} }
+func (*GCRequest) CreateReply() Response { return &GCResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalPushTxnRequest) CreateReply() Response { return &InternalPushTxnResponse{} }
+func (*PushTxnRequest) CreateReply() Response { return &PushTxnResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalRangeLookupRequest) CreateReply() Response { return &InternalRangeLookupResponse{} }
+func (*RangeLookupRequest) CreateReply() Response { return &RangeLookupResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalResolveIntentRequest) CreateReply() Response { return &InternalResolveIntentResponse{} }
+func (*ResolveIntentRequest) CreateReply() Response { return &ResolveIntentResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalResolveIntentRangeRequest) CreateReply() Response {
-	return &InternalResolveIntentRangeResponse{}
+func (*ResolveIntentRangeRequest) CreateReply() Response {
+	return &ResolveIntentRangeResponse{}
 }
 
 // CreateReply implements the Request interface.
-func (*InternalMergeRequest) CreateReply() Response { return &InternalMergeResponse{} }
+func (*MergeRequest) CreateReply() Response { return &MergeResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalTruncateLogRequest) CreateReply() Response { return &InternalTruncateLogResponse{} }
+func (*TruncateLogRequest) CreateReply() Response { return &TruncateLogResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLeaderLeaseResponse{} }
+func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{} }
 
 // CreateReply implements the Request interface.
-func (*InternalBatchRequest) CreateReply() Response { return &InternalBatchResponse{} }
+func (*BatchRequest) CreateReply() Response { return &BatchResponse{} }
 
-func (*GetRequest) flags() int                        { return isRead }
-func (*PutRequest) flags() int                        { return isWrite | isTxnWrite }
-func (*ConditionalPutRequest) flags() int             { return isRead | isWrite | isTxnWrite }
-func (*IncrementRequest) flags() int                  { return isRead | isWrite | isTxnWrite }
-func (*DeleteRequest) flags() int                     { return isWrite | isTxnWrite }
-func (*DeleteRangeRequest) flags() int                { return isWrite | isTxnWrite | isRange }
-func (*ScanRequest) flags() int                       { return isRead | isRange }
-func (*EndTransactionRequest) flags() int             { return isWrite }
-func (*BatchRequest) flags() int                      { return isWrite }
-func (*AdminSplitRequest) flags() int                 { return isAdmin }
-func (*AdminMergeRequest) flags() int                 { return isAdmin }
-func (*InternalHeartbeatTxnRequest) flags() int       { return isWrite }
-func (*InternalGCRequest) flags() int                 { return isWrite | isRange }
-func (*InternalPushTxnRequest) flags() int            { return isWrite }
-func (*InternalRangeLookupRequest) flags() int        { return isRead }
-func (*InternalResolveIntentRequest) flags() int      { return isWrite }
-func (*InternalResolveIntentRangeRequest) flags() int { return isWrite | isRange }
-func (*InternalMergeRequest) flags() int              { return isWrite }
-func (*InternalTruncateLogRequest) flags() int        { return isWrite }
-func (*InternalLeaderLeaseRequest) flags() int        { return isWrite }
-func (*InternalBatchRequest) flags() int              { return isWrite }
+func (*GetRequest) flags() int                { return isRead }
+func (*PutRequest) flags() int                { return isWrite | isTxnWrite }
+func (*ConditionalPutRequest) flags() int     { return isRead | isWrite | isTxnWrite }
+func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxnWrite }
+func (*DeleteRequest) flags() int             { return isWrite | isTxnWrite }
+func (*DeleteRangeRequest) flags() int        { return isWrite | isTxnWrite | isRange }
+func (*ScanRequest) flags() int               { return isRead | isRange }
+func (*EndTransactionRequest) flags() int     { return isWrite }
+func (*AdminSplitRequest) flags() int         { return isAdmin }
+func (*AdminMergeRequest) flags() int         { return isAdmin }
+func (*HeartbeatTxnRequest) flags() int       { return isWrite }
+func (*GCRequest) flags() int                 { return isWrite | isRange }
+func (*PushTxnRequest) flags() int            { return isWrite }
+func (*RangeLookupRequest) flags() int        { return isRead }
+func (*ResolveIntentRequest) flags() int      { return isWrite }
+func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
+func (*MergeRequest) flags() int              { return isWrite }
+func (*TruncateLogRequest) flags() int        { return isWrite }
+func (*LeaderLeaseRequest) flags() int        { return isWrite }
+func (*BatchRequest) flags() int              { return isWrite }

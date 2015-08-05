@@ -137,14 +137,14 @@ func (ner *nodeEventReader) recordEvent(event interface{}) {
 	eventStr := ""
 	switch event := event.(type) {
 	case *status.CallSuccessEvent:
-		if event.Method == proto.InternalResolveIntent {
+		if event.Method == proto.ResolveIntent {
 			// Ignore this best-effort method.
 			break
 		}
-		if event.Method == proto.InternalRangeLookup {
-			// Due to a race with the server's status recording system, we can't
-			// reliably depend on InternalRangeLookup to occur during the test.
-			// Ignore this method.
+		if event.Method == proto.RangeLookup {
+			// Due to a race with the server's status recording system, we
+			// can't reliably depend on RangeLookup to occur during the
+			// test. Ignore this method.
 			break
 		}
 		nid = event.NodeID

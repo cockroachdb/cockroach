@@ -61,9 +61,9 @@ func (ser *storeEventReader) recordEvent(event interface{}) {
 		eventStr = fmt.Sprintf("RegisterRange scan=%t, rid=%d, live=%d",
 			event.Scan, event.Desc.RangeID, event.Stats.LiveBytes)
 	case *storage.UpdateRangeEvent:
-		if event.Method == proto.InternalResolveIntent ||
-			event.Method == proto.InternalResolveIntentRange {
-			// Some Internal events are best effort calls that make this test
+		if event.Method == proto.ResolveIntent ||
+			event.Method == proto.ResolveIntentRange {
+			// Some commands are best effort calls that make this test
 			// flaky. Ignore them.
 			break
 		}
@@ -313,28 +313,28 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	// Expected count of update events on a per-method basis.
 	expectedUpdateCount := map[proto.StoreID]map[proto.Method]int{
 		proto.StoreID(1): {
-			proto.Put:                 18,
-			proto.ConditionalPut:      7,
-			proto.Increment:           2,
-			proto.Delete:              2,
-			proto.EndTransaction:      6,
-			proto.InternalLeaderLease: 3,
+			proto.Put:            18,
+			proto.ConditionalPut: 7,
+			proto.Increment:      2,
+			proto.Delete:         2,
+			proto.EndTransaction: 6,
+			proto.LeaderLease:    3,
 		},
 		proto.StoreID(2): {
-			proto.Put:                 16,
-			proto.ConditionalPut:      6,
-			proto.Increment:           2,
-			proto.Delete:              2,
-			proto.EndTransaction:      5,
-			proto.InternalLeaderLease: 2,
+			proto.Put:            16,
+			proto.ConditionalPut: 6,
+			proto.Increment:      2,
+			proto.Delete:         2,
+			proto.EndTransaction: 5,
+			proto.LeaderLease:    2,
 		},
 		proto.StoreID(3): {
-			proto.Put:                 14,
-			proto.ConditionalPut:      5,
-			proto.Increment:           2,
-			proto.Delete:              2,
-			proto.EndTransaction:      4,
-			proto.InternalLeaderLease: 2,
+			proto.Put:            14,
+			proto.ConditionalPut: 5,
+			proto.Increment:      2,
+			proto.Delete:         2,
+			proto.EndTransaction: 4,
+			proto.LeaderLease:    2,
 		},
 	}
 	if a, e := ser.perStoreUpdateCount, expectedUpdateCount; !reflect.DeepEqual(a, e) {

@@ -40,14 +40,14 @@ const testCacheSize = 1 << 30 // GB.
 // encodePutResponse creates a put response using the specified
 // timestamp and encodes it using gogoprotobuf.
 func encodePutResponse(timestamp proto.Timestamp, t *testing.T) []byte {
-	rwCmd := &proto.ReadWriteCmdResponse{
+	rcEntry := &proto.ResponseCacheEntry{
 		Put: &proto.PutResponse{
 			ResponseHeader: proto.ResponseHeader{
 				Timestamp: timestamp,
 			},
 		},
 	}
-	data, err := gogoproto.Marshal(rwCmd)
+	data, err := gogoproto.Marshal(rcEntry)
 	if err != nil {
 		t.Fatal(err)
 	}

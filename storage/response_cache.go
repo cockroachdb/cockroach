@@ -84,14 +84,14 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 	}
 
 	// Pull response from the cache and read into reply if available.
-	var rwResp proto.ReadWriteCmdResponse
+	var rcEntry proto.ResponseCacheEntry
 	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
-	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rwResp)
+	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rcEntry)
 	if err != nil {
 		return proto.ResponseWithError{}, err
 	}
 	if ok {
-		resp := rwResp.GetValue().(proto.Response)
+		resp := rcEntry.GetValue().(proto.Response)
 		header := resp.Header()
 		defer func() { header.Error = nil }()
 		return proto.ResponseWithError{Reply: resp, Err: header.GoError()}, nil
@@ -180,11 +180,11 @@ func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 		defer func() { header.Error = nil }()
 
 		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
-		var rwResp proto.ReadWriteCmdResponse
-		if !rwResp.SetValue(replyWithErr.Reply) {
+		var rcEntry proto.ResponseCacheEntry
+		if !rcEntry.SetValue(replyWithErr.Reply) {
 			panic(fmt.Sprintf("response %T not supported by response cache", replyWithErr.Reply))
 		}
-		return engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, &rwResp)
+		return engine.MVCCPutProto(e, nil, key, proto.ZeroTimestamp, nil, &rcEntry)
 	}
 
 	return nil

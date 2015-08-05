@@ -125,32 +125,38 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
 }
 
 // GetResponseHeader extracts the response header for each type of
-// response in the ReadWriteCmdResponse union.
-const cockroach::proto::ResponseHeader* GetResponseHeader(const cockroach::proto::ReadWriteCmdResponse& rwResp) {
-  if (rwResp.has_put()) {
-    return &rwResp.put().header();
-  } else if (rwResp.has_conditional_put()) {
-    return &rwResp.conditional_put().header();
-  } else if (rwResp.has_increment()) {
-    return &rwResp.increment().header();
-  } else if (rwResp.has_delete_()) {
-    return &rwResp.delete_().header();
-  } else if (rwResp.has_delete_range()) {
-    return &rwResp.delete_range().header();
-  } else if (rwResp.has_end_transaction()) {
-    return &rwResp.end_transaction().header();
-  } else if (rwResp.has_internal_heartbeat_txn()) {
-    return &rwResp.internal_heartbeat_txn().header();
-  } else if (rwResp.has_internal_gc()) {
-    return &rwResp.internal_gc().header();
-  } else if (rwResp.has_internal_push_txn()) {
-    return &rwResp.internal_push_txn().header();
-  } else if (rwResp.has_internal_resolve_intent()) {
-    return &rwResp.internal_resolve_intent().header();
-  } else if (rwResp.has_internal_merge()) {
-    return &rwResp.internal_merge().header();
-  } else if (rwResp.has_internal_truncate_log()) {
-    return &rwResp.internal_truncate_log().header();
+// response in the ResponseCacheEntry union.
+const cockroach::proto::ResponseHeader* GetResponseHeader(const cockroach::proto::ResponseCacheEntry& rcEntry) {
+  if (rcEntry.has_put()) {
+    return &rcEntry.put().header();
+  } else if (rcEntry.has_conditional_put()) {
+    return &rcEntry.conditional_put().header();
+  } else if (rcEntry.has_increment()) {
+    return &rcEntry.increment().header();
+  } else if (rcEntry.has_delete_()) {
+    return &rcEntry.delete_().header();
+  } else if (rcEntry.has_delete_range()) {
+    return &rcEntry.delete_range().header();
+  } else if (rcEntry.has_end_transaction()) {
+    return &rcEntry.end_transaction().header();
+  } else if (rcEntry.has_heartbeat_txn()) {
+    return &rcEntry.heartbeat_txn().header();
+  } else if (rcEntry.has_gc()) {
+    return &rcEntry.gc().header();
+  } else if (rcEntry.has_push_txn()) {
+    return &rcEntry.push_txn().header();
+  } else if (rcEntry.has_resolve_intent()) {
+    return &rcEntry.resolve_intent().header();
+  } else if (rcEntry.has_resolve_intent_range()) {
+    return &rcEntry.resolve_intent_range().header();
+  } else if (rcEntry.has_merge()) {
+    return &rcEntry.merge().header();
+  } else if (rcEntry.has_truncate_log()) {
+    return &rcEntry.truncate_log().header();
+  } else if (rcEntry.has_leader_lease()) {
+    return &rcEntry.leader_lease().header();
+  } else if (rcEntry.has_batch()) {
+    return &rcEntry.batch().header();
   }
   return NULL;
 }
@@ -260,12 +266,12 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     // Response cache rows are GC'd if their timestamp is older than the
     // response cache GC timeout.
     if (is_rcache) {
-      cockroach::proto::ReadWriteCmdResponse rwResp;
-      if (!rwResp.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
+      cockroach::proto::ResponseCacheEntry rcEntry;
+      if (!rcEntry.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse response cache entry";
         return false;
       }
-      const cockroach::proto::ResponseHeader* header = GetResponseHeader(rwResp);
+      const cockroach::proto::ResponseHeader* header = GetResponseHeader(rcEntry);
       if (header == NULL) {
         // *error_msg = (char*)"failed to parse response cache header";
         return false;

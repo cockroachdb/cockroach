@@ -121,15 +121,15 @@ var configDescriptors = [...]*configDescriptor{
 // tsCacheMethods specifies the set of methods which affect the
 // timestamp cache.
 var tsCacheMethods = [...]bool{
-	proto.Get:                        true,
-	proto.Put:                        true,
-	proto.ConditionalPut:             true,
-	proto.Increment:                  true,
-	proto.Scan:                       true,
-	proto.Delete:                     true,
-	proto.DeleteRange:                true,
-	proto.InternalResolveIntent:      true,
-	proto.InternalResolveIntentRange: true,
+	proto.Get:                true,
+	proto.Put:                true,
+	proto.ConditionalPut:     true,
+	proto.Increment:          true,
+	proto.Scan:               true,
+	proto.Delete:             true,
+	proto.DeleteRange:        true,
+	proto.ResolveIntent:      true,
+	proto.ResolveIntentRange: true,
 }
 
 // usesTimestampCache returns true if the request affects or is
@@ -174,7 +174,7 @@ type rangeManager interface {
 	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRaftID proto.RangeID) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
-	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
+	ProposeRaftCommand(cmdIDKey, proto.RaftCommand) <-chan error
 	RemoveRange(rng *Replica) error
 	Tracer() *tracer.Tracer
 	SplitRange(origRng, newRng *Replica) error
@@ -328,7 +328,7 @@ func (r *Replica) requestLeaderLease(timestamp proto.Timestamp) error {
 	duration := int64(DefaultLeaderLeaseDuration)
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
-	args := &proto.InternalLeaderLeaseRequest{
+	args := &proto.LeaderLeaseRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       r.Desc().StartKey,
 			Timestamp: timestamp,
@@ -745,7 +745,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, args proto.Request) (<
 		ctx:  ctx,
 		done: make(chan proto.ResponseWithError, 1),
 	}
-	raftCmd := proto.InternalRaftCommand{
+	raftCmd := proto.RaftCommand{
 		RangeID:      r.Desc().RangeID,
 		OriginNodeID: r.rm.RaftNodeID(),
 	}
@@ -767,7 +767,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, args proto.Request) (<
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
-func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.InternalRaftCommand) error {
+func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.RaftCommand) error {
 	if index == 0 {
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
@@ -866,7 +866,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
 
-	if lease := r.getLease(); args.Method() != proto.InternalLeaderLease &&
+	if lease := r.getLease(); args.Method() != proto.LeaderLease &&
 		(!lease.OwnedBy(originNode) || !lease.Covers(args.Header().Timestamp)) {
 		// Verify the leader lease is held, unless this command is trying to
 		// obtain it. Any other Raft command has had the leader lease held
@@ -1012,8 +1012,8 @@ func (r *Replica) maybeGossipFirstRange() error {
 //
 // Note that maybeGossipConfigs gossips information only when the
 // lease is actually held. The method does not request a leader lease
-// here since InternalLeaderLease and applyRaftCommand call the
-// method and we need to avoid deadlocking in redirectOnOrObtainLeaderLease.
+// here since LeaderLease and applyRaftCommand call the method and we
+// need to avoid deadlocking in redirectOnOrObtainLeaderLease.
 // TODO(tschottdorf): Can possibly simplify.
 func (r *Replica) maybeGossipConfigs(match func(proto.Key) bool) {
 	r.Lock()

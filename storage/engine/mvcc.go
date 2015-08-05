@@ -1243,7 +1243,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto
 // it iterates through the keys listed for garbage collection by the
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration.
-func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.InternalGCRequest_GCKey, timestamp proto.Timestamp) error {
+func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.GCRequest_GCKey, timestamp proto.Timestamp) error {
 	iter := engine.NewIterator()
 
 	// Iterate through specified GC keys.

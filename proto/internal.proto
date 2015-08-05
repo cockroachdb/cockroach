@@ -21,270 +21,17 @@ option go_package = "proto";
 
 import "cockroach/proto/api.proto";
 import "cockroach/proto/config.proto";
-import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-// An InternalRangeLookupRequest is arguments to the
-// InternalRangeLookup() method. It specifies the key for which the
-// containing range is being requested, and the maximum number of
-// total range descriptors that should be returned, if there are
-// additional consecutive addressable ranges. Specify max_ranges > 1
-// to pre-fill the range descriptor cache.
-message InternalRangeLookupRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
-  // Ignore intents indicates whether or not intents encountered
-  // while looking up the range info should be resolved. This should
-  // be false in general, except for the case where the lookup is
-  // already in service of pushing intents on meta records. Attempting
-  // to resolve intents in this case would lead to infinite recursion.
-  optional bool ignore_intents = 3 [(gogoproto.nullable) = false];
-}
-
-// An InternalRangeLookupResponse is the return value from the
-// InternalRangeLookup() method. It returns metadata for the range
-// containing the requested key, optionally returning the metadata for
-// additional consecutive ranges beyond the requested range to pre-fill
-// the range descriptor cache.
-message InternalRangeLookupResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
-}
-
-// An InternalHeartbeatTxnRequest is arguments to the
-// InternalHeartbeatTxn() method. It's sent by transaction
-// coordinators to let the system know that the transaction is still
-// ongoing. Note that this heartbeat message is different from the
-// heartbeat message in the gossip protocol.
-message InternalHeartbeatTxnRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalHeartbeatTxnResponse is the return value from the
-// InternalHeartbeatTxn() method. It returns the transaction info in
-// the response header. The returned transaction lets the coordinator
-// know the disposition of the transaction (i.e. aborted, committed or
-// pending).
-message InternalHeartbeatTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalGCRequest is arguments to the InternalGC() method. It's
-// sent by range leaders after scanning range data to find expired
-// MVCC values.
-message InternalGCRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional GCMetadata gc_meta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCMeta"];
-
-  message GCKey {
-    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-    optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  }
-  repeated GCKey keys = 3 [(gogoproto.nullable) = false];
-}
-
-// An InternalGCResponse is the return value from the InternalGC()
-// method.
-message InternalGCResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// TxnPushType determines what action to take when pushing a
-// transaction.
-enum PushTxnType {
-  option (gogoproto.goproto_enum_prefix) = false;
-  // Push the timestamp forward if possible to accommodate a concurrent reader.
-  PUSH_TIMESTAMP = 0;
-  // Abort the transaction if possible to accommodate a concurrent writer.
-  ABORT_TXN = 1;
-  // Cleanup the transaction if already committed/aborted, or if too old.
-  CLEANUP_TXN = 2;
-}
-
-// An InternalPushTxnRequest is arguments to the InternalPushTxn()
-// method. It's sent by readers or writers which have encountered an
-// "intent" laid down by another transaction. The goal is to resolve
-// the conflict. Note that args.Key should be set to the txn ID of
-// args.PusheeTxn, not args.Txn, as is usual. This RPC is addressed
-// to the range which owns the pushee's txn record.
-//
-// Resolution is trivial if the txn which owns the intent has either
-// been committed or aborted already. Otherwise, the existing txn can
-// either be aborted (for write/write conflicts), or its commit
-// timestamp can be moved forward (for read/write conflicts). The
-// course of action is determined by the specified push type, and by
-// the owning txn's status and priority.
-message InternalPushTxnRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
-  // Now holds the timestamp used to compare the last heartbeat of the pushee
-  // against. This is necessary since the request header's timestamp does not
-  // necessarily advance with the node clock across retries and hence cannot
-  // detect abandoned transactions.
-  optional Timestamp now = 3 [(gogoproto.nullable) = false];
-  // Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
-  // timestamp forward. Writers set this to ABORT_TXN to request that
-  // the PushTxn be aborted if possible. This is done in the event of
-  // a writer conflicting with PusheeTxn. Inconsistent readers set
-  // this to CLEANUP_TXN to determine whether dangling intents
-  // may be resolved.
-  optional PushTxnType push_type = 4 [(gogoproto.nullable) = false];
-  // Range lookup indicates whether we're pushing a txn because of an
-  // intent encountered while servicing an internal range lookup
-  // request. See notes in InternalRangeLookupRequest.
-  optional bool range_lookup = 5 [(gogoproto.nullable) = false];
-}
-
-// An InternalPushTxnResponse is the return value from the
-// InternalPushTxn() method. It returns success and the resulting
-// state of PusheeTxn if the conflict was resolved in favor of the
-// caller; the caller should subsequently invoke
-// InternalResolveIntent() on the conflicted key. It returns an error
-// otherwise.
-message InternalPushTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // pushee_txn is non-nil if the transaction was pushed and contains
-  // the current value of the transaction.
-  optional Transaction pushee_txn = 2;
-}
-
-// An InternalResolveIntentRequest is arguments to the
-// InternalResolveIntent() method. It is sent by transaction
-// coordinators and after success calling InternalPushTxn to clean up
-// write intents: either to remove them or commit them.
-message InternalResolveIntentRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalResolveIntentResponse is the return value from the
-// InternalResolveIntent() method.
-message InternalResolveIntentResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalResolveIntentRangeRequest is arguments to the
-// InternalResolveIntentRange() method. This clear write intents
-// for a range of keys to resolve intents created by range ops.
-message InternalResolveIntentRangeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalResolveIntentRangeResponse is the return value from the
-// InternalResolveIntent() method.
-message InternalResolveIntentRangeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalMergeRequest contains arguments to the InternalMerge() method. It
-// specifies a key and a value which should be merged into the existing value at
-// that key.
-message InternalMergeRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Value value = 2 [(gogoproto.nullable) = false];
-}
-
-// InternalMergeResponse is the response to an InternalMerge() operation.
-message InternalMergeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// InternalTruncateLogRequest is used to remove a prefix of the raft log. While there
-// is no requirement for correctness that the raft log truncation be synchronized across
-// replicas, it is nice to preserve the property that all replicas of a range are as close
-// to identical as possible. The raft leader can also inform decisions about the cutoff point
-// with its knowledge of the replicas' acknowledgement status.
-message InternalTruncateLogRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // Log entries < this index are to be discarded.
-  optional uint64 index = 2 [(gogoproto.nullable) = false];
-}
-
-// InternalTruncateLogResponse is the response to an InternalTruncateLog() operation.
-message InternalTruncateLogResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalLeaderLeaseRequest is arguments to the InternalLeaderLease()
-// method. It is sent by the store on behalf of one of its ranges upon receipt
-// of a leader election event for that range.
-message InternalLeaderLeaseRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Lease lease = 2[(gogoproto.nullable) = false];
-}
-
-// An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
-// operation.
-message InternalLeaderLeaseResponse{
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InternalRequestUnion contains exactly one of the optional requests.
-// Non-internal values added to RequestUnion must be added here.
-message InternalRequestUnion {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    GetRequest get = 2;
-    PutRequest put = 3;
-    ConditionalPutRequest conditional_put = 4;
-    IncrementRequest increment = 5;
-    DeleteRequest delete = 6;
-    DeleteRangeRequest delete_range = 7;
-    ScanRequest scan = 8;
-    EndTransactionRequest end_transaction = 9;
-
-    InternalPushTxnRequest internal_push_txn = 30;
-    InternalResolveIntentRequest internal_resolve_intent = 31;
-    InternalResolveIntentRangeRequest internal_resolve_intent_range = 32;
-}
-}
-
-// An InternalResponseUnion contains exactly one of the optional responses.
-// Non-internal values added to ResponseUnion must be added here.
-message InternalResponseUnion {
-  option (gogoproto.onlyone) = true;
-  oneof value {
-    GetResponse get = 2;
-    PutResponse put = 3;
-    ConditionalPutResponse conditional_put = 4;
-    IncrementResponse increment = 5;
-    DeleteResponse delete = 6;
-    DeleteRangeResponse delete_range = 7;
-    ScanResponse scan = 8;
-    EndTransactionResponse end_transaction = 9;
-
-    InternalPushTxnResponse internal_push_txn = 30;
-    InternalResolveIntentResponse internal_resolve_intent = 31;
-    InternalResolveIntentRangeResponse internal_resolve_intent_range = 32;
-  }
-}
-
-// An InternalBatchRequest contains a superset of commands from
-// BatchRequest and internal batchable commands.
-//
-// See comments for BatchRequest.
-message InternalBatchRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated InternalRequestUnion requests = 2 [(gogoproto.nullable) = false];
-}
-
-// An InternalBatchResponse contains command responses.
-//
-// See comments for BatchResponse.
-message InternalBatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated InternalResponseUnion responses = 2 [(gogoproto.nullable) = false];
-}
-
-// A ReadWriteCmdResponse is a union type containing instances of all
+// A ResponseCacheEntry is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in storage/engine/db.cc in GetResponseHeader(). This message is used
 // for storing responses to mutating commands in the response cache.
-message ReadWriteCmdResponse {
+message ResponseCacheEntry {
   option (gogoproto.onlyone) = true;
   oneof value {
     PutResponse put = 1;
@@ -293,56 +40,57 @@ message ReadWriteCmdResponse {
     DeleteResponse delete = 4;
     DeleteRangeResponse delete_range = 5;
     EndTransactionResponse end_transaction = 6;
-    InternalHeartbeatTxnResponse internal_heartbeat_txn = 10;
-    InternalPushTxnResponse internal_push_txn = 11;
-    InternalResolveIntentResponse internal_resolve_intent = 12;
-    InternalResolveIntentRangeResponse internal_resolve_intent_range = 13;
-    InternalMergeResponse internal_merge = 14;
-    InternalTruncateLogResponse internal_truncate_log = 15;
-    InternalGCResponse internal_gc = 16;
-    InternalLeaderLeaseResponse internal_leader_lease = 17;
+    HeartbeatTxnResponse heartbeat_txn = 7;
+    GCResponse gc = 8;
+    PushTxnResponse push_txn = 9;
+    ResolveIntentResponse resolve_intent = 10;
+    ResolveIntentRangeResponse resolve_intent_range = 11;
+    MergeResponse merge = 12;
+    TruncateLogResponse truncate_log = 13;
+    LeaderLeaseResponse leader_lease = 14;
+    BatchResponse batch = 30;
   }
 }
 
-// An InternalRaftCommandUnion is the union of all commands which can be
-// sent via raft.
-message InternalRaftCommandUnion {
+// A RaftCommandUnion is the union of all commands which can be sent
+// via raft.
+message RaftCommandUnion {
   option (gogoproto.onlyone) = true;
   oneof value {
     // Non-batched external requests. This section is the same as RequestUnion.
-    GetRequest get = 2;
-    PutRequest put = 3;
-    ConditionalPutRequest conditional_put = 4;
-    IncrementRequest increment = 5;
-    DeleteRequest delete = 6;
-    DeleteRangeRequest delete_range = 7;
-    ScanRequest scan = 8;
-    EndTransactionRequest end_transaction = 9;
+    GetRequest get = 1;
+    PutRequest put = 2;
+    ConditionalPutRequest conditional_put = 3;
+    IncrementRequest increment = 4;
+    DeleteRequest delete = 5;
+    DeleteRangeRequest delete_range = 6;
+    ScanRequest scan = 7;
+    EndTransactionRequest end_transaction = 8;
+
+    RangeLookupRequest range_lookup = 9;
+    HeartbeatTxnRequest heartbeat_txn = 10;
+    GCRequest gc = 11 [(gogoproto.customname) = "GC"];
+    PushTxnRequest push_txn = 12;
+    ResolveIntentRequest resolve_intent = 13;
+    ResolveIntentRangeRequest resolve_intent_range = 14;
+    MergeRequest merge_response = 15;
+    TruncateLogRequest truncate_log = 16;
+    LeaderLeaseRequest lease = 17;
 
     // Other requests. Allow a gap in tag numbers so the previous list can
     // be copy/pasted from RequestUnion.
     BatchRequest batch = 30;
-    InternalRangeLookupRequest internal_range_lookup = 31;
-    InternalHeartbeatTxnRequest internal_heartbeat_txn = 32;
-    InternalPushTxnRequest internal_push_txn = 33;
-    InternalResolveIntentRequest internal_resolve_intent = 34;
-    InternalResolveIntentRangeRequest internal_resolve_intent_range = 35;
-    InternalMergeRequest internal_merge_response = 36;
-    InternalTruncateLogRequest internal_truncate_log = 37;
-    InternalGCRequest internal_gc = 38 [(gogoproto.customname) = "InternalGC"];
-    InternalLeaderLeaseRequest internal_lease = 39;
-    InternalBatchRequest internal_batch = 40;
   }
 }
 
-// An InternalRaftCommand is a command which can be serialized and
-// sent via raft.
-message InternalRaftCommand {
+// A RaftCommand is a command which can be serialized and sent via
+// raft.
+message RaftCommand {
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   optional uint64 origin_node_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "OriginNodeID", (gogoproto.casttype) = "RaftNodeID"];
-  optional InternalRaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
+  optional RaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -376,8 +124,9 @@ enum InternalValueType {
   _CR_TS = 1;
 }
 
-// InternalTimeSeriesData is a collection of data samples for some measurable
-// value, where each sample is taken over a uniform time interval.
+// InternalTimeSeriesData is a collection of data samples for some
+// measurable value, where each sample is taken over a uniform time
+// interval.
 //
 // The collection itself contains a start timestamp (in seconds since the unix
 // epoch) and a sample duration (in milliseconds). Each sample in the collection
@@ -405,10 +154,10 @@ message InternalTimeSeriesData {
 }
 
 // A InternalTimeSeriesSample represents data gathered from multiple
-// measurements of a variable value over a given period of time. The length of
-// that period of time is stored in an InternalTimeSeriesData message; a sample
-// cannot be interpreted correctly without a start timestamp and sample
-// duration.
+// measurements of a variable value over a given period of time. The
+// length of that period of time is stored in an
+// InternalTimeSeriesData message; a sample cannot be interpreted
+// correctly without a start timestamp and sample duration.
 //
 // Each sample may contain data gathered from multiple measurements of the same
 // variable, as long as all of those measurements occured within the sample

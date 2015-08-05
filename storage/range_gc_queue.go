@@ -74,14 +74,14 @@ func (q *rangeGCQueue) shouldQueue(now proto.Timestamp, rng *Replica) (bool, flo
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
-	// Calls to InternalRangeLookup typically use inconsistent reads, but we
+	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
-	// considering one of the metadata ranges: we must not do an inconsistent
-	// lookup in our own copy of the range.
-	reply := proto.InternalRangeLookupResponse{}
+	// considering one of the metadata ranges: we must not do an
+	// inconsistent lookup in our own copy of the range.
+	reply := proto.RangeLookupResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{
-		Args: &proto.InternalRangeLookupRequest{
+		Args: &proto.RangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: keys.RangeMetaKey(rng.Desc().StartKey),
 			},

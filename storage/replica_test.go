@@ -278,7 +278,7 @@ func TestRangeContains(t *testing.T) {
 }
 
 func setLeaderLease(t *testing.T, r *Replica, l *proto.Lease) {
-	args := &proto.InternalLeaderLeaseRequest{Lease: *l}
+	args := &proto.LeaderLeaseRequest{Lease: *l}
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), args)
 	var err error
 	if err = <-errChan; err == nil {
@@ -935,10 +935,10 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RangeID, store
 	}
 }
 
-// pushTxnArgs returns request/response pair for InternalPushTxn RPC
+// pushTxnArgs returns a request/response pair for PushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID proto.RangeID, storeID proto.StoreID) proto.InternalPushTxnRequest {
-	return proto.InternalPushTxnRequest{
+func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID proto.RangeID, storeID proto.StoreID) proto.PushTxnRequest {
+	return proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       pushee.Key,
 			Timestamp: pusher.Timestamp,
@@ -952,9 +952,9 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 	}
 }
 
-// heartbeatArgs returns request/response pair for InternalHeartbeatTxn RPC.
-func heartbeatArgs(txn *proto.Transaction, raftID proto.RangeID, storeID proto.StoreID) proto.InternalHeartbeatTxnRequest {
-	return proto.InternalHeartbeatTxnRequest{
+// heartbeatArgs returns request/response pair for HeartbeatTxn RPC.
+func heartbeatArgs(txn *proto.Transaction, raftID proto.RangeID, storeID proto.StoreID) proto.HeartbeatTxnRequest {
+	return proto.HeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key,
 			RangeID: raftID,
@@ -964,11 +964,11 @@ func heartbeatArgs(txn *proto.Transaction, raftID proto.RangeID, storeID proto.S
 	}
 }
 
-// internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
+// internalMergeArgs returns a MergeRequest and MergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, raftID proto.RangeID, storeID proto.StoreID) proto.InternalMergeRequest {
-	return proto.InternalMergeRequest{
+func internalMergeArgs(key []byte, value proto.Value, raftID proto.RangeID, storeID proto.StoreID) proto.MergeRequest {
+	return proto.MergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RangeID: raftID,
@@ -978,8 +978,8 @@ func internalMergeArgs(key []byte, value proto.Value, raftID proto.RangeID, stor
 	}
 }
 
-func internalTruncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.InternalTruncateLogRequest {
-	return proto.InternalTruncateLogRequest{
+func truncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
+	return proto.TruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
 			RangeID: raftID,
 			Replica: proto.Replica{StoreID: storeID},
@@ -1577,7 +1577,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		hbReply := resp.(*proto.InternalHeartbeatTxnResponse)
+		hbReply := resp.(*proto.HeartbeatTxnResponse)
 		if hbReply.Txn.Status != expStatus || hbReply.Txn.LastHeartbeat != nil {
 			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
 		}
@@ -1604,7 +1604,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		hbReply := resp.(*proto.InternalHeartbeatTxnResponse)
+		hbReply := resp.(*proto.HeartbeatTxnResponse)
 		if hbReply.Txn.Status != proto.PENDING || hbReply.Txn.LastHeartbeat == nil {
 			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
 		}
@@ -1776,8 +1776,8 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
-func TestInternalPushTxnBadKey(t *testing.T) {
+// TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
+func TestPushTxnBadKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1794,9 +1794,9 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnAlreadyCommittedOrAborted verifies success
+// TestPushTxnAlreadyCommittedOrAborted verifies success
 // (noop) in event that pushee is already committed or aborted.
-func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
+func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1824,18 +1824,18 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reply := resp.(*proto.InternalPushTxnResponse)
+		reply := resp.(*proto.PushTxnResponse)
 		if reply.PusheeTxn.Status != status {
 			t.Errorf("expected push txn to return with status == %s; got %+v", status, reply.PusheeTxn)
 		}
 	}
 }
 
-// TestInternalPushTxnUpgradeExistingTxn verifies that pushing
+// TestPushTxnUpgradeExistingTxn verifies that pushing
 // a transaction record with a new epoch upgrades the pushee's
 // epoch and timestamp if greater. In all test cases, the
 // priorities are set such that the push will succeed.
-func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
+func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1887,7 +1887,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reply := resp.(*proto.InternalPushTxnResponse)
+		reply := resp.(*proto.PushTxnResponse)
 		expTxn := gogoproto.Clone(pushee).(*proto.Transaction)
 		expTxn.Epoch = test.expEpoch
 		expTxn.Timestamp = test.expTS
@@ -1900,10 +1900,10 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnHeartbeatTimeout verifies that a txn which
+// TestPushTxnHeartbeatTimeout verifies that a txn which
 // hasn't been heartbeat within 2x the heartbeat interval can be
 // pushed/aborted.
-func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
+func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1976,11 +1976,11 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnPriorities verifies that txns with lower
+// TestPushTxnPriorities verifies that txns with lower
 // priority are pushed; if priorities are equal, then the txns
 // are ordered by txn timestamp, with the more recent timestamp
 // being pushable.
-func TestInternalPushTxnPriorities(t *testing.T) {
+func TestPushTxnPriorities(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -2041,11 +2041,11 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnPushTimestamp verifies that with args.Abort is
+// TestPushTxnPushTimestamp verifies that with args.Abort is
 // false (i.e. for read/write conflict), the pushed txn keeps status
 // PENDING, but has its txn Timestamp moved forward to the pusher's
 // txn Timestamp + 1.
-func TestInternalPushTxnPushTimestamp(t *testing.T) {
+func TestPushTxnPushTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -2067,7 +2067,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	}
 	expTS := pusher.Timestamp
 	expTS.Logical++
-	reply := resp.(*proto.InternalPushTxnResponse)
+	reply := resp.(*proto.PushTxnResponse)
 	if !reply.PusheeTxn.Timestamp.Equal(expTS) {
 		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.Timestamp)
 	}
@@ -2076,11 +2076,11 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnPushTimestampAlreadyPushed verifies that pushing
+// TestPushTxnPushTimestampAlreadyPushed verifies that pushing
 // a timestamp forward which is already far enough forward is a simple
 // noop. We do this by ensuring that priorities would otherwise make
 // pushing impossible.
-func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
+func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -2100,7 +2100,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
-	reply := resp.(*proto.InternalPushTxnResponse)
+	reply := resp.(*proto.PushTxnResponse)
 	if !reply.PusheeTxn.Timestamp.Equal(pushee.Timestamp) {
 		t.Errorf("expected timestamp to be equal to original %+v; got %+v", pushee.Timestamp, reply.PusheeTxn.Timestamp)
 	}
@@ -2127,7 +2127,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	}
 
 	// Resolve the intents.
-	rArgs := &proto.InternalResolveIntentRangeRequest{
+	rArgs := &proto.ResolveIntentRangeRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: txn.Timestamp,
 			Key:       proto.Key("a"),
@@ -2199,7 +2199,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
-	rArgs := &proto.InternalResolveIntentRequest{
+	rArgs := &proto.ResolveIntentRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: pArgs.Txn.Timestamp,
 			Key:       pArgs.Key,
@@ -2227,11 +2227,11 @@ func TestRangeStatsComputation(t *testing.T) {
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 }
 
-// TestInternalMerge verifies that the InternalMerge command is behaving as
-// expected. Merge semantics for different data types are tested more robustly
-// at the engine level; this test is intended only to show that values passed to
-// InternalMerge are being merged.
-func TestInternalMerge(t *testing.T) {
+// TestMerge verifies that the Merge command is behaving as
+// expected. Merge semantics for different data types are tested more
+// robustly at the engine level; this test is intended only to show
+// that values passed to Merge are being merged.
+func TestMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -2245,7 +2245,7 @@ func TestInternalMerge(t *testing.T) {
 		mergeArgs := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1, tc.store.StoreID())
 
 		if _, err := tc.rng.AddCmd(tc.rng.context(), &mergeArgs); err != nil {
-			t.Fatalf("unexpected error from InternalMerge: %s", err.Error())
+			t.Fatalf("unexpected error from Merge: %s", err.Error())
 		}
 	}
 
@@ -2264,10 +2264,10 @@ func TestInternalMerge(t *testing.T) {
 	}
 }
 
-// TestInternalTruncateLog verifies that the InternalTruncateLog command
-// removes a prefix of the raft logs (modifying FirstIndex() and making them
+// TestTruncateLog verifies that the TruncateLog command removes a
+// prefix of the raft logs (modifying FirstIndex() and making them
 // inaccessible via Entries()).
-func TestInternalTruncateLog(t *testing.T) {
+func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -2289,7 +2289,7 @@ func TestInternalTruncateLog(t *testing.T) {
 	}
 
 	// Discard the first half of the log
-	truncateArgs := internalTruncateLogArgs(indexes[5], 1, tc.store.StoreID())
+	truncateArgs := truncateLogArgs(indexes[5], 1, tc.store.StoreID())
 
 	if _, err := tc.rng.AddCmd(tc.rng.context(), &truncateArgs); err != nil {
 		t.Fatal(err)
@@ -2511,11 +2511,11 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	}
 }
 
-// TestRangeDanglingMetaIntent creates a dangling intent on a
-// meta2 record and verifies that InternalRangeLookup requests
-// behave appropriately. Normally, the old value and a write intent
-// error should be returned. If IgnoreIntents is specified, then
-// a random choice of old or new is returned with no error.
+// TestRangeDanglingMetaIntent creates a dangling intent on a meta2
+// record and verifies that RangeLookup requests behave
+// appropriately. Normally, the old value and a write intent error
+// should be returned. If IgnoreIntents is specified, then a random
+// choice of old or new is returned with no error.
 func TestRangeDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
@@ -2525,7 +2525,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	key := proto.Key("a")
 
 	// Get original meta2 descriptor.
-	rlArgs := &proto.InternalRangeLookupRequest{
+	rlArgs := &proto.RangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:             keys.RangeMetaKey(key),
 			RangeID:         tc.rng.Desc().RangeID,
@@ -2535,13 +2535,13 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 		MaxRanges: 1,
 	}
 
-	var rlReply *proto.InternalRangeLookupResponse
+	var rlReply *proto.RangeLookupResponse
 
 	reply, err := tc.rng.AddCmd(tc.rng.context(), rlArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rlReply = reply.(*proto.InternalRangeLookupResponse)
+	rlReply = reply.(*proto.RangeLookupResponse)
 
 	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
@@ -2569,7 +2569,7 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected lookup error: %s", err)
 	}
-	rlReply = reply.(*proto.InternalRangeLookupResponse)
+	rlReply = reply.(*proto.RangeLookupResponse)
 	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
 		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
 	}
@@ -2595,14 +2595,14 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	const count = 100
 
 	for i := 0; i < count && !(origSeen && newSeen); i++ {
-		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.InternalRangeLookupRequest)
+		clonedRLArgs := gogoproto.Clone(rlArgs).(*proto.RangeLookupRequest)
 		clonedRLArgs.Timestamp = proto.ZeroTimestamp
 
 		reply, err = tc.rng.AddCmd(tc.rng.context(), clonedRLArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		rlReply = reply.(*proto.InternalRangeLookupResponse)
+		rlReply = reply.(*proto.RangeLookupResponse)
 		seen := rlReply.Ranges[0]
 		if reflect.DeepEqual(seen, origDesc) {
 			origSeen = true
@@ -2617,21 +2617,22 @@ func TestRangeDanglingMetaIntent(t *testing.T) {
 	}
 }
 
-func TestInternalRangeLookup(t *testing.T) {
+func TestRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 	for _, key := range []proto.Key{
-		// Test with the first range (StartKey==KeyMin). Normally we look up this
-		// range in gossip instead of executing the RPC, but InternalRangeLookup
-		// is still used when up-to-date information is required.
+		// Test with the first range (StartKey==KeyMin). Normally we look
+		// up this range in gossip instead of executing the RPC, but
+		// RangeLookup is still used when up-to-date information is
+		// required.
 		proto.KeyMin,
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
 		proto.MakeKey(keys.Meta1Prefix, proto.KeyMax),
 	} {
-		resp, err := tc.store.ExecuteCmd(context.Background(), &proto.InternalRangeLookupRequest{
+		resp, err := tc.store.ExecuteCmd(context.Background(), &proto.RangeLookupRequest{
 			RequestHeader: proto.RequestHeader{
 				RangeID: 1,
 				Key:     key,
@@ -2641,7 +2642,7 @@ func TestInternalRangeLookup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reply := resp.(*proto.InternalRangeLookupResponse)
+		reply := resp.(*proto.RangeLookupResponse)
 		expected := []proto.RangeDescriptor{*tc.rng.Desc()}
 		if !reflect.DeepEqual(reply.Ranges, expected) {
 			t.Fatalf("expected %+v, got %+v", expected, reply.Ranges)
@@ -2713,11 +2714,11 @@ func BenchmarkWriteCmdWithEventsAndConsumer(b *testing.B) {
 
 type mockRangeManager struct {
 	*Store
-	mockProposeRaftCommand func(cmdIDKey, proto.InternalRaftCommand) <-chan error
+	mockProposeRaftCommand func(cmdIDKey, proto.RaftCommand) <-chan error
 }
 
 // ProposeRaftCommand mocks out the corresponding method on the Store.
-func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) <-chan error {
+func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd proto.RaftCommand) <-chan error {
 	if mrm.mockProposeRaftCommand == nil {
 		return mrm.Store.ProposeRaftCommand(idKey, cmd)
 	}
@@ -2735,7 +2736,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock the RangeManager, simulate proposeRaftCommand return an ErrGroupDeleted error.
-	proposeRaftCommandFn := func(cmdIDKey, proto.InternalRaftCommand) <-chan error {
+	proposeRaftCommandFn := func(cmdIDKey, proto.RaftCommand) <-chan error {
 		ch := make(chan error, 1)
 		ch <- multiraft.ErrGroupDeleted
 		return ch

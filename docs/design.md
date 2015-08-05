@@ -60,13 +60,6 @@ location to be chosen to optimize performance and/or availability.
 Unlike Spanner, zones are monolithic and don’t allow movement of fine
 grained data on the level of entity groups.
 
-A
-[Megastore](http://www.cidrdb.org/cidr2011/Papers/CIDR11_Paper32.pdf)-like
-message queue mechanism is also provided to 1) efficiently sideline
-updates which can tolerate asynchronous execution and 2) provide an
-integrated message queuing system for asynchronous communication between
-distributed system components.
-
 # Architecture
 
 Cockroach implements a layered architecture. The highest level of
@@ -550,9 +543,7 @@ system to minimize clock skew.
     > mitigated by process initialization.
     >
     > All causally-related events within Cockroach maintain
-    > linearizability. Message queues, for example, guarantee that the
-    > receipt timestamp is greater than send timestamp, and that
-    > delivered messages may not be reaped until after the commit wait.
+    > linearizability.
 
 2.  Committed transactions respond with a commit wait parameter which
     > represents the remaining time in the nominal commit wait. This
@@ -839,7 +830,6 @@ Range-specific maintenance tasks such as
 
 * gossiping the sentinel and/or first range information
 * splitting, merging and rebalancing
-* handling message queues (see below)
 
 and, very importantly, may satisfy reads locally, without incurring the
 overhead of going through Raft.
@@ -949,84 +939,6 @@ spare capacity is chosen in the same datacenter and a special-case split
 is done which simply duplicates the data 1:1 and resets the range
 configuration metadata.
 
-# Message Queues
-
-Each range maintains an array of incoming message queues, referred to
-here as **inboxes**. Additionally, each range maintains and *processes*
-an array of outgoing message queues, referred to here as **outboxes**.
-Both inboxes and outboxes are assigned to keys; messages can be sent or
-received on behalf of any key. Inboxes and outboxes can contain any
-number of pending messages.
-
-Messages can be *deliverable*, or *executable.*
-
-Deliverable messages are defined by Value objects - simple byte arrays -
-that are delivered to a key’s inbox, awaiting collection by a client
-invoking the ReapQueue operation. These are typically used by client
-applications wishing to be notified of changes to an entry for further
-processing, such as expensive offline operations like sending emails,
-SMSs, etc.
-
-Executable messages are *outgoing-only*, and are instances of
-PutRequest,IncrementRequest, DeleteRequest, DeleteRangeRequest
-or AccountingRequest. Rather than being delivered to a key’s inbox, are
-executed when encountered. These are primarily useful when updates that
-are nominally part of a transaction can tolerate asynchronous execution
-(e.g. eventual consistency), and are otherwise too busy or numerous to
-make including them in the original [distributed] transaction efficient.
-Examples may include updates to the accounting for successive key
-prefixes (potentially busy) or updates to a full-text index (potentially
-numerous).
-
-These two types of messages are enqueued in different outboxes too - see
-key formats below.
-
-At commit time, the range processing the transaction places messages
-into a shared outbox located at the start of the range metadata. This is
-effectively free as it’s part of the same consensus write for the range
-as the COMMIT record. Outgoing messages are processed asynchronously by
-the range. To make processing easy, all outboxes are co-located at the
-start of the range. To make lookup easy, all inboxes are located
-immediately after the recipient key. The leader replica of a range is
-responsible for processing message queues.
-
-A dispatcher polls a given range’s *deliverable message outbox*
-periodically (configurable), and delivers those messages to the target
-key’s inbox. The dispatcher is also woken up whenever a new message is
-added to the outbox. A separate executor also polls the range’s
-*executable message outbox* periodically as well (again, configurable),
-and executes those commands. The executor, too, is woken up whenever a
-new message is added to the outbox.
-
-Formats follow in the table below. Notice that inbox messages for a
-given key sort by the `<outbox-timestamp>`. This doesn’t provide a
-precise ordering, but it does allow clients to scan messages in an
-approximate ordering of when they were originally lodged with senders.
-NTP offers walltime deltas to within 100s of milliseconds. The
-`<sender-range-key>` suffix provides uniqueness.
-
-**Outbox**
-`<sender-range-key>deliverable-outbox:<recipient-key><outbox-timestamp>`
-`<sender-range-key>executable-outbox:<recipient-key><outbox-timestamp>`
-
-**Inbox**
-`<recipient-key>inbox:<outbox-timestamp><sender-range-key>`
-
-Messages are processed and then deleted as part of a single distributed
-transaction. The message will be executed or delivered exactly once,
-regardless of failures at either sender or receiver.
-
-Delivered messages may be read by clients via the ReapQueue operation.
-This operation may only be used as part of a transaction. Clients should
-commit only after having processed the message. If the transaction is
-committed, scanned messages are automatically deleted. The operation
-name was chosen to reflect its mutating side effect. Deletion of read
-messages is mandatory because senders deliver messages asynchronously
-and a delay could cause insertion of messages at arbitrary points in the
-inbox queue. If clients require persistence, they should re-save read
-messages manually; the ReapQueue operation can be incorporated into
-normal transactional updates.
-
 # Range-Spanning Binary Tree
 
 A crucial enhancement to the organization of range metadata is to
@@ -1061,33 +973,15 @@ R0: `aa - cc`, R1: `*cc - lll`, R2: `*lll - llr`, R3: `*llr - nn`, R4: `*nn - rr
 
 ![Range Tree](media/rangetree.png)
 
-The range-spanning tree has many beneficial uses in Cockroach. It makes
-the problem of efficiently aggregating accounting information of
-potentially vast ranges of data tractable. Imagine a subrange of data
-over which accounting is being kept. For example, the *photos* table in
-a public photo sharing site. To efficiently keep track of data about the
-table (e.g. total size, number of rows, etc.), messages can be passed
-first up the tree and then down to the left until updates arrive at the
-key prefix under which accounting is aggregated. This makes worst case
-number of hops for an update to propagate into the accounting totals
-2 \* log N. A 64T database will require 1M ranges, meaning 40 hops
-worst case. In our experience, accounting tasks over vast ranges of data
-are most often map/reduce jobs scheduled with coarse-grained
-periodicity. By contrast, we expect Cockroach to maintain statistics
-with sub 10s accuracy and with minimal cycles and minimal IOPs.
+The range-spanning tree has many beneficial uses in Cockroach. It
+provides a ready made solution to scheduling mappers and sorting /
+reducing during map-reduce operations. It also provides a mechanism
+for visiting every Raft replica range which comprises a logical key
+range. This is used to periodically find the oldest extant write
+intent over the entire system.
 
-Another use for the range-spanning tree is to push accounting, zones and
-permissions configurations to all ranges. In the case of zones and
-permissions, this is an efficient way to pass updated configuration
-information with exponential fan-out. When adding accounting
-configurations (i.e. specifying a new key prefix to track), the
-implicated ranges are transactionally scanned and zero-state accounting
-information is computed as well. Deleting accounting configurations is
-similar, except accounting records are deleted.
-
-Last but *not* least, the range-spanning tree provides a convenient
-mechanism for planning and executing parallel queries. These provide the
-basis for
+The range-spanning tree provides a convenient mechanism for planning
+and executing parallel queries. These provide the basis for
 [Dremel](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36632.pdf)-like
 query execution trees and it’s easy to imagine supporting a subset of
 SQL or even javascript-based user functions for complex data analysis
@@ -1199,18 +1093,14 @@ the accounting system table. The format of accounting table keys is:
 In practice, we assume each RoachNode capable of caching the
 entire accounting table as it is likely to be relatively small.
 
-Accounting is kept for key prefix ranges with eventual consistency
-for efficiency. Updates to accounting values propagate through the
-system using the message queue facility if the accounting keys do
-not reside on the same range as ongoing activity (true for all but
-the smallest systems). There are two types of values which
-comprise accounting: counts and occurrences, for lack of better
-terms. Counts describe system state, such as the total number of
-bytes, rows, etc. Occurrences include transient performance and
-load metrics. Both types of accounting are captured as time series
-with minute granularity. The length of time accounting metrics are
-kept is configurable. Below are examples of each type of
-accounting value.
+Accounting is kept for key prefix ranges with eventual consistency for
+efficiency. There are two types of values which comprise accounting:
+counts and occurrences, for lack of better terms. Counts describe
+system state, such as the total number of bytes, rows,
+etc. Occurrences include transient performance and load metrics. Both
+types of accounting are captured as time series with minute
+granularity. The length of time accounting metrics are kept is
+configurable. Below are examples of each type of accounting value.
 
 **System State Counters/Performance**
 

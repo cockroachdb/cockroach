@@ -49,35 +49,20 @@ const (
 	Scan
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction
-	// ReapQueue scans and deletes messages from a recipient message
-	// queue. ReapQueueRequest invocations must be part of an extant
-	// transaction or they fail. Returns the reaped queue messsages, up to
-	// the requested maximum. If fewer than the maximum were returned,
-	// then the queue is empty.
-	ReapQueue
-	// EnqueueUpdate enqueues an update for eventual execution.
-	EnqueueUpdate
-	// EnqueueMessage enqueues a message for delivery to an inbox.
-	EnqueueMessage
-	// Batch executes a set of commands in parallel.
-	Batch
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit
 	// AdminMerge is called to coordinate a merge of two adjacent ranges.
 	AdminMerge
-	// InternalRangeLookup looks up range descriptors, containing the
-	// locations of replicas for the range containing the specified key.
-	InternalRangeLookup
-	// InternalHeartbeatTxn sends a periodic heartbeat to extant
+	// HeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.
-	InternalHeartbeatTxn
-	// InternalGC garbage collects values based on expired timestamps
+	HeartbeatTxn
+	// GC garbage collects values based on expired timestamps
 	// for a list of keys in a range. This method is called by the
 	// range leader after a snapshot scan. The call goes through Raft,
 	// so all range replicas GC the exact same values.
-	InternalGC
-	// InternalPushTxn attempts to resolve read or write conflicts between
+	GC
+	// PushTxn attempts to resolve read or write conflicts between
 	// transactions. Both the pusher (args.Txn) and the pushee
 	// (args.PushTxn) are supplied. However, args.Key should be set to the
 	// transaction ID of the pushee, as it must be directed to the range
@@ -86,24 +71,27 @@ const (
 	// resolved in favor of the pusher, returns success; otherwise returns
 	// an error code either indicating the pusher must retry or abort and
 	// restart the transaction.
-	InternalPushTxn
-	// InternalResolveIntent resolves existing write intents for a key.
-	InternalResolveIntent
-	// InternalResolveIntentRange resolves existing write intents for a key range.
-	InternalResolveIntentRange
-	// InternalMerge merges a given value into the specified key. Merge is a
+	PushTxn
+	// RangeLookup looks up range descriptors, containing the
+	// locations of replicas for the range containing the specified key.
+	RangeLookup
+	// ResolveIntent resolves existing write intents for a key.
+	ResolveIntent
+	// ResolveIntentRange resolves existing write intents for a key range.
+	ResolveIntentRange
+	// Merge merges a given value into the specified key. Merge is a
 	// high-performance operation provided by underlying data storage for values
 	// which are accumulated over several writes. Because it is not
 	// transactional, Merge is currently not made available to external clients.
 	//
 	// The logic used to merge values of different types is described in more
 	// detail by the "Merge" method of engine.Engine.
-	InternalMerge
-	// InternalTruncateLog discards a prefix of the raft log.
-	InternalTruncateLog
-	// InternalLeaderLease requests a leader lease for a replica.
-	InternalLeaderLease
-	// InternalBatch implements batch processing of commands. This is a
+	Merge
+	// TruncateLog discards a prefix of the raft log.
+	TruncateLog
+	// LeaderLease requests a leader lease for a replica.
+	LeaderLease
+	// Batch implements batch processing of commands. This is a
 	// superset of the Batch method.
-	InternalBatch
+	Batch
 )
