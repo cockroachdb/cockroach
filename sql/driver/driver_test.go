@@ -70,7 +70,9 @@ func asResultSlice(src [][]string) resultSlice {
 	for i, subSlice := range src {
 		result[i] = make([]*string, len(subSlice))
 		for j := range subSlice {
-			result[i][j] = &subSlice[j]
+			if subSlice[j] != "<NULL>" {
+				result[i][j] = &subSlice[j]
+			}
 		}
 	}
 	return result
@@ -686,6 +688,22 @@ CREATE TABLE t.kv (
 		}
 		results := readAll(t, rows)
 		if err := verifyResults(asResultSlice(d.expected), results); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := db.Exec(`INSERT INTO t.kv (a, b) VALUES (4, 5)`); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := db.Query(fmt.Sprintf("SELECT * FROM t.kv WHERE a = 4")); err != nil {
+		t.Fatal(err)
+	} else {
+		results := readAll(t, rows)
+		expected := [][]string{
+			{"a", "b", "c"},
+			{"4", "5", "<NULL>"},
+		}
+		if err := verifyResults(asResultSlice(expected), results); err != nil {
 			t.Fatal(err)
 		}
 	}
