@@ -136,10 +136,13 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 	}
 	var mu sync.Mutex
 	var oldestIntentNanos int64 = math.MaxInt64
-	var wg sync.WaitGroup
 	var expBaseKey proto.Key
 	var keys []proto.EncodedKey
 	var vals [][]byte
+
+	// Maps from txn ID to txn and intent key slice.
+	txnMap := map[string]*proto.Transaction{}
+	intentMap := map[string][]proto.Key{}
 
 	// updateOldestIntent atomically updates the oldest intent.
 	updateOldestIntent := func(intentNanos int64) {
@@ -165,13 +168,14 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 				// intent resolution if older than the threshold.
 				startIdx := 1
 				if meta.Txn != nil {
-					// Resolve intent asynchronously in a goroutine if the intent
-					// is older than the intent expiration threshold.
+					// Keep track of intent to resolve if older than the intent
+					// expiration threshold.
 					if meta.Timestamp.Less(intentExp) {
-						wg.Add(1)
-						go gcq.resolveIntent(rng, expBaseKey, meta, updateOldestIntent, &wg)
+						id := string(meta.Txn.ID)
+						txnMap[id] = meta.Txn
+						intentMap[id] = append(intentMap[id], expBaseKey)
 					} else {
-						updateOldestIntent(meta.Timestamp.WallTime)
+						updateOldestIntent(meta.Txn.OrigTimestamp.WallTime)
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
 					startIdx = 2
@@ -223,11 +227,38 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Replica) error {
 		gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key
 	}
 
-	// Wait for any outstanding intent resolves and set oldest extant intent.
+	// Process push transactions in parallel.
+	var wg sync.WaitGroup
+	for _, txn := range txnMap {
+		wg.Add(1)
+		go gcq.pushTxn(rng, now, txn, updateOldestIntent, &wg)
+	}
 	wg.Wait()
-	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
+
+	// Resolve all intents.
+	// TODO(spencer): use a batch here when available.
+	for id, txn := range txnMap {
+		if txn.Status != proto.PENDING {
+			// The transaction was successfully pushed, so resolve the intents.
+			for _, key := range intentMap[id] {
+				resolveArgs := &proto.ResolveIntentRequest{
+					RequestHeader: proto.RequestHeader{
+						Timestamp: now,
+						Key:       key,
+						User:      security.RootUser,
+						Txn:       txn,
+					},
+				}
+				if _, err := rng.AddCmd(rng.context(), resolveArgs); err != nil {
+					log.Warningf("resolve of key %q failed: %s", key, err)
+					updateOldestIntent(txn.OrigTimestamp.WallTime)
+				}
+			}
+		}
+	}
 
 	// Send GC request through range.
+	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
 	if _, err := rng.AddCmd(rng.context(), gcArgs); err != nil {
 		return err
@@ -248,53 +279,39 @@ func (gcq *gcQueue) timer() time.Duration {
 	return gcQueueTimerDuration
 }
 
-// resolveIntent resolves the intent at key by attempting to abort the
-// transaction and resolve the intent. If the transaction cannot be
-// aborted or intent cannot be resolved, the oldestIntentNanos value
-// is atomically updated to the min of oldestIntentNanos and the
-// intent's timestamp. The wait group is signaled on completion.
-func (gcq *gcQueue) resolveIntent(rng *Replica, key proto.Key, meta *engine.MVCCMetadata,
-	updateOldestIntent func(int64), wg *sync.WaitGroup) {
+// pushTxn attempts to abort the txn via push. If the transaction
+// cannot be aborted, the oldestIntentNanos value is atomically
+// updated to the min of oldestIntentNanos and the intent's
+// timestamp. The wait group is signaled on completion.
+func (gcq *gcQueue) pushTxn(rng *Replica, now proto.Timestamp, txn *proto.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
-
-	log.Infof("resolving intent at %q ts=%s", key, meta.Timestamp)
+	if log.V(1) {
+		log.Infof("pushing txn %s ts=%s", txn, txn.OrigTimestamp)
+	}
 
 	// Attempt to push the transaction which created the intent.
-	now := rng.rm.Clock().Now()
 	pushArgs := &proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    now,
-			Key:          meta.Txn.Key,
+			Key:          txn.Key,
 			User:         security.RootUser,
 			UserPriority: gogoproto.Int32(proto.MaxPriority),
 			Txn:          nil,
 		},
 		Now:       now,
-		PusheeTxn: *meta.Txn,
+		PusheeTxn: *txn,
 		PushType:  proto.ABORT_TXN,
 	}
 	pushReply := &proto.PushTxnResponse{}
 	b := &client.Batch{}
 	b.InternalAddCall(proto.Call{Args: pushArgs, Reply: pushReply})
 	if err := rng.rm.DB().Run(b); err != nil {
-		log.Warningf("push of txn %s failed: %s", meta.Txn, err)
-		updateOldestIntent(meta.Timestamp.WallTime)
+		log.Warningf("push of txn %s failed: %s", txn, err)
+		updateOldestIntent(txn.OrigTimestamp.WallTime)
 		return
 	}
-
-	// We pushed the transaction successfully, so resolve the intent.
-	resolveArgs := &proto.ResolveIntentRequest{
-		RequestHeader: proto.RequestHeader{
-			Timestamp: now,
-			Key:       key,
-			User:      security.RootUser,
-			Txn:       pushReply.PusheeTxn,
-		},
-	}
-	if _, err := rng.AddCmd(rng.context(), resolveArgs); err != nil {
-		log.Warningf("resolve of key %q failed: %s", key, err)
-		updateOldestIntent(meta.Timestamp.WallTime)
-	}
+	// Update the supplied txn on successful push.
+	*txn = *pushReply.PusheeTxn
 }
 
 // lookupGCPolicy queries the gossip prefix config map based on the

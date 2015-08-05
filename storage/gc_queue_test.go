@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -129,8 +131,8 @@ func TestGCQueueProcess(t *testing.T) {
 
 	ts1 := makeTS(now-2*24*60*60*1E9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
 	ts2 := makeTS(now-25*60*60*1E9, 0)                         // GC will occur at time=25 hours
-	ts3 := makeTS(now-(intentAgeThreshold.Nanoseconds()+1), 0) // 2h+1ns old
-	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-ns old
+	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
 	ts5 := makeTS(now-1E9, 0)                                  // 1s old
 	key1 := proto.Key("a")
 	key2 := proto.Key("b")
@@ -168,14 +170,14 @@ func TestGCQueueProcess(t *testing.T) {
 		{key5, ts2, true, false},
 		// For key6, expect no values to GC because most recent value is intent.
 		{key6, ts1, false, false},
-		{key6, ts5, true, true},
+		{key6, ts5, false, true},
 		// For key7, expect no values to GC because intent is exactly 2h old.
 		{key7, ts2, false, false},
-		{key7, ts4, true, true},
+		{key7, ts4, false, true},
 		// For key8, expect most recent value to resolve by aborting, which will clean it up.
 		{key8, ts2, false, false},
 		{key8, ts3, true, true},
-		// /For key9, resolve naked intent with no remaining values.
+		// For key9, resolve naked intent with no remaining values.
 		{key9, ts3, true, false},
 	}
 
@@ -185,6 +187,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs.Timestamp = datum.ts
 			if datum.txn {
 				dArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
+				dArgs.Txn.OrigTimestamp = datum.ts
 				dArgs.Txn.Timestamp = datum.ts
 			}
 			if _, err := tc.rng.AddCmd(tc.rng.context(), &dArgs); err != nil {
@@ -195,6 +198,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs.Timestamp = datum.ts
 			if datum.txn {
 				pArgs.Txn = newTransaction("test", datum.key, 1, proto.SERIALIZABLE, tc.clock)
+				pArgs.Txn.OrigTimestamp = datum.ts
 				pArgs.Txn.Timestamp = datum.ts
 			}
 			if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
@@ -206,7 +210,7 @@ func TestGCQueueProcess(t *testing.T) {
 	// Process through a scan queue.
 	gcQ := newGCQueue()
 	if err := gcQ.process(tc.clock.Now(), tc.rng); err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	expKVs := []struct {
@@ -286,6 +290,65 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 	if gcMeta.LastScanNanos != ts.WallTime {
 		t.Errorf("expected walltime nanos %d; got %d", gcMeta.LastScanNanos, ts.WallTime)
+	}
+}
+
+// TestGCQueueIntentResolution verifies intent resolution with many
+// intents spanning just two transactions.
+func TestGCQueueIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
+	tc.manualClock.Set(now)
+
+	txns := []*proto.Transaction{
+		newTransaction("txn1", proto.Key("0-00000"), 1, proto.SERIALIZABLE, tc.clock),
+		newTransaction("txn2", proto.Key("1-00000"), 1, proto.SERIALIZABLE, tc.clock),
+	}
+	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
+	txns[0].OrigTimestamp = intentResolveTS
+	txns[0].Timestamp = intentResolveTS
+	txns[1].OrigTimestamp = intentResolveTS
+	txns[1].Timestamp = intentResolveTS
+
+	// Two transactions.
+	for i := 0; i < 2; i++ {
+		// 50,000 puts per transaction.
+		// TODO(spencer): increase back to 50000 once batching support is available.
+		for j := 0; j < 5000; j++ {
+			pArgs := putArgs(proto.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"), tc.rng.Desc().RangeID, tc.store.StoreID())
+			pArgs.Timestamp = makeTS(1, 0)
+			pArgs.Txn = txns[i]
+			if _, err := tc.rng.AddCmd(tc.rng.context(), &pArgs); err != nil {
+				t.Fatalf("%d: could not put data: %s", i, err)
+			}
+		}
+	}
+
+	// Process through a scan queue.
+	gcQ := newGCQueue()
+	if err := gcQ.process(tc.clock.Now(), tc.rng); err != nil {
+		t.Fatal(err)
+	}
+
+	// Iterate through all values to ensure intents have been fully resolved.
+	meta := &engine.MVCCMetadata{}
+	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(proto.KeyMin), engine.MVCCEncodeKey(proto.KeyMax), func(kv proto.RawKeyValue) (bool, error) {
+		if key, _, isValue := engine.MVCCDecodeKey(kv.Key); !isValue {
+			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+				t.Fatalf("unable to unmarshal mvcc metadata for key %s", key)
+			}
+			if meta.Txn != nil {
+				t.Fatalf("non-nil Txn after GC for key %s", key)
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
