@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,29 +13,26 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Tamir Duberstein (tamird@gmail.com)
 
-package proto
+package config
 
-import (
-	"net"
-	"testing"
-)
+// CanRead does a linear search for user to verify read permission.
+func (p *PermConfig) CanRead(user string) bool {
+	for _, u := range p.Read {
+		if u == user {
+			return true
+		}
+	}
+	return false
+}
 
-func TestAddrToFrom(t *testing.T) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:8080")
-	if err != nil {
-		t.Fatal(err)
+// CanWrite does a linear search for user to verify write permission.
+func (p *PermConfig) CanWrite(user string) bool {
+	for _, u := range p.Write {
+		if u == user {
+			return true
+		}
 	}
-	addr := FromNetAddr(tcpAddr)
-	tcpAddr2, err := addr.NetAddr()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tcpAddr2.Network() != tcpAddr.Network() {
-		t.Errorf("networks differ: %s != %s", tcpAddr2.Network(), tcpAddr.Network())
-	}
-	if tcpAddr2.String() != tcpAddr.String() {
-		t.Errorf("strings differ: %s != %s", tcpAddr2.String(), tcpAddr.String())
-	}
+	return false
 }

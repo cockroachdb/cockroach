@@ -140,26 +140,6 @@ func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *Replica) {
 	return -1, nil
 }
 
-// CanRead does a linear search for user to verify read permission.
-func (p *PermConfig) CanRead(user string) bool {
-	for _, u := range p.Read {
-		if u == user {
-			return true
-		}
-	}
-	return false
-}
-
-// CanWrite does a linear search for user to verify write permission.
-func (p *PermConfig) CanWrite(user string) bool {
-	for _, u := range p.Write {
-		if u == user {
-			return true
-		}
-	}
-	return false
-}
-
 // Stringer implementation for replica.
 func (r *Replica) String() string {
 	return fmt.Sprintf("%d:%d", r.NodeID, r.StoreID)

@@ -21,8 +21,8 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -38,8 +38,8 @@ type zoneHandler struct {
 }
 
 // validateZoneConfig returns an error if a given zone config is invalid.
-func validateZoneConfig(config gogoproto.Message) error {
-	zConfig := config.(*proto.ZoneConfig)
+func validateZoneConfig(cfg gogoproto.Message) error {
+	zConfig := cfg.(*config.ZoneConfig)
 	if len(zConfig.ReplicaAttrs) == 0 {
 		return util.Errorf("attributes for at least one replica must be specified in zone config")
 	}
@@ -58,7 +58,7 @@ func validateZoneConfig(config gogoproto.Message) error {
 // "body". The specified body must validly parse into a zone config
 // struct.
 func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
-	return putConfig(zh.db, keys.ConfigZonePrefix, &proto.ZoneConfig{},
+	return putConfig(zh.db, keys.ConfigZonePrefix, &config.ZoneConfig{},
 		path, body, r, validateZoneConfig)
 }
 
@@ -71,7 +71,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 // JSON-formatted output for a listing of keys and JSON-formatted
 // output for retrieval of a zone config.
 func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	return getConfig(zh.db, keys.ConfigZonePrefix, &proto.ZoneConfig{}, path, r)
+	return getConfig(zh.db, keys.ConfigZonePrefix, &config.ZoneConfig{}, path, r)
 }
 
 // Delete removes the zone config specified by key.

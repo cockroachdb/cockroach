@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,18 +13,14 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: jqmp (jaqueramaphan@gmail.com)
-
-// TODO(jqmp): Needs testing.
+// Author: Tamir Duberstein (tamird@gmail.com)
 
 package util
 
-// UnresolvedAddr is an unresolved version of net.Addr.
-type UnresolvedAddr struct {
-	// These fields are only exported so that gob can see them.
-	NetworkField string `json:"network"`
-	StringField  string `json:"string"`
-}
+import (
+	"fmt"
+	"net"
+)
 
 // MakeUnresolvedAddr creates a new UnresolvedAddr from a network
 // and raw address string.
@@ -43,4 +39,17 @@ func (a UnresolvedAddr) Network() string {
 // String returns the address's string form.
 func (a UnresolvedAddr) String() string {
 	return a.StringField
+}
+
+// Resolve attempts to resolve a into a net.Addr.
+func (a UnresolvedAddr) Resolve() (net.Addr, error) {
+	switch a.NetworkField {
+	case "tcp", "tcp4", "tcp6":
+		return net.ResolveTCPAddr(a.NetworkField, a.StringField)
+	case "udp", "udp4", "udp6":
+		return net.ResolveUDPAddr(a.NetworkField, a.StringField)
+	case "unix", "unixgram", "unixpacket":
+		return net.ResolveUnixAddr(a.NetworkField, a.StringField)
+	}
+	return nil, fmt.Errorf("network %s not supported", a.NetworkField)
 }

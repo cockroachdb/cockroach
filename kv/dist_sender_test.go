@@ -28,12 +28,12 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -56,12 +56,12 @@ var testAddress = util.MakeUnresolvedAddr("tcp", "node1:8080")
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	g := n.Nodes[0].Gossip
-	permConfig := &proto.PermConfig{
+	permConfig := &config.PermConfig{
 		Read:  []string{""},
 		Write: []string{""},
 	}
 
-	configMap, err := storage.NewPrefixConfigMap([]*storage.PrefixConfig{
+	configMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
 		{proto.KeyMin, nil, permConfig},
 	})
 	if err != nil {
@@ -78,12 +78,9 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	}
 	nodeIDKey := gossip.MakeNodeIDKey(1)
 	if err := g.AddInfo(nodeIDKey, &proto.NodeDescriptor{
-		NodeID: 1,
-		Address: proto.Addr{
-			Network: testAddress.Network(),
-			Address: testAddress.String(),
-		},
-		Attrs: proto.Attributes{Attrs: []string{"attr1", "attr2"}},
+		NodeID:  1,
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+		Attrs:   proto.Attributes{Attrs: []string{"attr1", "attr2"}},
 	}, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -304,11 +301,8 @@ func TestSendRPCOrder(t *testing.T) {
 			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 			addrToNode[addr.String()] = i
 			nd := &proto.NodeDescriptor{
-				NodeID: proto.NodeID(i),
-				Address: proto.Addr{
-					Network: addr.Network(),
-					Address: addr.String(),
-				},
+				NodeID:  proto.NodeID(i),
+				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 				Attrs: proto.Attributes{
 					Attrs: nodeAttrs[i],
 				},
@@ -651,17 +645,17 @@ func TestVerifyPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
-	config1 := &proto.PermConfig{
+	config1 := &config.PermConfig{
 		Read:  []string{"read1", "readAll", "rw1", "rwAll"},
 		Write: []string{"write1", "writeAll", "rw1", "rwAll"}}
-	config2 := &proto.PermConfig{
+	config2 := &config.PermConfig{
 		Read:  []string{"read2", "readAll", "rw2", "rwAll"},
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
-	configs := []*storage.PrefixConfig{
+	configs := []*config.PrefixConfig{
 		{proto.KeyMin, nil, config1},
 		{proto.Key("a"), nil, config2},
 	}
-	configMap, err := storage.NewPrefixConfigMap(configs)
+	configMap, err := config.NewPrefixConfigMap(configs)
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
 	}
@@ -794,11 +788,8 @@ func TestSendRPCRetry(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 		nd := &proto.NodeDescriptor{
-			NodeID: proto.NodeID(i),
-			Address: proto.Addr{
-				Network: addr.Network(),
-				Address: addr.String(),
-			},
+			NodeID:  proto.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		}
 		if err := g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)

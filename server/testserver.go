@@ -19,6 +19,7 @@ package server
 
 import (
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
@@ -55,7 +56,7 @@ func StartTestServer(t util.Tester) *TestServer {
 
 	// Setup permissions for a test user.
 	err := s.WritePermissionConfig(TestUser,
-		&proto.PermConfig{
+		&config.PermConfig{
 			Read:  []string{TestUser},
 			Write: []string{TestUser},
 		})
@@ -209,7 +210,7 @@ func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 
 // WritePermissionConfig writes the passed-in 'cfg' permissions config
 // for the 'path' key prefix.
-func (ts *TestServer) WritePermissionConfig(path string, cfg *proto.PermConfig) error {
+func (ts *TestServer) WritePermissionConfig(path string, cfg *config.PermConfig) error {
 	// The testserver is running as "node". However, things like config changes are generally
 	// done as root.
 	db, err := client.Open(ts.Ctx.RequestScheme() + "://root@" + ts.ServingAddr() + "?certs=test_certs")

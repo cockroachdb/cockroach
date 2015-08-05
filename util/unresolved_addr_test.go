@@ -17,17 +17,25 @@
 
 package util
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 func TestUnresolvedAddr(t *testing.T) {
-	network := "tcp"
-	str := "host:1234"
-	addr := MakeUnresolvedAddr(network, str)
-
-	if addr.Network() != network {
-		t.Errorf("Expected addr.Network() to be %s; got %s", network, addr.Network())
+	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:8080")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if addr.String() != str {
-		t.Errorf("Expected addr.String() to be %s; got %s", str, addr.String())
+	addr := MakeUnresolvedAddr(tcpAddr.Network(), tcpAddr.String())
+	tcpAddr2, err := addr.Resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tcpAddr2.Network() != tcpAddr.Network() {
+		t.Errorf("networks differ: %s != %s", tcpAddr2.Network(), tcpAddr.Network())
+	}
+	if tcpAddr2.String() != tcpAddr.String() {
+		t.Errorf("strings differ: %s != %s", tcpAddr2.String(), tcpAddr.String())
 	}
 }

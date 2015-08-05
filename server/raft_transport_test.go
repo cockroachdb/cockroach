@@ -99,12 +99,10 @@ func TestSendAndReceive(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			addr := server.Addr()
 			if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
 				&proto.NodeDescriptor{
-					Address: proto.Addr{
-						Network: server.Addr().Network(),
-						Address: server.Addr().String(),
-					},
+					Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 				},
 				time.Hour); err != nil {
 				t.Fatal(err)
@@ -188,12 +186,10 @@ func TestInOrderDelivery(t *testing.T) {
 	if err := serverTransport.Listen(raftNodeID, serverChannel); err != nil {
 		t.Fatal(err)
 	}
+	addr := server.Addr()
 	if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
 		&proto.NodeDescriptor{
-			Address: proto.Addr{
-				Network: server.Addr().Network(),
-				Address: server.Addr().String(),
-			},
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		},
 		time.Hour); err != nil {
 		t.Fatal(err)

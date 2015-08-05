@@ -1176,7 +1176,7 @@ configuration applies. Zone values specify a protobuf containing
 the datacenters from which replicas for ranges which fall under
 the zone must be chosen.
 
-Please see [proto/config.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/config.proto) for up-to-date data structures used, the best entry point being `message ZoneConfig`.
+Please see [storage/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/storage/config/config.proto) for up-to-date data structures used, the best entry point being `message ZoneConfig`.
 
 If zones are modified in situ, each RoachNode verifies the
 existing zones for its ranges against the zone configuration. If
@@ -1192,7 +1192,7 @@ permissions keys is:
 `\0perm<key-prefix><user>`
 
 Permission values are a protobuf containing the permission details;
-please see [proto/config.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/config.proto) for up-to-date data structures used, the best entry point being `message PermConfig`.
+please see [storage/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/storage/config/config.proto) for up-to-date data structures used, the best entry point being `message PermConfig`.
 
 A default system root permission is assumed for the entire map
 with an empty key prefix and read/write as true.

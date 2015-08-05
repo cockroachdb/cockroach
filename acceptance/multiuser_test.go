@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 )
 
@@ -63,7 +63,7 @@ func TestMultiuser(t *testing.T) {
 		{"tmp", []string{"foo", "other"}, []string{"foo", "other"}},
 	}
 	for i, cfg := range configs {
-		protoConfig := &proto.PermConfig{Read: cfg.readers, Write: cfg.writers}
+		protoConfig := &config.PermConfig{Read: cfg.readers, Write: cfg.writers}
 		if err := putPermConfig(rootClient, cfg.prefix, protoConfig); err != nil {
 			t.Fatalf("#%d: failed to write config %+v for prefix %q: %v", i, protoConfig, cfg.prefix, err)
 		}

@@ -27,18 +27,19 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-var simpleZoneConfig = proto.ZoneConfig{
+var simpleZoneConfig = config.ZoneConfig{
 	ReplicaAttrs: []proto.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 	},
 }
 
-var multiDisksConfig = proto.ZoneConfig{
+var multiDisksConfig = config.ZoneConfig{
 	ReplicaAttrs: []proto.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"a", "hdd"}},
@@ -46,7 +47,7 @@ var multiDisksConfig = proto.ZoneConfig{
 	},
 }
 
-var multiDCConfig = proto.ZoneConfig{
+var multiDCConfig = config.ZoneConfig{
 	ReplicaAttrs: []proto.Attributes{
 		{Attrs: []string{"a", "ssd"}},
 		{Attrs: []string{"b", "ssd"}},

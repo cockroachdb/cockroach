@@ -21,6 +21,7 @@ package cockroach.proto;
 option go_package = "proto";
 
 import "gogoproto/gogo.proto";
+import "cockroach/util/unresolved_addr.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -64,51 +65,6 @@ message RangeDescriptor {
   repeated Replica replicas = 4 [(gogoproto.nullable) = false];
 }
 
-// GCPolicy defines garbage collection policies which apply to MVCC
-// values within a zone.
-//
-// TODO(spencer): flesh this out to include maximum number of values
-//   as well as whether there's an intersection between max values
-//   and TTL or a union.
-message GCPolicy {
-  // TTLSeconds specifies the maximum age of a value before it's
-  // garbage collected. Only older versions of values are garbage
-  // collected. Specifying <=0 mean older versions are never GC'd.
-  optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
-}
-
-// AcctConfig holds accounting configuration.
-message AcctConfig {
-  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"cluster_id,omitempty\""];
-}
-
-// PermConfig holds permission configuration, specifying read/write ACLs.
-message PermConfig {
-  // ACL lists users with read permissions.
-  repeated string read = 1 [(gogoproto.moretags) = "yaml:\"read,omitempty\""];
-  // ACL lists users with write permissions.
-  repeated string write = 2 [(gogoproto.moretags) = "yaml:\"write,omitempty\""];
-}
-
-// UserConfig holds per-user configuration needed for authentication.
-message UserConfig {
-  // Output of bcrypt: contains hash, salt, and cost.
-  optional bytes hashed_password = 1 [(gogoproto.moretags) = "yaml:\"hashed_password,omitempty\""];
-}
-
-// ZoneConfig holds configuration that is needed for a range of KV pairs.
-message ZoneConfig {
-  // ReplicaAttrs is a slice of Attributes, each describing required attributes
-  // for each replica in the zone. The order in which the attributes are stored
-  // in ReplicaAttrs is arbitrary and may change.
-  repeated Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty\""];
-  optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
-  optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
-  // If GC policy is not set, uses the next highest, non-null policy
-  // in the zone config hierarchy, up to the default policy if necessary.
-  optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
-}
-
 // TODO(bram): this comment has rotted, there is no size.
 // RangeTree holds the root node and size of the range tree.
 message RangeTree {
@@ -129,13 +85,6 @@ message RangeTreeNode {
   optional bytes right_key = 5 [(gogoproto.customtype) = "Key"];
 }
 
-// Addr holds any network address. It is structurally similar to net.Addr
-// however String is replaced with Address so the proto will compile.
-message Addr {
-  optional string network = 1 [(gogoproto.nullable) = false];
-  optional string address = 2 [(gogoproto.nullable) = false];
-}
-
 // StoreCapacity contains capacity information for a storage device.
 message StoreCapacity {
   optional int64 Capacity = 1 [(gogoproto.nullable) = false];
@@ -146,7 +95,7 @@ message StoreCapacity {
 // NodeDescriptor holds details on node physical/network topology.
 message NodeDescriptor {
   optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
-  optional Addr address = 2 [(gogoproto.nullable) = false];
+  optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
 }
 

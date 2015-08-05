@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
@@ -300,28 +301,28 @@ func (gcq *gcQueue) resolveIntent(rng *Replica, key proto.Key, meta *engine.MVCC
 // supplied range's start key. It queries all matching config prefixes
 // and then iterates from most specific to least, returning the first
 // non-nil GC policy.
-func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (proto.GCPolicy, error) {
+func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (config.GCPolicy, error) {
 	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil {
-		return proto.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
+		return config.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
 	}
-	configMap, ok := info.(PrefixConfigMap)
+	configMap, ok := info.(config.PrefixConfigMap)
 	if !ok {
-		return proto.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+		return config.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
 	}
 
 	// Verify that the range doesn't cross over the zone config prefix.
 	// This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
-	var gc *proto.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(rng.Desc().StartKey, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		zone := config.(*proto.ZoneConfig)
+	var gc *config.GCPolicy
+	if err = configMap.VisitPrefixesHierarchically(rng.Desc().StartKey, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
+		zone := cfg.(*config.ZoneConfig)
 		if zone.GC != nil {
 			rng.RLock()
 			isCovered := !end.Less(rng.Desc().EndKey)
 			rng.RUnlock()
 			if !isCovered {
-				return false, util.Errorf("range is only partially covered by zone %s (%q-%q); must wait for range split", config, start, end)
+				return false, util.Errorf("range is only partially covered by zone %s (%q-%q); must wait for range split", cfg, start, end)
 			}
 			gc = zone.GC
 			return true, nil
@@ -331,12 +332,12 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (proto.GCPolicy, error) {
 		}
 		return false, nil
 	}); err != nil {
-		return proto.GCPolicy{}, err
+		return config.GCPolicy{}, err
 	}
 
 	// We should always match _at least_ the default GC.
 	if gc == nil {
-		return proto.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc().StartKey)
+		return config.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc().StartKey)
 	}
 	return *gc, nil
 }

@@ -21,8 +21,8 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -37,14 +37,14 @@ func (uh *userHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 || path == "/" {
 		return util.Errorf("cannot write to root path")
 	}
-	return putConfig(uh.db, keys.ConfigUserPrefix, &proto.UserConfig{},
+	return putConfig(uh.db, keys.ConfigUserPrefix, &config.UserConfig{},
 		path, body, r, nil)
 }
 
 // Get retrieves the user config for the specified key.
 // If the key is empty, return all user configurations.
 func (uh *userHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	return getConfig(uh.db, keys.ConfigUserPrefix, &proto.UserConfig{}, path, r)
+	return getConfig(uh.db, keys.ConfigUserPrefix, &config.UserConfig{}, path, r)
 }
 
 // Delete removes the user config specified by key.

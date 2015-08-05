@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.proto;
 option go_package = "proto";
 
-import "cockroach/proto/config.proto";
+import "cockroach/proto/metadata.proto";
 import "cockroach/proto/data.proto";
 import "cockroach/proto/errors.proto";
 import "gogoproto/gogo.proto";

@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 
@@ -134,7 +134,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	}
 	// Build a UserConfig object. RunSetUser expects Yaml.
 	// TODO(marc): re-work admin client library to take other encodings.
-	pb := &proto.UserConfig{HashedPassword: hashed}
+	pb := &config.UserConfig{HashedPassword: hashed}
 	contents, err := yaml.Marshal(pb)
 	if err != nil {
 		log.Error(err)

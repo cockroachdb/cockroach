@@ -6,6 +6,7 @@ package proto
 
 import proto1 "github.com/gogo/protobuf/proto"
 import math "math"
+import cockroach_util "github.com/cockroachdb/cockroach/util"
 
 // discarding unused import gogoproto "gogoproto"
 
@@ -18,10 +19,10 @@ type GossipRequest struct {
 	// Requesting node's ID.
 	NodeID NodeID `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
 	// Address of the requesting client.
-	Addr Addr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
+	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Local address of client on requesting node (this is a kludge to
 	// allow gossip to know when client connections are dropped).
-	LAddr Addr `protobuf:"bytes,3,opt,name=l_addr" json:"l_addr"`
+	LAddr cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=l_addr" json:"l_addr"`
 	// Maximum sequence number of gossip from this peer.
 	MaxSeq int64 `protobuf:"varint,4,opt,name=max_seq" json:"max_seq"`
 	// Reciprocal delta of new info since last gossip.
@@ -33,18 +34,18 @@ func (m *GossipRequest) Reset()         { *m = GossipRequest{} }
 func (m *GossipRequest) String() string { return proto1.CompactTextString(m) }
 func (*GossipRequest) ProtoMessage()    {}
 
-func (m *GossipRequest) GetAddr() Addr {
+func (m *GossipRequest) GetAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.Addr
 	}
-	return Addr{}
+	return cockroach_util.UnresolvedAddr{}
 }
 
-func (m *GossipRequest) GetLAddr() Addr {
+func (m *GossipRequest) GetLAddr() cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.LAddr
 	}
-	return Addr{}
+	return cockroach_util.UnresolvedAddr{}
 }
 
 func (m *GossipRequest) GetMaxSeq() int64 {
@@ -67,8 +68,8 @@ type GossipResponse struct {
 	// Requested delta of server's infostore.
 	Delta []byte `protobuf:"bytes,1,opt,name=delta" json:"delta,omitempty"`
 	// Non-nil means client should retry with this address.
-	Alternate        *Addr  `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Alternate        *cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=alternate" json:"alternate,omitempty"`
+	XXX_unrecognized []byte                         `json:"-"`
 }
 
 func (m *GossipResponse) Reset()         { *m = GossipResponse{} }
@@ -82,7 +83,7 @@ func (m *GossipResponse) GetDelta() []byte {
 	return nil
 }
 
-func (m *GossipResponse) GetAlternate() *Addr {
+func (m *GossipResponse) GetAlternate() *cockroach_util.UnresolvedAddr {
 	if m != nil {
 		return m.Alternate
 	}

@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 )
@@ -50,8 +51,8 @@ func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user strin
 }
 
 // getPermConfig fetches the permissions config for 'prefix'.
-func getPermConfig(db *client.DB, prefix string) (*proto.PermConfig, error) {
-	config := &proto.PermConfig{}
+func getPermConfig(db *client.DB, prefix string) (*config.PermConfig, error) {
+	config := &config.PermConfig{}
 	if err := db.GetProto(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config); err != nil {
 		return nil, err
 	}
@@ -60,6 +61,6 @@ func getPermConfig(db *client.DB, prefix string) (*proto.PermConfig, error) {
 }
 
 // putPermConfig writes the permissions config for 'prefix'.
-func putPermConfig(db *client.DB, prefix string, config *proto.PermConfig) error {
+func putPermConfig(db *client.DB, prefix string, config *config.PermConfig) error {
 	return db.Put(keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key(prefix)), config)
 }

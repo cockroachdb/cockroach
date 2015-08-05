@@ -29,12 +29,12 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -224,7 +224,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	if configMap == nil {
 		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
 	}
-	permMap := configMap.(storage.PrefixConfigMap)
+	permMap := configMap.(config.PrefixConfigMap)
 	headerEnd := header.EndKey
 	if len(headerEnd) == 0 {
 		headerEnd = header.Key
@@ -240,10 +240,10 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	//   shortest to longest instead for performance. Keep an eye on profiling
 	//   for this code path as permission sets grow large.
 	return permMap.VisitPrefixes(header.Key, headerEnd,
-		func(start, end proto.Key, config gogoproto.Message) (bool, error) {
+		func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
 			hasPerm := false
-			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-				perm := config.(*proto.PermConfig)
+			if err := permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, cfg gogoproto.Message) (bool, error) {
+				perm := cfg.(*config.PermConfig)
 				if proto.IsRead(args) && !perm.CanRead(header.User) {
 					return false, nil
 				}
@@ -425,7 +425,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replica
 	replicaMap := map[string]*proto.Replica{}
 	for i := range replicas {
 		nd := &replicas[i].NodeDesc
-		addr := util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address)
+		addr := nd.Address
 		addrs = append(addrs, addr)
 		replicaMap[addr.String()] = &replicas[i].Replica
 	}

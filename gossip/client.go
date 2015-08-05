@@ -109,11 +109,14 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			deltaBytes = buf.Bytes()
 		}
 
+		addr := g.is.NodeAddr
+		lAddr := c.rpcClient.LocalAddr()
+
 		// Send gossip with timeout.
 		args := &proto.GossipRequest{
 			NodeID: nodeID,
-			Addr:   *proto.FromNetAddr(g.is.NodeAddr),
-			LAddr:  *proto.FromNetAddr(c.rpcClient.LocalAddr()),
+			Addr:   util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+			LAddr:  util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
 			MaxSeq: remoteMaxSeq,
 			Delta:  deltaBytes,
 		}
@@ -137,7 +140,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		// Handle remote forwarding.
 		if reply.Alternate != nil {
 			var err error
-			if c.forwardAddr, err = reply.Alternate.NetAddr(); err != nil {
+			if c.forwardAddr, err = reply.Alternate.Resolve(); err != nil {
 				return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
 			}
 			return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)

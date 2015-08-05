@@ -32,6 +32,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -50,20 +51,20 @@ import (
 )
 
 var (
-	testDefaultAcctConfig = proto.AcctConfig{}
-	testDefaultPermConfig = proto.PermConfig{
+	testDefaultAcctConfig = config.AcctConfig{}
+	testDefaultPermConfig = config.PermConfig{
 		Read:  []string{"root"},
 		Write: []string{"root"},
 	}
-	testDefaultUserConfig = proto.UserConfig{}
-	testDefaultZoneConfig = proto.ZoneConfig{
+	testDefaultUserConfig = config.UserConfig{}
+	testDefaultZoneConfig = config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{Attrs: []string{"dc1", "mem"}},
 			{Attrs: []string{"dc2", "mem"}},
 		},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
-		GC: &proto.GCPolicy{
+		GC: &config.GCPolicy{
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
 	}
@@ -495,7 +496,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	defer tc.Stop()
 
 	// Add a permission for a new key prefix.
-	db1Perm := proto.PermConfig{
+	db1Perm := config.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
@@ -509,13 +510,13 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		configMap := info.(PrefixConfigMap)
-		expConfigs := []*PrefixConfig{
+		configMap := info.(config.PrefixConfigMap)
+		expConfigs := []*config.PrefixConfig{
 			{proto.KeyMin, nil, &testDefaultPermConfig},
 			{proto.Key("/db1"), nil, &db1Perm},
 			{proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig},
 		}
-		return reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs)
+		return reflect.DeepEqual([]*config.PrefixConfig(configMap), expConfigs)
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
@@ -633,12 +634,12 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	defer tc.Stop()
 	testData := []struct {
 		gossipKey string
-		configs   []*PrefixConfig
+		configs   []*config.PrefixConfig
 	}{
-		{gossip.KeyConfigAccounting, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultAcctConfig}}},
-		{gossip.KeyConfigPermission, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultPermConfig}}},
-		{gossip.KeyConfigUser, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultUserConfig}}},
-		{gossip.KeyConfigZone, []*PrefixConfig{{proto.KeyMin, nil, &testDefaultZoneConfig}}},
+		{gossip.KeyConfigAccounting, []*config.PrefixConfig{{proto.KeyMin, nil, &testDefaultAcctConfig}}},
+		{gossip.KeyConfigPermission, []*config.PrefixConfig{{proto.KeyMin, nil, &testDefaultPermConfig}}},
+		{gossip.KeyConfigUser, []*config.PrefixConfig{{proto.KeyMin, nil, &testDefaultUserConfig}}},
+		{gossip.KeyConfigZone, []*config.PrefixConfig{{proto.KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {
 		_, err := tc.gossip.GetInfo(test.gossipKey)
@@ -656,7 +657,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	// Add a permission for a new key prefix.
-	db1Perm := &proto.PermConfig{
+	db1Perm := &config.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
@@ -678,13 +679,13 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(PrefixConfigMap)
-	expConfigs := []*PrefixConfig{
+	configMap := info.(config.PrefixConfigMap)
+	expConfigs := []*config.PrefixConfig{
 		{proto.KeyMin, nil, &testDefaultPermConfig},
 		{proto.Key("/db1"), nil, db1Perm},
 		{proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+	if !reflect.DeepEqual([]*config.PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
@@ -697,7 +698,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	// Add a permission for a new key prefix.
-	db1Perm := &proto.PermConfig{
+	db1Perm := &config.PermConfig{
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
@@ -719,13 +720,13 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(PrefixConfigMap)
-	expConfigs := []*PrefixConfig{
+	configMap := info.(config.PrefixConfigMap)
+	expConfigs := []*config.PrefixConfig{
 		{proto.KeyMin, nil, &testDefaultPermConfig},
 		{proto.Key("/db1"), nil, db1Perm},
 		{proto.Key("/db2"), proto.KeyMin, &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+	if !reflect.DeepEqual([]*config.PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
@@ -739,7 +740,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	defer tc.Stop()
 
 	// Add a permission for a new key prefix.
-	db1Perm := &proto.PermConfig{
+	db1Perm := &config.PermConfig{
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
@@ -771,11 +772,11 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		configMap := info.(PrefixConfigMap)
-		expConfigs := []*PrefixConfig{
+		configMap := info.(config.PrefixConfigMap)
+		expConfigs := []*config.PrefixConfig{
 			{proto.KeyMin, nil, &testDefaultPermConfig},
 		}
-		if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+		if !reflect.DeepEqual([]*config.PrefixConfig(configMap), expConfigs) {
 			t.Errorf("%d: expected gossiped configs to be equal %s vs %s",
 				i, configMap, expConfigs)
 		}
@@ -792,7 +793,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 	// Add a permission for a new key prefix. Set the config in a transaction
 	// to avoid gossip.
-	db1Perm := &proto.PermConfig{
+	db1Perm := &config.PermConfig{
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
@@ -836,11 +837,11 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(PrefixConfigMap)
-	expConfigs := []*PrefixConfig{
+	configMap := info.(config.PrefixConfigMap)
+	expConfigs := []*config.PrefixConfig{
 		{proto.KeyMin, nil, &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+	if !reflect.DeepEqual([]*config.PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s",
 			configMap, expConfigs)
 	}

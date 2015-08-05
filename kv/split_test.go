@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -141,7 +142,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	setTestRetryOptions()
 
 	// Rewrite a zone config with low max bytes.
-	zoneConfig := &proto.ZoneConfig{
+	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{},
 			{},

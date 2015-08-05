@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -659,7 +660,7 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 		log.Errorc(ctx, "unable to fetch %s config from gossip: %s", key, err)
 		return
 	}
-	configMap, ok := info.(PrefixConfigMap)
+	configMap, ok := info.(config.PrefixConfigMap)
 	if !ok {
 		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", info)
 		return
@@ -692,7 +693,7 @@ func (s *Store) GossipCapacity() {
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
 // adds them to the split queue.
-func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
+func (s *Store) maybeSplitRangesByConfigs(configMap config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, config := range configMap {
@@ -743,10 +744,10 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 //
 // TODO(spencer): scanning all ranges with the lock held could cause
 // perf issues if the number of ranges grows large enough.
-func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
+func (s *Store) setRangesMaxBytes(zoneMap config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	zone := zoneMap[0].Config.(*proto.ZoneConfig)
+	zone := zoneMap[0].Config.(*config.ZoneConfig)
 	idx := 0
 	// Note that we must iterate through the ranges in lexicographic
 	// order to match the ordering of the zoneMap.
@@ -754,7 +755,7 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 		rng := i.(*Replica)
 		if idx < len(zoneMap)-1 && !rng.Desc().StartKey.Less(zoneMap[idx+1].Prefix) {
 			idx++
-			zone = zoneMap[idx].Config.(*proto.ZoneConfig)
+			zone = zoneMap[idx].Config.(*config.ZoneConfig)
 		}
 		rng.SetMaxBytes(zone.RangeMaxBytes)
 		return true
@@ -878,13 +879,13 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 	// Accounting config.
-	acctConfig := &proto.AcctConfig{}
+	acctConfig := &config.AcctConfig{}
 	key := keys.MakeKey(keys.ConfigAccountingPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, acctConfig); err != nil {
 		return err
 	}
 	// Permission config.
-	permConfig := &proto.PermConfig{
+	permConfig := &config.PermConfig{
 		Read:  []string{security.RootUser}, // root user
 		Write: []string{security.RootUser}, // root user
 	}
@@ -894,13 +895,13 @@ func (s *Store) BootstrapRange() error {
 	}
 	// User config.
 	// TODO(marc): instead of a root entry, maybe we should have a default "node".
-	userConfig := &proto.UserConfig{}
+	userConfig := &config.UserConfig{}
 	key = keys.MakeKey(keys.ConfigUserPrefix, proto.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, userConfig); err != nil {
 		return err
 	}
 	// Zone config.
-	zoneConfig := &proto.ZoneConfig{
+	zoneConfig := &config.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{},
 			{},
@@ -908,7 +909,7 @@ func (s *Store) BootstrapRange() error {
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
-		GC: &proto.GCPolicy{
+		GC: &config.GCPolicy{
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
 	}
@@ -1635,7 +1636,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for raftID, rng := range s.ranges {
-		zoneConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*proto.ZoneConfig)
+		zoneConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*config.ZoneConfig)
 		raftStatus := s.RaftStatus(raftID)
 		if raftStatus == nil {
 			continue

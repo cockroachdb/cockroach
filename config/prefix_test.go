@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+package config
 
 import (
 	"bytes"
@@ -315,16 +315,16 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 		if len(results) != len(test.expRanges) {
 			t.Errorf("%d: expected %d matches, got %d:", i, len(test.expRanges), len(results))
 			for j, r := range results {
-				t.Errorf("match %d: %q, %q, %v", j, r.start, r.end, r.config)
+				t.Errorf("match %d: %q, %q, %v", j, r.Start, r.End, r.config)
 			}
 			continue
 		}
 		for j, r := range results {
-			if bytes.Compare(r.start, test.expRanges[j].start) != 0 {
-				t.Errorf("%d: expected \"%d\"th range start key %q, got %q", i, j, test.expRanges[j].start, r.start)
+			if bytes.Compare(r.Start, test.expRanges[j].Start) != 0 {
+				t.Errorf("%d: expected \"%d\"th range start key %q, got %q", i, j, test.expRanges[j].Start, r.Start)
 			}
-			if bytes.Compare(r.end, test.expRanges[j].end) != 0 {
-				t.Errorf("%d: expected \"%d\"th range end key %q, got %q", i, j, test.expRanges[j].end, r.end)
+			if bytes.Compare(r.End, test.expRanges[j].End) != 0 {
+				t.Errorf("%d: expected \"%d\"th range end key %q, got %q", i, j, test.expRanges[j].End, r.End)
 			}
 			if r.config != test.expRanges[j].config {
 				t.Errorf("%d: expected \"%d\"th range config %v, got %v", i, j, test.expRanges[j].config, r.config)

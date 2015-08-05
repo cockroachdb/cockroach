@@ -35,7 +35,7 @@ import (
 
 type clientInfo struct {
 	id   proto.NodeID
-	addr *proto.Addr
+	addr *util.UnresolvedAddr
 }
 
 // server maintains an array of connected peers to which it gossips
@@ -72,11 +72,11 @@ func (s *server) Gossip(argsI gogoproto.Message) (gogoproto.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	addr, err := args.Addr.NetAddr()
+	addr, err := args.Addr.Resolve()
 	if err != nil {
 		return nil, util.Errorf("addr %s could not be converted to net.Addr: %s", args.Addr, err)
 	}
-	lAddr, err := args.LAddr.NetAddr()
+	lAddr, err := args.LAddr.Resolve()
 	if err != nil {
 		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
 	}

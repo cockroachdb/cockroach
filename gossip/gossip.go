@@ -63,6 +63,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -101,12 +102,17 @@ var (
 	TestBootstrap = []resolver.Resolver{}
 )
 
+// init registers all the types that are sent over the wire as
+// implementations of info.Val.
 func init() {
-	// Used in storage.PrefixConfig.
-	gob.Register(&proto.AcctConfig{})
-	gob.Register(&proto.PermConfig{})
-	gob.Register(&proto.UserConfig{})
-	gob.Register(&proto.ZoneConfig{})
+	// The last thing that isn't a proto.
+	gob.Register(config.PrefixConfigMap{})
+
+	// Used in config.PrefixConfig.
+	gob.Register(&config.AcctConfig{})
+	gob.Register(&config.PermConfig{})
+	gob.Register(&config.UserConfig{})
+	gob.Register(&config.ZoneConfig{})
 	gob.Register(&proto.NodeDescriptor{})
 
 	// Used...elsewhere?
@@ -234,7 +240,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return util.MakeUnresolvedAddr(nd.Address.Network, nd.Address.Address), nil
+	return nd.Address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
