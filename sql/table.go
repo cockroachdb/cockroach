@@ -135,6 +135,24 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 	return &desc, nil
 }
 
+func (p *planner) getTableNames(dbDesc *structured.DatabaseDescriptor) (parser.QualifiedNames, error) {
+	prefix := structured.MakeNameMetadataKey(dbDesc.ID, "")
+	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var qualifiedNames parser.QualifiedNames
+	for _, row := range sr {
+		tableName := string(bytes.TrimPrefix(row.Key, prefix))
+		qualifiedNames = append(qualifiedNames, &parser.QualifiedName{
+			Base:     parser.Name(dbDesc.Name),
+			Indirect: parser.Indirection{parser.NameIndirection(tableName)},
+		})
+	}
+	return qualifiedNames, nil
+}
+
 func encodeTablePrefix(tableID structured.ID) []byte {
 	var key []byte
 	key = append(key, keys.TableDataPrefix...)

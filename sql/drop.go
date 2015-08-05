@@ -87,3 +87,61 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 	}
 	return &valuesNode{}, nil
 }
+
+// DropDatabase drops a database.
+// Privileges: WRITE on database.
+//   Notes: postgres allows only the database owner to DROP a database.
+//          mysql requires the DROP privileges on the database.
+// TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
+// (cockroach database == postgres schema). the postgres default of not
+// dropping the schema if there are dependent objects is more sensible
+// (see the RESTRICT and CASCADE options).
+func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
+	if n.Name == "" {
+		return nil, errEmptyDatabaseName
+	}
+
+	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, string(n.Name))
+	gr, err := p.db.Get(nameKey)
+	if err != nil {
+		return nil, err
+	}
+	if !gr.Exists() {
+		if n.IfExists {
+			// Noop.
+			return &valuesNode{}, nil
+		}
+		return nil, fmt.Errorf("database %q does not exist", n.Name)
+	}
+
+	descKey := gr.ValueBytes()
+	desc := structured.DatabaseDescriptor{}
+	if err := p.db.GetProto(descKey, &desc); err != nil {
+		return nil, err
+	}
+	if err := desc.Validate(); err != nil {
+		return nil, err
+	}
+
+	if !desc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
+			p.user, parser.PrivilegeWrite, desc.Name)
+	}
+
+	tbNames, err := p.getTableNames(&desc)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := p.DropTable(&parser.DropTable{Names: tbNames}); err != nil {
+		return nil, err
+	}
+
+	b := &client.Batch{}
+	b.Del(descKey)
+	b.Del(nameKey)
+	if err := p.db.Run(b); err != nil {
+		return nil, err
+	}
+	return &valuesNode{}, nil
+}

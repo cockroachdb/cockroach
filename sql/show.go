@@ -155,15 +155,14 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		return nil, err
 	}
 
-	prefix := structured.MakeNameMetadataKey(dbDesc.ID, "")
-	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
+	tableNames, err := p.getTableNames(dbDesc)
 	if err != nil {
 		return nil, err
 	}
 	v := &valuesNode{columns: []string{"Table"}}
-	for _, row := range sr {
-		name := string(bytes.TrimPrefix(row.Key, prefix))
-		v.rows = append(v.rows, []parser.Datum{parser.DString(name)})
+	for _, name := range tableNames {
+		v.rows = append(v.rows, []parser.Datum{parser.DString(name.Table())})
 	}
+
 	return v, nil
 }
