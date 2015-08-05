@@ -88,9 +88,8 @@ message RangeTreeNode {
   // Color is black if true, red if false.
   optional bool black = 2 [(gogoproto.nullable) = false];
 
-  // TODO(bram): this comment has rotted, parent key is not nullable
   // If the parent key is null, this is the root node.
-  optional bytes parent_key = 3 [(gogoproto.casttype) = "Key"];
+  optional bytes parent_key = 3 [(gogoproto.customtype) = "Key"];
   optional bytes left_key = 4 [(gogoproto.customtype) = "Key"];
   optional bytes right_key = 5 [(gogoproto.customtype) = "Key"];
 }

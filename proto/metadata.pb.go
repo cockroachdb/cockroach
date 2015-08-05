@@ -153,9 +153,8 @@ type RangeTreeNode struct {
 	Key Key `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
-	// TODO(bram): this comment has rotted, parent key is not nullable
 	// If the parent key is null, this is the root node.
-	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,casttype=Key" json:"parent_key,omitempty"`
+	ParentKey        *Key   `protobuf:"bytes,3,opt,name=parent_key,customtype=Key" json:"parent_key,omitempty"`
 	LeftKey          *Key   `protobuf:"bytes,4,opt,name=left_key,customtype=Key" json:"left_key,omitempty"`
 	RightKey         *Key   `protobuf:"bytes,5,opt,name=right_key,customtype=Key" json:"right_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
@@ -177,13 +176,6 @@ func (m *RangeTreeNode) GetBlack() bool {
 		return m.Black
 	}
 	return false
-}
-
-func (m *RangeTreeNode) GetParentKey() Key {
-	if m != nil {
-		return m.ParentKey
-	}
-	return nil
 }
 
 // StoreCapacity contains capacity information for a storage device.
@@ -767,7 +759,11 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ParentKey = append([]byte{}, data[iNdEx:postIndex]...)
+			var v Key
+			m.ParentKey = &v
+			if err := m.ParentKey.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1373,7 +1369,7 @@ func (m *RangeTreeNode) Size() (n int) {
 	}
 	n += 2
 	if m.ParentKey != nil {
-		l = len(m.ParentKey)
+		l = m.ParentKey.Size()
 		n += 1 + l + sovMetadata(uint64(l))
 	}
 	if m.LeftKey != nil {
@@ -1621,28 +1617,32 @@ func (m *RangeTreeNode) MarshalTo(data []byte) (n int, err error) {
 	if m.ParentKey != nil {
 		data[i] = 0x1a
 		i++
-		i = encodeVarintMetadata(data, i, uint64(len(m.ParentKey)))
-		i += copy(data[i:], m.ParentKey)
-	}
-	if m.LeftKey != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintMetadata(data, i, uint64(m.LeftKey.Size()))
-		n1, err := m.LeftKey.MarshalTo(data[i:])
+		i = encodeVarintMetadata(data, i, uint64(m.ParentKey.Size()))
+		n1, err := m.ParentKey.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n1
 	}
-	if m.RightKey != nil {
-		data[i] = 0x2a
+	if m.LeftKey != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintMetadata(data, i, uint64(m.RightKey.Size()))
-		n2, err := m.RightKey.MarshalTo(data[i:])
+		i = encodeVarintMetadata(data, i, uint64(m.LeftKey.Size()))
+		n2, err := m.LeftKey.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n2
+	}
+	if m.RightKey != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintMetadata(data, i, uint64(m.RightKey.Size()))
+		n3, err := m.RightKey.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -1701,19 +1701,19 @@ func (m *NodeDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Address.Size()))
-	n3, err := m.Address.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	data[i] = 0x1a
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
-	n4, err := m.Attrs.MarshalTo(data[i:])
+	n4, err := m.Address.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n4
+	data[i] = 0x1a
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
+	n5, err := m.Attrs.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1741,27 +1741,27 @@ func (m *StoreDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.Attrs.Size()))
-	n5, err := m.Attrs.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
-	data[i] = 0x1a
-	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Node.Size()))
-	n6, err := m.Node.MarshalTo(data[i:])
+	n6, err := m.Attrs.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n6
-	data[i] = 0x22
+	data[i] = 0x1a
 	i++
-	i = encodeVarintMetadata(data, i, uint64(m.Capacity.Size()))
-	n7, err := m.Capacity.MarshalTo(data[i:])
+	i = encodeVarintMetadata(data, i, uint64(m.Node.Size()))
+	n7, err := m.Node.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n7
+	data[i] = 0x22
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.Capacity.Size()))
+	n8, err := m.Capacity.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n8
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

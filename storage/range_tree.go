@@ -41,8 +41,6 @@ type treeContext struct {
 }
 
 // TODO(bram): Add delete for merging ranges.
-// TODO(bram): Add parent keys
-// TODO(bram): Add more elaborate testing.
 
 // SetupRangeTree creates a new RangeTree. This should only be called as part
 // of store.BootstrapRange.
@@ -78,7 +76,7 @@ func (tc *treeContext) flush(b *client.Batch) error {
 
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
 func getRangeTree(txn *client.Txn) (*treeContext, error) {
-	tree := &proto.RangeTree{}
+	tree := new(proto.RangeTree)
 	if err := txn.GetProto(keys.RangeTreeRoot, tree); err != nil {
 		return nil, err
 	}
@@ -92,8 +90,8 @@ func getRangeTree(txn *client.Txn) (*treeContext, error) {
 
 // setRoot sets the tree root key in the cache. It also marks the root for
 // writing during a flush.
-func (tc *treeContext) setRootKey(key *proto.Key) {
-	tc.tree.RootKey = *key
+func (tc *treeContext) setRootKey(key proto.Key) {
+	tc.tree.RootKey = key
 	tc.dirty = true
 }
 
@@ -121,7 +119,7 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 	}
 
 	// We don't have it cached so fetch it and add it to the cache.
-	node := &proto.RangeTreeNode{}
+	node := new(proto.RangeTreeNode)
 	if err := tc.txn.GetProto(keys.RangeTreeNodeKey(*key), node); err != nil {
 		return nil, err
 	}
@@ -132,77 +130,6 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 	return node, nil
 }
 
-// InsertRange adds a new range to the RangeTree. This should only be called
-// from operations that create new ranges, such as range.splitTrigger.
-// TODO(bram): Can we optimize this by inserting as a child of the range being
-// split?
-func InsertRange(txn *client.Txn, b *client.Batch, key proto.Key) error {
-	tc, err := getRangeTree(txn)
-	if err != nil {
-		return err
-	}
-	root, err := tc.getNode(&tc.tree.RootKey)
-	if err != nil {
-		return err
-	}
-	root, err = tc.insert(root, key)
-	if err != nil {
-		return err
-	}
-	if !root.Black {
-		// Always set the root back to black.
-		root.Black = true
-		tc.setNode(root)
-	}
-	if !tc.tree.RootKey.Equal(root.Key) {
-		// If the root has changed, update the tree to point to it.
-		tc.setRootKey(&root.Key)
-	}
-	return tc.flush(b)
-}
-
-// insert performs the insertion of a new range into the RangeTree. It will
-// recursively call insert until it finds the correct location. It will not
-// overwrite an already existing key, but that case should not occur.
-func (tc *treeContext) insert(node *proto.RangeTreeNode, key proto.Key) (*proto.RangeTreeNode, error) {
-	if node == nil {
-		// Insert the new node here.
-		node = &proto.RangeTreeNode{
-			Key: key,
-		}
-		tc.setNode(node)
-	} else if key.Less(node.Key) {
-		// Walk down the tree to the left.
-		left, err := tc.getNode(node.LeftKey)
-		if err != nil {
-			return nil, err
-		}
-		left, err = tc.insert(left, key)
-		if err != nil {
-			return nil, err
-		}
-		if node.LeftKey == nil || !(*node.LeftKey).Equal(left.Key) {
-			node.LeftKey = &left.Key
-			tc.setNode(node)
-		}
-	} else {
-		// Walk down the tree to the right.
-		right, err := tc.getNode(node.RightKey)
-		if err != nil {
-			return nil, err
-		}
-		right, err = tc.insert(right, key)
-		if err != nil {
-			return nil, err
-		}
-		if node.RightKey == nil || !(*node.RightKey).Equal(right.Key) {
-			node.RightKey = &right.Key
-			tc.setNode(node)
-		}
-	}
-	return tc.walkUpRot23(node)
-}
-
 // isRed will return true only if node exists and is not set to black.
 func isRed(node *proto.RangeTreeNode) bool {
 	if node == nil {
@@ -211,59 +138,73 @@ func isRed(node *proto.RangeTreeNode) bool {
 	return !node.Black
 }
 
-// walkUpRot23 walks up and rotates the tree using the Left Leaning Red Black
-// 2-3 algorithm.
-func (tc *treeContext) walkUpRot23(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
-	// Should we rotate left?
-	right, err := tc.getNode(node.RightKey)
+// sibling returns the other child of the node's parent. Returns nil if the node
+// has no parent or its parent has only one child.
+func (tc *treeContext) sibling(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	if node == nil || node.ParentKey == nil {
+		return nil, nil
+	}
+	parent, err := tc.getNode(node.ParentKey)
 	if err != nil {
 		return nil, err
 	}
-	left, err := tc.getNode(node.LeftKey)
-	if err != nil {
-		return nil, err
+	if parent.LeftKey == nil || parent.RightKey == nil {
+		return nil, nil
 	}
-	if isRed(right) && !isRed(left) {
-		node, err = tc.rotateLeft(node)
-		if err != nil {
-			return nil, err
-		}
+	if node.Key.Equal(*parent.LeftKey) {
+		return tc.getNode(parent.RightKey)
 	}
+	return tc.getNode(parent.LeftKey)
+}
 
-	// Should we rotate right?
-	left, err = tc.getNode(node.LeftKey)
+// uncle returns the node's parent's sibling. Or nil if the node doesn't have a
+// grandparent or their parent has no sibling.
+func (tc *treeContext) uncle(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	if node == nil || node.ParentKey == nil {
+		return nil, nil
+	}
+	parent, err := tc.getNode(node.ParentKey)
 	if err != nil {
 		return nil, err
 	}
-	if left != nil {
-		leftLeft, err := tc.getNode(left.LeftKey)
+	return tc.sibling(parent)
+}
+
+// replaceNode cuts a node away form its parent, substituting a new node or
+// nil. The updated new node is returned. Note that this does not in fact alter
+// the old node in any way, but only the old node's parent and the new node.
+func (tc *treeContext) replaceNode(oldNode, newNode *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	if oldNode.ParentKey == nil {
+		if newNode == nil {
+			return nil, util.Error("cannot replace the root node with nil")
+		}
+		// Update the root key if this was the root.
+		tc.setRootKey(newNode.Key)
+	} else {
+		oldParent, err := tc.getNode(oldNode.ParentKey)
 		if err != nil {
 			return nil, err
 		}
-		if isRed(left) && isRed(leftLeft) {
-			node, err = tc.rotateRight(node)
-			if err != nil {
-				return nil, err
+		if oldParent.LeftKey != nil && oldNode.Key.Equal(*oldParent.LeftKey) {
+			if newNode == nil {
+				oldParent.LeftKey = nil
+			} else {
+				oldParent.LeftKey = &newNode.Key
+			}
+		} else {
+			if newNode == nil {
+				oldParent.RightKey = nil
+			} else {
+				oldParent.RightKey = &newNode.Key
 			}
 		}
+		tc.setNode(oldParent)
 	}
-
-	// Should we flip?
-	right, err = tc.getNode(node.RightKey)
-	if err != nil {
-		return nil, err
+	if newNode != nil {
+		newNode.ParentKey = oldNode.ParentKey
+		tc.setNode(newNode)
 	}
-	left, err = tc.getNode(node.LeftKey)
-	if err != nil {
-		return nil, err
-	}
-	if isRed(left) && isRed(right) {
-		node, err = tc.flip(node)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return node, nil
+	return newNode, nil
 }
 
 // rotateLeft performs a left rotation around the node.
@@ -272,15 +213,23 @@ func (tc *treeContext) rotateLeft(node *proto.RangeTreeNode) (*proto.RangeTreeNo
 	if err != nil {
 		return nil, err
 	}
-	if right.Black {
-		return nil, util.Error("rotating a black node")
+	right, err = tc.replaceNode(node, right)
+	if err != nil {
+		return nil, err
 	}
 	node.RightKey = right.LeftKey
+	if right.LeftKey != nil {
+		rightLeft, err := tc.getNode(right.LeftKey)
+		if err != nil {
+			return nil, err
+		}
+		rightLeft.ParentKey = &node.Key
+		tc.setNode(rightLeft)
+	}
 	right.LeftKey = &node.Key
-	right.Black = node.Black
-	node.Black = false
-	tc.setNode(node)
+	node.ParentKey = &right.Key
 	tc.setNode(right)
+	tc.setNode(node)
 	return right, nil
 }
 
@@ -290,34 +239,207 @@ func (tc *treeContext) rotateRight(node *proto.RangeTreeNode) (*proto.RangeTreeN
 	if err != nil {
 		return nil, err
 	}
-	if left.Black {
-		return nil, util.Error("rotating a black node")
+	left, err = tc.replaceNode(node, left)
+	if err != nil {
+		return nil, err
 	}
 	node.LeftKey = left.RightKey
+	if left.RightKey != nil {
+		leftRight, err := tc.getNode(left.RightKey)
+		if err != nil {
+			return nil, err
+		}
+		leftRight.ParentKey = &node.Key
+		tc.setNode(leftRight)
+	}
 	left.RightKey = &node.Key
-	left.Black = node.Black
-	node.Black = false
-	tc.setNode(node)
+	node.ParentKey = &left.Key
 	tc.setNode(left)
+	tc.setNode(node)
 	return left, nil
 }
 
-// flip swaps the color of the node and both of its children. Both those
-// children must exist.
-func (tc *treeContext) flip(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
-	left, err := tc.getNode(node.LeftKey)
+// InsertRange adds a new range to the RangeTree. This should only be called
+// from operations that create new ranges, such as AdminSplit.
+func InsertRange(txn *client.Txn, b *client.Batch, key proto.Key) error {
+	tc, err := getRangeTree(txn)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	right, err := tc.getNode(node.RightKey)
+	newNode := &proto.RangeTreeNode{
+		Key: key,
+	}
+	err = tc.insert(newNode)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	node.Black = !node.Black
-	left.Black = !left.Black
-	right.Black = !right.Black
-	tc.setNode(node)
-	tc.setNode(left)
-	tc.setNode(right)
-	return node, nil
+	return tc.flush(b)
+}
+
+// insert performs the insertion of a new node into the tree. It walks the tree
+// until it finds the correct location. It will fail if the node already exists
+// as that case should not occur. After inserting the node, it checks all insert
+// cases to ensure the tree is balanced and adjusts it if needed.
+func (tc *treeContext) insert(node *proto.RangeTreeNode) error {
+	if tc.tree.RootKey == nil {
+		tc.setRootKey(node.Key)
+	} else {
+		// Walk the tree to find the right place to insert the new node.
+		currentKey := &tc.tree.RootKey
+		for {
+			currentNode, err := tc.getNode(currentKey)
+			if err != nil {
+				return err
+			}
+			if node.Key.Equal(currentNode.Key) {
+				return util.Errorf("key %s already exists in the range tree", node.Key)
+			}
+			if node.Key.Less(currentNode.Key) {
+				if currentNode.LeftKey == nil {
+					currentNode.LeftKey = &node.Key
+					tc.setNode(currentNode)
+					break
+				} else {
+					currentKey = currentNode.LeftKey
+				}
+			} else {
+				if currentNode.RightKey == nil {
+					currentNode.RightKey = &node.Key
+					tc.setNode(currentNode)
+					break
+				} else {
+					currentKey = currentNode.RightKey
+				}
+			}
+		}
+		node.ParentKey = currentKey
+		tc.setNode(node)
+	}
+	return tc.insertCase1(node)
+}
+
+// insertCase1 handles the case when the inserted node is the root node.
+func (tc *treeContext) insertCase1(node *proto.RangeTreeNode) error {
+	if node.ParentKey == nil {
+		node.Black = true
+		tc.setNode(node)
+		return nil
+	}
+	return tc.insertCase2(node)
+}
+
+// insertCase2 handles the case when the inserted node has a black parent.
+// In this is the case, no work need to be done, the tree is already correct.
+func (tc *treeContext) insertCase2(node *proto.RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	if !isRed(parent) {
+		return nil
+	}
+	return tc.insertCase3(node)
+}
+
+// insertCase3 handles the case in which the uncle node is red. If so, the uncle
+// and parent become black and the grandparent becomes red.
+func (tc *treeContext) insertCase3(node *proto.RangeTreeNode) error {
+	uncle, err := tc.uncle(node)
+	if err != nil {
+		return nil
+	}
+	if isRed(uncle) {
+		parent, err := tc.getNode(node.ParentKey)
+		if err != nil {
+			return err
+		}
+		parent.Black = true
+		tc.setNode(parent)
+		uncle.Black = true
+		tc.setNode(uncle)
+		grandparent, err := tc.getNode(parent.ParentKey)
+		if err != nil {
+			return err
+		}
+		grandparent.Black = false
+		tc.setNode(grandparent)
+		return tc.insertCase1(grandparent)
+	}
+	return tc.insertCase4(node)
+}
+
+// insertCase4 handles two mirror cases. If the node is the right child of its
+// parent who is the left child of the grandparent, a left rotation around the
+// parent is required. Similarly, if the node is the left child of its parent
+// who is the right child of the grandparent, a right rotation around the parent
+// is required. This only prepares the tree for insertCase5.
+func (tc *treeContext) insertCase4(node *proto.RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	grandparent, err := tc.getNode(parent.ParentKey)
+	if err != nil {
+		return err
+	}
+	if parent.RightKey != nil && grandparent.LeftKey != nil && node.Key.Equal(*parent.RightKey) && parent.Key.Equal(*grandparent.LeftKey) {
+		_, err = tc.rotateLeft(parent)
+		if err != nil {
+			return err
+		}
+		node, err = tc.getNode(&node.Key)
+		if err != nil {
+			return err
+		}
+		node, err = tc.getNode(node.LeftKey)
+		if err != nil {
+			return err
+		}
+	} else if parent.LeftKey != nil && grandparent.RightKey != nil && node.Key.Equal(*parent.LeftKey) && parent.Key.Equal(*grandparent.RightKey) {
+		node, err = tc.rotateRight(parent)
+		if err != nil {
+			return err
+		}
+		node, err = tc.getNode(&node.Key)
+		if err != nil {
+			return err
+		}
+		node, err = tc.getNode(node.RightKey)
+		if err != nil {
+			return err
+		}
+	}
+	return tc.insertCase5(node)
+}
+
+// insertCase5 handles two mirror cases. If the node is the right child of its
+// parent who is the right child of the grandparent, a right rotation around the
+// grandparent is required. Similarly, if the node is the left child of its
+// parent who is the left child of the grandparent, a left rotation around the
+// grandparent is required.
+func (tc *treeContext) insertCase5(node *proto.RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
+	}
+	parent.Black = true
+	tc.setNode(parent)
+	grandparent, err := tc.getNode(parent.ParentKey)
+	if err != nil {
+		return err
+	}
+	grandparent.Black = false
+	tc.setNode(grandparent)
+	if parent.LeftKey != nil && node.Key.Equal(*parent.LeftKey) {
+		_, err = tc.rotateRight(grandparent)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = tc.rotateLeft(grandparent)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
