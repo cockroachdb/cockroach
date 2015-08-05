@@ -31,6 +31,15 @@ prepare_artifacts() {
     fi
     if [ -f "${outdir}/acceptance.log" ]; then
       mkdir -p "${CIRCLE_TEST_REPORTS}/acceptance"
+
+      # Because we do not run `go test acceptance/...`, we don't get
+      # the package-level summary line, which breaks go2xunit. The
+      # `echo` below fakes that. It turns out go2xunit doesn't actually
+      # care about the content of this line, so long as it matches the
+      # correct format.
+      echo 'FAIL github.com/cockroachdb/cockroach/acceptance 1337s' \
+        >> "${outdir}/acceptance.log"
+
       ${builder} go2xunit < "${outdir}/acceptance.log" \
         > "${CIRCLE_TEST_REPORTS}/acceptance/acceptance.xml"
     fi
@@ -104,13 +113,6 @@ if [ "$(uname)" = "Linux" ]; then
     tr -d '\r' | tee "${outdir}/acceptance.log" | \
     grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
     awk '{print "acceptance:", $0}'
-
-  # Because we are not running go test above, we don't get the package-
-  # level summary line, which breaks go2xunit. The `echo` below fakes
-  # that. It turns out go2xunit doesn't actually care about the content
-  # of this line, so long as it matches the correct format.
-  echo 'FAIL github.com/cockroachdb/cockroach/acceptance 1337s' \
-    >> "${outdir}/acceptance.log"
 else
   echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
 fi
