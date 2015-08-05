@@ -155,7 +155,7 @@ func (t logicTest) run(path string) {
 		case "statement":
 			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", base, s.line)}
 			// Parse "query error <regexp>"
-			if m := errorRE.FindStringSubmatch(s.Text()); len(m) == 2 {
+			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErr = m[1]
 			}
 			var buf bytes.Buffer
@@ -172,7 +172,7 @@ func (t logicTest) run(path string) {
 		case "query":
 			query := logicQuery{pos: fmt.Sprintf("%s:%d", base, s.line)}
 			// Parse "query error <regexp>"
-			if m := errorRE.FindStringSubmatch(s.Text()); len(m) == 2 {
+			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				query.expectErr = m[1]
 			} else {
 				// TODO(pmattis): Parse "query <type-string> <sort-mode> <label>". The
@@ -201,28 +201,27 @@ func (t logicTest) run(path string) {
 			// blank line or a line of the form "xx values hashing to yyy". The
 			// latter format is used by sqllogictest when a large number of results
 			// match the query.
-			if !s.Scan() {
-				t.Fatalf("%d: expected query results line\n", s.line)
-			}
-			if m := resultsRE.FindStringSubmatch(s.Text()); len(m) == 3 {
-				var err error
-				query.expectedValues, err = strconv.Atoi(m[1])
-				if err != nil {
-					t.Fatal(err)
-				}
-				query.expectedHash = m[2]
-			} else {
-				for {
-					results := strings.Fields(s.Text())
-					if len(results) == 0 {
-						break
+			if s.Scan() {
+				if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
+					var err error
+					query.expectedValues, err = strconv.Atoi(m[1])
+					if err != nil {
+						t.Fatal(err)
 					}
-					query.expectedResults = append(query.expectedResults, results...)
-					if !s.Scan() {
-						break
+					query.expectedHash = m[2]
+				} else {
+					for {
+						results := strings.Fields(s.Text())
+						if len(results) == 0 {
+							break
+						}
+						query.expectedResults = append(query.expectedResults, results...)
+						if !s.Scan() {
+							break
+						}
 					}
+					query.expectedValues = len(query.expectedResults)
 				}
-				query.expectedValues = len(query.expectedResults)
 			}
 
 			t.execQuery(db, query)

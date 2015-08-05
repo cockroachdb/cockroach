@@ -1,0 +1,28 @@
+statement ok
+CREATE DATABASE t
+
+statement ok
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO t.kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II
+SELECT * FROM t.kv
+----
+k v
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+TRUNCATE TABLE t.kv
+
+query II
+SELECT * FROM t.kv
+----
+k v

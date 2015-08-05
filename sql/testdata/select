@@ -56,7 +56,7 @@ foo
 # SELECT of NULL value.
 
 statement ok
-CREATE TABLE t.kv (k VARCHAR PRIMARY KEY, v VARCHAR)
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)
 
 statement ok
 INSERT INTO t.kv (k) VALUES ('a')
