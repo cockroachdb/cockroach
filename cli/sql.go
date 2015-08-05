@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	// Import cockroach driver.
 	_ "github.com/cockroachdb/cockroach/sql/driver"
@@ -69,9 +70,11 @@ func (s *sqlValue) Scan(value interface{}) error {
 		s.value = v
 	case []byte:
 		s.value = string(v)
-	case int8, int16, int32, int64:
+	case time.Time:
+		s.value = v.String()
+	case int64:
 		s.value = fmt.Sprintf("%d", v)
-	case float32, float64:
+	case float64:
 		s.value = fmt.Sprintf("%f", v)
 	default:
 		s.value = fmt.Sprintf("%v", value)
@@ -105,7 +108,6 @@ func processOneLine(db *sql.DB, line string) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
 	sqlVals := make([]sqlValue, len(cols))
-	strs := make([]string, len(cols))
 	vals := make([]interface{}, len(cols))
 	for rows.Next() {
 		for i := range sqlVals {
@@ -114,10 +116,10 @@ func processOneLine(db *sql.DB, line string) error {
 		if err := rows.Scan(vals...); err != nil {
 			return util.Errorf("scan error: %s", err)
 		}
-		for i := range vals {
-			strs[i] = sqlVals[i].value
+		for _, v := range sqlVals {
+			fmt.Fprintf(tw, "%s\t", v.value)
 		}
-		fmt.Fprintf(tw, "%s\n", strings.Join(strs, "\t"))
+		fmt.Fprintf(tw, "\n")
 	}
 	_ = tw.Flush()
 	return nil
