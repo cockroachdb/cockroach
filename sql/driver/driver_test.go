@@ -135,20 +135,18 @@ func verifyResults(expectedResults resultSlice, actualResults resultSlice) error
 	return nil
 }
 
-func TestTruncateTable(t *testing.T) {
+func TestPlaceholders(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setup(t)
 	defer cleanup(s, db)
 
-	if _, err := db.Exec("CREATE DATABASE t"); err != nil {
+	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := db.Exec("CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)"); err != nil {
+	if _, err := db.Exec(`CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := db.Exec(`INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'),('b', 'd')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO t.kv VALUES ($1, $2), ($3, $4)`, "a", "b", "c", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,16 +156,16 @@ func TestTruncateTable(t *testing.T) {
 		results := readAll(t, rows)
 		expectedResults := asResultSlice([][]string{
 			{"k", "v"},
-			{"a", "c"},
-			{"b", "d"},
-			{"c", "e"},
+			{"a", "b"},
+			{"c", ""},
 		})
+		expectedResults[2][1] = nil
 		if err := verifyResults(expectedResults, results); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if _, err := db.Exec("Truncate TABLE t.kv"); err != nil {
+	if _, err := db.Exec(`DELETE FROM t.kv WHERE k IN ($1)`, "c"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -177,227 +175,10 @@ func TestTruncateTable(t *testing.T) {
 		results := readAll(t, rows)
 		expectedResults := asResultSlice([][]string{
 			{"k", "v"},
+			{"a", "b"},
 		})
 		if err := verifyResults(expectedResults, results); err != nil {
 			t.Fatal(err)
 		}
-	}
-}
-
-func TestInsertSelectDelete(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s, db := setup(t)
-	defer cleanup(s, db)
-
-	testcases := []struct {
-		db     string
-		schema string
-	}{
-		{
-			"t1",
-			`CREATE TABLE %s.kv (
-			k CHAR PRIMARY KEY,
-			v CHAR,
-			CONSTRAINT a UNIQUE (v)
-		)`,
-		},
-		{
-			"t2",
-			`CREATE TABLE %s.kv (
-	k CHAR,
-	v CHAR,
-	CONSTRAINT a UNIQUE (v),
-	PRIMARY KEY (k, v)
-)`,
-		},
-	}
-
-	for _, testcase := range testcases {
-		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('a', 'b')`, testcase.db)); !isError(err, "\\*structured.TableDescriptor .* does not exist") {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(testcase.schema, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
-			t.Fatal(err)
-		} else if results := readAll(t, rows); len(results) > 1 {
-			t.Fatalf("non-empty result set from empty table: %s", results)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('a')`, testcase.db)); !isError(err, "invalid values for columns") {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (v) VALUES ('a')`, testcase.db)); !isError(err, "missing .* primary key column") {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ($1, $2)`, testcase.db), "nil", nil); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ($1, $2)`, testcase.db), "c", "d"); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('e', 'f')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('e', 'f')`, testcase.db)); !isError(err, "duplicate key value .* violates unique constraint") {
-			t.Fatal(err)
-		}
-
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('f', 'g')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES ('g', 'g')`, testcase.db)); !isError(err, "duplicate key value .* violates unique constraint") {
-			t.Fatal(err)
-		}
-
-		// TODO(pmattis): We need much more testing of WHERE clauses. Need to think
-		// through the whole testing story in general.
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k IN ($1, $2)`, testcase.db), "a", "c"); err != nil {
-			t.Fatal(err)
-		} else {
-			results := readAll(t, rows)
-			expected := [][]string{
-				{"k", "v"},
-				{"a", "b"},
-				{"c", "d"},
-			}
-			if err := verifyResults(asResultSlice(expected), results); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
-			t.Fatal(err)
-		} else {
-			results := readAll(t, rows)
-			expected := [][]string{
-				{"k", "v"},
-				{"a", "b"},
-				{"c", "d"},
-				{"e", "f"},
-				{"f", "g"},
-			}
-			expectedResultSlice := asResultSlice(expected)
-
-			nilStr := "nil"
-			rowWithNil := []*string{&nilStr, nil}
-
-			expectedResultSlice = append(expectedResultSlice, rowWithNil)
-			if err := verifyResults(expectedResultSlice, results); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if _, err := db.Exec(fmt.Sprintf(`DELETE FROM %s.kv WHERE k IN ('a', 'c')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv WHERE k IN ('a', 'c')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		} else {
-			results := readAll(t, rows)
-			expected := [][]string{
-				{"k", "v"},
-			}
-			if err := verifyResults(asResultSlice(expected), results); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if _, err := db.Exec(fmt.Sprintf(`DELETE FROM %s.kv`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
-			t.Fatal(err)
-		} else {
-			results := readAll(t, rows)
-			expected := [][]string{
-				{"k", "v"},
-			}
-			if err := verifyResults(asResultSlice(expected), results); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-}
-
-func TestUpdate(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s, db := setup(t)
-	defer cleanup(s, db)
-
-	testcases := []struct {
-		db     string
-		schema string
-	}{
-		{
-			"t1",
-			`CREATE TABLE %s.kv (
-  k CHAR PRIMARY KEY,
-  v CHAR
-)`,
-		},
-	}
-
-	for _, testcase := range testcases {
-		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE ` + testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(testcase.schema, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('a', 'b'), ('c', 'd')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s.kv (k,v) VALUES ('e', 'f')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
-			t.Fatal(err)
-		} else {
-			results := readAll(t, rows)
-			expected := [][]string{
-				{"k", "v"},
-				{"a", "b"},
-				{"c", "d"},
-				{"e", "f"},
-			}
-			if err := verifyResults(asResultSlice(expected), results); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET v = 'g' WHERE k IN ('a', 'c')`, testcase.db)); err != nil {
-			t.Fatal(err)
-		}
-
-		if rows, err := db.Query(fmt.Sprintf(`SELECT * FROM %s.kv`, testcase.db)); err != nil {
-			t.Fatal(err)
-		} else {
-			results := readAll(t, rows)
-			expected := [][]string{
-				{"k", "v"},
-				{"a", "g"},
-				{"c", "g"},
-				{"e", "f"},
-			}
-			if err := verifyResults(asResultSlice(expected), results); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET m = 'g' WHERE k IN ('a', 'c')`, testcase.db)); !isError(err, "column \"m\" does not exist") {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET k = 'g' WHERE k IN ('a', 'c')`, testcase.db)); !isError(err, "primary key column \"k\" cannot be updated") {
-			t.Fatal(err)
-		}
-
 	}
 }

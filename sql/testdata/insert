@@ -1,0 +1,71 @@
+statement ok
+CREATE DATABASE t
+
+statement error structured.TableDescriptor .* does not exist
+INSERT INTO t.kv VALUES ('a', 'b')
+
+statement ok
+CREATE TABLE t.kv (
+  k CHAR PRIMARY KEY,
+  v CHAR,
+  CONSTRAINT a UNIQUE (v)
+)
+
+query TT
+SELECT * FROM t.kv
+----
+k v
+
+statement error invalid values for columns
+INSERT INTO t.kv VALUES ('a')
+
+statement error missing .* primary key column
+INSERT INTO t.kv (v) VALUES ('a')
+
+statement ok
+INSERT INTO t.kv VALUES ('nil', NULL)
+
+statement ok
+INSERT INTO t.kv (k,v) VALUES ('a', 'b'), ('c', 'd')
+
+statement ok
+INSERT INTO t.kv VALUES ('e', 'f')
+
+statement error duplicate key value .* violates unique constraint
+INSERT INTO t.kv VALUES ('e', 'f')
+
+statement ok
+INSERT INTO t.kv VALUES ('f', 'g')
+
+statement error duplicate key value .* violates unique constraint
+INSERT INTO t.kv VALUES ('g', 'g')
+
+query TT
+SELECT * FROM t.kv
+----
+k   v
+a   b
+c   d
+e   f
+f   g
+nil NULL
+
+statement ok
+CREATE TABLE t.kv2 (
+  k CHAR,
+  v CHAR,
+  CONSTRAINT a UNIQUE (v),
+  PRIMARY KEY (k, v)
+)
+
+statement ok
+INSERT INTO t.kv2 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g')
+
+query TT
+SELECT * FROM t.kv2
+----
+k   v
+a   b
+c   d
+e   f
+f   g
