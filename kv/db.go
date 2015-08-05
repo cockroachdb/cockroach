@@ -49,6 +49,13 @@ func verifyRequest(args proto.Request) error {
 		if t.InternalCommitTrigger != nil {
 			return util.Errorf("EndTransaction request from public KV API contains commit trigger: %+v", t.GetInternalCommitTrigger())
 		}
+	case *proto.BatchRequest:
+		for i := range t.Requests {
+			method := t.Requests[i].GetValue().(proto.Request).Method()
+			if _, ok := allPublicMethods[method.String()]; !ok {
+				return util.Errorf("Batch contains a non-public request %s", method.String())
+			}
+		}
 	}
 	return nil
 }

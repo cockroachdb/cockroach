@@ -155,6 +155,18 @@ func TestKVDBInternalMethods(t *testing.T) {
 		} else if !strings.Contains(err.Error(), "404 Not Found") {
 			t.Errorf("%d: expected 404; got %s", i, err)
 		}
+
+		// Verify same but within a Batch request.
+		bArgs := &proto.BatchRequest{}
+		bArgs.Add(test.args)
+		b = &client.Batch{}
+		b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+		err = db.Run(b)
+		if err == nil {
+			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
+		} else if !strings.Contains(err.Error(), "400 Bad Request") {
+			t.Errorf("%d: expected 400; got %s", i, err)
+		}
 	}
 }
 
