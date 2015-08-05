@@ -167,11 +167,7 @@ func (n *scanNode) renderRow() error {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		var err error
-		n.row[i], err = parser.EvalExpr(e, n.vals)
-		if err != nil {
-			return err
-		}
+		n.row[i], _ = parser.EvalExpr(e, n.vals)
 	}
 	return nil
 }
