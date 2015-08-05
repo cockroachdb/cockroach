@@ -113,7 +113,8 @@ func verifyKeyLength(key proto.Key) error {
 // is verified to be non-nil and greater than start key. If
 // checkEndKey is false, end key is verified to be nil. Additionally,
 // verifies that start key is less than KeyMax and end key is less
-// than or equal to KeyMax.
+// than or equal to KeyMax. It also verifies that a key range that
+// contains range-local keys is completely range-local.
 func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
@@ -138,6 +139,9 @@ func verifyKeys(start, end proto.Key, checkEndKey bool) error {
 	}
 	if !start.Less(end) {
 		return util.Errorf("end key %q must be greater than start %q", end, start)
+	}
+	if bytes.HasPrefix(start, keys.LocalRangePrefix) && !bytes.HasPrefix(end, keys.LocalRangePrefix) {
+		return util.Errorf("start key is range-local, but end key is not")
 	}
 	return nil
 }

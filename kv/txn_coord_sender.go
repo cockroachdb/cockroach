@@ -86,9 +86,9 @@ type txnMetadata struct {
 	// is set to 0, a default timeout will be used.
 	timeoutDuration time.Duration
 
-	// txnEnd receives a slice of pre-resolved intents when the transaction is
-	// aborted or committed, prompting the receiver to clean up the intents.
-	txnEnd chan []proto.Key
+	// txnEnd is closed when the transaction is aborted or committed,
+	// terminating the associated heartbeat instance.
+	txnEnd chan struct{}
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -446,7 +446,7 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						firstUpdateNanos: tc.clock.PhysicalNow(),
 						lastUpdateNanos:  tc.clock.PhysicalNow(),
 						timeoutDuration:  tc.clientTimeout,
-						txnEnd:           make(chan []proto.Key),
+						txnEnd:           make(chan struct{}),
 					}
 					tc.txns[id] = txnMeta
 					if !tc.stopper.RunAsyncTask(func() {
@@ -557,7 +557,7 @@ func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	}
 	aHeader.User = bHeader.User
 	aHeader.UserPriority = bHeader.UserPriority
-	// Only allow individual transactions in a batch if
+	// Only allow individual transactions on the requests of a batch if
 	// - the batch is non-transactional,
 	// - the individual transaction does not write intents, and
 	// - the individual transaction is initialized.
@@ -722,7 +722,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 	}
 	defer tc.unregisterTxn(id)
 
-	var closer <-chan []proto.Key
+	var closer <-chan struct{}
 	var trace *tracer.Trace
 	{
 		tc.Lock()

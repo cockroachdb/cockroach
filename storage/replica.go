@@ -1150,13 +1150,15 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 	return err
 }
 
-// resolveIntents resolves the given intents. Those which are local to the range
-// use a fast-path by submitting directly to the range-local Raft instance; all
-// others are dispatched in a batch.
+// resolveIntents resolves the given intents. For those which are local to the
+// range, we submit directly to the range-local Raft instance; the call returns
+// as soon as all resolve commands have been **proposed** (not executed). This
+// ensures that if a waiting client retries immediately after conflict
+// resolution, it will not hit the same intents again. All non-local intents
+// are resolved asynchronously in a batch.
 // TODO(tschottdorf): once Txn records have a list of possibly open intents,
 // resolveIntents should send an RPC to update the transaction(s) as well (for
 // those intents with non-pending Txns).
-// TODO(tschottdorf): need tests for this with range intents.
 func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
@@ -1198,11 +1200,15 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
 		}
 
 		// If it is local, it goes directly into Raft.
+		// TODO(tschottdorf): this may be premature optimization. Consider just
+		// treating everything as an external request. This means having to
+		// wait for complete execution of the command (whereas now we just wait
+		// for proposition) and some more overhead sending things around.
 		wg.Add(1)
 		action := func() {
 			// Trace this under the ID of the intent owner.
 			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(resolveArgs.Header().Txn))
-			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil && log.V(0) {
+			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil && log.V(1) {
 				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, err)
 			}
 		}

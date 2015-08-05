@@ -320,9 +320,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 	}
 
 	// Resolve any explicit intents. All that are local to this range get
-	// resolved synchronously in the same batch. The remainder is collected
+	// resolved synchronously in the same batch. The remainder are collected
 	// and handed off to asynchronous processing.
-	var externalIntents []proto.Intent
 	desc := *(r.Desc())
 	if wideDesc := args.GetInternalCommitTrigger().GetMergeTrigger().GetUpdatedDesc(); wideDesc.RangeID != 0 {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -330,6 +329,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 		// pre-split one instead because it's larger).
 		desc = wideDesc
 	}
+
+	var externalIntents []proto.Intent
 	for _, intent := range args.Intents {
 		if err := func() error {
 			if len(intent.EndKey) == 0 {
@@ -345,9 +346,6 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
-			// TODO(tschottdorf): This will panic for ranges which contain both
-			// local and non-local keys. Write a test to see if we can create
-			// those and if so, prohibit it.
 			insideIntent, outsideIntents := intersectIntent(intent, desc)
 			externalIntents = append(externalIntents, outsideIntents...)
 			if insideIntent != nil {

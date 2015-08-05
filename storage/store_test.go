@@ -485,36 +485,43 @@ func TestStoreVerifyKeys(t *testing.T) {
 
 	// Start with a too-long key on a get.
 	gArgs := getArgs(tooLongKey, 1, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &gArgs); err == nil {
-		t.Fatal("expected error for key too long")
+	if _, err := store.ExecuteCmd(context.Background(), &gArgs); !testutils.IsError(err, "exceeded") {
+		t.Fatalf("unexpected error for key too long: %v", err)
 	}
 	// Try a start key == KeyMax.
 	gArgs.Key = proto.KeyMax
-	if _, err := store.ExecuteCmd(context.Background(), &gArgs); err == nil {
-		t.Fatal("expected error for start key == KeyMax")
+	if _, err := store.ExecuteCmd(context.Background(), &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
+		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
 	gArgs.EndKey = proto.KeyMax
-	if _, err := store.ExecuteCmd(context.Background(), &gArgs); err == nil {
-		t.Fatal("expected error for end key specified on a non-range-based operation")
+	if _, err := store.ExecuteCmd(context.Background(), &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
+		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
 	// Try a scan with too-long EndKey.
 	sArgs := scanArgs(proto.KeyMin, tooLongKey, 1, store.StoreID())
-	if _, err := store.ExecuteCmd(context.Background(), &sArgs); err == nil {
-		t.Fatal("expected error for end key too long")
+	if _, err := store.ExecuteCmd(context.Background(), &sArgs); !testutils.IsError(err, "length exceeded") {
+		t.Fatalf("unexpected error for end key too long: %v", err)
 	}
 	// Try a scan with end key < start key.
 	sArgs.Key = []byte("b")
 	sArgs.EndKey = []byte("a")
-	if _, err := store.ExecuteCmd(context.Background(), &sArgs); err == nil {
-		t.Fatal("expected error for end key < start")
+	if _, err := store.ExecuteCmd(context.Background(), &sArgs); !testutils.IsError(err, "must be greater than") {
+		t.Fatalf("unexpected error for end key < start: %v", err)
 	}
 	// Try a scan with start key == end key.
 	sArgs.Key = []byte("a")
 	sArgs.EndKey = sArgs.Key
-	if _, err := store.ExecuteCmd(context.Background(), &sArgs); err == nil {
-		t.Fatal("expected error for start == end key")
+	if _, err := store.ExecuteCmd(context.Background(), &sArgs); !testutils.IsError(err, "must be greater than") {
+		t.Fatalf("unexpected error for start == end key: %v", err)
 	}
+	// Try a scan with range-local start key, but "regular" end key.
+	sArgs.Key = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
+	sArgs.EndKey = []byte("z")
+	if _, err := store.ExecuteCmd(context.Background(), &sArgs); !testutils.IsError(err, "range-local") {
+		t.Fatalf("unexpected error for local start, non-local end key: %v", err)
+	}
+
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
 	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, proto.KeyMax)
