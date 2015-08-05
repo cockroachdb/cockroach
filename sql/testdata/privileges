@@ -1,0 +1,52 @@
+# Test default database-level permissions.
+# Default user is "root".
+statement ok
+CREATE DATABASE a
+
+statement ok
+SHOW DATABASES
+
+statement ok
+SET DATABASE = a
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY)
+
+statement ok
+SHOW TABLES
+
+statement ok
+SHOW GRANTS ON DATABASE a
+
+statement ok
+GRANT ALL ON DATABASE a TO bar
+
+statement ok
+REVOKE ALL ON DATABASE a FROM bar
+
+# Switch to a user without any privileges.
+user testuser
+
+statement error only root is allowed to create databases
+CREATE DATABASE b
+
+statement ok
+SHOW DATABASES
+
+statement ok
+SET DATABASE = a
+
+statement error user testuser does not have WRITE privilege on database a
+CREATE TABLE t2 (id INT PRIMARY KEY)
+
+statement ok
+SHOW TABLES
+
+statement ok
+SHOW GRANTS ON DATABASE a
+
+statement error user testuser does not have WRITE privilege on database a
+GRANT ALL ON DATABASE a TO bar
+
+statement error user testuser does not have WRITE privilege on database a
+REVOKE ALL ON DATABASE a FROM bar

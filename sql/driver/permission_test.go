@@ -78,43 +78,6 @@ func TestInsecure(t *testing.T) {
 	}
 }
 
-func TestDefaultPrivileges(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s, dbRoot, dbTest := setupMultiuser(t)
-	defer cleanupMultiuser(s, dbRoot, dbTest)
-
-	// All statements must succeed with dbRoot.
-	// Statements with success==true must succeed with dbTest.
-	// They are evaluated in order, with dbTest first followed by dbRoot.
-	testCases := []struct {
-		query   string
-		success bool
-	}{
-		/* Database-level permissions */
-		{`CREATE DATABASE foo`, false},
-
-		{`SHOW DATABASES`, true},
-		{`SET DATABASE = foo`, true},
-
-		{`CREATE TABLE tbl (id INT PRIMARY KEY)`, false},
-
-		{`SHOW TABLES`, true},
-		{`SHOW GRANTS ON DATABASE foo`, true},
-
-		{`GRANT ALL ON DATABASE foo TO bar`, false},
-		{`REVOKE ALL ON DATABASE foo FROM bar`, false},
-	}
-
-	for _, tc := range testCases {
-		if _, err := dbTest.Exec(tc.query); (err == nil) != tc.success {
-			t.Fatalf("statement %q using testuser has err=%s, expected success=%t", tc.query, err, tc.success)
-		}
-		if _, err := dbRoot.Exec(tc.query); err != nil {
-			t.Fatalf("statement %q using root failed: %v", tc.query, err)
-		}
-	}
-}
-
 func TestReadPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, dbRoot, dbTest := setupMultiuser(t)
