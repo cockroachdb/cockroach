@@ -29,6 +29,9 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+var _ descriptorProto = &structured.DatabaseDescriptor{}
+var _ descriptorProto = &structured.TableDescriptor{}
+
 // descriptorProto is the interface implemented by both DatabaseDescriptor
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
@@ -38,8 +41,8 @@ type descriptorProto interface {
 	Revoke(*parser.Revoke) error
 	Show() (structured.UserPrivilegeList, error)
 	HasPrivilege(string, parser.PrivilegeType) bool
-	GetID() uint32
-	SetID(uint32)
+	GetID() structured.ID
+	SetID(structured.ID)
 	GetName() string
 	Validate() error
 }
@@ -65,7 +68,7 @@ func (p *planner) writeDescriptor(key proto.Key, descriptor descriptorProto, ifN
 
 	// Increment unique descriptor counter.
 	if ir, err := p.db.Inc(keys.DescIDGenerator, 1); err == nil {
-		descriptor.SetID(uint32(ir.ValueInt() - 1))
+		descriptor.SetID(structured.ID(ir.ValueInt() - 1))
 	} else {
 		return err
 	}
@@ -73,7 +76,7 @@ func (p *planner) writeDescriptor(key proto.Key, descriptor descriptorProto, ifN
 	// TODO(pmattis): The error currently returned below is likely going to be
 	// difficult to interpret.
 	// TODO(pmattis): Need to handle if-not-exists here as well.
-	descKey := keys.MakeDescMetadataKey(descriptor.GetID())
+	descKey := structured.MakeDescMetadataKey(descriptor.GetID())
 	return p.db.Txn(func(txn *client.Txn) error {
 		b := &client.Batch{}
 		b.CPut(key, descKey, nil)

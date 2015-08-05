@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
@@ -36,7 +35,7 @@ func makeDatabaseDesc(p *parser.CreateDatabase) structured.DatabaseDescriptor {
 
 // getDatabaseDesc looks up the database descriptor given its name.
 func (p *planner) getDatabaseDesc(name string) (*structured.DatabaseDescriptor, error) {
-	nameKey := keys.MakeNameMetadataKey(structured.RootNamespaceID, name)
+	nameKey := structured.MakeNameMetadataKey(structured.RootNamespaceID, name)
 	desc := structured.DatabaseDescriptor{}
 	if err := p.getDescriptor(nameKey, &desc); err != nil {
 		return nil, err

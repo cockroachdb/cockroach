@@ -20,7 +20,6 @@ package sql_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -32,13 +31,13 @@ func TestGrantDatabase(t *testing.T) {
 	defer cleanup(s, sqlDB)
 
 	// The first `MaxReservedDescID` (plus 0) are set aside.
-	expectedCounter := uint32(structured.MaxReservedDescID + 1)
+	expectedCounter := structured.MaxReservedDescID + 1
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
 
-	descKey := keys.MakeDescMetadataKey(expectedCounter)
+	descKey := structured.MakeDescMetadataKey(expectedCounter)
 	desc := structured.DatabaseDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)

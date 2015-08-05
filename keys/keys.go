@@ -21,7 +21,6 @@ package keys
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -55,24 +54,6 @@ func StoreStatusKey(storeID int32) proto.Key {
 // specified node ID.
 func NodeStatusKey(nodeID int32) proto.Key {
 	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
-}
-
-// MakeNameMetadataKey returns the key for the namespace.
-func MakeNameMetadataKey(parentID uint32, name string) proto.Key {
-	name = strings.ToLower(name)
-	k := make([]byte, 0, len(NameMetadataPrefix)+encoding.MaxUvarintSize+len(name))
-	k = append(k, NameMetadataPrefix...)
-	k = encoding.EncodeUvarint(k, uint64(parentID))
-	k = append(k, name...)
-	return k
-}
-
-// MakeDescMetadataKey returns the key for the table in namespaceID.
-func MakeDescMetadataKey(descID uint32) proto.Key {
-	k := make([]byte, 0, len(DescMetadataPrefix)+encoding.MaxUvarintSize)
-	k = append(k, DescMetadataPrefix...)
-	k = encoding.EncodeUvarint(k, uint64(descID))
-	return k
 }
 
 // indexKeyBufferWidth returns a likely cap on the width of the index key.

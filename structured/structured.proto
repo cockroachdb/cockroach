@@ -50,14 +50,16 @@ message ColumnType {
 
 message ColumnDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
-  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   optional ColumnType type = 3 [(gogoproto.nullable) = false];
   optional bool nullable = 4 [(gogoproto.nullable) = false];
 }
 
 message IndexDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
-  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   optional bool unique = 3 [(gogoproto.nullable) = false];
   // An ordered list of column names of which the index is comprised. This list
   // parallels the column_ids list. If duplicating the storage of the column
@@ -66,7 +68,8 @@ message IndexDescriptor {
   repeated string column_names = 4;
   // An ordered list of column ids of which the index is comprised. This list
   // parallels the column_names list.
-  repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs"];
+  repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ID"];
 }
 
 // PrivilegeDescriptor represents the sets of privileges on a descriptor.
@@ -82,17 +85,18 @@ message PrivilegeDescriptor {
 // {Column,Index}Descriptors have locally-unique IDs.
 message TableDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
-  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   repeated ColumnDescriptor columns = 3 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
   optional uint32 next_column_id = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NextColumnID"];
+      (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ID"];
   optional IndexDescriptor primary_index = 5 [(gogoproto.nullable) = false];
   // indexes are all the secondary indexes.
   repeated IndexDescriptor indexes = 6 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused.
   optional uint32 next_index_id = 7 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NextIndexID"];
+      (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "ID"];
   optional PrivilegeDescriptor privileges = 8 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -102,6 +106,7 @@ message TableDescriptor {
 // Permissions are applied to all tables in the namespace.
 message DatabaseDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
-  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   optional PrivilegeDescriptor privileges = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

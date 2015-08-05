@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -48,13 +49,15 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		return nil, err
 	}
 
-	colMap := map[uint32]int{}
+	// Construct a map from column ID to the index the value appears at within a
+	// row.
+	colIDtoRowIndex := map[structured.ID]int{}
 	for i, name := range node.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
 			return nil, err
 		}
-		colMap[c.ID] = i
+		colIDtoRowIndex[c.ID] = i
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
@@ -68,14 +71,14 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		}
 		values := node.Values()
 
-		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colMap, values, nil)
+		primaryIndexKeySuffix, err := encodeIndexKey(primaryIndex, colIDtoRowIndex, values, nil)
 		if err != nil {
 			return nil, err
 		}
 		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
 
 		// Delete the secondary indexes.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colMap, values, primaryIndexKeySuffix)
+		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, values, primaryIndexKeySuffix)
 		if err != nil {
 			return nil, err
 		}

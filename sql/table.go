@@ -113,7 +113,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 		return nil, err
 	}
 
-	nameKey := keys.MakeNameMetadataKey(dbDesc.ID, qname.Table())
+	nameKey := structured.MakeNameMetadataKey(dbDesc.ID, qname.Table())
 	desc := structured.TableDescriptor{}
 	if err := p.getDescriptor(nameKey, &desc); err != nil {
 		return nil, err
@@ -121,14 +121,14 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 	return &desc, nil
 }
 
-func encodeTablePrefix(tableID uint32) []byte {
+func encodeTablePrefix(tableID structured.ID) []byte {
 	var key []byte
 	key = append(key, keys.TableDataPrefix...)
 	key = encoding.EncodeUvarint(key, uint64(tableID))
 	return key
 }
 
-func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
+func encodeIndexKeyPrefix(tableID, indexID structured.ID) []byte {
 	var key []byte
 	key = append(key, keys.TableDataPrefix...)
 	key = encoding.EncodeUvarint(key, uint64(tableID))
@@ -137,7 +137,7 @@ func encodeIndexKeyPrefix(tableID, indexID uint32) []byte {
 }
 
 func encodeIndexKey(index structured.IndexDescriptor,
-	colMap map[uint32]int, values []parser.Datum, indexKey []byte) ([]byte, error) {
+	colMap map[structured.ID]int, values []parser.Datum, indexKey []byte) ([]byte, error) {
 	var key []byte
 	key = append(key, indexKey...)
 
@@ -193,13 +193,13 @@ func decodeIndexKey(desc *structured.TableDescriptor,
 
 	var tableID uint64
 	key, tableID = encoding.DecodeUvarint(key)
-	if uint32(tableID) != desc.ID {
+	if structured.ID(tableID) != desc.ID {
 		return nil, fmt.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
 	var indexID uint64
 	key, indexID = encoding.DecodeUvarint(key)
-	if uint32(indexID) != index.ID {
+	if structured.ID(indexID) != index.ID {
 		return nil, fmt.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
@@ -235,8 +235,8 @@ type indexEntry struct {
 	value []byte
 }
 
-func encodeSecondaryIndexes(tableID uint32, indexes []structured.IndexDescriptor,
-	colMap map[uint32]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
+func encodeSecondaryIndexes(tableID structured.ID, indexes []structured.IndexDescriptor,
+	colMap map[structured.ID]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableID, secondaryIndex.ID)

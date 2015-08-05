@@ -25,13 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
+// ID is a custom type for {Database,Table}Descriptor IDs.
+type ID uint32
+
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
 	// MaxReservedDescID is the maximum reserved descriptor ID.
-	MaxReservedDescID = 999
+	MaxReservedDescID ID = 999
 	// RootNamespaceID is the ID of the root namespace.
-	RootNamespaceID = 0
+	RootNamespaceID ID = 0
 )
 
 // ErrMissingPrimaryKey exported to the sql package.
@@ -45,8 +48,13 @@ func validateName(name, typ string) error {
 	return nil
 }
 
-// SetID is needed to implement descriptorProto in sql/create.go
-func (desc *TableDescriptor) SetID(id uint32) {
+// GetID implements the sql.descriptorProto interface.
+func (desc *TableDescriptor) GetID() ID {
+	return desc.ID
+}
+
+// SetID implements the sql.descriptorProto interface.
+func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
 }
 
@@ -60,7 +68,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		desc.NextIndexID = 1
 	}
 
-	columnNames := map[string]uint32{}
+	columnNames := map[string]ID{}
 	for i := range desc.Columns {
 		columnID := desc.Columns[i].ID
 		if columnID == 0 {
@@ -119,8 +127,8 @@ func (desc *TableDescriptor) Validate() error {
 		return fmt.Errorf("table must contain at least 1 column")
 	}
 
-	columnNames := map[string]uint32{}
-	columnIDs := map[uint32]string{}
+	columnNames := map[string]ID{}
+	columnIDs := map[ID]string{}
 	for _, column := range desc.Columns {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
@@ -153,7 +161,7 @@ func (desc *TableDescriptor) Validate() error {
 	}
 
 	indexNames := map[string]struct{}{}
-	indexIDs := map[uint32]string{}
+	indexIDs := map[ID]string{}
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
@@ -212,7 +220,7 @@ func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, e
 }
 
 // FindColumnByID finds the column with specified ID.
-func (desc *TableDescriptor) FindColumnByID(id uint32) (*ColumnDescriptor, error) {
+func (desc *TableDescriptor) FindColumnByID(id ID) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
 		if c.ID == id {
 			return &desc.Columns[i], nil
@@ -243,8 +251,13 @@ func (c *ColumnType) SQLString() string {
 	return c.Kind.String()
 }
 
-// SetID is needed to implement descriptorProto in sql/create.go
-func (desc *DatabaseDescriptor) SetID(id uint32) {
+// GetID implements the sql.descriptorProto interface.
+func (desc *DatabaseDescriptor) GetID() ID {
+	return desc.ID
+}
+
+// SetID implements the sql.descriptorProto interface.
+func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
 }
 

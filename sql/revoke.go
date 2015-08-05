@@ -20,8 +20,8 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/structured"
 )
 
 // Revoke removes privileges from users.
@@ -52,7 +52,7 @@ func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
 	// Now update the descriptor.
 	// TODO(marc): do this inside a transaction. This will be needed
 	// when modifying multiple descriptors in the same op.
-	descKey := keys.MakeDescMetadataKey(descriptor.GetID())
+	descKey := structured.MakeDescMetadataKey(descriptor.GetID())
 	if err := p.db.Put(descKey, descriptor); err != nil {
 		return nil, err
 	}

@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 )
@@ -51,7 +50,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
-	prefix := keys.MakeNameMetadataKey(structured.RootNamespaceID, "")
+	prefix := structured.MakeNameMetadataKey(structured.RootNamespaceID, "")
 	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -156,7 +155,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		return nil, err
 	}
 
-	prefix := keys.MakeNameMetadataKey(dbDesc.ID, "")
+	prefix := structured.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.db.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err

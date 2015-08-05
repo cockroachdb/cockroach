@@ -64,9 +64,6 @@ func TestKeyAddress(t *testing.T) {
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
 		{TransactionKey(proto.Key("baz"), proto.Key(uuid.NewUUID4())), proto.Key("baz")},
 		{TransactionKey(proto.KeyMax, proto.Key(uuid.NewUUID4())), proto.KeyMax},
-		{MakeNameMetadataKey(0, "foo"), proto.Key("\x00name-\bfoo")},
-		{MakeNameMetadataKey(0, "BAR"), proto.Key("\x00name-\bbar")},
-		{MakeDescMetadataKey(123), proto.Key("\x00desc-\t{")},
 		{nil, nil},
 	}
 	for i, test := range testCases {
