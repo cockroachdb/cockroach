@@ -17,3 +17,23 @@ query II
 SELECT * FROM kv WHERE v IN (6)
 ----
 5 6
+
+query II
+SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
+----
+1 2
+3 4
+5 6
+7 8
+
+query II
+SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
+----
+1 2
+3 4
+5 6
+7 8
+
+query error column "nonexistent" not found
+SELECT * FROM kv WHERE nonexistent = 1
+----
