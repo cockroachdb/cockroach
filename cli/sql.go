@@ -57,6 +57,28 @@ Open a sql shell running against the cockroach database at --addr.
 	Run: runTerm,
 }
 
+type sqlValue struct {
+	value string
+}
+
+func (s *sqlValue) Scan(value interface{}) error {
+	switch v := value.(type) {
+	case nil:
+		s.value = "NULL"
+	case string:
+		s.value = v
+	case []byte:
+		s.value = string(v)
+	case int8, int16, int32, int64:
+		s.value = fmt.Sprintf("%d", v)
+	case float32, float64:
+		s.value = fmt.Sprintf("%f", v)
+	default:
+		s.value = fmt.Sprintf("%v", value)
+	}
+	return nil
+}
+
 // processOneLine takes a line from the terminal, runs it,
 // and displays the result.
 // TODO(marc): handle multi-line, this will require ';' terminated statements.
@@ -82,14 +104,18 @@ func processOneLine(db *sql.DB, line string) error {
 	// Format all rows using tabwriter.
 	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
+	sqlVals := make([]sqlValue, len(cols))
 	strs := make([]string, len(cols))
 	vals := make([]interface{}, len(cols))
 	for rows.Next() {
-		for i := range vals {
-			vals[i] = &strs[i]
+		for i := range sqlVals {
+			vals[i] = &sqlVals[i]
 		}
 		if err := rows.Scan(vals...); err != nil {
 			return util.Errorf("scan error: %s", err)
+		}
+		for i := range vals {
+			strs[i] = sqlVals[i].value
 		}
 		fmt.Fprintf(tw, "%s\n", strings.Join(strs, "\t"))
 	}
