@@ -100,14 +100,15 @@ func (c *Config) validate() error {
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
-	stopper         *stop.Stopper
-	multiNode       raft.MultiNode
-	Events          chan interface{}
-	nodeID          proto.RaftNodeID
-	reqChan         chan *RaftMessageRequest
-	createGroupChan chan *createGroupOp
-	removeGroupChan chan *removeGroupOp
-	proposalChan    chan *proposal
+	stopper                *stop.Stopper
+	multiNode              raft.MultiNode
+	Events                 chan interface{}
+	nodeID                 proto.RaftNodeID
+	reqChan                chan *RaftMessageRequest
+	createGroupChan        chan *createGroupOp
+	removeGroupChan        chan *removeGroupOp
+	proposalChan           chan *proposal
+	coincideRaftLeaderChan chan *coincideRaftLeaderOp
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
 }
@@ -153,11 +154,12 @@ func NewMultiRaft(nodeID proto.RaftNodeID, config *Config, stopper *stop.Stopper
 		Events: make(chan interface{}, config.EventBufferSize),
 
 		// Input channels.
-		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
-		createGroupChan: make(chan *createGroupOp),
-		removeGroupChan: make(chan *removeGroupOp),
-		proposalChan:    make(chan *proposal),
-		callbackChan:    make(chan func()),
+		reqChan:                make(chan *RaftMessageRequest, reqBufferSize),
+		createGroupChan:        make(chan *createGroupOp),
+		removeGroupChan:        make(chan *removeGroupOp),
+		proposalChan:           make(chan *proposal),
+		coincideRaftLeaderChan: make(chan *coincideRaftLeaderOp),
+		callbackChan:           make(chan func()),
 	}
 
 	if err := m.Transport.Listen(nodeID, (*multiraftServer)(m)); err != nil {
@@ -357,6 +359,17 @@ func (m *MultiRaft) ChangeGroupMembership(groupID proto.RangeID, commandID strin
 	return ch
 }
 
+// CoincideRaftLeader try to make the raft leader located to the same
+// node as range leader.
+func (m *MultiRaft) CoincideRaftLeader(groupID proto.RangeID) error {
+	op := &coincideRaftLeaderOp{
+		groupID: groupID,
+		ch:      make(chan error, 1),
+	}
+	m.coincideRaftLeaderChan <- op
+	return <-op.ch
+}
+
 // Status returns the current status of the given group.
 func (m *MultiRaft) Status(groupID proto.RangeID) *raft.Status {
 	return m.multiNode.Status(uint64(groupID))
@@ -398,6 +411,11 @@ type createGroupOp struct {
 }
 
 type removeGroupOp struct {
+	groupID proto.RangeID
+	ch      chan error
+}
+
+type coincideRaftLeaderOp struct {
 	groupID proto.RangeID
 	ch      chan error
 }
@@ -532,6 +550,12 @@ func (s *state) start() {
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
+
+			case op := <-s.coincideRaftLeaderChan:
+				if log.V(6) {
+					log.Infof("node %v: got op %#v", s.nodeID, op)
+				}
+				op.ch <- s.coincideRaftLeader(op.groupID)
 
 			case readyGroups = <-raftReady:
 				// readyGroups are saved in a local variable until they can be sent to
@@ -763,6 +787,23 @@ func (s *state) propose(p *proposal) {
 	}
 	g.pending[p.commandID] = p
 	p.fn()
+}
+
+func (s *state) coincideRaftLeader(groupID proto.RangeID) error {
+	if _, ok := s.groups[groupID]; !ok {
+		return nil
+	}
+	if log.V(3) {
+		log.Infof("node %v coincideRaftLeader group %v", s.nodeID, groupID)
+	}
+	status := s.Status(groupID)
+	if log.V(3) {
+		log.Infof("node %v coincideRaftLeader group %v, currentRaftLeader %x raftState %v", s.nodeID, groupID, status.Lead, status.RaftState)
+	}
+	if status.Lead == uint64(s.nodeID) || status.RaftState == raft.StateCandidate {
+		return nil
+	}
+	return s.multiNode.Campaign(context.Background(), uint64(groupID))
 }
 
 func (s *state) logRaftReady(readyGroups map[uint64]raft.Ready) {
