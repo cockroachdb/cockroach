@@ -7,7 +7,7 @@ package proto
 import proto1 "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
@@ -87,7 +87,4 @@ func (m *GossipResponse) GetAlternate() *Addr {
 		return m.Alternate
 	}
 	return nil
-}
-
-func init() {
 }

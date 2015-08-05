@@ -18,7 +18,7 @@ import math "math"
 import cockroach_proto "github.com/cockroachdb/cockroach/proto"
 import cockroach_storage_engine "github.com/cockroachdb/cockroach/storage/engine"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import github_com_cockroachdb_cockroach_proto "github.com/cockroachdb/cockroach/proto"
 
@@ -104,8 +104,6 @@ func (m *NodeStatus) GetAvailableRangeCount() int32 {
 	return 0
 }
 
-func init() {
-}
 func (m *NodeStatus) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -142,6 +140,9 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthStatus
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -170,6 +171,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeCount", wireType)
 			}
+			m.RangeCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -185,6 +187,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StartedAt", wireType)
 			}
+			m.StartedAt = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -200,6 +203,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedAt", wireType)
 			}
+			m.UpdatedAt = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -228,6 +232,9 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthStatus
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -239,6 +246,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LeaderRangeCount", wireType)
 			}
+			m.LeaderRangeCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -254,6 +262,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ReplicatedRangeCount", wireType)
 			}
+			m.ReplicatedRangeCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -269,6 +278,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field AvailableRangeCount", wireType)
 			}
+			m.AvailableRangeCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -293,6 +303,9 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			skippy, err := skipStatus(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -350,6 +363,9 @@ func skipStatus(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthStatus
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -388,6 +404,11 @@ func skipStatus(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthStatus = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (m *NodeStatus) Size() (n int) {
 	var l int
 	_ = l

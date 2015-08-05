@@ -1133,7 +1133,7 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice* start, DBSlice* end) {
     ePtr = &e;
     e = ToSlice(*end);
   }
-  return ToDBStatus(db->rep->CompactRange(sPtr, ePtr));
+  return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), sPtr, ePtr));
 }
 
 uint64_t DBApproximateSize(DBEngine* db, DBSlice start, DBSlice end) {

@@ -39,7 +39,7 @@ package wire
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import io "io"
 import fmt "fmt"
@@ -206,6 +206,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
 			}
+			m.Id = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -244,6 +245,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MethodId", wireType)
 			}
+			m.MethodId = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -259,6 +261,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Compression", wireType)
 			}
+			m.Compression = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -274,6 +277,7 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UncompressedSize", wireType)
 			}
+			m.UncompressedSize = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -298,6 +302,9 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -332,6 +339,7 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
 			}
+			m.Id = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -392,6 +400,7 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Compression", wireType)
 			}
+			m.Compression = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -407,6 +416,7 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UncompressedSize", wireType)
 			}
+			m.UncompressedSize = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -431,6 +441,9 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			skippy, err := skipWire(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -488,6 +501,9 @@ func skipWire(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthWire
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -526,6 +542,11 @@ func skipWire(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthWire = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (m *RequestHeader) Size() (n int) {
 	var l int
 	_ = l

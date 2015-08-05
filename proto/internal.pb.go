@@ -7,7 +7,7 @@ package proto
 import proto1 "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "gogoproto/gogo.pb"
+// discarding unused import gogoproto "gogoproto"
 
 import io "io"
 
@@ -1299,6 +1299,9 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1310,6 +1313,7 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MaxRanges", wireType)
 			}
+			m.MaxRanges = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -1351,6 +1355,9 @@ func (m *InternalRangeLookupRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1398,6 +1405,9 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1422,6 +1432,9 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1443,6 +1456,9 @@ func (m *InternalRangeLookupResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1490,6 +1506,9 @@ func (m *InternalHeartbeatTxnRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1510,6 +1529,9 @@ func (m *InternalHeartbeatTxnRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1557,6 +1579,9 @@ func (m *InternalHeartbeatTxnResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1577,6 +1602,9 @@ func (m *InternalHeartbeatTxnResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1624,6 +1652,9 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1648,6 +1679,9 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1672,6 +1706,9 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1693,6 +1730,9 @@ func (m *InternalGCRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1739,6 +1779,9 @@ func (m *InternalGCRequest_GCKey) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -1762,6 +1805,9 @@ func (m *InternalGCRequest_GCKey) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1782,6 +1828,9 @@ func (m *InternalGCRequest_GCKey) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1829,6 +1878,9 @@ func (m *InternalGCResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1849,6 +1901,9 @@ func (m *InternalGCResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -1896,6 +1951,9 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1920,6 +1978,9 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1944,6 +2005,9 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1955,6 +2019,7 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PushType", wireType)
 			}
+			m.PushType = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -1996,6 +2061,9 @@ func (m *InternalPushTxnRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2043,6 +2111,9 @@ func (m *InternalPushTxnResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2067,6 +2138,9 @@ func (m *InternalPushTxnResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2090,6 +2164,9 @@ func (m *InternalPushTxnResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2137,6 +2214,9 @@ func (m *InternalResolveIntentRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2157,6 +2237,9 @@ func (m *InternalResolveIntentRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2204,6 +2287,9 @@ func (m *InternalResolveIntentResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2224,6 +2310,9 @@ func (m *InternalResolveIntentResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2271,6 +2360,9 @@ func (m *InternalResolveIntentRangeRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2291,6 +2383,9 @@ func (m *InternalResolveIntentRangeRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2338,6 +2433,9 @@ func (m *InternalResolveIntentRangeResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2358,6 +2456,9 @@ func (m *InternalResolveIntentRangeResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2405,6 +2506,9 @@ func (m *InternalMergeRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2429,6 +2533,9 @@ func (m *InternalMergeRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2449,6 +2556,9 @@ func (m *InternalMergeRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2496,6 +2606,9 @@ func (m *InternalMergeResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2516,6 +2629,9 @@ func (m *InternalMergeResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2563,6 +2679,9 @@ func (m *InternalTruncateLogRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2574,6 +2693,7 @@ func (m *InternalTruncateLogRequest) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
 			}
+			m.Index = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -2598,6 +2718,9 @@ func (m *InternalTruncateLogRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2645,6 +2768,9 @@ func (m *InternalTruncateLogResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2665,6 +2791,9 @@ func (m *InternalTruncateLogResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2712,6 +2841,9 @@ func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2736,6 +2868,9 @@ func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2756,6 +2891,9 @@ func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2803,6 +2941,9 @@ func (m *InternalLeaderLeaseResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2823,6 +2964,9 @@ func (m *InternalLeaderLeaseResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -2870,6 +3014,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2897,6 +3044,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2924,6 +3074,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2951,6 +3104,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2978,6 +3134,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3005,6 +3164,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3032,6 +3194,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3059,6 +3224,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3086,6 +3254,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3113,6 +3284,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3140,6 +3314,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3163,6 +3340,9 @@ func (m *InternalRequestUnion) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -3210,6 +3390,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3237,6 +3420,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3264,6 +3450,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3291,6 +3480,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3318,6 +3510,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3345,6 +3540,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3372,6 +3570,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3399,6 +3600,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3426,6 +3630,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3453,6 +3660,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3480,6 +3690,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3503,6 +3716,9 @@ func (m *InternalResponseUnion) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -3550,6 +3766,9 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3574,6 +3793,9 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3595,6 +3817,9 @@ func (m *InternalBatchRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -3642,6 +3867,9 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3666,6 +3894,9 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3687,6 +3918,9 @@ func (m *InternalBatchResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -3734,6 +3968,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3761,6 +3998,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3788,6 +4028,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3815,6 +4058,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3842,6 +4088,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3869,6 +4118,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3896,6 +4148,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3923,6 +4178,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3950,6 +4208,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -3977,6 +4238,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4004,6 +4268,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4031,6 +4298,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4058,6 +4328,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4085,6 +4358,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4108,6 +4384,9 @@ func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -4155,6 +4434,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4182,6 +4464,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4209,6 +4494,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4236,6 +4524,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4263,6 +4554,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4290,6 +4584,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4317,6 +4614,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4344,6 +4644,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4371,6 +4674,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4398,6 +4704,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4425,6 +4734,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4452,6 +4764,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4479,6 +4794,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4506,6 +4824,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4533,6 +4854,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4560,6 +4884,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4587,6 +4914,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4614,6 +4944,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4641,6 +4974,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4664,6 +5000,9 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -4698,6 +5037,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
+			m.RangeID = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -4713,6 +5053,7 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field OriginNodeID", wireType)
 			}
+			m.OriginNodeID = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -4741,6 +5082,9 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4761,6 +5105,9 @@ func (m *InternalRaftCommand) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -4795,6 +5142,7 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field GroupID", wireType)
 			}
+			m.GroupID = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -4822,6 +5170,9 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -4841,6 +5192,9 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -4884,6 +5238,9 @@ func (m *RaftMessageResponse) Unmarshal(data []byte) error {
 			if err != nil {
 				return err
 			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4917,6 +5274,7 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field StartTimestampNanos", wireType)
 			}
+			m.StartTimestampNanos = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -4932,6 +5290,7 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SampleDurationNanos", wireType)
 			}
+			m.SampleDurationNanos = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -4960,6 +5319,9 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -4981,6 +5343,9 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -5015,6 +5380,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Offset", wireType)
 			}
+			m.Offset = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -5030,6 +5396,7 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
 			}
+			m.Count = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -5111,6 +5478,9 @@ func (m *InternalTimeSeriesSample) Unmarshal(data []byte) error {
 			if err != nil {
 				return err
 			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5144,6 +5514,7 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
 			}
+			m.Index = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -5159,6 +5530,7 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Term", wireType)
 			}
+			m.Term = 0
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
@@ -5183,6 +5555,9 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -5230,6 +5605,9 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5254,6 +5632,9 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -5275,6 +5656,9 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -5321,6 +5705,9 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -5343,6 +5730,9 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthInternal
+			}
 			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
@@ -5362,6 +5752,9 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			skippy, err := skipInternal(data[iNdEx:])
 			if err != nil {
 				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInternal
 			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
@@ -5419,6 +5812,9 @@ func skipInternal(data []byte) (n int, err error) {
 				}
 			}
 			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthInternal
+			}
 			return iNdEx, nil
 		case 3:
 			for {
@@ -5457,6 +5853,11 @@ func skipInternal(data []byte) (n int, err error) {
 	}
 	panic("unreachable")
 }
+
+var (
+	ErrInvalidLengthInternal = fmt.Errorf("proto: negative length found during unmarshaling")
+)
+
 func (this *InternalRequestUnion) GetValue() interface{} {
 	if this.Get != nil {
 		return this.Get
