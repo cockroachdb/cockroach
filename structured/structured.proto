@@ -79,9 +79,11 @@ message TableDescriptor {
   // next_column_id is used to ensure that deleted column ids are not reused.
   optional uint32 next_column_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID"];
-  repeated IndexDescriptor indexes = 5 [(gogoproto.nullable) = false];
+  optional IndexDescriptor primary_index = 5 [(gogoproto.nullable) = false];
+  // indexes are all the secondary indexes.
+  repeated IndexDescriptor indexes = 6 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused.
-  optional uint32 next_index_id = 6 [(gogoproto.nullable) = false,
+  optional uint32 next_index_id = 7 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID"];
 }
 

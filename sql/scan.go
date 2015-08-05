@@ -67,7 +67,7 @@ func (n *scanNode) Next() bool {
 			n.primaryKey = []byte{}
 		} else {
 			// Retrieve all of the keys that start with our index key prefix.
-			startKey := proto.Key(encodeIndexKeyPrefix(n.desc.ID, n.desc.Indexes[0].ID))
+			startKey := proto.Key(encodeIndexKeyPrefix(n.desc.ID, n.desc.PrimaryIndex.ID))
 			endKey := startKey.PrefixEnd()
 			// TODO(pmattis): Currently we retrieve all of the key/value pairs for
 			// the table. We could enhance this code so that it retrieves the
@@ -118,7 +118,7 @@ func (n *scanNode) Next() bool {
 		}
 
 		var remaining []byte
-		remaining, n.err = decodeIndexKey(n.desc, n.desc.Indexes[0], n.vals, kv.Key)
+		remaining, n.err = decodeIndexKey(n.desc, n.desc.PrimaryIndex, n.vals, kv.Key)
 		if n.err != nil {
 			return false
 		}

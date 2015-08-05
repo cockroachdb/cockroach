@@ -224,10 +224,12 @@ type TableDescriptor struct {
 	ID      uint32             `protobuf:"varint,2,opt,name=id" json:"id"`
 	Columns []ColumnDescriptor `protobuf:"bytes,3,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
-	NextColumnID uint32            `protobuf:"varint,4,opt,name=next_column_id" json:"next_column_id"`
-	Indexes      []IndexDescriptor `protobuf:"bytes,5,rep,name=indexes" json:"indexes"`
+	NextColumnID uint32          `protobuf:"varint,4,opt,name=next_column_id" json:"next_column_id"`
+	PrimaryIndex IndexDescriptor `protobuf:"bytes,5,opt,name=primary_index" json:"primary_index"`
+	// indexes are all the secondary indexes.
+	Indexes []IndexDescriptor `protobuf:"bytes,6,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID      uint32 `protobuf:"varint,6,opt,name=next_index_id" json:"next_index_id"`
+	NextIndexID      uint32 `protobuf:"varint,7,opt,name=next_index_id" json:"next_index_id"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -261,6 +263,13 @@ func (m *TableDescriptor) GetNextColumnID() uint32 {
 		return m.NextColumnID
 	}
 	return 0
+}
+
+func (m *TableDescriptor) GetPrimaryIndex() IndexDescriptor {
+	if m != nil {
+		return m.PrimaryIndex
+	}
+	return IndexDescriptor{}
 }
 
 func (m *TableDescriptor) GetIndexes() []IndexDescriptor {
@@ -791,6 +800,30 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			}
 		case 5:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrimaryIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.PrimaryIndex.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Indexes", wireType)
 			}
 			var msglen int
@@ -817,7 +850,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
+		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextIndexID", wireType)
 			}
@@ -1144,6 +1177,8 @@ func (m *TableDescriptor) Size() (n int) {
 		}
 	}
 	n += 1 + sovStructured(uint64(m.NextColumnID))
+	l = m.PrimaryIndex.Size()
+	n += 1 + l + sovStructured(uint64(l))
 	if len(m.Indexes) > 0 {
 		for _, e := range m.Indexes {
 			l = e.Size()
@@ -1363,9 +1398,17 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x20
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
+	data[i] = 0x2a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
+	n2, err := m.PrimaryIndex.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
 	if len(m.Indexes) > 0 {
 		for _, msg := range m.Indexes {
-			data[i] = 0x2a
+			data[i] = 0x32
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -1375,7 +1418,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
-	data[i] = 0x30
+	data[i] = 0x38
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
 	if m.XXX_unrecognized != nil {

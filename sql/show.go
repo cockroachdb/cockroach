@@ -110,12 +110,12 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	v := &valuesNode{columns: []string{"Table", "Name", "Unique", "Seq", "Column"}}
 
 	name := n.Table.Table()
-	for i, index := range desc.Indexes {
+	for _, index := range append([]structured.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		for j, col := range index.ColumnNames {
 			v.rows = append(v.rows, []parser.Datum{
 				parser.DString(name),
-				parser.DString(desc.Indexes[i].Name),
-				parser.DBool(desc.Indexes[i].Unique),
+				parser.DString(index.Name),
+				parser.DBool(index.Unique),
 				parser.DInt(j + 1),
 				parser.DString(col),
 			})

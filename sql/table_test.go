@@ -96,7 +96,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.Parse("CREATE TABLE test (a " + d.sqlType + ")")
+		stmt, err := parser.Parse("CREATE TABLE test (a " + d.sqlType + " PRIMARY KEY)")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -117,8 +117,9 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	testData := []struct {
-		sql   string
-		index structured.IndexDescriptor
+		sql     string
+		primary structured.IndexDescriptor
+		indexes []structured.IndexDescriptor
 	}{
 		{
 			"a INT PRIMARY KEY",
@@ -127,29 +128,45 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:      true,
 				ColumnNames: []string{"a"},
 			},
+			[]structured.IndexDescriptor{},
 		},
 		{
-			"a INT UNIQUE",
+			"a INT UNIQUE, b INT PRIMARY KEY",
 			structured.IndexDescriptor{
-				Name:        "",
+				Name:        "primary",
 				Unique:      true,
-				ColumnNames: []string{"a"},
+				ColumnNames: []string{"b"},
+			},
+			[]structured.IndexDescriptor{
+				{
+					Name:        "",
+					Unique:      true,
+					ColumnNames: []string{"a"},
+				},
 			},
 		},
 		{
-			"a INT, b INT, CONSTRAINT c INDEX (a, b)",
-			structured.IndexDescriptor{
-				Name:        "c",
-				Unique:      false,
-				ColumnNames: []string{"a", "b"},
-			},
-		},
-		{
-			"a INT, b INT, CONSTRAINT c UNIQUE (a, b)",
+			"a INT, b INT, CONSTRAINT c PRIMARY KEY (a, b)",
 			structured.IndexDescriptor{
 				Name:        "c",
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
+			},
+			[]structured.IndexDescriptor{},
+		},
+		{
+			"a INT, b INT, CONSTRAINT c UNIQUE (b), PRIMARY KEY (a, b)",
+			structured.IndexDescriptor{
+				Name:        "primary",
+				Unique:      true,
+				ColumnNames: []string{"a", "b"},
+			},
+			[]structured.IndexDescriptor{
+				{
+					Name:        "c",
+					Unique:      true,
+					ColumnNames: []string{"b"},
+				},
 			},
 		},
 		{
@@ -159,6 +176,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:      true,
 				ColumnNames: []string{"a", "b"},
 			},
+			[]structured.IndexDescriptor{},
 		},
 	}
 	for i, d := range testData {
@@ -170,8 +188,27 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		if !reflect.DeepEqual(d.index, schema.Indexes[0]) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.index, schema.Indexes[0])
+		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
+			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
 		}
+		if !reflect.DeepEqual(d.indexes, append([]structured.IndexDescriptor{}, schema.Indexes...)) {
+			t.Fatalf("%d: expected %+v, but got %+v", i, d.indexes, schema.Indexes)
+		}
+
+	}
+}
+
+func TestPrimaryKeyUnspecified(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stmt, err := parser.Parse("CREATE TABLE test (a INT, b INT, CONSTRAINT c UNIQUE (b))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	desc, err := makeTableDesc(stmt[0].(*parser.CreateTable))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := desc.AllocateIDs(); err != structured.ErrMissingPrimaryKey {
+		t.Fatal(err)
 	}
 }

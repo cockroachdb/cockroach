@@ -18,6 +18,7 @@
 package structured
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -31,6 +32,9 @@ const (
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0
 )
+
+// ErrMissingPrimaryKey exported to the sql package.
+var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {
@@ -56,18 +60,24 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	}
 
 	columnNames := map[string]uint32{}
-	for i, column := range desc.Columns {
-		if column.ID == 0 {
-			column.ID = desc.NextColumnID
+	for i := range desc.Columns {
+		columnID := desc.Columns[i].ID
+		if columnID == 0 {
+			columnID = desc.NextColumnID
 			desc.NextColumnID++
 		}
-		columnNames[column.Name] = column.ID
-		// Mildly confusing: column is not a pointer so we need to set it back into
-		// the columns slice.
-		desc.Columns[i] = column
+		columnNames[desc.Columns[i].Name] = columnID
+		desc.Columns[i].ID = columnID
 	}
 
-	for i, index := range desc.Indexes {
+	// Create a slice of modifiable index descriptors.
+	var indexes []*IndexDescriptor
+	indexes = append(indexes, &desc.PrimaryIndex)
+	for i := range desc.Indexes {
+		indexes = append(indexes, &desc.Indexes[i])
+	}
+	// Populate IDs
+	for _, index := range indexes {
 		if index.ID == 0 {
 			index.ID = desc.NextIndexID
 			desc.NextIndexID++
@@ -80,9 +90,6 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				index.ColumnIDs[j] = columnNames[colName]
 			}
 		}
-		// Mildly confusing: index is not a pointer so we need to set it back into
-		// the index slice.
-		desc.Indexes[i] = index
 	}
 
 	// This is sort of ugly. We want to make sure the descriptor is valid, except
@@ -140,14 +147,13 @@ func (desc *TableDescriptor) Validate() error {
 
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
 	// should contain identical sets of columns.
-
-	if len(desc.Indexes) == 0 {
-		return fmt.Errorf("table must contain at least 1 index")
+	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
+		return ErrMissingPrimaryKey
 	}
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[uint32]string{}
-	for _, index := range desc.Indexes {
+	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
 		}

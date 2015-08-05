@@ -49,9 +49,9 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
-	for i, id := range tableDesc.Indexes[0].ColumnIDs {
+	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colMap[id]; !ok {
-			return nil, fmt.Errorf("missing \"%s\" primary key column", tableDesc.Indexes[0].ColumnNames[i])
+			return nil, fmt.Errorf("missing \"%s\" primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 
@@ -62,7 +62,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
-	primaryIndex := tableDesc.Indexes[0]
+	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
