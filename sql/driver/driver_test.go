@@ -207,8 +207,8 @@ func TestInsertSelectDelete(t *testing.T) {
 			`CREATE TABLE %s.kv (
 	k CHAR,
 	v CHAR,
-	PRIMARY KEY (k, v),
-	CONSTRAINT a UNIQUE (v)
+	CONSTRAINT a UNIQUE (v),
+	PRIMARY KEY (k, v)
 )`,
 		},
 	}
