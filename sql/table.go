@@ -235,11 +235,11 @@ type indexEntry struct {
 	value []byte
 }
 
-func encodeSecondaryIndexes(tableDesc *structured.TableDescriptor,
+func encodeSecondaryIndexes(tableID uint32, indexes []structured.IndexDescriptor,
 	colMap map[uint32]int, values []parser.Datum, primaryIndexKeySuffix []byte) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
-	for _, secondaryIndex := range tableDesc.Indexes {
-		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableDesc.ID, secondaryIndex.ID)
+	for _, secondaryIndex := range indexes {
+		secondaryIndexKeyPrefix := encodeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, err := encodeIndexKey(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err

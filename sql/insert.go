@@ -80,7 +80,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		primaryIndexKey := bytes.Join([][]byte{primaryIndexKeyPrefix, primaryIndexKeySuffix}, nil)
 
 		// Write the secondary indexes.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc, colMap, values, primaryIndexKeySuffix)
+		secondaryIndexEntries, err := encodeSecondaryIndexes(tableDesc.ID, tableDesc.Indexes, colMap, values, primaryIndexKeySuffix)
 		if err != nil {
 			return nil, err
 		}
