@@ -815,6 +815,9 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
