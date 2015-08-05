@@ -1,0 +1,32 @@
+statement ok
+CREATE DATABASE a
+
+statement error structured.DatabaseDescriptor .* already exists
+CREATE DATABASE a
+
+statement ok
+CREATE DATABASE IF NOT EXISTS a
+
+statement error empty database name
+CREATE DATABASE ""
+
+query T
+SHOW DATABASES
+----
+Database
+a
+
+statement ok
+CREATE DATABASE b
+
+statement ok
+CREATE DATABASE c
+
+query T
+SHOW DATABASES
+----
+Database
+a
+b
+c
+

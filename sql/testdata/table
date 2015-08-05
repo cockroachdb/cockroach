@@ -1,0 +1,93 @@
+statement ok
+CREATE DATABASE t
+
+statement error no database specified
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE t.a (id INT PRIMARY KEY)
+
+statement error structured.TableDescriptor .* already exists
+CREATE TABLE t.a (id INT PRIMARY KEY)
+
+statement ok
+SET DATABASE = t
+
+statement error structured.TableDescriptor .* already exists
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
+
+query T
+SHOW TABLES FROM t
+----
+Table
+a
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c (id INT PRIMARY KEY)
+
+query T
+SHOW TABLES FROM t
+----
+Table
+a
+b
+c
+
+statement ok
+SET DATABASE = ""
+
+query error no database specified
+SHOW COLUMNS FROM users
+----
+
+query error structured.DatabaseDescriptor .* does not exist
+SHOW COLUMNS FROM foo.users
+----
+
+query error structured.TableDescriptor .* does not exist
+SHOW COLUMNS FROM t.users
+----
+
+query error no database specified
+SHOW INDEX FROM users
+----
+
+query error structured.DatabaseDescriptor .* does not exist
+SHOW INDEX FROM foo.users
+----
+
+query error structured.TableDescriptor .* does not exist
+SHOW INDEX FROM t.users
+----
+
+statement ok
+CREATE TABLE t.users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  CONSTRAINT foo INDEX (name),
+  CONSTRAINT bar UNIQUE (id, name)
+)
+
+query TTT
+SHOW COLUMNS FROM t.users
+----
+Field Type Null
+id    INT  true
+name  CHAR false
+title CHAR true
+
+query TTTTT
+SHOW INDEX FROM t.users
+----
+Table Name    Unique Seq Column
+users primary true   1   id
+users foo     false  1   name
+users bar     true   1   id
+users bar     true   2   name
