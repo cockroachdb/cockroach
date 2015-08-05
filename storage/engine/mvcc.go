@@ -966,7 +966,7 @@ func MVCCIterate(engine Engine, startKey, endKey proto.Key, timestamp proto.Time
 	keyBuf := encEndKey[len(encEndKey):]
 	encKey := mvccEncodeKey(keyBuf, startKey)
 
-	// Get a new iterator and define our getEarlierFunc using iter.Seek.
+	// Get a new iterator and define our getter using iter.Seek.
 	iter := engine.NewIterator()
 	defer iter.Close()
 	getValue := func(engine Engine, start, end proto.EncodedKey,
