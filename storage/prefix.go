@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // PrefixConfig relate a string prefix to a config object. Config
@@ -39,9 +40,9 @@ import (
 // key refers to this "higher-up" PrefixConfig by specifying its prefix
 // so it can be binary searched from within a PrefixConfigMap.
 type PrefixConfig struct {
-	Prefix    proto.Key   // the prefix the config affects
-	Canonical proto.Key   // the prefix for the canonical config, if applicable
-	Config    interface{} // the config object
+	Prefix    proto.Key         // the prefix the config affects
+	Canonical proto.Key         // the prefix for the canonical config, if applicable
+	Config    gogoproto.Message // the config object
 }
 
 // String returns a human readable description.
@@ -58,7 +59,7 @@ type PrefixConfigMap []*PrefixConfig
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {
 	start, end proto.Key
-	config     interface{}
+	config     gogoproto.Message
 }
 
 // Implementation of sort.Interface.
@@ -213,7 +214,7 @@ func (p PrefixConfigMap) MatchesByPrefix(key proto.Key) []*PrefixConfig {
 // shortest. If visitor returns done=true or an error, the visitation
 // is halted.
 func (p PrefixConfigMap) VisitPrefixesHierarchically(key proto.Key,
-	visitor func(start, end proto.Key, config interface{}) (bool, error)) error {
+	visitor func(start, end proto.Key, config gogoproto.Message) (bool, error)) error {
 	prefixConfigs := p.MatchesByPrefix(key)
 	for _, pc := range prefixConfigs {
 		done, err := visitor(pc.Prefix, pc.Prefix.PrefixEnd(), pc.Config)
@@ -228,7 +229,7 @@ func (p PrefixConfigMap) VisitPrefixesHierarchically(key proto.Key,
 // by the specified key range [start, end). If visitor returns done=true
 // or an error, the visitation is halted.
 func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
-	visitor func(start, end proto.Key, config interface{}) (bool, error)) error {
+	visitor func(start, end proto.Key, config gogoproto.Message) (bool, error)) error {
 	comp := start.Compare(end)
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
@@ -299,7 +300,7 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 // PrefixConfig records and create a RangeResult for each.
 func (p PrefixConfigMap) SplitRangeByPrefixes(start, end proto.Key) ([]*RangeResult, error) {
 	var results []*RangeResult
-	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config interface{}) (bool, error) {
+	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		results = append(results, &RangeResult{start: start, end: end, config: config})
 		return false, nil
 	})

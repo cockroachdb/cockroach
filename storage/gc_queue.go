@@ -314,7 +314,7 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (proto.GCPolicy, error) {
 	// This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
 	var gc *proto.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(rng.Desc().StartKey, func(start, end proto.Key, config interface{}) (bool, error) {
+	if err = configMap.VisitPrefixesHierarchically(rng.Desc().StartKey, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		zone := config.(*proto.ZoneConfig)
 		if zone.GC != nil {
 			rng.RLock()

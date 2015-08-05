@@ -27,15 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-const (
-	config1 = 1
-	config2 = 2
-	config3 = 3
-	config4 = 4
-	config5 = 5
-)
+var config1, config2, config3, config4, config5 gogoproto.Message
 
 func buildTestPrefixConfigMap() PrefixConfigMap {
 	configs := []*PrefixConfig{
@@ -344,7 +339,7 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	var configs []interface{}
-	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		configs = append(configs, config)
 		return false, nil
 	}); err != nil {
@@ -357,7 +352,7 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 
 	// Now, stop partway through by returning done=true.
 	configs = []interface{}{}
-	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return true, nil
@@ -373,7 +368,7 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 
 	// Now, stop partway through by returning an error.
 	configs = []interface{}{}
-	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return false, util.Errorf("foo")
@@ -416,7 +411,7 @@ func TestVisitPrefixes(t *testing.T) {
 	for i, test := range testData {
 		ranges := [][2]proto.Key{}
 		configs := []interface{}{}
-		if err := pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config interface{}) (bool, error) {
+		if err := pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 			ranges = append(ranges, [2]proto.Key{start, end})
 			configs = append(configs, config)
 			return false, nil
@@ -433,7 +428,7 @@ func TestVisitPrefixes(t *testing.T) {
 
 	// Now, stop partway through by returning done=true.
 	configs := []interface{}{}
-	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return true, nil
@@ -449,7 +444,7 @@ func TestVisitPrefixes(t *testing.T) {
 
 	// Now, stop partway through by returning an error.
 	configs = []interface{}{}
-	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
+	if err := pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config gogoproto.Message) (bool, error) {
 		configs = append(configs, config)
 		if len(configs) == 2 {
 			return false, util.Errorf("foo")

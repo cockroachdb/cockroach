@@ -38,8 +38,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 	// Set accounting and zone configs.
 	acctMap, err := NewPrefixConfigMap([]*PrefixConfig{
-		{proto.KeyMin, nil, 1},
-		{proto.Key("/dbA"), nil, 2},
+		{proto.KeyMin, nil, config1},
+		{proto.Key("/dbA"), nil, config2},
 	})
 	if err != nil {
 		t.Fatal(err)
