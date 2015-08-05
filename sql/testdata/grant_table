@@ -1,0 +1,110 @@
+statement ok
+CREATE DATABASE a
+
+statement ok
+GRANT ALL ON DATABASE a TO readwrite
+
+query TTT colnames
+SHOW GRANTS ON DATABASE a
+----
+Database User      Privileges
+a        readwrite READ,WRITE
+a        root      READ,WRITE
+
+statement error .* does not exist
+SHOW GRANTS ON a.t
+
+statement error .* does not exist
+SHOW GRANTS ON t
+
+statement ok
+SET DATABASE = a
+
+statement error .* does not exist
+SHOW GRANTS ON t
+
+statement error .* does not exist
+GRANT ALL ON a.t TO readwrite
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY)
+
+query TTT colnames
+SHOW GRANTS ON t
+----
+Table    User      Privileges
+a.t      readwrite READ,WRITE
+a.t      root      READ,WRITE
+
+query TTT colnames
+SHOW GRANTS ON a.t
+----
+Table    User      Privileges
+a.t      readwrite READ,WRITE
+a.t      root      READ,WRITE
+
+statement ok
+GRANT ALL ON t TO readwrite, "test-user"
+
+query TTT
+SHOW GRANTS ON t
+----
+a.t   readwrite READ,WRITE
+a.t   root      READ,WRITE
+a.t   test-user READ,WRITE
+
+query TTT
+SHOW GRANTS ON t FOR readwrite, "test-user"
+----
+a.t   readwrite READ,WRITE
+a.t   test-user READ,WRITE
+
+statement ok
+REVOKE WRITE ON t FROM "test-user",readwrite
+
+query TTT
+SHOW GRANTS ON t
+----
+a.t   readwrite READ
+a.t   root      READ,WRITE
+a.t   test-user READ
+
+query TTT
+SHOW GRANTS ON t FOR readwrite, "test-user"
+----
+a.t   readwrite READ
+a.t   test-user READ
+
+statement ok
+REVOKE READ ON t FROM "test-user"
+
+query TTT
+SHOW GRANTS ON t
+----
+a.t   readwrite READ
+a.t   root      READ,WRITE
+
+query TTT
+SHOW GRANTS ON t FOR readwrite, "test-user"
+----
+a.t   readwrite READ
+
+statement ok
+REVOKE ALL ON t FROM readwrite,"test-user"
+
+query TTT
+SHOW GRANTS ON t
+----
+a.t   root      READ,WRITE
+
+query TTT
+SHOW GRANTS ON t FOR readwrite, "test-user"
+----
+
+# Verify that the DB privileges have not changed.
+query TTT colnames
+SHOW GRANTS ON DATABASE a
+----
+Database User      Privileges
+a        readwrite READ,WRITE
+a        root      READ,WRITE

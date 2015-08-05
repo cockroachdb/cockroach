@@ -19,11 +19,11 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // ShowColumns of a table.
@@ -70,18 +70,20 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
-	if n.Targets == nil || len(n.Targets.Targets) != 1 {
-		return nil, util.Errorf("TODO(marc): multiple targets not implemented")
+	if n.Targets == nil {
+		return nil, fmt.Errorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
-
-	// Lookup the database descriptor.
-	// TODO(marc): implement other types of objects once they support permissions.
-	dbDesc, err := p.getDatabaseDesc(n.Targets.Targets[0])
+	descriptor, err := p.getDescriptorFromTargetList(*n.Targets)
 	if err != nil {
 		return nil, err
 	}
 
-	v := &valuesNode{columns: []string{"Database", "User", "Privileges"}}
+	objectType := "Database"
+	if n.Targets.Tables != nil {
+		objectType = "Table"
+	}
+
+	v := &valuesNode{columns: []string{objectType, "User", "Privileges"}}
 	var wantedUsers map[string]struct{}
 	if len(n.Grantees) != 0 {
 		wantedUsers = make(map[string]struct{})
@@ -90,7 +92,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		wantedUsers[u] = struct{}{}
 	}
 
-	userPrivileges, err := dbDesc.Show()
+	userPrivileges, err := descriptor.Show()
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +103,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 			}
 		}
 		v.rows = append(v.rows, []parser.Datum{
-			parser.DString(dbDesc.Name),
+			parser.DString(descriptor.GetName()),
 			parser.DString(userPriv.User),
 			// The default stringer uses ", " separators. Strip whitespace
 			// to make things easier.

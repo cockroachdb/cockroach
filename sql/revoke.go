@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // Revoke removes privileges from users.
@@ -36,34 +35,25 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
-	if len(n.Targets.Targets) == 0 {
-		return nil, errEmptyDatabaseName
-	}
-	if len(n.Targets.Targets) != 1 {
-		return nil, util.Errorf("TODO(marc): multiple targets not implemented")
-	}
-
-	// Lookup the database descriptor.
-	// TODO(marc): iterate over n.Targets.Targets once the grammar supports more than one.
-	dbDesc, err := p.getDatabaseDesc(n.Targets.Targets[0])
+	descriptor, err := p.getDescriptorFromTargetList(n.Targets)
 	if err != nil {
 		return nil, err
 	}
 
-	if !dbDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+	if !descriptor.HasPrivilege(p.user, parser.PrivilegeWrite) {
 		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
-			p.user, parser.PrivilegeWrite, dbDesc.Name)
+			p.user, parser.PrivilegeWrite, descriptor.GetName())
 	}
 
-	if err := dbDesc.Revoke(n); err != nil {
+	if err := descriptor.Revoke(n); err != nil {
 		return nil, err
 	}
 
 	// Now update the descriptor.
 	// TODO(marc): do this inside a transaction. This will be needed
 	// when modifying multiple descriptors in the same op.
-	descKey := keys.MakeDescMetadataKey(dbDesc.ID)
-	if err := p.db.Put(descKey, dbDesc); err != nil {
+	descKey := keys.MakeDescMetadataKey(descriptor.GetID())
+	if err := p.db.Put(descKey, descriptor); err != nil {
 		return nil, err
 	}
 

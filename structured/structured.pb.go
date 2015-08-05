@@ -12,6 +12,7 @@
 		ColumnType
 		ColumnDescriptor
 		IndexDescriptor
+		PrivilegeDescriptor
 		TableDescriptor
 		DatabaseDescriptor
 */
@@ -216,6 +217,33 @@ func (m *IndexDescriptor) GetColumnIDs() []uint32 {
 	return nil
 }
 
+// PrivilegeDescriptor represents the sets of privileges on a descriptor.
+type PrivilegeDescriptor struct {
+	// lists of users with read permissions.
+	Read []string `protobuf:"bytes,1,rep,name=read" json:"read,omitempty"`
+	// lists of users with write permissions.
+	Write            []string `protobuf:"bytes,2,rep,name=write" json:"write,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *PrivilegeDescriptor) Reset()         { *m = PrivilegeDescriptor{} }
+func (m *PrivilegeDescriptor) String() string { return proto.CompactTextString(m) }
+func (*PrivilegeDescriptor) ProtoMessage()    {}
+
+func (m *PrivilegeDescriptor) GetRead() []string {
+	if m != nil {
+		return m.Read
+	}
+	return nil
+}
+
+func (m *PrivilegeDescriptor) GetWrite() []string {
+	if m != nil {
+		return m.Write
+	}
+	return nil
+}
+
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
@@ -229,8 +257,9 @@ type TableDescriptor struct {
 	// indexes are all the secondary indexes.
 	Indexes []IndexDescriptor `protobuf:"bytes,6,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID      uint32 `protobuf:"varint,7,opt,name=next_index_id" json:"next_index_id"`
-	XXX_unrecognized []byte `json:"-"`
+	NextIndexID         uint32 `protobuf:"varint,7,opt,name=next_index_id" json:"next_index_id"`
+	PrivilegeDescriptor `protobuf:"bytes,8,opt,name=privileges,embedded=privileges" json:"privileges"`
+	XXX_unrecognized    []byte `json:"-"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -291,13 +320,10 @@ func (m *TableDescriptor) GetNextIndexID() uint32 {
 // ID shared with the TableDescriptor ID.
 // Permissions are applied to all tables in the namespace.
 type DatabaseDescriptor struct {
-	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	ID   uint32 `protobuf:"varint,2,opt,name=id" json:"id"`
-	// lists of users with read permissions.
-	Read []string `protobuf:"bytes,3,rep,name=read" json:"read,omitempty" yaml:"read,omitempty"`
-	// lists of users with write permissions.
-	Write            []string `protobuf:"bytes,4,rep,name=write" json:"write,omitempty" yaml:"write,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Name                string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	ID                  uint32 `protobuf:"varint,2,opt,name=id" json:"id"`
+	PrivilegeDescriptor `protobuf:"bytes,3,opt,name=privileges,embedded=privileges" json:"privileges"`
+	XXX_unrecognized    []byte `json:"-"`
 }
 
 func (m *DatabaseDescriptor) Reset()         { *m = DatabaseDescriptor{} }
@@ -316,20 +342,6 @@ func (m *DatabaseDescriptor) GetID() uint32 {
 		return m.ID
 	}
 	return 0
-}
-
-func (m *DatabaseDescriptor) GetRead() []string {
-	if m != nil {
-		return m.Read
-	}
-	return nil
-}
-
-func (m *DatabaseDescriptor) GetWrite() []string {
-	if m != nil {
-		return m.Write
-	}
-	return nil
 }
 
 func init() {
@@ -697,6 +709,96 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 
 	return nil
 }
+func (m *PrivilegeDescriptor) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Read", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Read = append(m.Read, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Write", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Write = append(m.Write, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			iNdEx -= sizeOfWire
+			skippy, err := skipStructured(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStructured
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	return nil
+}
 func (m *TableDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -869,6 +971,33 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrivilegeDescriptor", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.PrivilegeDescriptor.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -955,47 +1084,30 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			}
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Read", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PrivilegeDescriptor", wireType)
 			}
-			var stringLen uint64
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			postIndex := iNdEx + int(stringLen)
+			postIndex := iNdEx + msglen
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Read = append(m.Read, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Write", wireType)
+			if err := m.PrivilegeDescriptor.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
 			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + int(stringLen)
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Write = append(m.Write, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -1167,6 +1279,27 @@ func (m *IndexDescriptor) Size() (n int) {
 	return n
 }
 
+func (m *PrivilegeDescriptor) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Read) > 0 {
+		for _, s := range m.Read {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if len(m.Write) > 0 {
+		for _, s := range m.Write {
+			l = len(s)
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *TableDescriptor) Size() (n int) {
 	var l int
 	_ = l
@@ -1189,6 +1322,8 @@ func (m *TableDescriptor) Size() (n int) {
 		}
 	}
 	n += 1 + sovStructured(uint64(m.NextIndexID))
+	l = m.PrivilegeDescriptor.Size()
+	n += 1 + l + sovStructured(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1201,18 +1336,8 @@ func (m *DatabaseDescriptor) Size() (n int) {
 	l = len(m.Name)
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.ID))
-	if len(m.Read) > 0 {
-		for _, s := range m.Read {
-			l = len(s)
-			n += 1 + l + sovStructured(uint64(l))
-		}
-	}
-	if len(m.Write) > 0 {
-		for _, s := range m.Write {
-			l = len(s)
-			n += 1 + l + sovStructured(uint64(l))
-		}
-	}
+	l = m.PrivilegeDescriptor.Size()
+	n += 1 + l + sovStructured(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1364,6 +1489,57 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
+func (m *PrivilegeDescriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *PrivilegeDescriptor) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Read) > 0 {
+		for _, s := range m.Read {
+			data[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if len(m.Write) > 0 {
+		for _, s := range m.Write {
+			data[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *TableDescriptor) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -1424,6 +1600,14 @@ func (m *TableDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x38
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
+	data[i] = 0x42
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.PrivilegeDescriptor.Size()))
+	n3, err := m.PrivilegeDescriptor.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1452,36 +1636,14 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.ID))
-	if len(m.Read) > 0 {
-		for _, s := range m.Read {
-			data[i] = 0x1a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.PrivilegeDescriptor.Size()))
+	n4, err := m.PrivilegeDescriptor.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
-	if len(m.Write) > 0 {
-		for _, s := range m.Write {
-			data[i] = 0x22
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
+	i += n4
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

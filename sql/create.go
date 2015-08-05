@@ -70,6 +70,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Inherit permissions from the database descriptor.
+	desc.PrivilegeDescriptor = dbDesc.PrivilegeDescriptor
+
 	if err := desc.AllocateIDs(); err != nil {
 		return nil, err
 	}

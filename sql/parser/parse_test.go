@@ -74,17 +74,30 @@ func TestParse(t *testing.T) {
 		{`SHOW INDEX FROM a`},
 		{`SHOW INDEX FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
+
+		// Tables are the default, but can also be specified with
+		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`SHOW GRANTS`},
+		{`SHOW GRANTS ON foo`},
+		{`SHOW GRANTS ON foo, db.foo`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
 
+		// Tables are the default, but can also be specified with
+		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
+		{`GRANT READ ON foo TO root`},
+		{`GRANT WRITE, READ ON foo, db.foo TO root, bar`},
 		{`GRANT READ ON DATABASE foo TO root`},
 		{`GRANT ALL ON DATABASE foo TO root, test`},
 		{`GRANT READ, WRITE ON DATABASE bar TO foo, bar, baz`},
 		{`GRANT READ, WRITE ON DATABASE db1, db2 TO foo, bar, baz`},
 		{`GRANT READ, WRITE ON DATABASE db1, db2 TO "test-user"`},
 
+		// Tables are the default, but can also be specified with
+		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
+		{`REVOKE READ ON foo FROM root`},
+		{`REVOKE WRITE, READ ON foo, db.foo FROM root, bar`},
 		{`REVOKE READ ON DATABASE foo FROM root`},
 		{`REVOKE ALL ON DATABASE foo FROM root, test`},
 		{`REVOKE READ, WRITE ON DATABASE bar FROM foo, bar, baz`},

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestGrant(t *testing.T) {
+func TestGrantDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)

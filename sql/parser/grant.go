@@ -91,14 +91,18 @@ var (
 	}
 )
 
-// TargetList represents a list of targets of a given type.
+// TargetList represents a list of targets.
+// Only one field may be non-nil.
 type TargetList struct {
-	Type    TargetType
-	Targets NameList
+	Databases NameList
+	Tables    QualifiedNames
 }
 
 func (tl TargetList) String() string {
-	return fmt.Sprintf("%s %s", tl.Type, tl.Targets)
+	if tl.Databases != nil {
+		return fmt.Sprintf("DATABASE %s", tl.Databases)
+	}
+	return fmt.Sprintf("%s", tl.Tables)
 }
 
 func (node *Grant) String() string {

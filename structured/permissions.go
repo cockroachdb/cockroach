@@ -35,7 +35,7 @@ type permissions struct {
 }
 
 // permissionsFromDescriptor builds a permissions object from a descriptor.
-func permissionsFromDescriptor(descriptor *DatabaseDescriptor) (*permissions, error) {
+func permissionsFromDescriptor(descriptor *PrivilegeDescriptor) (*permissions, error) {
 	p := &permissions{
 		read:  map[string]struct{}{},
 		write: map[string]struct{}{},
@@ -68,7 +68,7 @@ func (p *permissions) Validate() error {
 }
 
 // FillDescriptor writes the permissions from this object into a descriptor.
-func (p *permissions) FillDescriptor(descriptor *DatabaseDescriptor) error {
+func (p *permissions) FillDescriptor(descriptor *PrivilegeDescriptor) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
