@@ -166,8 +166,19 @@ func (n *scanNode) renderRow() error {
 	if n.row == nil {
 		n.row = make([]parser.Datum, len(n.render))
 	}
+
+	if n.desc != nil {
+		for _, col := range n.desc.Columns {
+			if _, ok := n.vals[col.Name]; ok {
+				continue
+			}
+			if col.Nullable {
+				n.vals[col.Name] = parser.DNull{}
+			}
+		}
+	}
+	var err error
 	for i, e := range n.render {
-		var err error
 		n.row[i], err = parser.EvalExpr(e, n.vals)
 		if err != nil {
 			return err
