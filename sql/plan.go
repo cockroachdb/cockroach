@@ -38,6 +38,13 @@ type planner struct {
 // plan needs to be iterated over using planNode.Next() and planNode.Values()
 // in order to retrieve matching rows.
 func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
+	// TODO(pmattis): It is somewhat premature to expand subqueries here as we
+	// should make sure the statement is otherwise valid first. But it is
+	// correct.
+	if err := p.expandSubqueries(stmt); err != nil {
+		return nil, err
+	}
+
 	switch n := stmt.(type) {
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
@@ -109,7 +116,8 @@ type planNode interface {
 	// Columns returns the column names. The length of the returned slice is
 	// guaranteed to be equal to the length of the tuple returned by Values().
 	Columns() []string
-	// Values returns the values at the current row.
+	// Values returns the values at the current row. The result is only valid
+	// until the next call to Next().
 	Values() parser.DTuple
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.

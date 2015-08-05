@@ -197,6 +197,10 @@ func (s *Server) exec(req driver.Request) (driver.Response, error) {
 			}
 			result.Rows = append(result.Rows, row)
 		}
+		if err := plan.Err(); err != nil {
+			return resp, err
+		}
+
 		resp.Results = append(resp.Results, result)
 	}
 
