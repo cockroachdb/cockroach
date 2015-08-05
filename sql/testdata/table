@@ -1,17 +1,17 @@
 statement ok
-CREATE DATABASE t
+SET DATABASE = ""
 
 statement error no database specified
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement ok
-CREATE TABLE t.a (id INT PRIMARY KEY)
+CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement error structured.TableDescriptor .* already exists
-CREATE TABLE t.a (id INT PRIMARY KEY)
+CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement ok
-SET DATABASE = t
+SET DATABASE = test
 
 statement error structured.TableDescriptor .* already exists
 CREATE TABLE a (id INT PRIMARY KEY)
@@ -19,8 +19,8 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 
-query T
-SHOW TABLES FROM t
+query T colnames
+SHOW TABLES FROM test
 ----
 Table
 a
@@ -32,9 +32,8 @@ statement ok
 CREATE TABLE c (id INT PRIMARY KEY)
 
 query T
-SHOW TABLES FROM t
+SHOW TABLES FROM test
 ----
-Table
 a
 b
 c
@@ -51,7 +50,7 @@ SHOW COLUMNS FROM foo.users
 ----
 
 query error structured.TableDescriptor .* does not exist
-SHOW COLUMNS FROM t.users
+SHOW COLUMNS FROM test.users
 ----
 
 query error no database specified
@@ -63,11 +62,11 @@ SHOW INDEX FROM foo.users
 ----
 
 query error structured.TableDescriptor .* does not exist
-SHOW INDEX FROM t.users
+SHOW INDEX FROM test.users
 ----
 
 statement ok
-CREATE TABLE t.users (
+CREATE TABLE test.users (
   id    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
@@ -75,16 +74,16 @@ CREATE TABLE t.users (
   CONSTRAINT bar UNIQUE (id, name)
 )
 
-query TTT
-SHOW COLUMNS FROM t.users
+query TTT colnames
+SHOW COLUMNS FROM test.users
 ----
 Field Type Null
 id    INT  true
 name  CHAR false
 title CHAR true
 
-query TTTTT
-SHOW INDEX FROM t.users
+query TTTTT colnames
+SHOW INDEX FROM test.users
 ----
 Table Name    Unique Seq Column
 users primary true   1   id

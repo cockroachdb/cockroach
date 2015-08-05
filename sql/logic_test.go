@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"database/sql"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -41,6 +42,7 @@ import (
 var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
+	testdata  = flag.String("d", "testdata/*", "test data glob")
 )
 
 type lineScanner struct {
@@ -72,6 +74,9 @@ type logicStatement struct {
 type logicQuery struct {
 	pos             string
 	sql             string
+	colNames        bool
+	colTypes        string // TODO(pmattis): not (yet) implemented.
+	label           string // TODO(pmattis): not (yet) implemented.
 	expectErr       string
 	expectedValues  int
 	expectedHash    string
@@ -140,6 +145,13 @@ func (t logicTest) run(path string) {
 	defer db.Close()
 	defer srv.Stop()
 
+	if _, err := db.Exec("CREATE DATABASE test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("SET DATABASE = test"); err != nil {
+		t.Fatal(err)
+	}
+
 	s := newLineScanner(file)
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
@@ -174,6 +186,8 @@ func (t logicTest) run(path string) {
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				query.expectErr = m[1]
+			} else if len(fields) < 2 {
+				t.Fatalf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
 				// TODO(pmattis): Parse "query <type-string> <sort-mode> <label>". The
 				// type string specifies the number of columns and their types: T for
@@ -186,6 +200,23 @@ func (t logicTest) run(path string) {
 				// same. This can be used to verify that two or more queries in the
 				// same test script that are logically equivalent always generate the
 				// same output.
+				query.colTypes = fields[1]
+				if len(fields) >= 3 {
+					for _, opt := range strings.Split(fields[2], ",") {
+						switch opt {
+						// TODO(pmattis): The sort options are not yet implemented.
+						case "nosort":
+						case "rowsort":
+						case "valuesort":
+
+						case "colnames":
+							query.colNames = true
+						}
+					}
+				}
+				if len(fields) >= 4 {
+					query.label = fields[3]
+				}
 			}
 			var buf bytes.Buffer
 			for s.Scan() {
@@ -277,9 +308,9 @@ func (t logicTest) execQuery(db *sql.DB, query logicQuery) {
 	}
 
 	var results []string
-	// TODO(pmattis): Need to make appending the column names optional because
-	// sqllogictest does not do so at all.
-	results = append(results, cols...)
+	if query.colNames {
+		results = append(results, cols...)
+	}
 	for rows.Next() {
 		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
@@ -293,20 +324,20 @@ func (t logicTest) execQuery(db *sql.DB, query logicQuery) {
 	}
 
 	if query.expectedHash != "" {
-		n := len(results) - len(cols)
+		n := len(results)
 		if query.expectedValues != n {
 			t.Fatalf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
 		}
-		// TODO(pmattis): Need to verify that this hashing precisely matches the
-		// hashing in sqllogictest.c.
+		// Hash the values using MD5. This hashing precisely matches the hashing in
+		// sqllogictest.c.
 		h := md5.New()
-		for _, r := range results[len(cols):] {
+		for _, r := range results {
 			_, _ = io.WriteString(h, r)
 			_, _ = io.WriteString(h, "\n")
 		}
 		hash := fmt.Sprintf("%x", h.Sum(nil))
 		if query.expectedHash != hash {
-			t.Fatalf("%s: expected %s, but found %s\n", query.pos, query.expectedHash, hash)
+			t.Fatalf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
 		}
 	} else if !reflect.DeepEqual(query.expectedResults, results) {
 		t.Fatalf("%s: expected %q, but found %q\n", query.pos, query.expectedResults, results)
@@ -317,7 +348,7 @@ func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	l := logicTest{T: t}
-	paths, err := filepath.Glob("testdata/*")
+	paths, err := filepath.Glob(*testdata)
 	if err != nil {
 		t.Fatal(err)
 	}
