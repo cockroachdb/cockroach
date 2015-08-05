@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
@@ -148,7 +149,7 @@ func TestStatusGossipJson(t *testing.T) {
 	type prefixedInfo struct {
 		Key string `json:"Key"`
 		Val []struct {
-			storage.PrefixConfig
+			config.PrefixConfig
 			// Dirty hacks here because `json` doesn't know how to magically
 			// synthesize the correct type of `proto.Message`.
 			Config interface{}

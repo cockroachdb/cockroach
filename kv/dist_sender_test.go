@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -62,7 +61,7 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 		Write: []string{""},
 	}
 
-	configMap, err := storage.NewPrefixConfigMap([]*storage.PrefixConfig{
+	configMap, err := config.NewPrefixConfigMap([]*config.PrefixConfig{
 		{proto.KeyMin, nil, permConfig},
 	})
 	if err != nil {
@@ -658,11 +657,11 @@ func TestVerifyPermissions(t *testing.T) {
 	config2 := &config.PermConfig{
 		Read:  []string{"read2", "readAll", "rw2", "rwAll"},
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
-	configs := []*storage.PrefixConfig{
+	configs := []*config.PrefixConfig{
 		{proto.KeyMin, nil, config1},
 		{proto.Key("a"), nil, config2},
 	}
-	configMap, err := storage.NewPrefixConfigMap(configs)
+	configMap, err := config.NewPrefixConfigMap(configs)
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
 	}

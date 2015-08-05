@@ -660,7 +660,7 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 		log.Errorc(ctx, "unable to fetch %s config from gossip: %s", key, err)
 		return
 	}
-	configMap, ok := info.(PrefixConfigMap)
+	configMap, ok := info.(config.PrefixConfigMap)
 	if !ok {
 		log.Errorc(ctx, "gossiped info is not a prefix configuration map: %+v", info)
 		return
@@ -693,7 +693,7 @@ func (s *Store) GossipCapacity() {
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
 // adds them to the split queue.
-func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
+func (s *Store) maybeSplitRangesByConfigs(configMap config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, config := range configMap {
@@ -744,7 +744,7 @@ func (s *Store) ForceRangeGCScan(t util.Tester) {
 //
 // TODO(spencer): scanning all ranges with the lock held could cause
 // perf issues if the number of ranges grows large enough.
-func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
+func (s *Store) setRangesMaxBytes(zoneMap config.PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	zone := zoneMap[0].Config.(*config.ZoneConfig)
@@ -1636,7 +1636,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for raftID, rng := range s.ranges {
-		zoneConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*config.ZoneConfig)
+		zoneConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*config.ZoneConfig)
 		raftStatus := s.RaftStatus(raftID)
 		if raftStatus == nil {
 			continue

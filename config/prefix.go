@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+package config
 
 import (
 	"bytes"
@@ -58,7 +58,7 @@ type PrefixConfigMap []*PrefixConfig
 
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {
-	start, end proto.Key
+	Start, End proto.Key
 	config     gogoproto.Message
 }
 
@@ -301,7 +301,7 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 func (p PrefixConfigMap) SplitRangeByPrefixes(start, end proto.Key) ([]*RangeResult, error) {
 	var results []*RangeResult
 	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config gogoproto.Message) (bool, error) {
-		results = append(results, &RangeResult{start: start, end: end, config: config})
+		results = append(results, &RangeResult{Start: start, End: end, config: config})
 		return false, nil
 	})
 	if err != nil {

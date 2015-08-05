@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -225,7 +224,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	if configMap == nil {
 		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
 	}
-	permMap := configMap.(storage.PrefixConfigMap)
+	permMap := configMap.(config.PrefixConfigMap)
 	headerEnd := header.EndKey
 	if len(headerEnd) == 0 {
 		headerEnd = header.Key

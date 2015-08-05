@@ -306,7 +306,7 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Replica) (config.GCPolicy, error) {
 	if err != nil {
 		return config.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
 	}
-	configMap, ok := info.(PrefixConfigMap)
+	configMap, ok := info.(config.PrefixConfigMap)
 	if !ok {
 		return config.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
 	}

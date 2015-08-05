@@ -23,7 +23,6 @@ package storage
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/gob"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -46,12 +45,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
-
-// init pre-registers PrefixConfigMap for gossip. This is here rather
-// than in gossip/gossip.go to avoid a circular dependency.
-func init() {
-	gob.Register(PrefixConfigMap{})
-}
 
 const (
 	// DefaultHeartbeatInterval is how often heartbeats are sent from the
@@ -1155,25 +1148,25 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map and its sha256 hash. Prefix
 // configuration maps include accounting, permissions, users, and zones.
-func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, []byte, error) {
+func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) (config.PrefixConfigMap, []byte, error) {
 	// TODO(tschottdorf): Currently this does not handle intents well.
 	kvs, _, err := engine.MVCCScan(eng, keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	var configs []*PrefixConfig
+	var cfgs []*config.PrefixConfig
 	sha := sha256.New()
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
 		// proto encoded config from the Value into a new instance of configI.
-		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
-		if err := gogoproto.Unmarshal(kv.Value.Bytes, config); err != nil {
+		cfg := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
+		if err := gogoproto.Unmarshal(kv.Value.Bytes, cfg); err != nil {
 			return nil, nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
-		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
+		cfgs = append(cfgs, &config.PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: cfg})
 		sha.Write(kv.Value.Bytes)
 	}
-	m, err := NewPrefixConfigMap(configs)
+	m, err := config.NewPrefixConfigMap(cfgs)
 	return m, sha.Sum(nil), err
 }
 

@@ -103,12 +103,13 @@ var (
 )
 
 func init() {
-	// Used in storage.PrefixConfig.
+	// Used in config.PrefixConfig.
 	gob.Register(&config.AcctConfig{})
 	gob.Register(&config.PermConfig{})
 	gob.Register(&config.UserConfig{})
 	gob.Register(&config.ZoneConfig{})
 	gob.Register(&proto.NodeDescriptor{})
+	gob.Register(config.PrefixConfigMap{})
 
 	// Used...elsewhere?
 	gob.Register(proto.RangeDescriptor{})
