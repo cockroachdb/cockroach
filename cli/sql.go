@@ -82,16 +82,23 @@ func processOneLine(db *sql.DB, line string) error {
 	// Format all rows using tabwriter.
 	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(tw, "%s\n", strings.Join(cols, "\t"))
-	strs := make([]string, len(cols))
 	vals := make([]interface{}, len(cols))
 	for rows.Next() {
 		for i := range vals {
-			vals[i] = &strs[i]
+			vals[i] = new(sql.NullString)
 		}
 		if err := rows.Scan(vals...); err != nil {
 			return util.Errorf("scan error: %s", err)
 		}
-		fmt.Fprintf(tw, "%s\n", strings.Join(strs, "\t"))
+		for _, v := range vals {
+			nullStr := v.(*sql.NullString)
+			if nullStr.Valid {
+				fmt.Fprintf(tw, "%s\t", nullStr.String)
+			} else {
+				fmt.Fprint(tw, "NULL\t")
+			}
+		}
+		fmt.Fprintf(tw, "\n")
 	}
 	_ = tw.Flush()
 	return nil
