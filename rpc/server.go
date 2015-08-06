@@ -245,10 +245,8 @@ func (s *Server) Serve(handler http.Handler) {
 	}
 
 	s.context.Stopper.RunWorker(func() {
-		if err := server.Serve(s.listener); err != nil {
-			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				log.Fatal(err)
-			}
+		if err := server.Serve(s.listener); err != nil && !isClosedConnection(err) {
+			log.Fatal(err)
 		}
 	})
 
@@ -346,8 +344,7 @@ func (s *Server) readRequests(codec rpc.ServerCodec, responses chan<- serverResp
 	for {
 		req, meth, args, err := s.readRequest(codec)
 		if err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF ||
-				strings.HasSuffix(err.Error(), "use of closed network connection") {
+			if err == io.EOF || err == io.ErrUnexpectedEOF || isClosedConnection(err) {
 				return
 			}
 			log.Warningf("rpc: server cannot decode request: %s", err)
@@ -412,4 +409,9 @@ func (s *Server) sendResponses(codec rpc.ServerCodec, responses <-chan serverRes
 			// net/rpc just swallows the error.
 		}
 	}
+}
+
+// isClosedConnection returns true if err is the net package's errClosed.
+func isClosedConnection(err error) bool {
+	return err != nil && strings.HasSuffix(err.Error(), "use of closed network connection")
 }
