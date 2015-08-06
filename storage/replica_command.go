@@ -1143,7 +1143,7 @@ func (r *Replica) AdminMerge(args proto.AdminMergeRequest) (proto.AdminMergeResp
 		// Noop.
 		return reply, nil
 	}
-	subsumedRng := r.rm.LookupRange(desc.EndKey, nil)
+	subsumedRng := r.rm.LookupReplica(desc.EndKey, nil)
 	if subsumedRng == nil {
 		return reply, util.Errorf("ranges not collocated; migration of ranges in anticipation of merge not yet implemented")
 	}

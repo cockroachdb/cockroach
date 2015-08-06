@@ -183,7 +183,7 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeI
 	defer ls.mu.RUnlock()
 	var rng *storage.Replica
 	for _, store := range ls.storeMap {
-		rng = store.LookupRange(start, end)
+		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			continue
 		}

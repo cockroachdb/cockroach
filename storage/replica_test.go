@@ -187,12 +187,12 @@ func (tc *testContext) Start(t testing.TB) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := tc.store.AddRangeTest(rng); err != nil {
+			if err := tc.store.AddReplicaTest(rng); err != nil {
 				t.Fatal(err)
 			}
 		}
 		var err error
-		tc.rng, err = tc.store.GetRange(1)
+		tc.rng, err = tc.store.GetReplica(1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2750,7 +2750,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.store.AddRangeTest(rng); err != nil {
+	if err := tc.store.AddReplicaTest(rng); err != nil {
 		t.Fatal(err)
 	}
 

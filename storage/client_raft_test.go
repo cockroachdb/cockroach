@@ -106,7 +106,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := store.ExecuteCmd(context.Background(), &splitArgs); err != nil {
 			t.Fatal(err)
 		}
-		rangeID2 = store.LookupRange(key2, nil).Desc().RangeID
+		rangeID2 = store.LookupReplica(key2, nil).Desc().RangeID
 		if rangeID2 == rangeID {
 			t.Errorf("got same raft id after split")
 		}
@@ -208,7 +208,7 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng, err := mtc.stores[0].GetRange(1)
+	rng, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestRestoreReplicas(t *testing.T) {
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
-	firstRng, err := mtc.stores[0].GetRange(1)
+	firstRng, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 	// Both replicas have a complete list in Desc.Replicas
 	for i, store := range mtc.stores {
-		rng, err := store.GetRange(1)
+		rng, err := store.GetReplica(1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -363,7 +363,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		return nil
 	}
 
-	rng, err := mtc.stores[0].GetRange(1)
+	rng, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +400,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	// complain about goroutines involved in the process).
 	if err := util.IsTrueWithin(func() bool {
 		for _, store := range mtc.stores {
-			rang, err := store.GetRange(1)
+			rang, err := store.GetReplica(1)
 			if err != nil {
 				return false
 			}
@@ -420,7 +420,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
-	rng, err := mtc.stores[0].GetRange(1)
+	rng, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng2, err := mtc.stores[1].GetRange(1)
+	rng2, err := mtc.stores[1].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +530,7 @@ func TestStoreRangeReplicate(t *testing.T) {
 	// The range should become available on every node.
 	if err := util.IsTrueWithin(func() bool {
 		for _, s := range mtc.stores {
-			r := s.LookupRange(proto.Key("a"), proto.Key("b"))
+			r := s.LookupReplica(proto.Key("a"), proto.Key("b"))
 			if r == nil {
 				return false
 			}
@@ -711,7 +711,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rangeID2 := store0.LookupRange(key, nil).Desc().RangeID
+	rangeID2 := store0.LookupReplica(key, nil).Desc().RangeID
 	if rangeID2 == rangeID {
 		t.Errorf("got same raft id after split")
 	}
@@ -723,7 +723,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	// Now add the second replica.
 	mtc.replicateRange(rangeID2, 0, 1)
 
-	if mtc.stores[1].LookupRange(key, nil).GetMaxBytes() == 0 {
+	if mtc.stores[1].LookupReplica(key, nil).GetMaxBytes() == 0 {
 		t.Error("Range MaxBytes is not set after snapshot applied")
 	}
 	// Once it catches up, the effects of increment commands can be seen.
@@ -762,7 +762,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			case <-stopper.ShouldStop():
 				return
 			default:
-				rng := mtc.stores[0].LookupRange(proto.KeyMin, nil)
+				rng := mtc.stores[0].LookupReplica(proto.KeyMin, nil)
 				if rng == nil {
 					t.Fatal("failed to look up min range")
 				}
@@ -771,7 +771,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
 
-				rng = mtc.stores[0].LookupRange(proto.Key("Z"), nil)
+				rng = mtc.stores[0].LookupReplica(proto.Key("Z"), nil)
 				if rng == nil {
 					t.Fatal("failed to look up max range")
 				}
@@ -787,7 +787,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	// initial range.  The bug that this test was designed to find
 	// usually occurred within the first 5 iterations.
 	for i := 20; i > 0; i-- {
-		rng := mtc.stores[0].LookupRange(proto.KeyMin, nil)
+		rng := mtc.stores[0].LookupReplica(proto.KeyMin, nil)
 		if rng == nil {
 			t.Fatal("failed to look up min range")
 		}
@@ -800,7 +800,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 
 	// Split again, carving chunks off the beginning of the final range.
 	for i := 0; i < 20; i++ {
-		rng := mtc.stores[0].LookupRange(proto.Key("Z"), nil)
+		rng := mtc.stores[0].LookupReplica(proto.Key("Z"), nil)
 		if rng == nil {
 			t.Fatal("failed to look up max range")
 		}
@@ -832,7 +832,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Wait for the removal to be processed.
 	util.SucceedsWithin(t, time.Second, func() error {
-		_, err := mtc.stores[1].GetRange(rangeID)
+		_, err := mtc.stores[1].GetReplica(rangeID)
 		if _, ok := err.(*proto.RangeNotFoundError); ok {
 			return nil
 		} else if err != nil {

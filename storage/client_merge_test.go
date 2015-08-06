@@ -49,8 +49,8 @@ func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.Ran
 		return nil, nil, err
 	}
 
-	rangeA := store.LookupRange([]byte("a"), nil)
-	rangeB := store.LookupRange([]byte("c"), nil)
+	rangeA := store.LookupReplica([]byte("a"), nil)
+	rangeB := store.LookupReplica([]byte("c"), nil)
 
 	if bytes.Equal(rangeA.Desc().StartKey, rangeB.Desc().StartKey) {
 		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeB.Desc().StartKey)
@@ -79,8 +79,8 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	rangeA := store.LookupRange([]byte("a"), nil)
-	rangeB := store.LookupRange([]byte("c"), nil)
+	rangeA := store.LookupReplica([]byte("a"), nil)
+	rangeB := store.LookupReplica([]byte("c"), nil)
 
 	if !reflect.DeepEqual(rangeA, rangeB) {
 		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
@@ -139,8 +139,8 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	rangeA := store.LookupRange([]byte("a"), nil)
-	rangeB := store.LookupRange([]byte("c"), nil)
+	rangeA := store.LookupReplica([]byte("a"), nil)
+	rangeB := store.LookupReplica([]byte("c"), nil)
 
 	if !reflect.DeepEqual(rangeA, rangeB) {
 		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
@@ -221,9 +221,9 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 		t.Fatalf("Can't split range %s", err)
 	}
 
-	rangeA := store.LookupRange([]byte("a"), nil)
-	rangeB := store.LookupRange([]byte("c"), nil)
-	rangeC := store.LookupRange([]byte("e"), nil)
+	rangeA := store.LookupReplica([]byte("a"), nil)
+	rangeB := store.LookupReplica([]byte("c"), nil)
+	rangeC := store.LookupReplica([]byte("e"), nil)
 
 	if bytes.Equal(rangeA.Desc().StartKey, rangeB.Desc().StartKey) {
 		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeB.Desc().StartKey)
@@ -254,7 +254,7 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	// TODO(bdarnell): refactor this test to rebalance the range onto a separate node
 	// when this is supported.
 	rangeB.WaitForLeaderLease(t)
-	if err := store.RemoveRange(rangeB); err != nil {
+	if err := store.RemoveReplica(rangeB); err != nil {
 		t.Fatal(err)
 	}
 
@@ -264,7 +264,7 @@ func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	}
 
 	// Re-add the range. This is necessary for a clean shutdown.
-	if err := store.AddRangeTest(rangeB); err != nil {
+	if err := store.AddReplicaTest(rangeB); err != nil {
 		t.Fatal(err)
 	}
 }

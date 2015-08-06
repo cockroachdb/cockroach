@@ -291,7 +291,7 @@ func (m *multiTestContext) restart() {
 
 // replicateRange replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreIndex int, dests ...int) {
-	rng, err := m.stores[sourceStoreIndex].GetRange(rangeID)
+	rng, err := m.stores[sourceStoreIndex].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreInde
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
-			if m.stores[dest].LookupRange(rng.Desc().StartKey, nil) == nil {
+			if m.stores[dest].LookupReplica(rng.Desc().StartKey, nil) == nil {
 				return util.Errorf("range not found on store %d", dest)
 			}
 		}
@@ -323,7 +323,7 @@ func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreInde
 // unreplicateRange removes a replica of the range in the source store
 // from the dest store.
 func (m *multiTestContext) unreplicateRange(rangeID proto.RangeID, source, dest int) {
-	rng, err := m.stores[source].GetRange(rangeID)
+	rng, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}

@@ -164,13 +164,13 @@ type rangeManager interface {
 	Context(context.Context) context.Context
 	resolveWriteIntentError(context.Context, *proto.WriteIntentError, *Replica, proto.Request, proto.PushTxnType) error
 
-	// Range manipulation methods.
-	LookupRange(start, end proto.Key) *Replica
+	// Range and replica manipulation methods.
+	LookupReplica(start, end proto.Key) *Replica
 	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.RaftCommand) <-chan error
-	RemoveRange(rng *Replica) error
+	RemoveReplica(rng *Replica) error
 	Tracer() *tracer.Tracer
 	SplitRange(origRng, newRng *Replica) error
 	processRangeDescriptorUpdate(rng *Replica) error

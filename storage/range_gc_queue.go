@@ -113,7 +113,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", rng.Desc().RangeID)
 		}
-		if err := rng.rm.RemoveRange(rng); err != nil {
+		if err := rng.rm.RemoveReplica(rng); err != nil {
 			return err
 		}
 		// TODO(bdarnell): update Destroy to leave tombstones for removed ranges (#768)
@@ -130,7 +130,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 		if log.V(1) {
 			log.Infof("removing merged range %d", rng.Desc().RangeID)
 		}
-		if err := rng.rm.RemoveRange(rng); err != nil {
+		if err := rng.rm.RemoveReplica(rng); err != nil {
 			return err
 		}
 
