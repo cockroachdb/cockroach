@@ -52,6 +52,8 @@ fi
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
+# -i causes some commands (including `git diff`) to attempt to use
+# a pager, so we override $PAGER to disable.
 docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/src:/go/src" \
   --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
@@ -61,4 +63,5 @@ docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/bin/linux_amd64:/go/bin" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="CACHE=/go/pkg/cache" \
+  --env="PAGER=cat" \
   "${image}" "$@"
