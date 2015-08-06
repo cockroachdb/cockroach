@@ -36,9 +36,8 @@ message Attributes {
 }
 
 // Replica describes a replica location by node ID (corresponds to a
-// host:port via lookup on gossip network), store ID (identifies the
-// device) and associated attributes. Replicas are stored in Range
-// lookup records (meta1, meta2).
+// host:port via lookup on gossip network) and store ID (identifies the
+// device).
 message Replica {
   option (gogoproto.goproto_stringer) = false;
 
@@ -46,6 +45,12 @@ message Replica {
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+
+  // ReplicaID uniquely identifies a replica instance. If a range is removed from
+  // a store and then re-added to the same store, the new instance will have a
+  // higher ReplicaID.
+  optional int32 replica_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
 // RangeDescriptor is the value stored in a range metadata key.
@@ -60,9 +65,14 @@ message RangeDescriptor {
   // contained in this range - it will be contained in the immediately
   // subsequent range.
   optional bytes end_key = 3 [(gogoproto.casttype) = "Key"];
-  // Replicas is the set of replicas on which this range is stored, the
-  // ordering being arbitrary and subject to permutation.
+  // Replicas is the set of nodes/stores on which replicas of this
+  // range are stored, the ordering being arbitrary and subject to
+  // permutation.
   repeated Replica replicas = 4 [(gogoproto.nullable) = false];
+
+  // NextReplicaID is a counter used to generate replica IDs.
+  optional int32 next_replica_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
 // TODO(bram): this comment has rotted, there is no size.

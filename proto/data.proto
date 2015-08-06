@@ -124,6 +124,8 @@ message ChangeReplicasTrigger {
   optional Replica replica = 4 [(gogoproto.nullable) = false];
   // The new replica list with this change applied.
   repeated Replica updated_replicas = 5 [(gogoproto.nullable) = false];
+  optional int32 next_replica_id = 6 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
 // CommitTrigger encapsulates all of the internal-only commit triggers.

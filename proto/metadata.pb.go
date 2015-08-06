@@ -35,13 +35,16 @@ func (m *Attributes) GetAttrs() []string {
 }
 
 // Replica describes a replica location by node ID (corresponds to a
-// host:port via lookup on gossip network), store ID (identifies the
-// device) and associated attributes. Replicas are stored in Range
-// lookup records (meta1, meta2).
+// host:port via lookup on gossip network) and store ID (identifies the
+// device).
 type Replica struct {
-	NodeID           NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	XXX_unrecognized []byte  `json:"-"`
+	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
+	// ReplicaID uniquely identifies a replica instance. If a range is removed from
+	// a store and then re-added to the same store, the new instance will have a
+	// higher ReplicaID.
+	ReplicaID        ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
+	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *Replica) Reset()      { *m = Replica{} }
@@ -58,9 +61,12 @@ type RangeDescriptor struct {
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
 	EndKey Key `protobuf:"bytes,3,opt,name=end_key,casttype=Key" json:"end_key,omitempty"`
-	// Replicas is the set of replicas on which this range is stored, the
-	// ordering being arbitrary and subject to permutation.
-	Replicas         []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
+	// Replicas is the set of nodes/stores on which replicas of this
+	// range are stored, the ordering being arbitrary and subject to
+	// permutation.
+	Replicas []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
+	// NextReplicaID is a counter used to generate replica IDs.
+	NextReplicaID    ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 	XXX_unrecognized []byte    `json:"-"`
 }
 
@@ -323,6 +329,22 @@ func (m *Replica) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicaID", wireType)
+			}
+			m.ReplicaID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ReplicaID |= (ReplicaID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -463,6 +485,22 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextReplicaID", wireType)
+			}
+			m.NextReplicaID = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NextReplicaID |= (ReplicaID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -1197,6 +1235,7 @@ func (m *Replica) Size() (n int) {
 	_ = l
 	n += 1 + sovMetadata(uint64(m.NodeID))
 	n += 1 + sovMetadata(uint64(m.StoreID))
+	n += 1 + sovMetadata(uint64(m.ReplicaID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1221,6 +1260,7 @@ func (m *RangeDescriptor) Size() (n int) {
 			n += 1 + l + sovMetadata(uint64(l))
 		}
 	}
+	n += 1 + sovMetadata(uint64(m.NextReplicaID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1378,6 +1418,9 @@ func (m *Replica) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintMetadata(data, i, uint64(m.StoreID))
+	data[i] = 0x18
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.ReplicaID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -1426,6 +1469,9 @@ func (m *RangeDescriptor) MarshalTo(data []byte) (n int, err error) {
 			i += n
 		}
 	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintMetadata(data, i, uint64(m.NextReplicaID))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

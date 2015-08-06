@@ -1260,6 +1260,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 func (r *Replica) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
+	cpy.NextReplicaID = change.NextReplicaID
 	if err := r.setDesc(&cpy); err != nil {
 		return err
 	}
@@ -1303,6 +1304,8 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 			return util.Errorf("adding replica %v which is already present in range %d",
 				replica, desc.RangeID)
 		}
+		replica.ReplicaID = updatedDesc.NextReplicaID
+		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 	} else if changeType == proto.REMOVE_REPLICA {
 		// If that exact node-store combination does not have the replica,
@@ -1343,6 +1346,7 @@ func (r *Replica) ChangeReplicas(changeType proto.ReplicaChangeType, replica pro
 						ChangeType:      changeType,
 						Replica:         replica,
 						UpdatedReplicas: updatedDesc.Replicas,
+						NextReplicaID:   updatedDesc.NextReplicaID,
 					},
 				},
 			},
@@ -1388,7 +1392,17 @@ func replicaSetsEqual(a, b []proto.Replica) bool {
 // splinter group with a node which was also a former replica, and hijacks the
 // range descriptor. This is a last line of defense; other mechanisms should
 // prevent rogue replicas from getting this far (see #768).
+//
+// Note that in addition to using this method to update the on-disk range
+// descriptor, a CommitTrigger must be used to update the in-memory
+// descriptor; it will not automatically be copied from newDesc.
+// TODO(bdarnell): store the entire RangeDescriptor in the CommitTrigger
+// and load it automatically instead of reconstructing individual
+// changes.
 func updateRangeDescriptor(b *client.Batch, descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) error {
+	if err := newDesc.Validate(); err != nil {
+		return err
+	}
 	var oldValue []byte
 	if oldDesc != nil {
 		var err error
