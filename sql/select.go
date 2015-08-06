@@ -26,6 +26,9 @@ import (
 )
 
 // Select selects rows from a single table.
+// Privileges: READ on table
+//   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
+//          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
 	var desc *structured.TableDescriptor
 
@@ -38,6 +41,11 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 		desc, err = p.getAliasedTableDesc(n.From[0])
 		if err != nil {
 			return nil, err
+		}
+
+		if !desc.HasPrivilege(p.user, parser.PrivilegeRead) {
+			return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
+				p.user, parser.PrivilegeRead, desc.Name)
 		}
 
 	default:

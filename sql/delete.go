@@ -19,6 +19,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
@@ -28,10 +29,18 @@ import (
 )
 
 // Delete deletes rows from a table.
+// Privileges: WRITE and READ on table. We currently always use a SELECT statement.
+//   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
+//          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	tableDesc, err := p.getAliasedTableDesc(n.Table)
 	if err != nil {
 		return nil, err
+	}
+
+	if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
+			p.user, parser.PrivilegeWrite, tableDesc.Name)
 	}
 
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
