@@ -25,7 +25,7 @@ type Field int
 const (
 	NodeID   Field = iota // the ID of the node
 	StoreID               // the ID of the store
-	RaftID                // the ID of the range
+	RangeID               // the ID of the range
 	Method                // the method being executed
 	Client                // TODO: client on whose behalf we're acting
 	Key                   // a proto.Key related to an event.

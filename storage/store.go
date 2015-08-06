@@ -51,8 +51,8 @@ const (
 	// GCResponseCacheExpiration is the expiration duration for response
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
-	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
-	raftIDAllocCount                = 10
+	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
+	rangeIDAllocCount               = 10
 	defaultRaftTickInterval         = 100 * time.Millisecond
 	defaultHeartbeatIntervalTicks   = 3
 	defaultRaftElectionTimeoutTicks = 15
@@ -152,7 +152,7 @@ type rangeAlreadyExists struct {
 
 // Error implements the error interface.
 func (e *rangeAlreadyExists) Error() string {
-	return fmt.Sprintf("range for Raft ID %d already exists on store", e.rng.Desc().RangeID)
+	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.Desc().RangeID)
 }
 
 // rangeKeyItem is a common interface for proto.Key and Range.
@@ -201,9 +201,9 @@ func (e *NotBootstrappedError) Error() string {
 // storeRangeSet is an implementation of rangeSet which
 // cycles through a store's rangesByKey btree.
 type storeRangeSet struct {
-	store   *Store
-	raftIDs []proto.RangeID // Raft IDs of ranges to be visited.
-	visited int             // Number of visited ranges. -1 when Visit() is not being called.
+	store    *Store
+	rangeIDs []proto.RangeID // Range IDs of ranges to be visited.
+	visited  int             // Number of visited ranges. -1 when Visit() is not being called.
 }
 
 func newStoreRangeSet(store *Store) *storeRangeSet {
@@ -214,24 +214,24 @@ func newStoreRangeSet(store *Store) *storeRangeSet {
 }
 
 func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
-	// Copy the raft IDs to a slice and iterate over the slice so
+	// Copy the  range IDs to a slice and iterate over the slice so
 	// that we can safely (e.g., no race, no range skip) iterate
 	// over ranges regardless of how BTree is implemented.
 	rs.store.mu.RLock()
-	rs.raftIDs = make([]proto.RangeID, rs.store.rangesByKey.Len())
+	rs.rangeIDs = make([]proto.RangeID, rs.store.rangesByKey.Len())
 	i := 0
 	rs.store.rangesByKey.Ascend(func(item btree.Item) bool {
-		rs.raftIDs[i] = item.(*Replica).Desc().RangeID
+		rs.rangeIDs[i] = item.(*Replica).Desc().RangeID
 		i++
 		return true
 	})
 	rs.store.mu.RUnlock()
 
 	rs.visited = 0
-	for _, raftID := range rs.raftIDs {
+	for _, rangeID := range rs.rangeIDs {
 		rs.visited++
 		rs.store.mu.RLock()
-		rng, ok := rs.store.ranges[raftID]
+		rng, ok := rs.store.ranges[rangeID]
 		rs.store.mu.RUnlock()
 		if ok {
 			if !visitor(rng) {
@@ -248,7 +248,7 @@ func (rs *storeRangeSet) EstimatedCount() int {
 	if rs.visited <= 0 {
 		return rs.store.rangesByKey.Len()
 	}
-	return len(rs.raftIDs) - rs.visited
+	return len(rs.rangeIDs) - rs.visited
 }
 
 // A Store maintains a map of ranges by start key. A Store corresponds
@@ -259,7 +259,7 @@ type Store struct {
 	db             *client.DB
 	engine         engine.Engine   // The underlying key-value store
 	_allocator     *allocator      // Makes allocation decisions
-	raftIDAlloc    *idAllocator    // Raft ID allocator
+	rangeIDAlloc   *idAllocator    // Range ID allocator
 	gcQueue        *gcQueue        // Garbage collection queue
 	_splitQueue    *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
@@ -275,9 +275,9 @@ type Store struct {
 	initComplete   sync.WaitGroup // Signaled by async init tasks
 
 	mu           sync.RWMutex               // Protects variables below...
-	ranges       map[proto.RangeID]*Replica // Map of ranges by Raft ID
+	ranges       map[proto.RangeID]*Replica // Map of ranges by Range ID
 	rangesByKey  *btree.BTree               // btree keyed by ranges end keys.
-	uninitRanges map[proto.RangeID]*Replica // Map of uninitialized ranges by Raft ID
+	uninitRanges map[proto.RangeID]*Replica // Map of uninitialized ranges by Range ID
 }
 
 var _ multiraft.Storage = &Store{}
@@ -437,11 +437,11 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
-	s.raftIDAlloc = idAlloc
+	s.rangeIDAlloc = idAlloc
 
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
@@ -798,14 +798,14 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *stop.Stopper) error {
 	return err
 }
 
-// GetRange fetches a range by Raft ID. Returns an error if no range is found.
-func (s *Store) GetRange(raftID proto.RangeID) (*Replica, error) {
+// GetRange fetches a range by Range ID. Returns an error if no range is found.
+func (s *Store) GetRange(rangeID proto.RangeID) (*Replica, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if rng, ok := s.ranges[raftID]; ok {
+	if rng, ok := s.ranges[rangeID]; ok {
 		return rng, nil
 	}
-	return nil, proto.NewRangeNotFoundError(raftID)
+	return nil, proto.NewRangeNotFoundError(rangeID)
 }
 
 // LookupRange looks up a range via binary search over the
@@ -831,8 +831,8 @@ func (s *Store) LookupRange(start, end proto.Key) *Replica {
 }
 
 // RaftStatus returns the current raft status of the given range.
-func (s *Store) RaftStatus(raftID proto.RangeID) *raft.Status {
-	return s.multiraft.Status(raftID)
+func (s *Store) RaftStatus(rangeID proto.RangeID) *raft.Status {
+	return s.multiraft.Status(rangeID)
 }
 
 // BootstrapRange creates the first range in the cluster and manually
@@ -992,7 +992,7 @@ func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
 // keys and the supplied proto.Replicas slice. It allocates new Raft
 // and range IDs to fill out the supplied replicas.
 func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
-	id, err := s.raftIDAlloc.Allocate()
+	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err
 	}
@@ -1045,15 +1045,15 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
 // on the same store.
-func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRaftID proto.RangeID) error {
+func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error {
 	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
 		return util.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			updatedEndKey, subsumingRng.Desc().EndKey)
 	}
 
-	subsumedRng, err := s.GetRange(subsumedRaftID)
+	subsumedRng, err := s.GetRange(subsumedRangeID)
 	if err != nil {
-		return util.Errorf("could not find the subsumed range: %d", subsumedRaftID)
+		return util.Errorf("could not find the subsumed range: %d", subsumedRangeID)
 	}
 
 	if !replicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
@@ -1093,7 +1093,7 @@ func (s *Store) AddRangeTest(rng *Replica) error {
 
 // addRangeInternal adds the range to the ranges map and the rangesByKey btree.
 // This method presupposes the store's lock is held. Returns a rangeAlreadyExists
-// error if a range with the same Raft ID has already been added to this store.
+// error if a range with the same Range ID has already been added to this store.
 func (s *Store) addRangeInternal(rng *Replica) error {
 	if !rng.isInitialized() {
 		return util.Errorf("attempted to add uninitialized range %s", rng)
@@ -1525,7 +1525,7 @@ func (s *Store) processRaft() {
 				}
 
 				if groupID != cmd.RangeID {
-					log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RangeID)
+					log.Fatalf("e.GroupID (%d) should == cmd.RangeID (%d)", groupID, cmd.RangeID)
 				}
 
 				s.mu.RLock()
@@ -1637,9 +1637,9 @@ func (s *Store) computeReplicationStatus(now int64) (
 	timestamp := proto.Timestamp{WallTime: now}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for raftID, rng := range s.ranges {
+	for rangeID, rng := range s.ranges {
 		zoneConfig := zoneMap.(config.PrefixConfigMap).MatchByPrefix(rng.Desc().StartKey).Config.(*config.ZoneConfig)
-		raftStatus := s.RaftStatus(raftID)
+		raftStatus := s.RaftStatus(rangeID)
 		if raftStatus == nil {
 			continue
 		}

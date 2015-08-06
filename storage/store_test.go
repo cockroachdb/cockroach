@@ -271,9 +271,9 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, raftID proto.RangeID, start, end proto.Key) *Replica {
+func createRange(s *Store, rangeID proto.RangeID, start, end proto.Key) *Replica {
 	desc := &proto.RangeDescriptor{
-		RangeID:  raftID,
+		RangeID:  rangeID,
 		StartKey: start,
 		EndKey:   end,
 	}
@@ -384,7 +384,7 @@ func TestStoreRangeSet(t *testing.T) {
 		i := 1
 		ranges.Visit(func(rng *Replica) bool {
 			if rng.Desc().RangeID != proto.RangeID(i) {
-				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
+				t.Errorf("expected range with Range ID %d; got %v", i, rng)
 			}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
 				t.Errorf("expected %d remaining; got %d", 10-i, ec)
@@ -406,14 +406,14 @@ func TestStoreRangeSet(t *testing.T) {
 		ranges.Visit(func(rng *Replica) bool {
 			if i == 1 {
 				if rng.Desc().RangeID != proto.RangeID(i) {
-					t.Errorf("expected range with Raft ID %d; got %v", i, rng)
+					t.Errorf("expected range with Range ID %d; got %v", i, rng)
 				}
 				close(visited)
 				<-updated
 			} else {
 				// The second range will be removed and skipped.
 				if rng.Desc().RangeID != proto.RangeID(i+1) {
-					t.Errorf("expected range with Raft ID %d; got %v", i+1, rng)
+					t.Errorf("expected range with Range ID %d; got %v", i+1, rng)
 				}
 			}
 			i++
@@ -444,7 +444,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Now, remove the next range in the iteration and verify we skip the removed range.
 	rng = store.LookupRange(proto.Key("a01"), nil)
 	if rng.Desc().RangeID != 2 {
-		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc().RangeID)
+		t.Errorf("expected fetch of rangeID=2; got %d", rng.Desc().RangeID)
 	}
 	if err := store.RemoveRange(rng); err != nil {
 		t.Error(err)
@@ -670,16 +670,16 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	}
 }
 
-// TestStoreRaftIDAllocation verifies that raft IDs are
+// TestStoreRangeIDAllocation verifies that  range IDs are
 // allocated in successive blocks.
-func TestStoreRaftIDAllocation(t *testing.T) {
+func TestStoreRangeIDAllocation(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	// Raft IDs should be allocated from ID 2 (first alloc'd range)
-	// to raftIDAllocCount * 3 + 1.
-	for i := 0; i < raftIDAllocCount*3; i++ {
+	// Range IDs should be allocated from ID 2 (first alloc'd range)
+	// to rangeIDAllocCount * 3 + 1.
+	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []proto.Replica{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(proto.Key(fmt.Sprintf("%03d", i)), proto.Key(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {

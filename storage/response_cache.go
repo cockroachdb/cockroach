@@ -45,28 +45,28 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 // machine and the results are stored in the ResponseCache.
 //
 // The ResponseCache stores responses in the underlying engine, using
-// keys derived from the Raft ID and the ClientCmdID.
+// keys derived from the Range ID and the ClientCmdID.
 //
 // A ResponseCache is not thread safe. Access to it is serialized
 // through Raft.
 type ResponseCache struct {
-	raftID proto.RangeID
+	rangeID proto.RangeID
 }
 
 // NewResponseCache returns a new response cache. Every range replica
 // maintains a response cache, not just the leader. However, when a
 // replica loses or gains leadership of the Raft consensus group, the
 // inflight map should be cleared.
-func NewResponseCache(raftID proto.RangeID) *ResponseCache {
+func NewResponseCache(rangeID proto.RangeID) *ResponseCache {
 	return &ResponseCache{
-		raftID: raftID,
+		rangeID: rangeID,
 	}
 }
 
 // ClearData removes all items stored in the persistent cache. It does not alter
 // the inflight map.
 func (rc *ResponseCache) ClearData(e engine.Engine) error {
-	p := keys.ResponseCacheKey(rc.raftID, nil) // prefix for all response cache entries with this raft ID
+	p := keys.ResponseCacheKey(rc.rangeID, nil) // prefix for all response cache entries with this  range ID
 	end := p.PrefixEnd()
 	_, err := engine.ClearRange(e, engine.MVCCEncodeKey(p), engine.MVCCEncodeKey(end))
 	return err
@@ -85,7 +85,7 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 
 	// Pull response from the cache and read into reply if available.
 	var rcEntry proto.ResponseCacheEntry
-	key := keys.ResponseCacheKey(rc.raftID, &cmdID)
+	key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
 	ok, err := engine.MVCCGetProto(e, key, proto.ZeroTimestamp, true, nil, &rcEntry)
 	if err != nil {
 		return proto.ResponseWithError{}, err
@@ -100,10 +100,10 @@ func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID proto.ClientCmdID) (
 }
 
 // CopyInto copies all the cached results from this response cache
-// into the destRaftID response cache. Failures decoding individual
+// into the destRangeID response cache. Failures decoding individual
 // cache entries return an error.
-func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RangeID) error {
-	prefix := keys.ResponseCacheKey(rc.raftID, nil) // response cache prefix
+func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID proto.RangeID) error {
+	prefix := keys.ResponseCacheKey(rc.rangeID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
@@ -115,7 +115,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RangeID) err
 			return false, util.Errorf("could not decode a response cache key %s: %s",
 				proto.Key(kv.Key), err)
 		}
-		key := keys.ResponseCacheKey(destRaftID, &cmdID)
+		key := keys.ResponseCacheKey(destRangeID, &cmdID)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &engine.MVCCMetadata{}
@@ -130,13 +130,13 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID proto.RangeID) err
 	})
 }
 
-// CopyFrom copies all the cached results from the originRaftID
+// CopyFrom copies all the cached results from the originRangeID
 // response cache into this one. Note that the cache will not be
 // locked while copying is in progress. Failures decoding individual
 // cache entries return an error. The copy is done directly using the
 // engine instead of interpreting values through MVCC for efficiency.
-func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RangeID) error {
-	prefix := keys.ResponseCacheKey(originRaftID, nil) // response cache prefix
+func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID proto.RangeID) error {
+	prefix := keys.ResponseCacheKey(originRangeID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
@@ -148,7 +148,7 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID proto.RangeID) e
 			return false, util.Errorf("could not decode a response cache key %s: %s",
 				proto.Key(kv.Key), err)
 		}
-		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
+		key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &engine.MVCCMetadata{}
@@ -179,7 +179,7 @@ func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID proto.ClientCmdID, r
 		// Be sure to clear it when you're done!
 		defer func() { header.Error = nil }()
 
-		key := keys.ResponseCacheKey(rc.raftID, &cmdID)
+		key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
 		var rcEntry proto.ResponseCacheEntry
 		if !rcEntry.SetValue(replyWithErr.Reply) {
 			panic(fmt.Sprintf("response %T not supported by response cache", replyWithErr.Reply))
@@ -215,7 +215,7 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
 		return ret, util.Errorf("key %s does not have %s prefix", key, keys.LocalRangeIDPrefix)
 	}
-	// Cut the prefix and the Raft ID.
+	// Cut the prefix and the Range ID.
 	b := key[len(keys.LocalRangeIDPrefix):]
 	b, _ = encoding.DecodeUvarint(b)
 	if !bytes.HasPrefix(b, keys.LocalResponseCacheSuffix) {

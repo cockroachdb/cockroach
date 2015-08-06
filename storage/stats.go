@@ -33,7 +33,7 @@ import (
 // processing goroutine and should never be individually updated; use
 // Update() instead. For access from other goroutines, use GetMVCC().
 type rangeStats struct {
-	raftID           proto.RangeID
+	rangeID          proto.RangeID
 	sync.Mutex       // Protects MVCCStats
 	engine.MVCCStats // embedded, cached version of stat values
 }
@@ -43,9 +43,9 @@ type rangeStats struct {
 // nanos and intent count are pulled from the engine and cached in the
 // struct for efficient processing (i.e. each new merge does not
 // require the values to be read from the engine).
-func newRangeStats(raftID proto.RangeID, e engine.Engine) (*rangeStats, error) {
-	rs := &rangeStats{raftID: raftID}
-	if err := engine.MVCCGetRangeStats(e, raftID, &rs.MVCCStats); err != nil {
+func newRangeStats(rangeID proto.RangeID, e engine.Engine) (*rangeStats, error) {
+	rs := &rangeStats{rangeID: rangeID}
+	if err := engine.MVCCGetRangeStats(e, rangeID, &rs.MVCCStats); err != nil {
 		return nil, err
 	}
 	return rs, nil
@@ -82,7 +82,7 @@ func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowN
 	ms.IntentAge += rs.IntentCount * diffSeconds
 	ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
 	rs.MVCCStats.Add(ms)
-	return engine.MVCCSetRangeStats(e, rs.raftID, &rs.MVCCStats)
+	return engine.MVCCSetRangeStats(e, rs.rangeID, &rs.MVCCStats)
 }
 
 // SetStats sets stats wholesale.
@@ -90,7 +90,7 @@ func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.MVCCStats = ms
-	return engine.MVCCSetRangeStats(e, rs.raftID, &ms)
+	return engine.MVCCSetRangeStats(e, rs.rangeID, &ms)
 }
 
 // GetAvgIntentAge returns the average age of outstanding intents,

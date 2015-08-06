@@ -290,8 +290,8 @@ func (m *multiTestContext) restart() {
 }
 
 // replicateRange replicates the given range onto the given stores.
-func (m *multiTestContext) replicateRange(raftID proto.RangeID, sourceStoreIndex int, dests ...int) {
-	rng, err := m.stores[sourceStoreIndex].GetRange(raftID)
+func (m *multiTestContext) replicateRange(rangeID proto.RangeID, sourceStoreIndex int, dests ...int) {
+	rng, err := m.stores[sourceStoreIndex].GetRange(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func (m *multiTestContext) replicateRange(raftID proto.RangeID, sourceStoreIndex
 	// Wait for the replication to complete on all destination nodes.
 	util.SucceedsWithin(m.t, time.Second, func() error {
 		for _, dest := range dests {
-			// Use LookupRange(keys) instead of GetRange(raftID) to ensure that the
+			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
 			if m.stores[dest].LookupRange(rng.Desc().StartKey, nil) == nil {
 				return util.Errorf("range not found on store %d", dest)
@@ -322,8 +322,8 @@ func (m *multiTestContext) replicateRange(raftID proto.RangeID, sourceStoreIndex
 
 // unreplicateRange removes a replica of the range in the source store
 // from the dest store.
-func (m *multiTestContext) unreplicateRange(raftID proto.RangeID, source, dest int) {
-	rng, err := m.stores[source].GetRange(raftID)
+func (m *multiTestContext) unreplicateRange(rangeID proto.RangeID, source, dest int) {
+	rng, err := m.stores[source].GetRange(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -344,11 +344,11 @@ func (m *multiTestContext) unreplicateRange(raftID proto.RangeID, source, dest i
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.GetRequest {
+func getArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.GetRequest {
 	return proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -356,11 +356,11 @@ func getArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.GetR
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, raftID proto.RangeID, storeID proto.StoreID) proto.PutRequest {
+func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.PutRequest {
 	return proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: proto.Value{
@@ -371,21 +371,21 @@ func putArgs(key, value []byte, raftID proto.RangeID, storeID proto.StoreID) pro
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, raftID proto.RangeID, storeID proto.StoreID) proto.IncrementRequest {
+func incrementArgs(key []byte, inc int64, rangeID proto.RangeID, storeID proto.StoreID) proto.IncrementRequest {
 	return proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Increment: inc,
 	}
 }
 
-func truncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
+func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
 	return proto.TruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Index: index,

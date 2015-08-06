@@ -978,7 +978,7 @@ func (r *Replica) AdminSplit(args proto.AdminSplitRequest) (proto.AdminSplitResp
 		return reply, util.Errorf("cannot split range at key %s", splitKey)
 	}
 
-	// Create new range descriptor with newly-allocated replica IDs and Raft IDs.
+	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
 	newDesc, err := r.rm.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		return reply, util.Errorf("unable to allocate new range descriptor: %s", err)
@@ -1220,7 +1220,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) e
 	}
 
 	if merge.SubsumedRangeID <= 0 {
-		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRangeID)
+		return util.Errorf("subsumed  range ID must be provided: %d", merge.SubsumedRangeID)
 	}
 
 	// Copy the subsumed range's response cache to the subsuming one.

@@ -58,7 +58,7 @@ var (
 	LocalStoreIdentSuffix = proto.Key("iden")
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
-	// indexed by Raft ID. The Raft ID is appended to this prefix,
+	// indexed by Range ID. The Range ID is appended to this prefix,
 	// encoded using EncodeUvarint. The specific sort of per-range
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, such as a command
@@ -162,8 +162,8 @@ var (
 	DescMetadataPrefix = MakeKey(SystemPrefix, proto.Key("desc-"))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = MakeKey(SystemPrefix, proto.Key("node-idgen"))
-	// RaftIDGenerator is the global Raft consensus group ID generator sequence.
-	RaftIDGenerator = MakeKey(SystemPrefix, proto.Key("raft-idgen"))
+	// RangeIDGenerator is the global Raft consensus group ID generator sequence.
+	RangeIDGenerator = MakeKey(SystemPrefix, proto.Key("raft-idgen"))
 	// SchemaPrefix specifies key prefixes for schema definitions.
 	SchemaPrefix = MakeKey(SystemPrefix, proto.Key("schema"))
 	// NameMetadataPrefix is the key prefix for all name metadata.

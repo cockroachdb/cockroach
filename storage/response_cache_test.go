@@ -31,9 +31,9 @@ var incR = proto.IncrementResponse{
 }
 
 // createTestResponseCache creates an in-memory engine and
-// returns a response cache using the supplied Raft ID.
-func createTestResponseCache(t *testing.T, raftID proto.RangeID) (*ResponseCache, engine.Engine) {
-	return NewResponseCache(raftID), engine.NewInMem(proto.Attributes{}, 1<<20)
+// returns a response cache using the supplied Range ID.
+func createTestResponseCache(t *testing.T, rangeID proto.RangeID) (*ResponseCache, engine.Engine) {
+	return NewResponseCache(rangeID), engine.NewInMem(proto.Attributes{}, 1<<20)
 }
 
 func makeCmdID(wallTime, random int64) proto.ClientCmdID {
@@ -106,7 +106,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
-	if err := rc1.CopyInto(e, rc2.raftID); err != nil {
+	if err := rc1.CopyInto(e, rc2.rangeID); err != nil {
 		t.Errorf("unexpected error while copying response cache: %s", err)
 	}
 	// Get should return 1 for both caches.
@@ -135,7 +135,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	}
 
 	// Copy the first cache into the second.
-	if err := rc2.CopyFrom(e, rc1.raftID); err != nil {
+	if err := rc2.CopyFrom(e, rc1.rangeID); err != nil {
 		t.Errorf("unexpected error while copying response cache: %s", err)
 	}
 

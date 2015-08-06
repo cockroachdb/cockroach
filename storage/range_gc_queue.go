@@ -123,7 +123,7 @@ func (q *rangeGCQueue) process(now proto.Timestamp, rng *Replica) error {
 			return err
 		}
 	} else if desc.RangeID != rng.Desc().RangeID {
-		// If we get a different raft ID back, then the range has been merged
+		// If we get a different  range ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.

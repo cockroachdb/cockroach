@@ -187,9 +187,9 @@ func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.Engine, raftID proto.RangeID, appliedIndex uint64) error {
+func setAppliedIndex(eng engine.Engine, rangeID proto.RangeID, appliedIndex uint64) error {
 	return engine.MVCCPut(eng, nil, /* stats */
-		keys.RaftAppliedIndexKey(raftID),
+		keys.RaftAppliedIndexKey(rangeID),
 		proto.ZeroTimestamp,
 		proto.Value{Bytes: encoding.EncodeUint64(nil, appliedIndex)},
 		nil /* txn */)
@@ -220,8 +220,8 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 }
 
 // setLastIndex persists a new last index.
-func setLastIndex(eng engine.Engine, raftID proto.RangeID, lastIndex uint64) error {
-	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(raftID),
+func setLastIndex(eng engine.Engine, rangeID proto.RangeID, lastIndex uint64) error {
+	return engine.MVCCPut(eng, nil, keys.RaftLastIndexKey(rangeID),
 		proto.ZeroTimestamp, proto.Value{
 			Bytes: encoding.EncodeUint64(nil, lastIndex),
 		}, nil)

@@ -1735,7 +1735,7 @@ func TestValidSplitKeys(t *testing.T) {
 
 func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RangeID(1)
+	rangeID := proto.RangeID(1)
 	engine := NewInMem(proto.Attributes{}, 1<<20)
 	defer engine.Close()
 
@@ -1756,12 +1756,12 @@ func TestFindSplitKey(t *testing.T) {
 		}
 	}
 	// write stats
-	if err := MVCCSetRangeStats(engine, raftID, ms); err != nil {
+	if err := MVCCSetRangeStats(engine, rangeID, ms); err != nil {
 		t.Fatal(err)
 	}
 	snap := engine.NewSnapshot()
 	defer snap.Close()
-	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, proto.KeyMin, proto.KeyMax)
+	humanSplitKey, err := MVCCFindSplitKey(snap, rangeID, proto.KeyMin, proto.KeyMax)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1775,7 +1775,7 @@ func TestFindSplitKey(t *testing.T) {
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RangeID(1)
+	rangeID := proto.RangeID(1)
 	testCases := []struct {
 		keys     []proto.Key
 		expSplit proto.Key
@@ -1861,14 +1861,14 @@ func TestFindValidSplitKeys(t *testing.T) {
 			}
 		}
 		// write stats
-		if err := MVCCSetRangeStats(engine, raftID, ms); err != nil {
+		if err := MVCCSetRangeStats(engine, rangeID, ms); err != nil {
 			t.Fatal(err)
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
 		rangeStart := test.keys[0]
 		rangeEnd := test.keys[len(test.keys)-1].Next()
-		splitKey, err := MVCCFindSplitKey(snap, raftID, rangeStart, rangeEnd)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, rangeStart, rangeEnd)
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: expected error", i)
@@ -1889,7 +1889,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	raftID := proto.RangeID(1)
+	rangeID := proto.RangeID(1)
 	testCases := []struct {
 		keySizes []int
 		valSizes []int
@@ -1950,12 +1950,12 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			}
 		}
 		// write stats
-		if err := MVCCSetRangeStats(engine, raftID, ms); err != nil {
+		if err := MVCCSetRangeStats(engine, rangeID, ms); err != nil {
 			t.Fatal(err)
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
-		splitKey, err := MVCCFindSplitKey(snap, raftID, proto.Key("\x01"), proto.KeyMax)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, proto.Key("\x01"), proto.KeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue

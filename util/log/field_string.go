@@ -4,7 +4,7 @@ package log
 
 import "fmt"
 
-const _Field_name = "NodeIDStoreIDRaftIDMethodClientKeymaxField"
+const _Field_name = "NodeIDStoreIDRangeIDMethodClientKeymaxField"
 
 var _Field_index = [...]uint8{0, 6, 13, 19, 25, 31, 34, 42}
 

@@ -360,14 +360,14 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the supplied MVCCStats struct.
-func MVCCGetRangeStats(engine Engine, raftID proto.RangeID, ms *MVCCStats) error {
-	_, err := MVCCGetProto(engine, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, true, nil, ms)
+func MVCCGetRangeStats(engine Engine, rangeID proto.RangeID, ms *MVCCStats) error {
+	_, err := MVCCGetProto(engine, keys.RangeStatsKey(rangeID), proto.ZeroTimestamp, true, nil, ms)
 	return err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
-func MVCCSetRangeStats(engine Engine, raftID proto.RangeID, ms *MVCCStats) error {
-	return MVCCPutProto(engine, nil, keys.RangeStatsKey(raftID), proto.ZeroTimestamp, nil, ms)
+func MVCCSetRangeStats(engine Engine, rangeID proto.RangeID, ms *MVCCStats) error {
+	return MVCCPutProto(engine, nil, keys.RangeStatsKey(rangeID), proto.ZeroTimestamp, nil, ms)
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
@@ -1356,7 +1356,7 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 //
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeyRanges.
-func MVCCFindSplitKey(engine Engine, raftID proto.RangeID, key, endKey proto.Key) (proto.Key, error) {
+func MVCCFindSplitKey(engine Engine, rangeID proto.RangeID, key, endKey proto.Key) (proto.Key, error) {
 	if key.Less(keys.LocalMax) {
 		key = keys.LocalMax
 	}
@@ -1365,7 +1365,7 @@ func MVCCFindSplitKey(engine Engine, raftID proto.RangeID, key, endKey proto.Key
 
 	// Get range size from stats.
 	var ms MVCCStats
-	if err := MVCCGetRangeStats(engine, raftID, &ms); err != nil {
+	if err := MVCCGetRangeStats(engine, rangeID, &ms); err != nil {
 		return nil, err
 	}
 	rangeSize := ms.KeyBytes + ms.ValBytes

@@ -42,20 +42,20 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
-func adminSplitArgs(key, splitKey []byte, raftID proto.RangeID, storeID proto.StoreID) proto.AdminSplitRequest {
+func adminSplitArgs(key, splitKey []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.AdminSplitRequest {
 	return proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		SplitKey: splitKey,
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, raftID proto.RangeID, expMS engine.MVCCStats) error {
+func verifyRangeStats(eng engine.Engine, rangeID proto.RangeID, expMS engine.MVCCStats) error {
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
 		return err
 	}
 	// Clear system counts as these are expected to vary.
@@ -182,16 +182,16 @@ func TestStoreRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
-	raftID := proto.RangeID(1)
+	rangeID := proto.RangeID(1)
 	splitKey := proto.Key("m")
 	content := proto.Key("asdvb")
 
 	// First, write some values left and right of the proposed split key.
-	pArgs := putArgs([]byte("c"), content, raftID, store.StoreID())
+	pArgs := putArgs([]byte("c"), content, rangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	pArgs = putArgs([]byte("x"), content, raftID, store.StoreID())
+	pArgs = putArgs([]byte("x"), content, rangeID, store.StoreID())
 	if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -199,12 +199,12 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Increments are a good way of testing the response cache. Up here, we
 	// address them to the original range, then later to the one that contains
 	// the key.
-	lIncArgs := incrementArgs([]byte("apoptosis"), 100, raftID, store.StoreID())
+	lIncArgs := incrementArgs([]byte("apoptosis"), 100, rangeID, store.StoreID())
 	lIncArgs.CmdID = proto.ClientCmdID{WallTime: 123, Random: 423}
 	if _, err := store.ExecuteCmd(context.Background(), &lIncArgs); err != nil {
 		t.Fatal(err)
 	}
-	rIncArgs := incrementArgs([]byte("wobble"), 10, raftID, store.StoreID())
+	rIncArgs := incrementArgs([]byte("wobble"), 10, rangeID, store.StoreID())
 	rIncArgs.CmdID = proto.ClientCmdID{WallTime: 12, Random: 42}
 	if _, err := store.ExecuteCmd(context.Background(), &rIncArgs); err != nil {
 		t.Fatal(err)
@@ -212,7 +212,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Get the original stats for key and value bytes.
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
@@ -240,7 +240,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	}
 
 	// Try to get values from both left and right of where the split happened.
-	gArgs := getArgs([]byte("c"), raftID, store.StoreID())
+	gArgs := getArgs([]byte("c"), rangeID, store.StoreID())
 	if reply, err := store.ExecuteCmd(context.Background(), &gArgs); err != nil {
 		t.Fatal(err)
 	} else if gReply := reply.(*proto.GetResponse); !bytes.Equal(gReply.Value.Bytes, content) {
@@ -273,7 +273,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Compare stats of split ranges to ensure they are non ero and
 	// exceed the original range when summed.
 	var left, right engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &left); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &left); err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
@@ -370,11 +370,11 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written.
-func fillRange(store *storage.Store, raftID proto.RangeID, prefix proto.Key, bytes int64, t *testing.T) {
+func fillRange(store *storage.Store, rangeID proto.RangeID, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
 		var ms engine.MVCCStats
-		if err := engine.MVCCGetRangeStats(store.Engine(), raftID, &ms); err != nil {
+		if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &ms); err != nil {
 			t.Fatal(err)
 		}
 		keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
@@ -383,7 +383,7 @@ func fillRange(store *storage.Store, raftID proto.RangeID, prefix proto.Key, byt
 		}
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val, raftID, store.StoreID())
+		pArgs := putArgs(key, val, rangeID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if _, err := store.ExecuteCmd(context.Background(), &pArgs); err != nil {
 			t.Fatal(err)

@@ -166,7 +166,7 @@ type rangeManager interface {
 
 	// Range manipulation methods.
 	LookupRange(start, end proto.Key) *Replica
-	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRaftID proto.RangeID) error
+	MergeRange(subsumingRng *Replica, updatedEndKey proto.Key, subsumedRangeID proto.RangeID) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.RaftCommand) <-chan error
@@ -269,7 +269,7 @@ func (r *Replica) Destroy() error {
 // on this range in the absence of a pre-existing context, such as
 // during range scanner operations.
 func (r *Replica) context() context.Context {
-	return context.WithValue(r.rm.Context(nil), log.RaftID, r.Desc().RangeID)
+	return context.WithValue(r.rm.Context(nil), log.RangeID, r.Desc().RangeID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -288,9 +288,9 @@ func (r *Replica) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, proto.KeyMin)
 }
 
-func loadLeaderLease(eng engine.Engine, raftID proto.RangeID) (*proto.Lease, error) {
+func loadLeaderLease(eng engine.Engine, rangeID proto.RangeID) (*proto.Lease, error) {
 	lease := &proto.Lease{}
-	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(raftID), proto.ZeroTimestamp, true, nil, lease); err != nil {
+	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(rangeID), proto.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil

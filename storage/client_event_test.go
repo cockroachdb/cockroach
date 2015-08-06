@@ -224,8 +224,8 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	defer mtc.Stop()
 
 	// Replicate the default range.
-	raftID := proto.RangeID(1)
-	mtc.replicateRange(raftID, 0, 1, 2)
+	rangeID := proto.RangeID(1)
+	mtc.replicateRange(rangeID, 0, 1, 2)
 
 	// Add some data in a transaction
 	err := mtc.db.Txn(func(txn *client.Txn) error {

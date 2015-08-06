@@ -33,11 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminMergeArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.AdminMergeRequest {
+func adminMergeArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.AdminMergeRequest {
 	return proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}

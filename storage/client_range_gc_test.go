@@ -36,13 +36,13 @@ func TestRangeGCQueueDropReplica(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	raftID := proto.RangeID(1)
-	mtc.replicateRange(raftID, 0, 1, 2)
-	mtc.unreplicateRange(raftID, 0, 1)
+	rangeID := proto.RangeID(1)
+	mtc.replicateRange(rangeID, 0, 1, 2)
+	mtc.unreplicateRange(rangeID, 0, 1)
 
 	// Make sure the range is removed from the store.
 	util.SucceedsWithin(t, time.Second, func() error {
-		if _, err := mtc.stores[1].GetRange(raftID); !testutils.IsError(err, "range .* was not found") {
+		if _, err := mtc.stores[1].GetRange(rangeID); !testutils.IsError(err, "range .* was not found") {
 			return util.Error("expected range removal")
 		}
 		return nil
@@ -63,14 +63,14 @@ func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	// Disable the range gc queue to prevent direct removal of range.
 	mtc.stores[1].DisableRangeGCQueue(true)
 
-	raftID := proto.RangeID(1)
-	mtc.replicateRange(raftID, 0, 1, 2)
-	mtc.unreplicateRange(raftID, 0, 1)
+	rangeID := proto.RangeID(1)
+	mtc.replicateRange(rangeID, 0, 1, 2)
+	mtc.unreplicateRange(rangeID, 0, 1)
 
 	// Wait long enough for the direct range GC to have had a chance and been
 	// discarded because the queue is disabled.
 	time.Sleep(10 * time.Millisecond)
-	if _, err := mtc.stores[1].GetRange(raftID); err != nil {
+	if _, err := mtc.stores[1].GetRange(rangeID); err != nil {
 		t.Error("unexpected range removal")
 	}
 
@@ -84,7 +84,7 @@ func TestRangeGCQueueDropReplicaGCOnScan(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		store := mtc.stores[1]
 		store.ForceRangeGCScan(t)
-		if _, err := store.GetRange(raftID); !testutils.IsError(err, "range .* was not found") {
+		if _, err := store.GetRange(rangeID); !testutils.IsError(err, "range .* was not found") {
 			return util.Errorf("expected range removal: %s", err)
 		}
 		return nil
