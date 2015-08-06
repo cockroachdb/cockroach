@@ -59,10 +59,9 @@ are already part of a pre-existing cluster, the bootstrap will fail.
 func runInit(cmd *cobra.Command, args []string) {
 	// Default user for servers.
 	Context.User = security.NodeUser
-	// First initialize the Context as it is used in other places.
-	err := Context.Init("init")
-	if err != nil {
-		log.Errorf("failed to initialize context: %s", err)
+
+	if err := Context.InitStores(); err != nil {
+		log.Errorf("failed to initialize stores: %s", err)
 		return
 	}
 
@@ -112,10 +111,14 @@ func runStart(cmd *cobra.Command, args []string) {
 
 	// Default user for servers.
 	Context.User = security.NodeUser
-	// First initialize the Context as it is used in other places.
-	err := Context.Init("start")
-	if err != nil {
-		log.Errorf("failed to initialize context: %s", err)
+
+	if err := Context.InitStores(); err != nil {
+		log.Errorf("failed to initialize stores: %s", err)
+		return
+	}
+
+	if err := Context.InitNode(); err != nil {
+		log.Errorf("failed to initialize node: %s", err)
 		return
 	}
 
@@ -189,8 +192,7 @@ node, cycling through each store specified by the --stores flag.
 
 // runExterminate destroys the data held in the specified stores.
 func runExterminate(cmd *cobra.Command, args []string) {
-	err := Context.Init("exterminate")
-	if err != nil {
+	if err := Context.InitStores(); err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
 	}

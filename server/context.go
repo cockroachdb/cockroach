@@ -138,52 +138,58 @@ func NewContext() *Context {
 	return ctx
 }
 
-// Init interprets the stores parameter to initialize a slice of
-// engine.Engine objects, parses node attributes, and initializes
-// the gossip bootstrap resolvers.
-func (ctx *Context) Init(command string) error {
-	if command == "init" || command == "start" || command == "exterminate" {
-		// Get the stores on both start and init.
-		storesRE := regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
-		// Error if regexp doesn't match.
-		storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
-		if storeSpecs == nil || len(storeSpecs) == 0 {
-			return fmt.Errorf("invalid or empty engines specification %q, "+
-				"did you specify --stores?", ctx.Stores)
-		}
+// Get the stores on both start and init.
+var storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 
-		ctx.Engines = nil
-		for _, store := range storeSpecs {
-			if len(store) != 4 {
-				return util.Errorf("unable to parse attributes and path from store %q", store[0])
-			}
-			// There are two matches for each store specification: the colon-separated
-			// list of attributes and the path.
-			engine, err := ctx.initEngine(store[1], store[2])
-			if err != nil {
-				return util.Errorf("unable to init engine for store %q: %s", store[0], err)
-			}
-			ctx.Engines = append(ctx.Engines, engine)
-		}
-		log.Infof("initialized %d storage engine(s)", len(ctx.Engines))
+// InitStores interprets the stores parameter to initialize a slice of
+// engine.Engine objects.
+func (ctx *Context) InitStores() error {
+	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
+	// Error if regexp doesn't match.
+	if storeSpecs == nil {
+		return fmt.Errorf("invalid or empty engines specification %q, did you specify --stores?", ctx.Stores)
 	}
 
-	if command == "start" {
-		// Initialize attributes.
-		ctx.NodeAttributes = parseAttributes(ctx.Attrs)
-
-		// Get the gossip bootstrap resolvers.
-		resolvers, err := ctx.parseGossipBootstrapResolvers()
+	for _, storeSpec := range storeSpecs {
+		name := storeSpec[0]
+		if len(storeSpec) != 4 {
+			return util.Errorf("unable to parse attributes and path from store %q", name)
+		}
+		attrs, path := storeSpec[1], storeSpec[2]
+		// There are two matches for each store specification: the colon-separated
+		// list of attributes and the path.
+		engine, err := ctx.initEngine(attrs, path)
 		if err != nil {
-			return err
+			return util.Errorf("unable to init engine for store %q: %s", name, err)
 		}
-		if len(resolvers) == 0 {
-			return errors.New("no gossip addresses found, did you specify --gossip?")
-		}
-		ctx.GossipBootstrapResolvers = resolvers
+		ctx.Engines = append(ctx.Engines, engine)
 	}
+	log.Infof("initialized %d storage engine(s)", len(ctx.Engines))
 	return nil
 }
+
+var errNoGossipAddresses = errors.New("no gossip addresses found, did you specify --gossip?")
+
+// InitNode parses node attributes and initializes the gossip bootstrap
+// resolvers.
+func (ctx *Context) InitNode() error {
+	// Initialize attributes.
+	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
+
+	// Get the gossip bootstrap resolvers.
+	resolvers, err := ctx.parseGossipBootstrapResolvers()
+	if err != nil {
+		return err
+	}
+	if len(resolvers) == 0 {
+		return errNoGossipAddresses
+	}
+	ctx.GossipBootstrapResolvers = resolvers
+
+	return nil
+}
+
+var errUnsizedInMemStore = errors.New("unable to initialize an in-memory store with capacity 0")
 
 // initEngine parses the store attributes as a colon-separated list
 // and instantiates an engine based on the dir parameter. If dir parses
@@ -193,7 +199,7 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 	attrs := parseAttributes(attrsStr)
 	if size, err := strconv.ParseUint(path, 10, 64); err == nil {
 		if size == 0 {
-			return nil, util.Errorf("unable to initialize an in-memory store with capacity 0")
+			return nil, errUnsizedInMemStore
 		}
 		return engine.NewInMem(attrs, int64(size)), nil
 	}

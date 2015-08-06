@@ -74,9 +74,8 @@ func TestInitEngine(t *testing.T) {
 	for _, spec := range testCases {
 		ctx := NewContext()
 		ctx.Stores, ctx.GossipBootstrap = spec.key, "self="
-		err := ctx.Init("start")
-		engines := ctx.Engines
-		if err == nil {
+		if err := ctx.InitStores(); err == nil {
+			engines := ctx.Engines
 			if spec.wantError {
 				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
 			}
@@ -117,11 +116,11 @@ func TestInitEngines(t *testing.T) {
 		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
-	err := ctx.Init("start")
-	engines := ctx.Engines
-	if err != nil {
+	if err := ctx.InitStores(); err != nil {
 		t.Fatal(err)
 	}
+
+	engines := ctx.Engines
 	if len(engines) != len(expEngines) {
 		t.Errorf("number of engines parsed %d != expected %d", len(engines), len(expEngines))
 	}
