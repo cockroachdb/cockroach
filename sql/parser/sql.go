@@ -6570,14 +6570,16 @@ sqldefault:
 		}
 	case 109:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:838
+		//line sql.y:836
 		{
 			sqlVAL.targetList = TargetList{Tables: QualifiedNames(sqlDollar[1].qnames)}
 		}
 	case 110:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:842
+		//line sql.y:840
 		{
+			// TODO(marc): this is postgres' grammar, but do we really need
+			// both "x" and "TABLE X"?
 			sqlVAL.targetList = TargetList{Tables: QualifiedNames(sqlDollar[2].qnames)}
 		}
 	case 111:
