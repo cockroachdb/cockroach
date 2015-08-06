@@ -29,6 +29,7 @@ import (
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numNodes = flag.Int("num", 3, "the number of nodes to start (if not otherwise specified by a test)")
+var numTrans = flag.Int("numTrans", 5, "the number of transactions to run concurrently (if not otherwise specified by a test)")
 var rangeMaxBytes = flag.Int64("range-max-bytes", 64<<20, "the maximum size of a range")
 var stopper = make(chan struct{})
 
