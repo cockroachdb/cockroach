@@ -1,4 +1,4 @@
-statement error .*name-\\bfoo.* does not exist
+statement error database "foo" does not exist
 SET DATABASE = foo
 
 # Ensure that the failing SET DATABASE call did not alter the session.

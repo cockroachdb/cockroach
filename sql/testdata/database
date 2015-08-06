@@ -1,7 +1,7 @@
 statement ok
 CREATE DATABASE a
 
-statement error structured.DatabaseDescriptor .* already exists
+statement error database "a" already exists
 CREATE DATABASE a
 
 statement ok

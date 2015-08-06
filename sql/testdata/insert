@@ -1,4 +1,4 @@
-statement error structured.TableDescriptor .* does not exist
+statement error table "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
 
 statement ok
@@ -15,7 +15,7 @@ SELECT * FROM kv
 statement error invalid values for columns
 INSERT INTO kv VALUES ('a')
 
-statement error missing .* primary key column
+statement error missing "k" primary key column
 INSERT INTO kv (v) VALUES ('a')
 
 statement ok

@@ -11,19 +11,19 @@ Database User      Privileges
 a        readwrite READ,WRITE
 a        root      READ,WRITE
 
-statement error .* does not exist
+statement error table "t" does not exist
 SHOW GRANTS ON a.t
 
-statement error .* does not exist
+statement error table "t" does not exist
 SHOW GRANTS ON t
 
 statement ok
 SET DATABASE = a
 
-statement error .* does not exist
+statement error table "t" does not exist
 SHOW GRANTS ON t
 
-statement error .* does not exist
+statement error table "t" does not exist
 GRANT ALL ON a.t TO readwrite
 
 statement ok

@@ -53,7 +53,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Don't allow updating any column that is part of the primary key.
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDSet[id]; ok {
-			return nil, fmt.Errorf("primary key column \"%s\" cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
+			return nil, fmt.Errorf("primary key column %q cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 

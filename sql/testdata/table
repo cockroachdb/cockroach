@@ -7,13 +7,13 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
-statement error structured.TableDescriptor .* already exists
+statement error table "a" already exists
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement ok
 SET DATABASE = test
 
-statement error structured.TableDescriptor .* already exists
+statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement ok
@@ -45,11 +45,11 @@ query error no database specified
 SHOW COLUMNS FROM users
 ----
 
-query error structured.DatabaseDescriptor .* does not exist
+query error database "foo" does not exist
 SHOW COLUMNS FROM foo.users
 ----
 
-query error structured.TableDescriptor .* does not exist
+query error table "users" does not exist
 SHOW COLUMNS FROM test.users
 ----
 
@@ -57,11 +57,11 @@ query error no database specified
 SHOW INDEX FROM users
 ----
 
-query error structured.DatabaseDescriptor .* does not exist
+query error database "foo" does not exist
 SHOW INDEX FROM foo.users
 ----
 
-query error structured.TableDescriptor .* does not exist
+query error table "users" does not exist
 SHOW INDEX FROM test.users
 ----
 

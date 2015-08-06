@@ -58,6 +58,11 @@ func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
 }
 
+// TypeName returns the plain type of this descriptor.
+func (desc *TableDescriptor) TypeName() string {
+	return "table"
+}
+
 // AllocateIDs allocates column and index ids for any column or index which has
 // an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
@@ -259,6 +264,11 @@ func (desc *DatabaseDescriptor) GetID() ID {
 // SetID implements the sql.descriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
+}
+
+// TypeName returns the plain type of this descriptor.
+func (desc *DatabaseDescriptor) TypeName() string {
+	return "database"
 }
 
 // Validate validates that the database descriptor is well formed.
