@@ -1,0 +1,215 @@
+# Test default table-level permissions.
+# Default user is "root".
+statement ok
+CREATE DATABASE a
+
+statement ok
+SET DATABASE = a
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+SHOW GRANTS ON t
+
+statement ok
+GRANT ALL ON t TO bar
+
+statement ok
+REVOKE ALL ON t FROM bar
+
+statement ok
+INSERT INTO t VALUES(1, 1),(2, 2)
+
+statement ok
+SELECT * from t
+
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM t where k = 1
+
+statement ok
+UPDATE t SET v = 0
+
+statement ok
+UPDATE t SET v = 2 WHERE k = 2
+
+statement ok
+TRUNCATE t
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+# Switch to a user without any privileges.
+user testuser
+
+# This needs to be repeated since session variables are per client.
+statement ok
+SET DATABASE = a
+
+statement ok
+SHOW GRANTS ON t
+
+statement error user testuser does not have WRITE privilege on table a.t
+GRANT ALL ON t TO bar
+
+statement error user testuser does not have WRITE privilege on table a.t
+REVOKE ALL ON t FROM bar
+
+statement error user testuser does not have WRITE privilege on table a.t
+INSERT INTO t VALUES(1, 1),(2, 2)
+
+statement error user testuser does not have READ privilege on table a.t
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement error user testuser does not have WRITE privilege on table a.t
+DELETE FROM t
+
+statement error user testuser does not have WRITE privilege on table a.t
+DELETE FROM t where k = 1
+
+statement error user testuser does not have WRITE privilege on table a.t
+UPDATE t SET v = 0
+
+statement error user testuser does not have WRITE privilege on table a.t
+UPDATE t SET v = 2 WHERE k = 2
+
+statement error user testuser does not have WRITE privilege on table a.t
+TRUNCATE t
+
+statement error user testuser does not have WRITE privilege on table a.t
+DROP TABLE t
+
+# Grant READ privilege.
+user root
+
+statement ok
+GRANT READ ON t TO testuser
+
+user testuser
+
+statement error user testuser does not have WRITE privilege on table a.t
+GRANT ALL ON t TO bar
+
+statement error user testuser does not have WRITE privilege on table a.t
+REVOKE ALL ON t FROM bar
+
+statement error user testuser does not have WRITE privilege on table a.t
+INSERT INTO t VALUES(1, 1),(2, 2)
+
+statement ok
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement error user testuser does not have WRITE privilege on table a.t
+DELETE FROM t
+
+statement error user testuser does not have WRITE privilege on table a.t
+DELETE FROM t where k = 1
+
+statement error user testuser does not have WRITE privilege on table a.t
+UPDATE t SET v = 0
+
+statement error user testuser does not have WRITE privilege on table a.t
+UPDATE t SET v = 2 WHERE k = 2
+
+statement error user testuser does not have WRITE privilege on table a.t
+TRUNCATE t
+
+statement error user testuser does not have WRITE privilege on table a.t
+DROP TABLE t
+
+# Grant WRITE privilege.
+user root
+
+statement ok
+REVOKE READ ON t FROM testuser
+
+statement ok
+GRANT WRITE ON t TO testuser
+
+user testuser
+
+statement ok
+GRANT ALL ON t TO bar
+
+statement ok
+REVOKE ALL ON t FROM bar
+
+statement ok
+INSERT INTO t VALUES(1, 1),(2, 2)
+
+statement error user testuser does not have READ privilege on table a.t
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement error user testuser does not have READ privilege on table a.t
+DELETE FROM t
+
+statement error user testuser does not have READ privilege on table a.t
+DELETE FROM t where k = 1
+
+statement error user testuser does not have READ privilege on table a.t
+UPDATE t SET v = 0
+
+statement error user testuser does not have READ privilege on table a.t
+UPDATE t SET v = 2 WHERE k = 2
+
+statement ok
+TRUNCATE t
+
+statement ok
+DROP TABLE t
+
+# Grant ALL privilege.
+user root
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+user testuser
+
+statement ok
+GRANT ALL ON t TO bar
+
+statement ok
+REVOKE ALL ON t FROM bar
+
+statement ok
+INSERT INTO t VALUES(1, 1),(2, 2)
+
+statement ok
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement ok
+DELETE FROM t
+
+statement ok
+DELETE FROM t where k = 1
+
+statement ok
+UPDATE t SET v = 0
+
+statement ok
+UPDATE t SET v = 2 WHERE k = 2
+
+statement ok
+TRUNCATE t

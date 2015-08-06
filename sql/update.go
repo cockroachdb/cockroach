@@ -29,10 +29,18 @@ import (
 )
 
 // Update updates columns for a selection of rows from a table.
+// Privileges: WRITE and READ on table. We currently always use a select statement.
+//   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
+//          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(n *parser.Update) (planNode, error) {
 	tableDesc, err := p.getAliasedTableDesc(n.Table)
 	if err != nil {
 		return nil, err
+	}
+
+	if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
+			p.user, parser.PrivilegeWrite, tableDesc.Name)
 	}
 
 	// Determine which columns we're inserting into.

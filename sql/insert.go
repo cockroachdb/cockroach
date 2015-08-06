@@ -29,10 +29,18 @@ import (
 )
 
 // Insert inserts rows into the database.
+// Privileges: WRITE on table
+//   Notes: postgres requires INSERT. No "on duplicate key update" option.
+//          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
 		return nil, err
+	}
+
+	if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+		return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
+			p.user, parser.PrivilegeWrite, tableDesc.Name)
 	}
 
 	// Determine which columns we're inserting into.

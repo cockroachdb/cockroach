@@ -18,6 +18,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -25,6 +27,9 @@ import (
 )
 
 // Truncate deletes all rows from a table.
+// Privileges: WRITE on table.
+//   Notes: postgres requires TRUNCATE.
+//          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	b := client.Batch{}
 
@@ -32,6 +37,11 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		tableDesc, err := p.getTableDesc(tableQualifiedName)
 		if err != nil {
 			return nil, err
+		}
+
+		if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+			return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
+				p.user, parser.PrivilegeWrite, tableDesc.Name)
 		}
 
 		tablePrefix := encodeTablePrefix(tableDesc.ID)

@@ -22,9 +22,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/structured"
 )
 
 // DropTable drops a table.
+// Privileges: WRITE on table.
+//   Notes: postgres allows only the table owner to DROP a table.
+//          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 	// TODO(XisiHuang): should do truncate and delete descriptor in
 	// the same txn
@@ -52,6 +56,19 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			}
 			// Key does not exist, but we want it to: error out.
 			return nil, fmt.Errorf("table %q does not exist", tbKey.Name())
+		}
+
+		tableDesc := structured.TableDescriptor{}
+		if err := p.db.GetProto(gr.ValueBytes(), &tableDesc); err != nil {
+			return nil, err
+		}
+		if err := tableDesc.Validate(); err != nil {
+			return nil, err
+		}
+
+		if !tableDesc.HasPrivilege(p.user, parser.PrivilegeWrite) {
+			return nil, fmt.Errorf("user %s does not have %s privilege on table %s",
+				p.user, parser.PrivilegeWrite, tableDesc.Name)
 		}
 
 		if _, err = p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); err != nil {
