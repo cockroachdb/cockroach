@@ -43,7 +43,7 @@ var Context = server.NewContext()
 // initCmd command initializes a new Cockroach cluster.
 var initCmd = &cobra.Command{
 	Use:   "init --stores=...",
-	Short: "init new Cockroach cluster and start server",
+	Short: "init new Cockroach cluster",
 	Long: `
 Initialize a new Cockroach cluster using the --stores flag to specify one or
 more storage locations. The first of these storage locations is used to

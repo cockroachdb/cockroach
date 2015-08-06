@@ -45,7 +45,7 @@ func (v pflagValue) IsBoolFlag() bool {
 
 var flagUsage = map[string]string{
 	"addr": `
-        The host:port to bind for HTTP/RPC traffic
+        The host:port to bind for HTTP/RPC traffic.
 `,
 	"attrs": `
         An ordered, colon-separated list of node attributes. Attributes are
