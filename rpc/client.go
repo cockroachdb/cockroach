@@ -157,7 +157,7 @@ func (c *Client) internalConn() *internalConn {
 
 // connect attempts a single connection attempt. On success, updates `c.conn`.
 func (c *Client) connect() error {
-	conn, err := TLSDialHTTP(c.addr.NetworkField, c.addr.StringField, c.tlsConfig)
+	conn, err := TLSDialHTTP(c.addr.NetworkField, c.addr.AddressField, c.tlsConfig)
 	if err != nil {
 		return err
 	}

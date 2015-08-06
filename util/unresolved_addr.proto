@@ -30,5 +30,5 @@ option (gogoproto.goproto_unrecognized_all) = false;
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
   optional string network_field = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "network"];
-  optional string string_field = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "string"];
+  optional string address_field = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "address"];
 }

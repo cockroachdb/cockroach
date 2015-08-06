@@ -216,12 +216,12 @@ func TestNodeJoin(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		if val, err := node1.ctx.Gossip.GetInfo(node2Key); err != nil {
 			return false
-		} else if addr2 := val.(*proto.NodeDescriptor).Address.StringField; addr2 != server2.Addr().String() {
+		} else if addr2 := val.(*proto.NodeDescriptor).Address.AddressField; addr2 != server2.Addr().String() {
 			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
 		if val, err := node2.ctx.Gossip.GetInfo(node1Key); err != nil {
 			return false
-		} else if addr1 := val.(*proto.NodeDescriptor).Address.StringField; addr1 != server1.Addr().String() {
+		} else if addr1 := val.(*proto.NodeDescriptor).Address.AddressField; addr1 != server1.Addr().String() {
 			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())
 		}
 		return true

@@ -28,7 +28,7 @@ var _ = math.Inf
 // / UnresolvedAddr is an unresolved version of net.Addr.
 type UnresolvedAddr struct {
 	NetworkField string `protobuf:"bytes,1,opt,name=network_field" json:"network"`
-	StringField  string `protobuf:"bytes,2,opt,name=string_field" json:"string"`
+	AddressField string `protobuf:"bytes,2,opt,name=address_field" json:"address"`
 }
 
 func (m *UnresolvedAddr) Reset()      { *m = UnresolvedAddr{} }
@@ -41,9 +41,9 @@ func (m *UnresolvedAddr) GetNetworkField() string {
 	return ""
 }
 
-func (m *UnresolvedAddr) GetStringField() string {
+func (m *UnresolvedAddr) GetAddressField() string {
 	if m != nil {
-		return m.StringField
+		return m.AddressField
 	}
 	return ""
 }
@@ -91,7 +91,7 @@ func (m *UnresolvedAddr) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StringField", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field AddressField", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -109,7 +109,7 @@ func (m *UnresolvedAddr) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.StringField = string(data[iNdEx:postIndex])
+			m.AddressField = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			var sizeOfWire int
@@ -234,7 +234,7 @@ func (m *UnresolvedAddr) Size() (n int) {
 	_ = l
 	l = len(m.NetworkField)
 	n += 1 + l + sovUnresolvedAddr(uint64(l))
-	l = len(m.StringField)
+	l = len(m.AddressField)
 	n += 1 + l + sovUnresolvedAddr(uint64(l))
 	return n
 }
@@ -273,8 +273,8 @@ func (m *UnresolvedAddr) MarshalTo(data []byte) (n int, err error) {
 	i += copy(data[i:], m.NetworkField)
 	data[i] = 0x12
 	i++
-	i = encodeVarintUnresolvedAddr(data, i, uint64(len(m.StringField)))
-	i += copy(data[i:], m.StringField)
+	i = encodeVarintUnresolvedAddr(data, i, uint64(len(m.AddressField)))
+	i += copy(data[i:], m.AddressField)
 	return i, nil
 }
 

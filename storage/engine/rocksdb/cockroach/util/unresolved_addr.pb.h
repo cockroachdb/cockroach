@@ -118,30 +118,30 @@ class UnresolvedAddr : public ::google::protobuf::Message {
   ::std::string* release_network_field();
   void set_allocated_network_field(::std::string* network_field);
 
-  // optional string string_field = 2;
-  bool has_string_field() const;
-  void clear_string_field();
-  static const int kStringFieldFieldNumber = 2;
-  const ::std::string& string_field() const;
-  void set_string_field(const ::std::string& value);
-  void set_string_field(const char* value);
-  void set_string_field(const char* value, size_t size);
-  ::std::string* mutable_string_field();
-  ::std::string* release_string_field();
-  void set_allocated_string_field(::std::string* string_field);
+  // optional string address_field = 2;
+  bool has_address_field() const;
+  void clear_address_field();
+  static const int kAddressFieldFieldNumber = 2;
+  const ::std::string& address_field() const;
+  void set_address_field(const ::std::string& value);
+  void set_address_field(const char* value);
+  void set_address_field(const char* value, size_t size);
+  ::std::string* mutable_address_field();
+  ::std::string* release_address_field();
+  void set_allocated_address_field(::std::string* address_field);
 
   // @@protoc_insertion_point(class_scope:cockroach.util.UnresolvedAddr)
  private:
   inline void set_has_network_field();
   inline void clear_has_network_field();
-  inline void set_has_string_field();
-  inline void clear_has_string_field();
+  inline void set_has_address_field();
+  inline void clear_has_address_field();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr network_field_;
-  ::google::protobuf::internal::ArenaStringPtr string_field_;
+  ::google::protobuf::internal::ArenaStringPtr address_field_;
   friend void  protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto();
   friend void protobuf_AssignDesc_cockroach_2futil_2funresolved_5faddr_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2futil_2funresolved_5faddr_2eproto();
@@ -210,57 +210,57 @@ inline void UnresolvedAddr::set_allocated_network_field(::std::string* network_f
   // @@protoc_insertion_point(field_set_allocated:cockroach.util.UnresolvedAddr.network_field)
 }
 
-// optional string string_field = 2;
-inline bool UnresolvedAddr::has_string_field() const {
+// optional string address_field = 2;
+inline bool UnresolvedAddr::has_address_field() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void UnresolvedAddr::set_has_string_field() {
+inline void UnresolvedAddr::set_has_address_field() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void UnresolvedAddr::clear_has_string_field() {
+inline void UnresolvedAddr::clear_has_address_field() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void UnresolvedAddr::clear_string_field() {
-  string_field_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_string_field();
+inline void UnresolvedAddr::clear_address_field() {
+  address_field_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_address_field();
 }
-inline const ::std::string& UnresolvedAddr::string_field() const {
-  // @@protoc_insertion_point(field_get:cockroach.util.UnresolvedAddr.string_field)
-  return string_field_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline const ::std::string& UnresolvedAddr::address_field() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.UnresolvedAddr.address_field)
+  return address_field_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void UnresolvedAddr::set_string_field(const ::std::string& value) {
-  set_has_string_field();
-  string_field_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.util.UnresolvedAddr.string_field)
+inline void UnresolvedAddr::set_address_field(const ::std::string& value) {
+  set_has_address_field();
+  address_field_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.util.UnresolvedAddr.address_field)
 }
-inline void UnresolvedAddr::set_string_field(const char* value) {
-  set_has_string_field();
-  string_field_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.util.UnresolvedAddr.string_field)
+inline void UnresolvedAddr::set_address_field(const char* value) {
+  set_has_address_field();
+  address_field_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.util.UnresolvedAddr.address_field)
 }
-inline void UnresolvedAddr::set_string_field(const char* value, size_t size) {
-  set_has_string_field();
-  string_field_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+inline void UnresolvedAddr::set_address_field(const char* value, size_t size) {
+  set_has_address_field();
+  address_field_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.util.UnresolvedAddr.string_field)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.util.UnresolvedAddr.address_field)
 }
-inline ::std::string* UnresolvedAddr::mutable_string_field() {
-  set_has_string_field();
-  // @@protoc_insertion_point(field_mutable:cockroach.util.UnresolvedAddr.string_field)
-  return string_field_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* UnresolvedAddr::mutable_address_field() {
+  set_has_address_field();
+  // @@protoc_insertion_point(field_mutable:cockroach.util.UnresolvedAddr.address_field)
+  return address_field_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* UnresolvedAddr::release_string_field() {
-  clear_has_string_field();
-  return string_field_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* UnresolvedAddr::release_address_field() {
+  clear_has_address_field();
+  return address_field_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void UnresolvedAddr::set_allocated_string_field(::std::string* string_field) {
-  if (string_field != NULL) {
-    set_has_string_field();
+inline void UnresolvedAddr::set_allocated_address_field(::std::string* address_field) {
+  if (address_field != NULL) {
+    set_has_address_field();
   } else {
-    clear_has_string_field();
+    clear_has_address_field();
   }
-  string_field_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), string_field);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.util.UnresolvedAddr.string_field)
+  address_field_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), address_field);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.UnresolvedAddr.address_field)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS

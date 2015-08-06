@@ -27,7 +27,7 @@ import (
 func MakeUnresolvedAddr(network string, str string) UnresolvedAddr {
 	return UnresolvedAddr{
 		NetworkField: network,
-		StringField:  str,
+		AddressField: str,
 	}
 }
 
@@ -38,18 +38,18 @@ func (a UnresolvedAddr) Network() string {
 
 // String returns the address's string form.
 func (a UnresolvedAddr) String() string {
-	return a.StringField
+	return a.AddressField
 }
 
 // Resolve attempts to resolve a into a net.Addr.
 func (a UnresolvedAddr) Resolve() (net.Addr, error) {
 	switch a.NetworkField {
 	case "tcp", "tcp4", "tcp6":
-		return net.ResolveTCPAddr(a.NetworkField, a.StringField)
+		return net.ResolveTCPAddr(a.NetworkField, a.AddressField)
 	case "udp", "udp4", "udp6":
-		return net.ResolveUDPAddr(a.NetworkField, a.StringField)
+		return net.ResolveUDPAddr(a.NetworkField, a.AddressField)
 	case "unix", "unixgram", "unixpacket":
-		return net.ResolveUnixAddr(a.NetworkField, a.StringField)
+		return net.ResolveUnixAddr(a.NetworkField, a.AddressField)
 	}
 	return nil, fmt.Errorf("network %s not supported", a.NetworkField)
 }
