@@ -33,7 +33,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -126,40 +125,13 @@ type logicQuery struct {
 	pos             string
 	sql             string
 	colNames        bool
-	colTypes        string // TODO(pmattis): not (yet) implemented.
-	label           string // TODO(pmattis): not (yet) implemented.
+	colTypes        string
+	label           string
 	sorter          logicSorter
 	expectErr       string
 	expectedValues  int
 	expectedHash    string
 	expectedResults []string
-}
-
-// TODO(pmattis): #1961 is adding a similar type to cli/sql.go. Perhaps move
-// this type into the sql or sql/driver packages and export it so that it can
-// be shared.
-type logicValue string
-
-func (v *logicValue) Scan(value interface{}) error {
-	switch t := value.(type) {
-	case nil:
-		*v = "NULL"
-	case bool:
-		*v = logicValue(strconv.FormatBool(t))
-	case int64:
-		*v = logicValue(strconv.FormatInt(t, 10))
-	case float64:
-		*v = logicValue(strconv.FormatFloat(t, 'g', -1, 64))
-	case []byte:
-		*v = logicValue(t)
-	case string:
-		*v = logicValue(t)
-	case time.Time:
-		*v = logicValue(t.String())
-	default:
-		return fmt.Errorf("unexpected type: %T", value)
-	}
-	return nil
 }
 
 // logicTest executes the test cases specified in a file. The file format is
@@ -168,10 +140,6 @@ func (v *logicValue) Scan(value interface{}) error {
 // extensions to allow specifying errors and additional options. See
 // https://github.com/gregrahn/sqllogictest/ for a github mirror of the
 // sqllogictest source.
-//
-// TODO(pmattis): We currently cannot run the tests from sqllogictest due to
-// insufficient SQL coverage (e.g. lack of subqueries and aggregation
-// functions). We should work towards fixing that.
 type logicTest struct {
 	*testing.T
 	srv *server.TestServer
@@ -290,7 +258,6 @@ func (t logicTest) run(path string) {
 				if len(fields) >= 3 {
 					for _, opt := range strings.Split(fields[2], ",") {
 						switch opt {
-						// TODO(pmattis): The sort options are not yet implemented.
 						case "nosort":
 							query.sorter = nil
 
@@ -408,7 +375,7 @@ func (t *logicTest) execQuery(query logicQuery) {
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
-		vals[i] = new(logicValue)
+		vals[i] = new(sql.NullString)
 	}
 
 	var results []string
@@ -420,7 +387,12 @@ func (t *logicTest) execQuery(query logicQuery) {
 			t.Fatal(err)
 		}
 		for _, v := range vals {
-			results = append(results, string(*v.(*logicValue)))
+			nullStr := v.(*sql.NullString)
+			if nullStr.Valid {
+				results = append(results, nullStr.String)
+			} else {
+				results = append(results, "NULL")
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
