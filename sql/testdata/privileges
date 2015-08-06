@@ -50,3 +50,70 @@ GRANT ALL ON DATABASE a TO bar
 
 statement error user testuser does not have WRITE privilege on database a
 REVOKE ALL ON DATABASE a FROM bar
+
+# Grant READ privilege.
+user root
+
+statement ok
+GRANT READ ON DATABASE a TO testuser
+
+user testuser
+
+statement error only root is allowed to create databases
+CREATE DATABASE b
+
+statement ok
+SHOW DATABASES
+
+statement ok
+SET DATABASE = a
+
+statement error user testuser does not have WRITE privilege on database a
+CREATE TABLE t2 (id INT PRIMARY KEY)
+
+statement ok
+SHOW TABLES
+
+statement ok
+SHOW GRANTS ON DATABASE a
+
+statement error user testuser does not have WRITE privilege on database a
+GRANT ALL ON DATABASE a TO bar
+
+statement error user testuser does not have WRITE privilege on database a
+REVOKE ALL ON DATABASE a FROM bar
+
+# Grant WRITE privilege.
+user root
+
+statement ok
+REVOKE READ ON DATABASE a FROM testuser
+
+statement ok
+GRANT WRITE ON DATABASE a TO testuser
+
+user testuser
+
+statement error only root is allowed to create databases
+CREATE DATABASE b
+
+statement ok
+SHOW DATABASES
+
+statement ok
+SET DATABASE = a
+
+statement ok
+CREATE TABLE t2 (id INT PRIMARY KEY)
+
+statement ok
+SHOW TABLES
+
+statement ok
+SHOW GRANTS ON DATABASE a
+
+statement ok
+GRANT ALL ON DATABASE a TO bar
+
+statement ok
+REVOKE ALL ON DATABASE a FROM bar
