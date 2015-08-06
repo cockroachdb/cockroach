@@ -376,10 +376,14 @@ func (t *logicTest) execStatement(stmt logicStatement) {
 	switch {
 	case stmt.expectErr == "":
 		if err != nil {
-			t.Fatalf("%s: expected success, but found %v", stmt.pos, err)
+			t.Fatalf("%s: expected success, but found %q", stmt.pos, err)
 		}
 	case !testutils.IsError(err, stmt.expectErr):
-		t.Fatalf("%s: expected %q, but found %q", stmt.pos, stmt.expectErr, err)
+		if err != nil {
+			t.Fatalf("%s: expected %q, but found %q", stmt.pos, stmt.expectErr, err)
+		} else {
+			t.Fatalf("%s: expected %q, but found success", stmt.pos, stmt.expectErr)
+		}
 	}
 }
 
