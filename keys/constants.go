@@ -162,8 +162,8 @@ var (
 	DescMetadataPrefix = MakeKey(SystemPrefix, proto.Key("desc-"))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = MakeKey(SystemPrefix, proto.Key("node-idgen"))
-	// RangeIDGenerator is the global Raft consensus group ID generator sequence.
-	RangeIDGenerator = MakeKey(SystemPrefix, proto.Key("raft-idgen"))
+	// RangeIDGenerator is the global range ID generator sequence.
+	RangeIDGenerator = MakeKey(SystemPrefix, proto.Key("range-idgen"))
 	// SchemaPrefix specifies key prefixes for schema definitions.
 	SchemaPrefix = MakeKey(SystemPrefix, proto.Key("schema"))
 	// NameMetadataPrefix is the key prefix for all name metadata.

@@ -108,7 +108,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		}
 		rangeID2 = store.LookupReplica(key2, nil).Desc().RangeID
 		if rangeID2 == rangeID {
-			t.Errorf("got same raft id after split")
+			t.Errorf("got same range id after split")
 		}
 		if _, err := increment(rangeID, key1, 11); err != nil {
 			t.Fatal(err)
@@ -713,7 +713,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 
 	rangeID2 := store0.LookupReplica(key, nil).Desc().RangeID
 	if rangeID2 == rangeID {
-		t.Errorf("got same raft id after split")
+		t.Errorf("got same range id after split")
 	}
 	// Issue an increment for later check.
 	incArgs := incrementArgs(key, 11, rangeID2, store0.StoreID())

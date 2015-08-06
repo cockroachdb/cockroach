@@ -686,7 +686,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 			t.Fatal(err)
 		}
 		if desc.RangeID != proto.RangeID(2+i) {
-			t.Errorf("expected Raft id %d; got %d", 2+i, desc.RangeID)
+			t.Errorf("expected range id %d; got %d", 2+i, desc.RangeID)
 		}
 	}
 }
