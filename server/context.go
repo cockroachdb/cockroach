@@ -83,6 +83,9 @@ type Context struct {
 	// communicated between hosts on the gossip network.
 	GossipInterval time.Duration
 
+	// // Enables running the node as a single-node in-memory cluster.
+	TransientSingleNode bool
+
 	// Enables linearizable behaviour of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
 	// node clocks have necessarily passed it.
@@ -206,6 +209,11 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 	return engine.NewRocksDB(attrs, path, ctx.CacheSize), nil
 }
 
+// SelfGossipAddr is a special flag that configures a node to gossip
+// only with itself. This avoids having to specify the port twice for
+// single-node clusters (i.e. once in --addr, and again in --gossip).
+const SelfGossipAddr = "self="
+
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
 func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
@@ -215,11 +223,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 		if len(address) == 0 {
 			continue
 		}
-		// Special case self= to pick a nice address that resolves
-		// uniquely for use in Gossip. This avoids having to specify
-		// the port for single-node clusters twice (once in --addr,
-		// once in --gossip).
-		if strings.HasPrefix(address, "self=") {
+		if strings.HasPrefix(address, SelfGossipAddr) {
 			address = ctx.Addr
 		}
 		resolver, err := resolver.NewResolver(&ctx.Context, address)

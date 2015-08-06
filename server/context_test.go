@@ -30,7 +30,7 @@ func TestParseNodeAttributes(t *testing.T) {
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
-	ctx.GossipBootstrap = "self="
+	ctx.GossipBootstrap = SelfGossipAddr
 	if err := ctx.InitStores(); err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}

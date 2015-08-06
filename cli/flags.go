@@ -91,6 +91,10 @@ var flagUsage = map[string]string{
         sure that no commit timestamp is reported back to the client until all
         other node clocks have necessarily passed it.
 `,
+	"dev": `
+        Runs the node as a standalone in-memory cluster. Useful for developing
+        Cockroach itself.
+`,
 	"insecure": `
         Run over plain HTTP. WARNING: this is strongly discouraged.
 `,
@@ -152,6 +156,8 @@ func initFlags(ctx *server.Context) {
 	}
 
 	if f := startCmd.Flags(); true {
+		f.BoolVar(&ctx.TransientSingleNode, "dev", ctx.TransientSingleNode, flagUsage["dev"])
+
 		// Server flags.
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, flagUsage["attrs"])

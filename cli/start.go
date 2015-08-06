@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -112,9 +113,16 @@ func runStart(cmd *cobra.Command, args []string) {
 	// Default user for servers.
 	Context.User = security.NodeUser
 
-	if err := Context.InitStores(); err != nil {
-		log.Errorf("failed to initialize stores: %s", err)
-		return
+	if Context.TransientSingleNode {
+		Context.Stores = "mem=1073741824"
+		Context.GossipBootstrap = server.SelfGossipAddr
+
+		runInit(cmd, args)
+	} else {
+		if err := Context.InitStores(); err != nil {
+			log.Errorf("failed to initialize stores: %s", err)
+			return
+		}
 	}
 
 	if err := Context.InitNode(); err != nil {
@@ -130,10 +138,17 @@ func runStart(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err = s.Start(false)
-	if err != nil {
+	if err := s.Start(false); err != nil {
 		log.Errorf("cockroach server exited with error: %s", err)
 		return
+	}
+
+	if Context.TransientSingleNode {
+		// TODO(tamird): pass this to BootstrapRange rather than doing it
+		// at runtime. This was quicker, though.
+		if err := testutils.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
+			log.Errorf("failed to set default replica number: %s", err)
+		}
 	}
 
 	signalCh := make(chan os.Signal, 1)
