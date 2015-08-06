@@ -1,0 +1,47 @@
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+query T colnames
+SHOW TABLES FROM test
+----
+Table
+a
+b
+
+statement ok
+INSERT INTO a VALUES (3),(7),(2)
+
+query I
+SELECT * FROM a
+----
+2
+3
+7
+
+statement ok
+DROP TABLE a
+
+query T colnames
+SHOW TABLES FROM test
+----
+Table
+b
+
+statement error table "a" does not exist
+SELECT * FROM a
+
+statement error table "a" does not exist
+DROP TABLE a
+
+statement ok
+DROP TABLE IF EXISTS a
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+query I
+SELECT * FROM a
+----
