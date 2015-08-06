@@ -6,7 +6,7 @@ image="cockroachdb/builder"
 
 function init() {
   docker build --tag="${image}" - <<EOF
-FROM golang:1.4.2
+FROM golang:1.5
 
 RUN apt-get update -y && \
  apt-get dist-upgrade -y && \
