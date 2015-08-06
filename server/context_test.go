@@ -30,9 +30,12 @@ func TestParseNodeAttributes(t *testing.T) {
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
-	ctx.GossipBootstrap = "self="
-	if err := ctx.Init("start"); err != nil {
-		t.Fatalf("Failed to initialize the context: %v", err)
+	ctx.GossipBootstrap = SelfGossipAddr
+	if err := ctx.InitStores(); err != nil {
+		t.Fatalf("Failed to initialize stores: %s", err)
+	}
+	if err := ctx.InitNode(); err != nil {
+		t.Fatalf("Failed to initialize node: %s", err)
 	}
 	expected := []string{"attr1=val1", "attr2=val2"}
 	if !reflect.DeepEqual(ctx.NodeAttributes.GetAttrs(), expected) {
@@ -47,8 +50,11 @@ func TestParseGossipBootstrapAddrs(t *testing.T) {
 	ctx := NewContext()
 	ctx.GossipBootstrap = "localhost:12345,,localhost:23456"
 	ctx.Stores = "mem=1"
-	if err := ctx.Init("start"); err != nil {
-		t.Fatalf("Failed to initialize the context: %v", err)
+	if err := ctx.InitStores(); err != nil {
+		t.Fatalf("Failed to initialize stores: %s", err)
+	}
+	if err := ctx.InitNode(); err != nil {
+		t.Fatalf("Failed to initialize node: %s", err)
 	}
 	r1, err := resolver.NewResolver(&ctx.Context, "tcp=localhost:12345")
 	if err != nil {

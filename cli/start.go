@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -43,7 +44,7 @@ var Context = server.NewContext()
 // initCmd command initializes a new Cockroach cluster.
 var initCmd = &cobra.Command{
 	Use:   "init --stores=...",
-	Short: "init new Cockroach cluster and start server",
+	Short: "init new Cockroach cluster",
 	Long: `
 Initialize a new Cockroach cluster using the --stores flag to specify one or
 more storage locations. The first of these storage locations is used to
@@ -59,10 +60,9 @@ are already part of a pre-existing cluster, the bootstrap will fail.
 func runInit(cmd *cobra.Command, args []string) {
 	// Default user for servers.
 	Context.User = security.NodeUser
-	// First initialize the Context as it is used in other places.
-	err := Context.Init("init")
-	if err != nil {
-		log.Errorf("failed to initialize context: %s", err)
+
+	if err := Context.InitStores(); err != nil {
+		log.Errorf("failed to initialize stores: %s", err)
 		return
 	}
 
@@ -112,10 +112,21 @@ func runStart(cmd *cobra.Command, args []string) {
 
 	// Default user for servers.
 	Context.User = security.NodeUser
-	// First initialize the Context as it is used in other places.
-	err := Context.Init("start")
-	if err != nil {
-		log.Errorf("failed to initialize context: %s", err)
+
+	if Context.TransientSingleNode {
+		Context.Stores = "mem=1073741824"
+		Context.GossipBootstrap = server.SelfGossipAddr
+
+		runInit(cmd, args)
+	} else {
+		if err := Context.InitStores(); err != nil {
+			log.Errorf("failed to initialize stores: %s", err)
+			return
+		}
+	}
+
+	if err := Context.InitNode(); err != nil {
+		log.Errorf("failed to initialize node: %s", err)
 		return
 	}
 
@@ -127,10 +138,17 @@ func runStart(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err = s.Start(false)
-	if err != nil {
+	if err := s.Start(false); err != nil {
 		log.Errorf("cockroach server exited with error: %s", err)
 		return
+	}
+
+	if Context.TransientSingleNode {
+		// TODO(tamird): pass this to BootstrapRange rather than doing it
+		// at runtime. This was quicker, though.
+		if err := testutils.SetDefaultRangeReplicaNum(makeDBClient(), 1); err != nil {
+			log.Errorf("failed to set default replica number: %s", err)
+		}
 	}
 
 	signalCh := make(chan os.Signal, 1)
@@ -189,8 +207,7 @@ node, cycling through each store specified by the --stores flag.
 
 // runExterminate destroys the data held in the specified stores.
 func runExterminate(cmd *cobra.Command, args []string) {
-	err := Context.Init("exterminate")
-	if err != nil {
+	if err := Context.InitStores(); err != nil {
 		log.Errorf("failed to initialize context: %s", err)
 		return
 	}

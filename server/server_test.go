@@ -73,10 +73,9 @@ func TestInitEngine(t *testing.T) {
 	}
 	for _, spec := range testCases {
 		ctx := NewContext()
-		ctx.Stores, ctx.GossipBootstrap = spec.key, "self="
-		err := ctx.Init("start")
-		engines := ctx.Engines
-		if err == nil {
+		ctx.Stores, ctx.GossipBootstrap = spec.key, SelfGossipAddr
+		if err := ctx.InitStores(); err == nil {
+			engines := ctx.Engines
 			if spec.wantError {
 				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
 			}
@@ -87,7 +86,7 @@ func TestInitEngine(t *testing.T) {
 			if e.Attrs().SortedString() != spec.expAttrs.SortedString() {
 				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, e.Attrs(), spec)
 			}
-			_, ok := e.(*engine.InMem)
+			_, ok := e.(engine.InMem)
 			if spec.isMem != ok {
 				t.Errorf("expected in memory? %t, got %t: %+v", spec.isMem, ok, spec)
 			}
@@ -106,7 +105,7 @@ func TestInitEngines(t *testing.T) {
 
 	ctx := NewContext()
 	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
-	ctx.GossipBootstrap = "self="
+	ctx.GossipBootstrap = SelfGossipAddr
 	expEngines := []struct {
 		attrs proto.Attributes
 		isMem bool
@@ -117,11 +116,11 @@ func TestInitEngines(t *testing.T) {
 		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
-	err := ctx.Init("start")
-	engines := ctx.Engines
-	if err != nil {
+	if err := ctx.InitStores(); err != nil {
 		t.Fatal(err)
 	}
+
+	engines := ctx.Engines
 	if len(engines) != len(expEngines) {
 		t.Errorf("number of engines parsed %d != expected %d", len(engines), len(expEngines))
 	}
@@ -129,7 +128,7 @@ func TestInitEngines(t *testing.T) {
 		if e.Attrs().SortedString() != expEngines[i].attrs.SortedString() {
 			t.Errorf("wrong engine attributes, expected %v but got %v: %+v", expEngines[i].attrs, e.Attrs(), expEngines[i])
 		}
-		_, ok := e.(*engine.InMem)
+		_, ok := e.(engine.InMem)
 		if expEngines[i].isMem != ok {
 			t.Errorf("expected in memory? %t, got %t: %+v", expEngines[i].isMem, ok, expEngines[i])
 		}
