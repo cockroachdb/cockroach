@@ -25,8 +25,8 @@ type InMem struct {
 }
 
 // NewInMem allocates and returns a new, opened InMem engine.
-func NewInMem(attrs proto.Attributes, cacheSize int64) *InMem {
-	db := &InMem{
+func NewInMem(attrs proto.Attributes, cacheSize int64) InMem {
+	db := InMem{
 		RocksDB: newMemRocksDB(attrs, cacheSize),
 	}
 	if err := db.Open(); err != nil {

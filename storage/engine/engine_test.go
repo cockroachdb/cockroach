@@ -633,7 +633,7 @@ func TestSnapshotMethods(t *testing.T) {
 		// Verify Attrs.
 		var attrs proto.Attributes
 		switch engine.(type) {
-		case *InMem:
+		case InMem:
 			attrs = inMemAttrs
 		}
 		if !reflect.DeepEqual(engine.Attrs(), attrs) {

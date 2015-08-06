@@ -87,7 +87,7 @@ func TestInitEngine(t *testing.T) {
 			if e.Attrs().SortedString() != spec.expAttrs.SortedString() {
 				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, e.Attrs(), spec)
 			}
-			_, ok := e.(*engine.InMem)
+			_, ok := e.(engine.InMem)
 			if spec.isMem != ok {
 				t.Errorf("expected in memory? %t, got %t: %+v", spec.isMem, ok, spec)
 			}
@@ -129,7 +129,7 @@ func TestInitEngines(t *testing.T) {
 		if e.Attrs().SortedString() != expEngines[i].attrs.SortedString() {
 			t.Errorf("wrong engine attributes, expected %v but got %v: %+v", expEngines[i].attrs, e.Attrs(), expEngines[i])
 		}
-		_, ok := e.(*engine.InMem)
+		_, ok := e.(engine.InMem)
 		if expEngines[i].isMem != ok {
 			t.Errorf("expected in memory? %t, got %t: %+v", expEngines[i].isMem, ok, expEngines[i])
 		}

@@ -196,8 +196,6 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 			return nil, util.Errorf("unable to initialize an in-memory store with capacity 0")
 		}
 		return engine.NewInMem(attrs, int64(size)), nil
-		// TODO(spencer): should be using rocksdb for in-memory stores and
-		// relegate the InMem engine to usage only from unittests.
 	}
 	return engine.NewRocksDB(attrs, path, ctx.CacheSize), nil
 }
