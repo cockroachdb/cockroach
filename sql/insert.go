@@ -51,7 +51,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	// Verify we have at least the columns that are part of the primary key.
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDtoRowIndex[id]; !ok {
-			return nil, fmt.Errorf("missing \"%s\" primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+			return nil, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 

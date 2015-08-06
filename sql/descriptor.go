@@ -32,6 +32,14 @@ import (
 var _ descriptorProto = &structured.DatabaseDescriptor{}
 var _ descriptorProto = &structured.TableDescriptor{}
 
+// descriptorKey is the interface implemented by both
+// DatabaseKey and TableKey. It is used to easily get the
+// descriptor key and plain name.
+type descriptorKey interface {
+	Key() proto.Key
+	Name() string
+}
+
 // descriptorProto is the interface implemented by both DatabaseDescriptor
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
@@ -43,13 +51,15 @@ type descriptorProto interface {
 	HasPrivilege(string, parser.PrivilegeType) bool
 	GetID() structured.ID
 	SetID(structured.ID)
+	TypeName() string
 	GetName() string
 	Validate() error
 }
 
 // writeDescriptor takes a Table or Database descriptor and writes it
 // if needed, incrementing the descriptor counter.
-func (p *planner) writeDescriptor(key proto.Key, descriptor descriptorProto, ifNotExists bool) error {
+func (p *planner) writeDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) error {
+	key := plainKey.Key()
 	// Check whether key exists.
 	gr, err := p.db.Get(key)
 	if err != nil {
@@ -62,8 +72,7 @@ func (p *planner) writeDescriptor(key proto.Key, descriptor descriptorProto, ifN
 			return nil
 		}
 		// Key exists, but we don't want it to: error out.
-		// TODO(marc): prettify the error (strip stuff off the type name)
-		return fmt.Errorf("%T \"%s\" already exists", descriptor, key.String())
+		return fmt.Errorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
 	}
 
 	// Increment unique descriptor counter.
@@ -85,16 +94,15 @@ func (p *planner) writeDescriptor(key proto.Key, descriptor descriptorProto, ifN
 	})
 }
 
-// getDescriptor looks up the descriptor at `key`, validates it,
+// getDescriptor looks up the descriptor for `key`, validates it,
 // and unmarshals it into `descriptor`.
-func (p *planner) getDescriptor(key proto.Key, descriptor descriptorProto) error {
-	gr, err := p.db.Get(key)
+func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) error {
+	gr, err := p.db.Get(plainKey.Key())
 	if err != nil {
 		return err
 	}
 	if !gr.Exists() {
-		// TODO(marc): prettify the error (strip stuff off the type name)
-		return fmt.Errorf("%T \"%s\" does not exist", descriptor, key.String())
+		return fmt.Errorf("%s %q does not exist", descriptor.TypeName(), plainKey.Name())
 	}
 
 	descKey := gr.ValueBytes()

@@ -41,8 +41,8 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 	}
 
 	if !descriptor.HasPrivilege(p.user, parser.PrivilegeWrite) {
-		return nil, fmt.Errorf("user %s does not have %s privilege on database %s",
-			p.user, parser.PrivilegeWrite, descriptor.GetName())
+		return nil, fmt.Errorf("user %s does not have %s privilege on %s %s",
+			p.user, parser.PrivilegeWrite, descriptor.TypeName(), descriptor.GetName())
 	}
 
 	if err := descriptor.Grant(n); err != nil {

@@ -22,11 +22,26 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
+
+// tableKey implements descriptorKey.
+type tableKey struct {
+	id   structured.ID
+	name string
+}
+
+func (tk tableKey) Key() proto.Key {
+	return structured.MakeNameMetadataKey(tk.id, tk.name)
+}
+
+func (tk tableKey) Name() string {
+	return tk.name
+}
 
 func makeTableDesc(p *parser.CreateTable) (structured.TableDescriptor, error) {
 	desc := structured.TableDescriptor{}
@@ -113,9 +128,8 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (
 		return nil, err
 	}
 
-	nameKey := structured.MakeNameMetadataKey(dbDesc.ID, qname.Table())
 	desc := structured.TableDescriptor{}
-	if err := p.getDescriptor(nameKey, &desc); err != nil {
+	if err := p.getDescriptor(tableKey{dbDesc.ID, qname.Table()}, &desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil
@@ -144,8 +158,7 @@ func encodeIndexKey(index structured.IndexDescriptor,
 	for i, id := range index.ColumnIDs {
 		j, ok := colMap[id]
 		if !ok {
-			return nil, fmt.Errorf("missing \"%s\" primary key column",
-				index.ColumnNames[i])
+			return nil, fmt.Errorf("missing %q primary key column", index.ColumnNames[i])
 		}
 		// TOOD(pmattis): Need to convert the values[i] value to the type expected by
 		// the column.
