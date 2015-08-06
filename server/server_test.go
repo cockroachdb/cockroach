@@ -369,6 +369,21 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			len(writes), n)
 	}
 
+	commit := proto.Call{
+		Args: &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{
+				User: security.RootUser,
+				Txn:  del.Reply.Header().Txn,
+			},
+			Commit: true,
+		},
+		Reply: &proto.EndTransactionResponse{},
+	}
+	tds.Send(context.Background(), commit)
+	if err := commit.Reply.Header().GoError(); err != nil {
+		t.Fatal(err)
+	}
+
 	scan := proto.ScanCall(writes[0], writes[len(writes)-1].Next(), 0)
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	scan.Args.Header().User = security.RootUser
