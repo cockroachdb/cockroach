@@ -174,9 +174,48 @@ func (v *logicValue) Scan(value interface{}) error {
 // functions). We should work towards fixing that.
 type logicTest struct {
 	*testing.T
+	srv *server.TestServer
+	// map of built clients. Needs to be persisted so that we can
+	// re-use them and close them all on exit.
+	clients map[string]*sql.DB
+	// client currently in use.
+	db *sql.DB
+}
+
+func (t *logicTest) close() {
+	if t.srv != nil {
+		t.srv.Stop()
+		t.srv = nil
+	}
+	if t.clients != nil {
+		for _, c := range t.clients {
+			c.Close()
+		}
+		t.clients = nil
+	}
+	t.db = nil
+}
+
+// setUser sets the DB client to the specified user, creating it if needed.
+func (t *logicTest) setUser(user string) {
+	if t.clients == nil {
+		t.clients = map[string]*sql.DB{}
+	}
+	if c, ok := t.clients[user]; ok {
+		t.db = c
+		return
+	}
+	db, err := sql.Open("cockroach", "https://"+user+"@"+t.srv.ServingAddr()+"?certs=test_certs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.clients[user] = db
+	t.db = db
 }
 
 func (t logicTest) run(path string) {
+	defer t.close()
+
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -186,21 +225,16 @@ func (t logicTest) run(path string) {
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
-	srv := server.StartTestServer(nil)
+	t.srv = server.StartTestServer(t)
 
-	// TODO(marc): Allow the user to be specified somehow so that we can
-	// test permissions.
-	db, err := sql.Open("cockroach", "https://root@"+srv.ServingAddr()+"?certs=test_certs")
-	if err != nil {
+	// db may change over the lifetime of this function, with intermediate
+	// values cached in t.clients and finally closed in t.close().
+	t.setUser("root")
+
+	if _, err := t.db.Exec("CREATE DATABASE test"); err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
-	defer srv.Stop()
-
-	if _, err := db.Exec("CREATE DATABASE test"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec("SET DATABASE = test"); err != nil {
+	if _, err := t.db.Exec("SET DATABASE = test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -231,7 +265,7 @@ func (t logicTest) run(path string) {
 				fmt.Fprintln(&buf, line)
 			}
 			stmt.sql = strings.TrimSpace(buf.String())
-			t.execStatement(db, stmt)
+			t.execStatement(stmt)
 
 		case "query":
 			query := logicQuery{pos: fmt.Sprintf("%s:%d", base, s.line)}
@@ -312,10 +346,19 @@ func (t logicTest) run(path string) {
 				}
 			}
 
-			t.execQuery(db, query)
+			t.execQuery(query)
 
 		case "halt":
 			break
+
+		case "user":
+			if len(fields) != 2 {
+				t.Fatalf("user command requires one argument, found: %v", fields)
+			}
+			if len(fields[1]) == 0 {
+				t.Fatal("user command requires a non-blank argument")
+			}
+			t.setUser(fields[1])
 
 		case "skipif", "onlyif":
 			t.Fatalf("unimplemented test statement: %s", s.Text())
@@ -327,9 +370,9 @@ func (t logicTest) run(path string) {
 	}
 }
 
-func (t logicTest) execStatement(db *sql.DB, stmt logicStatement) {
+func (t *logicTest) execStatement(stmt logicStatement) {
 	fmt.Printf("%s: %s\n", stmt.pos, stmt.sql)
-	_, err := db.Exec(stmt.sql)
+	_, err := t.db.Exec(stmt.sql)
 	switch {
 	case stmt.expectErr == "":
 		if err != nil {
@@ -340,9 +383,9 @@ func (t logicTest) execStatement(db *sql.DB, stmt logicStatement) {
 	}
 }
 
-func (t logicTest) execQuery(db *sql.DB, query logicQuery) {
+func (t *logicTest) execQuery(query logicQuery) {
 	fmt.Printf("%s: %s\n", query.pos, query.sql)
-	rows, err := db.Query(query.sql)
+	rows, err := t.db.Query(query.sql)
 	if query.expectErr == "" {
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %v", query.pos, err)
@@ -408,12 +451,11 @@ func (t logicTest) execQuery(db *sql.DB, query logicQuery) {
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	l := logicTest{T: t}
 	paths, err := filepath.Glob(*testdata)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range paths {
-		l.run(p)
+		logicTest{T: t}.run(p)
 	}
 }
