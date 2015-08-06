@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -448,13 +449,21 @@ func (r *Replica) GetMVCCStats() engine.MVCCStats {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Replica) ContainsKey(key proto.Key) bool {
-	return r.Desc().ContainsKey(keys.KeyAddress(key))
+	return containsKey(*r.Desc(), key)
+}
+
+func containsKey(desc proto.RangeDescriptor, key proto.Key) bool {
+	return desc.ContainsKey(keys.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end proto.Key) bool {
-	return r.Desc().ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
+	return containsKeyRange(*r.Desc(), start, end)
+}
+
+func containsKeyRange(desc proto.RangeDescriptor, start, end proto.Key) bool {
+	return desc.ContainsKeyRange(keys.KeyAddress(start), keys.KeyAddress(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
@@ -604,9 +613,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto
 			header.Timestamp = r.rm.Clock().Now()
 		}
 		reply, intents, err := r.executeCmd(r.rm.Engine(), nil, args)
-		if err == nil {
-			r.handleSkippedIntents(args, intents)
-		}
+		r.handleSkippedIntents(args, intents) // even on error
 		return reply, err
 	} else if header.ReadConsistency == proto.CONSENSUS {
 		return nil, util.Error("consensus reads not implemented")
@@ -628,9 +635,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, args proto.Request) (proto
 	// Only update the timestamp cache if the command succeeded.
 	r.endCmd(cmdKey, args, err, true /* readOnly */)
 
-	if err == nil {
-		r.handleSkippedIntents(args, intents)
-	}
+	r.handleSkippedIntents(args, intents) // even on error
 	return reply, err
 }
 
@@ -922,18 +927,13 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 	}
 
-	// If the execution of the command wasn't successful, stop here.
-	if rErr != nil {
-		return batch, reply, rErr
-	}
-
-	// On success and only on the replica on which this command originated,
-	// resolve skipped intents asynchronously.
+	// On the replica on which this command originated, resolve skipped intents
+	// asynchronously - even on failure.
 	if originNode == r.rm.RaftNodeID() {
 		r.handleSkippedIntents(args, intents)
 	}
 
-	return batch, reply, nil
+	return batch, reply, rErr
 }
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
@@ -1062,6 +1062,11 @@ func (r *Replica) handleSkippedIntents(args proto.Request, intents []proto.Inten
 
 	ctx := r.context()
 	stopper := r.rm.Stopper()
+	// TODO(tschottdorf): There's a chance that #1684 will make a comeback
+	// since intent resolution on commit has since moved to EndTransaction,
+	// which returns (some of) them as skipped intents. If so, need to resolve
+	// synchronously if we're not allowed to do async (or just launch
+	// goroutines).
 	stopper.RunAsyncTask(func() {
 		err := r.rm.resolveWriteIntentError(ctx, &proto.WriteIntentError{
 			Intents: intents,
@@ -1143,6 +1148,103 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 		return cErr
 	}
 	return err
+}
+
+// resolveIntents resolves the given intents. For those which are local to the
+// range, we submit directly to the range-local Raft instance; the call returns
+// as soon as all resolve commands have been **proposed** (not executed). This
+// ensures that if a waiting client retries immediately after conflict
+// resolution, it will not hit the same intents again. All non-local intents
+// are resolved asynchronously in a batch.
+// TODO(tschottdorf): once Txn records have a list of possibly open intents,
+// resolveIntents should send an RPC to update the transaction(s) as well (for
+// those intents with non-pending Txns).
+func (r *Replica) resolveIntents(ctx context.Context, intents []proto.Intent) {
+	trace := tracer.FromCtx(ctx)
+	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
+	trace.Event("resolving intents [async]")
+	var wg sync.WaitGroup
+
+	bArgs := &proto.BatchRequest{}
+	bArgs.User = security.RootUser
+	for i := range intents {
+		intent := intents[i] // avoids a race in `i, intent := range ...`
+		var resolveArgs proto.Request
+		var local bool // whether this intent lives on this Range
+		{
+			header := proto.RequestHeader{
+				// Use the pushee's timestamp, which might be lower than the
+				// pusher's request timestamp. No need to push the intent higher
+				// than the pushee's txn!
+				Timestamp: intent.Txn.Timestamp,
+				Key:       intent.Key,
+				EndKey:    intent.EndKey,
+				User:      security.RootUser,
+				Txn:       &intent.Txn,
+			}
+
+			if len(intent.EndKey) == 0 {
+				resolveArgs = &proto.ResolveIntentRequest{RequestHeader: header}
+				local = r.ContainsKey(intent.Key)
+			} else {
+				resolveArgs = &proto.ResolveIntentRangeRequest{RequestHeader: header}
+				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
+			}
+		}
+
+		// If the intent isn't (completely) local, we'll need to send an external request.
+		// We'll batch them all up and send at the end.
+		if !local {
+			bArgs.Add(resolveArgs)
+			continue
+		}
+
+		// If it is local, it goes directly into Raft.
+		// TODO(tschottdorf): this may be premature optimization. Consider just
+		// treating everything as an external request. This means having to
+		// wait for complete execution of the command (whereas now we just wait
+		// for proposition) and some more overhead sending things around.
+		wg.Add(1)
+		action := func() {
+			// Trace this under the ID of the intent owner.
+			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(resolveArgs.Header().Txn))
+			if _, err := r.addWriteCmd(ctx, resolveArgs, &wg); err != nil && log.V(1) {
+				log.Warningc(ctx, "resolve for key %s failed: %s", intent.Key, err)
+			}
+		}
+		if !r.rm.Stopper().RunAsyncTask(action) {
+			// Still run the task. Our caller already has a task and going async
+			// here again is merely for performance, but some intents need to
+			// be resolved because they might block other tasks. See #1684.
+			// Note that handleSkippedIntents has a TODO in case #1684 comes
+			// back.
+			action()
+		}
+	}
+	// Resolve all of the intents which aren't local to the Range. This is a
+	// no-op if all are local.
+	b := &client.Batch{}
+	b.InternalAddCall(proto.Call{Args: bArgs, Reply: &proto.BatchResponse{}})
+	action := func() {
+		// TODO(tschottdorf): no tracing here yet. Probably useful at some point,
+		// but needs a) the corresponding interface and b) facilities for tracing
+		// multiple tracees at the same time (batch full of possibly individual
+		// txns).
+		if err := r.rm.DB().Run(b); err != nil {
+			if log.V(1) {
+				log.Infoc(ctx, "%s", err)
+			}
+		}
+	}
+	if !r.rm.Stopper().RunAsyncTask(action) {
+		// As with local intents, try async to not keep the caller waiting, but
+		// when draining just go ahead and do it synchronously. See #1684.
+		action()
+	}
+
+	// Wait until all the local `ResolveIntent`s have been submitted to raft.
+	// No-op if all were external.
+	wg.Wait()
 }
 
 // loadConfigMap scans the config entries under keyPrefix and

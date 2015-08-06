@@ -86,9 +86,9 @@ type txnMetadata struct {
 	// is set to 0, a default timeout will be used.
 	timeoutDuration time.Duration
 
-	// txnEnd receives a slice of pre-resolved intents when the transaction is
-	// aborted or committed, prompting the receiver to clean up the intents.
-	txnEnd chan []proto.Key
+	// txnEnd is closed when the transaction is aborted or committed,
+	// terminating the associated heartbeat instance.
+	txnEnd chan struct{}
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -137,80 +137,20 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 	return tm.getLastUpdate() < timeout
 }
 
-// resolve sends resolve intent commands for all key ranges this transaction
-// has covered. Any keys listed in the resolved slice have already been
-// resolved and are skipped.
-func (tm *txnMetadata) resolve(trace *tracer.Trace, resolved []proto.Key, sender client.Sender) {
-	txn := &tm.txn
-	if tm.keys.Len() > 0 {
-		if log.V(2) {
-			log.Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
-		}
-	}
-	// TODO(tschottdorf): Should create a Batch here. However, we're resolving
-	// intents and if those are on meta records, there may be a certain order
-	// in which they need to be resolved so that they can get routed to the
-	// correct range. Since a batch runs its commands one by one and we don't
-	// know the correct order, we prefer to fire them off in parallel.
-	var wg sync.WaitGroup
+// intents collects the intents to be resolved for the transaction. It does
+// not create copies, so the caller must not alter the returned data.
+func (tm *txnMetadata) intents() []proto.Intent {
+	intents := make([]proto.Intent, 0, tm.keys.Len())
 	for _, o := range tm.keys.GetOverlaps(proto.KeyMin, proto.KeyMax) {
-		// If the op was range based, end key != start key: resolve a range.
-		var call proto.Call
-		key := o.Key.Start().(proto.Key)
-		endKey := o.Key.End().(proto.Key)
-		if !key.Next().Equal(endKey) {
-			call.Args = &proto.ResolveIntentRangeRequest{
-				RequestHeader: proto.RequestHeader{
-					Timestamp: txn.Timestamp,
-					Key:       key,
-					EndKey:    endKey,
-					User:      security.RootUser,
-					Txn:       txn,
-				},
-			}
-			call.Reply = &proto.ResolveIntentRangeResponse{}
-		} else {
-			// Check if the key has already been resolved; skip if yes.
-			found := false
-			for _, k := range resolved {
-				if key.Equal(k) {
-					if log.V(2) {
-						log.Warningf("skipping previously resolved intent at %q", k)
-					}
-					found = true
-				}
-			}
-			if found {
-				continue
-			}
-			call.Args = &proto.ResolveIntentRequest{
-				RequestHeader: proto.RequestHeader{
-					Timestamp: txn.Timestamp,
-					Key:       key,
-					User:      security.RootUser,
-					Txn:       txn,
-				},
-			}
-			call.Reply = &proto.ResolveIntentResponse{}
+		intent := proto.Intent{
+			Key: o.Key.Start().(proto.Key),
 		}
-		ctx := tracer.ToCtx(context.Background(), trace.Fork())
-		if log.V(2) {
-			log.Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+		if endKey := o.Key.End().(proto.Key); !intent.Key.IsPrev(endKey) {
+			intent.EndKey = endKey
 		}
-		// Each operation gets their own goroutine. We only want to return to
-		// the caller after the operations have finished.
-		wg.Add(1)
-		go func() {
-			sender.Send(ctx, call)
-			wg.Done()
-			if call.Reply.Header().Error != nil {
-				log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
-			}
-		}()
+		intents = append(intents, intent)
 	}
-	defer trace.Epoch("waiting for intent resolution")()
-	wg.Wait()
-	tm.keys.Clear()
+	return intents
 }
 
 // txnCoordStats tallies up statistics about the transactions which have
@@ -440,12 +380,34 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 		} else {
 			header.Timestamp = header.Txn.Timestamp
 		}
-		// EndTransaction must have its key set to that of the txn.
-		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
-			header.Key = header.Txn.Key
+
+		if args, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
+			// EndTransaction must have its key set to that of the txn.
+			header.Key = header.Txn.Key
+			if len(args.Intents) > 0 {
+				// TODO(tschottdorf): it may be useful to allow this later.
+				// That would be part of a possible plan to allow txns which
+				// write on multiple coordinators.
+				call.Reply.Header().SetGoError(util.Errorf(
+					"client must not pass intents to EndTransaction"))
+				return
+			}
+			tc.Lock()
+			if txnMeta := tc.txns[id]; id != "" && txnMeta != nil {
+				args.Intents = txnMeta.intents()
+			}
+			tc.Unlock()
+			// If there aren't any intents, then there's factually no
+			// transaction to end. Read-only txns have all of their state in
+			// the client.
+			if len(args.Intents) == 0 {
+				call.Reply.Header().SetGoError(util.Errorf(
+					"cannot commit a read-only transaction"))
+				return
+			}
 		}
 	}
 
@@ -484,18 +446,16 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						firstUpdateNanos: tc.clock.PhysicalNow(),
 						lastUpdateNanos:  tc.clock.PhysicalNow(),
 						timeoutDuration:  tc.clientTimeout,
-						txnEnd:           make(chan []proto.Key, 1),
+						txnEnd:           make(chan struct{}),
 					}
 					tc.txns[id] = txnMeta
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeat(id)
 					}) {
 						// The system is already draining and we can't start the
-						// heartbeat. Since the heartbeat also resolves intents,
-						// and since intent resolution may be critical for
-						// another running task (which may need to see an intent
-						// on the meta adressing records in order to hit the
-						// correct range), we fail here.
+						// heartbeat. We refuse new transactions for now because
+						// they're likely not going to have all intents committed.
+						// In principle, we can relax this as needed though.
 						call.Reply.Header().SetGoError(&proto.NodeUnavailableError{})
 						tc.Unlock()
 						tc.unregisterTxn(id)
@@ -518,10 +478,10 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 	case *proto.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider it dead.
-		tc.cleanupTxn(trace, t.Txn, nil)
+		tc.cleanupTxn(trace, t.Txn)
 	case *proto.TransactionAbortedError:
 		// If already aborted, cleanup the txn on this TxnCoordSender.
-		tc.cleanupTxn(trace, t.Txn, nil)
+		tc.cleanupTxn(trace, t.Txn)
 	case *proto.OpRequiresTxnError:
 		// Run a one-off transaction with that single command.
 		if log.V(1) {
@@ -548,7 +508,6 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 			log.Warning(err)
 		}
 	case nil:
-		var resolved []proto.Key
 		if txn := call.Reply.Header().Txn; txn != nil {
 			if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 				// If the --linearizable flag is set, we want to make sure that
@@ -572,9 +531,8 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 						time.Sleep(sleepNS)
 					}()
 				}
-				resolved = call.Reply.(*proto.EndTransactionResponse).Resolved
 				if txn.Status != proto.PENDING {
-					tc.cleanupTxn(trace, *txn, resolved)
+					tc.cleanupTxn(trace, *txn)
 				}
 
 			}
@@ -587,22 +545,31 @@ func (tc *TxnCoordSender) sendOne(ctx context.Context, call proto.Call) {
 // inconsistencies are found.
 // It is checked that the individual call does not have a User, UserPriority
 // or Txn set that differs from the batch's.
-func updateForBatch(aHeader *proto.RequestHeader, bHeader proto.RequestHeader) error {
+func updateForBatch(args proto.Request, bHeader proto.RequestHeader) error {
 	// Disallow transaction, user and priority on individual calls, unless
 	// equal.
+	aHeader := args.Header()
 	if aHeader.User != "" && aHeader.User != bHeader.User {
 		return util.Error("conflicting user on call in batch")
 	}
 	if aPrio := aHeader.GetUserPriority(); aPrio != proto.Default_RequestHeader_UserPriority && aPrio != bHeader.GetUserPriority() {
 		return util.Error("conflicting user priority on call in batch")
 	}
-	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
-		return util.Error("conflicting transaction in transactional batch")
-	}
-
 	aHeader.User = bHeader.User
 	aHeader.UserPriority = bHeader.UserPriority
-	aHeader.Txn = bHeader.Txn
+	// Only allow individual transactions on the requests of a batch if
+	// - the batch is non-transactional,
+	// - the individual transaction does not write intents, and
+	// - the individual transaction is initialized.
+	// The main usage of this is to allow mass-resolution of intents, which
+	// entails sending a non-txn batch of transactional InternalResolveIntent.
+	if aHeader.Txn != nil && !aHeader.Txn.Equal(bHeader.Txn) {
+		if len(aHeader.Txn.ID) == 0 || proto.IsTransactionWrite(args) || bHeader.Txn != nil {
+			return util.Error("conflicting transaction in transactional batch")
+		}
+	} else {
+		aHeader.Txn = bHeader.Txn
+	}
 	return nil
 }
 
@@ -619,7 +586,7 @@ func (tc *TxnCoordSender) sendBatch(ctx context.Context, batchArgs *proto.BatchR
 	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		if err := updateForBatch(args.Header(), batchArgs.RequestHeader); err != nil {
+		if err := updateForBatch(args, batchArgs.RequestHeader); err != nil {
 			batchReply.Header().SetGoError(err)
 			return
 		}
@@ -700,7 +667,7 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 // cleanupTxn is called when a transaction ends. The transaction record is
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
-func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction, resolved []proto.Key) {
+func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction) {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
@@ -712,10 +679,10 @@ func (tc *TxnCoordSender) cleanupTxn(trace *tracer.Trace, txn proto.Transaction,
 	// The supplied txn may be newed than the one in txnMeta, which is relevant
 	// for stats.
 	txnMeta.txn = txn
-	// Trigger intent resolution and heartbeat shutdown.
+	// Trigger heartbeat shutdown.
 	trace.Event("coordinator stops")
-	txnMeta.txnEnd <- resolved // buffered and not nil, so does not block
-	txnMeta.txnEnd = nil       // checked above
+	close(txnMeta.txnEnd)
+	txnMeta.txnEnd = nil // for idempotency; checked above
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
@@ -737,6 +704,7 @@ func (tc *TxnCoordSender) unregisterTxn(id string) {
 	case proto.COMMITTED:
 		tc.txnStats.committed++
 	}
+	txnMeta.keys.Clear()
 	delete(tc.txns, id)
 }
 
@@ -754,7 +722,7 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 	}
 	defer tc.unregisterTxn(id)
 
-	var closer <-chan []proto.Key
+	var closer <-chan struct{}
 	var trace *tracer.Trace
 	{
 		tc.Lock()
@@ -823,18 +791,13 @@ func (tc *TxnCoordSender) heartbeat(id string) {
 			if reply.GoError() != nil {
 				log.Warningf("heartbeat to %s failed: %s", txn, reply.GoError())
 			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-				tc.cleanupTxn(trace, *reply.Txn, nil) // signal closer
-				tickChan = nil                        // wait only for the closer, no more heartbeats
+				// Signal cleanup. Doesn't do much but stop this goroutine, but
+				// let's be future-proof.
+				tc.cleanupTxn(trace, *reply.Txn)
+				return
 			}
-
-		case resolved := <-closer:
-			// Transaction finished normally. Clean up intents (and wait for
-			// completion).
-			defer trace.Epoch("intent resolution")()
-			tc.Lock()
-			txnMeta := tc.txns[id]
-			tc.Unlock()
-			txnMeta.resolve(trace, resolved, tc.wrapped)
+		case <-closer:
+			// Transaction finished normally.
 			return
 		}
 	}

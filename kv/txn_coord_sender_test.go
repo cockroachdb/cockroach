@@ -474,8 +474,6 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	}
 	err := sendCall(s.Sender, call)
 	switch err.(type) {
-	case nil:
-		t.Fatal("expected txn aborted error")
 	case *proto.TransactionAbortedError:
 		// Expected
 	default:
@@ -620,48 +618,67 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderBatchTransaction tests that it is not possible to send
-// one-off transactional calls within a batch (the batch must contain the
-// transaction for all contained calls instead).
+// TestTxnCoordSenderBatchTransaction tests that it is possible to send
+// one-off transactional calls within a batch under certain circumstances.
 func TestTxnCoordSenderBatchTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	clock := hlc.NewClock(hlc.UnixNano)
 	var called bool
+	var alwaysError = errors.New("success")
 	ts := NewTxnCoordSender(newTestSender(func(call proto.Call) {
 		called = true
+		// Returning this error is an easy way of preventing heartbeats
+		// to be started for otherwise "successful" calls.
+		call.Reply.Header().SetGoError(alwaysError)
 		return
 	}), clock, false, nil, stopper)
 
-	testCases := []struct{ batch, arg, ok bool }{
-		{false, false, true},
-		{true, false, true},
-		{true, true, false},
-		{false, true, false},
+	pushArg := &proto.PushTxnRequest{}
+	putArg := &proto.PutRequest{}
+	getArg := &proto.GetRequest{}
+	testCases := []struct {
+		req            proto.Request
+		batch, arg, ok bool
+	}{
+		// Lays intents: can't have this on individual calls at all.
+		{putArg, false, false, true},
+		{putArg, true, false, true},
+		{putArg, true, true, false},
+		{putArg, false, true, false},
+
+		// No intents: all ok, except when batch and arg have different txns.
+		{pushArg, false, false, true},
+		{pushArg, true, false, true},
+		{pushArg, true, true, false},
+		{pushArg, false, true, true},
+		{getArg, false, false, true},
+		{getArg, true, false, true},
+		{getArg, true, true, false},
+		{getArg, false, true, true},
 	}
 
 	txn1 := &proto.Transaction{ID: []byte("txn1")}
 	txn2 := &proto.Transaction{ID: []byte("txn2")}
 
 	for i, tc := range testCases {
+		called = false
+		tc.req.Reset()
 		bArgs := &proto.BatchRequest{}
 		bReply := &proto.BatchResponse{}
 
-		pushArgs := &proto.PushTxnRequest{}
 		if tc.arg {
-			pushArgs.RequestHeader = proto.RequestHeader{
-				Txn: txn1,
-			}
+			tc.req.Header().Txn = txn1
 		}
-		bArgs.Add(pushArgs)
+		bArgs.Add(tc.req)
 		if tc.batch {
 			bArgs.Txn = txn2
 		}
 		called = false
 		ts.Send(context.Background(), proto.Call{Args: bArgs, Reply: bReply})
-		if !tc.ok && bReply.GoError() == nil {
-			t.Fatalf("%d: expected error", i)
+		if !tc.ok && bReply.GoError() == alwaysError {
+			t.Fatalf("%d: expected error%s", i, bReply.GoError())
 		} else if tc.ok != called {
 			t.Fatalf("%d: wanted call: %t, got call: %t", i, tc.ok, called)
 		}
@@ -773,7 +790,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	if pReply.Error != nil {
 		t.Fatal(pReply.GoError())
 	}
-	s.Sender.cleanupTxn(nil, *txn, nil) // first call
+	s.Sender.cleanupTxn(nil, *txn) // first call
 	etReply := &proto.EndTransactionResponse{}
 	s.Sender.Send(context.Background(), proto.Call{
 		Args: &proto.EndTransactionRequest{
@@ -825,8 +842,12 @@ func TestTxnMultipleCoord(t *testing.T) {
 		txn := tc.call.Reply.Header().Txn
 		// The transaction should come back rw if it started rw or if we just
 		// wrote.
-		if (tc.writing || proto.IsTransactionWrite(tc.call.Args)) != txn.Writing {
+		isWrite := proto.IsTransactionWrite(tc.call.Args)
+		if (tc.writing || isWrite) != txn.Writing {
 			t.Errorf("%d: unexpected writing state: %s", i, txn)
+		}
+		if !isWrite {
+			continue
 		}
 		// Abort for clean shutdown.
 		etReply := &proto.EndTransactionResponse{}

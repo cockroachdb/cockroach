@@ -102,6 +102,7 @@ var (
 	// NOTE: LocalRangePrefix must be kept in sync with the value in
 	// storage/engine/db.cc.
 	LocalRangePrefix = MakeKey(LocalPrefix, proto.Key("k"))
+	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = proto.Key("rdsc")

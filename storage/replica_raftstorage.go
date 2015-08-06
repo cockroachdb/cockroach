@@ -245,13 +245,9 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.Desc().StartKey),
-		r.rm.Clock().Now(), false, nil, &desc)
+		r.rm.Clock().Now(), false /* !consistent */, nil, &desc)
 	if err != nil {
-		// MVCCGetProto may return WriteIntentErrors in addition to a valid value.
-		// We can't resolve intents at this level so just ignore the error.
-		if _, ok = err.(*proto.WriteIntentError); !ok {
-			return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
-		}
+		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
 	}
 	if !ok {
 		return raftpb.Snapshot{}, util.Errorf("couldn't find range descriptor")

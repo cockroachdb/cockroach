@@ -278,7 +278,6 @@ func (sr *ScanResponse) Verify(req Request) error {
 func (br *BatchRequest) Add(args Request) {
 	union := RequestUnion{}
 	if !union.SetValue(args) {
-		// TODO(tschottdorf) evaluate whether this should return an error.
 		panic(fmt.Sprintf("unable to add %T to batch request", args))
 	}
 	if br.Key == nil {

@@ -87,6 +87,37 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 	}
 }
 
+// TestRangeSplit executes various splits and checks that all created intents
+// are resolved. This includes both intents which are resolved synchronously
+// with EndTransaction and via RPC.
+func TestRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	splitKeys := []proto.Key{proto.Key("G"), keys.RangeMetaKey(proto.Key("F")),
+		keys.RangeMetaKey(proto.Key("K")), keys.RangeMetaKey(proto.Key("H"))}
+
+	// Execute the consecutive splits.
+	for _, splitKey := range splitKeys {
+		log.Infof("starting split at key %q...", splitKey)
+		if err := s.DB.AdminSplit(splitKey); err != nil {
+			t.Fatal(err)
+		}
+		log.Infof("split at key %q complete", splitKey)
+	}
+
+	if err := util.IsTrueWithin(func() bool {
+		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, proto.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
+			log.Infof("mvcc scan should be clean: %s", err)
+			return false
+		}
+		return true
+	}, 500*time.Millisecond); err != nil {
+		t.Error("failed to verify no dangling intents within 500ms")
+	}
+}
+
 // TestRangeSplitsWithConcurrentTxns does 5 consecutive splits while
 // 10 concurrent goroutines are each running successive transactions
 // composed of a random mix of puts.
