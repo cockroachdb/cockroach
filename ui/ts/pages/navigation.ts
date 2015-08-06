@@ -43,6 +43,7 @@ module AdminViews {
 
         public TargetSet(): NavigationBar.TargetSet {
           return {
+            baseRoute: "",
             targets: Utils.Prop(Controller.defaultTargets),
             isActive: Controller.isActive
           };

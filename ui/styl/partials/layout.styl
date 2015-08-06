@@ -32,16 +32,23 @@ body
 
 #root
   position: relative
-  top: 4rem 
+  top: 6rem 
   min-height: calc(100% - 4rem)
-  background-color: -color('light')
+  background-color: -color('light', 'x-light')
   color: -color('dark', 'light')
-  padding: 0rem 1rem
 
   &:after
     content: ""
     display: table
     clear: both
 
+.primary
+  background-color: -color('light')
+
 .section
-  margin-bottom: 2rem
+  padding: 1rem 2rem
+
+  &:after
+    content: ""
+    display: table
+    clear: both

@@ -373,7 +373,7 @@ var Components;
                 var renderedCols = cols.map(function (col) {
                     return m("th", {
                         onclick: function (e) { return _this.SetSortColumn(col); },
-                        className: _this.IsSortColumn(col) ? sortClass : null
+                        className: _this.IsSortColumn(col) ? sortClass : ""
                     }, col.title);
                 });
                 return m("tr", renderedCols);
@@ -385,7 +385,7 @@ var Components;
                 var renderedRows = _.map(rows, function (row) {
                     var renderedCols = cols.map(function (col) {
                         return m("td", {
-                            className: _this.IsSortColumn(col) ? "sorted" : null
+                            className: _this.IsSortColumn(col) ? "sorted" : ""
                         }, col.view(row));
                     });
                     return m("tr", renderedCols);

@@ -613,7 +613,7 @@ var Components;
                     className: ts.isActive(t) ? "active" : ""
                 }, m("a", {
                     config: m.route,
-                    href: t.route
+                    href: ts.baseRoute + t.route
                 }, t.title));
             }));
         }
@@ -639,6 +639,7 @@ var AdminViews;
                 }
                 Controller.prototype.TargetSet = function () {
                     return {
+                        baseRoute: "",
                         targets: Utils.Prop(Controller.defaultTargets),
                         isActive: Controller.isActive
                     };
@@ -823,7 +824,7 @@ var Components;
                 var renderedCols = cols.map(function (col) {
                     return m("th", {
                         onclick: function (e) { return _this.SetSortColumn(col); },
-                        className: _this.IsSortColumn(col) ? sortClass : null
+                        className: _this.IsSortColumn(col) ? sortClass : ""
                     }, col.title);
                 });
                 return m("tr", renderedCols);
@@ -835,7 +836,7 @@ var Components;
                 var renderedRows = _.map(rows, function (row) {
                     var renderedCols = cols.map(function (col) {
                         return m("td", {
-                            className: _this.IsSortColumn(col) ? "sorted" : null
+                            className: _this.IsSortColumn(col) ? "sorted" : ""
                         }, col.view(row));
                     });
                     return m("tr", renderedCols);
@@ -1191,6 +1192,7 @@ var AdminViews;
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
+/// <reference path="../components/navbar.ts" />
 /// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -1214,7 +1216,7 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
-                Controller.prototype.PrimaryStats = function () {
+                Controller.prototype.RenderPrimaryStats = function () {
                     var allStats = nodeStatuses.totalStatus();
                     if (allStats) {
                         return m(".primary-stats", [
@@ -1292,16 +1294,17 @@ var AdminViews;
                     columns: ctrl.columns,
                     rows: nodeStatuses.allStatuses
                 };
-                return m("div", [
-                    m("h2", "Nodes List"),
-                    m(".section", ctrl.PrimaryStats()),
-                    m(".stats-table", Components.Table.create(comparisonData))
+                return m(".page", [
+                    m(".section.primary", m("h2", "Nodes Overview")),
+                    m(".section.primary", ctrl.RenderPrimaryStats()),
+                    m(".section", m(".stats-table", Components.Table.create(comparisonData)))
                 ]);
             }
             NodesPage.view = view;
         })(NodesPage = Nodes.NodesPage || (Nodes.NodesPage = {}));
         var NodePage;
         (function (NodePage) {
+            var NavigationBar = Components.NavigationBar;
             var Controller = (function () {
                 function Controller(nodeId) {
                     var _this = this;
@@ -1321,7 +1324,7 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
-                Controller.prototype.PrimaryStats = function () {
+                Controller.prototype.RenderPrimaryStats = function () {
                     var nodeStats = nodeStatuses.GetStatus(this._nodeId);
                     if (nodeStats) {
                         return m(".primary-stats", [
@@ -1357,6 +1360,25 @@ var AdminViews;
                     }
                     return m(".primary-stats");
                 };
+                Controller.prototype.RenderGraphs = function () {
+                    var _this = this;
+                    return m(".charts", this.axes.map(function (axis) {
+                        return m("", { style: "float:left" }, [
+                            m("h4", axis.title()),
+                            Components.Metrics.LineGraph.create(_this.exec, axis)
+                        ]);
+                    }));
+                };
+                Controller.prototype.TargetSet = function () {
+                    return {
+                        baseRoute: "/nodes/" + this._nodeId + "/",
+                        targets: Utils.Prop(Controller.defaultTargets),
+                        isActive: Controller.isActive
+                    };
+                };
+                Controller.prototype.GetNodeId = function () {
+                    return this._nodeId;
+                };
                 Controller.prototype._refresh = function () {
                     nodeStatuses.refresh();
                     this.exec.refresh();
@@ -1365,6 +1387,19 @@ var AdminViews;
                     var _this = this;
                     axis.selectors().forEach(function (s) { return _this._query.selectors().push(s); });
                     this.axes.push(axis);
+                };
+                Controller.defaultTargets = [
+                    {
+                        title: "Overview",
+                        route: ""
+                    },
+                    {
+                        title: "Graphs",
+                        route: "graph"
+                    }
+                ];
+                Controller.isActive = function (t) {
+                    return ((m.route.param("detail") || "") === t.route);
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;
@@ -1375,19 +1410,24 @@ var AdminViews;
             }
             NodePage.controller = controller;
             function view(ctrl) {
-                var nodeId = m.route.param("node_id");
-                return m("div", [
-                    m("h2", "Node Status"),
-                    m(".section", [
-                        m("h3", "Node: " + nodeId),
-                        ctrl.PrimaryStats()
+                var detail = m.route.param("detail");
+                var title = "Nodes: Node " + ctrl.GetNodeId();
+                if (detail === "graph") {
+                    title += ": Graphs";
+                }
+                var primaryContent;
+                if (detail === "graph") {
+                    primaryContent = ctrl.RenderGraphs();
+                }
+                else {
+                    primaryContent = ctrl.RenderPrimaryStats();
+                }
+                return m(".page", [
+                    m(".section.primary", [
+                        m.component(NavigationBar, ctrl.TargetSet()),
+                        m("h2", title)
                     ]),
-                    m(".charts", ctrl.axes.map(function (axis) {
-                        return m("", { style: "float:left" }, [
-                            m("h4", axis.title()),
-                            Components.Metrics.LineGraph.create(ctrl.exec, axis)
-                        ]);
-                    }))
+                    m(".section", primaryContent)
                 ]);
             }
             NodePage.view = view;
@@ -1399,6 +1439,7 @@ var AdminViews;
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
+/// <reference path="../components/navbar.ts" />
 /// <reference path="../util/format.ts" />
 var AdminViews;
 (function (AdminViews) {
@@ -1422,7 +1463,7 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
-                Controller.prototype.PrimaryStats = function () {
+                Controller.prototype.RenderPrimaryStats = function () {
                     var allStats = storeStatuses.totalStatus();
                     if (allStats) {
                         return m(".primary-stats", [
@@ -1502,16 +1543,17 @@ var AdminViews;
                     columns: ctrl.columns,
                     rows: storeStatuses.allStatuses
                 };
-                return m("div", [
-                    m("h2", "Stores List"),
-                    m(".section", ctrl.PrimaryStats()),
-                    m(".stats-table", Components.Table.create(comparisonData))
+                return m(".page", [
+                    m(".section.primary", m("h2", "Stores Overview")),
+                    m(".section.primary", ctrl.RenderPrimaryStats()),
+                    m(".section", m(".stats-table", Components.Table.create(comparisonData)))
                 ]);
             }
             StoresPage.view = view;
         })(StoresPage = Stores.StoresPage || (Stores.StoresPage = {}));
         var StorePage;
         (function (StorePage) {
+            var NavigationBar = Components.NavigationBar;
             var Controller = (function () {
                 function Controller(storeId) {
                     var _this = this;
@@ -1544,7 +1586,7 @@ var AdminViews;
                 Controller.prototype.onunload = function () {
                     clearInterval(this._interval);
                 };
-                Controller.prototype.PrimaryStats = function () {
+                Controller.prototype.RenderPrimaryStats = function () {
                     var storeStats = storeStatuses.GetStatus(this._storeId);
                     if (storeStats) {
                         return m(".primary-stats", [
@@ -1580,6 +1622,25 @@ var AdminViews;
                     }
                     return m(".primary-stats");
                 };
+                Controller.prototype.RenderGraphs = function () {
+                    var _this = this;
+                    return m(".charts", this.axes.map(function (axis) {
+                        return m("", { style: "float:left" }, [
+                            m("h4", axis.title()),
+                            Components.Metrics.LineGraph.create(_this.exec, axis)
+                        ]);
+                    }));
+                };
+                Controller.prototype.TargetSet = function () {
+                    return {
+                        baseRoute: "/stores/" + this._storeId + "/",
+                        targets: Utils.Prop(Controller.defaultTargets),
+                        isActive: Controller.isActive
+                    };
+                };
+                Controller.prototype.GetStoreId = function () {
+                    return this._storeId;
+                };
                 Controller.prototype._refresh = function () {
                     storeStatuses.refresh();
                     this.exec.refresh();
@@ -1588,6 +1649,19 @@ var AdminViews;
                     var _this = this;
                     axis.selectors().forEach(function (s) { return _this._query.selectors().push(s); });
                     this.axes.push(axis);
+                };
+                Controller.defaultTargets = [
+                    {
+                        title: "Overview",
+                        route: ""
+                    },
+                    {
+                        title: "Graphs",
+                        route: "graph"
+                    }
+                ];
+                Controller.isActive = function (t) {
+                    return ((m.route.param("detail") || "") === t.route);
                 };
                 Controller._queryEveryMS = 10000;
                 return Controller;
@@ -1598,19 +1672,24 @@ var AdminViews;
             }
             StorePage.controller = controller;
             function view(ctrl) {
-                var storeId = m.route.param("store_id");
-                return m("div", [
-                    m("h2", "Store Status"),
-                    m(".section", [
-                        m("h3", "Store: " + storeId),
-                        ctrl.PrimaryStats()
+                var detail = m.route.param("detail");
+                var title = "Stores: Store " + ctrl.GetStoreId();
+                if (detail === "graph") {
+                    title += ": Graphs";
+                }
+                var primaryContent;
+                if (detail === "graph") {
+                    primaryContent = ctrl.RenderGraphs();
+                }
+                else {
+                    primaryContent = ctrl.RenderPrimaryStats();
+                }
+                return m(".page", [
+                    m(".section.primary", [
+                        m.component(NavigationBar, ctrl.TargetSet()),
+                        m("h2", title)
                     ]),
-                    m(".charts", ctrl.axes.map(function (axis) {
-                        return m("", { style: "float:left" }, [
-                            m("h4", axis.title()),
-                            Components.Metrics.LineGraph.create(ctrl.exec, axis)
-                        ]);
-                    }))
+                    m(".section", primaryContent)
                 ]);
             }
             StorePage.view = view;
@@ -1636,8 +1715,12 @@ m.route(document.getElementById("root"), "/nodes", {
     "/nodes": AdminViews.Nodes.NodesPage,
     "/node/:node_id": AdminViews.Nodes.NodePage,
     "/nodes/:node_id": AdminViews.Nodes.NodePage,
+    "/node/:node_id/:detail": AdminViews.Nodes.NodePage,
+    "/nodes/:node_id/:detail": AdminViews.Nodes.NodePage,
     "/store": AdminViews.Stores.StorePage,
     "/stores": AdminViews.Stores.StoresPage,
     "/store/:store_id": AdminViews.Stores.StorePage,
-    "/stores/:store_id": AdminViews.Stores.StorePage
+    "/stores/:store_id": AdminViews.Stores.StorePage,
+    "/store/:store_id/:detail": AdminViews.Stores.StorePage,
+    "/stores/:store_id/:detail": AdminViews.Stores.StorePage
 });
