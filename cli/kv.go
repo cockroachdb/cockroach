@@ -47,7 +47,7 @@ func makeDBClient() *client.DB {
 		"://root@" + Context.Addr +
 		"?certs=" + Context.Certs)
 	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s\n", err)
 		osExit(1)
 	}
 	return db
@@ -228,7 +228,7 @@ var scanCmd = &cobra.Command{
 Fetches and display the key/value pairs for a range. If no <start-key>
 is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
-are retrieved. 
+are retrieved.
 `,
 	Run: runScan,
 }
