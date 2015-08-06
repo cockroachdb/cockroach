@@ -96,9 +96,9 @@ func (e *LeaseRejectedError) CanRetry() bool {
 }
 
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
-func NewRangeNotFoundError(raftID RangeID) *RangeNotFoundError {
+func NewRangeNotFoundError(rangeID RangeID) *RangeNotFoundError {
 	return &RangeNotFoundError{
-		RangeID: raftID,
+		RangeID: rangeID,
 	}
 }
 

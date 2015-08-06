@@ -153,11 +153,11 @@ func disabledTestRangeDataIterator(t *testing.T) {
 
 	// Create two more ranges, one before the test range and one after.
 	preRng := createRange(tc.store, 2, proto.KeyMin, proto.Key("b"))
-	if err := tc.store.AddRangeTest(preRng); err != nil {
+	if err := tc.store.AddReplicaTest(preRng); err != nil {
 		t.Fatal(err)
 	}
 	postRng := createRange(tc.store, 3, proto.Key("c"), proto.KeyMax)
-	if err := tc.store.AddRangeTest(postRng); err != nil {
+	if err := tc.store.AddReplicaTest(postRng); err != nil {
 		t.Fatal(err)
 	}
 

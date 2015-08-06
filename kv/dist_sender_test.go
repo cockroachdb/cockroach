@@ -150,7 +150,7 @@ func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, s := makeTestGossip(t)
 	defer s()
-	raftID := proto.RangeID(99)
+	rangeID := proto.RangeID(99)
 
 	nodeAttrs := map[int32][]string{
 		1: {}, // The local node, set in each test case.
@@ -269,7 +269,7 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	descriptor := proto.RangeDescriptor{
-		RangeID:  raftID,
+		RangeID:  rangeID,
 		Replicas: nil,
 	}
 
@@ -329,13 +329,13 @@ func TestSendRPCOrder(t *testing.T) {
 			}
 		}
 
-		ds.leaderCache.Update(proto.RangeID(raftID), proto.Replica{})
+		ds.leaderCache.Update(proto.RangeID(rangeID), proto.Replica{})
 		if tc.leader > 0 {
-			ds.leaderCache.Update(proto.RangeID(raftID), descriptor.Replicas[tc.leader-1])
+			ds.leaderCache.Update(proto.RangeID(rangeID), descriptor.Replicas[tc.leader-1])
 		}
 
 		args := tc.args
-		args.Header().RangeID = raftID // Not used in this test, but why not.
+		args.Header().RangeID = rangeID // Not used in this test, but why not.
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}

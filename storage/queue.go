@@ -110,7 +110,7 @@ type baseQueue struct {
 	incoming   chan struct{}                // Channel signalled when a new range is added to the queue.
 	sync.Mutex                              // Mutex protects priorityQ and ranges
 	priorityQ  priorityQueue                // The priority queue
-	ranges     map[proto.RangeID]*rangeItem // Map from RaftID to rangeItem (for updating priority)
+	ranges     map[proto.RangeID]*rangeItem // Map from RangeID to rangeItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 }

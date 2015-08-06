@@ -132,17 +132,17 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 	header := call.Args.Header()
 	if header.RangeID == 0 || header.Replica.StoreID == 0 {
 		var repl *proto.Replica
-		var raftID proto.RangeID
-		raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
+		var rangeID proto.RangeID
+		rangeID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
 		if err == nil {
-			header.RangeID = raftID
+			header.RangeID = rangeID
 			header.Replica = *repl
 		}
 	}
 	ctx = log.Add(ctx,
 		log.Method, call.Method(),
 		log.Key, header.Key,
-		log.RaftID, header.RangeID)
+		log.RangeID, header.RangeID)
 
 	if err == nil {
 		store, err = ls.GetStore(header.Replica.StoreID)
@@ -174,21 +174,21 @@ func (ls *LocalSender) Send(ctx context.Context, call proto.Call) {
 
 // lookupReplica looks up replica by key [range]. Lookups are done
 // by consulting each store in turn via Store.LookupRange(key).
-// Returns RaftID and replica on success; RangeKeyMismatch error
+// Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // TODO(tschottdorf) with a very large number of stores, the LocalSender
 // may want to avoid scanning the whole map of stores on each invocation.
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RangeID, replica *proto.Replica, err error) {
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (rangeID proto.RangeID, replica *proto.Replica, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *storage.Replica
 	for _, store := range ls.storeMap {
-		rng = store.LookupRange(start, end)
+		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			continue
 		}
 		if replica == nil {
-			raftID = rng.Desc().RangeID
+			rangeID = rng.Desc().RangeID
 			replica = rng.GetReplica()
 			continue
 		}
@@ -199,5 +199,5 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID proto.RangeID
 	if replica == nil {
 		err = proto.NewRangeKeyMismatchError(start, end, nil)
 	}
-	return raftID, replica, err
+	return rangeID, replica, err
 }

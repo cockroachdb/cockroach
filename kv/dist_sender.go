@@ -414,7 +414,7 @@ func (ds *DistSender) getNodeDescriptor() *proto.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
+func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID proto.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
 	args proto.Request) (proto.Response, error) {
 	if len(replicas) == 0 {
 		return nil, util.Errorf("%s: replicas set is empty", args.Method())
@@ -436,7 +436,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, raftID proto.RangeID, replica
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
 	// still route the request appropriately by key, but won't receive
 	// RangeNotFoundErrors.
-	args.Header().RangeID = raftID
+	args.Header().RangeID = rangeID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{

@@ -32,7 +32,7 @@ import (
 )
 
 // TestIDAllocator creates an ID allocator which allocates from
-// the Raft ID generator system key in blocks of 10 with a minimum
+// the Range ID generator system key in blocks of 10 with a minimum
 // ID value of 2 and then starts up 10 goroutines each allocating
 // 10 IDs. All goroutines deposit the allocated IDs into a final
 // channel, which is queried at the end to ensure that all IDs
@@ -42,7 +42,7 @@ func TestIDAllocator(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	allocd := make(chan int, 100)
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, store.ctx.DB, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create idAllocator: %v", err)
 	}
@@ -90,14 +90,14 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	defer stopper.Stop()
 
 	// Increment our key to a negative value.
-	newValue, err := engine.MVCCIncrement(store.Engine(), nil, keys.RaftIDGenerator, store.ctx.Clock.Now(), nil, -1024)
+	newValue, err := engine.MVCCIncrement(store.Engine(), nil, keys.RangeIDGenerator, store.ctx.Clock.Now(), nil, -1024)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if newValue != -1024 {
 		t.Errorf("expected new value to be -1024; got %d", newValue)
 	}
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, store.ctx.DB, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	allocd := make(chan int, 10)
 
 	// Firstly create a valid IDAllocator to get some ID.
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, store.ctx.DB, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	wg.Wait()
 
 	// Make the IDAllocator valid again.
-	idAlloc.idKey.Store(keys.RaftIDGenerator)
+	idAlloc.idKey.Store(keys.RangeIDGenerator)
 	// Check if the blocked allocations return expected ID.
 	ids := make([]int, routines)
 	for i := 0; i < routines; i++ {
@@ -221,7 +221,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 func TestAllocateWithStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
-	idAlloc, err := newIDAllocator(keys.RaftIDGenerator, store.ctx.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, store.ctx.DB, 2, 10, stopper)
 	if err != nil {
 		log.Fatal(err)
 	}

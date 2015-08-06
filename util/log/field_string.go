@@ -4,9 +4,9 @@ package log
 
 import "fmt"
 
-const _Field_name = "NodeIDStoreIDRaftIDMethodClientKeymaxField"
+const _Field_name = "NodeIDStoreIDRangeIDMethodClientKeymaxField"
 
-var _Field_index = [...]uint8{0, 6, 13, 19, 25, 31, 34, 42}
+var _Field_index = [...]uint8{0, 6, 13, 20, 26, 32, 35, 43}
 
 func (i Field) String() string {
 	if i < 0 || i >= Field(len(_Field_index)-1) {

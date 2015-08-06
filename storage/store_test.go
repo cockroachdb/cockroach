@@ -132,7 +132,7 @@ func (db *testSender) sendOne(call proto.Call) {
 	}
 	// Lookup range and direct request.
 	header := call.Args.Header()
-	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
+	if rng := db.store.LookupReplica(header.Key, header.EndKey); rng != nil {
 		header.RangeID = rng.Desc().RangeID
 		replica := rng.GetReplica()
 		if replica == nil {
@@ -221,7 +221,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Try to get 1st range--non-existent.
-	if _, err := store.GetRange(1); err == nil {
+	if _, err := store.GetReplica(1); err == nil {
 		t.Error("expected error fetching non-existent range")
 	}
 
@@ -236,7 +236,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
 	// 1st range should be available.
-	if _, err := store.GetRange(1); err != nil {
+	if _, err := store.GetReplica(1); err != nil {
 		t.Errorf("failure fetching 1st range: %s", err)
 	}
 }
@@ -271,9 +271,9 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, raftID proto.RangeID, start, end proto.Key) *Replica {
+func createRange(s *Store, rangeID proto.RangeID, start, end proto.Key) *Replica {
 	desc := &proto.RangeDescriptor{
-		RangeID:  raftID,
+		RangeID:  rangeID,
 		StartKey: start,
 		EndKey:   end,
 	}
@@ -288,25 +288,25 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	if _, err := store.GetRange(0); err == nil {
+	if _, err := store.GetReplica(0); err == nil {
 		t.Error("expected GetRange to fail on missing range")
 	}
 	// Range 1 already exists. Make sure we can fetch it.
-	rng1, err := store.GetRange(1)
+	rng1, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveRange(rng1); err != nil {
+	if err := store.RemoveReplica(rng1); err != nil {
 		t.Error(err)
 	}
 	// Create a new range (id=2).
 	rng2 := createRange(store, 2, proto.Key("a"), proto.Key("b"))
-	if err := store.AddRangeTest(rng2); err != nil {
+	if err := store.AddReplicaTest(rng2); err != nil {
 		t.Fatal(err)
 	}
 	// Try to add the same range twice
-	err = store.AddRangeTest(rng2)
+	err = store.AddReplicaTest(rng2)
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
@@ -314,17 +314,17 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveRange(rng1); err == nil {
+	if err := store.RemoveReplica(rng1); err == nil {
 		t.Fatal("expected error re-removing same range")
 	}
 	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createRange(store, 1, proto.Key("a"), proto.Key("b"))
-	if err := store.AddRangeTest(rng2Dup); err == nil {
+	if err := store.AddReplicaTest(rng2Dup); err == nil {
 		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
 	rng3 := createRange(store, 3, proto.Key("c"), proto.Key("d"))
-	if err := store.AddRangeTest(rng3); err != nil {
+	if err := store.AddReplicaTest(rng3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -347,7 +347,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		if r := store.LookupRange(test.start, test.end); r != test.expRng {
+		if r := store.LookupReplica(test.start, test.end); r != test.expRng {
 			t.Errorf("%d: expected range %v; got %v", i, test.expRng, r)
 		}
 	}
@@ -359,18 +359,18 @@ func TestStoreRangeSet(t *testing.T) {
 	defer stopper.Stop()
 
 	// Remove range 1.
-	rng1, err := store.GetRange(1)
+	rng1, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveRange(rng1); err != nil {
+	if err := store.RemoveReplica(rng1); err != nil {
 		t.Error(err)
 	}
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
 		rng := createRange(store, proto.RangeID(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
-		if err := store.AddRangeTest(rng); err != nil {
+		if err := store.AddReplicaTest(rng); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -384,7 +384,7 @@ func TestStoreRangeSet(t *testing.T) {
 		i := 1
 		ranges.Visit(func(rng *Replica) bool {
 			if rng.Desc().RangeID != proto.RangeID(i) {
-				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
+				t.Errorf("expected range with Range ID %d; got %v", i, rng)
 			}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
 				t.Errorf("expected %d remaining; got %d", 10-i, ec)
@@ -406,14 +406,14 @@ func TestStoreRangeSet(t *testing.T) {
 		ranges.Visit(func(rng *Replica) bool {
 			if i == 1 {
 				if rng.Desc().RangeID != proto.RangeID(i) {
-					t.Errorf("expected range with Raft ID %d; got %v", i, rng)
+					t.Errorf("expected range with Range ID %d; got %v", i, rng)
 				}
 				close(visited)
 				<-updated
 			} else {
 				// The second range will be removed and skipped.
 				if rng.Desc().RangeID != proto.RangeID(i+1) {
-					t.Errorf("expected range with Raft ID %d; got %v", i+1, rng)
+					t.Errorf("expected range with Range ID %d; got %v", i+1, rng)
 				}
 			}
 			i++
@@ -433,7 +433,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
 	rng := createRange(store, 11, proto.Key("a000"), proto.Key("a01"))
-	if err = store.SplitRange(store.LookupRange(proto.Key("a00"), nil), rng); err != nil {
+	if err = store.SplitRange(store.LookupReplica(proto.Key("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
 	// Estimated count will still be 9, as it's cached.
@@ -442,11 +442,11 @@ func TestStoreRangeSet(t *testing.T) {
 	}
 
 	// Now, remove the next range in the iteration and verify we skip the removed range.
-	rng = store.LookupRange(proto.Key("a01"), nil)
+	rng = store.LookupReplica(proto.Key("a01"), nil)
 	if rng.Desc().RangeID != 2 {
-		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc().RangeID)
+		t.Errorf("expected fetch of rangeID=2; got %d", rng.Desc().RangeID)
 	}
-	if err := store.RemoveRange(rng); err != nil {
+	if err := store.RemoveReplica(rng); err != nil {
 		t.Error(err)
 	}
 	if ec := ranges.EstimatedCount(); ec != 9 {
@@ -628,7 +628,7 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Replica {
-	rng := store.LookupRange(key, nil)
+	rng := store.LookupReplica(key, nil)
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
@@ -670,23 +670,23 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	}
 }
 
-// TestStoreRaftIDAllocation verifies that raft IDs are
+// TestStoreRangeIDAllocation verifies that  range IDs are
 // allocated in successive blocks.
-func TestStoreRaftIDAllocation(t *testing.T) {
+func TestStoreRangeIDAllocation(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	// Raft IDs should be allocated from ID 2 (first alloc'd range)
-	// to raftIDAllocCount * 3 + 1.
-	for i := 0; i < raftIDAllocCount*3; i++ {
+	// Range IDs should be allocated from ID 2 (first alloc'd range)
+	// to rangeIDAllocCount * 3 + 1.
+	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []proto.Replica{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(proto.Key(fmt.Sprintf("%03d", i)), proto.Key(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if desc.RangeID != proto.RangeID(2+i) {
-			t.Errorf("expected Raft id %d; got %d", 2+i, desc.RangeID)
+			t.Errorf("expected range id %d; got %d", 2+i, desc.RangeID)
 		}
 	}
 }
@@ -698,37 +698,37 @@ func TestStoreRangesByKey(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	r0 := store.LookupRange(proto.KeyMin, nil)
+	r0 := store.LookupReplica(proto.KeyMin, nil)
 	r1 := splitTestRange(store, proto.KeyMin, proto.Key("A"), t)
 	r2 := splitTestRange(store, proto.Key("A"), proto.Key("C"), t)
 	r3 := splitTestRange(store, proto.Key("C"), proto.Key("X"), t)
 	r4 := splitTestRange(store, proto.Key("X"), proto.Key("ZZ"), t)
 
-	if r := store.LookupRange(proto.Key("0"), nil); r != r0 {
+	if r := store.LookupReplica(proto.Key("0"), nil); r != r0 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r0.Desc())
 	}
-	if r := store.LookupRange(proto.Key("B"), nil); r != r1 {
+	if r := store.LookupReplica(proto.Key("B"), nil); r != r1 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r1.Desc())
 	}
-	if r := store.LookupRange(proto.Key("C"), nil); r != r2 {
+	if r := store.LookupReplica(proto.Key("C"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
-	if r := store.LookupRange(proto.Key("M"), nil); r != r2 {
+	if r := store.LookupReplica(proto.Key("M"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
-	if r := store.LookupRange(proto.Key("X"), nil); r != r3 {
+	if r := store.LookupReplica(proto.Key("X"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
-	if r := store.LookupRange(proto.Key("Z"), nil); r != r3 {
+	if r := store.LookupReplica(proto.Key("Z"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
-	if r := store.LookupRange(proto.Key("ZZ"), nil); r != r4 {
+	if r := store.LookupReplica(proto.Key("ZZ"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if r := store.LookupRange(proto.Key("\xff\x00"), nil); r != r4 {
+	if r := store.LookupReplica(proto.Key("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if store.LookupRange(proto.KeyMax, nil) != nil {
+	if store.LookupReplica(proto.KeyMax, nil) != nil {
 		t.Errorf("expected proto.KeyMax to not have an associated range")
 	}
 }
@@ -745,7 +745,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		rng         *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupRange(proto.KeyMin, nil), 64 << 20},
+		{store.LookupReplica(proto.KeyMin, nil), 64 << 20},
 		{splitTestRange(store, proto.KeyMin, proto.Key("a"), t), 1 << 20},
 		{splitTestRange(store, proto.Key("a"), proto.Key("aa"), t), 1 << 20},
 		{splitTestRange(store, proto.Key("aa"), proto.Key("b"), t), 64 << 20},
@@ -1432,11 +1432,11 @@ func TestMaybeRemove(t *testing.T) {
 	}
 	store.WaitForInit()
 
-	rng, err := store.GetRange(1)
+	rng, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveRange(rng); err != nil {
+	if err := store.RemoveReplica(rng); err != nil {
 		t.Error(err)
 	}
 	// MaybeRemove is called.

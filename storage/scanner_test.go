@@ -52,7 +52,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		// Initialize the range stat so the scanner can use it.
 		rng := &Replica{
 			stats: &rangeStats{
-				raftID: desc.RangeID,
+				rangeID: desc.RangeID,
 				MVCCStats: engine.MVCCStats{
 					KeyBytes:  1,
 					ValBytes:  2,

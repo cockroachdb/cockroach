@@ -45,7 +45,7 @@ func TestStoreEventFeed(t *testing.T) {
 	}
 	rng1 := &Replica{
 		stats: &rangeStats{
-			raftID: desc1.RangeID,
+			rangeID: desc1.RangeID,
 			MVCCStats: engine.MVCCStats{
 				LiveBytes:       400,
 				KeyBytes:        40,
@@ -59,7 +59,7 @@ func TestStoreEventFeed(t *testing.T) {
 	}
 	rng2 := &Replica{
 		stats: &rangeStats{
-			raftID: desc2.RangeID,
+			rangeID: desc2.RangeID,
 			MVCCStats: engine.MVCCStats{
 				LiveBytes:       200,
 				KeyBytes:        30,

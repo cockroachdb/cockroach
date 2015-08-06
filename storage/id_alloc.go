@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// idAllocationRetryOpts sets the retry options for handling RaftID
+// idAllocationRetryOpts sets the retry options for handling RangeID
 // allocation errors.
 var idAllocationRetryOpts = retry.Options{
 	InitialBackoff: 50 * time.Millisecond,

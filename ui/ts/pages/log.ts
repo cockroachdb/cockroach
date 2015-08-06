@@ -58,10 +58,10 @@ module AdminViews {
             sortValue: (entry: LogEntry): number => entry.store_id
           },
           {
-            title: "Raft",
-            view: (entry: LogEntry): string => entry.raft_id ? entry.raft_id.toString() : "",
+            title: "Range",
+            view: (entry: LogEntry): string => entry.range_id ? entry.range_id.toString() : "",
             sortable: true,
-            sortValue: (entry: LogEntry): number => entry.raft_id
+            sortValue: (entry: LogEntry): number => entry.range_id
           },
           {
             title: "Key",

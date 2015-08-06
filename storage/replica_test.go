@@ -187,12 +187,12 @@ func (tc *testContext) Start(t testing.TB) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := tc.store.AddRangeTest(rng); err != nil {
+			if err := tc.store.AddReplicaTest(rng); err != nil {
 				t.Fatal(err)
 			}
 		}
 		var err error
-		tc.rng, err = tc.store.GetRange(1)
+		tc.rng, err = tc.store.GetReplica(1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -745,21 +745,21 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	raftID := proto.RangeID(1)
+	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req1 := putArgs(key, data, raftID, tc.store.StoreID())
+	req1 := putArgs(key, data, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
 
-	req2 := endTxnArgs(txn, true /* commit */, raftID, tc.store.StoreID())
+	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
 
-	req3 := getArgs(key, raftID, tc.store.StoreID())
+	req3 := getArgs(key, rangeID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
 
 	for i, req := range []proto.Request{&req1, &req2, &req3} {
@@ -798,26 +798,26 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := keys.MakeKey(keys.ConfigPermissionPrefix, proto.Key("/db1"))
-	raftID := proto.RangeID(1)
+	rangeID := proto.RangeID(1)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, proto.SERIALIZABLE, tc.clock)
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req1 := putArgs(key, data, raftID, tc.store.StoreID())
+	req1 := putArgs(key, data, rangeID, tc.store.StoreID())
 	req1.Txn = txn
 	req1.Timestamp = txn.Timestamp
 	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req1); err != nil {
 		t.Fatal(err)
 	}
-	req2 := endTxnArgs(txn, true /* commit */, raftID, tc.store.StoreID())
+	req2 := endTxnArgs(txn, true /* commit */, rangeID, tc.store.StoreID())
 	req2.Timestamp = txn.Timestamp
 	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req2); err != nil {
 		t.Fatal(err)
 	}
 	// Execute a get to resolve the intent.
-	req3 := getArgs(key, raftID, tc.store.StoreID())
+	req3 := getArgs(key, rangeID, tc.store.StoreID())
 	req3.Timestamp = txn.Timestamp
 	if _, err := tc.store.ExecuteCmd(tc.rng.context(), &req3); err != nil {
 		t.Fatal(err)
@@ -849,11 +849,11 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.GetRequest {
+func getArgs(key []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.GetRequest {
 	return proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -861,12 +861,12 @@ func getArgs(key []byte, raftID proto.RangeID, storeID proto.StoreID) proto.GetR
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, raftID proto.RangeID, storeID proto.StoreID) proto.PutRequest {
+func putArgs(key, value []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.PutRequest {
 	return proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			Timestamp: proto.MinTimestamp,
-			RangeID:   raftID,
+			RangeID:   rangeID,
 			Replica:   proto.Replica{StoreID: storeID},
 		},
 		Value: proto.Value{
@@ -876,11 +876,11 @@ func putArgs(key, value []byte, raftID proto.RangeID, storeID proto.StoreID) pro
 }
 
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
-func deleteArgs(key proto.Key, raftID proto.RangeID, storeID proto.StoreID) proto.DeleteRequest {
+func deleteArgs(key proto.Key, rangeID proto.RangeID, storeID proto.StoreID) proto.DeleteRequest {
 	return proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -889,34 +889,34 @@ func deleteArgs(key proto.Key, raftID proto.RangeID, storeID proto.StoreID) prot
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
-func readOrWriteArgs(key proto.Key, read bool, raftID proto.RangeID, storeID proto.StoreID) proto.Request {
+func readOrWriteArgs(key proto.Key, read bool, rangeID proto.RangeID, storeID proto.StoreID) proto.Request {
 	if read {
-		gArgs := getArgs(key, raftID, storeID)
+		gArgs := getArgs(key, rangeID, storeID)
 		return &gArgs
 	}
-	pArgs := putArgs(key, []byte("value"), raftID, storeID)
+	pArgs := putArgs(key, []byte("value"), rangeID, storeID)
 	return &pArgs
 }
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, raftID proto.RangeID, storeID proto.StoreID) proto.IncrementRequest {
+func incrementArgs(key []byte, inc int64, rangeID proto.RangeID, storeID proto.StoreID) proto.IncrementRequest {
 	return proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Increment: inc,
 	}
 }
 
-func scanArgs(start, end []byte, raftID proto.RangeID, storeID proto.StoreID) proto.ScanRequest {
+func scanArgs(start, end []byte, rangeID proto.RangeID, storeID proto.StoreID) proto.ScanRequest {
 	return proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     start,
 			EndKey:  end,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
@@ -924,11 +924,11 @@ func scanArgs(start, end []byte, raftID proto.RangeID, storeID proto.StoreID) pr
 
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
-func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RangeID, storeID proto.StoreID) proto.EndTransactionRequest {
+func endTxnArgs(txn *proto.Transaction, commit bool, rangeID proto.RangeID, storeID proto.StoreID) proto.EndTransactionRequest {
 	return proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
 		},
@@ -938,12 +938,12 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID proto.RangeID, store
 
 // pushTxnArgs returns a request/response pair for PushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, raftID proto.RangeID, storeID proto.StoreID) proto.PushTxnRequest {
+func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, rangeID proto.RangeID, storeID proto.StoreID) proto.PushTxnRequest {
 	return proto.PushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       pushee.Key,
 			Timestamp: pusher.Timestamp,
-			RangeID:   raftID,
+			RangeID:   rangeID,
 			Replica:   proto.Replica{StoreID: storeID},
 			Txn:       pusher,
 		},
@@ -954,11 +954,11 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, pushType proto.PushTxnType, 
 }
 
 // heartbeatArgs returns request/response pair for HeartbeatTxn RPC.
-func heartbeatArgs(txn *proto.Transaction, raftID proto.RangeID, storeID proto.StoreID) proto.HeartbeatTxnRequest {
+func heartbeatArgs(txn *proto.Transaction, rangeID proto.RangeID, storeID proto.StoreID) proto.HeartbeatTxnRequest {
 	return proto.HeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.Key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
 		},
@@ -968,21 +968,21 @@ func heartbeatArgs(txn *proto.Transaction, raftID proto.RangeID, storeID proto.S
 // internalMergeArgs returns a MergeRequest and MergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, raftID proto.RangeID, storeID proto.StoreID) proto.MergeRequest {
+func internalMergeArgs(key []byte, value proto.Value, rangeID proto.RangeID, storeID proto.StoreID) proto.MergeRequest {
 	return proto.MergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: value,
 	}
 }
 
-func truncateLogArgs(index uint64, raftID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
+func truncateLogArgs(index uint64, rangeID proto.RangeID, storeID proto.StoreID) proto.TruncateLogRequest {
 	return proto.TruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
-			RangeID: raftID,
+			RangeID: rangeID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
 		Index: index,
@@ -2155,9 +2155,9 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, raftID proto.RangeID, expMS engine.MVCCStats, t *testing.T) {
+func verifyRangeStats(eng engine.Engine, rangeID proto.RangeID, expMS engine.MVCCStats, t *testing.T) {
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expMS, ms) {
@@ -2750,7 +2750,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.store.AddRangeTest(rng); err != nil {
+	if err := tc.store.AddReplicaTest(rng); err != nil {
 		t.Fatal(err)
 	}
 
