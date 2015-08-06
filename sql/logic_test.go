@@ -125,8 +125,8 @@ type logicQuery struct {
 	pos             string
 	sql             string
 	colNames        bool
-	colTypes        string // TODO(pmattis): not (yet) implemented.
-	label           string // TODO(pmattis): not (yet) implemented.
+	colTypes        string
+	label           string
 	sorter          logicSorter
 	expectErr       string
 	expectedValues  int
@@ -140,10 +140,6 @@ type logicQuery struct {
 // extensions to allow specifying errors and additional options. See
 // https://github.com/gregrahn/sqllogictest/ for a github mirror of the
 // sqllogictest source.
-//
-// TODO(pmattis): We currently cannot run the tests from sqllogictest due to
-// insufficient SQL coverage (e.g. lack of subqueries and aggregation
-// functions). We should work towards fixing that.
 type logicTest struct {
 	*testing.T
 	srv *server.TestServer
@@ -262,7 +258,6 @@ func (t logicTest) run(path string) {
 				if len(fields) >= 3 {
 					for _, opt := range strings.Split(fields[2], ",") {
 						switch opt {
-						// TODO(pmattis): The sort options are not yet implemented.
 						case "nosort":
 							query.sorter = nil
 
